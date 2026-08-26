@@ -12,7 +12,7 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from models import (RadarBucket, RadarMention, RadarPost,
+from models import (RadarBucket, RadarMention, RadarMentionEvent, RadarPost,
                     RadarSourceCursor, TickerUniverse)
 from features.radar import ingest
 from features.radar.sources import FetchResult, RawPost
@@ -28,6 +28,14 @@ def _wipe():
         RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
     RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
         synchronize_session=False)
+    # roll_up now rebuilds from the journal rather than from one cycle's rows
+    # (Task 2), so a ZZG event this suite never cleans up outlives the test
+    # that wrote it and inflates every later test's rebuild of the same
+    # (ticker, bucket_start) -- caught live: leftover rows from earlier tests
+    # in this file made mention_count read 4, 4 and 7 where fresh runs read
+    # 1, 0 and 2.
+    RadarMentionEvent.query.filter(
+        RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
     TickerUniverse.query.filter(TickerUniverse.symbol.like('ZZ%')).delete(
         synchronize_session=False)
     RadarSourceCursor.query.delete(synchronize_session=False)

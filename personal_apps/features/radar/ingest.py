@@ -167,7 +167,9 @@ def _store_mentioning_posts(raw_posts, lookup, now):
         score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))
         for symbol, confidence in tickers:
             mention_rows.append(buckets.MentionRow(
-                ticker=symbol, created_utc=raw.created_utc, source=raw.source,
+                ticker=symbol, external_id=raw.external_id,
+                created_utc=raw.created_utc, source=raw.source,
+                channel=raw.channel,
                 author=raw.author, simhash=fingerprint.simhash64(
                     '%s %s' % (raw.title or '', raw.body)),
                 confidence=confidence, sentiment=score,
@@ -180,7 +182,9 @@ def _store_mentioning_posts(raw_posts, lookup, now):
                                         confidence=confidence,
                                         lexicon_sentiment=score))
             mention_rows.append(buckets.MentionRow(
-                ticker=symbol, created_utc=raw.created_utc, source=raw.source,
+                ticker=symbol, external_id=raw.external_id,
+                created_utc=raw.created_utc, source=raw.source,
+                channel=raw.channel,
                 author=raw.author, simhash=row.simhash, confidence=confidence,
                 sentiment=score,
                 engagement=float(raw.score + raw.num_comments)))

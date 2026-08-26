@@ -13,7 +13,7 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from models import RadarBucket, RadarBucketSource
+from models import RadarBucket, RadarBucketSource, RadarMentionEvent
 from features.radar import buckets
 from features.radar.config import source_config_version
 
@@ -25,25 +25,31 @@ def clean_buckets():
             RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
         RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
             synchronize_session=False)
+        RadarMentionEvent.query.filter(
+            RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
         db.session.commit()
         yield
         RadarBucketSource.query.filter(
             RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
         RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
             synchronize_session=False)
+        RadarMentionEvent.query.filter(
+            RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
         db.session.commit()
 
 
-def row(ticker='ZZA', minute=3, source='stocktwits', author='u1', simhash=111,
-        confidence='high', sentiment=0.5, engagement=10.0):
+def row(ticker='ZZA', minute=3, source='bluesky', author='u1', simhash=111,
+        confidence='high', sentiment=0.5, engagement=10.0, external_id=None,
+        channel='c'):
     return buckets.MentionRow(
         ticker=ticker,
+        external_id=external_id or ('zz-%s-%s-%s' % (ticker, author, minute)),
         created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
-        source=source, author=author, simhash=simhash,
+        source=source, channel=channel, author=author, simhash=simhash,
         confidence=confidence, sentiment=sentiment, engagement=engagement)
 
 
-ALL_OK = {'stocktwits': 'ok'}
+ALL_OK = {'bluesky': 'ok'}
 
 
 def test_bucket_start_floors_to_fifteen_minutes():
@@ -60,7 +66,7 @@ def test_counts_are_written(clean_buckets):
     assert bucket.mention_count == 2
     assert bucket.distinct_authors == 2
     assert RadarBucketSource.query.filter_by(
-        ticker='ZZA', source='stocktwits').one().mention_count == 2
+        ticker='ZZA', source='bluesky').one().mention_count == 2
     assert bucket.high_confidence_count == 2
 
 
@@ -76,24 +82,24 @@ def test_distinct_text_ratio_catches_a_copy_paste_brigade(clean_buckets):
 
 def test_per_source_status_is_stored_separately(clean_buckets):
     from models import RadarBucketSource
-    buckets.roll_up([row()], {'stocktwits': 'ok', 'bluesky': 'missing'},
+    buckets.roll_up([row()], {'bluesky': 'ok', 'stocktwits': 'missing'},
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
     assert RadarBucket.query.filter_by(ticker='ZZA').one().sources_ok == 1
     rows = {r.source: r.status for r in
             RadarBucketSource.query.filter_by(ticker='ZZA').all()}
     # A `missing` source writes no row at all -- that is the rule.
-    assert rows == {'stocktwits': 'ok'}
+    assert rows == {'bluesky': 'ok'}
 
 
 def test_truncated_counts_are_kept_and_marked(clean_buckets):
     from models import RadarBucketSource
-    buckets.roll_up([row()], {'stocktwits': 'truncated'},
+    buckets.roll_up([row()], {'bluesky': 'truncated'},
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
     bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
     assert bucket.mention_count == 1
     assert bucket.sources_ok == 0
     assert RadarBucketSource.query.filter_by(
-        ticker='ZZA', source='stocktwits').one().status == 'truncated'
+        ticker='ZZA', source='bluesky').one().status == 'truncated'
 
 
 def test_a_missing_source_writes_no_bucket_rather_than_a_zero(clean_buckets):
@@ -105,7 +111,14 @@ def test_a_missing_source_writes_no_bucket_rather_than_a_zero(clean_buckets):
     assert RadarBucket.query.filter_by(ticker='ZZA').count() == 0
 
 
-def test_rerunning_a_cycle_replaces_rather_than_doubles(clean_buckets):
+def test_a_re_read_of_the_same_window_does_not_double(clean_buckets):
+    """A cycle that re-reads a window it already read must not add to it.
+
+    This is the overlap case, and it is the only one the old version of this
+    test covered -- it fed the second call a SUPERSET, which no source
+    produces. The disjoint case, which every source produces, lives in
+    tests/test_radar_journal.py and used to fail.
+    """
     start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
     buckets.roll_up([row(author='u1', simhash=1)], ALL_OK, start)
     buckets.roll_up([row(author='u1', simhash=1), row(author='u2', simhash=2)],
@@ -181,9 +194,14 @@ def test_a_low_mention_is_promoted_by_another_authors_cashtag(clean_buckets):
 
 
 def test_the_same_author_cannot_corroborate_themselves(clean_buckets):
-    """One person writing both ZZA and $ZZA is one opinion, not two."""
-    rows = [row(confidence='low', author='u1', simhash=1),
-            row(confidence='high', author='u1', simhash=2)]
+    """One person writing both ZZA and $ZZA is one opinion, not two.
+
+    Two distinct posts, so distinct external_ids -- row()'s default collapses
+    to one (ticker, author, minute) tuple and this is the one case in this
+    suite where the same author genuinely posts twice in the same window.
+    """
+    rows = [row(confidence='low', author='u1', simhash=1, external_id='zz-bare'),
+            row(confidence='high', author='u1', simhash=2, external_id='zz-cash')]
     buckets.roll_up(rows, ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
     bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
     assert bucket.mention_count == 1
@@ -204,7 +222,7 @@ def test_a_bucket_with_only_lows_still_records_its_source_status(clean_buckets):
     buckets.roll_up([row(confidence='low')], ALL_OK,
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
     assert RadarBucketSource.query.filter_by(
-        ticker='ZZA', source='stocktwits').one().status == 'ok'
+        ticker='ZZA', source='bluesky').one().status == 'ok'
 
 
 def test_the_config_version_is_stamped_on_each_source_row(clean_buckets):

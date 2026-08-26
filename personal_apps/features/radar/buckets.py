@@ -35,8 +35,15 @@ _SCORED = {'high', 'medium'}
 class MentionRow:
     """One extracted mention, flattened for rollup."""
     ticker: str
+    # The mention's identity in the journal, with source. Without it a rebuild
+    # cannot tell one author's second post apart from the same post arriving in
+    # a second cycle, and overlapping cycles would double-count the boundary.
+    external_id: str
     created_utc: dt.datetime
     source: str
+    # The venue inside the source. Journalled because a broadcast network's
+    # independent unit is the channel rather than the author.
+    channel: str
     author: str | None
     simhash: int
     confidence: str
@@ -48,6 +55,18 @@ def bucket_start_for(when):
     """Floor a UTC instant to its 15-minute bucket."""
     return when.replace(minute=(when.minute // BUCKET_MINUTES) * BUCKET_MINUTES,
                         second=0, microsecond=0)
+
+
+# Deferred until after MentionRow and bucket_start_for exist: journal imports
+# both of those from this module at IMPORT time (`from .buckets import ...`),
+# so when this module is the one imported first -- the common case, since
+# ingest.py and every test import `buckets` rather than `journal` -- the names
+# journal asks for must already be bound before this line runs, or the import
+# fails with "cannot import name 'MentionRow' from partially initialized
+# module" instead of resolving. Importing the MODULE here rather than a name
+# from it is still what makes the cycle resolvable at all: this binding itself
+# needs nothing from journal yet, only roll_up() does, at call time.
+from . import journal
 
 
 def _promote(rows):
@@ -135,15 +154,30 @@ def roll_up(rows, statuses, touched):
     sources_ok = sum(1 for status in statuses.values() if status == 'ok')
 
     usable = [r for r in rows if r.source in countable]
+
+    # Store first, then rebuild from EVERYTHING in these windows -- not from
+    # `usable`, which is one cycle's cursor slice. A bucket is recomputed from
+    # scratch on every pass, which is right because cycles overlap and additive
+    # rollup would double-count the boundary; it is only correct if the
+    # recompute sees the whole quarter-hour. It did not, and production lost
+    # 42.9% of its 10+ mention buckets to that (audit 2026-08-26).
+    journal.record(usable)
+
+    windows = {(r.ticker, bucket_start_for(r.created_utc)) for r in usable
+               if bucket_start_for(r.created_utc) in touched}
+    complete = journal.events_for(windows)
+
     grouped = collections.defaultdict(list)
-    for row in _promote(usable):
-        grouped[(row.ticker, bucket_start_for(row.created_utc))].append(row)
+    for row in _promote(complete):
+        key = (row.ticker, bucket_start_for(row.created_utc))
+        # A window the journal answered for that this cycle did not touch --
+        # possible when two tickers share a bucket_start -- is not this cycle's
+        # to rewrite.
+        if key in windows:
+            grouped[key].append(row)
 
     written = 0
     for (ticker, start), bucket_rows in grouped.items():
-        if start not in touched:
-            continue
-
         totals = _summarize(bucket_rows)
         bucket = RadarBucket.query.filter_by(
             ticker=ticker, bucket_start=start).one_or_none()
