@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from app import app as flask_app
 from extensions import db
 from models import RadarBucket, RadarBucketSource
+from features.radar import buckets
 from test_radar_buckets import row, clean_buckets  # noqa: F401
 
 START = dt.datetime(2026, 8, 21, 14, 0, 0)
@@ -129,12 +130,6 @@ def test_a_downgrade_to_truncated_clears_the_stale_score(clean_buckets):
     Found in production 2026-08-26: 399 rows marked truncated and still ranked
     on a mention_z from when they were ok.
     """
-    import datetime as dt
-
-    from extensions import db
-    from features.radar import buckets
-    from models import RadarBucketSource
-
     start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
     buckets.roll_up([row(external_id='zz-1')], {'bluesky': 'ok'}, start)
 

@@ -149,17 +149,42 @@ def test_sentiment_mean_is_averaged(clean_buckets):
 
 
 def test_scoring_columns_are_left_untouched(clean_buckets):
-    """Plan 1 writes no scores. A rollup that reset these would silently
-    invalidate Plan 2's work on every cycle."""
+    """Pinned on RadarBucketSource, not RadarBucket.
+
+    Until 2026-08-26 this asserted on `bucket.mention_z_reddit` -- a column
+    the per-source-rows refactor deleted (see
+    test_the_parent_bucket_no_longer_has_per_source_columns above).
+    SQLAlchemy lets you set an unmapped attribute on an instance with no
+    error, and db.session.expire() only reloads mapped columns, so that
+    attribute was never written to the database and the assertion could not
+    fail no matter what roll_up did to any real column. It passed vacuously
+    for as long as the refactor has existed.
+
+    The property still matters: expected/variance/mention_z/baseline_days
+    live on RadarBucketSource now, written by scoring.score_source, and a
+    rollup must not clobber them on a source whose status stays `ok`. The
+    complementary case -- a status change DOES clear them -- is
+    test_a_downgrade_to_truncated_clears_the_stale_score in
+    tests/test_radar_bucket_sources.py; this test must use a source that
+    stays `ok`, or the two would contradict each other.
+    """
     buckets.roll_up([row()], ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
-    bucket = RadarBucket.query.filter_by(ticker='ZZA').one()
-    bucket.mention_z_reddit = 4.2
+    source = RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='bluesky').one()
+    source.expected = 1.0
+    source.variance = 2.0
+    source.mention_z = 4.2
+    source.baseline_days = 9
     db.session.commit()
 
     buckets.roll_up([row(), row(author='u2', simhash=2)], ALL_OK,
                     {dt.datetime(2026, 4, 15, 14, 0, 0)})
-    db.session.expire(bucket)
-    assert bucket.mention_z_reddit == 4.2
+    db.session.expire(source)
+    assert source.status == 'ok'
+    assert source.expected == 1.0
+    assert source.variance == 2.0
+    assert source.mention_z == 4.2
+    assert source.baseline_days == 9
 
 
 def test_per_source_rows_are_written(clean_buckets):
