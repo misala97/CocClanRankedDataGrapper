@@ -5,6 +5,7 @@ Everything here reads radar_bucket_sources and writes back onto the same rows.
 No prices and no divergence -- those need a market feed and are Plan 3.
 """
 import datetime as dt
+import uuid
 
 import pytest
 
@@ -17,7 +18,7 @@ from features.radar.config import source_config_version
 MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
 NOW = MONDAY + dt.timedelta(days=35)
 _OWNED_TICKERS = (
-    'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL', 'SSNOPE',
+    'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL',
     'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED',
 )
 
@@ -60,10 +61,8 @@ def steady_history(ticker='SSA', per_bucket=2, days=30, source='stocktwits'):
 
 def test_row_cleanup_preserves_an_unowned_zz_sentinel():
     """This file's shared-DB cleanup must never claim another ZZ namespace."""
-    sentinel = 'ZZSENTINEL'
+    sentinel = 'ZZX' + uuid.uuid4().hex[:9].upper()
     with flask_app.app_context():
-        RadarBucketSource.query.filter_by(ticker=sentinel).delete(
-            synchronize_session=False)
         db.session.add(RadarBucketSource(
             ticker=sentinel, bucket_start=NOW, source='sentinel',
             mention_count=1, high_confidence_count=1, low_count=0,

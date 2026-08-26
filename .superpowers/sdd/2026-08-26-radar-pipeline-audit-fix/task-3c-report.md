@@ -442,3 +442,33 @@ py -3.12 -m pytest tests/test_radar_scoring.py -v
 py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
 141 passed in 47.63s
 ```
+
+## Fix round 3 — collision-safe shared-DB sentinel
+
+The round-2 exact ownership list still incorrectly included `SSNOPE`, which
+this file only queries and never creates. It has been removed. The ownership
+list now contains only tickers this file writes:
+`SSA`, `SSB`, `SSNEW`, `SSOLD`, `SSNULL`, `ZZGEN`, `ZZSCORED`, `ZZSCOPE`, and
+`ZZUNSCORED`.
+
+The sentinel regression now generates a per-run 12-character ticker as
+`ZZX` plus nine uppercase UUID hex characters. It performs no pre-delete,
+inserts that exact row, calls `_clear_owned_rows()`, asserts the row remains,
+and deletes only that exact ticker in `finally`.
+
+### Watched failing mutation
+
+Replacing the exact `ticker.in_(_OWNED_TICKERS)` cleanup predicate with the
+former broad `ticker.like('SS%') | ticker.like('ZZ%')` predicate failed the
+sentinel regression with `assert 0 == 1`; the generated `ZZX994168F8A`
+sentinel was deleted. The exact predicate was restored.
+
+### Final verification
+
+```text
+py -3.12 -m pytest tests/test_radar_scoring.py -v
+30 passed in 47.10s
+
+py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
+141 passed in 48.35s
+```
