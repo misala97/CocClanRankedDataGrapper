@@ -17,6 +17,7 @@ from app import app as flask_app
 from extensions import db
 from models import RadarBucketSource
 from features.radar import profile
+from features.radar.config import source_config_version
 
 MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)      # a Monday, 00:00 UTC
 
@@ -33,12 +34,14 @@ def buckets():
         db.session.commit()
 
 
-def add(source, when, count, ticker='PPA', status='ok'):
+def add(source, when, count, ticker='PPA', status='ok', version=None):
     db.session.add(RadarBucketSource(
         ticker=ticker, bucket_start=when, source=source,
         mention_count=count, high_confidence_count=count, low_count=0,
         distinct_authors=count, distinct_text_ratio=1.0,
-        engagement_weighted_count=float(count), status=status))
+        engagement_weighted_count=float(count), status=status,
+        source_config_version=(version if version is not None
+                               else source_config_version())))
 
 
 def test_bucket_of_week_is_zero_at_monday_midnight():
@@ -60,7 +63,8 @@ def test_a_profile_sums_to_one(buckets):
     for hour in (2, 14, 20):
         add('stocktwits', MONDAY + dt.timedelta(hours=hour), count=hour)
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1))
+    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+                                  source_config_version())
     assert sum(built.values()) == pytest.approx(1.0)
 
 
@@ -68,7 +72,8 @@ def test_busy_buckets_get_a_larger_share(buckets):
     add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
     add('stocktwits', MONDAY + dt.timedelta(hours=3), count=1)
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1))
+    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+                                  source_config_version())
     busy = profile.hour_share(built, MONDAY + dt.timedelta(hours=14))
     quiet = profile.hour_share(built, MONDAY + dt.timedelta(hours=3))
     assert busy > quiet * 10
@@ -80,7 +85,8 @@ def test_every_bucket_has_a_nonzero_share(buckets):
     window would manufacture a spike there forever after."""
     add('stocktwits', MONDAY + dt.timedelta(hours=14), count=50)
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1))
+    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+                                  source_config_version())
     assert len(built) == 672
     assert all(share > 0 for share in built.values())
 
@@ -91,8 +97,10 @@ def test_profiles_are_per_source(buckets):
     add('stocktwits', MONDAY + dt.timedelta(hours=14), count=100)
     add('bluesky', MONDAY + dt.timedelta(hours=3), count=100)
     db.session.commit()
-    st = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1))
-    bs = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1))
+    version = source_config_version()
+    st = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+                               version)
+    bs = profile.build_profile('bluesky', MONDAY + dt.timedelta(days=1), version)
     assert profile.hour_share(st, MONDAY + dt.timedelta(hours=14)) > \
         profile.hour_share(bs, MONDAY + dt.timedelta(hours=14))
 
@@ -104,7 +112,8 @@ def test_missing_and_truncated_buckets_are_ignored(buckets):
     add('stocktwits', MONDAY + dt.timedelta(hours=15), count=0, status='missing')
     add('stocktwits', MONDAY + dt.timedelta(hours=16), count=5, status='truncated')
     db.session.commit()
-    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1))
+    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+                                  source_config_version())
     fifteen = profile.hour_share(built, MONDAY + dt.timedelta(hours=15))
     sixteen = profile.hour_share(built, MONDAY + dt.timedelta(hours=16))
     # Both fall back to the smoothing floor, and are equal because neither
@@ -115,6 +124,21 @@ def test_missing_and_truncated_buckets_are_ignored(buckets):
 def test_an_empty_history_gives_a_flat_profile(buckets):
     """Day one. Flat means "no idea yet", which is the honest prior and cannot
     on its own make anything look unusual."""
-    built = profile.build_profile('stocktwits', MONDAY)
+    built = profile.build_profile('stocktwits', MONDAY, source_config_version())
     assert len(built) == 672
     assert len(set(round(v, 12) for v in built.values())) == 1
+
+
+def test_a_profile_uses_only_its_exact_config_generation(buckets):
+    current = source_config_version()
+    old_slot = MONDAY + dt.timedelta(hours=3)
+    current_slot = MONDAY + dt.timedelta(hours=14)
+    add('stocktwits', old_slot, count=10_000, ticker='PPO', version='old-version')
+    add('stocktwits', current_slot, count=100, ticker='PPC', version=current)
+    db.session.commit()
+
+    built = profile.build_profile('stocktwits', MONDAY + dt.timedelta(days=1),
+                                  current)
+
+    assert profile.hour_share(built, current_slot) > \
+        profile.hour_share(built, old_slot) * 10

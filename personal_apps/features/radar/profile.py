@@ -39,13 +39,22 @@ def bucket_of_week(when):
     return minutes // BUCKET_MINUTES
 
 
-def build_profile(source, until, weeks=DEFAULT_WEEKS):
+def build_profile(source, until, config_version, weeks=DEFAULT_WEEKS):
     """Share of this source's weekly volume falling in each bucket-of-week.
 
     Only `ok` buckets contribute. A `missing` bucket is a source that was down,
     not an hour that was quiet, and counting it would bend the profile towards
     silence at precisely the times ingest tends to fail. `truncated` is a known
     undercount and equally unusable as a description of normal.
+
+    `config_version` is required, not optional: a bucket stamped under a
+    different generation was aggregated from a different population (Task 3c
+    -- rebuilding from the complete mention journal instead of one cursor
+    slice changed measured volume even though the extractor's membership
+    rules did not), and folding it into this sum would let understated
+    pre-fix counts drag the expectation down right where corrected data is
+    starting to arrive. There is no unversioned fallback mode; every caller
+    scores against one exact generation or not at all.
     """
     since = until - dt.timedelta(weeks=weeks)
 
@@ -53,6 +62,7 @@ def build_profile(source, until, weeks=DEFAULT_WEEKS):
                              sa.func.sum(RadarBucketSource.mention_count))
             .filter(RadarBucketSource.source == source,
                     RadarBucketSource.status == 'ok',
+                    RadarBucketSource.source_config_version == config_version,
                     RadarBucketSource.bucket_start >= since,
                     RadarBucketSource.bucket_start < until)
             .group_by(RadarBucketSource.bucket_start).all())

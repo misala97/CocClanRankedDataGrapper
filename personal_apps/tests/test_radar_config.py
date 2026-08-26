@@ -15,6 +15,14 @@ def test_version_changes_when_the_source_list_changes(monkeypatch):
     assert config.source_config_version() != before
 
 
+def test_version_changes_when_the_rollup_generation_changes(monkeypatch):
+    """A corrected aggregate population cannot share the old baseline."""
+    before = config.source_config_version()
+    monkeypatch.setattr(config, 'ROLLUP_GENERATION',
+                        config.ROLLUP_GENERATION + 1, raising=False)
+    assert config.source_config_version() != before
+
+
 def test_version_ignores_source_order():
     forward = config.source_config_version()
     reversed_list = tuple(reversed(config.SOURCES))

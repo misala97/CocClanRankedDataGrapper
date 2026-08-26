@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from extensions import db
-from models import RadarMentionEvent
+from models import RadarMention, RadarMentionEvent, RadarPost
 
 # Imported as a module, not `from .buckets import MentionRow, bucket_start_for`
 # -- a name import needs those names bound in buckets' namespace by the time
@@ -66,6 +66,48 @@ def record(rows):
         db.session.execute(statement.on_duplicate_key_update(
             engagement=statement.inserted.engagement))
     db.session.commit()
+
+
+def bootstrap_from_mentions(since):
+    """Recover retained extractor decisions before the first journal rollup.
+
+    The journal table is empty immediately after migration (Task 1), so an
+    already-open quarter-hour rebuilt from the first post-deploy cursor slice
+    alone would repeat the exact overwrite this whole generation exists to
+    fix. radar_posts x radar_mentions is the only place the pre-migration
+    decision still lives -- 30-day retention on posts outlasts the journal's
+    48 hours -- so this replays it back through the same `record()` path a
+    live cycle uses.
+
+    Idempotent through record()'s unique key on (source, external_id,
+    ticker): safe to call on every startup, not just the first one after a
+    migration.
+
+    `medium` is deliberately absent from the recovered confidence: the
+    extractor only ever stored high/low, and promotion is recomputed from the
+    full bucket at rollup, never invented here. A low-only post was never
+    retained at all -- Bluesky alone would be 100 million rows a month of
+    text nothing reads -- and stays honestly unrecoverable.
+    """
+    rows = (db.session.query(
+                RadarMention.ticker, RadarMention.confidence,
+                RadarMention.lexicon_sentiment,
+                RadarPost.source, RadarPost.external_id, RadarPost.channel,
+                RadarPost.author, RadarPost.created_utc, RadarPost.simhash,
+                RadarPost.score, RadarPost.num_comments)
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarPost.created_utc >= since,
+                    RadarMention.confidence.in_(('high', 'low')))
+            .all())
+    recovered = [buckets.MentionRow(
+        ticker=ticker, external_id=external_id, created_utc=created_utc,
+        source=source, channel=channel, author=author, simhash=int(simhash),
+        confidence=confidence, sentiment=sentiment,
+        engagement=float((score or 0) + (num_comments or 0)))
+        for (ticker, confidence, sentiment, source, external_id, channel,
+             author, created_utc, simhash, score, num_comments) in rows]
+    record(recovered)
+    return len(recovered)
 
 
 def events_for(keys):

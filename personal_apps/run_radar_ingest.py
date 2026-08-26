@@ -24,14 +24,15 @@ from app import app
 from extensions import db
 from models import RadarPollState
 from features.radar import (
-    history, ingest, llm_sentiment, market_calendar, quotes, retention,
-    scheduling, scoring, universe)
+    history, ingest, journal, llm_sentiment, market_calendar, quotes,
+    retention, scheduling, scoring, universe)
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
-    REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL, REDDIT_MIN_POLL, REDDIT_SUBS,
-    REDDIT_SUBS_PER_CYCLE, SOURCES, STOCKTWITS_REQUESTS_PER_HOUR,
-    prefer_ipv4_if_configured)
+    MENTION_EVENT_RETENTION_HOURS, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
+    REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
+    STOCKTWITS_REQUESTS_PER_HOUR, prefer_ipv4_if_configured,
+    source_config_version)
 from features.radar.sources import bluesky, fourchan, reddit, stocktwits
 from features.radar.sources import FetchResult
 
@@ -509,10 +510,79 @@ def _scheduled_sentiment():
                         judged, llm_sentiment.pending_count())
 
 
+def _prepare_rollup_generation(now):
+    """Recover retained evidence and clear incompatible scores, once, before
+    any fetcher or scheduler exists.
+
+    Two things happen here and neither can wait for the first ingest cycle:
+
+    Bootstrap first. The mention journal is empty immediately after migration
+    (Task 1), so if the first cycle rebuilt an already-open quarter-hour
+    straight from its own cursor slice, that would repeat the exact overwrite
+    this generation exists to fix -- once, on the one window unlucky enough to
+    still be open at deploy time. journal.bootstrap_from_mentions replays the
+    retained radar_posts x radar_mentions evidence back through record() so
+    that window rebuilds complete instead.
+
+    Then the zero-recovery check. A fresh or genuinely quiet database recovers
+    zero events because there is nothing to recover, and must be allowed to
+    start. A migrated database whose retained evidence failed to bootstrap for
+    some other reason ALSO recovers zero events, and the two are
+    indistinguishable from the count alone -- an absence is never a zero. A
+    legacy RadarBucketSource already showing real high_confidence_count in the
+    same overlap window is what tells them apart: it is proof the evidence
+    existed, so recovering none of it means bootstrap is broken, not that the
+    world was quiet. Continuing anyway would serve relabelled scores over
+    evidence that never actually made it into the journal, so this raises
+    instead and lets the caller's lack of a try/except abort startup.
+
+    Finally, incompatible scores in the same window are cleared so nothing
+    still shows a generation-1 z-score under the generation-2 stamp before the
+    first cycle even runs. score_source repeats a narrower version of this
+    check every fifteen minutes as a backstop; this is the one-time pass for
+    the migration boundary itself.
+    """
+    from models import RadarBucketSource
+
+    with app.app_context():
+        since = now.replace(tzinfo=None) - dt.timedelta(
+            hours=MENTION_EVENT_RETENTION_HOURS)
+        recovered = journal.bootstrap_from_mentions(since)
+        if recovered == 0:
+            legacy = (RadarBucketSource.query
+                     .filter(RadarBucketSource.bucket_start >= since,
+                             RadarBucketSource.high_confidence_count > 0)
+                     .first())
+            if legacy is not None:
+                raise RuntimeError(
+                    'radar rollup bootstrap recovered zero mention events, '
+                    'but a legacy bucket in the same overlap window '
+                    '(ticker=%s source=%s bucket_start=%s) already carries '
+                    'high_confidence_count > 0 -- refusing to start ingest '
+                    'against evidence that failed to bootstrap' %
+                    (legacy.ticker, legacy.source, legacy.bucket_start))
+
+        invalidated = scoring.invalidate_incompatible_scores(
+            source_config_version(), since)
+        db.session.commit()
+        return recovered, invalidated
+
+
 def main():
     logging.basicConfig(level=logging.INFO)
     if prefer_ipv4_if_configured():
         logger.info('RADAR_FORCE_IPV4 set -- outbound HTTP will skip AAAA records')
+
+    # Ahead of build_fetchers and the scheduler, deliberately -- no cycle may
+    # run against a mixed-generation database, and the zero-recovery check
+    # above needs to see the pre-startup state before anything else touches
+    # it. Uncaught on purpose: a bootstrap or invalidation failure must abort
+    # the daemon rather than start ingest over evidence it could not recover.
+    recovered, invalidated = _prepare_rollup_generation(
+        dt.datetime.now(dt.timezone.utc))
+    logger.info('radar rollup generation prepared: recovered=%d invalidated=%d',
+               recovered, invalidated)
+
     fetchers = build_fetchers()
 
     scheduler = BackgroundScheduler(timezone='UTC')

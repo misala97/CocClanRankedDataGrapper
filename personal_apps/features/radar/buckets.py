@@ -203,15 +203,30 @@ def roll_up(rows, statuses, touched):
                 child = RadarBucketSource(ticker=ticker, bucket_start=start,
                                           source=source)
                 db.session.add(child)
+            # Read before this loop restamps the column below -- otherwise
+            # the comparison always reads current-against-current and a
+            # generation change could never be seen. A fresh row's version is
+            # Python None, which the `!=` below already treats as a mismatch.
+            previous_version = child.source_config_version
             for field, value in per.items():
                 setattr(child, field, value)
             child.status = statuses[source]
+            # Two independent reasons a stored score stops being trustworthy,
+            # cleared the same way:
+            #
             # scoring.score_source refuses any row that is not `ok`, so a row
             # leaving `ok` must lose the score it was given while it was one.
             # It kept it, and leaderboard ranks on mention_z IS NOT NULL --
             # 399 rows in production were being ranked on a z the scorer would
             # no longer compute for them (audit 2026-08-26).
-            if child.status != 'ok':
+            #
+            # A row whose generation is NULL or differs from the one about to
+            # be stamped was counted under a different aggregation -- Task 3c,
+            # generation 2 rebuilds from the complete journal where generation
+            # 1 rebuilt from one cursor slice. Restamping it to the current
+            # version without clearing first would disguise an old-population
+            # score as a current one, regardless of the row's status.
+            if child.status != 'ok' or previous_version != version:
                 child.expected = None
                 child.variance = None
                 child.mention_z = None

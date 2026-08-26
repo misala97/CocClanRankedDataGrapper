@@ -530,6 +530,12 @@ STOPWORDS = frozenset({
 # evidence that a common word has collided with a ticker.
 MAX_BARE_PER_VOUCHER = 4
 
+# Counts written by generation 1 were rebuilt from one cursor slice and lost
+# up to 42.9% of the busiest buckets. Generation 2 rebuilds from the complete
+# mention journal. This is hashed because the two populations are not valid
+# inputs to one baseline, even though the extractor admitted the same symbols.
+ROLLUP_GENERATION = 2
+
 
 def source_config_version():
     """A stable 16-char stamp for everything that decides what gets counted.
@@ -581,6 +587,11 @@ def source_config_version():
         # the ceiling mixes populations judged under two different rules
         # inside one baseline unless the stamp moves with it.
         'bare_per_voucher': MAX_BARE_PER_VOUCHER,
+        # Not an extraction rule -- the extractor admits the same symbols
+        # either way. What changed is how completely a bucket's count is
+        # aggregated (audit 2026-08-26), and that is exactly as valid a
+        # reason to start a new baseline as a membership change is.
+        'rollup_generation': ROLLUP_GENERATION,
     }, separators=(',', ':'), sort_keys=True)
     return hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]
 

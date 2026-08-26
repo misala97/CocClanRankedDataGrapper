@@ -187,6 +187,31 @@ def test_scoring_columns_are_left_untouched(clean_buckets):
     assert source.baseline_days == 9
 
 
+@pytest.mark.parametrize('previous_version', [None, 'old-generation'])
+def test_a_generation_restamp_clears_every_stale_score(clean_buckets,
+                                                        previous_version):
+    """A restamp cannot make an old score look current."""
+    start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
+    buckets.roll_up([row()], ALL_OK, start)
+    source = RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='bluesky').one()
+    source.source_config_version = previous_version
+    source.expected = 1.0
+    source.variance = 2.0
+    source.mention_z = 4.2
+    source.baseline_days = 9
+    db.session.commit()
+
+    buckets.roll_up([row()], ALL_OK, start)
+
+    db.session.expire(source)
+    assert source.source_config_version == source_config_version()
+    assert source.expected is None
+    assert source.variance is None
+    assert source.mention_z is None
+    assert source.baseline_days is None
+
+
 def test_per_source_rows_are_written(clean_buckets):
     rows = [row(source='stocktwits', author='u1', simhash=1),
             row(source='bluesky', author='u2', simhash=2)]

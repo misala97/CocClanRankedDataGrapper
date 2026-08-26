@@ -8,6 +8,8 @@ keyed on Berlin hours would poll at overnight rates through a live open.
 """
 import datetime as dt
 
+import pytest
+
 import run_radar_ingest as daemon
 
 
@@ -471,3 +473,141 @@ def test_the_daemon_retires_subreddits_dropped_from_the_config():
     source = inspect.getsource(daemon._reddit_fetcher)
 
     assert 'retire_untracked' in source
+
+
+# Task 3c: generation 2 rebuilds buckets from the complete mention journal
+# instead of one cursor slice, which changes measured volume even though the
+# extractor's membership rules do not. _prepare_rollup_generation is the
+# one-time startup pass that keeps that correction from silently mixing with
+# understated pre-fix history. The end-to-end version of this, against real
+# rows, lives in
+# tests/test_radar_journal.py::test_deploy_bootstrap_preserves_the_complete_open_bucket;
+# these pin the daemon's own wiring and its fail-closed branch in isolation.
+
+def test_prepare_rollup_generation_bootstraps_then_invalidates_then_commits(
+        monkeypatch):
+    """The call order is the contract: bootstrap has to land in the journal
+    before anything downstream reads it, and invalidation is what actually
+    clears the columns the leaderboard reads mention_z from."""
+    calls = []
+
+    def fake_bootstrap(since):
+        calls.append(('bootstrap', since))
+        return 3
+
+    def fake_invalidate(version, since):
+        calls.append(('invalidate', version, since))
+        return 5
+
+    monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions', fake_bootstrap)
+    monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
+                        fake_invalidate)
+
+    now = _utc(2026, 4, 15, 15, 0)
+    recovered, invalidated = daemon._prepare_rollup_generation(now)
+
+    assert (recovered, invalidated) == (3, 5)
+    assert [call[0] for call in calls] == ['bootstrap', 'invalidate']
+    since = now.replace(tzinfo=None) - dt.timedelta(
+        hours=daemon.MENTION_EVENT_RETENTION_HOURS)
+    assert calls[0][1] == since, 'bootstrap must see the retention-window floor'
+    assert calls[1][2] == since, 'invalidation must share the same floor'
+
+
+def test_prepare_rollup_generation_fails_closed_on_unrecovered_legacy_evidence(
+        monkeypatch):
+    """Zero recovered is ambiguous by itself -- a fresh database and a
+    migrated one whose bootstrap silently failed both report it. A legacy
+    bucket already carrying high_confidence_count in the overlap window is
+    what tells the two apart: it is proof the evidence existed, so recovering
+    none of it means bootstrap is broken, not that the world was quiet.
+    Continuing anyway would serve a relabelled score for evidence that never
+    actually made it into the journal.
+
+    The legacy-evidence check has no ticker filter -- production has to catch
+    ANY source's bootstrap failure, not one ticker's -- so `now` is
+    2026-08-26 rather than this file's usual 2026-04-15: the dev database
+    seeds RadarBucketSource rows back to 2026-07-22, and 2026-08-24 (this
+    `now` minus the 48-hour retention window) is confirmed clear of every one
+    of them that carries high_confidence_count > 0.
+    """
+    from app import app as flask_app
+    from extensions import db
+    from models import RadarBucketSource
+
+    now = _utc(2026, 8, 26, 6, 0)
+    since = now.replace(tzinfo=None) - dt.timedelta(
+        hours=daemon.MENTION_EVENT_RETENTION_HOURS)
+    with flask_app.app_context():
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        db.session.add(RadarBucketSource(
+            ticker='ZZDAEMON', bucket_start=since + dt.timedelta(hours=1),
+            source='bluesky', mention_count=9, high_confidence_count=6,
+            low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
+            engagement_weighted_count=9.0, status='ok',
+            source_config_version='old-generation'))
+        db.session.commit()
+
+    monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions', lambda s: 0)
+    invalidate_called = []
+    monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
+                        lambda v, s: invalidate_called.append(True) or 0)
+
+    try:
+        with pytest.raises(RuntimeError):
+            daemon._prepare_rollup_generation(now)
+        assert not invalidate_called, (
+            'a failed-closed bootstrap must never reach invalidation, or an '
+            'ingest cycle could still slip in before the process actually exits')
+    finally:
+        with flask_app.app_context():
+            RadarBucketSource.query.filter(
+                RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+            db.session.commit()
+
+
+def test_prepare_rollup_generation_continues_when_the_database_is_genuinely_quiet(
+        monkeypatch):
+    """The complementary case: zero recovered with no legacy evidence in the
+    overlap window at all is a fresh or genuinely quiet database, and the
+    fail-closed check meant for a broken migration must not block it.
+
+    Same 2026-08-26 `now` as the fail-closed test above, and for the same
+    reason -- confirmed clear of the dev database's seeded RadarBucketSource
+    history so this test's "nothing found" is not an accident of timing.
+    """
+    from app import app as flask_app
+    from extensions import db
+    from models import RadarBucketSource
+
+    now = _utc(2026, 8, 26, 6, 0)
+    with flask_app.app_context():
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        db.session.commit()
+
+    monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions', lambda s: 0)
+    invalidate_called = []
+    monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
+                        lambda v, s: invalidate_called.append(True) or 0)
+
+    recovered, invalidated = daemon._prepare_rollup_generation(now)
+
+    assert (recovered, invalidated) == (0, 0)
+    assert invalidate_called, 'the quiet path must still reach invalidation'
+
+
+def test_main_prepares_the_rollup_generation_before_building_fetchers():
+    """No cycle may run against a mixed-generation database, so this has to
+    see the pre-startup state before build_fetchers or the scheduler exist --
+    otherwise a cycle could already be queued by the time a bootstrap failure
+    is even detected."""
+    import inspect
+    source = inspect.getsource(daemon.main)
+
+    assert '_prepare_rollup_generation(' in source
+    prepare_at = source.index('_prepare_rollup_generation(')
+    fetchers_at = source.index('build_fetchers()')
+    scheduler_at = source.index('BackgroundScheduler(')
+    assert prepare_at < fetchers_at < scheduler_at

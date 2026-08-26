@@ -14,6 +14,8 @@ import collections
 import dataclasses
 import datetime as dt
 
+import sqlalchemy as sa
+
 from extensions import db
 from models import RadarBucketSource
 
@@ -28,9 +30,21 @@ from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
 PRIOR_WEIGHT = 0.05
 
 
-def _rows_by_ticker(source, since, until):
+def _rows_by_ticker(source, since, until, config_version):
+    """Every row a ticker may be scored or baselined from, THIS generation only.
+
+    Filtered here rather than trusted to baselines.usable() downstream: usable()
+    only screens what feeds the RATE estimate, but the write loop below scores
+    every `ok` row it is handed. Without this filter, a ticker straddling a
+    generation boundary -- some current rows plus an old-generation row that
+    invalidate_incompatible_scores has not yet reached -- would have the old
+    row overwritten with a freshly computed z from the CURRENT baseline, which
+    disguises it as current data while its own source_config_version still
+    says otherwise.
+    """
     rows = (RadarBucketSource.query
             .filter(RadarBucketSource.source == source,
+                    RadarBucketSource.source_config_version == config_version,
                     RadarBucketSource.bucket_start >= since,
                     RadarBucketSource.bucket_start < until)
             .all())
@@ -47,6 +61,33 @@ def _observations(rows):
             for r in rows]
 
 
+def invalidate_incompatible_scores(version, since):
+    """Clear expected/variance/mention_z/baseline_days from rows this
+    generation cannot vouch for. Returns rows cleared.
+
+    Two ways a row is incompatible: an explicit different stamp, or SQL NULL
+    -- a row scored before source_config_version existed, or one a bootstrap
+    recovered without yet being restamped. `!= version` alone does not match
+    NULL in SQL (NULL compares unequal to everything, including itself), so
+    it is tested for explicitly rather than trusted to fall out of the
+    inequality.
+
+    Restricted to rows carrying at least one non-NULL score column so a row
+    that was never scored -- already the honest absence this whole change
+    protects -- is not written to for no reason.
+    """
+    return (RadarBucketSource.query
+            .filter(RadarBucketSource.bucket_start >= since,
+                    sa.or_(RadarBucketSource.source_config_version.is_(None),
+                           RadarBucketSource.source_config_version != version),
+                    sa.or_(RadarBucketSource.expected.isnot(None),
+                           RadarBucketSource.variance.isnot(None),
+                           RadarBucketSource.mention_z.isnot(None),
+                           RadarBucketSource.baseline_days.isnot(None)))
+            .update({'expected': None, 'variance': None, 'mention_z': None,
+                    'baseline_days': None}, synchronize_session=False))
+
+
 def score_source(source, now, lookback_days=30, excluded=None):
     """Score every bucket of every ticker on one source. Returns rows written.
 
@@ -58,8 +99,19 @@ def score_source(source, now, lookback_days=30, excluded=None):
     since = now - dt.timedelta(days=lookback_days)
     version = source_config_version()
 
-    prof = profile.build_profile(source, now)
-    grouped = _rows_by_ticker(source, since, now)
+    # Defensive, not the primary defence: startup already clears the
+    # migration overlap window once (run_radar_ingest._prepare_rollup_
+    # generation). This is the steady-state backstop for whatever that
+    # window does not reach -- scoped to lookback_days rather than a full
+    # history scan, because _rows_by_ticker's own version filter already
+    # keeps an uncleared old row out of the ticker-level loop below; this
+    # only stops it sitting there forever still LOOKING scored to anything
+    # that reads the column directly (spec: leaderboard ranks on mention_z
+    # IS NOT NULL).
+    invalidate_incompatible_scores(version, since)
+
+    prof = profile.build_profile(source, now, version)
+    grouped = _rows_by_ticker(source, since, now, version)
 
     # The prior a thin ticker is pulled towards: what a typical ticker on this
     # source does. Spec 6.8 wants a segment median, which needs market cap and

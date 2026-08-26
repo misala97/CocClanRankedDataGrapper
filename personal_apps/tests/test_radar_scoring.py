@@ -157,6 +157,50 @@ def test_scoring_only_touches_its_own_source(rows):
         ticker='SSB', source='bluesky').first().mention_z is None
 
 
+def test_scoring_passes_the_current_generation_to_the_profile(rows,
+                                                               monkeypatch):
+    steady_history()
+    db.session.commit()
+    seen = {}
+    real_build_profile = scoring.profile.build_profile
+
+    def watched_build_profile(source, until, config_version, **kwargs):
+        seen['version'] = config_version
+        return real_build_profile(source, until, config_version, **kwargs)
+
+    monkeypatch.setattr(scoring.profile, 'build_profile', watched_build_profile)
+
+    scoring.score_source('stocktwits', NOW)
+
+    assert seen['version'] == source_config_version()
+
+
+def test_scoring_clears_old_and_sql_null_scores_inside_its_lookback(rows):
+    steady_history()
+    scored_at = NOW - dt.timedelta(days=1)
+    for ticker, version in (('SSOLD', 'old-generation'), ('SSNULL', None)):
+        db.session.add(RadarBucketSource(
+            ticker=ticker, bucket_start=scored_at, source='stocktwits',
+            mention_count=9, high_confidence_count=9, low_count=0,
+            distinct_authors=9, distinct_text_ratio=1.0,
+            engagement_weighted_count=9.0, status='ok',
+            source_config_version=version, expected=3.0, variance=4.0,
+            mention_z=3.0, baseline_days=20))
+    db.session.commit()
+
+    scoring.score_source('stocktwits', NOW)
+
+    incompatible = (RadarBucketSource.query
+                    .filter(RadarBucketSource.ticker.in_(['SSOLD', 'SSNULL']))
+                    .order_by(RadarBucketSource.ticker).all())
+    assert len(incompatible) == 2
+    for row in incompatible:
+        assert row.expected is None
+        assert row.variance is None
+        assert row.mention_z is None
+        assert row.baseline_days is None
+
+
 def test_pooling_sums_components_not_z_scores(rows):
     """A weighted mean of z-scores is not a z-score. Two sources each two
     sigma over is stronger evidence than either alone, and averaging would
