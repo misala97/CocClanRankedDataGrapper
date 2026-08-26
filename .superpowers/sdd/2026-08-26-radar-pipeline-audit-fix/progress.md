@@ -85,3 +85,23 @@ Ruling: Task 3c clears score fields both at startup and on the exact bucket row
   evidence exists but bootstrap recovers zero rows. Cost if wrong is a startup
   abort on a genuinely inconsistent migrated database; continuing would make
   missing evidence indistinguishable from zero and serve relabelled scores.
+
+Task 3c: implementation commit 7791963. Covering suite 137/137 passed; broad
+  radar gate 595 passed with the two known missing-Vite-manifest failures.
+  Independent Claude review found production behavior compliant but review NOT
+  APPROVED because eight test/efficiency findings remain. Fix round 1/5 is in
+  progress from `task-3c-fix-round-1.md`.
+
+Task 3c review findings: runtime fail-closed `main()` test can be fooled by
+  swallowing prepare errors; mixed-generation row scoring is unpinned; four
+  global-window tests collide with current dev seed data; startup commit,
+  current-version argument, `high_confidence_count > 0`, and score-presence
+  update guard are unpinned; scorer invalidation repeats an unscoped 30-day
+  scan per source.
+
+Ruling: fix all eight in one scoped round. Add an optional source argument to
+  defensive score invalidation while leaving startup all-source; move only the
+  Task 3c global-window fixtures to 2027-06-01. Cost if wrong is a slightly
+  wider public helper signature and future-dated test data; leaving the gaps
+  allows silent fail-open startup, phantom cross-generation spikes, flaky
+  counts, or repeated range locks.
