@@ -18,15 +18,18 @@ from features.radar import ingest
 from features.radar.sources import FetchResult, RawPost
 
 NOW = dt.datetime(2026, 4, 15, 14, 20, 0)
+TEST_CHANNEL = 'zz_task7_ingest'
+TEST_SOURCES = ('bluesky', 'reddit')
+TEST_TICKER = 'ZZG'
 
 
 def _wipe():
     from models import RadarBucketSource
-    RadarPost.query.filter(RadarPost.channel == 'testsub').delete(
+    RadarPost.query.filter(RadarPost.channel == TEST_CHANNEL).delete(
         synchronize_session=False)
-    RadarBucketSource.query.filter(
-        RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
-    RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
+    RadarBucketSource.query.filter_by(ticker=TEST_TICKER).delete(
+        synchronize_session=False)
+    RadarBucket.query.filter_by(ticker=TEST_TICKER).delete(
         synchronize_session=False)
     # roll_up now rebuilds from the journal rather than from one cycle's rows
     # (Task 2), so a ZZG event this suite never cleans up outlives the test
@@ -34,17 +37,19 @@ def _wipe():
     # (ticker, bucket_start) -- caught live: leftover rows from earlier tests
     # in this file made mention_count read 4, 4 and 7 where fresh runs read
     # 1, 0 and 2.
-    RadarMentionEvent.query.filter(
-        RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
-    TickerUniverse.query.filter(TickerUniverse.symbol.like('ZZ%')).delete(
+    RadarMentionEvent.query.filter_by(ticker=TEST_TICKER).delete(
         synchronize_session=False)
-    RadarSourceCursor.query.delete(synchronize_session=False)
+    TickerUniverse.query.filter_by(symbol=TEST_TICKER).delete(
+        synchronize_session=False)
+    RadarSourceCursor.query.filter(
+        RadarSourceCursor.source.in_(TEST_SOURCES)).delete(
+            synchronize_session=False)
 
 
 @pytest.fixture()
 def seeded(clean_radar):
     with flask_app.app_context():
-        db.session.add(TickerUniverse(symbol='ZZG', name='Zulu Games Corp',
+        db.session.add(TickerUniverse(symbol=TEST_TICKER, name='Zulu Games Corp',
                                       exchange='NYSE',
                                       first_seen=dt.datetime(2026, 1, 1)))
         db.session.commit()
@@ -63,7 +68,7 @@ def clean_radar():
 
 def post(ident='t3_1', body='$ZZG is ripping', score=5, author='u1',
          minute=10, title=None, source='bluesky'):
-    return RawPost(source=source, external_id=ident, channel='testsub',
+    return RawPost(source=source, external_id=ident, channel=TEST_CHANNEL,
                    author=author,
                    created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
                    title=title, body=body, score=score, num_comments=0,
@@ -126,7 +131,24 @@ def test_a_missing_source_writes_nothing_at_all(seeded):
     assert result['per_source'] == {'bluesky': 'missing'}
     assert result['buckets_written'] == 0
     with flask_app.app_context():
-        assert RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).count() == 0
+        assert RadarBucket.query.filter_by(ticker=TEST_TICKER).count() == 0
+
+
+def test_an_empty_healthy_source_stays_ok_without_database_artifacts(seeded):
+    """No work due is current coverage, not a source outage or a zero row."""
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[], status='ok')))
+
+    assert result['per_source'] == {'bluesky': 'ok'}
+    assert result['buckets_written'] == 0
+    with flask_app.app_context():
+        from models import RadarBucketSource
+        assert RadarPost.query.filter_by(channel=TEST_CHANNEL).count() == 0
+        assert RadarMention.query.filter_by(ticker=TEST_TICKER).count() == 0
+        assert RadarBucket.query.filter_by(ticker=TEST_TICKER).count() == 0
+        assert RadarBucketSource.query.filter_by(ticker=TEST_TICKER).count() == 0
+        assert RadarMentionEvent.query.filter_by(ticker=TEST_TICKER).count() == 0
+        assert RadarSourceCursor.query.filter_by(source='bluesky').count() == 0
 
 
 def test_a_truncated_cycle_still_stores_its_mentions(seeded):
@@ -336,18 +358,22 @@ def test_a_coin_collision_is_dropped_on_a_general_source(seeded, monkeypatch):
     assert result['mentions'] == 0
 
 
-def test_a_source_can_opt_into_reading_coin_symbols_as_companies(seeded,
-                                                                  monkeypatch):
+def test_a_source_can_opt_into_reading_coin_symbols_as_companies(monkeypatch):
     """The extension point, kept alive with no live source using it.
 
     StockTwits was the only population where $LINK meant Interlink. It is
     retired; this pins that a future finance-native source can still opt in,
     rather than the map quietly becoming a constant nobody can override.
     """
-    from features.radar import config
+    from features.radar import config, ingest
 
+    monkeypatch.setattr(config, 'COIN_COLLISION_SYMBOLS', frozenset({'LINK'}))
     monkeypatch.setitem(config.COIN_SYMBOLS_MEAN_STOCKS, 'bluesky', True)
-    assert config.coin_collision_dropped('bluesky', 'LINK') is False
+    lookup = {'LINK': {'name': 'Interlink Electronics Inc.', 'exchange': 'NASDAQ',
+                       'distinctive': set()}}
+    raw = post(ident='coin-link', body='$LINK is breaking out', source='bluesky')
+
+    assert ingest._extract_for(raw, lookup) == [('LINK', 'high')]
 
 
 # --- Automated feeds, wired in 2026-08-25 -----------------------------------
