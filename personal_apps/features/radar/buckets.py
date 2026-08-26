@@ -203,6 +203,16 @@ def roll_up(rows, statuses, touched):
             for field, value in per.items():
                 setattr(child, field, value)
             child.status = statuses[source]
+            # scoring.score_source refuses any row that is not `ok`, so a row
+            # leaving `ok` must lose the score it was given while it was one.
+            # It kept it, and leaderboard ranks on mention_z IS NOT NULL --
+            # 399 rows in production were being ranked on a z the scorer would
+            # no longer compute for them (audit 2026-08-26).
+            if child.status != 'ok':
+                child.expected = None
+                child.variance = None
+                child.mention_z = None
+                child.baseline_days = None
             child.source_config_version = version
 
         written += 1
