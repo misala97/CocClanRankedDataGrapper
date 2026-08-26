@@ -31,13 +31,15 @@ Task 3b: review NOT APPROVED - Important: promoted=True is sticky although
   itself mandated the one-way write, so this is a plan defect rather than an
   implementer deviation. Fix round 1/5 pending.
 
-Task 3b fix round 1: implemented in commit 95807c4. `mark_promoted` now
+Task 3b fix round 1: implemented in commit f3413b4. `mark_promoted` now
   replaces every recomputed low/medium verdict; the cap-plus-one regression
   proves prior promotions, voice count and bucket count are revoked together.
   Focused test 1/1 and covering tests 66/66 passed. Full radar gate reached
   585 passed and two unrelated template failures caused by the absent ignored
   Vite manifest; local npm build is unavailable because `tsc` is not installed.
-  Independent re-review pending.
+  Independent re-review APPROVED: no Critical or Important findings. Minor
+  self-referential report SHA wording corrected in the following docs commit.
+  Task 3b complete.
 
 Ruling: Task 3b promotion persistence replaces every recomputed bare verdict,
   writing False for current lows and True for current mediums - the journal
