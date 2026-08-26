@@ -22,11 +22,15 @@ NOW = MONDAY + dt.timedelta(days=35)
 def rows():
     with flask_app.app_context():
         RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('SS%')).delete(synchronize_session=False)
+            RadarBucketSource.ticker.like('SS%')
+            | RadarBucketSource.ticker.like('ZZ%')).delete(
+                synchronize_session=False)
         db.session.commit()
         yield
         RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('SS%')).delete(synchronize_session=False)
+            RadarBucketSource.ticker.like('SS%')
+            | RadarBucketSource.ticker.like('ZZ%')).delete(
+                synchronize_session=False)
         db.session.commit()
 
 
@@ -199,6 +203,60 @@ def test_scoring_clears_old_and_sql_null_scores_inside_its_lookback(rows):
         assert row.variance is None
         assert row.mention_z is None
         assert row.baseline_days is None
+
+
+def test_scoring_never_rescores_an_old_generation_row_mixed_with_current_history(rows):
+    """A current baseline must not make an incompatible row look current."""
+    steady_history(ticker='ZZGEN')
+    old_at = NOW - dt.timedelta(minutes=15)
+    add(old_at, 500, ticker='ZZGEN', version='old-generation')
+    db.session.commit()
+
+    scoring.score_source('stocktwits', NOW)
+
+    old = RadarBucketSource.query.filter_by(
+        ticker='ZZGEN', bucket_start=old_at, source='stocktwits').one()
+    assert old.mention_z is None
+
+
+def test_invalidation_skips_an_already_unscored_incompatible_row(rows):
+    since = NOW - dt.timedelta(days=1)
+    for ticker, score in (('ZZSCORED', 3.0), ('ZZUNSCORED', None)):
+        db.session.add(RadarBucketSource(
+            ticker=ticker, bucket_start=NOW - dt.timedelta(hours=1),
+            source='stocktwits', mention_count=5, high_confidence_count=5,
+            low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
+            engagement_weighted_count=5.0, status='ok',
+            source_config_version='old-generation', expected=2.0 if score else None,
+            variance=3.0 if score else None, mention_z=score,
+            baseline_days=10 if score else None))
+    db.session.commit()
+
+    cleared = scoring.invalidate_incompatible_scores(
+        source_config_version(), since)
+
+    assert cleared == 1
+    assert RadarBucketSource.query.filter_by(ticker='ZZUNSCORED').one().mention_z is None
+
+
+def test_scoring_invalidates_only_its_active_source(rows):
+    since = NOW - dt.timedelta(hours=1)
+    for source in ('stocktwits', 'bluesky'):
+        db.session.add(RadarBucketSource(
+            ticker='ZZSCOPE', bucket_start=NOW - dt.timedelta(minutes=15),
+            source=source, mention_count=5, high_confidence_count=5,
+            low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
+            engagement_weighted_count=5.0, status='ok',
+            source_config_version='old-generation', expected=2.0, variance=3.0,
+            mention_z=3.0, baseline_days=10))
+    db.session.commit()
+
+    scoring.score_source('stocktwits', NOW)
+
+    assert RadarBucketSource.query.filter_by(
+        ticker='ZZSCOPE', source='stocktwits').one().mention_z is None
+    assert RadarBucketSource.query.filter_by(
+        ticker='ZZSCOPE', source='bluesky').one().mention_z == 3.0
 
 
 def test_pooling_sums_components_not_z_scores(rows):

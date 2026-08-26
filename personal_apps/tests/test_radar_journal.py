@@ -255,19 +255,17 @@ def test_bootstrap_recovers_retained_mentions_with_field_fidelity(
     recover EVERY retained decision in the window, not one ticker's -- so
     unlike the rest of this file it cannot lean on ZZ-namespacing alone for
     isolation. The dev database seeds 1432 real RadarPost x RadarMention rows
-    dated 2026-08-22/23 (scratchpad/seed_radar_dev.py); `since` here is
-    2026-08-24, confirmed clear of them, rather than this file's usual
-    2026-04-15 -- that date is safely BEFORE the seeded rows, but the query
-    has no upper bound, so anything before them matches them too.
+    dated before this test's 2027-06-01 window. This future window stays clear
+    of all real and seeded rows while preserving the same bootstrap behaviour.
     """
     from features.radar import journal
 
-    since = dt.datetime(2026, 8, 24, 13, 0, 0)
+    since = dt.datetime(2027, 6, 1, 13, 0, 0)
     _retained_post('zz-bootstrap-high', 'ZZH', 'high',
-                   dt.datetime(2026, 8, 24, 14, 2, 0), author='high-author',
+                   dt.datetime(2027, 6, 1, 14, 2, 0), author='high-author',
                    simhash=101, sentiment=0.75, score=7, comments=4)
     _retained_post('zz-bootstrap-low', 'ZZL', 'low',
-                   dt.datetime(2026, 8, 24, 14, 7, 0), author='low-author',
+                   dt.datetime(2027, 6, 1, 14, 7, 0), author='low-author',
                    simhash=202, sentiment=-0.25, score=-2, comments=5)
     db.session.commit()
 
@@ -283,8 +281,8 @@ def test_bootstrap_recovers_retained_mentions_with_field_fidelity(
     high = events['ZZH']
     assert (high.source, high.external_id, high.channel, high.author) == (
         'bluesky', 'zz-bootstrap-high', 'radar-test', 'high-author')
-    assert high.created_utc == dt.datetime(2026, 8, 24, 14, 2, 0)
-    assert high.bucket_start == dt.datetime(2026, 8, 24, 14, 0, 0)
+    assert high.created_utc == dt.datetime(2027, 6, 1, 14, 2, 0)
+    assert high.bucket_start == dt.datetime(2027, 6, 1, 14, 0, 0)
     assert (high.simhash, high.confidence, high.sentiment, high.engagement) == (
         101, 'high', 0.75, 11.0)
     low = events['ZZL']
@@ -295,19 +293,17 @@ def test_deploy_bootstrap_preserves_the_complete_open_bucket(
         clean_buckets, clean_events, clean_retained_mentions):
     """Same real-data constraint as the fidelity test above:
     _prepare_rollup_generation's bootstrap call and its legacy-evidence check
-    both scan unbounded by ticker, so `now` here is 2026-08-26 (giving a
-    48-hour `since` of 2026-08-24) rather than this file's usual 2026-04-15 --
-    confirmed clear of both the 1432 seeded RadarPost rows (2026-08-22/23) and
-    every seeded RadarBucketSource row carrying high_confidence_count > 0.
+    both scan unbounded by ticker, so this test uses a 2027-06-01 window,
+    beyond real and seeded rows, instead of this file's usual 2026-04-15.
     """
     import run_radar_ingest as daemon
     from features.radar import buckets
     from features.radar.config import source_config_version
     from models import RadarBucket, RadarBucketSource
 
-    pre_deploy = dt.datetime(2026, 8, 25, 14, 2, 0)
-    post_deploy = dt.datetime(2026, 8, 25, 14, 9, 0)
-    start = {dt.datetime(2026, 8, 25, 14, 0, 0)}
+    pre_deploy = dt.datetime(2027, 6, 1, 14, 2, 0)
+    post_deploy = dt.datetime(2027, 6, 1, 14, 9, 0)
+    start = {dt.datetime(2027, 6, 1, 14, 0, 0)}
     before = _row('zz-bootstrap-pre', author='predeploy', simhash=301,
                  created_utc=pre_deploy)
     buckets.roll_up([before], _ALL_OK, start)
@@ -326,7 +322,7 @@ def test_deploy_bootstrap_preserves_the_complete_open_bucket(
     db.session.commit()
 
     recovered, invalidated = daemon._prepare_rollup_generation(
-        dt.datetime(2026, 8, 26, 0, 0, 0))
+        dt.datetime(2027, 6, 1, 16, 0, 0))
     buckets.roll_up([
         _row('zz-bootstrap-post', author='postdeploy', simhash=302,
             created_utc=post_deploy),

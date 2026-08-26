@@ -502,16 +502,22 @@ def test_prepare_rollup_generation_bootstraps_then_invalidates_then_commits(
     monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions', fake_bootstrap)
     monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
                         fake_invalidate)
+    monkeypatch.setattr(daemon.db.session, 'commit',
+                        lambda: calls.append(('commit',)))
 
     now = _utc(2026, 4, 15, 15, 0)
     recovered, invalidated = daemon._prepare_rollup_generation(now)
 
     assert (recovered, invalidated) == (3, 5)
-    assert [call[0] for call in calls] == ['bootstrap', 'invalidate']
+    assert [call[0] for call in calls] == ['bootstrap', 'invalidate', 'commit']
     since = now.replace(tzinfo=None) - dt.timedelta(
         hours=daemon.MENTION_EVENT_RETENTION_HOURS)
     assert calls[0][1] == since, 'bootstrap must see the retention-window floor'
     assert calls[1][2] == since, 'invalidation must share the same floor'
+    assert calls[1][1] == daemon.source_config_version(), (
+        'invalidation must receive the exact current generation')
+    assert calls[2] == ('commit',), (
+        'bootstrap and invalidation must be durable before startup continues')
 
 
 def test_prepare_rollup_generation_fails_closed_on_unrecovered_legacy_evidence(
@@ -526,16 +532,14 @@ def test_prepare_rollup_generation_fails_closed_on_unrecovered_legacy_evidence(
 
     The legacy-evidence check has no ticker filter -- production has to catch
     ANY source's bootstrap failure, not one ticker's -- so `now` is
-    2026-08-26 rather than this file's usual 2026-04-15: the dev database
-    seeds RadarBucketSource rows back to 2026-07-22, and 2026-08-24 (this
-    `now` minus the 48-hour retention window) is confirmed clear of every one
-    of them that carries high_confidence_count > 0.
+    2027-06-01, beyond the real and seeded database history, so the global
+    legacy-evidence query cannot match unrelated rows.
     """
     from app import app as flask_app
     from extensions import db
     from models import RadarBucketSource
 
-    now = _utc(2026, 8, 26, 6, 0)
+    now = _utc(2027, 6, 1, 6, 0)
     since = now.replace(tzinfo=None) - dt.timedelta(
         hours=daemon.MENTION_EVENT_RETENTION_HOURS)
     with flask_app.app_context():
@@ -573,18 +577,23 @@ def test_prepare_rollup_generation_continues_when_the_database_is_genuinely_quie
     overlap window at all is a fresh or genuinely quiet database, and the
     fail-closed check meant for a broken migration must not block it.
 
-    Same 2026-08-26 `now` as the fail-closed test above, and for the same
-    reason -- confirmed clear of the dev database's seeded RadarBucketSource
-    history so this test's "nothing found" is not an accident of timing.
+    Uses the same 2027-06-01 window as the fail-closed test, beyond the real
+    and seeded database history.
     """
     from app import app as flask_app
     from extensions import db
     from models import RadarBucketSource
 
-    now = _utc(2026, 8, 26, 6, 0)
+    now = _utc(2027, 6, 1, 6, 0)
     with flask_app.app_context():
         RadarBucketSource.query.filter(
             RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        db.session.add(RadarBucketSource(
+            ticker='ZZQUIET', bucket_start=now.replace(tzinfo=None),
+            source='bluesky', mention_count=0, high_confidence_count=0,
+            low_count=0, distinct_authors=0, distinct_text_ratio=1.0,
+            engagement_weighted_count=0.0, status='missing',
+            source_config_version='old-generation'))
         db.session.commit()
 
     monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions', lambda s: 0)
@@ -592,22 +601,45 @@ def test_prepare_rollup_generation_continues_when_the_database_is_genuinely_quie
     monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
                         lambda v, s: invalidate_called.append(True) or 0)
 
-    recovered, invalidated = daemon._prepare_rollup_generation(now)
+    try:
+        recovered, invalidated = daemon._prepare_rollup_generation(now)
 
-    assert (recovered, invalidated) == (0, 0)
-    assert invalidate_called, 'the quiet path must still reach invalidation'
+        assert (recovered, invalidated) == (0, 0)
+        assert invalidate_called, 'the quiet path must still reach invalidation'
+    finally:
+        with flask_app.app_context():
+            RadarBucketSource.query.filter(
+                RadarBucketSource.ticker.like('ZZ%')).delete(
+                    synchronize_session=False)
+            db.session.commit()
 
 
-def test_main_prepares_the_rollup_generation_before_building_fetchers():
-    """No cycle may run against a mixed-generation database, so this has to
-    see the pre-startup state before build_fetchers or the scheduler exist --
-    otherwise a cycle could already be queued by the time a bootstrap failure
-    is even detected."""
-    import inspect
-    source = inspect.getsource(daemon.main)
+def test_main_prepares_the_rollup_generation_before_building_fetchers(monkeypatch):
+    """No cycle may run against a mixed-generation database, so a bootstrap or
+    invalidation failure has to prevent build_fetchers and the scheduler from
+    ever existing -- not merely appear earlier than them in main()'s source
+    text.
 
-    assert '_prepare_rollup_generation(' in source
-    prepare_at = source.index('_prepare_rollup_generation(')
-    fetchers_at = source.index('build_fetchers()')
-    scheduler_at = source.index('BackgroundScheduler(')
-    assert prepare_at < fetchers_at < scheduler_at
+    This replaces a source-inspection version of the test that only checked
+    substring order. The reviewer wrapped the _prepare_rollup_generation call
+    in main() with `try/except Exception: recovered, invalidated = 0, 0` --
+    the substrings stayed in the same order, so the old assertion kept
+    passing, and all 40 daemon tests were still green, while the daemon would
+    go on to start ingest over evidence it could not recover. Watching
+    build_fetchers actually run, or not, is the only way to tell a real raise
+    from one that got swallowed; main() raises on its first statement after
+    logging config, so it never reaches the blocking scheduler loop.
+    """
+    def explode(now):
+        raise RuntimeError('rollup generation bootstrap failed')
+
+    called = []
+    monkeypatch.setattr(daemon, '_prepare_rollup_generation', explode)
+    monkeypatch.setattr(daemon, 'build_fetchers', lambda: called.append(True))
+
+    with pytest.raises(RuntimeError):
+        daemon.main()
+
+    assert not called, ('a failed rollup-generation prepare must never reach '
+                        'build_fetchers, or a cycle could run before the '
+                        'process actually exits')

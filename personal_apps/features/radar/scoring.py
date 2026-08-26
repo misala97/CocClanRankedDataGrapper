@@ -61,7 +61,7 @@ def _observations(rows):
             for r in rows]
 
 
-def invalidate_incompatible_scores(version, since):
+def invalidate_incompatible_scores(version, since, source=None):
     """Clear expected/variance/mention_z/baseline_days from rows this
     generation cannot vouch for. Returns rows cleared.
 
@@ -76,16 +76,18 @@ def invalidate_incompatible_scores(version, since):
     that was never scored -- already the honest absence this whole change
     protects -- is not written to for no reason.
     """
-    return (RadarBucketSource.query
-            .filter(RadarBucketSource.bucket_start >= since,
-                    sa.or_(RadarBucketSource.source_config_version.is_(None),
-                           RadarBucketSource.source_config_version != version),
-                    sa.or_(RadarBucketSource.expected.isnot(None),
-                           RadarBucketSource.variance.isnot(None),
-                           RadarBucketSource.mention_z.isnot(None),
-                           RadarBucketSource.baseline_days.isnot(None)))
-            .update({'expected': None, 'variance': None, 'mention_z': None,
-                    'baseline_days': None}, synchronize_session=False))
+    query = RadarBucketSource.query.filter(
+        RadarBucketSource.bucket_start >= since,
+        sa.or_(RadarBucketSource.source_config_version.is_(None),
+               RadarBucketSource.source_config_version != version),
+        sa.or_(RadarBucketSource.expected.isnot(None),
+               RadarBucketSource.variance.isnot(None),
+               RadarBucketSource.mention_z.isnot(None),
+               RadarBucketSource.baseline_days.isnot(None)))
+    if source is not None:
+        query = query.filter(RadarBucketSource.source == source)
+    return query.update({'expected': None, 'variance': None, 'mention_z': None,
+                         'baseline_days': None}, synchronize_session=False)
 
 
 def score_source(source, now, lookback_days=30, excluded=None):
@@ -108,7 +110,7 @@ def score_source(source, now, lookback_days=30, excluded=None):
     # only stops it sitting there forever still LOOKING scored to anything
     # that reads the column directly (spec: leaderboard ranks on mention_z
     # IS NOT NULL).
-    invalidate_incompatible_scores(version, since)
+    invalidate_incompatible_scores(version, since, source=source)
 
     prof = profile.build_profile(source, now, version)
     grouped = _rows_by_ticker(source, since, now, version)

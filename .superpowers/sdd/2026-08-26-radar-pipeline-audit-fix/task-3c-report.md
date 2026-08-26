@@ -334,3 +334,78 @@ git add personal_apps/features/radar/config.py \
         personal_apps/tests/test_radar_daemon.py
 git commit -m "fix(radar): start corrected rollups as a new baseline generation"
 ```
+
+## Fix round 1 — test teeth and scoped invalidation
+
+Base: `c0f6f6b`. This round owns and replaces the reviewer's uncommitted
+`test_main_prepares_the_rollup_generation_before_building_fetchers` rewrite.
+Only the Task 3c scorer, Task 3c tests, and this report are staged for the
+round commit.
+
+### Changes
+
+- Replaced the daemon source-text ordering assertion with runtime proof that a
+  `_prepare_rollup_generation` exception propagates and never reaches
+  `build_fetchers`.
+- Pinned the prepare wiring's bootstrap → invalidation → commit order and the
+  exact `source_config_version()` passed to invalidation. The quiet path now
+  contains a `ZZQUIET` legacy row with `high_confidence_count=0`, proving that
+  zero is not evidence of a failed bootstrap.
+- Moved the Task 3c global-window daemon and journal fixtures to a
+  `2027-06-01` window (with same-test offsets), beyond real and seeded rows.
+- Added a mixed-generation `ZZGEN` regression: enough current history to
+  score plus one incompatible `ok` row must leave the old row unscored.
+- Pinned invalidation's score-presence guard with a scored and an already-null
+  incompatible row.
+- Added optional `source=None` scope to
+  `invalidate_incompatible_scores`. Startup omits it and remains all-source;
+  `score_source` passes its active source so one `score_all` pass does not run
+  four identical all-source range updates.
+
+### Watched failing mutations, then restoration
+
+1. Wrapped `main()` prepare in a swallowing `try/except`: runtime daemon test
+   failed after `build_fetchers` ran.
+2. Removed `_rows_by_ticker`'s generation predicate: mixed `ZZGEN` test
+   failed with old-row `mention_z == 357.92`.
+3. Removed `db.session.commit()`: prepare wiring test failed because its
+   observed sequence lacked `commit`.
+4. Replaced the prepare call-site version with `wrong-version`: wiring test
+   failed its exact-version assertion.
+5. Mutated `high_confidence_count > 0` to `>= 0`: quiet-database test raised
+   on the seeded zero-count legacy row.
+6. Replaced the score-presence `isnot(None)` disjunction with `sa.true()`:
+   invalidation test reported two writes instead of one.
+7. Removed `source=source` from the scorer invalidation call: the unrelated
+   Bluesky row was cleared by a StockTwits scoring pass.
+8. The source-scoped regression was written first and initially failed against
+   the inherited all-source scorer call; it passed after adding the optional
+   scope and passing the active source.
+
+### Final verification
+
+Focused regressions:
+
+```text
+py -3.12 -m pytest [nine Task 3c focused tests] -v
+9 passed in 2.47s
+```
+
+Required covering gate:
+
+```text
+py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
+140 collected; exit 0
+```
+
+Required broad gate:
+
+```text
+py -3.12 -m pytest tests/ -k radar -q
+2 failed, 598 passed, 2 skipped, 646 deselected, 2 warnings in 66.84s
+```
+
+The only broad failures are the established unrelated Radar API template
+tests, both caused by the ignored missing
+`static/radar/dist/.vite/manifest.json`. The test-created `ZZ...` rows are
+cleaned before and after each affected test.
