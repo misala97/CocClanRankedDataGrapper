@@ -16,22 +16,25 @@ from features.radar.config import source_config_version
 
 MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
 NOW = MONDAY + dt.timedelta(days=35)
+_OWNED_TICKERS = (
+    'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL', 'SSNOPE',
+    'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED',
+)
+
+
+def _clear_owned_rows():
+    RadarBucketSource.query.filter(
+        RadarBucketSource.ticker.in_(_OWNED_TICKERS)).delete(
+            synchronize_session=False)
+    db.session.commit()
 
 
 @pytest.fixture()
 def rows():
     with flask_app.app_context():
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('SS%')
-            | RadarBucketSource.ticker.like('ZZ%')).delete(
-                synchronize_session=False)
-        db.session.commit()
+        _clear_owned_rows()
         yield
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('SS%')
-            | RadarBucketSource.ticker.like('ZZ%')).delete(
-                synchronize_session=False)
-        db.session.commit()
+        _clear_owned_rows()
 
 
 def add(when, count, ticker='SSA', source='stocktwits', status='ok',
@@ -53,6 +56,28 @@ def steady_history(ticker='SSA', per_bucket=2, days=30, source='stocktwits'):
     for step in range(days * 96):
         add(MONDAY + dt.timedelta(minutes=15 * step), per_bucket,
             ticker=ticker, source=source)
+
+
+def test_row_cleanup_preserves_an_unowned_zz_sentinel():
+    """This file's shared-DB cleanup must never claim another ZZ namespace."""
+    sentinel = 'ZZSENTINEL'
+    with flask_app.app_context():
+        RadarBucketSource.query.filter_by(ticker=sentinel).delete(
+            synchronize_session=False)
+        db.session.add(RadarBucketSource(
+            ticker=sentinel, bucket_start=NOW, source='sentinel',
+            mention_count=1, high_confidence_count=1, low_count=0,
+            distinct_authors=1, distinct_text_ratio=1.0,
+            engagement_weighted_count=1.0, status='ok',
+            source_config_version='sentinel'))
+        db.session.commit()
+        try:
+            _clear_owned_rows()
+            assert RadarBucketSource.query.filter_by(ticker=sentinel).count() == 1
+        finally:
+            RadarBucketSource.query.filter_by(ticker=sentinel).delete(
+                synchronize_session=False)
+            db.session.commit()
 
 
 def test_a_normal_bucket_scores_near_zero(rows):

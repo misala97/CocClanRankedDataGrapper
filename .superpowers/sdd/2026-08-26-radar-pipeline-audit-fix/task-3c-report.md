@@ -409,3 +409,36 @@ The only broad failures are the established unrelated Radar API template
 tests, both caused by the ignored missing
 `static/radar/dist/.vite/manifest.json`. The test-created `ZZ...` rows are
 cleaned before and after each affected test.
+
+## Fix round 2 — shared-DB scoring cleanup ownership
+
+The scoring fixture had widened its cleanup from its original `SS%` prefix
+to `SS% OR ZZ%` when the Task 3c `ZZ...` regressions were added. Because the
+development database is shared, that broad `ZZ%` deletion could erase rows
+owned by another test or user.
+
+`test_radar_scoring.py` now declares the exact ticker set owned by this file:
+`SSA`, `SSB`, `SSNEW`, `SSOLD`, `SSNULL`, `SSNOPE`, `ZZGEN`, `ZZSCORED`,
+`ZZSCOPE`, and `ZZUNSCORED`. Its setup and teardown use the shared
+`_clear_owned_rows()` helper with `ticker.in_(...)`, not namespace prefixes.
+The new `test_row_cleanup_preserves_an_unowned_zz_sentinel` creates
+`ZZSENTINEL`, calls that helper, asserts the sentinel remains, and explicitly
+deletes its own sentinel in `finally`.
+
+### Watched failing mutation
+
+Temporarily replacing the exact `ticker.in_(_OWNED_TICKERS)` predicate with
+the former `ticker.like('SS%') | ticker.like('ZZ%')` predicate made the
+sentinel test fail with `assert 0 == 1`: the helper deleted the unowned
+`ZZSENTINEL` row. The exact predicate was then restored and the regression
+passed.
+
+### Final verification
+
+```text
+py -3.12 -m pytest tests/test_radar_scoring.py -v
+30 passed in 45.09s
+
+py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
+141 passed in 47.63s
+```
