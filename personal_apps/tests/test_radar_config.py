@@ -9,6 +9,12 @@ def test_version_is_stable_across_calls():
     assert config.source_config_version() == config.source_config_version()
 
 
+def test_the_superseded_page_cap_is_gone():
+    from features.radar import config
+
+    assert not hasattr(config, 'PAGE_CAP')
+
+
 def test_version_changes_when_the_source_list_changes(monkeypatch):
     before = config.source_config_version()
     monkeypatch.setattr(config, 'SOURCES', config.SOURCES + ('newsource',))

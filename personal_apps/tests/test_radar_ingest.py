@@ -62,8 +62,8 @@ def clean_radar():
 
 
 def post(ident='t3_1', body='$ZZG is ripping', score=5, author='u1',
-         minute=10, title=None):
-    return RawPost(source='stocktwits', external_id=ident, channel='testsub',
+         minute=10, title=None, source='stocktwits'):
+    return RawPost(source=source, external_id=ident, channel='testsub',
                    author=author,
                    created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
                    title=title, body=body, score=score, num_comments=0,
@@ -381,3 +381,26 @@ def test_a_person_naming_the_same_tickers_still_counts():
     raw = post(body='$GOLD breaking out, miners finally waking up')
 
     assert ingest._extract_for(raw, lookup) == [('GOLD', 'high')]
+
+
+def test_a_single_letter_cashtag_is_refused_on_a_general_network():
+    """`$M` on Bluesky is money shorthand, not Macy's.
+
+    Measured on live Bluesky: 119 of 3302 cashtag matches were single letters
+    and essentially all were prose -- "Tax @60% for over a $M", "make $B's".
+    config.SINGLE_LETTER_CASHTAGS has said so since it was written; nothing
+    passed it to the extractor until now, and 353 such mentions reached the
+    production corpus, 3.0% of the whole high-confidence set.
+    """
+    from features.radar import ingest
+
+    lookup = {'B': {'name': 'Barnes Group Inc.', 'exchange': 'NYSE',
+                    'distinctive': set()}}
+    general = post(ident='zz-single', body='make $B and youre set',
+                   source='bluesky')
+    finance = post(ident='zz-single-2', body='make $B and youre set',
+                   source='stocktwits')
+
+    assert ingest._extract_for(general, lookup) == []
+    # The same text on a finance-native population still yields the company.
+    assert ingest._extract_for(finance, lookup) == [('B', 'high')]

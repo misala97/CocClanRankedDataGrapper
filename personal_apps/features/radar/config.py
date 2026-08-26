@@ -411,10 +411,6 @@ STOCKTWITS_REQUESTS_PER_HOUR = 150
 # that a forever-retained table stays small.
 BUCKET_MINUTES = 15
 
-# Pages to walk per channel per cycle before giving up and
-# marking the affected buckets `truncated` (spec 4.3).
-PAGE_CAP = 10
-
 POST_RETENTION_DAYS = 30
 
 # How long the mention journal is kept. Buckets are the durable artifact; the
