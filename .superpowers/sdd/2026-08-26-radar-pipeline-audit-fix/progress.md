@@ -160,3 +160,35 @@ Codex-to-Claude stop checkpoint (2026-08-26): Michi requested an immediate
   `task-6-brief.md`, preserve the completed/reviewed Tasks 1-5, and follow the
   remaining order 6, 7, 9, 8, 10-13, 14-17, 18-19, final review. The prepared
   ignored `task-7-brief.md` is included in the handoff checkpoint for later use.
+
+Task 6: complete (commits d11ccb5..8b0a07d, review clean). One-shot backfill
+  script plus its test file. Independent review APPROVED the implementation
+  with one Important and two Minor findings; fix round 1 closed the Important
+  and one Minor, and the scoped re-review returned zero findings at every
+  severity. Focused gate 4/4 then 5/5; broad radar gate 605 passed with only
+  the two established missing-Vite-manifest API template failures. The real
+  dry-run path runs clean and reports 210 bucket rows examined, 165
+  understated, against local dev data - so this is measured behaviour, not a
+  script proven only by printing `examined 0`.
+
+Task 6 deviation (accepted): equality of `distinct_text_ratio` and
+  `engagement_weighted_count` uses `math.isclose`, not `==`. MySQL FLOAT is
+  single-precision and round-trips lossily, which broke the brief's literal
+  idempotency guarantee; reproduced independently by the reviewer.
+
+Task 6 fix round 1: the stale-score query's `ticker_prefix` scoping passed
+  only because this dev database currently holds zero real rows matching
+  `status != 'ok' AND any-score-column-not-null` outside `ZZBF` - which is
+  precisely the population the production run exists to clear, so the luck was
+  temporary. A data-independent sentinel-prefix assertion now pins it, teeth
+  confirmed under deletion of the filter. Separately, `_TRUTH`'s computed
+  `bs` came back a Python `str` and the ORM lookup relied on implicit
+  string-to-datetime coercion; production is MariaDB, so it is now parsed
+  explicitly to a naive UTC datetime, guarded for drivers already returning
+  one. Dry-run numbers unchanged across the type change.
+
+Task 6 minor (deferred to final review): the `int()`-at-the-boundary comment
+  claims COUNT returns Decimal, which is empirically true only of SUM on this
+  driver. Left as-is because the same phrasing is an existing house
+  convention (features/radar/journal.py:204); it misleads a reader but
+  changes no behaviour.
