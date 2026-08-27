@@ -1,5 +1,115 @@
 # HANDOFF — radar pipeline audit fix
 
+## STOP CHECKPOINT — Task 9 WIP, Codex to Claude, 2026-08-27
+
+This is the newest authoritative checkpoint and supersedes every section
+below. Michi stopped because the Codex session limit is imminent.
+
+**There are no active workers.** Task 9 implementer Curie
+(`01a0407b-4d15-7ae0-8c44-c5a8378dc183`) was interrupted, wrote a complete
+WIP checkpoint to `task-9-report.md`, returned `safe: yes`, and was closed.
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD: `88a2b50` (`docs(radar): close StockTwits review and harden Reddit split`)
+
+### Exact dirty state and ownership
+
+Task 9 owns these unstaged changes; none is committed:
+
+- `personal_apps/features/radar/config.py`
+- `personal_apps/features/radar/ingest.py`
+- `personal_apps/features/radar/routes/api.py`
+- `personal_apps/features/radar/sources/__init__.py`
+- `personal_apps/features/radar/sources/reddit.py`
+- `personal_apps/models.py`
+- `personal_apps/run_radar_ingest.py`
+- `personal_apps/tests/test_radar_api.py`
+- `personal_apps/tests/test_radar_config.py`
+- `personal_apps/tests/test_radar_daemon.py`
+- `personal_apps/tests/test_radar_ingest.py`
+- `personal_apps/tests/test_radar_reddit.py`
+- untracked `personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py`
+
+Ignored/controller artifacts to preserve and force-add with the next docs
+checkpoint: `task-9-report.md`, hardened `task-8-brief.md`, and prepared
+`task-10-brief.md` through `task-13-brief.md`.
+
+There are no staged changes. No deliberate teeth mutation remains. Do not
+discard or restart these files: the implementation is substantially complete.
+
+### Critical database state
+
+The **local shared MySQL database is already upgraded to the uncommitted
+migration `08316d3e4d77`**, and `flask db current` / `flask db heads` both
+report that single head. Git does not yet contain the migration because Task 9
+is uncommitted. Abandoning/resetting the worktree without first handling the
+database leaves DB and Git out of sync.
+
+The migration widened `RadarPost.source`, `RadarBucketSource.source`, and
+`RadarPollState.source` to 48. Forward upgrade succeeded. Downgrade has **not**
+been exercised. Before a downgrade, verify there are no unowned prefixed Reddit
+posts: downgrade normalizes `reddit:<sub>` post sources to root `reddit`, which
+is a real data mutation in the shared dev DB. Never run it broadly without that
+check. Per-subreddit bucket summaries cannot be losslessly collapsed back into
+aggregate Reddit; the semantic rollback limit is documented in the report.
+
+### What is complete inside Task 9
+
+Implemented but uncommitted:
+
+- prefix-aware policy helpers and shared source expansion;
+- real `SOURCE_NAME_GENERATION` hash input;
+- `FetchResult.per_source_status`;
+- Reddit posts emitted as `reddit:<sub>`;
+- concrete-only rollup statuses with partial successes preserved;
+- API prefixed validation/root expansion/viewer-selection restoration;
+- daemon scoring of concrete Reddit names;
+- root cursor and root poll-state preservation;
+- all three model/migration width changes;
+- migration chained correctly from `1d26ac48e744`.
+
+Before migration, 13 tests failed for intended missing behavior and two setup
+defects were corrected; then the two DB-boundary tests failed with MySQL 1406
+(`source` too long), as intended. After migration, the new focused gate passed
+15/15. Covering suites passed 147 tests plus exactly the two known
+missing-Vite-manifest page failures. Ten targeted teeth mutations were watched
+failing and restored; see `task-9-report.md` for exact evidence.
+
+### Claude's immediate next action
+
+1. Read this checkpoint, `progress.md`, the hardened `task-9-brief.md`, and
+   `task-9-report.md` in full. Verify Git status and DB revision before editing.
+2. Continue Task 9 from the WIP — do not redo the completed RED/GREEN work.
+3. Finish the report's remaining checklist: policy-helper teeth, focused green,
+   cautious downgrade decision/exercise, fresh-process circular imports,
+   Alembic head/current/live widths, one broad radar gate, self-review.
+4. Commit only the 13 Task 9 production/test/migration paths by exact name.
+   Do not stage protected discovery/candidate files or SDD artifacts with the
+   implementation commit.
+5. Generate the Task 9 review package from base `88a2b50` to its implementation
+   HEAD and run the exceptional high-capability **Reddit** review. Task 8 cannot
+   start before Task 9 is review-clean.
+6. After review/fixes, ledger and force-add all reports/briefs/handoff, then
+   continue `8 -> 10-13 -> 14-17 -> 18-19 -> final review`.
+
+### Prepared next work
+
+- `task-8-brief.md` is hardened: its missing-status test must exercise a real
+  current-generation missing row, not merely assert a constant; both truncated
+  and missing guards require mutation teeth.
+- Task 10–13 source briefs are generated for the one absence-shaped batch.
+- `task-13-brief.md` is hardened because
+  `dict.setdefault(key, _extract_for(...))` evaluates the extraction eagerly
+  even when the key exists. Use an explicit membership branch and test a
+  duplicate external ID is extracted once.
+
+Reviews stay on Sonnet except StockTwits and Reddit; Task 9 and Task 8 use the
+most capable reviewer. Subagents write full reports to file and return only a
+status line.
+
+---
+
 ## CURRENT AUTHORITATIVE CHECKPOINT — Task 7 closed, 2026-08-27
 
 This checkpoint supersedes the live-worker checkpoint immediately below.

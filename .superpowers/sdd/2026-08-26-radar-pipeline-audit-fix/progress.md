@@ -270,3 +270,32 @@ Task 7: fix round 1/5 (2 addressed, 0 open; commit 3b74f32). Added a
 Task 7: complete (commits 945c9d7..3b74f32, review clean). High-capability
   scoped re-review APPROVED both Important findings with no new findings at
   any severity. The one original Minor remains deferred to final review.
+
+Task 9: WIP STOP CHECKPOINT, uncommitted at HEAD 88a2b50. Implementer Curie
+  was interrupted safely for the Codex session limit, wrote
+  `task-9-report.md`, confirmed no deliberate mutation remains, and was
+  closed. Twelve tracked files plus untracked migration
+  `08316d3e4d77_widen_radar_source_columns.py` belong to Task 9. The local
+  shared MySQL DB is already at that uncommitted revision; Git/DB must not be
+  separated by discarding the WIP.
+
+Task 9 completed WIP evidence: source-root policies, shared expansion,
+  concrete Reddit status/partial-success ingest, API expansion, concrete
+  daemon scoring, three width changes, real config-version bump and root
+  cursor/poll-state preservation are implemented. Focused green 15/15;
+  covering files 147 passed plus exactly the two known manifest failures. Ten
+  teeth mutations failed and were restored. Remaining: policy-helper teeth,
+  final focused/broad gates, circular imports, migration rollback decision or
+  controlled exercise, self-review, report completion, commit, independent
+  high-capability Reddit review. Task 8 remains blocked behind this.
+
+Ruling: harden Task 8's missing-status test into a behavioral row-level guard
+  rather than asserting only `SCOREABLE_STATUSES` — a write loop can ignore a
+  correct constant. Cost if wrong is one direct DB fixture; leaving it lets a
+  missing observation gain a score with the suite green.
+
+Ruling: Task 13 uses explicit membership before caching extraction, not
+  `dict.setdefault(key, _extract_for(...))` — Python evaluates the default
+  eagerly, so the draft still re-extracts duplicate IDs. Cost if wrong is a
+  few lines and a call-count regression; leaving it ships the exact duplicate
+  work the task claims to remove.
