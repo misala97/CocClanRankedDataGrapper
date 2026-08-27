@@ -163,7 +163,10 @@ def fetch_one(sub, since, client):
     entries = root.findall('a:entry', ATOM)
     posts = [p for p in (_to_raw_post(e, sub) for e in entries) if p]
     if not posts:
-        return [], 'ok', 0.0
+        # No rate, not a rate of zero. interval_for_rate reads zero as
+        # "genuinely silent" and backs the subreddit off to its ceiling;
+        # None means never measured and schedules a prompt retry instead.
+        return [], 'ok', None
 
     stamps = sorted(p.created_utc for p in posts)
     oldest, newest = stamps[0], stamps[-1]

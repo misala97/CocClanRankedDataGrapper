@@ -264,7 +264,17 @@ def test_an_empty_feed_is_quiet_rather_than_broken():
 
     posts, status, rate = reddit.fetch_one('x', NOW - dt.timedelta(hours=1), client)
 
-    assert posts == [] and status == 'ok' and rate == 0.0
+    assert posts == [] and status == 'ok' and rate is None
+
+
+def test_an_unparseable_feed_is_unknown_to_the_scheduler():
+    """A bad response was attempted but supplied no rate measurement."""
+    client = FakeClient({'x': '<not atom'})
+
+    result = reddit.fetch({'x': NOW - dt.timedelta(hours=1)}, client, pause=0)
+
+    assert result.status == 'missing'
+    assert result.rates['x'] is None
 
 
 def test_every_configured_subreddit_fits_the_column_it_is_stored_in():

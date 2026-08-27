@@ -238,7 +238,8 @@ def run_cycle(now, fetchers):
             # `missing` is the honest record of it: no row, never a zero.
             logger.exception('radar source %s failed this cycle', source)
             statuses[source] = 'missing'
-            depths[source] = 0
+            # Not zero: no fetch arrived to measure a catch-up depth.
+            depths[source] = None
             continue
         # A fetcher covering several source names reports each. Reddit does:
         # one cycle reads a slice of subreddits and each is its own source.

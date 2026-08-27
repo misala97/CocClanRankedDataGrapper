@@ -438,6 +438,17 @@ def test_an_unexpected_source_error_does_not_kill_the_cycle(seeded):
         assert rows == {'reddit'}   # no bluesky row, and no zero
 
 
+def test_a_failed_fetch_reports_no_catchup_depth(seeded):
+    """Depth zero says the source reached back nowhere; failure reached nothing."""
+    def explode(since):
+        raise RuntimeError('nope')
+
+    summary = ingest.run_cycle(NOW, {'bluesky': explode})
+
+    assert summary['per_source']['bluesky'] == 'missing'
+    assert summary['catchup_depth']['bluesky'] is None
+
+
 def test_a_coin_collision_is_dropped_on_a_general_source(seeded, monkeypatch):
     """$BCH on Bluesky means Bitcoin Cash, not Banco de Chile.
 
