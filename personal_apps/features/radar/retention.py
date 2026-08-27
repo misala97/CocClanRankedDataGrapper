@@ -130,6 +130,9 @@ def prune_mention_events(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
             RadarMentionEvent.id.in_(ids)).delete(synchronize_session=False)
         db.session.commit()
         total += len(ids)
+
+        if len(ids) < chunk_size:
+            break
         if pause:
             time.sleep(pause)
 

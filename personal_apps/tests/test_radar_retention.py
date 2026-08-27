@@ -101,7 +101,7 @@ def test_pruning_an_empty_window_is_a_no_op(aged_posts):
 @pytest.fixture()
 def clean_events():
     from models import RadarMentionEvent
-    idents = ('zz-new', 'zz-old')
+    idents = ('zz-new', 'zz-old', 'zz-boundary')
 
     def clear():
         RadarMentionEvent.query.filter(
@@ -119,11 +119,23 @@ def clean_events():
 def test_the_journal_is_pruned_by_when_the_post_was_written(clean_events):
     """By created_utc, not by when the row was inserted. A catch-up after an
     outage ingests posts hours old, and once their bucket is past the retention
-    window nothing will rewrite it -- so that is what decides."""
+    window nothing will rewrite it -- so that is what decides.
+
+    The third row sits at EXACTLY the cutoff (now - MENTION_EVENT_RETENTION_HOURS),
+    still safely inside this test's own April-2026 `now` -- nowhere near the real
+    dev database's Aug-2026 rows. `created_utc < cutoff` is strict, so a row
+    exactly at the cutoff has not yet aged out and must survive. This pins the
+    boundary: flipping the implementation's `<` to `<=` must fail this test.
+    """
     from models import RadarMentionEvent
 
     now = dt.datetime(2026, 4, 20, 12, 0, 0)
-    for hours, ident in ((1, 'zz-new'), (72, 'zz-old')):
+    rows = (
+        (1, 'zz-new'),
+        (72, 'zz-old'),
+        (retention.MENTION_EVENT_RETENTION_HOURS, 'zz-boundary'),
+    )
+    for hours, ident in rows:
         created = now - dt.timedelta(hours=hours)
         db.session.add(RadarMentionEvent(
             source='bluesky', external_id=ident, ticker='ZZA', channel='c',
@@ -136,6 +148,6 @@ def test_the_journal_is_pruned_by_when_the_post_was_written(clean_events):
     deleted = retention.prune_mention_events(now)
     assert deleted == 1
     assert isinstance(deleted, int)
-    remaining = [e.external_id for e in
-                 RadarMentionEvent.query.filter_by(ticker='ZZA').all()]
-    assert remaining == ['zz-new']
+    remaining = {e.external_id for e in
+                 RadarMentionEvent.query.filter_by(ticker='ZZA').all()}
+    assert remaining == {'zz-new', 'zz-boundary'}

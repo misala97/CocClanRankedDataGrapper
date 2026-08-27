@@ -89,7 +89,7 @@ def test_anyway_proceeds_past_the_guard_when_daemon_runs(monkeypatch):
 
     result = discovery.main(['--anyway'])
 
-    assert result != 1
+    assert result in (None, 0)
     assert fake_app.entered >= 1
     fake_open.assert_called_once_with(
         'reddit_candidates.json', 'w', encoding='utf-8')
