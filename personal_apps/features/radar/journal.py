@@ -22,6 +22,9 @@ from models import RadarMention, RadarMentionEvent, RadarPost
 # below defers that lookup to call time, when both modules are always fully
 # loaded, so it works regardless of which one a caller imports first.
 from . import buckets
+# Safe as a name import: config imports nothing from this package, so it is
+# never the module mid-import. Only `buckets` is in the cycle.
+from .config import expand_sources_for_history
 
 # Rows per INSERT. Large enough that a busy Bluesky cycle is a handful of
 # statements, small enough to stay well inside max_allowed_packet.
@@ -190,6 +193,11 @@ def distinct_voices(tickers, sources, since, now, field):
     if not tickers:
         return {}
 
+    # A raw count of distinct people, with no baseline behind it, so the
+    # pre-split root `reddit` events count towards it -- they are the same
+    # readers on the same platform, and dropping them would undercount
+    # breadth for every ticker discussed before the split.
+    sources = expand_sources_for_history(sources)
     column = {'author': RadarMentionEvent.author,
               'channel': RadarMentionEvent.channel}[field]
     rows = (db.session.query(RadarMentionEvent.ticker,

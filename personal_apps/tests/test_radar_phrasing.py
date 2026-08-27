@@ -11,6 +11,7 @@ So the wording IS the feature, and these pin it.
 import dataclasses
 
 from features.radar import phrasing
+from features.radar.config import source_root
 
 
 @dataclasses.dataclass
@@ -24,6 +25,13 @@ class FakeRow:
     price_status: str = 'ok'
     baseline_days: int | None = 30
     mention_z: float | None = 4.1
+
+    @property
+    def venues(self):
+        """Derived rather than a field, so the fake cannot claim a breadth
+        its own source list does not support. One venue per ROOT: two
+        subreddits are one venue, which is what the real Row.venues counts."""
+        return len({source_root(name) for name in self.sources})
 
 
 def kinds(clauses):

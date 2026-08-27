@@ -285,6 +285,43 @@ def test_a_successful_subreddit_survives_a_missing_aggregate_status(seeded):
         assert RadarPost.query.filter_by(external_id='task9-partial').count() == 1
 
 
+def test_a_source_that_observed_nothing_writes_no_row_at_all(seeded):
+    """An explicitly empty per-source map records NOTHING for that source.
+
+    Reddit's "nothing due" branch is the common path -- six of eight cycles
+    have no subreddit due -- and on it Reddit is not read at all. That is an
+    absence: no fetch was made, so there is no observation. It is not an `ok`
+    zero (a bucket child claiming coverage nothing produced, which also
+    inflates RadarBucket.sources_ok) and it is not a `missing` (which means we
+    tried and failed).
+
+    So the map is empty rather than absent, and ingest must tell the two
+    apart: `None` means "this fetcher does not report per-source status" and
+    falls back to the aggregate verdict; `{}` means "no source was observed"
+    and must not.
+    """
+    fetchers = fetcher_for(FetchResult(
+        posts=[post(ident='task9-quiet', body='$ZZG moving',
+                    author='task9-quiet')], status='ok'))
+    fetchers.update(fetcher_for(
+        FetchResult(posts=[], status='ok', per_source_status={}),
+        source='reddit'))
+
+    result = ingest.run_cycle(NOW, fetchers)
+
+    assert result['per_source'] == {'bluesky': 'ok'}
+    with flask_app.app_context():
+        from models import RadarBucket, RadarBucketSource
+        rows = {row.source: (row.status, row.mention_count) for row in
+                RadarBucketSource.query.filter_by(ticker=TEST_TICKER).all()}
+        assert rows == {'bluesky': ('ok', 1)}
+        assert RadarBucketSource.query.filter_by(
+            ticker=TEST_TICKER, source='reddit').count() == 0
+        # And the bucket does not claim two sources were ok.
+        assert {b.sources_ok for b in
+                RadarBucket.query.filter_by(ticker=TEST_TICKER).all()} == {1}
+
+
 def test_one_source_failing_does_not_stop_the_other(seeded):
     """The entire reason status is per source. A dead Bluesky must not cost a
     healthy Reddit cycle, and must not write a zero for itself."""

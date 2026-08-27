@@ -99,7 +99,9 @@ def _breadth_clauses(row):
     warning, because "1 venue · 2 people" in the counting grammar reads as two
     small numbers rather than as the one thing that should stop you.
     """
-    venues = len(row.sources)
+    # The rooted count, not len(row.sources): "2 venues" must not mean two
+    # subreddits. See leaderboard.Row.venues.
+    venues = row.venues
     narrow = []
     if venues < 2:
         narrow.append('one venue only')

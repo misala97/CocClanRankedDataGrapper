@@ -298,6 +298,32 @@ def test_the_bucket_maximum_is_the_fallback(board):
     assert build_rows(['bluesky'], NOW)[0].authors == 7
 
 
+def test_the_pre_split_reddit_voices_still_count(board):
+    """The journal's voice count is raw, so it sees the older root name.
+
+    Distinct authors are people, not baselines: the person who posted under
+    the pre-split `reddit` name and the person who posted under
+    `reddit:wallstreetbets` are the same population. Dropping the older half
+    would undercount breadth for every ticker discussed before 2026-08-26 and
+    could push it below the eligibility floor -- the board reading thinner
+    than the evidence it holds.
+    """
+    from features.radar import journal
+
+    universe_row('LBH')
+    scored('LBH', source='reddit:wallstreetbets', mentions=4, authors=2)
+    _mention('LBH', 'newvoice1', 30, source='reddit:wallstreetbets')
+    _mention('LBH', 'newvoice2', 30, source='reddit:wallstreetbets')
+    _mention('LBH', 'oldvoice1', 45, source='reddit')
+    _mention('LBH', 'oldvoice2', 45, source='reddit')
+    db.session.commit()
+
+    voices = journal.distinct_voices(
+        ['LBH'], ['reddit'], NOW - dt.timedelta(hours=4), NOW, 'author')
+
+    assert voices['LBH'] == 4
+
+
 def test_a_genuinely_concentrated_ticker_is_still_rejected(board):
     """The gate must keep working after the fix. Live data had PH at 14
     mentions from one author -- exactly what it exists to catch."""

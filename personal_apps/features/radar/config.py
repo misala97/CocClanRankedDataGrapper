@@ -369,11 +369,49 @@ REDDIT_SUBS = (
 )
 
 
+# TWO expansions exist, and merging them back into one is a data-loss bug in
+# either direction. Read this before "simplifying" them.
+#
+# Before 2026-08-26 every Reddit observation was stored under the bare name
+# `reddit`. Since the split it is stored under `reddit:<sub>`, and that older
+# history is still sitting in radar_bucket_sources, radar_posts and
+# radar_mention_events -- buckets are retained forever, which is what lets the
+# detail chart's 1Y and 3Y spans fill in.
+#
+# Those old rows are readable for what they COUNTED and unreadable for what
+# they SCORED:
+#
+#   - a mention_count is a raw observation. `reddit` counted 40 mentions in an
+#     hour and `reddit:wallstreetbets` counted 12 in another; pooling them is
+#     addition, and leaving the older half out draws Reddit's real, still
+#     stored contribution as absent -- while Bluesky satisfies the same hour's
+#     coverage test, so the gap renders as a measured number rather than as a
+#     gap. That is an absence presented as a zero, which is the one thing this
+#     surface may never do.
+#
+#   - an expected/variance/mention_z is relative to a BASELINE, and the old
+#     rows carry the previous source_config_version. "All of Reddit" and
+#     "r/pennystocks" are different populations; admitting the old stamp to a
+#     scored read mixes two baselines into one z. That is what the stamp bump
+#     exists to prevent.
+#
+# So: `expand_sources` for anything that reads a score, and
+# `expand_sources_for_history` for anything that reads a count, a status or a
+# timestamp. Neither is a superset that can stand in for the other.
+
+
 def expand_sources(names):
     """Concrete stored source names for a root-level selection.
 
-    `reddit` means every configured subreddit, because that is what the UI
-    chip and daemon source list promise. A concrete subreddit stays concrete.
+    STRICT -- this generation's names only. `reddit` means every configured
+    subreddit, because that is what the UI chip and the daemon source list
+    promise; a concrete subreddit stays concrete; and the pre-split root
+    `reddit` is deliberately NOT included, because rows written under it were
+    baselined against a different population.
+
+    For scored reads and for scoring itself: leaderboard.build_rows,
+    board._triplets, detail_panel.window_figures, scoring.pooled_z /
+    window_z, run_radar_ingest.score_all.
     """
     out = []
     for name in names:
@@ -381,6 +419,27 @@ def expand_sources(names):
             out.extend('reddit:%s' % sub for sub in REDDIT_SUBS)
         else:
             out.append(name)
+    return out
+
+
+def expand_sources_for_history(names):
+    """`expand_sources` plus the pre-split root name it deliberately drops.
+
+    For raw-count reads, which have no baseline dependency and so may see the
+    whole of what was actually observed: board._covered_hours / _hourly_counts
+    / _tones, detail.daily_counts / intraday_counts / first_watched_day /
+    _watched_from_index, detail_panel.breakdown_for / _posts,
+    journal.distinct_voices.
+
+    Only for a ROOT selection. A reader who asked for one subreddit gets that
+    subreddit, and the undifferentiated pre-split history is not it.
+    """
+    out = expand_sources(names)
+    if 'reddit' in names:
+        # Appended, not prepended: the order of an IN (...) list is
+        # irrelevant to the query and this keeps the strict expansion's
+        # ordering stable for anything that compares the two.
+        out.append('reddit')
     return out
 
 # Feeds read per cycle. The cycle is three minutes at the fastest cadence, so

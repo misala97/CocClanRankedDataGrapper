@@ -23,7 +23,7 @@ from . import baselines, profile
 from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
                      MIN_DISTINCT_TEXT_RATIO, MIN_MENTIONS,
                      SUSTAINED_HOURS_CONSIDERED, SUSTAINED_HOURS_REQUIRED,
-                     VARIANCE_FLOOR, source_config_version)
+                     VARIANCE_FLOOR, expand_sources, source_config_version)
 
 # Weight of the cold-start prior, in units of observed mass. 0.05 of a week is
 # about eight hours: enough to dominate on day one and vanish by week two.
@@ -168,7 +168,12 @@ def pooled_z(ticker, bucket_start, sources):
 
     A source with no scored row for this bucket -- down, or truncated -- drops
     out of all three sums rather than contributing zero.
+
+    `sources` is a selection and expands STRICTLY: this reads `expected` and
+    `variance`, and the pre-split root `reddit` rows were baselined against a
+    different population (config.expand_sources).
     """
+    sources = expand_sources(sources)
     rows = (RadarBucketSource.query
             .filter(RadarBucketSource.ticker == ticker,
                     RadarBucketSource.bucket_start == bucket_start,
@@ -235,7 +240,10 @@ def window_z(ticker, sources, end, hours):
     Components are summed across both time and sources for the same reason
     pooled_z sums them: the sum of independent counts has the sum of their
     expectations and variances, and no other combination is a z-score.
+
+    Strict expansion, for pooled_z's reason.
     """
+    sources = expand_sources(sources)
     start = end - dt.timedelta(hours=hours)
     rows = (RadarBucketSource.query
             .filter(RadarBucketSource.ticker == ticker,

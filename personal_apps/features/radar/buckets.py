@@ -20,7 +20,7 @@ from extensions import db
 from models import RadarBucket, RadarBucketSource
 
 from .config import (BUCKET_MINUTES, MAX_BARE_PER_VOUCHER,
-                     source_config_version)
+                     source_config_version, source_root)
 # Safe at the top because journal.py imports this module as `buckets` rather
 # than pulling MentionRow/bucket_start_for by name -- neither side touches an
 # attribute of the other until a function actually runs, so it no longer
@@ -146,7 +146,15 @@ def roll_up(rows, statuses, touched):
         return 0
 
     version = source_config_version()
-    sources_ok = sum(1 for status in statuses.values() if status == 'ok')
+    # Distinct ROOTS, not names. "How many sources were ok" is a count of
+    # venues, and eight subreddits reporting ok is Reddit reporting ok once --
+    # counting the names would make this rise and fall with
+    # REDDIT_SUBS_PER_CYCLE, which is a budget rather than a fact about
+    # coverage. Nothing outside tests reads the column yet; the point is that
+    # whatever starts reading it reads the same unit it always meant.
+    sources_ok = len({source_root(source)
+                      for source, status in statuses.items()
+                      if status == 'ok'})
 
     usable = [r for r in rows if r.source in countable]
 

@@ -18,6 +18,8 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarBucketSource, RadarQuote
 
+from .config import expand_sources_for_history
+
 # Calendar days per span, not trading days: the arrays are indexed by calendar
 # day so price and chatter stay aligned through weekends and holidays. A year
 # holds ~252 trading days and 365 calendar ones, and indexing each by its own
@@ -79,11 +81,14 @@ def daily_counts(tickers, sources, start, now):
 
     From buckets, which are retained forever -- unlike posts, which prune at
     30 days. That is what lets the chart's long spans fill in over time with
-    no new collection.
+    no new collection. Which is exactly why this expands FOR HISTORY: a 1Y
+    span reaches back well past the 2026-08-26 subreddit split, and Reddit's
+    contribution before it is stored under the bare name `reddit`.
     """
     if not tickers:
         return {}
 
+    sources = expand_sources_for_history(sources)
     rows = (db.session.query(RadarBucketSource.ticker,
                              sa.func.date(RadarBucketSource.bucket_start),
                              sa.func.sum(RadarBucketSource.mention_count))
@@ -107,6 +112,7 @@ def daily_counts(tickers, sources, start, now):
 def first_watched_day(sources, start, now):
     """Earliest calendar day any bucket exists for. Before it, chatter is
     unknown rather than zero."""
+    sources = expand_sources_for_history(sources)
     earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
                 .filter(RadarBucketSource.source.in_(list(sources)),
                         RadarBucketSource.bucket_start >= start).scalar())
@@ -171,6 +177,7 @@ def intraday_counts(ticker, sources, start, now, step_minutes, slots):
     Returns (counts, first_seen_index). Buckets are 15 minutes; a 1W slot is
     an hour, so four of them pool into one and must add rather than overwrite.
     """
+    sources = expand_sources_for_history(sources)
     rows = (db.session.query(RadarBucketSource.bucket_start,
                              sa.func.sum(RadarBucketSource.mention_count))
             .filter(RadarBucketSource.ticker == ticker,
@@ -196,6 +203,7 @@ def _watched_from_index(sources, start, now, step_minutes, slots):
     Per source rather than per ticker, exactly like first_watched_day: the
     question is when we were watching, not when this symbol was mentioned.
     """
+    sources = expand_sources_for_history(sources)
     earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
                 .filter(RadarBucketSource.source.in_(list(sources)),
                         RadarBucketSource.bucket_start >= start,

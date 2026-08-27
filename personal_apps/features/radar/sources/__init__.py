@@ -42,6 +42,21 @@ class FetchResult:
     # Status per emitted source name, where one fetch covers several. Reddit
     # reads a slice of subreddits and each is its own source; the rolled-up
     # `status` above is what the cycle reports, and this is what the rollup
-    # stamps on each source's rows. Empty means `status` applies to everything
-    # this result produced.
-    per_source_status: dict = dataclasses.field(default_factory=dict)
+    # stamps on each source's rows.
+    #
+    # THREE states, and the difference between the last two is the difference
+    # between an absence and a zero:
+    #
+    #   None  -- this fetcher does not report per-source status at all, so
+    #            `status` above applies to the single name it fetches under.
+    #            Bluesky and 4chan.
+    #   {...} -- these names were observed, with these verdicts.
+    #   {}    -- explicitly NO source was observed. Reddit with nothing due
+    #            did not read Reddit: there is no observation to record, so
+    #            the rollup must write no row at all. Not an `ok` zero (a
+    #            bucket child claiming coverage no fetch produced) and not a
+    #            `missing` (which means we tried and failed).
+    #
+    # Consumers must therefore test `is not None`, never truthiness -- the
+    # empty map and the absent map mean opposite things.
+    per_source_status: dict | None = None

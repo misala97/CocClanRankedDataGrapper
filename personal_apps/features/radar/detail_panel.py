@@ -20,7 +20,8 @@ from models import (RadarBucketSource, RadarMention, RadarPost, RadarQuote,
 from . import detail as chart_mod
 from . import history, market_calendar, universe
 from . import quotes as quotes_mod
-from .config import source_kind
+from .config import (expand_sources, expand_sources_for_history, source_kind,
+                     source_root)
 
 # How many posts the panel shows. Enough to form an opinion, few enough to
 # read; the count of the rest sits beside them.
@@ -87,7 +88,14 @@ def window_figures(ticker, sources, since, now):
     panel is reachable for a ticker the board filtered out -- and refusing to
     describe one because it did not rank is the wrong answer to "tell me about
     this".
+
+    STRICT expansion, unlike the breakdown below: `expected` and
+    `baseline_days` are baseline-relative, and the written read quotes
+    `mentions` against `expected` in the same sentence. Pooling a pre-split
+    root count into an expectation computed for the post-split population
+    would compare two different populations' numbers to each other.
     """
+    sources = expand_sources(sources)
     rows = (db.session.query(RadarBucketSource.mention_count,
                              RadarBucketSource.expected,
                              RadarBucketSource.baseline_days)
@@ -103,6 +111,7 @@ def window_figures(ticker, sources, since, now):
 
 def _posts(ticker, sources, since, now):
     """The newest posts, and how many there were in all."""
+    sources = expand_sources_for_history(sources)
     base = (db.session.query(RadarPost)
             .join(RadarMention, RadarMention.post_id == RadarPost.id)
             .filter(RadarMention.ticker == ticker,
@@ -122,6 +131,7 @@ def breakdown_for(ticker, sources, since, now):
     totals -- and five GROUP BY queries would read them five times over for a
     set that is at most a few thousand rows.
     """
+    sources = expand_sources_for_history(sources)
     score = RadarMention.lexicon_sentiment
     rows = (db.session.query(RadarPost.source, RadarPost.author,
                              RadarPost.channel, RadarPost.created_utc, score)
@@ -138,7 +148,18 @@ def breakdown_for(ticker, sources, since, now):
     bullish = bearish = 0
 
     for source, author, channel, when, sentiment in rows:
-        entry = by_source.setdefault(source, [0, set()])
+        # A VENUE IS A ROOT. Every stored Reddit name -- the eight
+        # `reddit:<sub>` and the pre-split bare `reddit` -- pools into one
+        # `reddit` row, which is what this table showed before the subreddit
+        # split and what `venues=len(b.venues)` in the written read counts.
+        #
+        # Splitting it into eight rows with eight voice counts and eight
+        # shares-of-mentions would be a product decision about what this
+        # surface is FOR; the split that produced these names was a decision
+        # about how status and scoring are partitioned. Shipping the first as
+        # a side effect of the second would foreclose it silently.
+        venue = source_root(source)
+        entry = by_source.setdefault(venue, [0, set()])
         entry[0] += 1
         # The independent unit differs by kind, the same way the eligibility
         # gate's does: an author on a forum, a channel on a broadcast network.
@@ -188,7 +209,13 @@ def first_mention_day(ticker):
 
 
 def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
-    """One ticker's panel. Raises UnknownTicker if it is not in the universe."""
+    """One ticker's panel. Raises UnknownTicker if it is not in the universe.
+
+    `sources` is the viewer's SELECTION, unexpanded -- each query below picks
+    its own expansion, because the chart and the breakdown may see the
+    pre-split root `reddit` history and window_figures may not. See
+    config.expand_sources.
+    """
     if not chart_mod.known_span(span):
         raise ValueError('unknown span')
 

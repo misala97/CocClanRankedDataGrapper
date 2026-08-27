@@ -59,9 +59,21 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 
 /** A source name the config knows but this file does not still renders --
- *  adding a source must not require touching the UI (PRODUCT.md). */
+ *  adding a source must not require touching the UI (PRODUCT.md).
+ *
+ *  Rooted at the colon first. Since 2026-08-26 a stored Reddit source name
+ *  carries its subreddit (`reddit:wallstreetbets`) so that one sub's feed
+ *  rolling over marks its own buckets truncated rather than every other
+ *  sub's. That is a decision about how STATUS and SCORING are partitioned,
+ *  and it is not a decision to put subreddits on the surface -- so the label
+ *  is the venue, `Reddit`, exactly as it was before the split. Showing
+ *  `r/wallstreetbets` here would be its own product call, and one worth
+ *  making deliberately rather than inheriting from a storage change. */
 export function sourceLabel(key: string): string {
-  return SOURCE_LABELS[key] ?? key
+  const root = key.split(':')[0] ?? key
+  // Falls through as the WHOLE key, not the root: an unknown source with a
+  // suffix must render as itself rather than silently losing half its name.
+  return SOURCE_LABELS[root] ?? key
 }
 
 /** Nasdaq's one-letter listing codes, as stored in radar_ticker_universe.

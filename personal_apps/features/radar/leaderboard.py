@@ -20,7 +20,8 @@ from . import journal
 from . import market_calendar
 from . import quotes as quotes_mod
 from . import scoring, universe
-from .config import PROVISIONAL_BASELINE_DAYS, segments_in, source_kind
+from .config import (PROVISIONAL_BASELINE_DAYS, expand_sources, segments_in,
+                     source_kind, source_root)
 
 
 @dataclasses.dataclass
@@ -48,7 +49,16 @@ class Row:
     expected: float
     authors: int
     text_ratio: float
+    # Concrete stored names that contributed -- `reddit:pennystocks`, not
+    # `reddit`. This is the breakdown, and it must stay concrete.
     sources: list
+    # How many INDEPENDENT venues those names represent, which is the count of
+    # their roots. Two subreddits are two entries in `sources` and one venue:
+    # they share a platform, a user population and a rate-limit budget, so the
+    # corroboration the breadth filter and the `single-source` mark claim is
+    # not there. Carried as its own field rather than recomputed by every
+    # reader, so the two can never drift apart.
+    venues: int
     price: object
     price_move: object
     direction: str
@@ -90,6 +100,13 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
                session=None, min_venues=1):
     """Ranked leaderboard rows for the selected sources.
 
+    `sources` is the viewer's SELECTION, root-level or concrete, not an
+    expanded list. The bucket query below is a SCORED read, so it expands
+    strictly: the pre-split root `reddit` rows carry a different
+    source_config_version and their z belongs to a different baseline
+    population (see config.expand_sources). The voice counts are raw and
+    expand for history.
+
     The source list is a read-time filter: it re-pools components that were
     stored per source, and never touches how anything was scored (spec 8.6).
 
@@ -126,6 +143,11 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
     # MIN over a nullable baseline_days skips NULLs, which is exactly what the
     # Python it replaces did. The columns that must not skip -- mention_count,
     # distinct_authors, distinct_text_ratio, status -- are all NOT NULL.
+    scored_sources = expand_sources(sources)
+    # How many venues the VIEWER switched on, rooted for the same reason the
+    # contributing count is: picking `reddit` is picking one venue, however
+    # many subreddits it expands to.
+    selected_venues = len({source_root(name) for name in sources})
     bucket = RadarBucketSource
     per_source = (db.session.query(
         bucket.ticker.label('ticker'),
@@ -138,7 +160,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         sa.func.min(bucket.baseline_days).label('baseline_days'),
         sa.func.max(sa.case((bucket.status == 'truncated', 1), else_=0))
         .label('truncated'))
-        .filter(bucket.source.in_(list(sources)),
+        .filter(bucket.source.in_(scored_sources),
                 bucket.bucket_start >= since,
                 bucket.bucket_start < now,
                 bucket.mention_z.isnot(None))
@@ -229,6 +251,8 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
                      / max(variance, 0.25) ** 0.5) if variance else None
 
         contributing = sorted({part.source for part in parts})
+        # One venue per ROOT, not per stored name -- see Row.venues.
+        venues = len({source_root(name) for name in contributing})
         # MIN already skipped NULLs per source; this skips the sources that
         # had nothing but NULLs, so a row with no usable baseline anywhere
         # still reports None rather than raising.
@@ -260,7 +284,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         marks = []
         if status == 'stale':
             marks.append('no-print')
-        if len(contributing) == 1 and len(sources) > 1:
+        if venues == 1 and selected_venues > 1:
             marks.append('single-source')
         if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
             marks.append('provisional')
@@ -282,7 +306,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         # Counted apart from the floor: this is the reader's own filter doing
         # what they asked, not the data being too thin to measure. Merging the
         # two would tell them the data was worse than it is.
-        if len(contributing) < min_venues:
+        if venues < min_venues:
             excluded['one_venue'] += 1
             continue
 
@@ -297,6 +321,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
             authors=authors,
             text_ratio=text_ratio,
             sources=contributing,
+            venues=venues,
             price=latest.price if latest else None,
             price_move=move,
             direction=divergence_mod.direction(move),

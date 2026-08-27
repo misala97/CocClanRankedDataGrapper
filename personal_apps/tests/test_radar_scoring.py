@@ -16,6 +16,10 @@ from features.radar import scoring
 from features.radar.config import source_config_version
 
 MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
+# A concrete stored Reddit source name. Since 2026-08-26 every Reddit
+# observation is written under `reddit:<sub>`; the bare root is a SELECTION,
+# and pooled_z expands it to all eight configured subs.
+REDDIT = 'reddit:pennystocks'
 NOW = MONDAY + dt.timedelta(days=35)
 _OWNED_TICKERS = (
     'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL',
@@ -286,8 +290,12 @@ def test_scoring_invalidates_only_its_active_source(rows):
 def test_pooling_sums_components_not_z_scores(rows):
     """A weighted mean of z-scores is not a z-score. Two sources each two
     sigma over is stronger evidence than either alone, and averaging would
-    report the same two."""
-    for source in ('reddit', 'bluesky'):
+    report the same two.
+
+    The second source is a CONCRETE subreddit name. pooled_z takes a viewer
+    selection and expands it strictly, so the bare `reddit` would now expand
+    to the eight configured subs and match nothing these fixtures wrote."""
+    for source in (REDDIT, 'bluesky'):
         steady_history(source=source)
     loud = MONDAY + dt.timedelta(days=20)
     db.session.commit()
@@ -295,21 +303,21 @@ def test_pooling_sums_components_not_z_scores(rows):
         {'mention_count': 12})
     db.session.commit()
 
-    for source in ('reddit', 'bluesky'):
+    for source in (REDDIT, 'bluesky'):
         scoring.score_source(source, NOW)
 
-    single, n_single = scoring.pooled_z('SSA', loud, ['reddit'])
-    both, n_both = scoring.pooled_z('SSA', loud, ['reddit', 'bluesky'])
+    single, n_single = scoring.pooled_z('SSA', loud, [REDDIT])
+    both, n_both = scoring.pooled_z('SSA', loud, [REDDIT, 'bluesky'])
     assert n_single == 1 and n_both == 2
     assert both > single
 
 
 def test_pooling_ignores_unselected_sources(rows):
-    for source in ('reddit', 'bluesky'):
+    for source in (REDDIT, 'bluesky'):
         steady_history(source=source)
     when = MONDAY + dt.timedelta(days=10)
     db.session.commit()
-    for source in ('reddit', 'bluesky'):
+    for source in (REDDIT, 'bluesky'):
         scoring.score_source(source, NOW)
 
     _, n = scoring.pooled_z('SSA', when, ['bluesky'])
@@ -319,7 +327,7 @@ def test_pooling_ignores_unselected_sources(rows):
 def test_a_missing_source_drops_out_rather_than_contributing_zero(rows):
     """The rule, at read time. A source that was down must not drag the pooled
     reading towards nothing."""
-    for source in ('reddit', 'bluesky'):
+    for source in (REDDIT, 'bluesky'):
         steady_history(source=source)
     when = MONDAY + dt.timedelta(days=10)
     db.session.commit()
@@ -327,11 +335,11 @@ def test_a_missing_source_drops_out_rather_than_contributing_zero(rows):
         ticker='SSA', bucket_start=when, source='bluesky').update(
         {'status': 'missing', 'mention_count': 0})
     db.session.commit()
-    for source in ('reddit', 'bluesky'):
+    for source in (REDDIT, 'bluesky'):
         scoring.score_source(source, NOW)
 
-    pooled, n = scoring.pooled_z('SSA', when, ['reddit', 'bluesky'])
-    only, _ = scoring.pooled_z('SSA', when, ['reddit'])
+    pooled, n = scoring.pooled_z('SSA', when, [REDDIT, 'bluesky'])
+    only, _ = scoring.pooled_z('SSA', when, [REDDIT])
     assert n == 1
     assert pooled == pytest.approx(only)
 

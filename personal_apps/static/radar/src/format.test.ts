@@ -46,6 +46,23 @@ describe('labels', () => {
     expect(sourceLabel('discord')).toBe('discord')
     expect(segmentLabel('nonsense')).toBe('nonsense')
   })
+
+  it('names the venue, not the subreddit', () => {
+    // Since 2026-08-26 a stored Reddit source name carries its subreddit, so
+    // that one sub's feed rolling over marks its own buckets truncated
+    // rather than every other sub's. That is a decision about how status and
+    // scoring are partitioned, NOT a decision to put subreddits on the
+    // surface -- and without the rooting the raw key leaked through the
+    // fallback and post badges read `reddit:wallstreetbets` next to
+    // `Bluesky`.
+    expect(sourceLabel('reddit')).toBe('Reddit')
+    expect(sourceLabel('reddit:wallstreetbets')).toBe('Reddit')
+    expect(sourceLabel('reddit:pennystocks')).toBe('Reddit')
+  })
+
+  it('still falls through for an unknown root with a suffix', () => {
+    expect(sourceLabel('discord:general')).toBe('discord:general')
+  })
 })
 
 describe('the stamp', () => {

@@ -271,6 +271,74 @@ def test_neutral_is_everything_the_lexicon_did_not_score(panel_ticker):
     assert b.neutral == 2
 
 
+# ------------------------------------------------- pre-split root history ---
+#
+# Before 2026-08-26 every Reddit observation was stored under the bare name
+# `reddit`. This chart's default span is 1Y and buckets are retained forever,
+# so most of what it draws for Reddit is under that older name.
+
+def _old_root_bucket(ticker, days_ago, mentions):
+    """A bucket row exactly as production wrote it before the split."""
+    db.session.add(RadarBucketSource(
+        ticker=ticker,
+        bucket_start=dt.datetime.combine(
+            NOW.date() - dt.timedelta(days=days_ago), dt.time(12, 0)),
+        source='reddit', mention_count=mentions,
+        high_confidence_count=mentions, low_count=0, distinct_authors=6,
+        distinct_text_ratio=0.9, engagement_weighted_count=float(mentions),
+        # The real pre-split stamp, 16 hex characters -- which is also the
+        # column's whole width, so a descriptive placeholder does not fit.
+        status='ok', source_config_version='8106787f1fa72179',
+        expected=1.0, variance=2.0, mention_z=9.9, baseline_days=30))
+
+
+def test_the_chart_still_draws_the_pre_split_reddit_history(clean):
+    """A 1Y span reaches back past the subreddit split.
+
+    Dropping those rows would not draw a gap: `first_watched_day` is
+    satisfied by the days after the split, so the earlier days are marked
+    watched and drawn as zeroes -- an absence rendered as a measurement.
+    """
+    db.session.add(TickerUniverse(
+        symbol=f'{PREFIX}H', name='History Corp', exchange='NASDAQ',
+        first_seen=dt.datetime(2020, 1, 1)))
+    _old_root_bucket(f'{PREFIX}H', days_ago=200, mentions=7)
+    db.session.commit()
+
+    start = NOW.date() - dt.timedelta(days=SPAN - 1)
+    from_dt = dt.datetime.combine(start, dt.time.min)
+    counts = detail.daily_counts([f'{PREFIX}H'], ['reddit'], from_dt, NOW)
+    watched = detail.first_watched_day(['reddit'], from_dt, NOW)
+
+    assert counts[(f'{PREFIX}H', NOW.date() - dt.timedelta(days=200))] == 7
+    assert watched == NOW.date() - dt.timedelta(days=200)
+
+
+def test_the_breakdown_still_shows_one_reddit_row(panel_ticker):
+    """Task 9 changed the POPULATION, not the presentation.
+
+    Splitting the source name is how one sub's feed rollover stops marking
+    every other sub truncated. It is not a decision to put subreddits on the
+    surface -- so the venue table keeps the single pooled `Reddit` row it had
+    before, with one voices count and one share of mentions, and the
+    pre-split root rows pool into it as well. Fragmenting it into eight rows
+    would be its own product call, worth making deliberately rather than
+    inheriting from a storage change.
+    """
+    post_for(f'{PREFIX}A', 40, 'carol', 'wsb says moon',
+             source='reddit:wallstreetbets')
+    post_for(f'{PREFIX}A', 50, 'dave', 'penny says moon',
+             source='reddit:pennystocks')
+    post_for(f'{PREFIX}A', 60, 'erin', 'older reddit view', source='reddit')
+    db.session.commit()
+
+    b = detail_panel.build(f'{PREFIX}A', ['bluesky', 'reddit'], NOW).breakdown
+    venues = {v.source: (v.mentions, v.voices) for v in b.venues}
+
+    assert set(venues) == {'bluesky', 'reddit'}
+    assert venues['reddit'] == (3, 3)
+
+
 @pytest.fixture()
 def panel_live(clean):
     """The same ticker, but anchored to real wall-clock time.

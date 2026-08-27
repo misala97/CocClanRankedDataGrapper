@@ -135,7 +135,17 @@ def _reddit_fetcher(client):
             # so coverage IS current -- this is no work to do, not a failure.
             # `missing` here made six of eight cycles look like outages in the
             # log and hid the real ones among them.
-            return FetchResult(posts=[], status='ok')
+            #
+            # And an EXPLICITLY EMPTY per-source map, not the default None.
+            # Reddit was not read at all this cycle, so it made no observation
+            # -- there is nothing to record. None would fall through to
+            # ingest's `{source: result.status}` fallback, stamp
+            # `{'reddit': 'ok'}` onto the rollup and write a zero-count child
+            # row named `reddit` into every bucket any OTHER source touched,
+            # claiming coverage no fetch produced. This is the common path --
+            # six of eight cycles have nothing due -- so that zero would be
+            # the normal case rather than an edge one.
+            return FetchResult(posts=[], status='ok', per_source_status={})
 
         # Each subreddit reads from when IT was last polled, never from a
         # cursor shared across the source. Shared, the busiest sub sets a

@@ -244,13 +244,28 @@ def run_cycle(now, fetchers):
         # one cycle reads a slice of subreddits and each is its own source.
         # When those concrete statuses exist, the aggregate fetch verdict must
         # not become a zero-valued root child in the rollup population.
-        result_statuses = result.per_source_status or {source: result.status}
+        #
+        # `is not None`, NOT truthiness. An empty map is an explicit "no
+        # source was observed" -- Reddit with nothing due did not read Reddit
+        # -- and falling back to the aggregate verdict there would stamp
+        # `{'reddit': 'ok'}` onto the rollup, which writes a zero-count child
+        # row under a name no fetch produced. Only a MISSING map (None) means
+        # "this fetcher does not report per-source status", where the
+        # aggregate genuinely applies to the one name it fetched under.
+        if result.per_source_status is None:
+            result_statuses = {source: result.status}
+        else:
+            result_statuses = dict(result.per_source_status)
         statuses.update(result_statuses)
         depths[source] = result.catchup_depth
 
-        # Aggregate status remains useful for cycle reporting, but it cannot
-        # discard an earlier successful sub when a later request was refused.
-        if all(status == 'missing' for status in result_statuses.values()):
+        # Nothing observed at all, or everything observed failed. Either way
+        # there is no coverage this cycle: no buckets are touched on this
+        # source's behalf and no cursor moves. Aggregate status remains useful
+        # for cycle reporting, but it cannot discard an earlier successful sub
+        # when a later request was refused.
+        if not result_statuses or all(
+                status == 'missing' for status in result_statuses.values()):
             continue
 
         posts_seen += len(result.posts)

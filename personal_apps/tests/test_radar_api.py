@@ -43,9 +43,19 @@ def test_a_concrete_reddit_source_is_accepted_but_an_unknown_root_is_not():
         parse_query({'sources': 'notreddit:wallstreetbets'})
 
 
-def test_root_reddit_expands_for_board_queries_but_echoes_the_root(
-        client, monkeypatch):
-    from features.radar.config import REDDIT_SUBS
+def test_the_board_gets_the_selection_and_echoes_the_root(client, monkeypatch):
+    """The API hands the SELECTION down, not an expansion, and echoes a root.
+
+    Expanding here would take the choice away from the queries underneath,
+    which expand differently: a scored read may not see the pre-split root
+    `reddit` rows and a raw-count read must (config.expand_sources vs
+    expand_sources_for_history). Once the list is expanded the root is gone
+    and neither can tell it was ever asked for.
+
+    What the payload carries back is still the root, because that is what
+    lights the chip. The expansion itself is proved where it happens -- see
+    test_radar_board / test_radar_detail's historical-root tests.
+    """
     from features.radar.routes import api
 
     seen = {}
@@ -60,12 +70,11 @@ def test_root_reddit_expands_for_board_queries_but_echoes_the_root(
     payload = json.loads(response.data)
 
     assert response.status_code == 200
-    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
+    assert seen['sources'] == ['reddit']
     assert payload['sources'] == ['reddit']
 
 
-def test_root_reddit_expands_for_detail_queries(client, monkeypatch):
-    from features.radar.config import REDDIT_SUBS
+def test_the_detail_panel_gets_the_selection(client, monkeypatch):
     from features.radar.routes import api
 
     seen = {}
@@ -80,7 +89,50 @@ def test_root_reddit_expands_for_detail_queries(client, monkeypatch):
     response = client.get('/radar/api/ticker/ZZG?sources=reddit')
 
     assert response.status_code == 200
-    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
+    assert seen['sources'] == ['reddit']
+
+
+def test_a_concrete_subreddit_link_lights_the_reddit_chip(client, monkeypatch):
+    """`?sources=reddit:wallstreetbets` filters to that sub AND lights Reddit.
+
+    The payload's `sources` is compared against `all_sources` -- three roots
+    -- to decide which chips are on. A concrete name matched none of them, so
+    the control rendered every chip off: a state it otherwise forbids, and
+    one whose first click silently discarded the concrete selection.
+    """
+    from features.radar.routes import api
+
+    seen = {}
+    real_build = api.board_mod.build
+
+    def capture(sources, *args, **kwargs):
+        seen['sources'] = list(sources)
+        return real_build(sources, *args, **kwargs)
+
+    monkeypatch.setattr(api.board_mod, 'build', capture)
+    payload = json.loads(
+        client.get('/radar/api/board?sources=reddit:wallstreetbets').data)
+
+    assert seen['sources'] == ['reddit:wallstreetbets']
+    assert payload['sources'] == ['reddit']
+    assert payload['sources'][0] in payload['all_sources']
+
+
+def test_a_selection_longer_than_every_real_name_is_rejected(client):
+    """Rooting the membership check unbounded the list's length.
+
+    `reddit:<anything>` passes validation, and each accepted entry lands in
+    six or more IN (...) clauses against a ~300k-row partitioned table. The
+    cap is the largest selection that can name something real.
+    """
+    from features.radar.routes.api import MAX_SOURCES
+
+    ok = ','.join(['reddit:x%d' % i for i in range(MAX_SOURCES)])
+    too_many = ok + ',reddit:overflow'
+
+    assert client.get('/radar/api/board?sources=' + ok).status_code == 200
+    assert client.get(
+        '/radar/api/board?sources=' + too_many).status_code == 400
 
 
 def test_an_unknown_segment_is_rejected(client):

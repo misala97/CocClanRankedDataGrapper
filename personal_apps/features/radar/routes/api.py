@@ -9,13 +9,15 @@ from auth import login_required
 from .. import board as board_mod
 from .. import detail as detail_mod
 from .. import detail_panel, phrasing, spend
-from ..config import (DEFAULT_SEGMENT, SOURCES, expand_sources, source_root)
+from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
 from ._blueprint import radar_bp
 
 SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
 WINDOWS = (1, 4, 24)
 VENUE_FLOORS = (1, 2)
 MAX_LIMIT = 100
+# Every root plus every configured subreddit. See parse_query.
+MAX_SOURCES = len(SOURCES) + len(REDDIT_SUBS)
 
 
 @dataclasses.dataclass
@@ -57,6 +59,15 @@ def parse_query(args):
         # offers `reddit` as one chip, and a link may name one subreddit.
         if any(source_root(s) not in SOURCES for s in selected):
             raise BadQuery('unknown source')
+        # Bounded, because rooting the membership check unbounded it. Before
+        # the subreddit split every accepted name had to be one of three, so
+        # the list could hold at most three; now `reddit:<anything>` passes,
+        # and each accepted entry lands in six or more IN (...) clauses
+        # against a ~300k-row partitioned table. MAX_SOURCES is the largest
+        # selection that can name something real -- every root plus every
+        # configured subreddit.
+        if len(selected) > MAX_SOURCES:
+            raise BadQuery('too many sources')
     else:
         selected = list(SOURCES)
 
@@ -165,13 +176,23 @@ def build_payload(args, now=None):
     """Validated query -> serialized board. Shared by the page and the API."""
     query = parse_query(args)
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
-    board = board_mod.build(expand_sources(query.sources), now,
+    # The SELECTION, unexpanded. board.build hands it to each query, and the
+    # queries expand differently: a scored read may not see the pre-split root
+    # `reddit` rows and a raw-count read must (config.expand_sources vs
+    # expand_sources_for_history). Expanding once here would take that choice
+    # away from them -- and expanding for history afterwards is impossible,
+    # since the root is no longer in the list to recognise.
+    board = board_mod.build(query.sources, now,
                             window_hours=query.window,
                             segments=query.segments, limit=query.limit,
                             min_venues=query.min_venues)
-    # What the VIEWER picked, not what it expanded to. The payload's `sources`
-    # drives which root chips are lit, and the chip is `reddit`.
-    board.sources = list(query.sources)
+    # ROOTED, because the payload's `sources` is what lights the chips and
+    # there is one chip per root. `?sources=reddit:wallstreetbets` filtered
+    # the board to that subreddit above and still lights the Reddit chip
+    # here; without the rooting it matched no chip at all and the control
+    # rendered every chip off -- a state it otherwise forbids, and one whose
+    # first click silently discarded the concrete selection.
+    board.sources = sorted({source_root(s) for s in query.sources})
     return serialize(board)
 
 
@@ -272,8 +293,7 @@ def ticker_detail(ticker):
 
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     try:
-        built = detail_panel.build(ticker.upper(),
-                                   expand_sources(query.sources), now,
+        built = detail_panel.build(ticker.upper(), query.sources, now,
                                    window_hours=query.window, span=span)
     except detail_mod.UnknownTicker:
         return jsonify({'error': 'unknown ticker'}), 404

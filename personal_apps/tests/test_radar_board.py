@@ -364,6 +364,129 @@ def test_venue_counts_are_taken_before_the_venue_filter(clean):
     assert built.venue_counts['multi'] == 1
 
 
+def test_two_subreddits_are_one_venue(clean):
+    """The breadth filter's claim is INDEPENDENT corroboration.
+
+    Since 2026-08-26 each subreddit is its own stored source name, so a
+    ticker discussed in r/wallstreetbets and r/pennystocks now has two
+    entries in `sources`. It still has one venue: they share a platform, a
+    user population and a rate-limit budget, and "the same reading from two
+    independent sources" -- the words the surface puts on the
+    `single-source` mark -- is not what happened.
+    """
+    universe(f'{PREFIX}A')
+    universe(f'{PREFIX}B')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets')
+    bucket(f'{PREFIX}A', minutes_ago=45, source='reddit:pennystocks')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='reddit:wallstreetbets')
+    bucket(f'{PREFIX}B', minutes_ago=30, source='bluesky')
+    db.session.commit()
+
+    built = board.build(['reddit', 'bluesky'], NOW, min_venues=2)
+
+    # A was in two subreddits and nowhere else: one venue, filtered out.
+    assert [e.rank.ticker for e in built.rows] == [f'{PREFIX}B']
+    assert built.venue_counts['multi'] == 1
+    a = only(board.build(['reddit', 'bluesky'], NOW), f'{PREFIX}A')
+    assert a.rank.venues == 1
+    # `sources` stays concrete -- that is the breakdown, and it is not the
+    # venue count.
+    assert a.rank.sources == ['reddit:pennystocks', 'reddit:wallstreetbets']
+    assert 'single-source' in a.rank.marks
+
+
+# ------------------------------------------------- pre-split root history ---
+#
+# Before 2026-08-26 every Reddit observation was stored under the bare name
+# `reddit`. Those rows are still in the table -- buckets are retained forever
+# -- and they are readable for what they COUNTED and unreadable for what they
+# SCORED. See config.expand_sources / expand_sources_for_history.
+
+def _old_root_bucket(ticker, minutes_ago, mentions):
+    """A bucket row exactly as production wrote it before the split."""
+    db.session.add(RadarBucketSource(
+        ticker=ticker, bucket_start=NOW - dt.timedelta(minutes=minutes_ago),
+        source='reddit', mention_count=mentions,
+        high_confidence_count=mentions, low_count=0, distinct_authors=6,
+        distinct_text_ratio=0.9, engagement_weighted_count=float(mentions),
+        # The real pre-split stamp, 16 hex characters -- which is also the
+        # column's whole width, so a descriptive placeholder does not fit.
+        status='ok', source_config_version='8106787f1fa72179',
+        expected=1.0, variance=2.0, mention_z=9.9, baseline_days=30))
+
+
+def test_the_pre_split_reddit_history_still_counts_on_the_series(clean):
+    """A raw count has no baseline behind it, so it may be pooled.
+
+    Leaving it out would be worse than a gap: Bluesky satisfies the same
+    hour's coverage test, so the hour is marked measured and the point is
+    drawn as a real number with Reddit's real, still-stored contribution
+    missing from the sum. That is an absence rendered as a zero.
+    """
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets',
+           mentions=10)
+    _old_root_bucket(f'{PREFIX}A', minutes_ago=45, mentions=7)
+    db.session.commit()
+
+    series = only(board.build(['reddit'], NOW), f'{PREFIX}A').series
+
+    assert at_hour(series, 1).count == 17
+
+
+def test_the_pre_split_reddit_history_is_kept_out_of_the_ranking(clean):
+    """The other half of the same rule: a z is relative to a BASELINE.
+
+    Those rows were baselined against "all of Reddit" under the previous
+    source_config_version. Admitting them to the scored read would sum two
+    populations' expectations into one z, which is what the stamp bump exists
+    to prevent.
+    """
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets',
+           mentions=10)
+    _old_root_bucket(f'{PREFIX}A', minutes_ago=45, mentions=7)
+    db.session.commit()
+
+    row = only(board.build(['reddit'], NOW), f'{PREFIX}A').rank
+
+    assert row.sources == ['reddit:wallstreetbets']
+    assert row.mentions == 10
+
+
+def test_one_named_subreddit_does_not_reach_the_undifferentiated_history(clean):
+    """`?sources=reddit:wallstreetbets` asks for that sub.
+
+    The pre-split rows are every subreddit pooled together and cannot be
+    attributed to one, so a concrete selection must not silently pick them
+    up -- only the root selection, which is what they actually were.
+    """
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets',
+           mentions=10)
+    _old_root_bucket(f'{PREFIX}A', minutes_ago=45, mentions=7)
+    db.session.commit()
+
+    series = only(board.build(['reddit:wallstreetbets'], NOW),
+                  f'{PREFIX}A').series
+
+    assert at_hour(series, 1).count == 10
+
+
+def test_the_pre_split_reddit_history_still_counts_towards_tone(clean):
+    """Same rule for the mention rows behind the tone split."""
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets')
+    post(f'{PREFIX}A', f'{PREFIX}new', 20, 0.6,
+         source='reddit:wallstreetbets')
+    post(f'{PREFIX}A', f'{PREFIX}old', 25, 0.6, source='reddit')
+    db.session.commit()
+
+    tone = only(board.build(['reddit'], NOW), f'{PREFIX}A').tone
+
+    assert tone.bullish == 2
+
+
 # ---------------------------------------------------------------- segments ---
 
 def test_small_unions_the_three_segments_below_mid(clean):

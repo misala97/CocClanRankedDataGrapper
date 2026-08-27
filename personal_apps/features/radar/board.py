@@ -32,7 +32,8 @@ from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
 from . import leaderboard, market_calendar, phrasing
-from .config import SEGMENT_GROUPS, VARIANCE_FLOOR, segments_in
+from .config import (SEGMENT_GROUPS, VARIANCE_FLOOR, expand_sources,
+                     expand_sources_for_history, segments_in)
 
 # The windows the triplet reports, shortest first. Fixed rather than derived
 # from the selected window: the point of the triplet is that all three are
@@ -124,6 +125,7 @@ def _covered_hours(sources, since, now):
     "not measured", which is the honest half of the ambiguity -- the dishonest
     half would be drawing a zero.
     """
+    sources = expand_sources_for_history(sources)
     rows = (db.session.query(RadarBucketSource.bucket_start)
             .filter(RadarBucketSource.source.in_(list(sources)),
                     RadarBucketSource.bucket_start >= since,
@@ -138,6 +140,7 @@ def _hourly_counts(tickers, sources, since, now):
     if not tickers:
         return {}
 
+    sources = expand_sources_for_history(sources)
     rows = (db.session.query(RadarBucketSource.ticker,
                              RadarBucketSource.bucket_start,
                              RadarBucketSource.mention_count)
@@ -177,6 +180,10 @@ def _triplets(tickers, sources, now):
     if not tickers:
         return {}
 
+    # STRICT: every figure below comes off `expected` and `variance`, which
+    # are relative to a baseline. The pre-split root `reddit` rows were
+    # baselined against a different population and may not enter a z.
+    sources = expand_sources(sources)
     longest = max(TRIPLET_HOURS)
     rows = (db.session.query(RadarBucketSource.ticker,
                              RadarBucketSource.bucket_start,
@@ -222,6 +229,7 @@ def _tones(tickers, sources, since, now):
     if not tickers:
         return {}
 
+    sources = expand_sources_for_history(sources)
     # A model verdict outranks the word list on the same post, and a NULL
     # verdict falls back to it rather than counting as toneless. The lexicon
     # is forty words with a negation window: it reads "great, another green
@@ -266,6 +274,11 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
           leads=LEAD_COUNT, min_venues=1):
     """The whole board.
 
+    `sources` is the viewer's SELECTION, root-level (`reddit`) or concrete
+    (`reddit:pennystocks`) -- not an expanded list. Each query below expands
+    it for itself, because the two expansions differ: see config.expand_sources
+    and config.expand_sources_for_history.
+
     Segment counts are taken before the segment filter, because the counts
     label the filter's own buttons -- computing them after it would report the
     selected segment's size in every slot.
@@ -284,16 +297,22 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     # Both venue counts come from the same unfiltered pass, for the reason the
     # segment counts do: they label the control, and counting after the filter
     # would report the filtered size in every slot.
+    #
+    # A VENUE IS A ROOT. `row.sources` is concrete, so two subreddits are two
+    # names -- but they are one platform, one user population and one
+    # rate-limit budget. The breadth control's whole claim is that a second
+    # venue is INDEPENDENT corroboration, and r/wallstreetbets agreeing with
+    # r/pennystocks is not that. `row.venues` is the rooted count.
     venue_counts = {
         'any': len(ranked),
-        'multi': sum(1 for row in ranked if len(row.sources) > 1),
+        'multi': sum(1 for row in ranked if row.venues > 1),
     }
 
     allowed = segments_in(segments)
     if allowed:
         ranked = [row for row in ranked if row.segment in allowed]
     if min_venues > 1:
-        ranked = [row for row in ranked if len(row.sources) >= min_venues]
+        ranked = [row for row in ranked if row.venues >= min_venues]
     ranked = ranked[:limit]
 
     tickers = [row.ticker for row in ranked]
