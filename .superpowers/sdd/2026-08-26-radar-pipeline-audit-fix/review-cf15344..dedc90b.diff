@@ -1,0 +1,1220 @@
+# Review package: cf15344..dedc90b
+
+## Commits
+dedc90b feat(radar): give every subreddit its own source identity
+
+## Files changed
+ personal_apps/features/radar/config.py             | 57 +++++++++++++++---
+ personal_apps/features/radar/ingest.py             | 11 +++-
+ personal_apps/features/radar/routes/api.py         | 15 +++--
+ personal_apps/features/radar/sources/__init__.py   |  6 ++
+ personal_apps/features/radar/sources/reddit.py     | 18 ++++--
+ .../08316d3e4d77_widen_radar_source_columns.py     | 51 ++++++++++++++++
+ personal_apps/models.py                            |  9 ++-
+ personal_apps/run_radar_ingest.py                  |  8 ++-
+ personal_apps/tests/test_radar_api.py              | 50 ++++++++++++++++
+ personal_apps/tests/test_radar_config.py           | 49 +++++++++++++++
+ personal_apps/tests/test_radar_daemon.py           | 49 ++++++++++++++-
+ personal_apps/tests/test_radar_ingest.py           | 63 ++++++++++++++++++-
+ personal_apps/tests/test_radar_reddit.py           | 70 ++++++++++++++++++++--
+ 13 files changed, 423 insertions(+), 33 deletions(-)
+
+## Diff
+diff --git a/personal_apps/features/radar/config.py b/personal_apps/features/radar/config.py
+index e50b28f..44b0440 100644
+--- a/personal_apps/features/radar/config.py
++++ b/personal_apps/features/radar/config.py
+@@ -102,27 +102,44 @@ COIN_SYMBOLS_MEAN_STOCKS = {
+ # is corroboration, one channel posting it forty times is not.
+ SOURCE_KIND = {
+     'bluesky': 'forum',
+     'fourchan': 'forum',
+     # Comments carry real distinct authors, so the forum gate applies
+     # unchanged -- unlike a broadcast channel, where one admin is every voice.
+     'reddit': 'forum',
+ }
+ 
+ 
++def source_root(source):
++    """The policy-bearing part of a source name.
++
++    Reddit carries its subreddit -- `reddit:wallstreetbets` -- so that one
++    sub's feed rolling over between polls marks its own buckets truncated and
++    not every other sub's. Before 2026-08-26 they shared one name and one
++    status, and with REDDIT_SUBS_PER_CYCLE = 1 that meant whichever sub the
++    cycle happened to read decided the status of all of them. In production
++    that was 4372 truncated rows against 478 ok.
++
++    The policy must NOT split with the name. An unlisted sub inherits Reddit's
++    judgements rather than falling through to the strict default, which would
++    silently disable bare tokens on a source that has nothing else.
++    """
++    return source.split(':', 1)[0]
++
++
+ def source_kind(source):
+     """'forum' or 'broadcast'. Unknown sources are treated as forums.
+ 
+     The strict direction: forum is the tighter gate, so a source nobody has
+     characterised is judged by the harder standard rather than waved through.
+     """
+-    return SOURCE_KIND.get(source, 'forum')
++    return SOURCE_KIND.get(source_root(source), 'forum')
+ 
+ 
+ # Single-letter cashtags. `$M`, `$B`, `$T` and `$K` are money shorthand far
+ # more often than Macy's, Barnes Group, AT&T and Kellanova -- measured on live
+ # Bluesky, 119 of 3302 cashtag matches were single letters and essentially all
+ # of them were prose: "Tax @60% for over a $M", "make $B's", "is $B & can be
+ # $T if we all do it". A finance-native population is the exception, the same
+ # judgement bare tokens and coin collisions already get.
+ SINGLE_LETTER_CASHTAGS = {
+     'fourchan': False,
+@@ -250,32 +267,32 @@ def looks_like_bot_feed(text):
+     """True for machine-generated crypto exchange output.
+ 
+     Applied on every source. A source these bots never touch pays nothing for
+     the check, and scoping it per source would only invite the question of
+     which sources are safe.
+     """
+     return bool(_BOT_FEED_RE.search(text or ''))
+ 
+ 
+ def single_letter_cashtags_allowed(source):
+-    return SINGLE_LETTER_CASHTAGS.get(source, False)
++    return SINGLE_LETTER_CASHTAGS.get(source_root(source), False)
+ 
+ 
+ def coin_collision_dropped(source, symbol):
+     """True when this symbol should be ignored on this source."""
+-    if COIN_SYMBOLS_MEAN_STOCKS.get(source, False):
++    if COIN_SYMBOLS_MEAN_STOCKS.get(source_root(source), False):
+         return False
+     return symbol in COIN_COLLISION_SYMBOLS
+ 
+ 
+ def bare_tokens_allowed(source):
+-    return BARE_TOKENS_ALLOWED.get(source, False)
++    return BARE_TOKENS_ALLOWED.get(source_root(source), False)
+ 
+ 
+ # What an UNCORROBORATED bare token is worth, per source. Measured 2026-08-25
+ # by sampling what the extractor actually threw away, live, on each source:
+ #
+ #   bluesky   0 of 25 discards were real tickers. CNH is a Brazilian driving
+ #             licence, HQ is comics, EU is the Portuguese word "I".
+ #   reddit   14 of 15 were real -- NVDA three times, plus AIXI, AMST, APRE,
+ #             CAST, CODX, DKS, GITS, GPUS, INHD, OLOX, SWVL. The one miss was
+ #             GPT, in a sentence about Claude and ChatGPT.
+@@ -286,21 +303,21 @@ def bare_tokens_allowed(source):
+ # essentially never fires. The rule was discarding an entire source.
+ #
+ # `low` is the default on purpose: a new source has to opt in, or a general
+ # network quietly inherits a stock forum's rules.
+ BARE_TOKEN_CONFIDENCE = {
+     'reddit': 'high',
+ }
+ 
+ 
+ def bare_token_confidence(source):
+-    return BARE_TOKEN_CONFIDENCE.get(source, 'low')
++    return BARE_TOKEN_CONFIDENCE.get(source_root(source), 'low')
+ 
+ # Subreddits to read, from
+ # docs/superpowers/specs/2026-08-24-radar-subreddit-source-list.md. Tier 1 and
+ # Tier 2 together, on Michi's call 2026-08-24: measure everything for a few
+ # days from real stored data, then prune. The alternative was 25-comment
+ # snapshots, which were too small a sample to decide on -- r/stocks measured
+ # zero ticker density across 93 comments an hour, which is sampling noise
+ # rather than truth.
+ #
+ # Regional subs are deliberately absent and must stay absent: TSX-V, NSE and
+@@ -344,20 +361,35 @@ def bare_token_confidence(source):
+ #
+ # Hashed into source_config_version, so this starts a baseline warm-up. And
+ # note run_radar_ingest retires the dropped subs' poll state -- due_symbols
+ # filters by source rather than by this list, so without that they would keep
+ # taking turns forever and the cut would be a silent no-op.
+ REDDIT_SUBS = (
+     'wallstreetbets', 'pennystocks', 'shortsqueeze', 'thetagang',
+     'options', 'smallstreetbets', 'swingtrading', 'weedstocks',
+ )
+ 
++
++def expand_sources(names):
++    """Concrete stored source names for a root-level selection.
++
++    `reddit` means every configured subreddit, because that is what the UI
++    chip and daemon source list promise. A concrete subreddit stays concrete.
++    """
++    out = []
++    for name in names:
++        if name == 'reddit':
++            out.extend('reddit:%s' % sub for sub in REDDIT_SUBS)
++        else:
++            out.append(name)
++    return out
++
+ # Feeds read per cycle. The cycle is three minutes at the fastest cadence, so
+ # four is roughly one request every forty-five seconds -- deliberately below
+ # the rate that earned a sustained 429 during measurement. Eighteen subs
+ # therefore come round about every fourteen minutes, which is honest rather
+ # than complete: r/wallstreetbets turns its 25-entry feed over in under two
+ # minutes, so most of its comments will be missed and its buckets will say
+ # `truncated`. Raise this only after watching for 429s in the daemon log.
+ # One, because one is the entire budget. Measured against the live endpoint
+ # on the VPS 2026-08-25: `x-ratelimit-remaining` reads 0.0 after a single
+ # request, and successes landed at t=0, t=78 and t=198 seconds against
+@@ -523,20 +555,26 @@ STOPWORDS = frozenset({
+ # WHICH four to promote has no principled answer and the excess is itself the
+ # evidence that a common word has collided with a ticker.
+ MAX_BARE_PER_VOUCHER = 4
+ 
+ # Counts written by generation 1 were rebuilt from one cursor slice and lost
+ # up to 42.9% of the busiest buckets. Generation 2 rebuilds from the complete
+ # mention journal. This is hashed because the two populations are not valid
+ # inputs to one baseline, even though the extractor admitted the same symbols.
+ ROLLUP_GENERATION = 2
+ 
++# Generation 1 stored every subreddit under the aggregate name `reddit`.
++# Generation 2 makes the subreddit part of the durable source name. The
++# configured roots and subreddit membership stay unchanged across that split,
++# so neither existing hash input can express this population discontinuity.
++SOURCE_NAME_GENERATION = 2
++
+ 
+ def source_config_version():
+     """A stable 16-char stamp for everything that decides what gets counted.
+ 
+     Sorted before hashing so reordering a list is not a config change -- only
+     membership is. Stamped onto every bucket; baselines are computed only over
+     buckets sharing the current stamp, so a change starts a warm-up instead of
+     reading straight through a discontinuity (spec 6.6).
+ 
+     THE EXTRACTION RULES ARE PART OF THIS, and were not until 2026-08-22. The
+@@ -560,25 +598,26 @@ def source_config_version():
+         'bare_confidence': dict(sorted(BARE_TOKEN_CONFIDENCE.items())),
+         'single_letter': dict(sorted(SINGLE_LETTER_CASHTAGS.items())),
+         'coin_symbols': sorted(COIN_COLLISION_SYMBOLS),
+         'coin_means_stocks': dict(sorted(COIN_SYMBOLS_MEAN_STOCKS.items())),
+         'stopwords': sorted(STOPWORDS),
+         'cashtag_re': CASHTAG_PATTERN,
+         'bare_re': BARE_PATTERN,
+         'bot_re': _BOT_FEED_RE.pattern,
+         'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
+                     MIN_NAME_TOKEN_LEN],
+-        # Every subreddit shares the source name `reddit`, so adding or
+-        # dropping one changes which mentions are counted under it while the
+-        # source list stays identical. Exactly the false assurance the
+-        # extraction rules gave before 2026-08-22.
++        # Adding or dropping a subreddit changes the set of concrete Reddit
++        # populations while the root source list stays identical.
+         'reddit_subs': sorted(REDDIT_SUBS),
++        # The same roots and subreddits can still produce a different stored
++        # population when the source-name scheme changes.
++        'source_name_generation': SOURCE_NAME_GENERATION,
+         'pooled_re': POOLED_VEHICLE_PATTERN,
+         # The PATTERN alone was not enough: this flag changes what the same
+         # pattern is used FOR, so flipping it changed which mentions were
+         # counted while leaving the stamp identical.
+         'fund_tokens': FUNDS_PROMOTE_BARE_TOKENS,
+         # Corroboration decides which bare mentions become scored, so retuning
+         # the ceiling mixes populations judged under two different rules
+         # inside one baseline unless the stamp moves with it.
+         'bare_per_voucher': MAX_BARE_PER_VOUCHER,
+         # Not an extraction rule -- the extractor admits the same symbols
+diff --git a/personal_apps/features/radar/ingest.py b/personal_apps/features/radar/ingest.py
+index adab325..dd6fed8 100644
+--- a/personal_apps/features/radar/ingest.py
++++ b/personal_apps/features/radar/ingest.py
+@@ -233,24 +233,31 @@ def run_cycle(now, fetchers):
+             # exception type for "this fetch did not arrive", but a source can
+             # also fail in ways it never anticipated -- a missing dependency
+             # took down a whole cycle, StockTwits and 4chan included, because
+             # ModuleNotFoundError is not JetstreamUnavailable. One source
+             # failing must never cost the others their data (spec 4.5), and
+             # `missing` is the honest record of it: no row, never a zero.
+             logger.exception('radar source %s failed this cycle', source)
+             statuses[source] = 'missing'
+             depths[source] = 0
+             continue
+-        statuses[source] = result.status
++        # A fetcher covering several source names reports each. Reddit does:
++        # one cycle reads a slice of subreddits and each is its own source.
++        # When those concrete statuses exist, the aggregate fetch verdict must
++        # not become a zero-valued root child in the rollup population.
++        result_statuses = result.per_source_status or {source: result.status}
++        statuses.update(result_statuses)
+         depths[source] = result.catchup_depth
+ 
+-        if result.status == 'missing':
++        # Aggregate status remains useful for cycle reporting, but it cannot
++        # discard an earlier successful sub when a later request was refused.
++        if all(status == 'missing' for status in result_statuses.values()):
+             continue
+ 
+         posts_seen += len(result.posts)
+ 
+         # A source that could not reach as far back as it was asked did not
+         # cover the earlier part of the window, and must not have buckets
+         # written as though it had.
+         effective_since = result.covered_since or since
+         touched |= _touched_buckets([], effective_since, now)
+ 
+diff --git a/personal_apps/features/radar/routes/api.py b/personal_apps/features/radar/routes/api.py
+index 3082d81..db856df 100644
+--- a/personal_apps/features/radar/routes/api.py
++++ b/personal_apps/features/radar/routes/api.py
+@@ -2,21 +2,21 @@
+ import dataclasses
+ import datetime as dt
+ 
+ from flask import jsonify, request
+ 
+ from auth import login_required
+ 
+ from .. import board as board_mod
+ from .. import detail as detail_mod
+ from .. import detail_panel, phrasing, spend
+-from ..config import DEFAULT_SEGMENT, SOURCES
++from ..config import (DEFAULT_SEGMENT, SOURCES, expand_sources, source_root)
+ from ._blueprint import radar_bp
+ 
+ SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
+ WINDOWS = (1, 4, 24)
+ VENUE_FLOORS = (1, 2)
+ MAX_LIMIT = 100
+ 
+ 
+ @dataclasses.dataclass
+ class Query:
+@@ -46,21 +46,23 @@ class BadQuery(ValueError):
+ def parse_query(args):
+     """(sources, segment, window, limit) or raise BadQuery.
+ 
+     Every parameter is validated rather than coerced. Silently ignoring an
+     unknown source would return the default board under a selection the viewer
+     never made, which is worse than an error.
+     """
+     raw_sources = args.get('sources')
+     if raw_sources:
+         selected = [s.strip() for s in raw_sources.split(',') if s.strip()]
+-        if any(s not in SOURCES for s in selected):
++        # A prefixed name is valid when its ROOT is a known source: the UI
++        # offers `reddit` as one chip, and a link may name one subreddit.
++        if any(source_root(s) not in SOURCES for s in selected):
+             raise BadQuery('unknown source')
+     else:
+         selected = list(SOURCES)
+ 
+     # Comma-separated since 2026-08-25, and `?segment=small` still parses --
+     # widening the parameter must not invalidate every bookmarked link.
+     # `?segment=` with an empty value stays how the surface asks for All.
+     raw_segments = args.get('segment', DEFAULT_SEGMENT)
+     segments = [name.strip() for name in raw_segments.split(',') if name.strip()]
+     # One bad name rejects the whole selection rather than being dropped:
+@@ -156,23 +158,27 @@ def _row(entry):
+         # Why this row is here, in words. The client styles by `kind` and
+         # never parses `text` -- see phrasing.py.
+         'clauses': [{'kind': c.kind, 'text': c.text} for c in entry.clauses],
+     }
+ 
+ 
+ def build_payload(args, now=None):
+     """Validated query -> serialized board. Shared by the page and the API."""
+     query = parse_query(args)
+     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+-    board = board_mod.build(query.sources, now, window_hours=query.window,
++    board = board_mod.build(expand_sources(query.sources), now,
++                            window_hours=query.window,
+                             segments=query.segments, limit=query.limit,
+                             min_venues=query.min_venues)
++    # What the VIEWER picked, not what it expanded to. The payload's `sources`
++    # drives which root chips are lit, and the chip is `reddit`.
++    board.sources = list(query.sources)
+     return serialize(board)
+ 
+ 
+ @radar_bp.route('/api/board')
+ @login_required
+ def board():
+     """Ranked rows for the selected sources, segment and window."""
+     try:
+         return jsonify(build_payload(request.args))
+     except BadQuery as exc:
+@@ -259,15 +265,16 @@ def ticker_detail(ticker):
+     span = request.args.get('span', detail_mod.DEFAULT_SPAN)
+     if not detail_mod.known_span(span):
+         return jsonify({'error': 'unknown span'}), 400
+     try:
+         query = parse_query(request.args)
+     except BadQuery as exc:
+         return jsonify({'error': str(exc)}), 400
+ 
+     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+     try:
+-        built = detail_panel.build(ticker.upper(), query.sources, now,
++        built = detail_panel.build(ticker.upper(),
++                                   expand_sources(query.sources), now,
+                                    window_hours=query.window, span=span)
+     except detail_mod.UnknownTicker:
+         return jsonify({'error': 'unknown ticker'}), 404
+     return jsonify(serialize_detail(built))
+diff --git a/personal_apps/features/radar/sources/__init__.py b/personal_apps/features/radar/sources/__init__.py
+index d99003e..052567e 100644
+--- a/personal_apps/features/radar/sources/__init__.py
++++ b/personal_apps/features/radar/sources/__init__.py
+@@ -32,10 +32,16 @@ class FetchResult:
+     status: str                      # 'ok' | 'missing' | 'truncated'
+     catchup_depth: int = 0
+     # Earliest instant this fetch actually covers. Anything the caller asked
+     # for before this was not delivered -- Jetstream clamps a too-old cursor
+     # silently, and a caller that assumed otherwise would carry a hole it
+     # believed was complete. None means the full requested range was covered.
+     covered_since: object = None
+     # Observed messages/hour per symbol, for the poll scheduler. Empty for
+     # sources that are not polled per symbol.
+     rates: dict = dataclasses.field(default_factory=dict)
++    # Status per emitted source name, where one fetch covers several. Reddit
++    # reads a slice of subreddits and each is its own source; the rolled-up
++    # `status` above is what the cycle reports, and this is what the rollup
++    # stamps on each source's rows. Empty means `status` applies to everything
++    # this result produced.
++    per_source_status: dict = dataclasses.field(default_factory=dict)
+diff --git a/personal_apps/features/radar/sources/reddit.py b/personal_apps/features/radar/sources/reddit.py
+index 6dfc784..c3d56c8 100644
+--- a/personal_apps/features/radar/sources/reddit.py
++++ b/personal_apps/features/radar/sources/reddit.py
+@@ -123,25 +123,26 @@ def _to_raw_post(entry, sub):
+     Zero rather than None: they are engagement weights, and a comment with no
+     reported score genuinely contributed no measured engagement -- unlike a
+     mention count, where zero and unknown are different facts.
+     """
+     author = entry.find('a:author/a:name', ATOM)
+     link = entry.find('a:link', ATOM)
+     created = _stamp(entry)
+     if created is None:
+         return None
+     return RawPost(
+-        source='reddit',
++        # The SUBREDDIT is part of the source, not only of the channel. One
++        # name meant one status for the whole cycle, and with one sub read per
++        # cycle that was whichever sub happened to be due -- r/wallstreetbets
++        # is permanently truncated and used to mark every quieter sub with it.
++        source='reddit:%s' % sub,
+         external_id=entry.findtext('a:id', '', ATOM),
+-        # The subreddit, not 'reddit'. Per-subreddit baselines are not built
+-        # yet, but every stored comment records which sub it came from, so the
+-        # decision about which subs are worth keeping can be made from data.
+         channel=sub,
+         author=author.text if author is not None else None,
+         created_utc=created,
+         title=entry.findtext('a:title', '', ATOM) or None,
+         body=_text_of(entry),
+         score=0,
+         num_comments=0,
+         url=link.get('href') if link is not None else '',
+     )
+ 
+@@ -203,43 +204,50 @@ def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
+ 
+     Reversed 2026-08-25. A throttled sub used to be reported at rate zero, so
+     the scheduler read it as silent and backed it off. The response headers
+     disproved the reasoning behind that: `x-ratelimit-remaining` is 0.0 after
+     a SINGLE request, so the budget is one feed per window and everything
+     after the first is refused however long the pause. Whichever sub went
+     second took the 429 -- two consecutive runs blamed a different one purely
+     on ordering. A 429 is a fact about the budget, never about the subreddit.
+     """
+     posts, statuses, rates = [], [], {}
++    by_sub = {}
+ 
+     for index, (sub, since) in enumerate(since_by_sub.items()):
+         if index and pause:
+             time.sleep(pause)
+         try:
+             found, status, rate = fetch_one(sub, since, client)
+         except RedditThrottled:
+             # Nothing recorded: it was refused, not read, so it stays due and
+             # is retried rather than losing its turn.
+             statuses.append('missing')
++            by_sub[sub] = 'missing'
+             break
+         except RedditUnavailable:
+             # Attempted and learned nothing. Recorded as unknown so it is
+             # retried soon -- unlike a throttle, a 500 says nothing about
+             # whether the next request will work.
+             statuses.append('missing')
++            by_sub[sub] = 'missing'
+             rates[sub] = None
+             continue
+         posts.extend(found)
+         statuses.append(status)
++        by_sub[sub] = status
+         rates[sub] = rate
+ 
+-    return FetchResult(posts=posts, status=_roll_up(statuses), rates=rates)
++    return FetchResult(
++        posts=posts, status=_roll_up(statuses), rates=rates,
++        per_source_status={'reddit:%s' % sub: status
++                           for sub, status in by_sub.items()})
+ 
+ 
+ def _roll_up(statuses):
+     """One status for the cycle, worst-case first.
+ 
+     `missing` beats `truncated` beats `ok`, because a bucket may only claim
+     the completeness of its least complete contributor. Nothing at all is
+     `missing` rather than `ok`: a cycle that read no subreddit did not observe
+     a quiet period, it observed nothing.
+     """
+diff --git a/personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py b/personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py
+new file mode 100644
+index 0000000..380686f
+--- /dev/null
++++ b/personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py
+@@ -0,0 +1,51 @@
++"""widen radar source columns
++
++Revision ID: 08316d3e4d77
++Revises: 1d26ac48e744
++Create Date: 2026-08-27 02:01:16.469834
++
++"""
++from alembic import op
++import sqlalchemy as sa
++
++
++# revision identifiers, used by Alembic.
++revision = '08316d3e4d77'
++down_revision = '1d26ac48e744'
++branch_labels = None
++depends_on = None
++
++
++def upgrade():
++    # Expand before any writer emits `reddit:<sub>`. MySQL/MariaDB DDL is
++    # non-transactional, so each MODIFY may commit independently.
++    op.alter_column('radar_posts', 'source',
++                    existing_type=sa.String(length=16),
++                    type_=sa.String(length=48), existing_nullable=False)
++    # radar_bucket_sources is PARTITIONED, and `source` is part of its primary
++    # key. MODIFY COLUMN rebuilds the table; at ~300k rows that is seconds, but
++    # it is not online -- expect the ingest daemon's writes to block briefly.
++    op.alter_column('radar_bucket_sources', 'source',
++                    existing_type=sa.String(length=24),
++                    type_=sa.String(length=48), existing_nullable=False)
++    op.alter_column('radar_poll_state', 'source',
++                    existing_type=sa.String(length=24),
++                    type_=sa.String(length=48), existing_nullable=False)
++
++
++def downgrade():
++    op.alter_column('radar_poll_state', 'source',
++                    existing_type=sa.String(length=48),
++                    type_=sa.String(length=24), existing_nullable=False)
++    op.alter_column('radar_bucket_sources', 'source',
++                    existing_type=sa.String(length=48),
++                    type_=sa.String(length=24), existing_nullable=False)
++    # Old code can only write/read aggregate Reddit posts. Atom comment IDs
++    # are globally unique, so collapsing the source component cannot collide
++    # on uq_radar_post_source_ext.
++    op.execute(sa.text(
++        "UPDATE radar_posts SET source = 'reddit' "
++        "WHERE source LIKE 'reddit:%'"))
++    op.alter_column('radar_posts', 'source',
++                    existing_type=sa.String(length=48),
++                    type_=sa.String(length=16), existing_nullable=False)
+diff --git a/personal_apps/models.py b/personal_apps/models.py
+index ad161f7..23c8796 100644
+--- a/personal_apps/models.py
++++ b/personal_apps/models.py
+@@ -549,21 +549,22 @@ class RadarPost(db.Model):
+     the 64KB TEXT limit once utf8mb4 puts up to 4 bytes behind each one.
+     """
+     __tablename__ = 'radar_posts'
+     __table_args__ = (
+         db.UniqueConstraint('source', 'external_id', name='uq_radar_post_source_ext'),
+         db.Index('ix_radar_posts_created_utc', 'created_utc'),
+         {'mysql_charset': 'utf8mb4'},
+     )
+ 
+     id           = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+-    source       = db.Column(db.String(16), nullable=False)
++    # Reddit carries the subreddit in the durable source name.
++    source       = db.Column(db.String(48), nullable=False)
+     # 128, not 32: a Bluesky id is 'bluesky:<did>:<rkey>' and a DID alone is
+     # 32 characters. The original width was sized for Reddit fullnames.
+     external_id  = db.Column(db.String(128), nullable=False)
+     channel      = db.Column(db.String(64), nullable=False)
+     author       = db.Column(db.String(64), nullable=True)
+     created_utc  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+     title        = db.Column(db.String(512), nullable=True)
+     body         = db.Column(MEDIUMTEXT, nullable=True)
+     score        = db.Column(db.Integer, nullable=False, default=0)
+     num_comments = db.Column(db.Integer, nullable=False, default=0)
+@@ -671,21 +672,23 @@ class RadarBucketSource(db.Model):
+     """
+     __tablename__ = 'radar_bucket_sources'
+     __table_args__ = (
+         db.Index('ix_radar_bucket_sources_start', 'bucket_start', 'source'),
+         {'mysql_charset': 'utf8mb4'},
+     )
+ 
+     ticker                    = db.Column(db.String(12, collation='utf8mb4_bin'),
+                                           primary_key=True)
+     bucket_start              = db.Column(MYSQL_DATETIME(fsp=6), primary_key=True)
+-    source                    = db.Column(db.String(24), primary_key=True)
++    # 48, not 24: a Reddit source name carries its subreddit
++    # (`reddit:smallstreetbets` is 22 characters and the margin at 24 was two).
++    source                    = db.Column(db.String(48), primary_key=True)
+ 
+     mention_count             = db.Column(db.Integer, nullable=False, default=0)
+     high_confidence_count     = db.Column(db.Integer, nullable=False, default=0)
+     low_count                 = db.Column(db.Integer, nullable=False, default=0)
+     distinct_authors          = db.Column(db.Integer, nullable=False, default=0)
+     distinct_text_ratio       = db.Column(db.Float, nullable=False, default=1.0)
+     engagement_weighted_count = db.Column(db.Float, nullable=False, default=0.0)
+     sentiment_mean            = db.Column(db.Float, nullable=True)
+     sentiment_stdev           = db.Column(db.Float, nullable=True)
+ 
+@@ -713,21 +716,21 @@ class RadarPollState(db.Model):
+     """When each symbol was last polled, and when it is next due.
+ 
+     Per source, because the same symbol has a different message rate on each.
+     """
+     __tablename__ = 'radar_poll_state'
+     __table_args__ = (
+         db.Index('ix_radar_poll_state_due', 'source', 'next_due_at'),
+         {'mysql_charset': 'utf8mb4'},
+     )
+ 
+-    source          = db.Column(db.String(24), primary_key=True)
++    source          = db.Column(db.String(48), primary_key=True)
+     # 64, not 12. This holds whatever the source polls by, and that stopped
+     # being a ticker when Reddit reused the scheduler with the SUBREDDIT as
+     # the unit -- `RobinHoodPennyStocks` is 20 characters, and at 12 the whole
+     # insert failed on the daemon's first cycle.
+     symbol          = db.Column(db.String(64, collation='utf8mb4_bin'),
+                                 primary_key=True)
+     last_polled_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+     next_due_at     = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+     observed_rate   = db.Column(db.Float, nullable=True)   # messages per hour
+ 
+diff --git a/personal_apps/run_radar_ingest.py b/personal_apps/run_radar_ingest.py
+index bc52a29..52389b6 100644
+--- a/personal_apps/run_radar_ingest.py
++++ b/personal_apps/run_radar_ingest.py
+@@ -26,21 +26,21 @@ from app import app
+ from extensions import db
+ from models import RadarPollState
+ from features.radar import (
+     history, ingest, journal, llm_sentiment, market_calendar, quotes,
+     retention, scheduling, scoring, universe)
+ from features.radar.prices import finnhub as finnhub_provider
+ from features.radar.prices import twelvedata as twelvedata_provider
+ from features.radar.config import (
+     MENTION_EVENT_RETENTION_HOURS, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
+     REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
+-    prefer_ipv4_if_configured, source_config_version)
++    expand_sources, prefer_ipv4_if_configured, source_config_version)
+ from features.radar.sources import bluesky, fourchan, reddit
+ from features.radar.sources import FetchResult
+ 
+ logger = logging.getLogger('radar.ingest')
+ 
+ INTERVALS = {
+     'premarket': 180,
+     'regular': 180,
+     'afterhours': 600,
+     'closed': 1800,
+@@ -106,20 +106,24 @@ def _reddit_fetcher(client):
+     well past what earned a sustained 429 during measurement, so they rotate
+     through the poll scheduler's due-symbol ordering: most-overdue first, so
+     a backlog larger than the budget rotates instead of starving the same subs
+     forever.
+ 
+     The observed rate comes back from the feed itself, which lets a quiet sub
+     fall to a slow cadence and hand its share of the budget to a busy one.
+     """
+     def fetch(since):
+         now = _utcnow()
++        # Poll state stays keyed by the bare source name with the subreddit as
++        # its symbol. Only what the POSTS carry is prefixed -- the scheduler's
++        # unit is the subreddit either way, and re-keying it would retire every
++        # learned observed_rate on deploy.
+         scheduling.ensure_tracked('reddit', REDDIT_SUBS, now)
+         # And drop the ones no longer configured. due_symbols filters by
+         # SOURCE rather than by this list, so a removed subreddit would keep
+         # its poll state and keep taking turns -- spending the very budget its
+         # removal was meant to free, while still appearing in the logs as
+         # though nothing had changed. Reddit can do this because REDDIT_SUBS
+         # is the complete set; a source whose tracked set is a rolling window
+         # must never call this, since a symbol falling out of it is temporary.
+         retired = scheduling.retire_untracked('reddit', REDDIT_SUBS)
+         if retired:
+@@ -213,21 +217,21 @@ def score_all(now_utc):
+ 
+     Separate from ingest and slower -- it walks thirty days of buckets per
+     ticker, so it runs on its own schedule rather than inside a three-minute
+     cycle.
+ 
+     Failures are isolated per source for the same reason ingest isolates them:
+     one source's baseline going wrong is not a reason to leave the rest
+     unscored.
+     """
+     written = {}
+-    for source in SOURCES:
++    for source in expand_sources(SOURCES):
+         try:
+             written[source] = scoring.score_source(
+                 source, now_utc.replace(tzinfo=None))
+         except Exception:
+             logger.exception('radar scoring failed for %s', source)
+             written[source] = 0
+     return written
+ 
+ 
+ def _scheduled_scoring():
+diff --git a/personal_apps/tests/test_radar_api.py b/personal_apps/tests/test_radar_api.py
+index 19b1bda..5a8c2cd 100644
+--- a/personal_apps/tests/test_radar_api.py
++++ b/personal_apps/tests/test_radar_api.py
+@@ -26,20 +26,70 @@ def test_the_selected_sources_are_echoed_back(client):
+     payload = json.loads(client.get('/radar/api/board?sources=bluesky').data)
+     assert payload['sources'] == ['bluesky']
+ 
+ 
+ def test_an_unknown_source_is_rejected(client):
+     """Silently ignoring it would return the default board under a selection
+     the viewer never made."""
+     assert client.get('/radar/api/board?sources=nonsense').status_code == 400
+ 
+ 
++def test_a_concrete_reddit_source_is_accepted_but_an_unknown_root_is_not():
++    from features.radar.routes.api import BadQuery, parse_query
++    import pytest
++
++    assert parse_query({'sources': 'reddit:wallstreetbets'}).sources == [
++        'reddit:wallstreetbets']
++    with pytest.raises(BadQuery):
++        parse_query({'sources': 'notreddit:wallstreetbets'})
++
++
++def test_root_reddit_expands_for_board_queries_but_echoes_the_root(
++        client, monkeypatch):
++    from features.radar.config import REDDIT_SUBS
++    from features.radar.routes import api
++
++    seen = {}
++    real_build = api.board_mod.build
++
++    def capture(sources, *args, **kwargs):
++        seen['sources'] = list(sources)
++        return real_build(sources, *args, **kwargs)
++
++    monkeypatch.setattr(api.board_mod, 'build', capture)
++    response = client.get('/radar/api/board?sources=reddit')
++    payload = json.loads(response.data)
++
++    assert response.status_code == 200
++    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
++    assert payload['sources'] == ['reddit']
++
++
++def test_root_reddit_expands_for_detail_queries(client, monkeypatch):
++    from features.radar.config import REDDIT_SUBS
++    from features.radar.routes import api
++
++    seen = {}
++
++    def capture(ticker, sources, now, **kwargs):
++        seen['sources'] = list(sources)
++        return object()
++
++    monkeypatch.setattr(api.detail_panel, 'build', capture)
++    monkeypatch.setattr(api, 'serialize_detail', lambda built: {'ok': True})
++
++    response = client.get('/radar/api/ticker/ZZG?sources=reddit')
++
++    assert response.status_code == 200
++    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
++
++
+ def test_an_unknown_segment_is_rejected(client):
+     assert client.get('/radar/api/board?segment=nonsense').status_code == 400
+ 
+ 
+ def test_the_window_is_bounded(client):
+     """An unbounded window would scan the whole partitioned history on a page
+     load."""
+     assert client.get('/radar/api/board?window=99999').status_code == 400
+ 
+ 
+diff --git a/personal_apps/tests/test_radar_config.py b/personal_apps/tests/test_radar_config.py
+index e44b710..b2e190a 100644
+--- a/personal_apps/tests/test_radar_config.py
++++ b/personal_apps/tests/test_radar_config.py
+@@ -22,20 +22,28 @@ def test_version_changes_when_the_source_list_changes(monkeypatch):
+ 
+ 
+ def test_version_changes_when_the_rollup_generation_changes(monkeypatch):
+     """A corrected aggregate population cannot share the old baseline."""
+     before = config.source_config_version()
+     monkeypatch.setattr(config, 'ROLLUP_GENERATION',
+                         config.ROLLUP_GENERATION + 1, raising=False)
+     assert config.source_config_version() != before
+ 
+ 
++def test_version_changes_when_the_source_name_generation_changes(monkeypatch):
++    """Aggregate Reddit and per-subreddit Reddit are different populations."""
++    before = config.source_config_version()
++    monkeypatch.setattr(config, 'SOURCE_NAME_GENERATION',
++                        config.SOURCE_NAME_GENERATION + 1)
++    assert config.source_config_version() != before
++
++
+ def test_version_ignores_source_order():
+     forward = config.source_config_version()
+     reversed_list = tuple(reversed(config.SOURCES))
+     import unittest.mock as mock
+     with mock.patch.object(config, 'SOURCES', reversed_list):
+         assert config.source_config_version() == forward
+ 
+ 
+ def test_version_is_short_hex():
+     version = config.source_config_version()
+@@ -196,20 +204,61 @@ def test_every_configured_source_has_a_kind():
+ 
+ 
+ def test_an_unknown_source_gets_the_stricter_gate():
+     """Forum is the tighter of the two. A source nobody has characterised
+     should be judged strictly, not leniently."""
+     from features.radar.config import source_kind
+ 
+     assert source_kind('something-new') == 'forum'
+ 
+ 
++def test_a_prefixed_source_inherits_its_roots_policy():
++    """`reddit:wallstreetbets` is Reddit for every per-source judgement.
++
++    Splitting the source name is what stops one sub's permanent feed rollover
++    from marking every other sub's buckets truncated. It must not also split
++    the policy: an unlisted sub inherits Reddit's rules rather than falling
++    through to the strict default, which would silently disable bare tokens on
++    a source that depends on them.
++    """
++    from features.radar import config
++
++    assert config.source_root('reddit:wallstreetbets') == 'reddit'
++    assert config.source_root('bluesky') == 'bluesky'
++    assert config.bare_tokens_allowed('reddit:wallstreetbets') is True
++    assert config.bare_token_confidence('reddit:pennystocks') == 'high'
++    assert config.source_kind('reddit:thetagang') == 'forum'
++    assert config.coin_collision_dropped('reddit:weedstocks', 'LINK') is True
++
++
++def test_every_policy_lookup_uses_the_prefixed_sources_root(monkeypatch):
++    """The less visible policy extension points must inherit the root too."""
++    monkeypatch.setitem(config.SOURCE_KIND, 'reddit', 'broadcast')
++    monkeypatch.setitem(config.SINGLE_LETTER_CASHTAGS, 'reddit', True)
++    monkeypatch.setitem(config.COIN_SYMBOLS_MEAN_STOCKS, 'reddit', True)
++
++    assert config.source_kind('reddit:wallstreetbets') == 'broadcast'
++    assert config.single_letter_cashtags_allowed(
++        'reddit:wallstreetbets') is True
++    assert config.coin_collision_dropped(
++        'reddit:wallstreetbets', 'LINK') is False
++
++
++def test_root_reddit_expands_to_every_configured_concrete_source():
++    expected = ['reddit:%s' % sub for sub in config.REDDIT_SUBS]
++
++    assert config.expand_sources(['bluesky', 'reddit']) == [
++        'bluesky', *expected]
++    assert config.expand_sources(['reddit:wallstreetbets']) == [
++        'reddit:wallstreetbets']
++
++
+ def test_the_version_stamp_covers_the_distinctiveness_rule():
+     """Distinctiveness decides whether a bare mention is promoted to `high`,
+     so changing it changes WHICH mentions get counted -- the exact
+     discontinuity the stamp warms up from. It hashed the source list and the
+     extraction patterns but not this, which is the same omission that shipped
+     three extraction fixes over stale baselines on 2026-08-22.
+     """
+     from features.radar import config
+ 
+     before = config.source_config_version()
+diff --git a/personal_apps/tests/test_radar_daemon.py b/personal_apps/tests/test_radar_daemon.py
+index 3590d54..21d2a67 100644
+--- a/personal_apps/tests/test_radar_daemon.py
++++ b/personal_apps/tests/test_radar_daemon.py
+@@ -129,21 +129,68 @@ def test_the_first_cycle_is_scheduled_immediately():
+     import inspect
+     source = inspect.getsource(daemon.main)
+     assert 'next_run_time' in source, 'first cycle would wait a full interval'
+ 
+ 
+ def test_scoring_covers_every_configured_source(monkeypatch):
+     seen = []
+     monkeypatch.setattr(daemon.scoring, 'score_source',
+                         lambda source, now, **k: seen.append(source) or 1)
+     daemon.score_all(_utc(2026, 8, 21, 14))
+-    assert set(seen) == set(daemon.SOURCES)
++    expected = {'bluesky', 'fourchan'} | {
++        'reddit:%s' % sub for sub in daemon.REDDIT_SUBS}
++    assert set(seen) == expected
++    assert 'reddit' not in seen
++
++
++def test_reddit_poll_state_stays_keyed_to_the_root_source(monkeypatch):
++    """Concrete post names must not retire the scheduler's learned state."""
++    from app import app as flask_app
++    from extensions import db
++    from features.radar.sources import FetchResult
++    from models import RadarPollState
++
++    sub = 'zz_task9_sub'
++    root = 'reddit'
++    concrete = 'reddit:%s' % sub
++    owned_sources = (root, concrete)
++    now = dt.datetime(2026, 8, 27, 12, 0, 0)
++
++    def wipe_owned_state():
++        RadarPollState.query.filter(
++            RadarPollState.source.in_(owned_sources),
++            RadarPollState.symbol == sub).delete(synchronize_session=False)
++        db.session.commit()
++
++    with flask_app.app_context():
++        wipe_owned_state()
++        monkeypatch.setattr(daemon, 'REDDIT_SUBS', (sub,))
++        monkeypatch.setattr(daemon, '_utcnow', lambda: now)
++        monkeypatch.setattr(daemon.scheduling, 'retire_untracked',
++                            lambda source, symbols: 0)
++        monkeypatch.setattr(daemon.scheduling, 'due_symbols',
++                            lambda source, current, limit: [sub])
++        monkeypatch.setattr(
++            daemon.reddit, 'fetch',
++            lambda since_by_sub, client: FetchResult(
++                posts=[], status='ok', rates={sub: 0.0},
++                per_source_status={concrete: 'ok'}))
++
++        try:
++            daemon._reddit_fetcher(object())(now - dt.timedelta(minutes=5))
++            rows = RadarPollState.query.filter(
++                RadarPollState.source.in_(owned_sources),
++                RadarPollState.symbol == sub).all()
++            assert [(row.source, row.symbol) for row in rows] == [(root, sub)]
++        finally:
++            db.session.rollback()
++            wipe_owned_state()
+ 
+ 
+ def test_one_source_failing_to_score_does_not_stop_the_others(monkeypatch):
+     """Same rule as ingest. A bad baseline on one source is not a reason to
+     leave the others unscored."""
+     def flaky(source, now, **k):
+         if source == 'bluesky':
+             raise RuntimeError('bad baseline')
+         return 3
+ 
+diff --git a/personal_apps/tests/test_radar_ingest.py b/personal_apps/tests/test_radar_ingest.py
+index 0064e09..65a4e55 100644
+--- a/personal_apps/tests/test_radar_ingest.py
++++ b/personal_apps/tests/test_radar_ingest.py
+@@ -12,21 +12,21 @@ import pytest
+ 
+ from app import app as flask_app
+ from extensions import db
+ from models import (RadarBucket, RadarMention, RadarMentionEvent, RadarPost,
+                     RadarSourceCursor, TickerUniverse)
+ from features.radar import ingest
+ from features.radar.sources import FetchResult, RawPost
+ 
+ NOW = dt.datetime(2026, 4, 15, 14, 20, 0)
+ TEST_CHANNEL = 'zz_task7_ingest'
+-TEST_SOURCES = ('bluesky', 'reddit')
++TEST_SOURCES = ('bluesky', 'reddit', 'reddit:wallstreetbets')
+ TEST_TICKER = 'ZZG'
+ 
+ 
+ def _wipe():
+     from models import RadarBucketSource
+     RadarPost.query.filter(RadarPost.channel == TEST_CHANNEL).delete(
+         synchronize_session=False)
+     RadarBucketSource.query.filter_by(ticker=TEST_TICKER).delete(
+         synchronize_session=False)
+     RadarBucket.query.filter_by(ticker=TEST_TICKER).delete(
+@@ -221,20 +221,77 @@ def test_two_sources_ingest_in_one_cycle(seeded):
+     result = ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
+     assert result['posts_new'] == 2
+     assert result['per_source'] == {'reddit': 'ok', 'bluesky': 'ok'}
+     with flask_app.app_context():
+         from models import RadarBucketSource
+         sources = {r.source for r in
+                    RadarBucketSource.query.filter_by(ticker='ZZG').all()}
+         assert sources == {'reddit', 'bluesky'}
+ 
+ 
++def test_reddit_subreddits_write_only_their_own_status_rows(seeded):
++    """One rolled-over feed must not mark a quieter subreddit truncated."""
++    wallstreetbets = post(
++        ident='task9-wsb', body='$ZZG from wsb', author='task9-wsb',
++        source='reddit:wallstreetbets')
++    pennystocks = post(
++        ident='task9-penny', body='$ZZG from pennies', author='task9-penny',
++        source='reddit:pennystocks')
++    result = ingest.run_cycle(
++        NOW,
++        fetcher_for(FetchResult(
++            posts=[wallstreetbets, pennystocks], status='truncated',
++            per_source_status={
++                'reddit:wallstreetbets': 'truncated',
++                'reddit:pennystocks': 'ok',
++            }), source='reddit'))
++
++    assert result['per_source'] == {
++        'reddit:wallstreetbets': 'truncated',
++        'reddit:pennystocks': 'ok',
++    }
++    with flask_app.app_context():
++        from models import RadarBucketSource
++        rows = {row.source: row.status for row in
++                RadarBucketSource.query.filter_by(ticker=TEST_TICKER).all()}
++        assert rows == {
++            'reddit:wallstreetbets': 'truncated',
++            'reddit:pennystocks': 'ok',
++        }
++        assert RadarBucketSource.query.filter_by(
++            ticker=TEST_TICKER, source='reddit').count() == 0
++
++
++def test_a_successful_subreddit_survives_a_missing_aggregate_status(seeded):
++    """A later refusal cannot discard comments already fetched this cycle."""
++    successful = post(
++        ident='task9-partial', body='$ZZG survived', author='task9-partial',
++        source='reddit:pennystocks')
++    result = ingest.run_cycle(
++        NOW,
++        fetcher_for(FetchResult(
++            posts=[successful], status='missing',
++            per_source_status={
++                'reddit:pennystocks': 'ok',
++                'reddit:wallstreetbets': 'missing',
++            }), source='reddit'))
++
++    assert result['posts_new'] == 1
++    assert result['mentions'] == 1
++    with flask_app.app_context():
++        from models import RadarBucketSource
++        rows = {row.source: row.status for row in
++                RadarBucketSource.query.filter_by(ticker=TEST_TICKER).all()}
++        assert rows == {'reddit:pennystocks': 'ok'}
++        assert RadarPost.query.filter_by(external_id='task9-partial').count() == 1
++
++
+ def test_one_source_failing_does_not_stop_the_other(seeded):
+     """The entire reason status is per source. A dead Bluesky must not cost a
+     healthy Reddit cycle, and must not write a zero for itself."""
+     def rd(since):
+         return FetchResult(
+             posts=[post(ident='st1', body='$ZZG up', source='reddit')],
+             status='ok')
+ 
+     def bs(since):
+         return FetchResult(posts=[], status='missing')
+@@ -246,33 +303,35 @@ def test_one_source_failing_does_not_stop_the_other(seeded):
+         rows = {r.source: r.status for r in
+                 RadarBucketSource.query.filter_by(ticker='ZZG').all()}
+         assert rows == {'reddit': 'ok'}
+ 
+ 
+ def test_each_source_keeps_its_own_cursor(seeded):
+     """One source catching up must not drag the others back over ground they
+     already covered."""
+     def rd(since):
+         return FetchResult(
+-            posts=[post(ident='st1', body='$ZZG', minute=10, source='reddit')],
++            posts=[post(ident='st1', body='$ZZG', minute=10,
++                        source='reddit:wallstreetbets')],
+             status='ok')
+ 
+     def bs(since):
+         p = post(ident='bs1', body='$ZZG', minute=18)
+         p.source = 'bluesky'
+         return FetchResult(posts=[p], status='ok')
+ 
+     ingest.run_cycle(NOW, {'reddit': rd, 'bluesky': bs})
+     with flask_app.app_context():
+         cursors = {c.source: c.cursor_utc for c in RadarSourceCursor.query.all()}
+     assert cursors['reddit'] == dt.datetime(2026, 4, 15, 14, 10, 0)
+     assert cursors['bluesky'] == dt.datetime(2026, 4, 15, 14, 18, 0)
++    assert 'reddit:wallstreetbets' not in cursors
+ 
+ 
+ def test_the_same_post_twice_in_one_batch_is_stored_once(seeded):
+     """A StockTwits message tagged $ZZG and $OTHER is returned by both symbol
+     streams, so one cycle sees the same external_id twice. Found in live data,
+     not in tests -- every fixture until now used distinct ids."""
+     duplicate = [post(ident='dup1', body='$ZZG and more'),
+                  post(ident='dup1', body='$ZZG and more')]
+     result = ingest.run_cycle(
+         NOW, fetcher_for(FetchResult(posts=duplicate, status='ok')))
+diff --git a/personal_apps/tests/test_radar_reddit.py b/personal_apps/tests/test_radar_reddit.py
+index 5c12bcf..9d92c27 100644
+--- a/personal_apps/tests/test_radar_reddit.py
++++ b/personal_apps/tests/test_radar_reddit.py
+@@ -45,33 +45,32 @@ class FakeClient:
+ 
+     def get_feed(self, sub):
+         self.asked.append(sub)
+         answer = self.feeds[sub]
+         if isinstance(answer, Exception):
+             raise answer
+         return answer
+ 
+ 
+ def test_a_comment_becomes_a_post_with_its_subreddit_on_it():
+-    """The subreddit rides on `channel`, not on `source`.
++    """The subreddit rides on both the stored source name and channel.
+ 
+-    Per-subreddit baselines are not built yet, so which sub a comment came
+-    from is only recoverable if it is stored -- and deciding which subs are
+-    worth keeping is the entire reason this ships wide.
++    The concrete source is what gives each subreddit its own coverage status;
++    channel remains the original venue label carried by the stored comment.
+     """
+     client = FakeClient({'pennystocks': feed([entry('t1_aaa', 5)])})
+ 
+     posts, status, _rate = reddit.fetch_one('pennystocks', NOW - dt.timedelta(hours=1), client)
+ 
+     assert len(posts) == 1
+     post = posts[0]
+-    assert post.source == 'reddit'
++    assert post.source == 'reddit:pennystocks'
+     assert post.channel == 'pennystocks'
+     assert post.external_id == 't1_aaa'
+     assert post.author == '/u/someone'
+     assert 'AAPL' in post.body
+     assert status == 'ok'
+ 
+ 
+ def test_html_is_stripped_from_the_body():
+     """The extractor reads text. Left as markup, `<b>AAPL</b>` is not a
+     word-boundary match and the mention is silently lost."""
+@@ -146,20 +145,22 @@ def test_a_throttle_stops_the_cycle_instead_of_asking_again():
+         'a': feed([entry('t1_a', 5)]),
+         'b': reddit.RedditThrottled('r/b: 429'),
+         'c': feed([entry('t1_c', 5)]),
+     })
+ 
+     since = NOW - dt.timedelta(hours=1)
+     result = reddit.fetch({'a': since, 'b': since, 'c': since}, client, pause=0)
+ 
+     assert client.asked == ['a', 'b']
+     assert [p.external_id for p in result.posts] == ['t1_a']
++    assert result.per_source_status == {
++        'reddit:a': 'ok', 'reddit:b': 'missing'}
+ 
+     # 'c' was never requested, so it must not be scheduled as though it had
+     # been -- it would lose its turn to whatever happened to sort earlier.
+     assert 'c' not in result.rates
+ 
+ 
+ def test_a_throttled_subreddit_keeps_its_place_rather_than_being_backed_off():
+     """Reversed 2026-08-25, after measuring what the 429s actually were.
+ 
+     This used to report a throttled sub at rate 0.0 -- a deliberate lie,
+@@ -210,20 +211,22 @@ def test_one_unreachable_sub_does_not_cost_the_others():
+     client = FakeClient({
+         'a': reddit.RedditUnavailable('r/a: HTTP 500'),
+         'b': feed([entry('t1_b', 5)]),
+     })
+ 
+     since = NOW - dt.timedelta(hours=1)
+     result = reddit.fetch({'a': since, 'b': since}, client, pause=0)
+ 
+     assert client.asked == ['a', 'b']
+     assert [p.external_id for p in result.posts] == ['t1_b']
++    assert result.per_source_status == {
++        'reddit:a': 'missing', 'reddit:b': 'ok'}
+     # Attempted and told nothing. Unknown, not zero -- a 500 says nothing
+     # about whether the next request will work, so it is retried soon.
+     assert result.rates['a'] is None
+ 
+ 
+ def test_a_cycle_that_read_nothing_is_missing_not_ok():
+     """`ok` with no posts means a genuinely quiet period, and the rollup
+     writes zero counts for it. A cycle where every request failed observed
+     nothing at all, which is a different fact."""
+     client = FakeClient({'a': reddit.RedditUnavailable('down')})
+@@ -319,10 +322,67 @@ def test_each_subreddit_is_read_from_its_own_cursor():
+     })
+ 
+     result = reddit.fetch({
+         'busy': NOW - dt.timedelta(minutes=5),      # read 5 minutes ago
+         'quiet': NOW - dt.timedelta(minutes=90),    # last read 90 minutes ago
+     }, client, pause=0)
+ 
+     got = {p.external_id for p in result.posts}
+     assert got == {'t1_busy', 't1_quiet'}, (
+         "the quiet subreddit was filtered out by another sub cursor")
++
++
++def test_all_three_prefixed_source_columns_are_wide_in_model_and_database():
++    """The longest configured Reddit name must survive the durable boundary."""
++    import sqlalchemy as sa
++
++    from app import app as flask_app
++    from extensions import db
++    from features.radar.config import REDDIT_SUBS
++    from models import RadarBucketSource, RadarPollState, RadarPost
++
++    concrete = max(('reddit:%s' % sub for sub in REDDIT_SUBS), key=len)
++    models = (RadarPost, RadarBucketSource, RadarPollState)
++    assert {model.__tablename__: model.__table__.c.source.type.length
++            for model in models} == {
++                'radar_posts': 48,
++                'radar_bucket_sources': 48,
++                'radar_poll_state': 48,
++            }
++
++    external_id = 'zz-task9-longest-source'
++    channel = 'zz_task9_source_width'
++    with flask_app.app_context():
++        inspector = sa.inspect(db.engine)
++        live = {
++            model.__tablename__: next(
++                column['type'].length
++                for column in inspector.get_columns(model.__tablename__)
++                if column['name'] == 'source')
++            for model in models
++        }
++        assert live == {
++            'radar_posts': 48,
++            'radar_bucket_sources': 48,
++            'radar_poll_state': 48,
++        }
++
++        def wipe_owned_post():
++            RadarPost.query.filter_by(
++                external_id=external_id, channel=channel).delete(
++                    synchronize_session=False)
++            db.session.commit()
++
++        wipe_owned_post()
++        try:
++            stamp = dt.datetime(2026, 8, 24, 12, 0, 0)
++            db.session.add(RadarPost(
++                source=concrete, external_id=external_id, channel=channel,
++                author='zz-task9', created_utc=stamp, title=None, body='$AAPL',
++                score=0, num_comments=0, url='', simhash=1,
++                first_seen=stamp, last_seen=stamp))
++            db.session.commit()
++            assert RadarPost.query.filter_by(
++                source=concrete, external_id=external_id).one().source == concrete
++        finally:
++            db.session.rollback()
++            wipe_owned_post()

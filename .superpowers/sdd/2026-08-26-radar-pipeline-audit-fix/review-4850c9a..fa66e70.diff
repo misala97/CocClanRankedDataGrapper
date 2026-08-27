@@ -1,0 +1,119 @@
+# Review package: 4850c9a..fa66e70
+
+## Commits
+fa66e70 test(radar): isolate scoring cleanup sentinels
+
+## Files changed
+ .../task-3c-report.md                              | 30 ++++++++++++++++++++++
+ personal_apps/tests/test_radar_scoring.py          |  7 +++--
+ 2 files changed, 33 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md b/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
+index cee2812..dc8c532 100644
+--- a/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
++++ b/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
+@@ -435,10 +435,40 @@ passed.
+ 
+ ### Final verification
+ 
+ ```text
+ py -3.12 -m pytest tests/test_radar_scoring.py -v
+ 30 passed in 45.09s
+ 
+ py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
+ 141 passed in 47.63s
+ ```
++
++## Fix round 3 — collision-safe shared-DB sentinel
++
++The round-2 exact ownership list still incorrectly included `SSNOPE`, which
++this file only queries and never creates. It has been removed. The ownership
++list now contains only tickers this file writes:
++`SSA`, `SSB`, `SSNEW`, `SSOLD`, `SSNULL`, `ZZGEN`, `ZZSCORED`, `ZZSCOPE`, and
++`ZZUNSCORED`.
++
++The sentinel regression now generates a per-run 12-character ticker as
++`ZZX` plus nine uppercase UUID hex characters. It performs no pre-delete,
++inserts that exact row, calls `_clear_owned_rows()`, asserts the row remains,
++and deletes only that exact ticker in `finally`.
++
++### Watched failing mutation
++
++Replacing the exact `ticker.in_(_OWNED_TICKERS)` cleanup predicate with the
++former broad `ticker.like('SS%') | ticker.like('ZZ%')` predicate failed the
++sentinel regression with `assert 0 == 1`; the generated `ZZX994168F8A`
++sentinel was deleted. The exact predicate was restored.
++
++### Final verification
++
++```text
++py -3.12 -m pytest tests/test_radar_scoring.py -v
++30 passed in 47.10s
++
++py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
++141 passed in 48.35s
++```
+diff --git a/personal_apps/tests/test_radar_scoring.py b/personal_apps/tests/test_radar_scoring.py
+index 5e3e675..a2bf19f 100644
+--- a/personal_apps/tests/test_radar_scoring.py
++++ b/personal_apps/tests/test_radar_scoring.py
+@@ -1,30 +1,31 @@
+ # personal_apps/tests/test_radar_scoring.py
+ """Turning counts into surprise.
+ 
+ Everything here reads radar_bucket_sources and writes back onto the same rows.
+ No prices and no divergence -- those need a market feed and are Plan 3.
+ """
+ import datetime as dt
++import uuid
+ 
+ import pytest
+ 
+ from app import app as flask_app
+ from extensions import db
+ from models import RadarBucketSource
+ from features.radar import scoring
+ from features.radar.config import source_config_version
+ 
+ MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
+ NOW = MONDAY + dt.timedelta(days=35)
+ _OWNED_TICKERS = (
+-    'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL', 'SSNOPE',
++    'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL',
+     'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED',
+ )
+ 
+ 
+ def _clear_owned_rows():
+     RadarBucketSource.query.filter(
+         RadarBucketSource.ticker.in_(_OWNED_TICKERS)).delete(
+             synchronize_session=False)
+     db.session.commit()
+ 
+@@ -53,24 +54,22 @@ def steady_history(ticker='SSA', per_bucket=2, days=30, source='stocktwits'):
+     2880 rows at 15-minute grain. Added to the session and committed once by
+     the caller -- committing per row makes this suite take minutes.
+     """
+     for step in range(days * 96):
+         add(MONDAY + dt.timedelta(minutes=15 * step), per_bucket,
+             ticker=ticker, source=source)
+ 
+ 
+ def test_row_cleanup_preserves_an_unowned_zz_sentinel():
+     """This file's shared-DB cleanup must never claim another ZZ namespace."""
+-    sentinel = 'ZZSENTINEL'
++    sentinel = 'ZZX' + uuid.uuid4().hex[:9].upper()
+     with flask_app.app_context():
+-        RadarBucketSource.query.filter_by(ticker=sentinel).delete(
+-            synchronize_session=False)
+         db.session.add(RadarBucketSource(
+             ticker=sentinel, bucket_start=NOW, source='sentinel',
+             mention_count=1, high_confidence_count=1, low_count=0,
+             distinct_authors=1, distinct_text_ratio=1.0,
+             engagement_weighted_count=1.0, status='ok',
+             source_config_version='sentinel'))
+         db.session.commit()
+         try:
+             _clear_owned_rows()
+             assert RadarBucketSource.query.filter_by(ticker=sentinel).count() == 1

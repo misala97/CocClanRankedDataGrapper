@@ -1,6 +1,123 @@
 # HANDOFF — radar pipeline audit fix
 
-## STOP CHECKPOINT — Task 9 WIP, Codex to Claude, 2026-08-27
+## AUTHORITATIVE CHECKPOINT — Claude to Codex, 2026-08-27
+
+Newest checkpoint; supersedes every section below. Michi stopped Claude near
+its session limit. **There are no active workers.**
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD: `cc2d278` (`fix(radar): keep historical Reddit visible and stop zero-count root rows`)
+Working tree: clean except SDD docs, which the checkpoint commit force-adds.
+
+### State of the plan
+
+Complete and review-clean: **Tasks 1, 2, 3, 3b, 3c, 4, 5, 6, 7, 9.**
+
+**Task 9 is DONE and review-clean** — that is the change since the last
+checkpoint. It was `NOT APPROVED` at first pass with 2 Critical, 2 Important
+and 6 Minor; fix round 1 (`cc2d278`) addressed all ten and the high-capability
+re-review APPROVED it with **zero new Critical or Important**.
+
+**Nothing is in progress. Task 8 is next and has not been started.**
+
+### Database state — check before anything else
+
+The local shared MySQL database is at single Alembic head **`08316d3e4d77`**,
+and that migration is now COMMITTED (it shipped inside `dedc90b`), so Git and
+the DB agree. This is no longer the fragile split the previous checkpoint
+warned about. Three source columns are widened to 48.
+
+**Do not run a migration downgrade.** The round trip was already exercised
+under a controller ruling, at a moment when every prefixed-row count was zero
+so the normalization mutated nothing. That window may have closed. Minor N1
+below records that the downgrade's width guard fires only after a DDL has
+already committed — which on MariaDB cannot be rolled back.
+
+### Codex's immediate next action
+
+1. Read this checkpoint, `progress.md`, and the hardened `task-8-brief.md`.
+2. Verify `git status --short`, `git log -1` = `cc2d278`, and `flask db current`
+   = `08316d3e4d77` before editing anything.
+3. **Start Task 8.** It was deliberately sequenced after Task 9 because
+   Reddit's aggregate status was the wrong population — that is now fixed, so
+   Task 8 is unblocked for the first time.
+4. **Task 8 is Reddit: its review uses the most capable model, not Sonnet.**
+   Michi's standing ruling is Sonnet for every review EXCEPT StockTwits and
+   Reddit. Task 8 is the last task under that exception; 10-19 go to Sonnet.
+5. Then continue: **8 → 10-13 → 14-17 → 18-19 → final branch review**, batching
+   per the ceremony table further down this file.
+
+### Task 8 specifics already prepared
+
+`task-8-brief.md` is hardened: its missing-status test must exercise a **real
+current-generation missing row**, not merely assert that a constant has the
+right value — a write loop can ignore a correct constant. Both the truncated
+and missing guards require mutation teeth.
+
+`task-10-brief.md` through `task-13-brief.md` are generated for the single
+absence-shaped batch. `task-13-brief.md` is hardened because
+`dict.setdefault(key, _extract_for(...))` evaluates the extraction eagerly even
+when the key is already present — use an explicit membership branch and test
+that a duplicate external ID is extracted once.
+
+### Rulings from Task 9 that bind later tasks
+
+- **A not-due cycle records NOTHING** — not an `ok` zero, not `missing`.
+  `missing` means we tried and failed; not-due means we never tried.
+  `per_source_status` distinguishes `None` (no information, keep the root
+  fallback) from `{}` (explicitly nothing observed), tested with `is not None`,
+  never truthiness. Any later source that can skip a cycle must follow this.
+- **Two source-expansion helpers exist on purpose.** Strict `expand_sources`
+  (concrete only) for scored reads; root-inclusive `expand_sources_for_history`
+  for raw-count reads. Merging them loses either pre-deploy history or
+  generation isolation. The reason is documented at the definition — do not let
+  a later "simplification" collapse them.
+- **Population is not presentation.** Task 9 was explicitly forbidden from
+  surfacing subreddits in the UI: the detail panel keeps one pooled `Reddit`
+  venue row and labels are rooted. Exposing per-subreddit rows is a real
+  product decision for Michi, not a side effect. Later tasks inherit this line.
+- **Venues are counted by ROOT.** Two subreddits are not two independent
+  venues; they share a platform, a population and a rate-limit budget.
+  Verified to reach the client, not stop at the server boundary.
+
+### Deferred Minors the final branch review must triage
+
+- **Task 4+5:** `_extract_for` says four per-source judgements, prose lists three.
+- **Task 6:** the `int()`-at-the-boundary comment claims `COUNT` returns
+  `Decimal`; only `SUM` does on this driver. Left as house convention.
+- **Task 7:** one Minor carried from its original review.
+- **Task 9 N1:** the downgrade's width guard fires after a DDL has committed.
+- **Task 9 N2:** four of the five scored reads' strictness is untested, which
+  weakens the Minor 10 closure argument.
+- **Task 9 N3 (PRE-EXISTING, worth real attention):** broad `LIKE 'ZZ%'`
+  teardowns across **five** test files. This is the shared-DB hazard that has
+  been caught three separate times on this branch and it is still live — one
+  suite can erase another suite's or Michi's namespaced rows. Not introduced by
+  Task 9. Strong candidate to fix before merge rather than defer.
+- **Task 9 N4 (pre-existing):** `board.excluded['one_venue']` is dead in production.
+
+### Gate numbers
+
+Broad gate `python -m pytest tests/ -k radar -q` from `personal_apps/`:
+**617 passed**, plus **exactly two** API template failures caused by the
+missing gitignored `personal_apps/static/radar/dist/.vite/manifest.json`. Those
+two are expected — confirm they are the only failures, never fix them.
+
+Frontend is **not** blocked: `npm install` has been run, `node_modules/` is on
+disk, `tsc` type-checks clean and vitest passes. An older section below claims
+`tsc` is not installed — that claim is disproved and Tasks 11, 15 and 16 should
+be planned with the runner available.
+
+Reviews: subagents write full reports to file and return only a status line.
+
+---
+
+The material below is historical context from earlier handoffs. Where it
+conflicts with the checkpoint above, the checkpoint above wins.
+
+
+## Superseded: Task 9 WIP checkpoint (Task 9 now complete and review-clean)
 
 This is the newest authoritative checkpoint and supersedes every section
 below. Michi stopped because the Codex session limit is imminent.

@@ -1,0 +1,2046 @@
+# Review package: dedc90b..cc2d278
+
+## Commits
+cc2d278 fix(radar): keep historical Reddit visible and stop zero-count root rows
+
+## Files changed
+ personal_apps/features/radar/board.py              |  25 ++++-
+ personal_apps/features/radar/buckets.py            |  12 +-
+ personal_apps/features/radar/config.py             |  63 ++++++++++-
+ personal_apps/features/radar/detail.py             |  10 +-
+ personal_apps/features/radar/detail_panel.py       |  33 +++++-
+ personal_apps/features/radar/ingest.py             |  23 +++-
+ personal_apps/features/radar/journal.py            |   8 ++
+ personal_apps/features/radar/leaderboard.py        |  33 +++++-
+ personal_apps/features/radar/phrasing.py           |   4 +-
+ personal_apps/features/radar/routes/api.py         |  34 ++++--
+ personal_apps/features/radar/scoring.py            |  10 +-
+ personal_apps/features/radar/sources/__init__.py   |  21 +++-
+ .../08316d3e4d77_widen_radar_source_columns.py     |  40 +++++++
+ personal_apps/run_radar_ingest.py                  |  12 +-
+ personal_apps/static/radar/src/format.test.ts      |  17 +++
+ personal_apps/static/radar/src/format.ts           |  16 ++-
+ personal_apps/tests/test_radar_api.py              |  66 +++++++++--
+ personal_apps/tests/test_radar_board.py            | 123 +++++++++++++++++++++
+ personal_apps/tests/test_radar_detail.py           |  68 ++++++++++++
+ personal_apps/tests/test_radar_ingest.py           |  37 +++++++
+ personal_apps/tests/test_radar_leaderboard.py      |  26 +++++
+ personal_apps/tests/test_radar_phrasing.py         |   8 ++
+ personal_apps/tests/test_radar_scoring.py          |  30 +++--
+ 23 files changed, 667 insertions(+), 52 deletions(-)
+
+## Diff
+diff --git a/personal_apps/features/radar/board.py b/personal_apps/features/radar/board.py
+index d2a43fa..3996575 100644
+--- a/personal_apps/features/radar/board.py
++++ b/personal_apps/features/radar/board.py
+@@ -25,21 +25,22 @@ different clothes -- an absence is not a zero:
+ import collections
+ import dataclasses
+ import datetime as dt
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+ from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
+ 
+ from . import leaderboard, market_calendar, phrasing
+-from .config import SEGMENT_GROUPS, VARIANCE_FLOOR, segments_in
++from .config import (SEGMENT_GROUPS, VARIANCE_FLOOR, expand_sources,
++                     expand_sources_for_history, segments_in)
+ 
+ # The windows the triplet reports, shortest first. Fixed rather than derived
+ # from the selected window: the point of the triplet is that all three are
+ # always visible together, so "building" and "fading" can be told apart at a
+ # glance instead of by switching the window control and remembering.
+ TRIPLET_HOURS = (1, 4, 24)
+ 
+ # How much history the sparkline and the lead charts draw.
+ SERIES_HOURS = 24
+ 
+@@ -117,34 +118,36 @@ def _hour_floor(when):
+ 
+ 
+ def _covered_hours(sources, since, now):
+     """Hours in which any bucket at all was written for these sources.
+ 
+     The proxy for "ingest was alive". It is a proxy and not a record: a genuine
+     board-wide silence reads the same as a stopped daemon. Both resolve to
+     "not measured", which is the honest half of the ambiguity -- the dishonest
+     half would be drawing a zero.
+     """
++    sources = expand_sources_for_history(sources)
+     rows = (db.session.query(RadarBucketSource.bucket_start)
+             .filter(RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.bucket_start >= since,
+                     RadarBucketSource.bucket_start < now,
+                     RadarBucketSource.status.in_(('ok', 'truncated')))
+             .distinct().all())
+     return {_hour_floor(start) for (start,) in rows}
+ 
+ 
+ def _hourly_counts(tickers, sources, since, now):
+     """Pooled mention count per (ticker, hour)."""
+     if not tickers:
+         return {}
+ 
++    sources = expand_sources_for_history(sources)
+     rows = (db.session.query(RadarBucketSource.ticker,
+                              RadarBucketSource.bucket_start,
+                              RadarBucketSource.mention_count)
+             .filter(RadarBucketSource.ticker.in_(list(tickers)),
+                     RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.bucket_start >= since,
+                     RadarBucketSource.bucket_start < now)
+             .all())
+ 
+     totals = collections.defaultdict(int)
+@@ -170,20 +173,24 @@ def _series_for(ticker, totals, covered, since, now):
+ def _triplets(tickers, sources, now):
+     """mention_z at each triplet window, per ticker.
+ 
+     One query over the longest window, sliced in Python. Three queries would
+     read the same rows three times, and the longest window contains the other
+     two by construction.
+     """
+     if not tickers:
+         return {}
+ 
++    # STRICT: every figure below comes off `expected` and `variance`, which
++    # are relative to a baseline. The pre-split root `reddit` rows were
++    # baselined against a different population and may not enter a z.
++    sources = expand_sources(sources)
+     longest = max(TRIPLET_HOURS)
+     rows = (db.session.query(RadarBucketSource.ticker,
+                              RadarBucketSource.bucket_start,
+                              RadarBucketSource.mention_count,
+                              RadarBucketSource.expected,
+                              RadarBucketSource.variance)
+             .filter(RadarBucketSource.ticker.in_(list(tickers)),
+                     RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.bucket_start >= now - dt.timedelta(hours=longest),
+                     RadarBucketSource.bucket_start < now,
+@@ -215,20 +222,21 @@ def _triplets(tickers, sources, now):
+ def _tones(tickers, sources, since, now):
+     """Bullish / neutral / bearish mention counts per ticker.
+ 
+     Counted from the mention rows rather than derived from the stored bucket
+     mean, for the reason in the module docstring: a mean cannot tell a balanced
+     argument apart from a room that used no sentiment words at all.
+     """
+     if not tickers:
+         return {}
+ 
++    sources = expand_sources_for_history(sources)
+     # A model verdict outranks the word list on the same post, and a NULL
+     # verdict falls back to it rather than counting as toneless. The lexicon
+     # is forty words with a negation window: it reads "great, another green
+     # day" after a crash as bullish, which is exactly the case spec 6.11
+     # specified a re-read for. Verdicts arrive on a scheduled pass, so most
+     # rows carry none at any given moment and the fallback is the normal path,
+     # not the exception.
+     #
+     # `unclear` deliberately votes neither way AND blocks the lexicon from
+     # voting: it means the post named the ticker without saying anything about
+@@ -259,48 +267,59 @@ def _tones(tickers, sources, since, now):
+         bullish, bearish = int(bullish or 0), int(bearish or 0)
+         out[ticker] = Tone(bullish=bullish, bearish=bearish,
+                            neutral=max(0, int(total) - bullish - bearish))
+     return out
+ 
+ 
+ def build(sources, now, window_hours=4, segments=(), limit=50,
+           leads=LEAD_COUNT, min_venues=1):
+     """The whole board.
+ 
++    `sources` is the viewer's SELECTION, root-level (`reddit`) or concrete
++    (`reddit:pennystocks`) -- not an expanded list. Each query below expands
++    it for itself, because the two expansions differ: see config.expand_sources
++    and config.expand_sources_for_history.
++
+     Segment counts are taken before the segment filter, because the counts
+     label the filter's own buttons -- computing them after it would report the
+     selected segment's size in every slot.
+     """
+     session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
+     ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
+                                      segments=(), limit=None, session=session)
+     ranked = ranking.rows
+ 
+     counts = collections.Counter(row.segment for row in ranked)
+     segment_counts = dict(counts)
+     segment_counts['all'] = len(ranked)
+     segment_counts['small'] = sum(
+         1 for row in ranked if row.segment in SEGMENT_GROUPS['small'])
+ 
+     # Both venue counts come from the same unfiltered pass, for the reason the
+     # segment counts do: they label the control, and counting after the filter
+     # would report the filtered size in every slot.
++    #
++    # A VENUE IS A ROOT. `row.sources` is concrete, so two subreddits are two
++    # names -- but they are one platform, one user population and one
++    # rate-limit budget. The breadth control's whole claim is that a second
++    # venue is INDEPENDENT corroboration, and r/wallstreetbets agreeing with
++    # r/pennystocks is not that. `row.venues` is the rooted count.
+     venue_counts = {
+         'any': len(ranked),
+-        'multi': sum(1 for row in ranked if len(row.sources) > 1),
++        'multi': sum(1 for row in ranked if row.venues > 1),
+     }
+ 
+     allowed = segments_in(segments)
+     if allowed:
+         ranked = [row for row in ranked if row.segment in allowed]
+     if min_venues > 1:
+-        ranked = [row for row in ranked if len(row.sources) >= min_venues]
++        ranked = [row for row in ranked if row.venues >= min_venues]
+     ranked = ranked[:limit]
+ 
+     tickers = [row.ticker for row in ranked]
+     since = now - dt.timedelta(hours=SERIES_HOURS)
+ 
+     covered = _covered_hours(sources, since, now)
+     totals = _hourly_counts(tickers, sources, since, now)
+     triplets = _triplets(tickers, sources, now)
+     tones = _tones(tickers, sources, since, now)
+ 
+diff --git a/personal_apps/features/radar/buckets.py b/personal_apps/features/radar/buckets.py
+index 120b94e..1210213 100644
+--- a/personal_apps/features/radar/buckets.py
++++ b/personal_apps/features/radar/buckets.py
+@@ -13,21 +13,21 @@ rollup would inflate every bucket that spans two cycles.
+ """
+ import collections
+ import dataclasses
+ import datetime as dt
+ import statistics
+ 
+ from extensions import db
+ from models import RadarBucket, RadarBucketSource
+ 
+ from .config import (BUCKET_MINUTES, MAX_BARE_PER_VOUCHER,
+-                     source_config_version)
++                     source_config_version, source_root)
+ # Safe at the top because journal.py imports this module as `buckets` rather
+ # than pulling MentionRow/bucket_start_for by name -- neither side touches an
+ # attribute of the other until a function actually runs, so it no longer
+ # matters which of the two a caller imports first. Verified all three orders
+ # (`import buckets`, `import journal`, `import ingest`) after this change;
+ # see the review that added this note for the command output.
+ from . import journal
+ 
+ # Statuses whose counts are real enough to store. `missing` is not one:
+ # see the module docstring. There is deliberately no list of source names --
+@@ -139,21 +139,29 @@ def roll_up(rows, statuses, touched):
+     source names is open -- nothing here knows or cares which they are.
+ 
+     Returns the number of bucket rows written.
+     """
+     countable = {source for source, status in statuses.items()
+                  if status in _COUNTABLE}
+     if not countable:
+         return 0
+ 
+     version = source_config_version()
+-    sources_ok = sum(1 for status in statuses.values() if status == 'ok')
++    # Distinct ROOTS, not names. "How many sources were ok" is a count of
++    # venues, and eight subreddits reporting ok is Reddit reporting ok once --
++    # counting the names would make this rise and fall with
++    # REDDIT_SUBS_PER_CYCLE, which is a budget rather than a fact about
++    # coverage. Nothing outside tests reads the column yet; the point is that
++    # whatever starts reading it reads the same unit it always meant.
++    sources_ok = len({source_root(source)
++                      for source, status in statuses.items()
++                      if status == 'ok'})
+ 
+     usable = [r for r in rows if r.source in countable]
+ 
+     # Store first, then rebuild from EVERYTHING in these windows -- not from
+     # `usable`, which is one cycle's cursor slice. A bucket is recomputed from
+     # scratch on every pass, which is right because cycles overlap and additive
+     # rollup would double-count the boundary; it is only correct if the
+     # recompute sees the whole quarter-hour. It did not, and production lost
+     # 42.9% of its 10+ mention buckets to that (audit 2026-08-26).
+     journal.record(usable)
+diff --git a/personal_apps/features/radar/config.py b/personal_apps/features/radar/config.py
+index 44b0440..0f65257 100644
+--- a/personal_apps/features/radar/config.py
++++ b/personal_apps/features/radar/config.py
+@@ -362,34 +362,93 @@ def bare_token_confidence(source):
+ # Hashed into source_config_version, so this starts a baseline warm-up. And
+ # note run_radar_ingest retires the dropped subs' poll state -- due_symbols
+ # filters by source rather than by this list, so without that they would keep
+ # taking turns forever and the cut would be a silent no-op.
+ REDDIT_SUBS = (
+     'wallstreetbets', 'pennystocks', 'shortsqueeze', 'thetagang',
+     'options', 'smallstreetbets', 'swingtrading', 'weedstocks',
+ )
+ 
+ 
++# TWO expansions exist, and merging them back into one is a data-loss bug in
++# either direction. Read this before "simplifying" them.
++#
++# Before 2026-08-26 every Reddit observation was stored under the bare name
++# `reddit`. Since the split it is stored under `reddit:<sub>`, and that older
++# history is still sitting in radar_bucket_sources, radar_posts and
++# radar_mention_events -- buckets are retained forever, which is what lets the
++# detail chart's 1Y and 3Y spans fill in.
++#
++# Those old rows are readable for what they COUNTED and unreadable for what
++# they SCORED:
++#
++#   - a mention_count is a raw observation. `reddit` counted 40 mentions in an
++#     hour and `reddit:wallstreetbets` counted 12 in another; pooling them is
++#     addition, and leaving the older half out draws Reddit's real, still
++#     stored contribution as absent -- while Bluesky satisfies the same hour's
++#     coverage test, so the gap renders as a measured number rather than as a
++#     gap. That is an absence presented as a zero, which is the one thing this
++#     surface may never do.
++#
++#   - an expected/variance/mention_z is relative to a BASELINE, and the old
++#     rows carry the previous source_config_version. "All of Reddit" and
++#     "r/pennystocks" are different populations; admitting the old stamp to a
++#     scored read mixes two baselines into one z. That is what the stamp bump
++#     exists to prevent.
++#
++# So: `expand_sources` for anything that reads a score, and
++# `expand_sources_for_history` for anything that reads a count, a status or a
++# timestamp. Neither is a superset that can stand in for the other.
++
++
+ def expand_sources(names):
+     """Concrete stored source names for a root-level selection.
+ 
+-    `reddit` means every configured subreddit, because that is what the UI
+-    chip and daemon source list promise. A concrete subreddit stays concrete.
++    STRICT -- this generation's names only. `reddit` means every configured
++    subreddit, because that is what the UI chip and the daemon source list
++    promise; a concrete subreddit stays concrete; and the pre-split root
++    `reddit` is deliberately NOT included, because rows written under it were
++    baselined against a different population.
++
++    For scored reads and for scoring itself: leaderboard.build_rows,
++    board._triplets, detail_panel.window_figures, scoring.pooled_z /
++    window_z, run_radar_ingest.score_all.
+     """
+     out = []
+     for name in names:
+         if name == 'reddit':
+             out.extend('reddit:%s' % sub for sub in REDDIT_SUBS)
+         else:
+             out.append(name)
+     return out
+ 
++
++def expand_sources_for_history(names):
++    """`expand_sources` plus the pre-split root name it deliberately drops.
++
++    For raw-count reads, which have no baseline dependency and so may see the
++    whole of what was actually observed: board._covered_hours / _hourly_counts
++    / _tones, detail.daily_counts / intraday_counts / first_watched_day /
++    _watched_from_index, detail_panel.breakdown_for / _posts,
++    journal.distinct_voices.
++
++    Only for a ROOT selection. A reader who asked for one subreddit gets that
++    subreddit, and the undifferentiated pre-split history is not it.
++    """
++    out = expand_sources(names)
++    if 'reddit' in names:
++        # Appended, not prepended: the order of an IN (...) list is
++        # irrelevant to the query and this keeps the strict expansion's
++        # ordering stable for anything that compares the two.
++        out.append('reddit')
++    return out
++
+ # Feeds read per cycle. The cycle is three minutes at the fastest cadence, so
+ # four is roughly one request every forty-five seconds -- deliberately below
+ # the rate that earned a sustained 429 during measurement. Eighteen subs
+ # therefore come round about every fourteen minutes, which is honest rather
+ # than complete: r/wallstreetbets turns its 25-entry feed over in under two
+ # minutes, so most of its comments will be missed and its buckets will say
+ # `truncated`. Raise this only after watching for 429s in the daemon log.
+ # One, because one is the entire budget. Measured against the live endpoint
+ # on the VPS 2026-08-25: `x-ratelimit-remaining` reads 0.0 after a single
+ # request, and successes landed at t=0, t=78 and t=198 seconds against
+diff --git a/personal_apps/features/radar/detail.py b/personal_apps/features/radar/detail.py
+index b4444e0..80cf0b8 100644
+--- a/personal_apps/features/radar/detail.py
++++ b/personal_apps/features/radar/detail.py
+@@ -11,20 +11,22 @@ closes, so carrying the chart per row would have a twenty-row board shipping
+ sixteen thousand numbers in order to draw twenty sparklines.
+ """
+ import dataclasses
+ import datetime as dt
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+ from models import RadarBucketSource, RadarQuote
+ 
++from .config import expand_sources_for_history
++
+ # Calendar days per span, not trading days: the arrays are indexed by calendar
+ # day so price and chatter stay aligned through weekends and holidays. A year
+ # holds ~252 trading days and 365 calendar ones, and indexing each by its own
+ # position would drift them apart by over a hundred days.
+ SPAN_DAYS = {'1M': 30, '6M': 182, '1Y': 365, '3Y': 1095}
+ 
+ # Spans measured in minutes rather than days, as (slots, minutes_per_slot).
+ #
+ # These CANNOT be entries in SPAN_DAYS. That chart is indexed by calendar day,
+ # so a one-day span is a single point and a week is seven -- a chart with
+@@ -72,25 +74,28 @@ class Chart:
+     # minutes from days on its own -- without this it labels a 24-hour chart
+     # with month names.
+     step_minutes: int = 1440
+ 
+ 
+ def daily_counts(tickers, sources, start, now):
+     """Pooled mention count per (ticker, calendar day).
+ 
+     From buckets, which are retained forever -- unlike posts, which prune at
+     30 days. That is what lets the chart's long spans fill in over time with
+-    no new collection.
++    no new collection. Which is exactly why this expands FOR HISTORY: a 1Y
++    span reaches back well past the 2026-08-26 subreddit split, and Reddit's
++    contribution before it is stored under the bare name `reddit`.
+     """
+     if not tickers:
+         return {}
+ 
++    sources = expand_sources_for_history(sources)
+     rows = (db.session.query(RadarBucketSource.ticker,
+                              sa.func.date(RadarBucketSource.bucket_start),
+                              sa.func.sum(RadarBucketSource.mention_count))
+             .filter(RadarBucketSource.ticker.in_(list(tickers)),
+                     RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.bucket_start >= start,
+                     RadarBucketSource.bucket_start < now)
+             .group_by(RadarBucketSource.ticker,
+                       sa.func.date(RadarBucketSource.bucket_start)).all())
+ 
+@@ -100,20 +105,21 @@ def daily_counts(tickers, sources, start, now):
+         # return a string. Normalise rather than trusting the driver.
+         if isinstance(day, str):
+             day = dt.date.fromisoformat(day)
+         totals[(ticker, day)] = int(count or 0)
+     return totals
+ 
+ 
+ def first_watched_day(sources, start, now):
+     """Earliest calendar day any bucket exists for. Before it, chatter is
+     unknown rather than zero."""
++    sources = expand_sources_for_history(sources)
+     earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
+                 .filter(RadarBucketSource.source.in_(list(sources)),
+                         RadarBucketSource.bucket_start >= start).scalar())
+     return earliest.date() if earliest else None
+ 
+ 
+ def chart_for(ticker, start, days, closes_by_day, counts, watched_from):
+     """One Chart, both arrays indexed by calendar day from `start`."""
+     closes, chatter = [], []
+     for offset in range(days):
+@@ -164,20 +170,21 @@ def intraday_prices(ticker, start, now, step_minutes, slots):
+             prices[index] = float(price)
+     return prices
+ 
+ 
+ def intraday_counts(ticker, sources, start, now, step_minutes, slots):
+     """Mentions per slot, and the first slot anything was observed in.
+ 
+     Returns (counts, first_seen_index). Buckets are 15 minutes; a 1W slot is
+     an hour, so four of them pool into one and must add rather than overwrite.
+     """
++    sources = expand_sources_for_history(sources)
+     rows = (db.session.query(RadarBucketSource.bucket_start,
+                              sa.func.sum(RadarBucketSource.mention_count))
+             .filter(RadarBucketSource.ticker == ticker,
+                     RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.bucket_start >= start,
+                     RadarBucketSource.bucket_start < now)
+             .group_by(RadarBucketSource.bucket_start).all())
+ 
+     counts = [0] * slots
+     seen = None
+@@ -189,20 +196,21 @@ def intraday_counts(ticker, sources, start, now, step_minutes, slots):
+         seen = index if seen is None else min(seen, index)
+     return counts, seen
+ 
+ 
+ def _watched_from_index(sources, start, now, step_minutes, slots):
+     """First slot ANY ticker was observed in.
+ 
+     Per source rather than per ticker, exactly like first_watched_day: the
+     question is when we were watching, not when this symbol was mentioned.
+     """
++    sources = expand_sources_for_history(sources)
+     earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
+                 .filter(RadarBucketSource.source.in_(list(sources)),
+                         RadarBucketSource.bucket_start >= start,
+                         RadarBucketSource.bucket_start < now).scalar())
+     if earliest is None:
+         return None
+     return _slot_index(earliest, start, step_minutes, slots)
+ 
+ 
+ def intraday_chart_for(ticker, sources, now, span):
+diff --git a/personal_apps/features/radar/detail_panel.py b/personal_apps/features/radar/detail_panel.py
+index d53f98e..1c92280 100644
+--- a/personal_apps/features/radar/detail_panel.py
++++ b/personal_apps/features/radar/detail_panel.py
+@@ -13,21 +13,22 @@ import datetime as dt
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+ from models import (RadarBucketSource, RadarMention, RadarPost, RadarQuote,
+                     TickerUniverse)
+ 
+ from . import detail as chart_mod
+ from . import history, market_calendar, universe
+ from . import quotes as quotes_mod
+-from .config import source_kind
++from .config import (expand_sources, expand_sources_for_history, source_kind,
++                     source_root)
+ 
+ # How many posts the panel shows. Enough to form an opinion, few enough to
+ # read; the count of the rest sits beside them.
+ POST_LIMIT = 25
+ 
+ 
+ @dataclasses.dataclass
+ class Venue:
+     source: str
+     mentions: int
+@@ -80,72 +81,92 @@ class Detail:
+     baseline_days: int | None
+ 
+ 
+ def window_figures(ticker, sources, since, now):
+     """Mentions, expected and baseline age across the scoring window.
+ 
+     Read from buckets rather than taken from a leaderboard row, because the
+     panel is reachable for a ticker the board filtered out -- and refusing to
+     describe one because it did not rank is the wrong answer to "tell me about
+     this".
++
++    STRICT expansion, unlike the breakdown below: `expected` and
++    `baseline_days` are baseline-relative, and the written read quotes
++    `mentions` against `expected` in the same sentence. Pooling a pre-split
++    root count into an expectation computed for the post-split population
++    would compare two different populations' numbers to each other.
+     """
++    sources = expand_sources(sources)
+     rows = (db.session.query(RadarBucketSource.mention_count,
+                              RadarBucketSource.expected,
+                              RadarBucketSource.baseline_days)
+             .filter(RadarBucketSource.ticker == ticker,
+                     RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.bucket_start >= since,
+                     RadarBucketSource.bucket_start < now).all())
+     mentions = sum(row[0] for row in rows)
+     expected = sum(row[1] or 0.0 for row in rows)
+     ages = [row[2] for row in rows if row[2] is not None]
+     return mentions, expected, (min(ages) if ages else None)
+ 
+ 
+ def _posts(ticker, sources, since, now):
+     """The newest posts, and how many there were in all."""
++    sources = expand_sources_for_history(sources)
+     base = (db.session.query(RadarPost)
+             .join(RadarMention, RadarMention.post_id == RadarPost.id)
+             .filter(RadarMention.ticker == ticker,
+                     RadarPost.source.in_(list(sources)),
+                     RadarPost.created_utc >= since,
+                     RadarPost.created_utc < now,
+                     RadarMention.confidence.in_(('high', 'medium'))))
+     rows = base.order_by(RadarPost.created_utc.desc()).limit(POST_LIMIT).all()
+     return rows, base.count()
+ 
+ 
+ def breakdown_for(ticker, sources, since, now):
+     """One pass over the window's mentions, taken apart several ways.
+ 
+     Loaded rather than aggregated in SQL because the same rows answer five
+     questions -- per venue, per author, per hour, the concentration, and the
+     totals -- and five GROUP BY queries would read them five times over for a
+     set that is at most a few thousand rows.
+     """
++    sources = expand_sources_for_history(sources)
+     score = RadarMention.lexicon_sentiment
+     rows = (db.session.query(RadarPost.source, RadarPost.author,
+                              RadarPost.channel, RadarPost.created_utc, score)
+             .join(RadarMention, RadarMention.post_id == RadarPost.id)
+             .filter(RadarMention.ticker == ticker,
+                     RadarPost.source.in_(list(sources)),
+                     RadarPost.created_utc >= since,
+                     RadarPost.created_utc < now,
+                     RadarMention.confidence.in_(('high', 'medium'))).all())
+ 
+     by_source = {}
+     by_author = collections.Counter()
+     by_hour = collections.Counter()
+     bullish = bearish = 0
+ 
+     for source, author, channel, when, sentiment in rows:
+-        entry = by_source.setdefault(source, [0, set()])
++        # A VENUE IS A ROOT. Every stored Reddit name -- the eight
++        # `reddit:<sub>` and the pre-split bare `reddit` -- pools into one
++        # `reddit` row, which is what this table showed before the subreddit
++        # split and what `venues=len(b.venues)` in the written read counts.
++        #
++        # Splitting it into eight rows with eight voice counts and eight
++        # shares-of-mentions would be a product decision about what this
++        # surface is FOR; the split that produced these names was a decision
++        # about how status and scoring are partitioned. Shipping the first as
++        # a side effect of the second would foreclose it silently.
++        venue = source_root(source)
++        entry = by_source.setdefault(venue, [0, set()])
+         entry[0] += 1
+         # The independent unit differs by kind, the same way the eligibility
+         # gate's does: an author on a forum, a channel on a broadcast network.
+         entry[1].add(channel if source_kind(source) == 'broadcast' else author)
+         by_author[author] += 1
+         by_hour[when.replace(minute=0, second=0, microsecond=0)] += 1
+         if sentiment and sentiment > 0:
+             bullish += 1
+         elif sentiment and sentiment < 0:
+             bearish += 1
+@@ -181,21 +202,27 @@ def first_mention_day(ticker):
+     From buckets, which are retained forever. Posts prune at 30 days, so
+     reading it from them would report "first seen" as a rolling month ago for
+     every ticker the radar has followed longer than that.
+     """
+     first = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
+              .filter(RadarBucketSource.ticker == ticker).scalar())
+     return first.date() if first else None
+ 
+ 
+ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
+-    """One ticker's panel. Raises UnknownTicker if it is not in the universe."""
++    """One ticker's panel. Raises UnknownTicker if it is not in the universe.
++
++    `sources` is the viewer's SELECTION, unexpanded -- each query below picks
++    its own expansion, because the chart and the breakdown may see the
++    pre-split root `reddit` history and window_figures may not. See
++    config.expand_sources.
++    """
+     if not chart_mod.known_span(span):
+         raise ValueError('unknown span')
+ 
+     profile = TickerUniverse.query.filter_by(symbol=ticker).one_or_none()
+     if profile is None:
+         raise chart_mod.UnknownTicker(ticker)
+ 
+     since = now - dt.timedelta(hours=window_hours)
+     session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
+     status = quotes_mod.price_status(ticker, now, session=session)
+diff --git a/personal_apps/features/radar/ingest.py b/personal_apps/features/radar/ingest.py
+index dd6fed8..bea0a5b 100644
+--- a/personal_apps/features/radar/ingest.py
++++ b/personal_apps/features/radar/ingest.py
+@@ -237,27 +237,42 @@ def run_cycle(now, fetchers):
+             # failing must never cost the others their data (spec 4.5), and
+             # `missing` is the honest record of it: no row, never a zero.
+             logger.exception('radar source %s failed this cycle', source)
+             statuses[source] = 'missing'
+             depths[source] = 0
+             continue
+         # A fetcher covering several source names reports each. Reddit does:
+         # one cycle reads a slice of subreddits and each is its own source.
+         # When those concrete statuses exist, the aggregate fetch verdict must
+         # not become a zero-valued root child in the rollup population.
+-        result_statuses = result.per_source_status or {source: result.status}
++        #
++        # `is not None`, NOT truthiness. An empty map is an explicit "no
++        # source was observed" -- Reddit with nothing due did not read Reddit
++        # -- and falling back to the aggregate verdict there would stamp
++        # `{'reddit': 'ok'}` onto the rollup, which writes a zero-count child
++        # row under a name no fetch produced. Only a MISSING map (None) means
++        # "this fetcher does not report per-source status", where the
++        # aggregate genuinely applies to the one name it fetched under.
++        if result.per_source_status is None:
++            result_statuses = {source: result.status}
++        else:
++            result_statuses = dict(result.per_source_status)
+         statuses.update(result_statuses)
+         depths[source] = result.catchup_depth
+ 
+-        # Aggregate status remains useful for cycle reporting, but it cannot
+-        # discard an earlier successful sub when a later request was refused.
+-        if all(status == 'missing' for status in result_statuses.values()):
++        # Nothing observed at all, or everything observed failed. Either way
++        # there is no coverage this cycle: no buckets are touched on this
++        # source's behalf and no cursor moves. Aggregate status remains useful
++        # for cycle reporting, but it cannot discard an earlier successful sub
++        # when a later request was refused.
++        if not result_statuses or all(
++                status == 'missing' for status in result_statuses.values()):
+             continue
+ 
+         posts_seen += len(result.posts)
+ 
+         # A source that could not reach as far back as it was asked did not
+         # cover the earlier part of the window, and must not have buckets
+         # written as though it had.
+         effective_since = result.covered_since or since
+         touched |= _touched_buckets([], effective_since, now)
+ 
+diff --git a/personal_apps/features/radar/journal.py b/personal_apps/features/radar/journal.py
+index 8617a6f..ef5517d 100644
+--- a/personal_apps/features/radar/journal.py
++++ b/personal_apps/features/radar/journal.py
+@@ -15,20 +15,23 @@ from extensions import db
+ from models import RadarMention, RadarMentionEvent, RadarPost
+ 
+ # Imported as a module, not `from .buckets import MentionRow, bucket_start_for`
+ # -- a name import needs those names bound in buckets' namespace by the time
+ # THIS line runs, which fails whenever buckets is the module still mid-import
+ # (it imports journal at its own top). Importing the module and reaching
+ # `buckets.MentionRow` / `buckets.bucket_start_for` only inside the functions
+ # below defers that lookup to call time, when both modules are always fully
+ # loaded, so it works regardless of which one a caller imports first.
+ from . import buckets
++# Safe as a name import: config imports nothing from this package, so it is
++# never the module mid-import. Only `buckets` is in the cycle.
++from .config import expand_sources_for_history
+ 
+ # Rows per INSERT. Large enough that a busy Bluesky cycle is a handful of
+ # statements, small enough to stay well inside max_allowed_packet.
+ _CHUNK = 500
+ 
+ 
+ def record(rows):
+     """Store this cycle's mentions. Idempotent on (source, external_id, ticker).
+ 
+     Only `engagement` is updated on a duplicate. Everything else was decided at
+@@ -183,20 +186,25 @@ def distinct_voices(tickers, sources, since, now, field):
+ 
+     Buckets store distinct_authors as a COUNT, so aggregating them can only
+     take a maximum, and a maximum systematically undercounts: two buckets
+     holding {x, y} and {z, w} have four distinct voices and report two.
+     Measured on live data, NVDA showed 26 real authors against a bucket
+     maximum of 2.
+     """
+     if not tickers:
+         return {}
+ 
++    # A raw count of distinct people, with no baseline behind it, so the
++    # pre-split root `reddit` events count towards it -- they are the same
++    # readers on the same platform, and dropping them would undercount
++    # breadth for every ticker discussed before the split.
++    sources = expand_sources_for_history(sources)
+     column = {'author': RadarMentionEvent.author,
+               'channel': RadarMentionEvent.channel}[field]
+     rows = (db.session.query(RadarMentionEvent.ticker,
+                              sa.func.count(sa.distinct(column)))
+             .filter(RadarMentionEvent.ticker.in_(list(tickers)),
+                     RadarMentionEvent.source.in_(list(sources)),
+                     RadarMentionEvent.created_utc >= since,
+                     RadarMentionEvent.created_utc < now,
+                     sa.or_(RadarMentionEvent.confidence == 'high',
+                            RadarMentionEvent.promoted.is_(True)))
+diff --git a/personal_apps/features/radar/leaderboard.py b/personal_apps/features/radar/leaderboard.py
+index 1f6db17..cb630d0 100644
+--- a/personal_apps/features/radar/leaderboard.py
++++ b/personal_apps/features/radar/leaderboard.py
+@@ -13,21 +13,22 @@ import datetime as dt
+ import sqlalchemy as sa
+ 
+ from extensions import db
+ from models import RadarBucketSource, TickerUniverse
+ 
+ from . import divergence as divergence_mod
+ from . import journal
+ from . import market_calendar
+ from . import quotes as quotes_mod
+ from . import scoring, universe
+-from .config import PROVISIONAL_BASELINE_DAYS, segments_in, source_kind
++from .config import (PROVISIONAL_BASELINE_DAYS, expand_sources, segments_in,
++                     source_kind, source_root)
+ 
+ 
+ @dataclasses.dataclass
+ class Ranking:
+     """Rows worth showing, and an account of what was left out.
+ 
+     The account is not decoration. The eligibility floor is the single largest
+     reason this board is short, and until now it dropped tickers with no trace
+     -- so a quiet market and a stopped daemon rendered identically, and the
+     reader had no way to tell which they were looking at.
+@@ -41,21 +42,30 @@ class Ranking:
+ class Row:
+     ticker: str
+     name: str | None
+     segment: str
+     divergence: float | None
+     mention_z: float | None
+     mentions: int
+     expected: float
+     authors: int
+     text_ratio: float
++    # Concrete stored names that contributed -- `reddit:pennystocks`, not
++    # `reddit`. This is the breakdown, and it must stay concrete.
+     sources: list
++    # How many INDEPENDENT venues those names represent, which is the count of
++    # their roots. Two subreddits are two entries in `sources` and one venue:
++    # they share a platform, a user population and a rate-limit budget, so the
++    # corroboration the breadth filter and the `single-source` mark claim is
++    # not there. Carried as its own field rather than recomputed by every
++    # reader, so the two can never drift apart.
++    venues: int
+     price: object
+     price_move: object
+     direction: str
+     price_status: str
+     baseline_days: int | None
+     marks: list
+ 
+ 
+ def _distinct_authors(tickers, sources, since, now):
+     """True distinct authors per ticker across the whole window.
+@@ -83,20 +93,27 @@ def _universe_rows(tickers):
+         return {}
+     rows = TickerUniverse.query.filter(
+         TickerUniverse.symbol.in_(list(tickers))).all()
+     return {row.symbol: row for row in rows}
+ 
+ 
+ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+                session=None, min_venues=1):
+     """Ranked leaderboard rows for the selected sources.
+ 
++    `sources` is the viewer's SELECTION, root-level or concrete, not an
++    expanded list. The bucket query below is a SCORED read, so it expands
++    strictly: the pre-split root `reddit` rows carry a different
++    source_config_version and their z belongs to a different baseline
++    population (see config.expand_sources). The voice counts are raw and
++    expand for history.
++
+     The source list is a read-time filter: it re-pools components that were
+     stored per source, and never touches how anything was scored (spec 8.6).
+ 
+     `session` is the exchange state. With the market shut no row gets a
+     divergence, because there is no price movement to be surprised by -- so
+     the sort falls through to mention_z and the board ranks on chatter alone.
+     That is the useful answer at 23:00 on a Sunday (what is worth looking at
+     on Monday), and it is only honest if the surface says which of the two
+     rankings the reader is looking at. Computed once here rather than per
+     ticker; the caller may pass it in to avoid computing it twice.
+@@ -119,33 +136,38 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+     # 707ms of SQL and 1.8s of object construction, for figures the database
+     # can produce in one pass.
+     #
+     # Grouped by SOURCE as well as ticker, not folded to kind here: which kind
+     # a source belongs to is `source_kind`'s judgement and it stays in Python.
+     # Sources are a handful, so this is ~3 rows per ticker rather than ~96.
+     #
+     # MIN over a nullable baseline_days skips NULLs, which is exactly what the
+     # Python it replaces did. The columns that must not skip -- mention_count,
+     # distinct_authors, distinct_text_ratio, status -- are all NOT NULL.
++    scored_sources = expand_sources(sources)
++    # How many venues the VIEWER switched on, rooted for the same reason the
++    # contributing count is: picking `reddit` is picking one venue, however
++    # many subreddits it expands to.
++    selected_venues = len({source_root(name) for name in sources})
+     bucket = RadarBucketSource
+     per_source = (db.session.query(
+         bucket.ticker.label('ticker'),
+         bucket.source.label('source'),
+         sa.func.sum(bucket.mention_count).label('mentions'),
+         sa.func.sum(sa.func.coalesce(bucket.expected, 0.0)).label('expected'),
+         sa.func.sum(sa.func.coalesce(bucket.variance, 0.0)).label('variance'),
+         sa.func.max(bucket.distinct_authors).label('authors'),
+         sa.func.min(bucket.distinct_text_ratio).label('text_ratio'),
+         sa.func.min(bucket.baseline_days).label('baseline_days'),
+         sa.func.max(sa.case((bucket.status == 'truncated', 1), else_=0))
+         .label('truncated'))
+-        .filter(bucket.source.in_(list(sources)),
++        .filter(bucket.source.in_(scored_sources),
+                 bucket.bucket_start >= since,
+                 bucket.bucket_start < now,
+                 bucket.mention_z.isnot(None))
+         .group_by(bucket.ticker, bucket.source)
+         .all())
+ 
+     grouped = collections.defaultdict(list)
+     for row in per_source:
+         grouped[row.ticker].append(row)
+ 
+@@ -222,20 +244,22 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+     today = now.date()
+     rows = []
+ 
+     for ticker, (mentions, expected, variance, authors,
+                  text_ratio) in survivors.items():
+         parts = grouped[ticker]
+         mention_z = ((mentions - expected)
+                      / max(variance, 0.25) ** 0.5) if variance else None
+ 
+         contributing = sorted({part.source for part in parts})
++        # One venue per ROOT, not per stored name -- see Row.venues.
++        venues = len({source_root(name) for name in contributing})
+         # MIN already skipped NULLs per source; this skips the sources that
+         # had nothing but NULLs, so a row with no usable baseline anywhere
+         # still reports None rather than raising.
+         baseline_days = min((part.baseline_days for part in parts
+                              if part.baseline_days is not None), default=None)
+ 
+         profile = profiles.get(ticker)
+         status, latest = statuses[ticker]
+         move = moves[ticker]
+         if status == 'unknown':
+@@ -253,21 +277,21 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+         if status == 'ok' and move is not None and mention_z is not None:
+             sigma = profile.daily_sigma if profile else None
+             move_z = divergence_mod.price_move_z(
+                 move, quotes_mod.scale_sigma(sigma, window_hours))
+             if move_z is not None:
+                 value = divergence_mod.divergence(mention_z, move_z)
+ 
+         marks = []
+         if status == 'stale':
+             marks.append('no-print')
+-        if len(contributing) == 1 and len(sources) > 1:
++        if venues == 1 and selected_venues > 1:
+             marks.append('single-source')
+         if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
+             marks.append('provisional')
+         if any(part.truncated for part in parts):
+             marks.append('partial')
+ 
+         row_segment = universe.segment_for(
+             profile.market_cap if profile else None,
+             profile.ipo_date if profile else None,
+             latest.price if latest else None,
+@@ -275,35 +299,36 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+             profile.is_etf if profile else None)
+         if allowed and row_segment not in allowed:
+             continue
+         # Breadth as a filter, not as a score. `contributing` is the list of
+         # sources that actually said something, so this asks how many venues
+         # are talking rather than how many the viewer has switched on.
+         #
+         # Counted apart from the floor: this is the reader's own filter doing
+         # what they asked, not the data being too thin to measure. Merging the
+         # two would tell them the data was worse than it is.
+-        if len(contributing) < min_venues:
++        if venues < min_venues:
+             excluded['one_venue'] += 1
+             continue
+ 
+         rows.append(Row(
+             ticker=ticker,
+             name=profile.name if profile else None,
+             segment=row_segment,
+             divergence=value,
+             mention_z=mention_z,
+             mentions=mentions,
+             expected=expected,
+             authors=authors,
+             text_ratio=text_ratio,
+             sources=contributing,
++            venues=venues,
+             price=latest.price if latest else None,
+             price_move=move,
+             direction=divergence_mod.direction(move),
+             price_status=status,
+             baseline_days=baseline_days,
+             marks=marks,
+         ))
+ 
+     # Divergence first where it exists, then mention_z. A ticker with no price
+     # is not evidence of anything about its price, so it sorts below one that
+diff --git a/personal_apps/features/radar/phrasing.py b/personal_apps/features/radar/phrasing.py
+index f29dd85..f4a7cef 100644
+--- a/personal_apps/features/radar/phrasing.py
++++ b/personal_apps/features/radar/phrasing.py
+@@ -92,21 +92,23 @@ def row_clauses(row, session):
+ 
+ def _breadth_clauses(row):
+     """How many independent things are saying it -- or, when too few are, one
+     warning instead of two counts.
+ 
+     Deliberately asymmetric. A broad row gets venues and people as separate
+     facts because both are reassuring on their own; a narrow one gets a single
+     warning, because "1 venue · 2 people" in the counting grammar reads as two
+     small numbers rather than as the one thing that should stop you.
+     """
+-    venues = len(row.sources)
++    # The rooted count, not len(row.sources): "2 venues" must not mean two
++    # subreddits. See leaderboard.Row.venues.
++    venues = row.venues
+     narrow = []
+     if venues < 2:
+         narrow.append('one venue only')
+     if row.authors < NARROW_VOICES:
+         narrow.append(f'{row.authors} voices')
+ 
+     if narrow:
+         return [Clause('warn', ', '.join(narrow))]
+     return [Clause('venues', f'{venues} venues'),
+             Clause('people', f'{row.authors} people')]
+diff --git a/personal_apps/features/radar/routes/api.py b/personal_apps/features/radar/routes/api.py
+index db856df..233d04d 100644
+--- a/personal_apps/features/radar/routes/api.py
++++ b/personal_apps/features/radar/routes/api.py
+@@ -2,27 +2,29 @@
+ import dataclasses
+ import datetime as dt
+ 
+ from flask import jsonify, request
+ 
+ from auth import login_required
+ 
+ from .. import board as board_mod
+ from .. import detail as detail_mod
+ from .. import detail_panel, phrasing, spend
+-from ..config import (DEFAULT_SEGMENT, SOURCES, expand_sources, source_root)
++from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
+ from ._blueprint import radar_bp
+ 
+ SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
+ WINDOWS = (1, 4, 24)
+ VENUE_FLOORS = (1, 2)
+ MAX_LIMIT = 100
++# Every root plus every configured subreddit. See parse_query.
++MAX_SOURCES = len(SOURCES) + len(REDDIT_SUBS)
+ 
+ 
+ @dataclasses.dataclass
+ class Query:
+     """A validated query string.
+ 
+     A dataclass rather than a tuple: five fields unpacked positionally in two
+     call sites, three of them ints, is one transposition away from silently
+     swapping limit and min_venues with nothing to complain about.
+     """
+@@ -50,20 +52,29 @@ def parse_query(args):
+     unknown source would return the default board under a selection the viewer
+     never made, which is worse than an error.
+     """
+     raw_sources = args.get('sources')
+     if raw_sources:
+         selected = [s.strip() for s in raw_sources.split(',') if s.strip()]
+         # A prefixed name is valid when its ROOT is a known source: the UI
+         # offers `reddit` as one chip, and a link may name one subreddit.
+         if any(source_root(s) not in SOURCES for s in selected):
+             raise BadQuery('unknown source')
++        # Bounded, because rooting the membership check unbounded it. Before
++        # the subreddit split every accepted name had to be one of three, so
++        # the list could hold at most three; now `reddit:<anything>` passes,
++        # and each accepted entry lands in six or more IN (...) clauses
++        # against a ~300k-row partitioned table. MAX_SOURCES is the largest
++        # selection that can name something real -- every root plus every
++        # configured subreddit.
++        if len(selected) > MAX_SOURCES:
++            raise BadQuery('too many sources')
+     else:
+         selected = list(SOURCES)
+ 
+     # Comma-separated since 2026-08-25, and `?segment=small` still parses --
+     # widening the parameter must not invalidate every bookmarked link.
+     # `?segment=` with an empty value stays how the surface asks for All.
+     raw_segments = args.get('segment', DEFAULT_SEGMENT)
+     segments = [name.strip() for name in raw_segments.split(',') if name.strip()]
+     # One bad name rejects the whole selection rather than being dropped:
+     # answering with a board under a selection the viewer never made is the
+@@ -158,27 +169,37 @@ def _row(entry):
+         # Why this row is here, in words. The client styles by `kind` and
+         # never parses `text` -- see phrasing.py.
+         'clauses': [{'kind': c.kind, 'text': c.text} for c in entry.clauses],
+     }
+ 
+ 
+ def build_payload(args, now=None):
+     """Validated query -> serialized board. Shared by the page and the API."""
+     query = parse_query(args)
+     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+-    board = board_mod.build(expand_sources(query.sources), now,
++    # The SELECTION, unexpanded. board.build hands it to each query, and the
++    # queries expand differently: a scored read may not see the pre-split root
++    # `reddit` rows and a raw-count read must (config.expand_sources vs
++    # expand_sources_for_history). Expanding once here would take that choice
++    # away from them -- and expanding for history afterwards is impossible,
++    # since the root is no longer in the list to recognise.
++    board = board_mod.build(query.sources, now,
+                             window_hours=query.window,
+                             segments=query.segments, limit=query.limit,
+                             min_venues=query.min_venues)
+-    # What the VIEWER picked, not what it expanded to. The payload's `sources`
+-    # drives which root chips are lit, and the chip is `reddit`.
+-    board.sources = list(query.sources)
++    # ROOTED, because the payload's `sources` is what lights the chips and
++    # there is one chip per root. `?sources=reddit:wallstreetbets` filtered
++    # the board to that subreddit above and still lights the Reddit chip
++    # here; without the rooting it matched no chip at all and the control
++    # rendered every chip off -- a state it otherwise forbids, and one whose
++    # first click silently discarded the concrete selection.
++    board.sources = sorted({source_root(s) for s in query.sources})
+     return serialize(board)
+ 
+ 
+ @radar_bp.route('/api/board')
+ @login_required
+ def board():
+     """Ranked rows for the selected sources, segment and window."""
+     try:
+         return jsonify(build_payload(request.args))
+     except BadQuery as exc:
+@@ -265,16 +286,15 @@ def ticker_detail(ticker):
+     span = request.args.get('span', detail_mod.DEFAULT_SPAN)
+     if not detail_mod.known_span(span):
+         return jsonify({'error': 'unknown span'}), 400
+     try:
+         query = parse_query(request.args)
+     except BadQuery as exc:
+         return jsonify({'error': str(exc)}), 400
+ 
+     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+     try:
+-        built = detail_panel.build(ticker.upper(),
+-                                   expand_sources(query.sources), now,
++        built = detail_panel.build(ticker.upper(), query.sources, now,
+                                    window_hours=query.window, span=span)
+     except detail_mod.UnknownTicker:
+         return jsonify({'error': 'unknown ticker'}), 404
+     return jsonify(serialize_detail(built))
+diff --git a/personal_apps/features/radar/scoring.py b/personal_apps/features/radar/scoring.py
+index e574690..9c4cd31 100644
+--- a/personal_apps/features/radar/scoring.py
++++ b/personal_apps/features/radar/scoring.py
+@@ -16,21 +16,21 @@ import datetime as dt
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+ from models import RadarBucketSource
+ 
+ from . import baselines, profile
+ from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
+                      MIN_DISTINCT_TEXT_RATIO, MIN_MENTIONS,
+                      SUSTAINED_HOURS_CONSIDERED, SUSTAINED_HOURS_REQUIRED,
+-                     VARIANCE_FLOOR, source_config_version)
++                     VARIANCE_FLOOR, expand_sources, source_config_version)
+ 
+ # Weight of the cold-start prior, in units of observed mass. 0.05 of a week is
+ # about eight hours: enough to dominate on day one and vanish by week two.
+ PRIOR_WEIGHT = 0.05
+ 
+ 
+ def _rows_by_ticker(source, since, until, config_version):
+     """Every row a ticker may be scored or baselined from, THIS generation only.
+ 
+     Filtered here rather than trusted to baselines.usable() downstream: usable()
+@@ -161,21 +161,26 @@ def score_source(source, now, lookback_days=30, excluded=None):
+ def pooled_z(ticker, bucket_start, sources):
+     """Combined z over the selected sources. Returns (z, contributing count).
+ 
+     Sums the components rather than averaging the z-scores, because a weighted
+     mean of z-scores is not a z-score (spec 6.2). Two sources each two sigma
+     over is stronger evidence than either alone; averaging reports the same two
+     sigma and throws the corroboration away.
+ 
+     A source with no scored row for this bucket -- down, or truncated -- drops
+     out of all three sums rather than contributing zero.
++
++    `sources` is a selection and expands STRICTLY: this reads `expected` and
++    `variance`, and the pre-split root `reddit` rows were baselined against a
++    different population (config.expand_sources).
+     """
++    sources = expand_sources(sources)
+     rows = (RadarBucketSource.query
+             .filter(RadarBucketSource.ticker == ticker,
+                     RadarBucketSource.bucket_start == bucket_start,
+                     RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.mention_z.isnot(None))
+             .all())
+     if not rows:
+         return None, 0
+ 
+     observed = sum(r.mention_count for r in rows)
+@@ -228,21 +233,24 @@ def is_eligible(contributions):
+         and part.text_ratio >= MIN_DISTINCT_TEXT_RATIO
+         for kind, part in contributions.items())
+ 
+ 
+ def window_z(ticker, sources, end, hours):
+     """Pooled z over a time window. Returns (z, component parts).
+ 
+     Components are summed across both time and sources for the same reason
+     pooled_z sums them: the sum of independent counts has the sum of their
+     expectations and variances, and no other combination is a z-score.
++
++    Strict expansion, for pooled_z's reason.
+     """
++    sources = expand_sources(sources)
+     start = end - dt.timedelta(hours=hours)
+     rows = (RadarBucketSource.query
+             .filter(RadarBucketSource.ticker == ticker,
+                     RadarBucketSource.source.in_(list(sources)),
+                     RadarBucketSource.bucket_start >= start,
+                     RadarBucketSource.bucket_start < end,
+                     RadarBucketSource.mention_z.isnot(None))
+             .all())
+     if not rows:
+         return None, {}
+diff --git a/personal_apps/features/radar/sources/__init__.py b/personal_apps/features/radar/sources/__init__.py
+index 052567e..16bc7c7 100644
+--- a/personal_apps/features/radar/sources/__init__.py
++++ b/personal_apps/features/radar/sources/__init__.py
+@@ -35,13 +35,28 @@ class FetchResult:
+     # for before this was not delivered -- Jetstream clamps a too-old cursor
+     # silently, and a caller that assumed otherwise would carry a hole it
+     # believed was complete. None means the full requested range was covered.
+     covered_since: object = None
+     # Observed messages/hour per symbol, for the poll scheduler. Empty for
+     # sources that are not polled per symbol.
+     rates: dict = dataclasses.field(default_factory=dict)
+     # Status per emitted source name, where one fetch covers several. Reddit
+     # reads a slice of subreddits and each is its own source; the rolled-up
+     # `status` above is what the cycle reports, and this is what the rollup
+-    # stamps on each source's rows. Empty means `status` applies to everything
+-    # this result produced.
+-    per_source_status: dict = dataclasses.field(default_factory=dict)
++    # stamps on each source's rows.
++    #
++    # THREE states, and the difference between the last two is the difference
++    # between an absence and a zero:
++    #
++    #   None  -- this fetcher does not report per-source status at all, so
++    #            `status` above applies to the single name it fetches under.
++    #            Bluesky and 4chan.
++    #   {...} -- these names were observed, with these verdicts.
++    #   {}    -- explicitly NO source was observed. Reddit with nothing due
++    #            did not read Reddit: there is no observation to record, so
++    #            the rollup must write no row at all. Not an `ok` zero (a
++    #            bucket child claiming coverage no fetch produced) and not a
++    #            `missing` (which means we tried and failed).
++    #
++    # Consumers must therefore test `is not None`, never truthiness -- the
++    # empty map and the absent map mean opposite things.
++    per_source_status: dict | None = None
+diff --git a/personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py b/personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py
+index 380686f..434c154 100644
+--- a/personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py
++++ b/personal_apps/migrations/versions/08316d3e4d77_widen_radar_source_columns.py
+@@ -27,23 +27,63 @@ def upgrade():
+     # it is not online -- expect the ingest daemon's writes to block briefly.
+     op.alter_column('radar_bucket_sources', 'source',
+                     existing_type=sa.String(length=24),
+                     type_=sa.String(length=48), existing_nullable=False)
+     op.alter_column('radar_poll_state', 'source',
+                     existing_type=sa.String(length=24),
+                     type_=sa.String(length=48), existing_nullable=False)
+ 
+ 
+ def downgrade():
++    """Narrow the three columns back. NOT semantically lossless -- read this.
++
++    What it restores: old code can write and read Reddit posts again, because
++    radar_posts.source is normalised back to the bare `reddit` below.
++
++    What it CANNOT restore: the per-subreddit bucket history. Rows in
++    radar_bucket_sources written as `reddit:<sub>` cannot be re-aggregated
++    into a single `reddit` row -- each carries its own mention_count,
++    distinct_authors, distinct_text_ratio and status, and summing counts while
++    taking a max of author counts and a worst-case of statuses invents an
++    aggregate that was never observed. They are left under their prefixed
++    names, where post-downgrade code reading `source = 'reddit'` will not see
++    them: the Reddit history written during the upgraded period reads as
++    absent rather than as a wrong number. radar_mention_events keeps its
++    prefixed names for the same reason (its column was already 48 and is not
++    touched here).
++
++    A re-upgrade therefore recovers the bucket history intact; it is only
++    invisible while rolled back.
++
++    WIDTH DEPENDENCY on radar_bucket_sources. Unlike radar_posts, that table
++    is narrowed 48 -> 24 with no normalisation, so every prefixed name it
++    holds must already fit in 24 characters. The longest configured name is
++    `reddit:smallstreetbets` at 22. Adding a subreddit whose name exceeds 17
++    characters -- RadarPollState.symbol's own comment cites the
++    20-character RobinHoodPennyStocks, which would give a 27-character source
++    -- makes this statement fail with MySQL 1406, AFTER the radar_poll_state
++    DDL above has already auto-committed. The check below turns that into a
++    readable error instead of a half-applied rollback.
++    """
+     op.alter_column('radar_poll_state', 'source',
+                     existing_type=sa.String(length=48),
+                     type_=sa.String(length=24), existing_nullable=False)
++    too_long = op.get_bind().execute(sa.text(
++        "SELECT COUNT(*) FROM radar_bucket_sources "
++        "WHERE CHAR_LENGTH(source) > 24")).scalar()
++    # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
++    if int(too_long or 0):
++        raise RuntimeError(
++            'radar_bucket_sources holds %d source name(s) longer than 24 '
++            'characters; narrowing the column would truncate them. Decide '
++            'what those rows should become and delete or rename them before '
++            'rolling this migration back.' % int(too_long))
+     op.alter_column('radar_bucket_sources', 'source',
+                     existing_type=sa.String(length=48),
+                     type_=sa.String(length=24), existing_nullable=False)
+     # Old code can only write/read aggregate Reddit posts. Atom comment IDs
+     # are globally unique, so collapsing the source component cannot collide
+     # on uq_radar_post_source_ext.
+     op.execute(sa.text(
+         "UPDATE radar_posts SET source = 'reddit' "
+         "WHERE source LIKE 'reddit:%'"))
+     op.alter_column('radar_posts', 'source',
+diff --git a/personal_apps/run_radar_ingest.py b/personal_apps/run_radar_ingest.py
+index 52389b6..b5281de 100644
+--- a/personal_apps/run_radar_ingest.py
++++ b/personal_apps/run_radar_ingest.py
+@@ -128,21 +128,31 @@ def _reddit_fetcher(client):
+         retired = scheduling.retire_untracked('reddit', REDDIT_SUBS)
+         if retired:
+             logger.info('radar reddit retired %d subreddit(s) '
+                         'no longer configured', retired)
+         subs = scheduling.due_symbols('reddit', now, limit=REDDIT_SUBS_PER_CYCLE)
+         if not subs:
+             # Nothing due. Every subreddit was read inside its own interval,
+             # so coverage IS current -- this is no work to do, not a failure.
+             # `missing` here made six of eight cycles look like outages in the
+             # log and hid the real ones among them.
+-            return FetchResult(posts=[], status='ok')
++            #
++            # And an EXPLICITLY EMPTY per-source map, not the default None.
++            # Reddit was not read at all this cycle, so it made no observation
++            # -- there is nothing to record. None would fall through to
++            # ingest's `{source: result.status}` fallback, stamp
++            # `{'reddit': 'ok'}` onto the rollup and write a zero-count child
++            # row named `reddit` into every bucket any OTHER source touched,
++            # claiming coverage no fetch produced. This is the common path --
++            # six of eight cycles have nothing due -- so that zero would be
++            # the normal case rather than an edge one.
++            return FetchResult(posts=[], status='ok', per_source_status={})
+ 
+         # Each subreddit reads from when IT was last polled, never from a
+         # cursor shared across the source. Shared, the busiest sub sets a
+         # watermark that permanently excludes every quieter one.
+         rows = {row.symbol: row.last_polled_at for row in
+                 RadarPollState.query.filter(
+                     RadarPollState.source == 'reddit',
+                     RadarPollState.symbol.in_(subs)).all()}
+         since_by_sub = {sub: (rows.get(sub) or since) for sub in subs}
+ 
+diff --git a/personal_apps/static/radar/src/format.test.ts b/personal_apps/static/radar/src/format.test.ts
+index f34ea0a..c946666 100644
+--- a/personal_apps/static/radar/src/format.test.ts
++++ b/personal_apps/static/radar/src/format.test.ts
+@@ -39,20 +39,37 @@ describe('signed numbers', () => {
+ 
+ describe('labels', () => {
+   it('renders a source the label table does not know', () => {
+     // Adding a source must be a config entry plus an ingest module, never a
+     // UI change (PRODUCT.md). An unknown key falling through as itself is
+     // what keeps that true.
+     expect(sourceLabel('bluesky')).toBe('Bluesky')
+     expect(sourceLabel('discord')).toBe('discord')
+     expect(segmentLabel('nonsense')).toBe('nonsense')
+   })
++
++  it('names the venue, not the subreddit', () => {
++    // Since 2026-08-26 a stored Reddit source name carries its subreddit, so
++    // that one sub's feed rolling over marks its own buckets truncated
++    // rather than every other sub's. That is a decision about how status and
++    // scoring are partitioned, NOT a decision to put subreddits on the
++    // surface -- and without the rooting the raw key leaked through the
++    // fallback and post badges read `reddit:wallstreetbets` next to
++    // `Bluesky`.
++    expect(sourceLabel('reddit')).toBe('Reddit')
++    expect(sourceLabel('reddit:wallstreetbets')).toBe('Reddit')
++    expect(sourceLabel('reddit:pennystocks')).toBe('Reddit')
++  })
++
++  it('still falls through for an unknown root with a suffix', () => {
++    expect(sourceLabel('discord:general')).toBe('discord:general')
++  })
+ })
+ 
+ describe('the stamp', () => {
+   it('is UTC, matching every other time on the page', () => {
+     expect(stampTime('2026-08-22T19:04:11Z')).toBe('19:04 UTC')
+   })
+ 
+   it('does not crash on a malformed timestamp', () => {
+     expect(stampTime('not a date')).toBe('—')
+   })
+diff --git a/personal_apps/static/radar/src/format.ts b/personal_apps/static/radar/src/format.ts
+index 77c68e4..ee66837 100644
+--- a/personal_apps/static/radar/src/format.ts
++++ b/personal_apps/static/radar/src/format.ts
+@@ -52,23 +52,35 @@ export function segmentLabel(key: string): string {
+   return SEGMENT_LABELS[key] ?? key
+ }
+ 
+ const SOURCE_LABELS: Record<string, string> = {
+   bluesky: 'Bluesky',
+   fourchan: '4chan /biz/',
+   reddit: 'Reddit',
+ }
+ 
+ /** A source name the config knows but this file does not still renders --
+- *  adding a source must not require touching the UI (PRODUCT.md). */
++ *  adding a source must not require touching the UI (PRODUCT.md).
++ *
++ *  Rooted at the colon first. Since 2026-08-26 a stored Reddit source name
++ *  carries its subreddit (`reddit:wallstreetbets`) so that one sub's feed
++ *  rolling over marks its own buckets truncated rather than every other
++ *  sub's. That is a decision about how STATUS and SCORING are partitioned,
++ *  and it is not a decision to put subreddits on the surface -- so the label
++ *  is the venue, `Reddit`, exactly as it was before the split. Showing
++ *  `r/wallstreetbets` here would be its own product call, and one worth
++ *  making deliberately rather than inheriting from a storage change. */
+ export function sourceLabel(key: string): string {
+-  return SOURCE_LABELS[key] ?? key
++  const root = key.split(':')[0] ?? key
++  // Falls through as the WHOLE key, not the root: an unknown source with a
++  // suffix must render as itself rather than silently losing half its name.
++  return SOURCE_LABELS[root] ?? key
+ }
+ 
+ /** Nasdaq's one-letter listing codes, as stored in radar_ticker_universe.
+  *
+  *  The panel printed the raw letter: `Q · large cap · $2.9T`. The tier is
+  *  worth keeping rather than flattening all three Nasdaq codes to "Nasdaq" --
+  *  Capital Market is the lowest listing standard and it is where most of what
+  *  this board is for actually lists. Verified against the stored universe:
+  *  F and GE are N, SPY and DIA are P, NVDA is Q, SOUN is G, HOWL is S. */
+ const EXCHANGE_LABELS: Record<string, string> = {
+diff --git a/personal_apps/tests/test_radar_api.py b/personal_apps/tests/test_radar_api.py
+index 5a8c2cd..1be32c4 100644
+--- a/personal_apps/tests/test_radar_api.py
++++ b/personal_apps/tests/test_radar_api.py
+@@ -36,58 +36,110 @@ def test_an_unknown_source_is_rejected(client):
+ def test_a_concrete_reddit_source_is_accepted_but_an_unknown_root_is_not():
+     from features.radar.routes.api import BadQuery, parse_query
+     import pytest
+ 
+     assert parse_query({'sources': 'reddit:wallstreetbets'}).sources == [
+         'reddit:wallstreetbets']
+     with pytest.raises(BadQuery):
+         parse_query({'sources': 'notreddit:wallstreetbets'})
+ 
+ 
+-def test_root_reddit_expands_for_board_queries_but_echoes_the_root(
+-        client, monkeypatch):
+-    from features.radar.config import REDDIT_SUBS
++def test_the_board_gets_the_selection_and_echoes_the_root(client, monkeypatch):
++    """The API hands the SELECTION down, not an expansion, and echoes a root.
++
++    Expanding here would take the choice away from the queries underneath,
++    which expand differently: a scored read may not see the pre-split root
++    `reddit` rows and a raw-count read must (config.expand_sources vs
++    expand_sources_for_history). Once the list is expanded the root is gone
++    and neither can tell it was ever asked for.
++
++    What the payload carries back is still the root, because that is what
++    lights the chip. The expansion itself is proved where it happens -- see
++    test_radar_board / test_radar_detail's historical-root tests.
++    """
+     from features.radar.routes import api
+ 
+     seen = {}
+     real_build = api.board_mod.build
+ 
+     def capture(sources, *args, **kwargs):
+         seen['sources'] = list(sources)
+         return real_build(sources, *args, **kwargs)
+ 
+     monkeypatch.setattr(api.board_mod, 'build', capture)
+     response = client.get('/radar/api/board?sources=reddit')
+     payload = json.loads(response.data)
+ 
+     assert response.status_code == 200
+-    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
++    assert seen['sources'] == ['reddit']
+     assert payload['sources'] == ['reddit']
+ 
+ 
+-def test_root_reddit_expands_for_detail_queries(client, monkeypatch):
+-    from features.radar.config import REDDIT_SUBS
++def test_the_detail_panel_gets_the_selection(client, monkeypatch):
+     from features.radar.routes import api
+ 
+     seen = {}
+ 
+     def capture(ticker, sources, now, **kwargs):
+         seen['sources'] = list(sources)
+         return object()
+ 
+     monkeypatch.setattr(api.detail_panel, 'build', capture)
+     monkeypatch.setattr(api, 'serialize_detail', lambda built: {'ok': True})
+ 
+     response = client.get('/radar/api/ticker/ZZG?sources=reddit')
+ 
+     assert response.status_code == 200
+-    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
++    assert seen['sources'] == ['reddit']
++
++
++def test_a_concrete_subreddit_link_lights_the_reddit_chip(client, monkeypatch):
++    """`?sources=reddit:wallstreetbets` filters to that sub AND lights Reddit.
++
++    The payload's `sources` is compared against `all_sources` -- three roots
++    -- to decide which chips are on. A concrete name matched none of them, so
++    the control rendered every chip off: a state it otherwise forbids, and
++    one whose first click silently discarded the concrete selection.
++    """
++    from features.radar.routes import api
++
++    seen = {}
++    real_build = api.board_mod.build
++
++    def capture(sources, *args, **kwargs):
++        seen['sources'] = list(sources)
++        return real_build(sources, *args, **kwargs)
++
++    monkeypatch.setattr(api.board_mod, 'build', capture)
++    payload = json.loads(
++        client.get('/radar/api/board?sources=reddit:wallstreetbets').data)
++
++    assert seen['sources'] == ['reddit:wallstreetbets']
++    assert payload['sources'] == ['reddit']
++    assert payload['sources'][0] in payload['all_sources']
++
++
++def test_a_selection_longer_than_every_real_name_is_rejected(client):
++    """Rooting the membership check unbounded the list's length.
++
++    `reddit:<anything>` passes validation, and each accepted entry lands in
++    six or more IN (...) clauses against a ~300k-row partitioned table. The
++    cap is the largest selection that can name something real.
++    """
++    from features.radar.routes.api import MAX_SOURCES
++
++    ok = ','.join(['reddit:x%d' % i for i in range(MAX_SOURCES)])
++    too_many = ok + ',reddit:overflow'
++
++    assert client.get('/radar/api/board?sources=' + ok).status_code == 200
++    assert client.get(
++        '/radar/api/board?sources=' + too_many).status_code == 400
+ 
+ 
+ def test_an_unknown_segment_is_rejected(client):
+     assert client.get('/radar/api/board?segment=nonsense').status_code == 400
+ 
+ 
+ def test_the_window_is_bounded(client):
+     """An unbounded window would scan the whole partitioned history on a page
+     load."""
+     assert client.get('/radar/api/board?window=99999').status_code == 400
+diff --git a/personal_apps/tests/test_radar_board.py b/personal_apps/tests/test_radar_board.py
+index 7aedffb..8f0e020 100644
+--- a/personal_apps/tests/test_radar_board.py
++++ b/personal_apps/tests/test_radar_board.py
+@@ -357,20 +357,143 @@ def test_venue_counts_are_taken_before_the_venue_filter(clean):
+     bucket(f'{PREFIX}B', minutes_ago=30, source='bluesky')
+     bucket(f'{PREFIX}B', minutes_ago=30, source='fourchan')
+     db.session.commit()
+ 
+     built = board.build(['bluesky', 'fourchan'], NOW, min_venues=2)
+ 
+     assert built.venue_counts['any'] == 2
+     assert built.venue_counts['multi'] == 1
+ 
+ 
++def test_two_subreddits_are_one_venue(clean):
++    """The breadth filter's claim is INDEPENDENT corroboration.
++
++    Since 2026-08-26 each subreddit is its own stored source name, so a
++    ticker discussed in r/wallstreetbets and r/pennystocks now has two
++    entries in `sources`. It still has one venue: they share a platform, a
++    user population and a rate-limit budget, and "the same reading from two
++    independent sources" -- the words the surface puts on the
++    `single-source` mark -- is not what happened.
++    """
++    universe(f'{PREFIX}A')
++    universe(f'{PREFIX}B')
++    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets')
++    bucket(f'{PREFIX}A', minutes_ago=45, source='reddit:pennystocks')
++    bucket(f'{PREFIX}B', minutes_ago=30, source='reddit:wallstreetbets')
++    bucket(f'{PREFIX}B', minutes_ago=30, source='bluesky')
++    db.session.commit()
++
++    built = board.build(['reddit', 'bluesky'], NOW, min_venues=2)
++
++    # A was in two subreddits and nowhere else: one venue, filtered out.
++    assert [e.rank.ticker for e in built.rows] == [f'{PREFIX}B']
++    assert built.venue_counts['multi'] == 1
++    a = only(board.build(['reddit', 'bluesky'], NOW), f'{PREFIX}A')
++    assert a.rank.venues == 1
++    # `sources` stays concrete -- that is the breakdown, and it is not the
++    # venue count.
++    assert a.rank.sources == ['reddit:pennystocks', 'reddit:wallstreetbets']
++    assert 'single-source' in a.rank.marks
++
++
++# ------------------------------------------------- pre-split root history ---
++#
++# Before 2026-08-26 every Reddit observation was stored under the bare name
++# `reddit`. Those rows are still in the table -- buckets are retained forever
++# -- and they are readable for what they COUNTED and unreadable for what they
++# SCORED. See config.expand_sources / expand_sources_for_history.
++
++def _old_root_bucket(ticker, minutes_ago, mentions):
++    """A bucket row exactly as production wrote it before the split."""
++    db.session.add(RadarBucketSource(
++        ticker=ticker, bucket_start=NOW - dt.timedelta(minutes=minutes_ago),
++        source='reddit', mention_count=mentions,
++        high_confidence_count=mentions, low_count=0, distinct_authors=6,
++        distinct_text_ratio=0.9, engagement_weighted_count=float(mentions),
++        # The real pre-split stamp, 16 hex characters -- which is also the
++        # column's whole width, so a descriptive placeholder does not fit.
++        status='ok', source_config_version='8106787f1fa72179',
++        expected=1.0, variance=2.0, mention_z=9.9, baseline_days=30))
++
++
++def test_the_pre_split_reddit_history_still_counts_on_the_series(clean):
++    """A raw count has no baseline behind it, so it may be pooled.
++
++    Leaving it out would be worse than a gap: Bluesky satisfies the same
++    hour's coverage test, so the hour is marked measured and the point is
++    drawn as a real number with Reddit's real, still-stored contribution
++    missing from the sum. That is an absence rendered as a zero.
++    """
++    universe(f'{PREFIX}A')
++    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets',
++           mentions=10)
++    _old_root_bucket(f'{PREFIX}A', minutes_ago=45, mentions=7)
++    db.session.commit()
++
++    series = only(board.build(['reddit'], NOW), f'{PREFIX}A').series
++
++    assert at_hour(series, 1).count == 17
++
++
++def test_the_pre_split_reddit_history_is_kept_out_of_the_ranking(clean):
++    """The other half of the same rule: a z is relative to a BASELINE.
++
++    Those rows were baselined against "all of Reddit" under the previous
++    source_config_version. Admitting them to the scored read would sum two
++    populations' expectations into one z, which is what the stamp bump exists
++    to prevent.
++    """
++    universe(f'{PREFIX}A')
++    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets',
++           mentions=10)
++    _old_root_bucket(f'{PREFIX}A', minutes_ago=45, mentions=7)
++    db.session.commit()
++
++    row = only(board.build(['reddit'], NOW), f'{PREFIX}A').rank
++
++    assert row.sources == ['reddit:wallstreetbets']
++    assert row.mentions == 10
++
++
++def test_one_named_subreddit_does_not_reach_the_undifferentiated_history(clean):
++    """`?sources=reddit:wallstreetbets` asks for that sub.
++
++    The pre-split rows are every subreddit pooled together and cannot be
++    attributed to one, so a concrete selection must not silently pick them
++    up -- only the root selection, which is what they actually were.
++    """
++    universe(f'{PREFIX}A')
++    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets',
++           mentions=10)
++    _old_root_bucket(f'{PREFIX}A', minutes_ago=45, mentions=7)
++    db.session.commit()
++
++    series = only(board.build(['reddit:wallstreetbets'], NOW),
++                  f'{PREFIX}A').series
++
++    assert at_hour(series, 1).count == 10
++
++
++def test_the_pre_split_reddit_history_still_counts_towards_tone(clean):
++    """Same rule for the mention rows behind the tone split."""
++    universe(f'{PREFIX}A')
++    bucket(f'{PREFIX}A', minutes_ago=30, source='reddit:wallstreetbets')
++    post(f'{PREFIX}A', f'{PREFIX}new', 20, 0.6,
++         source='reddit:wallstreetbets')
++    post(f'{PREFIX}A', f'{PREFIX}old', 25, 0.6, source='reddit')
++    db.session.commit()
++
++    tone = only(board.build(['reddit'], NOW), f'{PREFIX}A').tone
++
++    assert tone.bullish == 2
++
++
+ # ---------------------------------------------------------------- segments ---
+ 
+ def test_small_unions_the_three_segments_below_mid(clean):
+     """The tool is for penny stocks and unknowns. `Small` is what that means
+     in the segment vocabulary: anything not large and not mid."""
+     universe(f'{PREFIX}A', cap='50000000000')      # large
+     universe(f'{PREFIX}B', cap='100000000')        # micro
+     universe(f'{PREFIX}C', cap=None)               # unknown
+     for suffix in 'ABC':
+         bucket(f'{PREFIX}{suffix}', minutes_ago=30)
+diff --git a/personal_apps/tests/test_radar_detail.py b/personal_apps/tests/test_radar_detail.py
+index 32b5f59..6b83fc9 100644
+--- a/personal_apps/tests/test_radar_detail.py
++++ b/personal_apps/tests/test_radar_detail.py
+@@ -264,20 +264,88 @@ def test_the_panel_describes_a_ticker_the_board_filtered_out(clean):
+ def test_neutral_is_everything_the_lexicon_did_not_score(panel_ticker):
+     """Most mentions carry no sentiment word at all. Folding them into one
+     percentage would turn a handful of scored posts into a confident-looking
+     reading."""
+     b = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW).breakdown
+ 
+     assert b.bullish + b.neutral + b.bearish == b.mentions
+     assert b.neutral == 2
+ 
+ 
++# ------------------------------------------------- pre-split root history ---
++#
++# Before 2026-08-26 every Reddit observation was stored under the bare name
++# `reddit`. This chart's default span is 1Y and buckets are retained forever,
++# so most of what it draws for Reddit is under that older name.
++
++def _old_root_bucket(ticker, days_ago, mentions):
++    """A bucket row exactly as production wrote it before the split."""
++    db.session.add(RadarBucketSource(
++        ticker=ticker,
++        bucket_start=dt.datetime.combine(
++            NOW.date() - dt.timedelta(days=days_ago), dt.time(12, 0)),
++        source='reddit', mention_count=mentions,
++        high_confidence_count=mentions, low_count=0, distinct_authors=6,
++        distinct_text_ratio=0.9, engagement_weighted_count=float(mentions),
++        # The real pre-split stamp, 16 hex characters -- which is also the
++        # column's whole width, so a descriptive placeholder does not fit.
++        status='ok', source_config_version='8106787f1fa72179',
++        expected=1.0, variance=2.0, mention_z=9.9, baseline_days=30))
++
++
++def test_the_chart_still_draws_the_pre_split_reddit_history(clean):
++    """A 1Y span reaches back past the subreddit split.
++
++    Dropping those rows would not draw a gap: `first_watched_day` is
++    satisfied by the days after the split, so the earlier days are marked
++    watched and drawn as zeroes -- an absence rendered as a measurement.
++    """
++    db.session.add(TickerUniverse(
++        symbol=f'{PREFIX}H', name='History Corp', exchange='NASDAQ',
++        first_seen=dt.datetime(2020, 1, 1)))
++    _old_root_bucket(f'{PREFIX}H', days_ago=200, mentions=7)
++    db.session.commit()
++
++    start = NOW.date() - dt.timedelta(days=SPAN - 1)
++    from_dt = dt.datetime.combine(start, dt.time.min)
++    counts = detail.daily_counts([f'{PREFIX}H'], ['reddit'], from_dt, NOW)
++    watched = detail.first_watched_day(['reddit'], from_dt, NOW)
++
++    assert counts[(f'{PREFIX}H', NOW.date() - dt.timedelta(days=200))] == 7
++    assert watched == NOW.date() - dt.timedelta(days=200)
++
++
++def test_the_breakdown_still_shows_one_reddit_row(panel_ticker):
++    """Task 9 changed the POPULATION, not the presentation.
++
++    Splitting the source name is how one sub's feed rollover stops marking
++    every other sub truncated. It is not a decision to put subreddits on the
++    surface -- so the venue table keeps the single pooled `Reddit` row it had
++    before, with one voices count and one share of mentions, and the
++    pre-split root rows pool into it as well. Fragmenting it into eight rows
++    would be its own product call, worth making deliberately rather than
++    inheriting from a storage change.
++    """
++    post_for(f'{PREFIX}A', 40, 'carol', 'wsb says moon',
++             source='reddit:wallstreetbets')
++    post_for(f'{PREFIX}A', 50, 'dave', 'penny says moon',
++             source='reddit:pennystocks')
++    post_for(f'{PREFIX}A', 60, 'erin', 'older reddit view', source='reddit')
++    db.session.commit()
++
++    b = detail_panel.build(f'{PREFIX}A', ['bluesky', 'reddit'], NOW).breakdown
++    venues = {v.source: (v.mentions, v.voices) for v in b.venues}
++
++    assert set(venues) == {'bluesky', 'reddit'}
++    assert venues['reddit'] == (3, 3)
++
++
+ @pytest.fixture()
+ def panel_live(clean):
+     """The same ticker, but anchored to real wall-clock time.
+ 
+     The route reads `now` from the clock, deliberately -- a time parameter on
+     a production endpoint is a way to ask the server for a board that never
+     existed. So the fixed-NOW fixture above cannot reach it, and the HTTP
+     tests get posts placed minutes before the actual present instead.
+     """
+     from models import RadarMention, RadarPost
+diff --git a/personal_apps/tests/test_radar_ingest.py b/personal_apps/tests/test_radar_ingest.py
+index 65a4e55..539f21a 100644
+--- a/personal_apps/tests/test_radar_ingest.py
++++ b/personal_apps/tests/test_radar_ingest.py
+@@ -278,20 +278,57 @@ def test_a_successful_subreddit_survives_a_missing_aggregate_status(seeded):
+     assert result['posts_new'] == 1
+     assert result['mentions'] == 1
+     with flask_app.app_context():
+         from models import RadarBucketSource
+         rows = {row.source: row.status for row in
+                 RadarBucketSource.query.filter_by(ticker=TEST_TICKER).all()}
+         assert rows == {'reddit:pennystocks': 'ok'}
+         assert RadarPost.query.filter_by(external_id='task9-partial').count() == 1
+ 
+ 
++def test_a_source_that_observed_nothing_writes_no_row_at_all(seeded):
++    """An explicitly empty per-source map records NOTHING for that source.
++
++    Reddit's "nothing due" branch is the common path -- six of eight cycles
++    have no subreddit due -- and on it Reddit is not read at all. That is an
++    absence: no fetch was made, so there is no observation. It is not an `ok`
++    zero (a bucket child claiming coverage nothing produced, which also
++    inflates RadarBucket.sources_ok) and it is not a `missing` (which means we
++    tried and failed).
++
++    So the map is empty rather than absent, and ingest must tell the two
++    apart: `None` means "this fetcher does not report per-source status" and
++    falls back to the aggregate verdict; `{}` means "no source was observed"
++    and must not.
++    """
++    fetchers = fetcher_for(FetchResult(
++        posts=[post(ident='task9-quiet', body='$ZZG moving',
++                    author='task9-quiet')], status='ok'))
++    fetchers.update(fetcher_for(
++        FetchResult(posts=[], status='ok', per_source_status={}),
++        source='reddit'))
++
++    result = ingest.run_cycle(NOW, fetchers)
++
++    assert result['per_source'] == {'bluesky': 'ok'}
++    with flask_app.app_context():
++        from models import RadarBucket, RadarBucketSource
++        rows = {row.source: (row.status, row.mention_count) for row in
++                RadarBucketSource.query.filter_by(ticker=TEST_TICKER).all()}
++        assert rows == {'bluesky': ('ok', 1)}
++        assert RadarBucketSource.query.filter_by(
++            ticker=TEST_TICKER, source='reddit').count() == 0
++        # And the bucket does not claim two sources were ok.
++        assert {b.sources_ok for b in
++                RadarBucket.query.filter_by(ticker=TEST_TICKER).all()} == {1}
++
++
+ def test_one_source_failing_does_not_stop_the_other(seeded):
+     """The entire reason status is per source. A dead Bluesky must not cost a
+     healthy Reddit cycle, and must not write a zero for itself."""
+     def rd(since):
+         return FetchResult(
+             posts=[post(ident='st1', body='$ZZG up', source='reddit')],
+             status='ok')
+ 
+     def bs(since):
+         return FetchResult(posts=[], status='missing')
+diff --git a/personal_apps/tests/test_radar_leaderboard.py b/personal_apps/tests/test_radar_leaderboard.py
+index ab16052..d246c9a 100644
+--- a/personal_apps/tests/test_radar_leaderboard.py
++++ b/personal_apps/tests/test_radar_leaderboard.py
+@@ -291,20 +291,46 @@ def test_authors_are_counted_across_the_window_not_per_bucket(board):
+ def test_the_bucket_maximum_is_the_fallback(board):
+     """Once posts age out of retention the authors are gone, and the bucket
+     count is all that remains. It undercounts, which can hide a ticker but can
+     never invent breadth that was not there."""
+     universe_row('LBX')
+     scored('LBX', mentions=10, authors=7)
+     db.session.commit()
+     assert build_rows(['bluesky'], NOW)[0].authors == 7
+ 
+ 
++def test_the_pre_split_reddit_voices_still_count(board):
++    """The journal's voice count is raw, so it sees the older root name.
++
++    Distinct authors are people, not baselines: the person who posted under
++    the pre-split `reddit` name and the person who posted under
++    `reddit:wallstreetbets` are the same population. Dropping the older half
++    would undercount breadth for every ticker discussed before 2026-08-26 and
++    could push it below the eligibility floor -- the board reading thinner
++    than the evidence it holds.
++    """
++    from features.radar import journal
++
++    universe_row('LBH')
++    scored('LBH', source='reddit:wallstreetbets', mentions=4, authors=2)
++    _mention('LBH', 'newvoice1', 30, source='reddit:wallstreetbets')
++    _mention('LBH', 'newvoice2', 30, source='reddit:wallstreetbets')
++    _mention('LBH', 'oldvoice1', 45, source='reddit')
++    _mention('LBH', 'oldvoice2', 45, source='reddit')
++    db.session.commit()
++
++    voices = journal.distinct_voices(
++        ['LBH'], ['reddit'], NOW - dt.timedelta(hours=4), NOW, 'author')
++
++    assert voices['LBH'] == 4
++
++
+ def test_a_genuinely_concentrated_ticker_is_still_rejected(board):
+     """The gate must keep working after the fix. Live data had PH at 14
+     mentions from one author -- exactly what it exists to catch."""
+     universe_row('LBY')
+     scored('LBY', mentions=14, authors=1)
+     for index in range(14):
+         _mention('LBY', 'onlyvoice', 30)
+     db.session.commit()
+     assert build_rows(['bluesky'], NOW) == []
+ 
+diff --git a/personal_apps/tests/test_radar_phrasing.py b/personal_apps/tests/test_radar_phrasing.py
+index a9957c3..39bfefb 100644
+--- a/personal_apps/tests/test_radar_phrasing.py
++++ b/personal_apps/tests/test_radar_phrasing.py
+@@ -4,34 +4,42 @@
+ The live board's failure was not that the numbers were wrong. It was that the
+ biggest number on the page belonged to the row that scored nothing, and
+ nothing said why. Michi's words on 2026-08-23: "i have no real idea why and
+ what is worth looking at."
+ 
+ So the wording IS the feature, and these pin it.
+ """
+ import dataclasses
+ 
+ from features.radar import phrasing
++from features.radar.config import source_root
+ 
+ 
+ @dataclasses.dataclass
+ class FakeRow:
+     ticker: str = 'ZZZ'
+     mentions: int = 40
+     expected: float = 1.0
+     authors: int = 11
+     sources: tuple = ('bluesky', 'fourchan')
+     price_move: float | None = 0.182
+     price_status: str = 'ok'
+     baseline_days: int | None = 30
+     mention_z: float | None = 4.1
+ 
++    @property
++    def venues(self):
++        """Derived rather than a field, so the fake cannot claim a breadth
++        its own source list does not support. One venue per ROOT: two
++        subreddits are one venue, which is what the real Row.venues counts."""
++        return len({source_root(name) for name in self.sources})
++
+ 
+ def kinds(clauses):
+     return [c.kind for c in clauses]
+ 
+ 
+ def text(clauses):
+     return ' '.join(c.text for c in clauses)
+ 
+ 
+ def test_a_measurable_row_says_how_unusual_how_broad_and_what_price_did():
+diff --git a/personal_apps/tests/test_radar_scoring.py b/personal_apps/tests/test_radar_scoring.py
+index 756e025..4ea00bc 100644
+--- a/personal_apps/tests/test_radar_scoring.py
++++ b/personal_apps/tests/test_radar_scoring.py
+@@ -9,20 +9,24 @@ import uuid
+ 
+ import pytest
+ 
+ from app import app as flask_app
+ from extensions import db
+ from models import RadarBucketSource
+ from features.radar import scoring
+ from features.radar.config import source_config_version
+ 
+ MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
++# A concrete stored Reddit source name. Since 2026-08-26 every Reddit
++# observation is written under `reddit:<sub>`; the bare root is a SELECTION,
++# and pooled_z expands it to all eight configured subs.
++REDDIT = 'reddit:pennystocks'
+ NOW = MONDAY + dt.timedelta(days=35)
+ _OWNED_TICKERS = (
+     'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL',
+     'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED',
+ )
+ 
+ 
+ def _clear_owned_rows():
+     RadarBucketSource.query.filter(
+         RadarBucketSource.ticker.in_(_OWNED_TICKERS)).delete(
+@@ -279,66 +283,70 @@ def test_scoring_invalidates_only_its_active_source(rows):
+ 
+     assert RadarBucketSource.query.filter_by(
+         ticker='ZZSCOPE', source='reddit').one().mention_z is None
+     assert RadarBucketSource.query.filter_by(
+         ticker='ZZSCOPE', source='bluesky').one().mention_z == 3.0
+ 
+ 
+ def test_pooling_sums_components_not_z_scores(rows):
+     """A weighted mean of z-scores is not a z-score. Two sources each two
+     sigma over is stronger evidence than either alone, and averaging would
+-    report the same two."""
+-    for source in ('reddit', 'bluesky'):
++    report the same two.
++
++    The second source is a CONCRETE subreddit name. pooled_z takes a viewer
++    selection and expands it strictly, so the bare `reddit` would now expand
++    to the eight configured subs and match nothing these fixtures wrote."""
++    for source in (REDDIT, 'bluesky'):
+         steady_history(source=source)
+     loud = MONDAY + dt.timedelta(days=20)
+     db.session.commit()
+     RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud).update(
+         {'mention_count': 12})
+     db.session.commit()
+ 
+-    for source in ('reddit', 'bluesky'):
++    for source in (REDDIT, 'bluesky'):
+         scoring.score_source(source, NOW)
+ 
+-    single, n_single = scoring.pooled_z('SSA', loud, ['reddit'])
+-    both, n_both = scoring.pooled_z('SSA', loud, ['reddit', 'bluesky'])
++    single, n_single = scoring.pooled_z('SSA', loud, [REDDIT])
++    both, n_both = scoring.pooled_z('SSA', loud, [REDDIT, 'bluesky'])
+     assert n_single == 1 and n_both == 2
+     assert both > single
+ 
+ 
+ def test_pooling_ignores_unselected_sources(rows):
+-    for source in ('reddit', 'bluesky'):
++    for source in (REDDIT, 'bluesky'):
+         steady_history(source=source)
+     when = MONDAY + dt.timedelta(days=10)
+     db.session.commit()
+-    for source in ('reddit', 'bluesky'):
++    for source in (REDDIT, 'bluesky'):
+         scoring.score_source(source, NOW)
+ 
+     _, n = scoring.pooled_z('SSA', when, ['bluesky'])
+     assert n == 1
+ 
+ 
+ def test_a_missing_source_drops_out_rather_than_contributing_zero(rows):
+     """The rule, at read time. A source that was down must not drag the pooled
+     reading towards nothing."""
+-    for source in ('reddit', 'bluesky'):
++    for source in (REDDIT, 'bluesky'):
+         steady_history(source=source)
+     when = MONDAY + dt.timedelta(days=10)
+     db.session.commit()
+     RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=when, source='bluesky').update(
+         {'status': 'missing', 'mention_count': 0})
+     db.session.commit()
+-    for source in ('reddit', 'bluesky'):
++    for source in (REDDIT, 'bluesky'):
+         scoring.score_source(source, NOW)
+ 
+-    pooled, n = scoring.pooled_z('SSA', when, ['reddit', 'bluesky'])
+-    only, _ = scoring.pooled_z('SSA', when, ['reddit'])
++    pooled, n = scoring.pooled_z('SSA', when, [REDDIT, 'bluesky'])
++    only, _ = scoring.pooled_z('SSA', when, [REDDIT])
+     assert n == 1
+     assert pooled == pytest.approx(only)
+ 
+ 
+ def test_pooling_nothing_returns_none(rows):
+     assert scoring.pooled_z('SSNOPE', MONDAY, ['bluesky']) == (None, 0)
+ 
+ 
+ def _forum(mentions=10, voices=6, text_ratio=0.9):
+     return {'forum': scoring.Contribution(mentions, voices, text_ratio)}

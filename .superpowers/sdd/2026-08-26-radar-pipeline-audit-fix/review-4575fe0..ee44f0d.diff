@@ -1,0 +1,473 @@
+# Review package: 4575fe0..ee44f0d
+
+## Commits
+ee44f0d fix(radar): the eligibility floor can finally see the mentions it counts
+
+## Files changed
+ personal_apps/features/radar/buckets.py            |  5 +-
+ personal_apps/features/radar/journal.py            | 53 ++++++++++++++++
+ personal_apps/features/radar/leaderboard.py        | 61 ++++--------------
+ ...c48e744_add_promoted_to_radar_mention_events.py | 26 ++++++++
+ personal_apps/models.py                            |  5 ++
+ personal_apps/tests/test_radar_leaderboard.py      | 74 +++++++++++++++++++---
+ 6 files changed, 166 insertions(+), 58 deletions(-)
+
+## Diff
+diff --git a/personal_apps/features/radar/buckets.py b/personal_apps/features/radar/buckets.py
+index a947771..6e6ba2c 100644
+--- a/personal_apps/features/radar/buckets.py
++++ b/personal_apps/features/radar/buckets.py
+@@ -155,22 +155,25 @@ def roll_up(rows, statuses, touched):
+     # scratch on every pass, which is right because cycles overlap and additive
+     # rollup would double-count the boundary; it is only correct if the
+     # recompute sees the whole quarter-hour. It did not, and production lost
+     # 42.9% of its 10+ mention buckets to that (audit 2026-08-26).
+     journal.record(usable)
+ 
+     windows = {(r.ticker, bucket_start_for(r.created_utc)) for r in usable
+                if bucket_start_for(r.created_utc) in touched}
+     complete = journal.events_for(windows)
+ 
++    promoted_rows = _promote(complete)
++    journal.mark_promoted(promoted_rows)
++
+     grouped = collections.defaultdict(list)
+-    for row in _promote(complete):
++    for row in promoted_rows:
+         key = (row.ticker, bucket_start_for(row.created_utc))
+         # Guards a BUCKET_MINUTES change, not same-bucket_start collisions --
+         # events_for matches on the STORED bucket_start column, so a row
+         # journalled under a previous BUCKET_MINUTES can still come back for a
+         # window whose boundaries have since changed. Recomputing the key from
+         # created_utc under the CURRENT value is what catches that mismatch;
+         # without this check such a row would be written into a bucket this
+         # cycle never touched.
+         if key in windows:
+             grouped[key].append(row)
+diff --git a/personal_apps/features/radar/journal.py b/personal_apps/features/radar/journal.py
+index d559c2b..05a050e 100644
+--- a/personal_apps/features/radar/journal.py
++++ b/personal_apps/features/radar/journal.py
+@@ -88,10 +88,63 @@ def events_for(keys):
+                        RadarMentionEvent.ticker.in_(list(tickers)))
+                for start, tickers in by_window.items()]
+ 
+     rows = RadarMentionEvent.query.filter(sa.or_(*clauses)).all()
+     return [buckets.MentionRow(ticker=row.ticker, external_id=row.external_id,
+                                created_utc=row.created_utc, source=row.source,
+                                channel=row.channel, author=row.author,
+                                simhash=row.simhash, confidence=row.confidence,
+                                sentiment=row.sentiment, engagement=row.engagement)
+             for row in rows]
++
++
++def mark_promoted(rows):
++    """Record which bare mentions the rollup promoted.
++
++    Called after _promote has seen the whole bucket, so what is stored is the
++    decision rather than an intermediate. Idempotent: a later cycle recomputes
++    the same bucket and writes the same answer, or a better-informed one.
++    """
++    promoted = [(row.source, row.external_id, row.ticker) for row in rows
++                if row.confidence == 'medium']
++    if not promoted:
++        return
++    for start in range(0, len(promoted), _CHUNK):
++        clauses = [sa.and_(RadarMentionEvent.source == source,
++                           RadarMentionEvent.external_id == external_id,
++                           RadarMentionEvent.ticker == ticker)
++                   for source, external_id, ticker in promoted[start:start + _CHUNK]]
++        (RadarMentionEvent.query.filter(sa.or_(*clauses))
++         .update({'promoted': True}, synchronize_session=False))
++    db.session.commit()
++
++
++def distinct_voices(tickers, sources, since, now, field):
++    """Distinct authors or channels per ticker over the SCORED mentions.
++
++    `field` is 'author' or 'channel'. Counted here rather than from
++    radar_mentions because that table never holds `medium` -- promotion happens
++    at rollup and is written back onto the journal, not onto the mention -- and
++    because a post whose tickers were all `low` has no mention row at all.
++
++    Buckets store distinct_authors as a COUNT, so aggregating them can only
++    take a maximum, and a maximum systematically undercounts: two buckets
++    holding {x, y} and {z, w} have four distinct voices and report two.
++    Measured on live data, NVDA showed 26 real authors against a bucket
++    maximum of 2.
++    """
++    if not tickers:
++        return {}
++
++    column = {'author': RadarMentionEvent.author,
++              'channel': RadarMentionEvent.channel}[field]
++    rows = (db.session.query(RadarMentionEvent.ticker,
++                             sa.func.count(sa.distinct(column)))
++            .filter(RadarMentionEvent.ticker.in_(list(tickers)),
++                    RadarMentionEvent.source.in_(list(sources)),
++                    RadarMentionEvent.created_utc >= since,
++                    RadarMentionEvent.created_utc < now,
++                    sa.or_(RadarMentionEvent.confidence == 'high',
++                           RadarMentionEvent.promoted.is_(True)))
++            .group_by(RadarMentionEvent.ticker).all())
++    # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
++    return {ticker: int(count) for ticker, count in rows}
+diff --git a/personal_apps/features/radar/leaderboard.py b/personal_apps/features/radar/leaderboard.py
+index 5f97af1..1f6db17 100644
+--- a/personal_apps/features/radar/leaderboard.py
++++ b/personal_apps/features/radar/leaderboard.py
+@@ -6,23 +6,24 @@ appearance. What it does decide is what is worth showing at all -- the
+ eligibility floor -- and that matters more on a thin board than a busy one,
+ because the temptation to pad is greatest when there is little to show.
+ """
+ import collections
+ import dataclasses
+ import datetime as dt
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+-from models import RadarBucketSource, RadarMention, RadarPost, TickerUniverse
++from models import RadarBucketSource, TickerUniverse
+ 
+ from . import divergence as divergence_mod
++from . import journal
+ from . import market_calendar
+ from . import quotes as quotes_mod
+ from . import scoring, universe
+ from .config import PROVISIONAL_BASELINE_DAYS, segments_in, source_kind
+ 
+ 
+ @dataclasses.dataclass
+ class Ranking:
+     """Rows worth showing, and an account of what was left out.
+ 
+@@ -52,72 +53,36 @@ class Row:
+     price_move: object
+     direction: str
+     price_status: str
+     baseline_days: int | None
+     marks: list
+ 
+ 
+ def _distinct_authors(tickers, sources, since, now):
+     """True distinct authors per ticker across the whole window.
+ 
+-    Buckets store distinct_authors as a COUNT, so aggregating them can only
+-    take a maximum -- and a maximum systematically undercounts. Two buckets
+-    holding {x, y} and {z, w} have four distinct authors between them and
+-    report two.
++    Read from the mention journal rather than from radar_mentions. That table
++    never holds `medium` -- promotion is decided at rollup over the whole
++    bucket and written back onto the journal -- and a post whose tickers were
++    all `low` is never stored there at all, so the count it gave was smaller
++    than the mention count the floor was gating.
+ 
+-    Measured on live data the gap was severe: NVDA showed 26 real authors
+-    against a bucket maximum of 2, and SPY 21 against 2. The eligibility floor
+-    needs three, so the maximum was rejecting almost every ticker on the board
+-    -- including the ones with the broadest genuine participation.
+-
+-    Counted from the mention rows instead, where the authors themselves are
+-    still available.
++    Falls back to nothing: a ticker whose events have aged out of the journal
++    is absent from the result and the caller uses the bucket maximum, which
++    undercounts in the safe direction.
+     """
+-    if not tickers:
+-        return {}
+-
+-    rows = (db.session.query(RadarMention.ticker,
+-                             sa.func.count(sa.distinct(RadarPost.author)))
+-            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+-            .filter(RadarMention.ticker.in_(list(tickers)),
+-                    RadarPost.source.in_(list(sources)),
+-                    RadarPost.created_utc >= since,
+-                    RadarPost.created_utc < now,
+-                    RadarMention.confidence.in_(('high', 'medium')))
+-            .group_by(RadarMention.ticker).all())
+-    return {ticker: count for ticker, count in rows}
++    return journal.distinct_voices(tickers, sources, since, now, 'author')
+ 
+ 
+ def _distinct_channels(tickers, sources, since, now):
+-    """True distinct channels per ticker across the window.
+-
+-    The broadcast analogue of _distinct_authors. On a broadcast network the
+-    author is the channel's admin and is therefore always one; the channel is
+-    what varies, and two channels carrying the same symbol is the corroboration
+-    an author count cannot express.
+-
+-    Counted from the mention rows for the same reason authors are: a bucket
+-    stores a COUNT, and the maximum across buckets systematically undercounts.
+-    """
+-    if not tickers:
+-        return {}
+-
+-    rows = (db.session.query(RadarMention.ticker,
+-                             sa.func.count(sa.distinct(RadarPost.channel)))
+-            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+-            .filter(RadarMention.ticker.in_(list(tickers)),
+-                    RadarPost.source.in_(list(sources)),
+-                    RadarPost.created_utc >= since,
+-                    RadarPost.created_utc < now,
+-                    RadarMention.confidence.in_(('high', 'medium')))
+-            .group_by(RadarMention.ticker).all())
+-    return {ticker: count for ticker, count in rows}
++    """The broadcast analogue. See _distinct_authors."""
++    return journal.distinct_voices(tickers, sources, since, now, 'channel')
+ 
+ 
+ def _universe_rows(tickers):
+     if not tickers:
+         return {}
+     rows = TickerUniverse.query.filter(
+         TickerUniverse.symbol.in_(list(tickers))).all()
+     return {row.symbol: row for row in rows}
+ 
+ 
+diff --git a/personal_apps/migrations/versions/1d26ac48e744_add_promoted_to_radar_mention_events.py b/personal_apps/migrations/versions/1d26ac48e744_add_promoted_to_radar_mention_events.py
+new file mode 100644
+index 0000000..43d8415
+--- /dev/null
++++ b/personal_apps/migrations/versions/1d26ac48e744_add_promoted_to_radar_mention_events.py
+@@ -0,0 +1,26 @@
++"""add promoted to radar mention events
++
++Revision ID: 1d26ac48e744
++Revises: c489b7c94875
++Create Date: 2026-08-26 14:10:31.073316
++
++"""
++from alembic import op
++import sqlalchemy as sa
++
++
++# revision identifiers, used by Alembic.
++revision = '1d26ac48e744'
++down_revision = 'c489b7c94875'
++branch_labels = None
++depends_on = None
++
++
++def upgrade():
++    op.add_column('radar_mention_events',
++                  sa.Column('promoted', sa.Boolean(), nullable=False,
++                            server_default=sa.text('0')))
++
++
++def downgrade():
++    op.drop_column('radar_mention_events', 'promoted')
+diff --git a/personal_apps/models.py b/personal_apps/models.py
+index eb126dc..f5e9a3f 100644
+--- a/personal_apps/models.py
++++ b/personal_apps/models.py
+@@ -881,10 +881,15 @@ class RadarMentionEvent(db.Model):
+     bucket_start = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+     author       = db.Column(db.String(64), nullable=True)
+     simhash      = db.Column(MYSQL_BIGINT(unsigned=True), nullable=False, default=0)
+     # PRE-promotion. `medium` is awarded at rollup from the complete bucket and
+     # is never stored here, because storing it would freeze a decision that the
+     # next cycle's arrivals can legitimately change.
+     confidence   = db.Column(
+         db.Enum('high', 'low', name='radar_event_confidence'), nullable=False)
+     sentiment    = db.Column(db.Float, nullable=True)
+     engagement   = db.Column(db.Float, nullable=False, default=0.0)
++    # What _promote decided, written back after the rollup ran over the whole
++    # bucket. `confidence` above is what the EXTRACTOR said, and stays that
++    # way -- promotion is a property of the quarter-hour and legitimately
++    # changes as more of it arrives, so the two facts are stored apart.
++    promoted     = db.Column(db.Boolean, nullable=False, default=False)
+diff --git a/personal_apps/tests/test_radar_leaderboard.py b/personal_apps/tests/test_radar_leaderboard.py
+index fb20199..ab16052 100644
+--- a/personal_apps/tests/test_radar_leaderboard.py
++++ b/personal_apps/tests/test_radar_leaderboard.py
+@@ -8,43 +8,49 @@ be padded.
+ import datetime as dt
+ import decimal
+ 
+ import pytest
+ 
+ from app import app as flask_app
+ from extensions import db
+ from models import RadarBucketSource, RadarQuote, TickerUniverse
+ from features.radar import leaderboard
+ from features.radar.config import source_config_version
++from test_radar_journal import _row, _ALL_OK, clean_buckets, clean_events  # noqa: F401
+ 
+ # Deliberately far from any window a live dev database holds data for. These
+ # tests assert on an exact list of LB* tickers, and the fixture can only clean
+ # up rows it created -- so an unrelated ticker sitting in the same window makes
+ # them fail on data rather than on behaviour. Found when a production snapshot
+ # was loaded locally for debugging and eighteen real tickers joined the board.
+ #
+ # Still a regular trading session (Thursday, 10:00 ET), which the price-status
+ # assertions depend on.
+ NOW = dt.datetime(2026, 1, 15, 15, 0, 0)
+ 
+ 
+ @pytest.fixture()
+ def board():
+     # Clears every table these tests write to. A run that fails before its own
+     # cleanup otherwise leaves rows that collide with the next one -- which is
+     # exactly how this suite first broke.
+     def wipe():
+-        from models import RadarMention, RadarPost
++        from models import RadarMention, RadarMentionEvent, RadarPost
+         RadarMention.query.filter(
+             RadarMention.ticker.like('LB%')).delete(synchronize_session=False)
+         RadarPost.query.filter(
+             RadarPost.external_id.like('LB%')).delete(synchronize_session=False)
++        # Since Task 3b, _distinct_authors/_distinct_channels read the journal
++        # instead of radar_mentions -- the helpers below write matching rows
++        # here too, so this table needs the same LB* cleanup as the others.
++        RadarMentionEvent.query.filter(
++            RadarMentionEvent.ticker.like('LB%')).delete(synchronize_session=False)
+         for model in (RadarBucketSource, RadarQuote):
+             model.query.filter(model.ticker.like('LB%')).delete(
+                 synchronize_session=False)
+         TickerUniverse.query.filter(TickerUniverse.symbol.like('LB%')).delete(
+             synchronize_session=False)
+         db.session.commit()
+ 
+     with flask_app.app_context():
+         wipe()
+         yield
+@@ -229,35 +235,47 @@ def test_the_limit_is_respected(board):
+         universe_row(ticker)
+         scored(ticker, z=float(index))
+     db.session.commit()
+     assert len(build_rows(['bluesky'], NOW, limit=3)) == 3
+ 
+ 
+ _mention_seq = [0]
+ 
+ 
+ def _mention(ticker, author, minutes_ago, source='bluesky'):
+-    """A stored post and its mention, so the author is countable."""
+-    from models import RadarMention, RadarPost
++    """A stored post and its mention, so the author is countable.
++
++    Also writes the journal row _distinct_authors reads since Task 3b. A real
++    `high` mention still lands in radar_mentions too -- only the promoted
++    `medium` and post-was-all-low cases are journal-only -- so writing both
++    here mirrors production rather than special-casing the test.
++    """
++    from models import RadarMention, RadarMentionEvent, RadarPost
++    from features.radar import buckets
+     _mention_seq[0] += 1
+     when = NOW - dt.timedelta(minutes=minutes_ago)
+-    post = RadarPost(source=source,
+-                     external_id='%s-%s-%d-%d' % (ticker, author, minutes_ago,
+-                                                  _mention_seq[0]),
++    external_id = '%s-%s-%d-%d' % (ticker, author, minutes_ago, _mention_seq[0])
++    post = RadarPost(source=source, external_id=external_id,
+                      channel='firehose', author=author, created_utc=when,
+                      title=None, body='$%s' % ticker, score=0, num_comments=0,
+                      url='https://example.invalid/', simhash=1,
+                      first_seen=when, last_seen=when)
+     db.session.add(post)
+     db.session.flush()
+     db.session.add(RadarMention(post_id=post.id, ticker=ticker,
+                                 confidence='high', lexicon_sentiment=0.0))
++    db.session.add(RadarMentionEvent(
++        source=source, external_id=external_id, ticker=ticker,
++        channel='firehose', created_utc=when,
++        bucket_start=buckets.bucket_start_for(when), author=author,
++        simhash=_mention_seq[0], confidence='high', sentiment=None,
++        engagement=0.0))
+ 
+ 
+ def test_authors_are_counted_across_the_window_not_per_bucket(board):
+     """Buckets store a COUNT, so aggregating them can only take a maximum --
+     and a maximum undercounts badly. Measured live: NVDA had 26 real authors
+     against a bucket maximum of 2, and the floor needs three, so the maximum
+     was rejecting nearly the whole board."""
+     universe_row('LBW')
+     # Four buckets, two distinct authors each, but eight distinct in total.
+     for index in range(4):
+@@ -292,32 +310,41 @@ def test_a_genuinely_concentrated_ticker_is_still_rejected(board):
+ 
+ 
+ # Broadcast venues. A channel's admin is always one author, so the author gate
+ # can never be cleared there however loud a ticker gets; the independent unit
+ # is the channel instead.
+ 
+ def posted(ticker, external, source, channel, author, minutes_ago=20):
+     """A post plus its mention, so author and channel counts are real.
+ 
+     The bucket helpers above write COUNTS; these write the rows those counts
+-    are derived from, which is what the channel gate actually reads.
++    are derived from, which is what the channel gate actually reads -- the
++    mention journal since Task 3b, alongside radar_mentions for the same
++    reason _mention above writes both.
+     """
+-    from models import RadarMention, RadarPost
++    from models import RadarMention, RadarMentionEvent, RadarPost
++    from features.radar import buckets
+     when = NOW - dt.timedelta(minutes=minutes_ago)
++    simhash = abs(hash(external)) % 10 ** 9
+     row = RadarPost(source=source, external_id=external, channel=channel,
+                     author=author, created_utc=when, body='x', score=0,
+-                    num_comments=0, simhash=abs(hash(external)) % 10 ** 9,
++                    num_comments=0, simhash=simhash,
+                     first_seen=when, last_seen=when)
+     db.session.add(row)
+     db.session.flush()
+     db.session.add(RadarMention(post_id=row.id, ticker=ticker,
+                                 confidence='high', lexicon_sentiment=0.0))
++    db.session.add(RadarMentionEvent(
++        source=source, external_id=external, ticker=ticker, channel=channel,
++        created_utc=when, bucket_start=buckets.bucket_start_for(when),
++        author=author, simhash=simhash, confidence='high', sentiment=None,
++        engagement=0.0))
+ 
+ 
+ def test_a_broadcast_only_ticker_reaches_the_board_on_two_channels(board, monkeypatch):
+     """Before this, a Telegram-shaped source could never put a row up: one
+     admin posts, every bucket has one author, and the author gate rejects it
+     however loud the ticker gets.
+ 
+     fourchan is borrowed as the broadcast source rather than inventing one,
+     because a source not in config.SOURCES has no ingest path and could not
+     have written these rows in the first place.
+@@ -450,10 +477,39 @@ def test_the_reason_is_the_furthest_gate_any_kind_reached():
+ 
+ def test_a_kind_that_passes_clears_the_whole_ticker():
+     """Eligibility is a union across kinds, so one passing kind means no
+     rejection at all -- not a rejection described by the other one."""
+     from features.radar.scoring import Contribution
+ 
+     assert leaderboard._rejection({
+         'broadcast': Contribution(mentions=1, voices=1, text_ratio=1.0),
+         'forum': Contribution(mentions=40, voices=40, text_ratio=0.9),
+     }) is None
++
++
++def test_a_promoted_mention_counts_towards_the_author_floor(clean_buckets,
++                                                            clean_events):
++    """The floor gated on a count that could not see half the mentions.
++
++    `medium` is awarded at rollup and never written to radar_mentions -- zero
++    such rows exist in production -- and a post whose tickers were all `low` is
++    never stored at all. So bucket.mention_count counted the promoted mentions
++    and the author query could not, and the eligibility floor judged a ticker
++    on the smaller number (audit 2026-08-26).
++    """
++    import datetime as dt
++
++    from features.radar import buckets, journal
++
++    start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
++    buckets.roll_up([
++        _row(external_id='zz-h', author='u1', simhash=1, confidence='high'),
++        _row(external_id='zz-l', author='u2', simhash=2, confidence='low',
++             minute=7),
++    ], _ALL_OK, start)
++
++    voices = journal.distinct_voices(
++        ['ZZA'], ['bluesky'], dt.datetime(2026, 4, 15, 13, 0, 0),
++        dt.datetime(2026, 4, 15, 15, 0, 0), 'author')
++    # u2's bare mention was vouched for by u1's cashtag, so it is scored --
++    # and its author is one of the ticker's independent voices.
++    assert voices['ZZA'] == 2

@@ -1,0 +1,576 @@
+# Review package: c0f6f6b..c553c47
+
+## Commits
+c553c47 test(radar): pin generation invalidation safeguards
+
+## Files changed
+ .../task-3c-report.md                              | 75 ++++++++++++++++++++
+ personal_apps/features/radar/scoring.py            | 26 +++----
+ personal_apps/tests/test_radar_daemon.py           | 82 +++++++++++++++-------
+ personal_apps/tests/test_radar_journal.py          | 30 ++++----
+ personal_apps/tests/test_radar_scoring.py          | 62 +++++++++++++++-
+ 5 files changed, 219 insertions(+), 56 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md b/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
+index 29ace36..4d5c72f 100644
+--- a/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
++++ b/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
+@@ -327,10 +327,85 @@ git add personal_apps/features/radar/config.py \
+         personal_apps/features/radar/scoring.py \
+         personal_apps/run_radar_ingest.py \
+         personal_apps/tests/test_radar_config.py \
+         personal_apps/tests/test_radar_journal.py \
+         personal_apps/tests/test_radar_buckets.py \
+         personal_apps/tests/test_radar_profile.py \
+         personal_apps/tests/test_radar_scoring.py \
+         personal_apps/tests/test_radar_daemon.py
+ git commit -m "fix(radar): start corrected rollups as a new baseline generation"
+ ```
++
++## Fix round 1 — test teeth and scoped invalidation
++
++Base: `c0f6f6b`. This round owns and replaces the reviewer's uncommitted
++`test_main_prepares_the_rollup_generation_before_building_fetchers` rewrite.
++Only the Task 3c scorer, Task 3c tests, and this report are staged for the
++round commit.
++
++### Changes
++
++- Replaced the daemon source-text ordering assertion with runtime proof that a
++  `_prepare_rollup_generation` exception propagates and never reaches
++  `build_fetchers`.
++- Pinned the prepare wiring's bootstrap → invalidation → commit order and the
++  exact `source_config_version()` passed to invalidation. The quiet path now
++  contains a `ZZQUIET` legacy row with `high_confidence_count=0`, proving that
++  zero is not evidence of a failed bootstrap.
++- Moved the Task 3c global-window daemon and journal fixtures to a
++  `2027-06-01` window (with same-test offsets), beyond real and seeded rows.
++- Added a mixed-generation `ZZGEN` regression: enough current history to
++  score plus one incompatible `ok` row must leave the old row unscored.
++- Pinned invalidation's score-presence guard with a scored and an already-null
++  incompatible row.
++- Added optional `source=None` scope to
++  `invalidate_incompatible_scores`. Startup omits it and remains all-source;
++  `score_source` passes its active source so one `score_all` pass does not run
++  four identical all-source range updates.
++
++### Watched failing mutations, then restoration
++
++1. Wrapped `main()` prepare in a swallowing `try/except`: runtime daemon test
++   failed after `build_fetchers` ran.
++2. Removed `_rows_by_ticker`'s generation predicate: mixed `ZZGEN` test
++   failed with old-row `mention_z == 357.92`.
++3. Removed `db.session.commit()`: prepare wiring test failed because its
++   observed sequence lacked `commit`.
++4. Replaced the prepare call-site version with `wrong-version`: wiring test
++   failed its exact-version assertion.
++5. Mutated `high_confidence_count > 0` to `>= 0`: quiet-database test raised
++   on the seeded zero-count legacy row.
++6. Replaced the score-presence `isnot(None)` disjunction with `sa.true()`:
++   invalidation test reported two writes instead of one.
++7. Removed `source=source` from the scorer invalidation call: the unrelated
++   Bluesky row was cleared by a StockTwits scoring pass.
++8. The source-scoped regression was written first and initially failed against
++   the inherited all-source scorer call; it passed after adding the optional
++   scope and passing the active source.
++
++### Final verification
++
++Focused regressions:
++
++```text
++py -3.12 -m pytest [nine Task 3c focused tests] -v
++9 passed in 2.47s
++```
++
++Required covering gate:
++
++```text
++py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
++140 collected; exit 0
++```
++
++Required broad gate:
++
++```text
++py -3.12 -m pytest tests/ -k radar -q
++2 failed, 598 passed, 2 skipped, 646 deselected, 2 warnings in 66.84s
++```
++
++The only broad failures are the established unrelated Radar API template
++tests, both caused by the ignored missing
++`static/radar/dist/.vite/manifest.json`. The test-created `ZZ...` rows are
++cleaned before and after each affected test.
+diff --git a/personal_apps/features/radar/scoring.py b/personal_apps/features/radar/scoring.py
+index 63affb7..e574690 100644
+--- a/personal_apps/features/radar/scoring.py
++++ b/personal_apps/features/radar/scoring.py
+@@ -54,45 +54,47 @@ def _rows_by_ticker(source, since, until, config_version):
+         grouped[row.ticker].append(row)
+     return grouped
+ 
+ 
+ def _observations(rows):
+     return [baselines.Observation(r.bucket_start, r.mention_count, r.status,
+                                   r.source_config_version)
+             for r in rows]
+ 
+ 
+-def invalidate_incompatible_scores(version, since):
++def invalidate_incompatible_scores(version, since, source=None):
+     """Clear expected/variance/mention_z/baseline_days from rows this
+     generation cannot vouch for. Returns rows cleared.
+ 
+     Two ways a row is incompatible: an explicit different stamp, or SQL NULL
+     -- a row scored before source_config_version existed, or one a bootstrap
+     recovered without yet being restamped. `!= version` alone does not match
+     NULL in SQL (NULL compares unequal to everything, including itself), so
+     it is tested for explicitly rather than trusted to fall out of the
+     inequality.
+ 
+     Restricted to rows carrying at least one non-NULL score column so a row
+     that was never scored -- already the honest absence this whole change
+     protects -- is not written to for no reason.
+     """
+-    return (RadarBucketSource.query
+-            .filter(RadarBucketSource.bucket_start >= since,
+-                    sa.or_(RadarBucketSource.source_config_version.is_(None),
+-                           RadarBucketSource.source_config_version != version),
+-                    sa.or_(RadarBucketSource.expected.isnot(None),
+-                           RadarBucketSource.variance.isnot(None),
+-                           RadarBucketSource.mention_z.isnot(None),
+-                           RadarBucketSource.baseline_days.isnot(None)))
+-            .update({'expected': None, 'variance': None, 'mention_z': None,
+-                    'baseline_days': None}, synchronize_session=False))
++    query = RadarBucketSource.query.filter(
++        RadarBucketSource.bucket_start >= since,
++        sa.or_(RadarBucketSource.source_config_version.is_(None),
++               RadarBucketSource.source_config_version != version),
++        sa.or_(RadarBucketSource.expected.isnot(None),
++               RadarBucketSource.variance.isnot(None),
++               RadarBucketSource.mention_z.isnot(None),
++               RadarBucketSource.baseline_days.isnot(None)))
++    if source is not None:
++        query = query.filter(RadarBucketSource.source == source)
++    return query.update({'expected': None, 'variance': None, 'mention_z': None,
++                         'baseline_days': None}, synchronize_session=False)
+ 
+ 
+ def score_source(source, now, lookback_days=30, excluded=None):
+     """Score every bucket of every ticker on one source. Returns rows written.
+ 
+     `excluded` is the set of bucket starts to keep out of baselines, wired to
+     open spikes in Plan 3 so a ticker that squeezed last week does not carry
+     the squeeze into its own expectation.
+     """
+     excluded = excluded or set()
+@@ -101,21 +103,21 @@ def score_source(source, now, lookback_days=30, excluded=None):
+ 
+     # Defensive, not the primary defence: startup already clears the
+     # migration overlap window once (run_radar_ingest._prepare_rollup_
+     # generation). This is the steady-state backstop for whatever that
+     # window does not reach -- scoped to lookback_days rather than a full
+     # history scan, because _rows_by_ticker's own version filter already
+     # keeps an uncleared old row out of the ticker-level loop below; this
+     # only stops it sitting there forever still LOOKING scored to anything
+     # that reads the column directly (spec: leaderboard ranks on mention_z
+     # IS NOT NULL).
+-    invalidate_incompatible_scores(version, since)
++    invalidate_incompatible_scores(version, since, source=source)
+ 
+     prof = profile.build_profile(source, now, version)
+     grouped = _rows_by_ticker(source, since, now, version)
+ 
+     # The prior a thin ticker is pulled towards: what a typical ticker on this
+     # source does. Spec 6.8 wants a segment median, which needs market cap and
+     # therefore Plan 3; a global median is the same shape with a coarser peer
+     # group.
+     rates = []
+     for rows in grouped.values():
+diff --git a/personal_apps/tests/test_radar_daemon.py b/personal_apps/tests/test_radar_daemon.py
+index fbbd373..64a94f1 100644
+--- a/personal_apps/tests/test_radar_daemon.py
++++ b/personal_apps/tests/test_radar_daemon.py
+@@ -495,54 +495,58 @@ def test_prepare_rollup_generation_bootstraps_then_invalidates_then_commits(
+         calls.append(('bootstrap', since))
+         return 3
+ 
+     def fake_invalidate(version, since):
+         calls.append(('invalidate', version, since))
+         return 5
+ 
+     monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions', fake_bootstrap)
+     monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
+                         fake_invalidate)
++    monkeypatch.setattr(daemon.db.session, 'commit',
++                        lambda: calls.append(('commit',)))
+ 
+     now = _utc(2026, 4, 15, 15, 0)
+     recovered, invalidated = daemon._prepare_rollup_generation(now)
+ 
+     assert (recovered, invalidated) == (3, 5)
+-    assert [call[0] for call in calls] == ['bootstrap', 'invalidate']
++    assert [call[0] for call in calls] == ['bootstrap', 'invalidate', 'commit']
+     since = now.replace(tzinfo=None) - dt.timedelta(
+         hours=daemon.MENTION_EVENT_RETENTION_HOURS)
+     assert calls[0][1] == since, 'bootstrap must see the retention-window floor'
+     assert calls[1][2] == since, 'invalidation must share the same floor'
++    assert calls[1][1] == daemon.source_config_version(), (
++        'invalidation must receive the exact current generation')
++    assert calls[2] == ('commit',), (
++        'bootstrap and invalidation must be durable before startup continues')
+ 
+ 
+ def test_prepare_rollup_generation_fails_closed_on_unrecovered_legacy_evidence(
+         monkeypatch):
+     """Zero recovered is ambiguous by itself -- a fresh database and a
+     migrated one whose bootstrap silently failed both report it. A legacy
+     bucket already carrying high_confidence_count in the overlap window is
+     what tells the two apart: it is proof the evidence existed, so recovering
+     none of it means bootstrap is broken, not that the world was quiet.
+     Continuing anyway would serve a relabelled score for evidence that never
+     actually made it into the journal.
+ 
+     The legacy-evidence check has no ticker filter -- production has to catch
+     ANY source's bootstrap failure, not one ticker's -- so `now` is
+-    2026-08-26 rather than this file's usual 2026-04-15: the dev database
+-    seeds RadarBucketSource rows back to 2026-07-22, and 2026-08-24 (this
+-    `now` minus the 48-hour retention window) is confirmed clear of every one
+-    of them that carries high_confidence_count > 0.
++    2027-06-01, beyond the real and seeded database history, so the global
++    legacy-evidence query cannot match unrelated rows.
+     """
+     from app import app as flask_app
+     from extensions import db
+     from models import RadarBucketSource
+ 
+-    now = _utc(2026, 8, 26, 6, 0)
++    now = _utc(2027, 6, 1, 6, 0)
+     since = now.replace(tzinfo=None) - dt.timedelta(
+         hours=daemon.MENTION_EVENT_RETENTION_HOURS)
+     with flask_app.app_context():
+         RadarBucketSource.query.filter(
+             RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+         db.session.add(RadarBucketSource(
+             ticker='ZZDAEMON', bucket_start=since + dt.timedelta(hours=1),
+             source='bluesky', mention_count=9, high_confidence_count=6,
+             low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
+             engagement_weighted_count=9.0, status='ok',
+@@ -566,48 +570,76 @@ def test_prepare_rollup_generation_fails_closed_on_unrecovered_legacy_evidence(
+                 RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+             db.session.commit()
+ 
+ 
+ def test_prepare_rollup_generation_continues_when_the_database_is_genuinely_quiet(
+         monkeypatch):
+     """The complementary case: zero recovered with no legacy evidence in the
+     overlap window at all is a fresh or genuinely quiet database, and the
+     fail-closed check meant for a broken migration must not block it.
+ 
+-    Same 2026-08-26 `now` as the fail-closed test above, and for the same
+-    reason -- confirmed clear of the dev database's seeded RadarBucketSource
+-    history so this test's "nothing found" is not an accident of timing.
++    Uses the same 2027-06-01 window as the fail-closed test, beyond the real
++    and seeded database history.
+     """
+     from app import app as flask_app
+     from extensions import db
+     from models import RadarBucketSource
+ 
+-    now = _utc(2026, 8, 26, 6, 0)
++    now = _utc(2027, 6, 1, 6, 0)
+     with flask_app.app_context():
+         RadarBucketSource.query.filter(
+             RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
++        db.session.add(RadarBucketSource(
++            ticker='ZZQUIET', bucket_start=now.replace(tzinfo=None),
++            source='bluesky', mention_count=0, high_confidence_count=0,
++            low_count=0, distinct_authors=0, distinct_text_ratio=1.0,
++            engagement_weighted_count=0.0, status='missing',
++            source_config_version='old-generation'))
+         db.session.commit()
+ 
+     monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions', lambda s: 0)
+     invalidate_called = []
+     monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
+                         lambda v, s: invalidate_called.append(True) or 0)
+ 
+-    recovered, invalidated = daemon._prepare_rollup_generation(now)
++    try:
++        recovered, invalidated = daemon._prepare_rollup_generation(now)
++
++        assert (recovered, invalidated) == (0, 0)
++        assert invalidate_called, 'the quiet path must still reach invalidation'
++    finally:
++        with flask_app.app_context():
++            RadarBucketSource.query.filter(
++                RadarBucketSource.ticker.like('ZZ%')).delete(
++                    synchronize_session=False)
++            db.session.commit()
+ 
+-    assert (recovered, invalidated) == (0, 0)
+-    assert invalidate_called, 'the quiet path must still reach invalidation'
+ 
++def test_main_prepares_the_rollup_generation_before_building_fetchers(monkeypatch):
++    """No cycle may run against a mixed-generation database, so a bootstrap or
++    invalidation failure has to prevent build_fetchers and the scheduler from
++    ever existing -- not merely appear earlier than them in main()'s source
++    text.
++
++    This replaces a source-inspection version of the test that only checked
++    substring order. The reviewer wrapped the _prepare_rollup_generation call
++    in main() with `try/except Exception: recovered, invalidated = 0, 0` --
++    the substrings stayed in the same order, so the old assertion kept
++    passing, and all 40 daemon tests were still green, while the daemon would
++    go on to start ingest over evidence it could not recover. Watching
++    build_fetchers actually run, or not, is the only way to tell a real raise
++    from one that got swallowed; main() raises on its first statement after
++    logging config, so it never reaches the blocking scheduler loop.
++    """
++    def explode(now):
++        raise RuntimeError('rollup generation bootstrap failed')
+ 
+-def test_main_prepares_the_rollup_generation_before_building_fetchers():
+-    """No cycle may run against a mixed-generation database, so this has to
+-    see the pre-startup state before build_fetchers or the scheduler exist --
+-    otherwise a cycle could already be queued by the time a bootstrap failure
+-    is even detected."""
+-    import inspect
+-    source = inspect.getsource(daemon.main)
++    called = []
++    monkeypatch.setattr(daemon, '_prepare_rollup_generation', explode)
++    monkeypatch.setattr(daemon, 'build_fetchers', lambda: called.append(True))
++
++    with pytest.raises(RuntimeError):
++        daemon.main()
+ 
+-    assert '_prepare_rollup_generation(' in source
+-    prepare_at = source.index('_prepare_rollup_generation(')
+-    fetchers_at = source.index('build_fetchers()')
+-    scheduler_at = source.index('BackgroundScheduler(')
+-    assert prepare_at < fetchers_at < scheduler_at
++    assert not called, ('a failed rollup-generation prepare must never reach '
++                        'build_fetchers, or a cycle could run before the '
++                        'process actually exits')
+diff --git a/personal_apps/tests/test_radar_journal.py b/personal_apps/tests/test_radar_journal.py
+index 63288d4..2e673b2 100644
+--- a/personal_apps/tests/test_radar_journal.py
++++ b/personal_apps/tests/test_radar_journal.py
+@@ -248,92 +248,88 @@ def test_a_down_sources_mentions_never_reach_the_journal(clean_buckets, clean_ev
+         ticker='ZZA', source='stocktwits').one()
+     assert stocktwits_row.mention_count == 0
+ 
+ 
+ def test_bootstrap_recovers_retained_mentions_with_field_fidelity(
+         clean_events, clean_retained_mentions):
+     """bootstrap_from_mentions carries no ticker filter -- production has to
+     recover EVERY retained decision in the window, not one ticker's -- so
+     unlike the rest of this file it cannot lean on ZZ-namespacing alone for
+     isolation. The dev database seeds 1432 real RadarPost x RadarMention rows
+-    dated 2026-08-22/23 (scratchpad/seed_radar_dev.py); `since` here is
+-    2026-08-24, confirmed clear of them, rather than this file's usual
+-    2026-04-15 -- that date is safely BEFORE the seeded rows, but the query
+-    has no upper bound, so anything before them matches them too.
++    dated before this test's 2027-06-01 window. This future window stays clear
++    of all real and seeded rows while preserving the same bootstrap behaviour.
+     """
+     from features.radar import journal
+ 
+-    since = dt.datetime(2026, 8, 24, 13, 0, 0)
++    since = dt.datetime(2027, 6, 1, 13, 0, 0)
+     _retained_post('zz-bootstrap-high', 'ZZH', 'high',
+-                   dt.datetime(2026, 8, 24, 14, 2, 0), author='high-author',
++                   dt.datetime(2027, 6, 1, 14, 2, 0), author='high-author',
+                    simhash=101, sentiment=0.75, score=7, comments=4)
+     _retained_post('zz-bootstrap-low', 'ZZL', 'low',
+-                   dt.datetime(2026, 8, 24, 14, 7, 0), author='low-author',
++                   dt.datetime(2027, 6, 1, 14, 7, 0), author='low-author',
+                    simhash=202, sentiment=-0.25, score=-2, comments=5)
+     db.session.commit()
+ 
+     assert journal.bootstrap_from_mentions(since) == 2
+     assert journal.bootstrap_from_mentions(since) == 2
+ 
+     events = {event.ticker: event for event in
+               RadarMentionEvent.query.filter(
+                   RadarMentionEvent.ticker.in_(['ZZH', 'ZZL'])).all()}
+     assert set(events) == {'ZZH', 'ZZL'}
+     assert RadarMentionEvent.query.filter(
+         RadarMentionEvent.ticker.in_(['ZZH', 'ZZL'])).count() == 2
+     high = events['ZZH']
+     assert (high.source, high.external_id, high.channel, high.author) == (
+         'bluesky', 'zz-bootstrap-high', 'radar-test', 'high-author')
+-    assert high.created_utc == dt.datetime(2026, 8, 24, 14, 2, 0)
+-    assert high.bucket_start == dt.datetime(2026, 8, 24, 14, 0, 0)
++    assert high.created_utc == dt.datetime(2027, 6, 1, 14, 2, 0)
++    assert high.bucket_start == dt.datetime(2027, 6, 1, 14, 0, 0)
+     assert (high.simhash, high.confidence, high.sentiment, high.engagement) == (
+         101, 'high', 0.75, 11.0)
+     low = events['ZZL']
+     assert (low.confidence, low.sentiment, low.engagement) == ('low', -0.25, 3.0)
+ 
+ 
+ def test_deploy_bootstrap_preserves_the_complete_open_bucket(
+         clean_buckets, clean_events, clean_retained_mentions):
+     """Same real-data constraint as the fidelity test above:
+     _prepare_rollup_generation's bootstrap call and its legacy-evidence check
+-    both scan unbounded by ticker, so `now` here is 2026-08-26 (giving a
+-    48-hour `since` of 2026-08-24) rather than this file's usual 2026-04-15 --
+-    confirmed clear of both the 1432 seeded RadarPost rows (2026-08-22/23) and
+-    every seeded RadarBucketSource row carrying high_confidence_count > 0.
++    both scan unbounded by ticker, so this test uses a 2027-06-01 window,
++    beyond real and seeded rows, instead of this file's usual 2026-04-15.
+     """
+     import run_radar_ingest as daemon
+     from features.radar import buckets
+     from features.radar.config import source_config_version
+     from models import RadarBucket, RadarBucketSource
+ 
+-    pre_deploy = dt.datetime(2026, 8, 25, 14, 2, 0)
+-    post_deploy = dt.datetime(2026, 8, 25, 14, 9, 0)
+-    start = {dt.datetime(2026, 8, 25, 14, 0, 0)}
++    pre_deploy = dt.datetime(2027, 6, 1, 14, 2, 0)
++    post_deploy = dt.datetime(2027, 6, 1, 14, 9, 0)
++    start = {dt.datetime(2027, 6, 1, 14, 0, 0)}
+     before = _row('zz-bootstrap-pre', author='predeploy', simhash=301,
+                  created_utc=pre_deploy)
+     buckets.roll_up([before], _ALL_OK, start)
+     RadarMentionEvent.query.filter_by(
+         source='bluesky', external_id='zz-bootstrap-pre', ticker='ZZA').delete()
+     _retained_post('zz-bootstrap-pre', 'ZZA', 'high', before.created_utc,
+                    author=before.author, simhash=before.simhash,
+                    sentiment=before.sentiment, score=6, comments=4)
+     source = RadarBucketSource.query.filter_by(
+         ticker='ZZA', source='bluesky').one()
+     source.source_config_version = 'old-generation'
+     source.expected = 1.0
+     source.variance = 2.0
+     source.mention_z = 4.2
+     source.baseline_days = 9
+     db.session.commit()
+ 
+     recovered, invalidated = daemon._prepare_rollup_generation(
+-        dt.datetime(2026, 8, 26, 0, 0, 0))
++        dt.datetime(2027, 6, 1, 16, 0, 0))
+     buckets.roll_up([
+         _row('zz-bootstrap-post', author='postdeploy', simhash=302,
+             created_utc=post_deploy),
+     ], _ALL_OK, start)
+ 
+     db.session.expire_all()
+     source = RadarBucketSource.query.filter_by(
+         ticker='ZZA', source='bluesky').one()
+     assert recovered == 1
+     assert invalidated == 1
+diff --git a/personal_apps/tests/test_radar_scoring.py b/personal_apps/tests/test_radar_scoring.py
+index b9f07a1..86764f4 100644
+--- a/personal_apps/tests/test_radar_scoring.py
++++ b/personal_apps/tests/test_radar_scoring.py
+@@ -15,25 +15,29 @@ from features.radar import scoring
+ from features.radar.config import source_config_version
+ 
+ MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
+ NOW = MONDAY + dt.timedelta(days=35)
+ 
+ 
+ @pytest.fixture()
+ def rows():
+     with flask_app.app_context():
+         RadarBucketSource.query.filter(
+-            RadarBucketSource.ticker.like('SS%')).delete(synchronize_session=False)
++            RadarBucketSource.ticker.like('SS%')
++            | RadarBucketSource.ticker.like('ZZ%')).delete(
++                synchronize_session=False)
+         db.session.commit()
+         yield
+         RadarBucketSource.query.filter(
+-            RadarBucketSource.ticker.like('SS%')).delete(synchronize_session=False)
++            RadarBucketSource.ticker.like('SS%')
++            | RadarBucketSource.ticker.like('ZZ%')).delete(
++                synchronize_session=False)
+         db.session.commit()
+ 
+ 
+ def add(when, count, ticker='SSA', source='stocktwits', status='ok',
+         version=None):
+     db.session.add(RadarBucketSource(
+         ticker=ticker, bucket_start=when, source=source,
+         mention_count=count, high_confidence_count=count, low_count=0,
+         distinct_authors=count, distinct_text_ratio=1.0,
+         engagement_weighted_count=float(count), status=status,
+@@ -194,20 +198,74 @@ def test_scoring_clears_old_and_sql_null_scores_inside_its_lookback(rows):
+                     .filter(RadarBucketSource.ticker.in_(['SSOLD', 'SSNULL']))
+                     .order_by(RadarBucketSource.ticker).all())
+     assert len(incompatible) == 2
+     for row in incompatible:
+         assert row.expected is None
+         assert row.variance is None
+         assert row.mention_z is None
+         assert row.baseline_days is None
+ 
+ 
++def test_scoring_never_rescores_an_old_generation_row_mixed_with_current_history(rows):
++    """A current baseline must not make an incompatible row look current."""
++    steady_history(ticker='ZZGEN')
++    old_at = NOW - dt.timedelta(minutes=15)
++    add(old_at, 500, ticker='ZZGEN', version='old-generation')
++    db.session.commit()
++
++    scoring.score_source('stocktwits', NOW)
++
++    old = RadarBucketSource.query.filter_by(
++        ticker='ZZGEN', bucket_start=old_at, source='stocktwits').one()
++    assert old.mention_z is None
++
++
++def test_invalidation_skips_an_already_unscored_incompatible_row(rows):
++    since = NOW - dt.timedelta(days=1)
++    for ticker, score in (('ZZSCORED', 3.0), ('ZZUNSCORED', None)):
++        db.session.add(RadarBucketSource(
++            ticker=ticker, bucket_start=NOW - dt.timedelta(hours=1),
++            source='stocktwits', mention_count=5, high_confidence_count=5,
++            low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
++            engagement_weighted_count=5.0, status='ok',
++            source_config_version='old-generation', expected=2.0 if score else None,
++            variance=3.0 if score else None, mention_z=score,
++            baseline_days=10 if score else None))
++    db.session.commit()
++
++    cleared = scoring.invalidate_incompatible_scores(
++        source_config_version(), since)
++
++    assert cleared == 1
++    assert RadarBucketSource.query.filter_by(ticker='ZZUNSCORED').one().mention_z is None
++
++
++def test_scoring_invalidates_only_its_active_source(rows):
++    since = NOW - dt.timedelta(hours=1)
++    for source in ('stocktwits', 'bluesky'):
++        db.session.add(RadarBucketSource(
++            ticker='ZZSCOPE', bucket_start=NOW - dt.timedelta(minutes=15),
++            source=source, mention_count=5, high_confidence_count=5,
++            low_count=0, distinct_authors=5, distinct_text_ratio=1.0,
++            engagement_weighted_count=5.0, status='ok',
++            source_config_version='old-generation', expected=2.0, variance=3.0,
++            mention_z=3.0, baseline_days=10))
++    db.session.commit()
++
++    scoring.score_source('stocktwits', NOW)
++
++    assert RadarBucketSource.query.filter_by(
++        ticker='ZZSCOPE', source='stocktwits').one().mention_z is None
++    assert RadarBucketSource.query.filter_by(
++        ticker='ZZSCOPE', source='bluesky').one().mention_z == 3.0
++
++
+ def test_pooling_sums_components_not_z_scores(rows):
+     """A weighted mean of z-scores is not a z-score. Two sources each two
+     sigma over is stronger evidence than either alone, and averaging would
+     report the same two."""
+     for source in ('stocktwits', 'bluesky'):
+         steady_history(source=source)
+     loud = MONDAY + dt.timedelta(days=20)
+     db.session.commit()
+     RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud).update(
+         {'mention_count': 12})

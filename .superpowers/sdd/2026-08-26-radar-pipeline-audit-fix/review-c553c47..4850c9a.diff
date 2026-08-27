@@ -1,0 +1,156 @@
+# Review package: c553c47..4850c9a
+
+## Commits
+4850c9a test(radar): scope shared scoring cleanup
+
+## Files changed
+ .../task-3c-report.md                              | 33 ++++++++++++++++
+ personal_apps/tests/test_radar_scoring.py          | 45 +++++++++++++++++-----
+ 2 files changed, 68 insertions(+), 10 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md b/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
+index 4d5c72f..cee2812 100644
+--- a/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
++++ b/.superpowers/sdd/2026-08-26-radar-pipeline-audit-fix/task-3c-report.md
+@@ -402,10 +402,43 @@ Required broad gate:
+ 
+ ```text
+ py -3.12 -m pytest tests/ -k radar -q
+ 2 failed, 598 passed, 2 skipped, 646 deselected, 2 warnings in 66.84s
+ ```
+ 
+ The only broad failures are the established unrelated Radar API template
+ tests, both caused by the ignored missing
+ `static/radar/dist/.vite/manifest.json`. The test-created `ZZ...` rows are
+ cleaned before and after each affected test.
++
++## Fix round 2 — shared-DB scoring cleanup ownership
++
++The scoring fixture had widened its cleanup from its original `SS%` prefix
++to `SS% OR ZZ%` when the Task 3c `ZZ...` regressions were added. Because the
++development database is shared, that broad `ZZ%` deletion could erase rows
++owned by another test or user.
++
++`test_radar_scoring.py` now declares the exact ticker set owned by this file:
++`SSA`, `SSB`, `SSNEW`, `SSOLD`, `SSNULL`, `SSNOPE`, `ZZGEN`, `ZZSCORED`,
++`ZZSCOPE`, and `ZZUNSCORED`. Its setup and teardown use the shared
++`_clear_owned_rows()` helper with `ticker.in_(...)`, not namespace prefixes.
++The new `test_row_cleanup_preserves_an_unowned_zz_sentinel` creates
++`ZZSENTINEL`, calls that helper, asserts the sentinel remains, and explicitly
++deletes its own sentinel in `finally`.
++
++### Watched failing mutation
++
++Temporarily replacing the exact `ticker.in_(_OWNED_TICKERS)` predicate with
++the former `ticker.like('SS%') | ticker.like('ZZ%')` predicate made the
++sentinel test fail with `assert 0 == 1`: the helper deleted the unowned
++`ZZSENTINEL` row. The exact predicate was then restored and the regression
++passed.
++
++### Final verification
++
++```text
++py -3.12 -m pytest tests/test_radar_scoring.py -v
++30 passed in 45.09s
++
++py -3.12 -m pytest tests/test_radar_config.py tests/test_radar_journal.py tests/test_radar_buckets.py tests/test_radar_profile.py tests/test_radar_scoring.py tests/test_radar_daemon.py -v
++141 passed in 47.63s
++```
+diff --git a/personal_apps/tests/test_radar_scoring.py b/personal_apps/tests/test_radar_scoring.py
+index 86764f4..5e3e675 100644
+--- a/personal_apps/tests/test_radar_scoring.py
++++ b/personal_apps/tests/test_radar_scoring.py
+@@ -9,36 +9,39 @@ import datetime as dt
+ import pytest
+ 
+ from app import app as flask_app
+ from extensions import db
+ from models import RadarBucketSource
+ from features.radar import scoring
+ from features.radar.config import source_config_version
+ 
+ MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
+ NOW = MONDAY + dt.timedelta(days=35)
++_OWNED_TICKERS = (
++    'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL', 'SSNOPE',
++    'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED',
++)
++
++
++def _clear_owned_rows():
++    RadarBucketSource.query.filter(
++        RadarBucketSource.ticker.in_(_OWNED_TICKERS)).delete(
++            synchronize_session=False)
++    db.session.commit()
+ 
+ 
+ @pytest.fixture()
+ def rows():
+     with flask_app.app_context():
+-        RadarBucketSource.query.filter(
+-            RadarBucketSource.ticker.like('SS%')
+-            | RadarBucketSource.ticker.like('ZZ%')).delete(
+-                synchronize_session=False)
+-        db.session.commit()
++        _clear_owned_rows()
+         yield
+-        RadarBucketSource.query.filter(
+-            RadarBucketSource.ticker.like('SS%')
+-            | RadarBucketSource.ticker.like('ZZ%')).delete(
+-                synchronize_session=False)
+-        db.session.commit()
++        _clear_owned_rows()
+ 
+ 
+ def add(when, count, ticker='SSA', source='stocktwits', status='ok',
+         version=None):
+     db.session.add(RadarBucketSource(
+         ticker=ticker, bucket_start=when, source=source,
+         mention_count=count, high_confidence_count=count, low_count=0,
+         distinct_authors=count, distinct_text_ratio=1.0,
+         engagement_weighted_count=float(count), status=status,
+         source_config_version=version or source_config_version()))
+@@ -48,20 +51,42 @@ def steady_history(ticker='SSA', per_bucket=2, days=30, source='stocktwits'):
+     """A boringly consistent ticker, so anything unusual is the test's doing.
+ 
+     2880 rows at 15-minute grain. Added to the session and committed once by
+     the caller -- committing per row makes this suite take minutes.
+     """
+     for step in range(days * 96):
+         add(MONDAY + dt.timedelta(minutes=15 * step), per_bucket,
+             ticker=ticker, source=source)
+ 
+ 
++def test_row_cleanup_preserves_an_unowned_zz_sentinel():
++    """This file's shared-DB cleanup must never claim another ZZ namespace."""
++    sentinel = 'ZZSENTINEL'
++    with flask_app.app_context():
++        RadarBucketSource.query.filter_by(ticker=sentinel).delete(
++            synchronize_session=False)
++        db.session.add(RadarBucketSource(
++            ticker=sentinel, bucket_start=NOW, source='sentinel',
++            mention_count=1, high_confidence_count=1, low_count=0,
++            distinct_authors=1, distinct_text_ratio=1.0,
++            engagement_weighted_count=1.0, status='ok',
++            source_config_version='sentinel'))
++        db.session.commit()
++        try:
++            _clear_owned_rows()
++            assert RadarBucketSource.query.filter_by(ticker=sentinel).count() == 1
++        finally:
++            RadarBucketSource.query.filter_by(ticker=sentinel).delete(
++                synchronize_session=False)
++            db.session.commit()
++
++
+ def test_a_normal_bucket_scores_near_zero(rows):
+     steady_history()
+     db.session.commit()
+     scoring.score_source('stocktwits', NOW)
+ 
+     row = RadarBucketSource.query.filter_by(
+         ticker='SSA', bucket_start=MONDAY + dt.timedelta(days=10)).one()
+     assert row.mention_z is not None
+     assert abs(row.mention_z) < 2
+ 

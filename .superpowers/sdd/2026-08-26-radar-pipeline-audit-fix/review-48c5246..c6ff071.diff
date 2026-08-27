@@ -1,0 +1,202 @@
+# Review package: 48c5246..c6ff071
+
+## Commits
+c6ff071 fix(radar): wire source cashtag policy and remove page cap
+
+## Files changed
+ personal_apps/features/radar/config.py   |  4 ----
+ personal_apps/features/radar/ingest.py   |  6 ++++--
+ personal_apps/tests/test_radar_config.py |  6 ++++++
+ personal_apps/tests/test_radar_ingest.py | 27 +++++++++++++++++++++++++--
+ 4 files changed, 35 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/personal_apps/features/radar/config.py b/personal_apps/features/radar/config.py
+index 1b899ff..905c481 100644
+--- a/personal_apps/features/radar/config.py
++++ b/personal_apps/features/radar/config.py
+@@ -404,24 +404,20 @@ REDDIT_MAX_POLL = dt.timedelta(hours=6)
+ 
+ # StockTwits publishes no rate-limit headers and twenty consecutive requests
+ # drew no 429, so this is a conservative budget rather than a documented
+ # ceiling. The daemon backs off on 429 regardless.
+ STOCKTWITS_REQUESTS_PER_HOUR = 150
+ 
+ # 15-minute grain. Fine enough for the 1h window in spec 6.9, coarse enough
+ # that a forever-retained table stays small.
+ BUCKET_MINUTES = 15
+ 
+-# Pages to walk per channel per cycle before giving up and
+-# marking the affected buckets `truncated` (spec 4.3).
+-PAGE_CAP = 10
+-
+ POST_RETENTION_DAYS = 30
+ 
+ # How long the mention journal is kept. Buckets are the durable artifact; the
+ # journal exists only so a bucket can be rebuilt while cycles are still
+ # arriving in it. Two days is generous against a catch-up after an outage --
+ # what it must outlast is the deepest cursor rewind, not the retention of
+ # anything the board reads.
+ MENTION_EVENT_RETENTION_HOURS = 48
+ 
+ # How long a price snapshot is worth keeping. The longest window the board or
+diff --git a/personal_apps/features/radar/ingest.py b/personal_apps/features/radar/ingest.py
+index f2635a5..adab325 100644
+--- a/personal_apps/features/radar/ingest.py
++++ b/personal_apps/features/radar/ingest.py
+@@ -8,21 +8,22 @@ import datetime as dt
+ import logging
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+ from models import RadarMention, RadarPost, RadarSourceCursor
+ 
+ from . import buckets, extraction, fingerprint, sentiment, universe
+ from .config import (
+     BUCKET_MINUTES, bare_token_confidence, bare_tokens_allowed,
+-    coin_collision_dropped, looks_like_bot_feed)
++    coin_collision_dropped, looks_like_bot_feed,
++    single_letter_cashtags_allowed)
+ 
+ logger = logging.getLogger('radar.ingest')
+ 
+ def _utcnow():
+     """Naive UTC, the convention every datetime in this codebase is stored in.
+ 
+     datetime.utcnow() is deprecated and slated for removal, and it printed a
+     warning into the service log on every cycle.
+     """
+     return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+@@ -58,35 +59,36 @@ def _advance_cursor(source, newest_seen):
+     if row is None:
+         row = RadarSourceCursor(source=source, cursor_utc=newest_seen)
+         db.session.add(row)
+     elif newest_seen > row.cursor_utc:
+         row.cursor_utc = newest_seen
+ 
+ 
+ def _extract_for(raw, lookup):
+     """Extract under the policy that applies to this post's source.
+ 
+-    Three per-source judgements, all about population rather than code:
++    Four per-source judgements, all about population rather than code:
+     whether a bare token can be read as a ticker at all, what an
+     uncorroborated one is WORTH, and whether a coin-shaped symbol means the
+     company or the coin.
+     """
+     # An automated feed is one publisher however many tickers it names, and
+     # it is not a person discussing anything. Dropped before extraction so the
+     # whole post goes -- config.looks_like_bot_feed carries what counts and
+     # why it matches the format's vocabulary rather than the symbols.
+     if looks_like_bot_feed('%s %s' % (raw.title or '', raw.body or '')):
+         return []
+ 
+     tickers = extraction.extract_tickers(
+         raw.title, raw.body, lookup,
+         allow_bare=bare_tokens_allowed(raw.source),
++        allow_single_letter=single_letter_cashtags_allowed(raw.source),
+         bare_confidence=bare_token_confidence(raw.source))
+     return [(symbol, confidence) for symbol, confidence in tickers
+             if not coin_collision_dropped(raw.source, symbol)]
+ 
+ 
+ def _store_mentioning_posts(raw_posts, lookup, now):
+     """Store only posts that mention a ticker, and their mentions.
+ 
+     Extraction runs before storage rather than after, which is what keeps the
+     firehose affordable: at 144k posts/hour, storing everything and extracting
+diff --git a/personal_apps/tests/test_radar_config.py b/personal_apps/tests/test_radar_config.py
+index 9208da9..4370613 100644
+--- a/personal_apps/tests/test_radar_config.py
++++ b/personal_apps/tests/test_radar_config.py
+@@ -2,20 +2,26 @@
+ """The source config version is what stops a source being added from
+ manufacturing a market-wide spike the next morning (spec 6.6). It has to be
+ stable across runs and sensitive to the list it hashes."""
+ from features.radar import config
+ 
+ 
+ def test_version_is_stable_across_calls():
+     assert config.source_config_version() == config.source_config_version()
+ 
+ 
++def test_the_superseded_page_cap_is_gone():
++    from features.radar import config
++
++    assert not hasattr(config, 'PAGE_CAP')
++
++
+ def test_version_changes_when_the_source_list_changes(monkeypatch):
+     before = config.source_config_version()
+     monkeypatch.setattr(config, 'SOURCES', config.SOURCES + ('newsource',))
+     assert config.source_config_version() != before
+ 
+ 
+ def test_version_changes_when_the_rollup_generation_changes(monkeypatch):
+     """A corrected aggregate population cannot share the old baseline."""
+     before = config.source_config_version()
+     monkeypatch.setattr(config, 'ROLLUP_GENERATION',
+diff --git a/personal_apps/tests/test_radar_ingest.py b/personal_apps/tests/test_radar_ingest.py
+index 8382d8b..9690fe3 100644
+--- a/personal_apps/tests/test_radar_ingest.py
++++ b/personal_apps/tests/test_radar_ingest.py
+@@ -55,22 +55,22 @@ def seeded(clean_radar):
+ def clean_radar():
+     with flask_app.app_context():
+         _wipe()
+         db.session.commit()
+         yield
+         _wipe()
+         db.session.commit()
+ 
+ 
+ def post(ident='t3_1', body='$ZZG is ripping', score=5, author='u1',
+-         minute=10, title=None):
+-    return RawPost(source='stocktwits', external_id=ident, channel='testsub',
++         minute=10, title=None, source='stocktwits'):
++    return RawPost(source=source, external_id=ident, channel='testsub',
+                    author=author,
+                    created_utc=dt.datetime(2026, 4, 15, 14, minute, 0),
+                    title=title, body=body, score=score, num_comments=0,
+                    url='https://example.invalid/%s' % ident)
+ 
+ 
+ def fetcher_for(result, source='stocktwits'):
+     def fetcher(since):
+         return result
+     return {source: fetcher}
+@@ -374,10 +374,33 @@ def test_a_person_naming_the_same_tickers_still_counts():
+     """Teeth. If the filter swallowed the tickers rather than the feed, the
+     assertion above would pass while Barrick became untrackable."""
+     from features.radar import ingest, universe
+ 
+     lookup = universe.annotate_distinctive({
+         'GOLD': {'name': 'Barrick Mining Corporation', 'exchange': 'NYSE'},
+     })
+     raw = post(body='$GOLD breaking out, miners finally waking up')
+ 
+     assert ingest._extract_for(raw, lookup) == [('GOLD', 'high')]
++
++
++def test_a_single_letter_cashtag_is_refused_on_a_general_network():
++    """`$M` on Bluesky is money shorthand, not Macy's.
++
++    Measured on live Bluesky: 119 of 3302 cashtag matches were single letters
++    and essentially all were prose -- "Tax @60% for over a $M", "make $B's".
++    config.SINGLE_LETTER_CASHTAGS has said so since it was written; nothing
++    passed it to the extractor until now, and 353 such mentions reached the
++    production corpus, 3.0% of the whole high-confidence set.
++    """
++    from features.radar import ingest
++
++    lookup = {'B': {'name': 'Barnes Group Inc.', 'exchange': 'NYSE',
++                    'distinctive': set()}}
++    general = post(ident='zz-single', body='make $B and youre set',
++                   source='bluesky')
++    finance = post(ident='zz-single-2', body='make $B and youre set',
++                   source='stocktwits')
++
++    assert ingest._extract_for(general, lookup) == []
++    # The same text on a finance-native population still yields the company.
++    assert ingest._extract_for(finance, lookup) == [('B', 'high')]

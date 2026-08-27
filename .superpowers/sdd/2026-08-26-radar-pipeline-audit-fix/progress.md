@@ -299,3 +299,59 @@ Ruling: Task 13 uses explicit membership before caching extraction, not
   eagerly, so the draft still re-extracts duplicate IDs. Cost if wrong is a
   few lines and a call-count regression; leaving it ships the exact duplicate
   work the task claims to remove.
+
+Task 9: complete (commits dedc90b..cc2d278, review clean). Per-subreddit
+  source identity shipped with migration 08316d3e4d77 (three source columns
+  widened to 48, chained from 1d26ac48e744). The first high-capability review
+  was NOT APPROVED with 2 Critical, 2 Important and 6 Minor; fix round 1
+  addressed all ten and the re-review APPROVED with zero new Critical or
+  Important. Broad gate 617 passed plus only the two established
+  missing-Vite-manifest failures; tsc clean; vitest green; single Alembic head.
+
+Task 9 Critical 1 (fixed): a Reddit cycle with nothing due wrote a zero-count
+  root `reddit` child row into every touched bucket, status `ok`, on what the
+  code's own comment calls the common path. It also inflated
+  RadarBucket.sources_ok. Absence rendered as zero, in the exact task meant to
+  stop that.
+
+Ruling: a not-due cycle records NOTHING for Reddit - not an `ok` zero and not
+  `missing`. `missing` means we tried and failed; not-due means we never
+  tried, so there is no observation to write. The review's suggested fix of
+  emitting per-subreddit `ok` entries was overruled because it claims coverage
+  for subs whose poll interval may not span the bucket. Implemented by making
+  `per_source_status` distinguish None (no information, keep the old
+  root fallback) from {} (explicitly nothing observed), tested with
+  `is not None` rather than truthiness. Cost if wrong is a bucket missing a
+  Reddit child it could have had; the alternative fabricates observations.
+
+Task 9 Critical 2 (fixed): `expand_sources` dropped the root, so every
+  pre-deploy root-`reddit` row would have vanished from the board and the
+  detail charts - and worse, mixed selections still marked those hours
+  measured from Bluesky/4chan while silently omitting Reddit's real stored
+  contribution. On a 1Y detail span that is permanent, not a transition.
+
+Ruling: split into strict `expand_sources` (concrete only) for scored reads
+  and root-inclusive `expand_sources_for_history` for raw-count reads. Cost if
+  wrong is two helpers a future reader might try to merge - documented at the
+  definition to prevent exactly that; collapsing them loses either history or
+  generation isolation.
+
+Ruling: Task 9 changes the POPULATION, not the PRESENTATION. The detail panel
+  keeps its single pooled `Reddit` venue row and user-facing labels are rooted;
+  per-subreddit rows and `r/<sub>` labels are NOT introduced. Surfacing
+  subreddits is a real product decision and must not ship as a side effect of
+  a data-population task. Cost if wrong is a deferred feature; shipping it
+  silently forecloses the choice.
+
+Ruling: venues are counted by ROOT (Important 3 + Minor 9, one decision). Two
+  subreddits share a platform, a user population and a rate-limit budget, so
+  they are not the two independent venues the corroboration signal and its UI
+  copy mean. Verified to reach the client, not stop at the server boundary.
+
+Task 9 deferred Minors for the final branch review: N1 the downgrade's width
+  guard fires after a DDL has already committed, which on MariaDB cannot be
+  rolled back; N2 four of the five scored reads' strictness is untested, which
+  weakens the Minor 10 closure argument; N3 broad `LIKE 'ZZ%'` teardowns
+  across five test files (PRE-EXISTING, not introduced here) - the shared-DB
+  hazard caught three times on this branch, still live; N4
+  `board.excluded['one_venue']` is dead in production (pre-existing).
