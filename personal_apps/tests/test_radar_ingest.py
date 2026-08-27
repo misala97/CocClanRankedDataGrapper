@@ -7,6 +7,7 @@ a post, and the aggregate fact that a ticker was discussed is not what needs
 forgetting (spec 4.1).
 """
 import datetime as dt
+import logging
 
 import pytest
 
@@ -261,6 +262,49 @@ def test_reddit_subreddits_write_only_their_own_status_rows(seeded):
             ticker=TEST_TICKER, source='reddit').count() == 0
 
 
+def test_tick_reports_reddit_aggregate_without_root_rollup(
+        seeded, monkeypatch, caplog):
+    """Operational root health is separate from concrete storage status."""
+    import run_radar_ingest as daemon
+
+    seen_rollup_statuses = []
+    real_roll_up = ingest.buckets.roll_up
+
+    def recording_roll_up(rows, statuses, touched):
+        seen_rollup_statuses.append(dict(statuses))
+        return real_roll_up(rows, statuses, touched)
+
+    monkeypatch.setattr(ingest.buckets, 'roll_up', recording_roll_up)
+    successful = post(
+        ident='i3-partial', body='$ZZG survived', author='i3-partial',
+        source='reddit:pennystocks')
+    fetchers = fetcher_for(FetchResult(
+        posts=[successful], status='truncated', catchup_depth=4,
+        per_source_status={
+            'reddit:pennystocks': 'ok',
+            'reddit:wallstreetbets': 'missing',
+        }), source='reddit')
+
+    with caplog.at_level(logging.INFO, logger=daemon.logger.name):
+        summary = daemon.tick(NOW.replace(tzinfo=dt.timezone.utc), fetchers)
+
+    assert seen_rollup_statuses == [{
+        'reddit:pennystocks': 'ok',
+        'reddit:wallstreetbets': 'missing',
+    }]
+    assert 'reddit' not in seen_rollup_statuses[0]
+    assert summary['aggregate_status'] == {'reddit': 'truncated'}
+    assert 'aggregate=reddit=truncated' in caplog.text
+    assert 'catchup_depth=reddit=4' in caplog.text
+    with flask_app.app_context():
+        from models import RadarBucketSource
+        stored_sources = {row.source for row in
+                          RadarBucketSource.query.filter_by(
+                              ticker=TEST_TICKER).all()}
+        assert stored_sources == {'reddit:pennystocks'}
+        assert 'reddit' not in stored_sources
+
+
 def test_a_successful_subreddit_survives_a_missing_aggregate_status(seeded):
     """A later refusal cannot discard comments already fetched this cycle."""
     successful = post(
@@ -400,6 +444,7 @@ def test_a_duplicate_external_id_is_extracted_once_and_refreshes_engagement(
     assert calls == ['dup-extract']
     assert result['posts_new'] == 1
     assert result['mentions'] == 1
+    assert result['aggregate_status'] == {'reddit': 'missing'}
     with flask_app.app_context():
         stored = RadarPost.query.filter_by(external_id='dup-extract').one()
         assert stored.score == 900
@@ -473,6 +518,23 @@ def test_a_failed_fetch_reports_no_catchup_depth(seeded):
 
     assert summary['per_source']['bluesky'] == 'missing'
     assert summary['catchup_depth']['bluesky'] is None
+
+
+def test_tick_visibly_logs_failed_fetch_depth_as_unknown(seeded, caplog):
+    import run_radar_ingest as daemon
+
+    def explode(since):
+        raise RuntimeError('nope')
+
+    with caplog.at_level(logging.INFO, logger=daemon.logger.name):
+        summary = daemon.tick(
+            NOW.replace(tzinfo=dt.timezone.utc), {'bluesky': explode})
+
+    assert summary['aggregate_status'] == {'bluesky': 'missing'}
+    assert summary['catchup_depth'] == {'bluesky': None}
+    assert 'aggregate=bluesky=missing' in caplog.text
+    assert 'catchup_depth=bluesky=unknown' in caplog.text
+    assert 'catchup_depth=bluesky=0' not in caplog.text
 
 
 def test_a_coin_collision_is_dropped_on_a_general_source(seeded, monkeypatch):

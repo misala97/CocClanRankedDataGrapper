@@ -227,7 +227,7 @@ def run_cycle(now, fetchers):
     nothing here knows which sources exist.
     """
     lookup = universe.load_lookup()
-    statuses, depths = {}, {}
+    statuses, aggregate_statuses, depths = {}, {}, {}
     all_mentions = []
     touched = set()
     posts_seen = posts_new = 0
@@ -246,9 +246,15 @@ def run_cycle(now, fetchers):
             # `missing` is the honest record of it: no row, never a zero.
             logger.exception('radar source %s failed this cycle', source)
             statuses[source] = 'missing'
+            aggregate_statuses[source] = 'missing'
             # Not zero: no fetch arrived to measure a catch-up depth.
             depths[source] = None
             continue
+        # Root-level operational health is distinct from durable storage
+        # identity. Reddit's aggregate may be truncated even while one
+        # concrete subreddit succeeded; operators need that verdict, while
+        # rollup must receive only the concrete statuses below.
+        aggregate_statuses[source] = result.status
         # A fetcher covering several source names reports each. Reddit does:
         # one cycle reads a slice of subreddits and each is its own source.
         # When those concrete statuses exist, the aggregate fetch verdict must
@@ -301,4 +307,5 @@ def run_cycle(now, fetchers):
 
     return {'posts_seen': posts_seen, 'posts_new': posts_new,
             'mentions': len(all_mentions), 'buckets_written': written,
-            'per_source': statuses, 'catchup_depth': depths}
+            'per_source': statuses, 'aggregate_status': aggregate_statuses,
+            'catchup_depth': depths}

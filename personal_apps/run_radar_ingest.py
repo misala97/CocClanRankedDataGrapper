@@ -187,6 +187,15 @@ def build_fetchers():
     }
 
 
+def _format_operational_map(values):
+    """Stable one-line source report; None is visibly unknown, never zero."""
+    if not values:
+        return 'none'
+    return ','.join(
+        '%s=%s' % (source, 'unknown' if value is None else value)
+        for source, value in sorted(values.items()))
+
+
 def tick(now_utc, fetchers):
     """One cycle across every source, with failures contained.
 
@@ -199,12 +208,16 @@ def tick(now_utc, fetchers):
     except Exception:
         logger.exception('radar ingest cycle failed')
         return {'status': 'error', 'posts_seen': 0, 'posts_new': 0,
-                'mentions': 0, 'buckets_written': 0, 'per_source': {}}
+                'mentions': 0, 'buckets_written': 0, 'per_source': {},
+                'aggregate_status': {}, 'catchup_depth': {}}
 
-    logger.info('radar cycle posts=%d new=%d mentions=%d buckets=%d sources=%s',
+    logger.info('radar cycle posts=%d new=%d mentions=%d buckets=%d sources=%s '
+                'aggregate=%s catchup_depth=%s',
                 summary['posts_seen'], summary['posts_new'],
                 summary['mentions'], summary['buckets_written'],
-                summary['per_source'])
+                summary['per_source'],
+                _format_operational_map(summary['aggregate_status']),
+                _format_operational_map(summary['catchup_depth']))
     return summary
 
 

@@ -41,8 +41,8 @@ class FetchResult:
     rates: dict = dataclasses.field(default_factory=dict)
     # Status per emitted source name, where one fetch covers several. Reddit
     # reads a slice of subreddits and each is its own source; the rolled-up
-    # `status` above is what the cycle reports, and this is what the rollup
-    # stamps on each source's rows.
+    # `status` above is retained in the cycle's root-level aggregate report,
+    # and this is what the rollup stamps on each concrete source's rows.
     #
     # THREE states, and the difference between the last two is the difference
     # between an absence and a zero:

@@ -51,7 +51,8 @@ def test_tick_returns_the_cycle_summary(monkeypatch):
     monkeypatch.setattr(daemon.ingest, 'run_cycle',
                         lambda now, fetchers: {'per_source': {}, 'mentions': 3,
                                               'buckets_written': 1,
-                                              'catchup_depth': 1,
+                                              'aggregate_status': {},
+                                              'catchup_depth': {},
                                               'posts_seen': 3, 'posts_new': 3})
     result = daemon.tick(_utc(2026, 4, 15, 14),
                          fetchers={'bluesky': lambda s: None})
@@ -68,6 +69,9 @@ def test_a_cycle_that_raises_does_not_kill_the_daemon(monkeypatch):
     result = daemon.tick(_utc(2026, 4, 15, 14),
                          fetchers={'bluesky': lambda s: None})
     assert result['status'] == 'error'
+    assert result['per_source'] == {}
+    assert result['aggregate_status'] == {}
+    assert result['catchup_depth'] == {}
 
 
 def test_every_configured_source_gets_a_fetcher():
