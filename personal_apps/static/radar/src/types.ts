@@ -94,6 +94,9 @@ export interface Breakdown {
   bullish: number
   neutral: number
   bearish: number
+  /** How often the word list and the model read the same post the opposite
+   *  way -- the sarcasm the lexicon alone cannot see. */
+  disagreements: number
   /** The pump tell: one account posting forty times reads as forty mentions
    *  everywhere else on the surface. */
   top_author_share: number | null

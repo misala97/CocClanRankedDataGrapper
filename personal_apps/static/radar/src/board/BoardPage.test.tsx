@@ -54,7 +54,7 @@ function detail(ticker = 'AAA'): Detail {
     },
     breakdown: {
       venues: [{ source: 'bluesky', mentions: 20, voices: 9 }],
-      bullish: 4, neutral: 10, bearish: 2,
+      bullish: 4, neutral: 10, bearish: 2, disagreements: 1,
       top_author_share: 0.2, top_two_share: 0.3,
       peak_hour: '2026-08-22T14:00:00Z', peak_count: 9,
       first_seen: '2026-08-18', mentions: 20, voices: 9,

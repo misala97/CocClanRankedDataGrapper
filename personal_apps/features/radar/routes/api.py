@@ -253,6 +253,10 @@ def serialize_detail(d):
             'bullish': b.bullish,
             'neutral': b.neutral,
             'bearish': b.bearish,
+            # How often the word list and the model read the same post the
+            # opposite way. Both scores exist so this is answerable, and a
+            # disagreement is the sarcasm the lexicon cannot see.
+            'disagreements': b.disagreements,
             'top_author_share': b.top_author_share,
             'top_two_share': b.top_two_share,
             'peak_hour': b.peak_hour.isoformat() + 'Z' if b.peak_hour else None,

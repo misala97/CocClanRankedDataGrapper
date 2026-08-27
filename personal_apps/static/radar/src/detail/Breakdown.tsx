@@ -73,6 +73,16 @@ export function Breakdown({ breakdown, windowHours }: {
               <span className="q">
                 <b>{b.neutral}</b> carried no wording at all
               </span>
+              {/* Both scores are kept precisely so this comparison is
+                  possible -- a post the word list and the model read
+                  opposite ways is a post that was being sarcastic. Words,
+                  not colour: green and red mean price direction here and
+                  nothing else. */}
+              {b.disagreements > 0 && (
+                <span className="q">
+                  <b>{b.disagreements}</b> read differently by the model
+                </span>
+              )}
             </p>
           )}
 

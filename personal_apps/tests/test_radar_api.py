@@ -424,3 +424,46 @@ def test_one_unknown_name_rejects_the_whole_selection():
 def test_whitespace_and_empty_entries_are_forgiven():
     """A person editing the address bar is not a bug."""
     assert _parse(segment=' small , large ,').segments == ['small', 'large']
+
+
+def _stub_detail(breakdown):
+    """The minimal detail_panel.build() return serialize_detail reads.
+
+    Built by hand from detail_panel.py's and detail.py's own dataclasses
+    rather than through detail_panel.build itself, so tests that use this do
+    not depend on which tickers the local database happens to hold.
+    """
+    import datetime as dt
+
+    from features.radar import detail, detail_panel
+
+    return detail_panel.Detail(
+        ticker='ZZSTUB', name='Stub Corp', exchange='Q', segment='micro',
+        market_cap=None, ipo_date=None, price=None, price_move=None,
+        price_status='ok', session='closed', span='1D',
+        chart=detail.Chart(start=dt.date(2026, 3, 12), closes=[], chatter=[],
+                           watched_from=None, step_minutes=15),
+        breakdown=breakdown, posts=[], post_total=0,
+        mentions=breakdown.mentions, expected=0.0, baseline_days=None)
+
+
+def test_the_detail_payload_carries_the_sarcasm_signal():
+    """Two sentiment scores are kept so their DISAGREEMENT can be read. Until
+    now nothing compared them, which made the second one decoration.
+
+    Asserted on the serializer rather than through a route, so it does not
+    depend on which tickers the local database happens to hold.
+    """
+    import dataclasses
+
+    from features.radar import detail_panel
+    from features.radar.routes import api
+
+    breakdown = detail_panel.Breakdown(
+        venues=[], bullish=3, neutral=1, bearish=2, disagreements=2,
+        top_author_share=None, top_two_share=None, peak_hour=None,
+        peak_count=0, first_seen=None, mentions=6, voices=4)
+    built = _stub_detail(breakdown)
+
+    payload = api.serialize_detail(built)
+    assert payload['breakdown']['disagreements'] == 2
