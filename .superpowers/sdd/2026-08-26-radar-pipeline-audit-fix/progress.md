@@ -445,3 +445,21 @@ Immediate continuation after authentication: rerun the one Sonnet review over
   `task-13-brief.md`, `task-10-13-report.md`, and
   `task-10-13-review-package.md`; write `task-10-13-review.md`; return only the
   prescribed verdict line. Do not begin Tasks 14-17 first.
+
+Tasks 10-13: complete (commits 4264036..d5997c9, review clean). The
+  absence-shaped batch: unknown rate/depth instead of a measured zero (10),
+  unknown model pricing with visible unpriced tokens (11), honest interior
+  intraday gaps (12), and breadth accounting with a named floor and
+  extract-once (13). One Sonnet review over the exact four-commit range
+  returned APPROVED with 0 Critical, 0 Important, teeth 9/9. Broad gate 633
+  passed, 0 failures with the generated manifest present.
+
+Note: the Sonnet review that the previous checkpoint recorded as BLOCKED was
+  blocked only for Codex, whose local Claude CLI OAuth had expired. Dispatching
+  a Sonnet subagent directly needs no CLI authentication, so the blocker did
+  not apply and no `claude auth login` was required. Prefer the direct dispatch
+  over shelling out to the CLI for any remaining review.
+
+Tasks 10-13 deferred Minor: `features/radar/spend.py` `summary.unpriced`'s
+  local `total` shadows the outer `summary.total` function name. Confirmed not
+  a bug by mutation - closures resolve correctly - readability only.
