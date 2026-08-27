@@ -652,3 +652,20 @@ def test_a_daily_chart_still_reports_a_days_step(clean):
         chart = detail.chart_for(f'{PREFIX}A', NOW.date(), 3, {}, {}, None)
 
         assert chart.step_minutes == 1440
+
+
+def test_the_breakdown_prefers_the_model_verdict_over_the_lexicon():
+    """The one surface that draws a tone bar never read the verdicts.
+
+    Production 2026-08-26: 11,789 of 11,794 scored mentions carried a model
+    verdict, at $1.24 a day, and the panel rendered the forty-word lexicon.
+    """
+    from features.radar import detail_panel
+
+    assert detail_panel._tone_of(lexicon=0.8, verdict='bearish') == 'bearish'
+    assert detail_panel._tone_of(lexicon=0.8, verdict=None) == 'bullish'
+    # `unclear` votes neither way AND blocks the lexicon: it means the post
+    # named the ticker without saying anything about it, and that read is
+    # better informed than the word list it overrides.
+    assert detail_panel._tone_of(lexicon=0.8, verdict='unclear') is None
+    assert detail_panel._tone_of(lexicon=None, verdict=None) is None

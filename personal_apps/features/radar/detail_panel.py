@@ -47,6 +47,10 @@ class Breakdown:
     bullish: int
     neutral: int
     bearish: int
+    # How often the word list and the model read the same post the opposite
+    # way. Both scores are kept precisely so this is answerable -- a
+    # disagreement is the sarcasm the lexicon alone cannot see.
+    disagreements: int
     top_author_share: float | None
     top_two_share: float | None
     peak_hour: dt.datetime | None
@@ -123,6 +127,35 @@ def _posts(ticker, sources, since, now):
     return rows, base.count()
 
 
+def _tone_of(lexicon, verdict):
+    """'bullish', 'bearish' or None, from the two scores together.
+
+    The model outranks the word list where both spoke. The lexicon is forty
+    words with a negation window: it reads "great, another green day" after a
+    crash as bullish, which is exactly the case spec 6.11 specified a re-read
+    for.
+
+    `unclear` votes neither way and BLOCKS the lexicon. It means the post named
+    the ticker without expressing a view, and that read is better informed than
+    the word list it overrides.
+
+    A NULL verdict falls back to the lexicon rather than counting as toneless:
+    verdicts arrive on a scheduled pass, so a fresh mention has none, and
+    treating that as silence would make the newest posts look even-handed.
+    """
+    if verdict == 'bullish':
+        return 'bullish'
+    if verdict == 'bearish':
+        return 'bearish'
+    if verdict is not None:            # 'neutral' or 'unclear'
+        return None
+    if lexicon and lexicon > 0:
+        return 'bullish'
+    if lexicon and lexicon < 0:
+        return 'bearish'
+    return None
+
+
 def breakdown_for(ticker, sources, since, now):
     """One pass over the window's mentions, taken apart several ways.
 
@@ -133,8 +166,10 @@ def breakdown_for(ticker, sources, since, now):
     """
     sources = expand_sources_for_history(sources)
     score = RadarMention.lexicon_sentiment
+    verdict = RadarMention.llm_sentiment
     rows = (db.session.query(RadarPost.source, RadarPost.author,
-                             RadarPost.channel, RadarPost.created_utc, score)
+                             RadarPost.channel, RadarPost.created_utc, score,
+                             verdict)
             .join(RadarMention, RadarMention.post_id == RadarPost.id)
             .filter(RadarMention.ticker == ticker,
                     RadarPost.source.in_(list(sources)),
@@ -145,9 +180,9 @@ def breakdown_for(ticker, sources, since, now):
     by_source = {}
     by_author = collections.Counter()
     by_hour = collections.Counter()
-    bullish = bearish = 0
+    bullish = bearish = disagreements = 0
 
-    for source, author, channel, when, sentiment in rows:
+    for source, author, channel, when, sentiment, llm in rows:
         # A VENUE IS A ROOT. Every stored Reddit name -- the eight
         # `reddit:<sub>` and the pre-split bare `reddit` -- pools into one
         # `reddit` row, which is what this table showed before the subreddit
@@ -166,10 +201,17 @@ def breakdown_for(ticker, sources, since, now):
         entry[1].add(channel if source_kind(source) == 'broadcast' else author)
         by_author[author] += 1
         by_hour[when.replace(minute=0, second=0, microsecond=0)] += 1
-        if sentiment and sentiment > 0:
+        tone = _tone_of(sentiment, llm)
+        if tone == 'bullish':
             bullish += 1
-        elif sentiment and sentiment < 0:
+        elif tone == 'bearish':
             bearish += 1
+        # A post the word list read one way and the model read the other is a
+        # post that was being sarcastic. Both scores are kept precisely so this
+        # comparison is possible; nothing performed it until now.
+        lexicon_only = _tone_of(sentiment, None)
+        if llm is not None and lexicon_only is not None and tone != lexicon_only:
+            disagreements += 1
 
     total = len(rows)
     ranked = by_author.most_common(2)
@@ -185,6 +227,7 @@ def breakdown_for(ticker, sources, since, now):
         # most of them. Hiding it would turn a handful of scored posts into a
         # confident-looking sentiment reading.
         neutral=total - bullish - bearish,
+        disagreements=disagreements,
         top_author_share=(ranked[0][1] / total) if total and ranked else None,
         top_two_share=((sum(count for _, count in ranked) / total)
                        if total and ranked else None),
