@@ -175,11 +175,43 @@ def passes(entry):
             and entry['distinct_authors'] >= 5)
 
 
-def main():
+def _daemon_is_running():
+    """True when radar_ingest holds the Reddit budget.
+
+    Reddit's anonymous feed budget is per IP and is one request per window --
+    `x-ratelimit-remaining` reads 0.0 after a single call, measured on the VPS
+    2026-08-25. This script asks every 45 seconds and the daemon every 120, so
+    run together they refuse each other, and the daemon's cycle then reports
+    `missing` and writes no buckets at all. Nothing else coordinates them.
+
+    systemctl only exists where the daemon is deployed. Anywhere else the
+    answer is no, which is right: a dev machine is not sharing the budget.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which('systemctl') is None:
+        return False
+    result = subprocess.run(['systemctl', 'is-active', 'radar_ingest'],
+                            capture_output=True, text=True)
+    return result.stdout.strip() == 'active'
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--sleep', type=float, default=SLEEP,
                         help='seconds between requests; lower risks a 429')
-    args = parser.parse_args()
+    parser.add_argument('--anyway', action='store_true',
+                        help='run even while radar_ingest holds the budget')
+    args = parser.parse_args(argv)
+
+    if _daemon_is_running() and not args.anyway:
+        print('radar_ingest is running and shares this IP\'s Reddit budget --\n'
+              'one request per window, so the two will refuse each other and\n'
+              'the daemon will write no buckets while this runs.\n\n'
+              'Stop it first:  systemctl stop radar_ingest\n'
+              'Or override:    --anyway', file=sys.stderr)
+        return 1
 
     with app.app_context():
         lookup = universe.load_lookup()
@@ -221,4 +253,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main() or 0)
