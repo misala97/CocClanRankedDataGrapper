@@ -463,3 +463,30 @@ Note: the Sonnet review that the previous checkpoint recorded as BLOCKED was
 Tasks 10-13 deferred Minor: `features/radar/spend.py` `summary.unpriced`'s
   local `total` shadows the outer `summary.total` function name. Confirmed not
   a bug by mutation - closures resolve correctly - readability only.
+
+Tasks 14-17: complete (commits f1dddee..d7fc03d, review clean). The detail
+  panel now reads the model verdicts it was paying for (14) and renders where
+  they disagree with the lexicon (15); `provisional` means a thin baseline
+  rather than every row on the board (16); the cost docstring matches the
+  measured figures (17). Task 16 added migration 35c3ae366677 turning
+  `baseline_days` from SmallInteger to Float, chained off 08316d3e4d77, single
+  head. Sonnet review returned NEEDS_FIXES with 2 Important and 3 Minor; fix
+  round 1 (d7fc03d) closed all five and the re-review APPROVED with nothing new
+  at any severity. Broad gate 640 passed; tsc clean; vitest green.
+
+Tasks 14-17 Important 1 (fixed): making the `provisional` mark honest made the
+  sentence underneath it look broken. `baseline_days` became an unrounded
+  float and `phrasing.read_clauses` interpolated it straight into prose - "The
+  baseline is 0.041666666666666664 days old, not 30". `phrasing.py` was in no
+  brief's file list; it was in scope because Task 16's change is what broke it.
+  A fix that lands correctly in one surface and wrong in its neighbour is not
+  done.
+
+Tasks 14-17 Important 2 (fixed): the disagreement-counting loop in
+  `detail_panel.py` had zero integration coverage - replacing its condition
+  with `if False:` left all 69 covering tests green. The tests exercised the
+  pure `_tone_of` helper and a hand-built `Breakdown` literal, never the loop.
+  A toothless test sitting on the batch's headline deliverable, and the same
+  class of defect the whole audit exists to find. Closed with a test driving
+  real rows carrying disagreeing verdicts, verified under the same `if False:`
+  mutation.

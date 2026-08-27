@@ -1,0 +1,625 @@
+diff --git a/personal_apps/features/radar/detail_panel.py b/personal_apps/features/radar/detail_panel.py
+index 1c92280..db24bba 100644
+--- a/personal_apps/features/radar/detail_panel.py
++++ b/personal_apps/features/radar/detail_panel.py
+@@ -47,6 +47,10 @@ class Breakdown:
+     bullish: int
+     neutral: int
+     bearish: int
++    # How often the word list and the model read the same post the opposite
++    # way. Both scores are kept precisely so this is answerable -- a
++    # disagreement is the sarcasm the lexicon alone cannot see.
++    disagreements: int
+     top_author_share: float | None
+     top_two_share: float | None
+     peak_hour: dt.datetime | None
+@@ -78,7 +82,7 @@ class Detail:
+     # the same numbers.
+     mentions: int
+     expected: float
+-    baseline_days: int | None
++    baseline_days: float | None
+ 
+ 
+ def window_figures(ticker, sources, since, now):
+@@ -123,6 +127,35 @@ def _posts(ticker, sources, since, now):
+     return rows, base.count()
+ 
+ 
++def _tone_of(lexicon, verdict):
++    """'bullish', 'bearish' or None, from the two scores together.
++
++    The model outranks the word list where both spoke. The lexicon is forty
++    words with a negation window: it reads "great, another green day" after a
++    crash as bullish, which is exactly the case spec 6.11 specified a re-read
++    for.
++
++    `unclear` votes neither way and BLOCKS the lexicon. It means the post named
++    the ticker without expressing a view, and that read is better informed than
++    the word list it overrides.
++
++    A NULL verdict falls back to the lexicon rather than counting as toneless:
++    verdicts arrive on a scheduled pass, so a fresh mention has none, and
++    treating that as silence would make the newest posts look even-handed.
++    """
++    if verdict == 'bullish':
++        return 'bullish'
++    if verdict == 'bearish':
++        return 'bearish'
++    if verdict is not None:            # 'neutral' or 'unclear'
++        return None
++    if lexicon and lexicon > 0:
++        return 'bullish'
++    if lexicon and lexicon < 0:
++        return 'bearish'
++    return None
++
++
+ def breakdown_for(ticker, sources, since, now):
+     """One pass over the window's mentions, taken apart several ways.
+ 
+@@ -133,8 +166,10 @@ def breakdown_for(ticker, sources, since, now):
+     """
+     sources = expand_sources_for_history(sources)
+     score = RadarMention.lexicon_sentiment
++    verdict = RadarMention.llm_sentiment
+     rows = (db.session.query(RadarPost.source, RadarPost.author,
+-                             RadarPost.channel, RadarPost.created_utc, score)
++                             RadarPost.channel, RadarPost.created_utc, score,
++                             verdict)
+             .join(RadarMention, RadarMention.post_id == RadarPost.id)
+             .filter(RadarMention.ticker == ticker,
+                     RadarPost.source.in_(list(sources)),
+@@ -145,9 +180,9 @@ def breakdown_for(ticker, sources, since, now):
+     by_source = {}
+     by_author = collections.Counter()
+     by_hour = collections.Counter()
+-    bullish = bearish = 0
++    bullish = bearish = disagreements = 0
+ 
+-    for source, author, channel, when, sentiment in rows:
++    for source, author, channel, when, sentiment, llm in rows:
+         # A VENUE IS A ROOT. Every stored Reddit name -- the eight
+         # `reddit:<sub>` and the pre-split bare `reddit` -- pools into one
+         # `reddit` row, which is what this table showed before the subreddit
+@@ -166,10 +201,17 @@ def breakdown_for(ticker, sources, since, now):
+         entry[1].add(channel if source_kind(source) == 'broadcast' else author)
+         by_author[author] += 1
+         by_hour[when.replace(minute=0, second=0, microsecond=0)] += 1
+-        if sentiment and sentiment > 0:
++        tone = _tone_of(sentiment, llm)
++        if tone == 'bullish':
+             bullish += 1
+-        elif sentiment and sentiment < 0:
++        elif tone == 'bearish':
+             bearish += 1
++        # A post the word list read one way and the model read the other is a
++        # post that was being sarcastic. Both scores are kept precisely so this
++        # comparison is possible; nothing performed it until now.
++        lexicon_only = _tone_of(sentiment, None)
++        if llm is not None and lexicon_only is not None and tone != lexicon_only:
++            disagreements += 1
+ 
+     total = len(rows)
+     ranked = by_author.most_common(2)
+@@ -185,6 +227,7 @@ def breakdown_for(ticker, sources, since, now):
+         # most of them. Hiding it would turn a handful of scored posts into a
+         # confident-looking sentiment reading.
+         neutral=total - bullish - bearish,
++        disagreements=disagreements,
+         top_author_share=(ranked[0][1] / total) if total and ranked else None,
+         top_two_share=((sum(count for _, count in ranked) / total)
+                        if total and ranked else None),
+diff --git a/personal_apps/features/radar/leaderboard.py b/personal_apps/features/radar/leaderboard.py
+index 028c148..efe881b 100644
+--- a/personal_apps/features/radar/leaderboard.py
++++ b/personal_apps/features/radar/leaderboard.py
+@@ -63,7 +63,7 @@ class Row:
+     price_move: object
+     direction: str
+     price_status: str
+-    baseline_days: int | None
++    baseline_days: float | None
+     marks: list
+ 
+ 
+@@ -287,7 +287,12 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+         if venues == 1 and selected_venues > 1:
+             marks.append('single-source')
+         if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
+-            marks.append('provisional')
++            # Two different facts wear this badge, and only one is about the
++            # ticker. A NEW ticker has thin history of its own; every ticker on
++            # the board has thin history when the extraction rules changed
++            # recently, because baselines are built per config version. Saying
++            # `provisional` for both made it fire on all of them.
++            marks.append('provisional' if baseline_days >= 1.0 else 'warming-up')
+         if any(part.truncated for part in parts):
+             marks.append('partial')
+ 
+diff --git a/personal_apps/features/radar/llm_sentiment.py b/personal_apps/features/radar/llm_sentiment.py
+index 5e0b019..7d2a6d1 100644
+--- a/personal_apps/features/radar/llm_sentiment.py
++++ b/personal_apps/features/radar/llm_sentiment.py
+@@ -19,11 +19,19 @@ counted mention is scored, and rescoring re-reads the same buckets, so there
+ is no discontinuity to warm up from. config.source_config_version's own
+ docstring draws that line; this stays on the far side of it.
+ 
+-COST. About 1335 scored mentions a day, ~100 input tokens each and one word
+-back, batched. At Haiku's rates that is roughly twenty cents a day. The
+-estimate in spec 6.11 -- "order of 150k input tokens/day, cents" -- turns out
+-to have been accurate for exactly this population, and is wrong by two orders
+-of magnitude for any larger one.
++COST. Measured, not estimated, on 2026-08-25: 344 calls, 798,198 input tokens,
++89,281 output, $1.2446 for the day. The earlier figure in this docstring --
++"about 1335 scored mentions a day ... roughly twenty cents" -- was 5x low on
++volume and 6x low on cost, because it counted the mentions a day's BUCKETS
++carry rather than the mentions the pass is handed. spec 6.11's own estimate
++("order of 150k input tokens/day, cents") is wrong by the same factor.
++
++No daily ceiling. PASS_LIMIT caps one pass at 400 and the pass runs every ten
++minutes, so the theoretical maximum is 57,600 mentions a day against an
++observed 6,880 -- the ceiling that matters is how many mentions ingest
++produces, and a spend cap would silently stop reading tone rather than
++signalling that something upstream had changed. The figure is on the board;
++watch it there.
+ """
+ import json
+ import logging
+diff --git a/personal_apps/features/radar/routes/api.py b/personal_apps/features/radar/routes/api.py
+index 233d04d..796c56c 100644
+--- a/personal_apps/features/radar/routes/api.py
++++ b/personal_apps/features/radar/routes/api.py
+@@ -253,6 +253,10 @@ def serialize_detail(d):
+             'bullish': b.bullish,
+             'neutral': b.neutral,
+             'bearish': b.bearish,
++            # How often the word list and the model read the same post the
++            # opposite way. Both scores exist so this is answerable, and a
++            # disagreement is the sarcasm the lexicon cannot see.
++            'disagreements': b.disagreements,
+             'top_author_share': b.top_author_share,
+             'top_two_share': b.top_two_share,
+             'peak_hour': b.peak_hour.isoformat() + 'Z' if b.peak_hour else None,
+diff --git a/personal_apps/features/radar/scoring.py b/personal_apps/features/radar/scoring.py
+index 63efa85..c3c8eee 100644
+--- a/personal_apps/features/radar/scoring.py
++++ b/personal_apps/features/radar/scoring.py
+@@ -149,7 +149,10 @@ def score_source(source, now, lookback_days=30, excluded=None):
+                                         prior_weight=PRIOR_WEIGHT)
+         k = baselines.dispersion(good, prof, rate)
+         span = max(o.bucket_start for o in good) - min(o.bucket_start for o in good)
+-        baseline_days = span.days
++        # Fractional. `.days` truncated twenty-three hours to zero, which put
++        # every row under PROVISIONAL_BASELINE_DAYS forever -- a mark that
++        # fires on 100% of a board carries no information.
++        baseline_days = span.total_seconds() / 86400.0
+ 
+         for row in rows:
+             # A source that was DOWN has nothing to be surprised about --
+diff --git a/personal_apps/migrations/versions/35c3ae366677_widen_radar_bucket_sources_baseline_days.py b/personal_apps/migrations/versions/35c3ae366677_widen_radar_bucket_sources_baseline_days.py
+new file mode 100644
+index 0000000..d74df3c
+--- /dev/null
++++ b/personal_apps/migrations/versions/35c3ae366677_widen_radar_bucket_sources_baseline_days.py
+@@ -0,0 +1,32 @@
++"""widen radar bucket sources baseline days
++
++Revision ID: 35c3ae366677
++Revises: 08316d3e4d77
++Create Date: 2026-08-27 15:56:10.620302
++
++"""
++from alembic import op
++import sqlalchemy as sa
++from sqlalchemy.dialects import mysql
++
++# revision identifiers, used by Alembic.
++revision = '35c3ae366677'
++down_revision = '08316d3e4d77'
++branch_labels = None
++depends_on = None
++
++
++def upgrade():
++    # Float since 2026-08-26. SmallInteger stored span.days, and .days
++    # truncated twenty-three hours of history to zero -- which put every row
++    # on the board under PROVISIONAL_BASELINE_DAYS permanently (147,228 of
++    # 147,429 scored Bluesky rows in production).
++    op.alter_column('radar_bucket_sources', 'baseline_days',
++                    existing_type=mysql.SMALLINT(),
++                    type_=sa.Float(), existing_nullable=True)
++
++
++def downgrade():
++    op.alter_column('radar_bucket_sources', 'baseline_days',
++                    existing_type=sa.Float(),
++                    type_=mysql.SMALLINT(), existing_nullable=True)
+diff --git a/personal_apps/models.py b/personal_apps/models.py
+index 23c8796..6e06e0e 100644
+--- a/personal_apps/models.py
++++ b/personal_apps/models.py
+@@ -709,7 +709,10 @@ class RadarBucketSource(db.Model):
+     expected                  = db.Column(db.Float, nullable=True)
+     variance                  = db.Column(db.Float, nullable=True)
+     mention_z                 = db.Column(db.Float, nullable=True)
+-    baseline_days             = db.Column(db.SmallInteger, nullable=True)
++    # Float since 2026-08-26. SmallInteger meant span.days, and .days truncated
++    # twenty-three hours of history to zero -- which put every row on the board
++    # under PROVISIONAL_BASELINE_DAYS permanently.
++    baseline_days             = db.Column(db.Float, nullable=True)
+ 
+ 
+ class RadarPollState(db.Model):
+diff --git a/personal_apps/static/radar/src/board/BoardPage.test.tsx b/personal_apps/static/radar/src/board/BoardPage.test.tsx
+index 58ccdd1..2eae8e8 100644
+--- a/personal_apps/static/radar/src/board/BoardPage.test.tsx
++++ b/personal_apps/static/radar/src/board/BoardPage.test.tsx
+@@ -54,7 +54,7 @@ function detail(ticker = 'AAA'): Detail {
+     },
+     breakdown: {
+       venues: [{ source: 'bluesky', mentions: 20, voices: 9 }],
+-      bullish: 4, neutral: 10, bearish: 2,
++      bullish: 4, neutral: 10, bearish: 2, disagreements: 1,
+       top_author_share: 0.2, top_two_share: 0.3,
+       peak_hour: '2026-08-22T14:00:00Z', peak_count: 9,
+       first_seen: '2026-08-18', mentions: 20, voices: 9,
+diff --git a/personal_apps/static/radar/src/detail/Breakdown.tsx b/personal_apps/static/radar/src/detail/Breakdown.tsx
+index 6033255..f161c46 100644
+--- a/personal_apps/static/radar/src/detail/Breakdown.tsx
++++ b/personal_apps/static/radar/src/detail/Breakdown.tsx
+@@ -73,6 +73,16 @@ export function Breakdown({ breakdown, windowHours }: {
+               <span className="q">
+                 <b>{b.neutral}</b> carried no wording at all
+               </span>
++              {/* Both scores are kept precisely so this comparison is
++                  possible -- a post the word list and the model read
++                  opposite ways is a post that was being sarcastic. Words,
++                  not colour: green and red mean price direction here and
++                  nothing else. */}
++              {b.disagreements > 0 && (
++                <span className="q">
++                  <b>{b.disagreements}</b> read differently by the model
++                </span>
++              )}
+             </p>
+           )}
+ 
+diff --git a/personal_apps/static/radar/src/format.ts b/personal_apps/static/radar/src/format.ts
+index ee66837..ea1bb8e 100644
+--- a/personal_apps/static/radar/src/format.ts
++++ b/personal_apps/static/radar/src/format.ts
+@@ -113,6 +113,10 @@ export const MARK_WHY: Record<string, string> = {
+   partial:
+     'A source was truncated during this window, so the count is real but ' +
+     'incomplete. The true figure is higher.',
++  'warming-up':
++    'Under a day of baseline history, because the extraction rules changed ' +
++    'recently and older data no longer counts toward it. Not a new ticker -- ' +
++    'every ticker on the board is warming up together.',
+ }
+ 
+ /** "22:14 UTC" -- the board's own clock, always UTC.
+diff --git a/personal_apps/static/radar/src/list/ListPane.tsx b/personal_apps/static/radar/src/list/ListPane.tsx
+index aab636f..82e4778 100644
+--- a/personal_apps/static/radar/src/list/ListPane.tsx
++++ b/personal_apps/static/radar/src/list/ListPane.tsx
+@@ -20,6 +20,10 @@ const UNIVERSAL: Record<Mark, string> = {
+   'single-source': 'every row here came from a single source',
+   'no-print': 'no tape has printed in this window',
+   partial: 'every source here was truncated, so the counts are low',
++  // Distinct from `provisional`: this fires when the extraction rules
++  // changed recently, not when a ticker itself is new -- see marks.test.tsx.
++  'warming-up': 'the extraction rules changed recently, so every baseline '
++    + 'here is starting over',
+ }
+ 
+ /** Marks shared by the whole board, in the order they are written above.
+@@ -46,10 +50,16 @@ function Finding({ payload, shared }: {
+ }) {
+   const count = payload.rows.length
+   const tickers = count === 1 ? '1 ticker' : `${count} tickers`
+-  const baselines = shared.includes('provisional')
+-    ? UNIVERSAL.provisional
+-    : 'baselines over 30 days'
+-  const rest = shared.filter((mark) => mark !== 'provisional')
++  // The two never both apply to one row -- leaderboard.py picks exactly one
++  // per row, by age -- so at most one is ever universal at a time. Either
++  // way the header must not say "baselines over 30 days" while every row
++  // disagrees; that was the bug this whole section exists to fix.
++  const thinBaseline = shared.includes('provisional') ? 'provisional'
++    : shared.includes('warming-up') ? 'warming-up'
++    : null
++  const baselines = thinBaseline ? UNIVERSAL[thinBaseline] : 'baselines over 30 days'
++  const rest = shared.filter(
++    (mark) => mark !== 'provisional' && mark !== 'warming-up')
+ 
+   return (
+     <p className="finding">
+diff --git a/personal_apps/static/radar/src/list/Spend.test.tsx b/personal_apps/static/radar/src/list/Spend.test.tsx
+index 21ceb63..3f00d31 100644
+--- a/personal_apps/static/radar/src/list/Spend.test.tsx
++++ b/personal_apps/static/radar/src/list/Spend.test.tsx
+@@ -36,8 +36,8 @@ describe('the spend footnote', () => {
+   })
+ 
+   it('drops to cents once there are dollars to round', () => {
+-    /* Three places below a dollar because a day costs about twenty cents and
+-       "$0.20" reads as a rounding of something unknown. Above a dollar the
++    /* Three places below a dollar: at two decimal places a sub-dollar spend
++       ("$0.20") reads as a rounding of something unknown. Above a dollar the
+        third place is noise. */
+     render(<Spend payload={payload({ today_usd: 1.5, month_usd: 12.345, unpriced_tokens: 0 })} />)
+ 
+diff --git a/personal_apps/static/radar/src/list/Spend.tsx b/personal_apps/static/radar/src/list/Spend.tsx
+index a8128ed..0e2f183 100644
+--- a/personal_apps/static/radar/src/list/Spend.tsx
++++ b/personal_apps/static/radar/src/list/Spend.tsx
+@@ -3,8 +3,8 @@ import type { BoardPayload } from '../types'
+ /** Money in USD, at the precision the number deserves.
+  *
+  *  Cents once there are dollars to round; three places below a dollar,
+- *  because a day of this costs about twenty cents and "$0.20" reads as a
+- *  rounding of something unknown while "$0.196" reads as a measurement.
++ *  because a sub-dollar spend reads as a rounding of something unknown at two
++ *  decimal places ("$0.20") and as a measurement at three ("$0.196").
+  */
+ function usd(amount: number): string {
+   if (amount >= 1) return `$${amount.toFixed(2)}`
+diff --git a/personal_apps/static/radar/src/list/marks.test.tsx b/personal_apps/static/radar/src/list/marks.test.tsx
+index abc30e4..6e9f9ef 100644
+--- a/personal_apps/static/radar/src/list/marks.test.tsx
++++ b/personal_apps/static/radar/src/list/marks.test.tsx
+@@ -56,3 +56,32 @@ describe('a mark carried by every row', () => {
+       .toContain('provisional')
+   })
+ })
++
++describe('warming-up, a second thin-baseline mark', () => {
++  /* leaderboard.py splits one badge into two: a NEW ticker is `provisional`,
++     but a board-wide config-version change makes EVERY ticker `warming-up`
++     instead -- see leaderboard.py's own comment where the mark is written.
++     A mark the client does not know about renders as a raw key or nothing at
++     all; these pin that it is lifted, rendered and worded the same way
++     `provisional` already is. */
++  it('is lifted off the rows when the whole board has it, like provisional', () => {
++    const rows = [row('A', ['warming-up']), row('B', ['warming-up'])]
++
++    expect(universalMarks(rows)).toEqual(['warming-up'])
++  })
++
++  it('stays on the row when only some rows carry it', () => {
++    const rows = [row('A', ['warming-up']), row('B', [])]
++
++    expect(universalMarks(rows)).toEqual([])
++  })
++
++  it('renders on the row like any other mark', () => {
++    const { container } = render(
++      <TickerRow row={row('A', ['warming-up'])} selected={false}
++                 onSelect={() => {}} />)
++
++    expect(container.querySelector('.meta')!.textContent)
++      .toContain('warming-up')
++  })
++})
+diff --git a/personal_apps/static/radar/src/types.ts b/personal_apps/static/radar/src/types.ts
+index 4bc19cf..95d525c 100644
+--- a/personal_apps/static/radar/src/types.ts
++++ b/personal_apps/static/radar/src/types.ts
+@@ -21,7 +21,8 @@ export interface Tone {
+ 
+ /** Why a number on this row cannot be taken at face value. Rendered, never
+  *  hidden behind a hover -- see PRODUCT.md. */
+-export type Mark = 'no-print' | 'provisional' | 'single-source' | 'partial'
++export type Mark =
++  'no-print' | 'provisional' | 'single-source' | 'partial' | 'warming-up'
+ 
+ /** `fund` is a pooled vehicle -- an ETF, an ETN, an index product. It is
+  *  deliberately outside the `small` group and therefore off the default
+@@ -94,6 +95,9 @@ export interface Breakdown {
+   bullish: number
+   neutral: number
+   bearish: number
++  /** How often the word list and the model read the same post the opposite
++   *  way -- the sarcasm the lexicon alone cannot see. */
++  disagreements: number
+   /** The pump tell: one account posting forty times reads as forty mentions
+    *  everywhere else on the surface. */
+   top_author_share: number | null
+diff --git a/personal_apps/tests/test_radar_api.py b/personal_apps/tests/test_radar_api.py
+index 4fe0dd5..875a75b 100644
+--- a/personal_apps/tests/test_radar_api.py
++++ b/personal_apps/tests/test_radar_api.py
+@@ -424,3 +424,46 @@ def test_one_unknown_name_rejects_the_whole_selection():
+ def test_whitespace_and_empty_entries_are_forgiven():
+     """A person editing the address bar is not a bug."""
+     assert _parse(segment=' small , large ,').segments == ['small', 'large']
++
++
++def _stub_detail(breakdown):
++    """The minimal detail_panel.build() return serialize_detail reads.
++
++    Built by hand from detail_panel.py's and detail.py's own dataclasses
++    rather than through detail_panel.build itself, so tests that use this do
++    not depend on which tickers the local database happens to hold.
++    """
++    import datetime as dt
++
++    from features.radar import detail, detail_panel
++
++    return detail_panel.Detail(
++        ticker='ZZSTUB', name='Stub Corp', exchange='Q', segment='micro',
++        market_cap=None, ipo_date=None, price=None, price_move=None,
++        price_status='ok', session='closed', span='1D',
++        chart=detail.Chart(start=dt.date(2026, 3, 12), closes=[], chatter=[],
++                           watched_from=None, step_minutes=15),
++        breakdown=breakdown, posts=[], post_total=0,
++        mentions=breakdown.mentions, expected=0.0, baseline_days=None)
++
++
++def test_the_detail_payload_carries_the_sarcasm_signal():
++    """Two sentiment scores are kept so their DISAGREEMENT can be read. Until
++    now nothing compared them, which made the second one decoration.
++
++    Asserted on the serializer rather than through a route, so it does not
++    depend on which tickers the local database happens to hold.
++    """
++    import dataclasses
++
++    from features.radar import detail_panel
++    from features.radar.routes import api
++
++    breakdown = detail_panel.Breakdown(
++        venues=[], bullish=3, neutral=1, bearish=2, disagreements=2,
++        top_author_share=None, top_two_share=None, peak_hour=None,
++        peak_count=0, first_seen=None, mentions=6, voices=4)
++    built = _stub_detail(breakdown)
++
++    payload = api.serialize_detail(built)
++    assert payload['breakdown']['disagreements'] == 2
+diff --git a/personal_apps/tests/test_radar_detail.py b/personal_apps/tests/test_radar_detail.py
+index e25b1a8..4a42222 100644
+--- a/personal_apps/tests/test_radar_detail.py
++++ b/personal_apps/tests/test_radar_detail.py
+@@ -652,3 +652,20 @@ def test_a_daily_chart_still_reports_a_days_step(clean):
+         chart = detail.chart_for(f'{PREFIX}A', NOW.date(), 3, {}, {}, None)
+ 
+         assert chart.step_minutes == 1440
++
++
++def test_the_breakdown_prefers_the_model_verdict_over_the_lexicon():
++    """The one surface that draws a tone bar never read the verdicts.
++
++    Production 2026-08-26: 11,789 of 11,794 scored mentions carried a model
++    verdict, at $1.24 a day, and the panel rendered the forty-word lexicon.
++    """
++    from features.radar import detail_panel
++
++    assert detail_panel._tone_of(lexicon=0.8, verdict='bearish') == 'bearish'
++    assert detail_panel._tone_of(lexicon=0.8, verdict=None) == 'bullish'
++    # `unclear` votes neither way AND blocks the lexicon: it means the post
++    # named the ticker without saying anything about it, and that read is
++    # better informed than the word list it overrides.
++    assert detail_panel._tone_of(lexicon=0.8, verdict='unclear') is None
++    assert detail_panel._tone_of(lexicon=None, verdict=None) is None
+diff --git a/personal_apps/tests/test_radar_leaderboard.py b/personal_apps/tests/test_radar_leaderboard.py
+index d246c9a..41209fe 100644
+--- a/personal_apps/tests/test_radar_leaderboard.py
++++ b/personal_apps/tests/test_radar_leaderboard.py
+@@ -196,7 +196,26 @@ def test_a_thin_baseline_is_marked_provisional(board):
+     universe_row('LBH')
+     scored('LBH', baseline_days=3)
+     db.session.commit()
+-    assert 'provisional' in build_rows(['bluesky'], NOW)[0].marks
++    row = build_rows(['bluesky'], NOW)[0]
++    assert 'provisional' in row.marks
++    # A ticker with genuine multi-day history is not "warming up" -- that
++    # word is reserved for a baseline thinner than a day.
++    assert 'warming-up' not in row.marks
++
++
++def test_a_baseline_under_a_day_is_marked_warming_up_not_provisional(board):
++    """Two different facts wear the same badge otherwise: a NEW ticker has
++    thin history of its own, but a config-version change gives EVERY ticker
++    on the board under a day of history at once. Production: baseline_days
++    truncated to 0 on 147,228 of 147,429 scored Bluesky rows, which fired
++    `provisional` on the whole board -- a mark that fires on every row is not
++    a mark."""
++    universe_row('LBW')
++    scored('LBW', baseline_days=0.5)
++    db.session.commit()
++    row = build_rows(['bluesky'], NOW)[0]
++    assert 'warming-up' in row.marks
++    assert 'provisional' not in row.marks
+ 
+ 
+ def test_a_truncated_source_is_marked_partial(board):
+diff --git a/personal_apps/tests/test_radar_llm_sentiment.py b/personal_apps/tests/test_radar_llm_sentiment.py
+index 0b8c4cb..80f78da 100644
+--- a/personal_apps/tests/test_radar_llm_sentiment.py
++++ b/personal_apps/tests/test_radar_llm_sentiment.py
+@@ -176,9 +176,9 @@ def test_the_post_text_is_delimited_as_data():
+ 
+ 
+ def test_the_model_is_haiku():
+-    """Deliberate, and the one place it is decided. 1335 scored mentions a day
+-    at Haiku's rates is about twenty cents; the same pass on an Opus-tier
+-    model is not a hobby board's bill."""
++    """Deliberate, and the one place it is decided. Measured 2026-08-25: 344
++    calls and $1.2446 for the day at Haiku's rates; the same pass on an
++    Opus-tier model is not a hobby board's bill."""
+     client = FakeClient([answer([(1, 'neutral')])])
+ 
+     llm_sentiment.judge([item('a')], client=client)
+diff --git a/personal_apps/tests/test_radar_phrasing.py b/personal_apps/tests/test_radar_phrasing.py
+index 39bfefb..0bd78ce 100644
+--- a/personal_apps/tests/test_radar_phrasing.py
++++ b/personal_apps/tests/test_radar_phrasing.py
+@@ -23,7 +23,7 @@ class FakeRow:
+     sources: tuple = ('bluesky', 'fourchan')
+     price_move: float | None = 0.182
+     price_status: str = 'ok'
+-    baseline_days: int | None = 30
++    baseline_days: float | None = 30
+     mention_z: float | None = 4.1
+ 
+     @property
+diff --git a/personal_apps/tests/test_radar_scoring.py b/personal_apps/tests/test_radar_scoring.py
+index f212893..a538835 100644
+--- a/personal_apps/tests/test_radar_scoring.py
++++ b/personal_apps/tests/test_radar_scoring.py
+@@ -12,8 +12,9 @@ import pytest
+ from app import app as flask_app
+ from extensions import db
+ from models import RadarBucketSource
+-from features.radar import scoring
++from features.radar import buckets, scoring
+ from features.radar.config import source_config_version
++from test_radar_buckets import clean_buckets  # noqa: F401
+ 
+ MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
+ # A concrete stored Reddit source name. Since 2026-08-26 every Reddit
+@@ -492,3 +493,42 @@ def test_sustained_needs_several_non_overlapping_hours(rows):
+     db.session.commit()
+     scoring.score_source('bluesky', NOW)
+     assert scoring.is_sustained('SSA', ['bluesky'], end) is True
++
++
++def row(external_id, minute=0, hour=14, ticker='ZZA', source='bluesky'):
++    """A MentionRow for the fractional-baseline test below.
++
++    test_radar_buckets.row() (whose clean_buckets fixture is reused above)
++    hardcodes hour=14, which would collapse all three of that test's
++    roll_up calls onto the same 14:00 bucket -- span would be zero and the
++    assertion the test exists to make would never pass, before or after the
++    fix. This local row() takes `hour` explicitly so the three calls land in
++    three separate buckets, the way the scenario needs.
++    """
++    return buckets.MentionRow(
++        ticker=ticker, external_id=external_id,
++        created_utc=dt.datetime(2026, 4, 15, hour, minute, 0),
++        source=source, channel='c', author='u1', simhash=111,
++        confidence='high', sentiment=0.5, engagement=10.0)
++
++
++def test_a_baseline_shorter_than_a_day_is_not_reported_as_zero_days(clean_buckets):
++    """span.days truncates. Twenty-three hours of history is not no history,
++    and reporting it as zero put every row on the board permanently
++    provisional -- 147,228 of 147,429 in production."""
++    import datetime as dt
++
++    from features.radar import buckets, scoring
++    from models import RadarBucketSource
++
++    now = dt.datetime(2026, 4, 16, 14, 0, 0)
++    for hour in (14, 20, 23):
++        start = dt.datetime(2026, 4, 15, hour, 0, 0)
++        buckets.roll_up([row(external_id='zz-%d' % hour, minute=0, hour=hour)],
++                        {'bluesky': 'ok'}, {start})
++
++    scoring.score_source('bluesky', now)
++
++    scored = RadarBucketSource.query.filter_by(
++        ticker='ZZA', source='bluesky').first()
++    assert 0 < scored.baseline_days < 1
