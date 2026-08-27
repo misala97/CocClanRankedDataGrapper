@@ -39,3 +39,9 @@ class FetchResult:
     # Observed messages/hour per symbol, for the poll scheduler. Empty for
     # sources that are not polled per symbol.
     rates: dict = dataclasses.field(default_factory=dict)
+    # Status per emitted source name, where one fetch covers several. Reddit
+    # reads a slice of subreddits and each is its own source; the rolled-up
+    # `status` above is what the cycle reports, and this is what the rollup
+    # stamps on each source's rows. Empty means `status` applies to everything
+    # this result produced.
+    per_source_status: dict = dataclasses.field(default_factory=dict)

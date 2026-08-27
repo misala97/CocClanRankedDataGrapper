@@ -109,13 +109,30 @@ SOURCE_KIND = {
 }
 
 
+def source_root(source):
+    """The policy-bearing part of a source name.
+
+    Reddit carries its subreddit -- `reddit:wallstreetbets` -- so that one
+    sub's feed rolling over between polls marks its own buckets truncated and
+    not every other sub's. Before 2026-08-26 they shared one name and one
+    status, and with REDDIT_SUBS_PER_CYCLE = 1 that meant whichever sub the
+    cycle happened to read decided the status of all of them. In production
+    that was 4372 truncated rows against 478 ok.
+
+    The policy must NOT split with the name. An unlisted sub inherits Reddit's
+    judgements rather than falling through to the strict default, which would
+    silently disable bare tokens on a source that has nothing else.
+    """
+    return source.split(':', 1)[0]
+
+
 def source_kind(source):
     """'forum' or 'broadcast'. Unknown sources are treated as forums.
 
     The strict direction: forum is the tighter gate, so a source nobody has
     characterised is judged by the harder standard rather than waved through.
     """
-    return SOURCE_KIND.get(source, 'forum')
+    return SOURCE_KIND.get(source_root(source), 'forum')
 
 
 # Single-letter cashtags. `$M`, `$B`, `$T` and `$K` are money shorthand far
@@ -257,18 +274,18 @@ def looks_like_bot_feed(text):
 
 
 def single_letter_cashtags_allowed(source):
-    return SINGLE_LETTER_CASHTAGS.get(source, False)
+    return SINGLE_LETTER_CASHTAGS.get(source_root(source), False)
 
 
 def coin_collision_dropped(source, symbol):
     """True when this symbol should be ignored on this source."""
-    if COIN_SYMBOLS_MEAN_STOCKS.get(source, False):
+    if COIN_SYMBOLS_MEAN_STOCKS.get(source_root(source), False):
         return False
     return symbol in COIN_COLLISION_SYMBOLS
 
 
 def bare_tokens_allowed(source):
-    return BARE_TOKENS_ALLOWED.get(source, False)
+    return BARE_TOKENS_ALLOWED.get(source_root(source), False)
 
 
 # What an UNCORROBORATED bare token is worth, per source. Measured 2026-08-25
@@ -293,7 +310,7 @@ BARE_TOKEN_CONFIDENCE = {
 
 
 def bare_token_confidence(source):
-    return BARE_TOKEN_CONFIDENCE.get(source, 'low')
+    return BARE_TOKEN_CONFIDENCE.get(source_root(source), 'low')
 
 # Subreddits to read, from
 # docs/superpowers/specs/2026-08-24-radar-subreddit-source-list.md. Tier 1 and
@@ -350,6 +367,21 @@ REDDIT_SUBS = (
     'wallstreetbets', 'pennystocks', 'shortsqueeze', 'thetagang',
     'options', 'smallstreetbets', 'swingtrading', 'weedstocks',
 )
+
+
+def expand_sources(names):
+    """Concrete stored source names for a root-level selection.
+
+    `reddit` means every configured subreddit, because that is what the UI
+    chip and daemon source list promise. A concrete subreddit stays concrete.
+    """
+    out = []
+    for name in names:
+        if name == 'reddit':
+            out.extend('reddit:%s' % sub for sub in REDDIT_SUBS)
+        else:
+            out.append(name)
+    return out
 
 # Feeds read per cycle. The cycle is three minutes at the fastest cadence, so
 # four is roughly one request every forty-five seconds -- deliberately below
@@ -530,6 +562,12 @@ MAX_BARE_PER_VOUCHER = 4
 # inputs to one baseline, even though the extractor admitted the same symbols.
 ROLLUP_GENERATION = 2
 
+# Generation 1 stored every subreddit under the aggregate name `reddit`.
+# Generation 2 makes the subreddit part of the durable source name. The
+# configured roots and subreddit membership stay unchanged across that split,
+# so neither existing hash input can express this population discontinuity.
+SOURCE_NAME_GENERATION = 2
+
 
 def source_config_version():
     """A stable 16-char stamp for everything that decides what gets counted.
@@ -567,11 +605,12 @@ def source_config_version():
         'bot_re': _BOT_FEED_RE.pattern,
         'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
                     MIN_NAME_TOKEN_LEN],
-        # Every subreddit shares the source name `reddit`, so adding or
-        # dropping one changes which mentions are counted under it while the
-        # source list stays identical. Exactly the false assurance the
-        # extraction rules gave before 2026-08-22.
+        # Adding or dropping a subreddit changes the set of concrete Reddit
+        # populations while the root source list stays identical.
         'reddit_subs': sorted(REDDIT_SUBS),
+        # The same roots and subreddits can still produce a different stored
+        # population when the source-name scheme changes.
+        'source_name_generation': SOURCE_NAME_GENERATION,
         'pooled_re': POOLED_VEHICLE_PATTERN,
         # The PATTERN alone was not enough: this flag changes what the same
         # pattern is used FOR, so flipping it changed which mentions were

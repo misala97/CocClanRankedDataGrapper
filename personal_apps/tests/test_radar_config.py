@@ -29,6 +29,14 @@ def test_version_changes_when_the_rollup_generation_changes(monkeypatch):
     assert config.source_config_version() != before
 
 
+def test_version_changes_when_the_source_name_generation_changes(monkeypatch):
+    """Aggregate Reddit and per-subreddit Reddit are different populations."""
+    before = config.source_config_version()
+    monkeypatch.setattr(config, 'SOURCE_NAME_GENERATION',
+                        config.SOURCE_NAME_GENERATION + 1)
+    assert config.source_config_version() != before
+
+
 def test_version_ignores_source_order():
     forward = config.source_config_version()
     reversed_list = tuple(reversed(config.SOURCES))
@@ -201,6 +209,47 @@ def test_an_unknown_source_gets_the_stricter_gate():
     from features.radar.config import source_kind
 
     assert source_kind('something-new') == 'forum'
+
+
+def test_a_prefixed_source_inherits_its_roots_policy():
+    """`reddit:wallstreetbets` is Reddit for every per-source judgement.
+
+    Splitting the source name is what stops one sub's permanent feed rollover
+    from marking every other sub's buckets truncated. It must not also split
+    the policy: an unlisted sub inherits Reddit's rules rather than falling
+    through to the strict default, which would silently disable bare tokens on
+    a source that depends on them.
+    """
+    from features.radar import config
+
+    assert config.source_root('reddit:wallstreetbets') == 'reddit'
+    assert config.source_root('bluesky') == 'bluesky'
+    assert config.bare_tokens_allowed('reddit:wallstreetbets') is True
+    assert config.bare_token_confidence('reddit:pennystocks') == 'high'
+    assert config.source_kind('reddit:thetagang') == 'forum'
+    assert config.coin_collision_dropped('reddit:weedstocks', 'LINK') is True
+
+
+def test_every_policy_lookup_uses_the_prefixed_sources_root(monkeypatch):
+    """The less visible policy extension points must inherit the root too."""
+    monkeypatch.setitem(config.SOURCE_KIND, 'reddit', 'broadcast')
+    monkeypatch.setitem(config.SINGLE_LETTER_CASHTAGS, 'reddit', True)
+    monkeypatch.setitem(config.COIN_SYMBOLS_MEAN_STOCKS, 'reddit', True)
+
+    assert config.source_kind('reddit:wallstreetbets') == 'broadcast'
+    assert config.single_letter_cashtags_allowed(
+        'reddit:wallstreetbets') is True
+    assert config.coin_collision_dropped(
+        'reddit:wallstreetbets', 'LINK') is False
+
+
+def test_root_reddit_expands_to_every_configured_concrete_source():
+    expected = ['reddit:%s' % sub for sub in config.REDDIT_SUBS]
+
+    assert config.expand_sources(['bluesky', 'reddit']) == [
+        'bluesky', *expected]
+    assert config.expand_sources(['reddit:wallstreetbets']) == [
+        'reddit:wallstreetbets']
 
 
 def test_the_version_stamp_covers_the_distinctiveness_rule():

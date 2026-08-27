@@ -33,7 +33,7 @@ from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
     MENTION_EVENT_RETENTION_HOURS, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
     REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
-    prefer_ipv4_if_configured, source_config_version)
+    expand_sources, prefer_ipv4_if_configured, source_config_version)
 from features.radar.sources import bluesky, fourchan, reddit
 from features.radar.sources import FetchResult
 
@@ -113,6 +113,10 @@ def _reddit_fetcher(client):
     """
     def fetch(since):
         now = _utcnow()
+        # Poll state stays keyed by the bare source name with the subreddit as
+        # its symbol. Only what the POSTS carry is prefixed -- the scheduler's
+        # unit is the subreddit either way, and re-keying it would retire every
+        # learned observed_rate on deploy.
         scheduling.ensure_tracked('reddit', REDDIT_SUBS, now)
         # And drop the ones no longer configured. due_symbols filters by
         # SOURCE rather than by this list, so a removed subreddit would keep
@@ -220,7 +224,7 @@ def score_all(now_utc):
     unscored.
     """
     written = {}
-    for source in SOURCES:
+    for source in expand_sources(SOURCES):
         try:
             written[source] = scoring.score_source(
                 source, now_utc.replace(tzinfo=None))

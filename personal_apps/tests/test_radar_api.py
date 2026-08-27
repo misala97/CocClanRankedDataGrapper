@@ -33,6 +33,56 @@ def test_an_unknown_source_is_rejected(client):
     assert client.get('/radar/api/board?sources=nonsense').status_code == 400
 
 
+def test_a_concrete_reddit_source_is_accepted_but_an_unknown_root_is_not():
+    from features.radar.routes.api import BadQuery, parse_query
+    import pytest
+
+    assert parse_query({'sources': 'reddit:wallstreetbets'}).sources == [
+        'reddit:wallstreetbets']
+    with pytest.raises(BadQuery):
+        parse_query({'sources': 'notreddit:wallstreetbets'})
+
+
+def test_root_reddit_expands_for_board_queries_but_echoes_the_root(
+        client, monkeypatch):
+    from features.radar.config import REDDIT_SUBS
+    from features.radar.routes import api
+
+    seen = {}
+    real_build = api.board_mod.build
+
+    def capture(sources, *args, **kwargs):
+        seen['sources'] = list(sources)
+        return real_build(sources, *args, **kwargs)
+
+    monkeypatch.setattr(api.board_mod, 'build', capture)
+    response = client.get('/radar/api/board?sources=reddit')
+    payload = json.loads(response.data)
+
+    assert response.status_code == 200
+    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
+    assert payload['sources'] == ['reddit']
+
+
+def test_root_reddit_expands_for_detail_queries(client, monkeypatch):
+    from features.radar.config import REDDIT_SUBS
+    from features.radar.routes import api
+
+    seen = {}
+
+    def capture(ticker, sources, now, **kwargs):
+        seen['sources'] = list(sources)
+        return object()
+
+    monkeypatch.setattr(api.detail_panel, 'build', capture)
+    monkeypatch.setattr(api, 'serialize_detail', lambda built: {'ok': True})
+
+    response = client.get('/radar/api/ticker/ZZG?sources=reddit')
+
+    assert response.status_code == 200
+    assert seen['sources'] == ['reddit:%s' % sub for sub in REDDIT_SUBS]
+
+
 def test_an_unknown_segment_is_rejected(client):
     assert client.get('/radar/api/board?segment=nonsense').status_code == 400
 

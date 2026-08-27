@@ -240,10 +240,17 @@ def run_cycle(now, fetchers):
             statuses[source] = 'missing'
             depths[source] = 0
             continue
-        statuses[source] = result.status
+        # A fetcher covering several source names reports each. Reddit does:
+        # one cycle reads a slice of subreddits and each is its own source.
+        # When those concrete statuses exist, the aggregate fetch verdict must
+        # not become a zero-valued root child in the rollup population.
+        result_statuses = result.per_source_status or {source: result.status}
+        statuses.update(result_statuses)
         depths[source] = result.catchup_depth
 
-        if result.status == 'missing':
+        # Aggregate status remains useful for cycle reporting, but it cannot
+        # discard an earlier successful sub when a later request was refused.
+        if all(status == 'missing' for status in result_statuses.values()):
             continue
 
         posts_seen += len(result.posts)

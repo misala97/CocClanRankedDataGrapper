@@ -9,7 +9,7 @@ from auth import login_required
 from .. import board as board_mod
 from .. import detail as detail_mod
 from .. import detail_panel, phrasing, spend
-from ..config import DEFAULT_SEGMENT, SOURCES
+from ..config import (DEFAULT_SEGMENT, SOURCES, expand_sources, source_root)
 from ._blueprint import radar_bp
 
 SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
@@ -53,7 +53,9 @@ def parse_query(args):
     raw_sources = args.get('sources')
     if raw_sources:
         selected = [s.strip() for s in raw_sources.split(',') if s.strip()]
-        if any(s not in SOURCES for s in selected):
+        # A prefixed name is valid when its ROOT is a known source: the UI
+        # offers `reddit` as one chip, and a link may name one subreddit.
+        if any(source_root(s) not in SOURCES for s in selected):
             raise BadQuery('unknown source')
     else:
         selected = list(SOURCES)
@@ -163,9 +165,13 @@ def build_payload(args, now=None):
     """Validated query -> serialized board. Shared by the page and the API."""
     query = parse_query(args)
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
-    board = board_mod.build(query.sources, now, window_hours=query.window,
+    board = board_mod.build(expand_sources(query.sources), now,
+                            window_hours=query.window,
                             segments=query.segments, limit=query.limit,
                             min_venues=query.min_venues)
+    # What the VIEWER picked, not what it expanded to. The payload's `sources`
+    # drives which root chips are lit, and the chip is `reddit`.
+    board.sources = list(query.sources)
     return serialize(board)
 
 
@@ -266,7 +272,8 @@ def ticker_detail(ticker):
 
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     try:
-        built = detail_panel.build(ticker.upper(), query.sources, now,
+        built = detail_panel.build(ticker.upper(),
+                                   expand_sources(query.sources), now,
                                    window_hours=query.window, span=span)
     except detail_mod.UnknownTicker:
         return jsonify({'error': 'unknown ticker'}), 404

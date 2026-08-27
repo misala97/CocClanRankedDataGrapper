@@ -136,7 +136,54 @@ def test_scoring_covers_every_configured_source(monkeypatch):
     monkeypatch.setattr(daemon.scoring, 'score_source',
                         lambda source, now, **k: seen.append(source) or 1)
     daemon.score_all(_utc(2026, 8, 21, 14))
-    assert set(seen) == set(daemon.SOURCES)
+    expected = {'bluesky', 'fourchan'} | {
+        'reddit:%s' % sub for sub in daemon.REDDIT_SUBS}
+    assert set(seen) == expected
+    assert 'reddit' not in seen
+
+
+def test_reddit_poll_state_stays_keyed_to_the_root_source(monkeypatch):
+    """Concrete post names must not retire the scheduler's learned state."""
+    from app import app as flask_app
+    from extensions import db
+    from features.radar.sources import FetchResult
+    from models import RadarPollState
+
+    sub = 'zz_task9_sub'
+    root = 'reddit'
+    concrete = 'reddit:%s' % sub
+    owned_sources = (root, concrete)
+    now = dt.datetime(2026, 8, 27, 12, 0, 0)
+
+    def wipe_owned_state():
+        RadarPollState.query.filter(
+            RadarPollState.source.in_(owned_sources),
+            RadarPollState.symbol == sub).delete(synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        wipe_owned_state()
+        monkeypatch.setattr(daemon, 'REDDIT_SUBS', (sub,))
+        monkeypatch.setattr(daemon, '_utcnow', lambda: now)
+        monkeypatch.setattr(daemon.scheduling, 'retire_untracked',
+                            lambda source, symbols: 0)
+        monkeypatch.setattr(daemon.scheduling, 'due_symbols',
+                            lambda source, current, limit: [sub])
+        monkeypatch.setattr(
+            daemon.reddit, 'fetch',
+            lambda since_by_sub, client: FetchResult(
+                posts=[], status='ok', rates={sub: 0.0},
+                per_source_status={concrete: 'ok'}))
+
+        try:
+            daemon._reddit_fetcher(object())(now - dt.timedelta(minutes=5))
+            rows = RadarPollState.query.filter(
+                RadarPollState.source.in_(owned_sources),
+                RadarPollState.symbol == sub).all()
+            assert [(row.source, row.symbol) for row in rows] == [(root, sub)]
+        finally:
+            db.session.rollback()
+            wipe_owned_state()
 
 
 def test_one_source_failing_to_score_does_not_stop_the_others(monkeypatch):

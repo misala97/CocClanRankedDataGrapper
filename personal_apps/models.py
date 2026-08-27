@@ -556,7 +556,8 @@ class RadarPost(db.Model):
     )
 
     id           = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    source       = db.Column(db.String(16), nullable=False)
+    # Reddit carries the subreddit in the durable source name.
+    source       = db.Column(db.String(48), nullable=False)
     # 128, not 32: a Bluesky id is 'bluesky:<did>:<rkey>' and a DID alone is
     # 32 characters. The original width was sized for Reddit fullnames.
     external_id  = db.Column(db.String(128), nullable=False)
@@ -678,7 +679,9 @@ class RadarBucketSource(db.Model):
     ticker                    = db.Column(db.String(12, collation='utf8mb4_bin'),
                                           primary_key=True)
     bucket_start              = db.Column(MYSQL_DATETIME(fsp=6), primary_key=True)
-    source                    = db.Column(db.String(24), primary_key=True)
+    # 48, not 24: a Reddit source name carries its subreddit
+    # (`reddit:smallstreetbets` is 22 characters and the margin at 24 was two).
+    source                    = db.Column(db.String(48), primary_key=True)
 
     mention_count             = db.Column(db.Integer, nullable=False, default=0)
     high_confidence_count     = db.Column(db.Integer, nullable=False, default=0)
@@ -720,7 +723,7 @@ class RadarPollState(db.Model):
         {'mysql_charset': 'utf8mb4'},
     )
 
-    source          = db.Column(db.String(24), primary_key=True)
+    source          = db.Column(db.String(48), primary_key=True)
     # 64, not 12. This holds whatever the source polls by, and that stopped
     # being a ticker when Reddit reused the scheduler with the SUBREDDIT as
     # the unit -- `RobinHoodPennyStocks` is 20 characters, and at 12 the whole

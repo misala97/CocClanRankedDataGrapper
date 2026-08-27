@@ -52,11 +52,10 @@ class FakeClient:
 
 
 def test_a_comment_becomes_a_post_with_its_subreddit_on_it():
-    """The subreddit rides on `channel`, not on `source`.
+    """The subreddit rides on both the stored source name and channel.
 
-    Per-subreddit baselines are not built yet, so which sub a comment came
-    from is only recoverable if it is stored -- and deciding which subs are
-    worth keeping is the entire reason this ships wide.
+    The concrete source is what gives each subreddit its own coverage status;
+    channel remains the original venue label carried by the stored comment.
     """
     client = FakeClient({'pennystocks': feed([entry('t1_aaa', 5)])})
 
@@ -64,7 +63,7 @@ def test_a_comment_becomes_a_post_with_its_subreddit_on_it():
 
     assert len(posts) == 1
     post = posts[0]
-    assert post.source == 'reddit'
+    assert post.source == 'reddit:pennystocks'
     assert post.channel == 'pennystocks'
     assert post.external_id == 't1_aaa'
     assert post.author == '/u/someone'
@@ -153,6 +152,8 @@ def test_a_throttle_stops_the_cycle_instead_of_asking_again():
 
     assert client.asked == ['a', 'b']
     assert [p.external_id for p in result.posts] == ['t1_a']
+    assert result.per_source_status == {
+        'reddit:a': 'ok', 'reddit:b': 'missing'}
 
     # 'c' was never requested, so it must not be scheduled as though it had
     # been -- it would lose its turn to whatever happened to sort earlier.
@@ -217,6 +218,8 @@ def test_one_unreachable_sub_does_not_cost_the_others():
 
     assert client.asked == ['a', 'b']
     assert [p.external_id for p in result.posts] == ['t1_b']
+    assert result.per_source_status == {
+        'reddit:a': 'missing', 'reddit:b': 'ok'}
     # Attempted and told nothing. Unknown, not zero -- a 500 says nothing
     # about whether the next request will work, so it is retried soon.
     assert result.rates['a'] is None
@@ -326,3 +329,60 @@ def test_each_subreddit_is_read_from_its_own_cursor():
     got = {p.external_id for p in result.posts}
     assert got == {'t1_busy', 't1_quiet'}, (
         "the quiet subreddit was filtered out by another sub cursor")
+
+
+def test_all_three_prefixed_source_columns_are_wide_in_model_and_database():
+    """The longest configured Reddit name must survive the durable boundary."""
+    import sqlalchemy as sa
+
+    from app import app as flask_app
+    from extensions import db
+    from features.radar.config import REDDIT_SUBS
+    from models import RadarBucketSource, RadarPollState, RadarPost
+
+    concrete = max(('reddit:%s' % sub for sub in REDDIT_SUBS), key=len)
+    models = (RadarPost, RadarBucketSource, RadarPollState)
+    assert {model.__tablename__: model.__table__.c.source.type.length
+            for model in models} == {
+                'radar_posts': 48,
+                'radar_bucket_sources': 48,
+                'radar_poll_state': 48,
+            }
+
+    external_id = 'zz-task9-longest-source'
+    channel = 'zz_task9_source_width'
+    with flask_app.app_context():
+        inspector = sa.inspect(db.engine)
+        live = {
+            model.__tablename__: next(
+                column['type'].length
+                for column in inspector.get_columns(model.__tablename__)
+                if column['name'] == 'source')
+            for model in models
+        }
+        assert live == {
+            'radar_posts': 48,
+            'radar_bucket_sources': 48,
+            'radar_poll_state': 48,
+        }
+
+        def wipe_owned_post():
+            RadarPost.query.filter_by(
+                external_id=external_id, channel=channel).delete(
+                    synchronize_session=False)
+            db.session.commit()
+
+        wipe_owned_post()
+        try:
+            stamp = dt.datetime(2026, 8, 24, 12, 0, 0)
+            db.session.add(RadarPost(
+                source=concrete, external_id=external_id, channel=channel,
+                author='zz-task9', created_utc=stamp, title=None, body='$AAPL',
+                score=0, num_comments=0, url='', simhash=1,
+                first_seen=stamp, last_seen=stamp))
+            db.session.commit()
+            assert RadarPost.query.filter_by(
+                source=concrete, external_id=external_id).one().source == concrete
+        finally:
+            db.session.rollback()
+            wipe_owned_post()

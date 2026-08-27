@@ -19,7 +19,7 @@ from features.radar.sources import FetchResult, RawPost
 
 NOW = dt.datetime(2026, 4, 15, 14, 20, 0)
 TEST_CHANNEL = 'zz_task7_ingest'
-TEST_SOURCES = ('bluesky', 'reddit')
+TEST_SOURCES = ('bluesky', 'reddit', 'reddit:wallstreetbets')
 TEST_TICKER = 'ZZG'
 
 
@@ -228,6 +228,63 @@ def test_two_sources_ingest_in_one_cycle(seeded):
         assert sources == {'reddit', 'bluesky'}
 
 
+def test_reddit_subreddits_write_only_their_own_status_rows(seeded):
+    """One rolled-over feed must not mark a quieter subreddit truncated."""
+    wallstreetbets = post(
+        ident='task9-wsb', body='$ZZG from wsb', author='task9-wsb',
+        source='reddit:wallstreetbets')
+    pennystocks = post(
+        ident='task9-penny', body='$ZZG from pennies', author='task9-penny',
+        source='reddit:pennystocks')
+    result = ingest.run_cycle(
+        NOW,
+        fetcher_for(FetchResult(
+            posts=[wallstreetbets, pennystocks], status='truncated',
+            per_source_status={
+                'reddit:wallstreetbets': 'truncated',
+                'reddit:pennystocks': 'ok',
+            }), source='reddit'))
+
+    assert result['per_source'] == {
+        'reddit:wallstreetbets': 'truncated',
+        'reddit:pennystocks': 'ok',
+    }
+    with flask_app.app_context():
+        from models import RadarBucketSource
+        rows = {row.source: row.status for row in
+                RadarBucketSource.query.filter_by(ticker=TEST_TICKER).all()}
+        assert rows == {
+            'reddit:wallstreetbets': 'truncated',
+            'reddit:pennystocks': 'ok',
+        }
+        assert RadarBucketSource.query.filter_by(
+            ticker=TEST_TICKER, source='reddit').count() == 0
+
+
+def test_a_successful_subreddit_survives_a_missing_aggregate_status(seeded):
+    """A later refusal cannot discard comments already fetched this cycle."""
+    successful = post(
+        ident='task9-partial', body='$ZZG survived', author='task9-partial',
+        source='reddit:pennystocks')
+    result = ingest.run_cycle(
+        NOW,
+        fetcher_for(FetchResult(
+            posts=[successful], status='missing',
+            per_source_status={
+                'reddit:pennystocks': 'ok',
+                'reddit:wallstreetbets': 'missing',
+            }), source='reddit'))
+
+    assert result['posts_new'] == 1
+    assert result['mentions'] == 1
+    with flask_app.app_context():
+        from models import RadarBucketSource
+        rows = {row.source: row.status for row in
+                RadarBucketSource.query.filter_by(ticker=TEST_TICKER).all()}
+        assert rows == {'reddit:pennystocks': 'ok'}
+        assert RadarPost.query.filter_by(external_id='task9-partial').count() == 1
+
+
 def test_one_source_failing_does_not_stop_the_other(seeded):
     """The entire reason status is per source. A dead Bluesky must not cost a
     healthy Reddit cycle, and must not write a zero for itself."""
@@ -253,7 +310,8 @@ def test_each_source_keeps_its_own_cursor(seeded):
     already covered."""
     def rd(since):
         return FetchResult(
-            posts=[post(ident='st1', body='$ZZG', minute=10, source='reddit')],
+            posts=[post(ident='st1', body='$ZZG', minute=10,
+                        source='reddit:wallstreetbets')],
             status='ok')
 
     def bs(since):
@@ -266,6 +324,7 @@ def test_each_source_keeps_its_own_cursor(seeded):
         cursors = {c.source: c.cursor_utc for c in RadarSourceCursor.query.all()}
     assert cursors['reddit'] == dt.datetime(2026, 4, 15, 14, 10, 0)
     assert cursors['bluesky'] == dt.datetime(2026, 4, 15, 14, 18, 0)
+    assert 'reddit:wallstreetbets' not in cursors
 
 
 def test_the_same_post_twice_in_one_batch_is_stored_once(seeded):

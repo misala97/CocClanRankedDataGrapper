@@ -130,11 +130,12 @@ def _to_raw_post(entry, sub):
     if created is None:
         return None
     return RawPost(
-        source='reddit',
+        # The SUBREDDIT is part of the source, not only of the channel. One
+        # name meant one status for the whole cycle, and with one sub read per
+        # cycle that was whichever sub happened to be due -- r/wallstreetbets
+        # is permanently truncated and used to mark every quieter sub with it.
+        source='reddit:%s' % sub,
         external_id=entry.findtext('a:id', '', ATOM),
-        # The subreddit, not 'reddit'. Per-subreddit baselines are not built
-        # yet, but every stored comment records which sub it came from, so the
-        # decision about which subs are worth keeping can be made from data.
         channel=sub,
         author=author.text if author is not None else None,
         created_utc=created,
@@ -210,6 +211,7 @@ def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
     on ordering. A 429 is a fact about the budget, never about the subreddit.
     """
     posts, statuses, rates = [], [], {}
+    by_sub = {}
 
     for index, (sub, since) in enumerate(since_by_sub.items()):
         if index and pause:
@@ -220,19 +222,25 @@ def fetch(since_by_sub, client, pause=REQUEST_INTERVAL_SECONDS):
             # Nothing recorded: it was refused, not read, so it stays due and
             # is retried rather than losing its turn.
             statuses.append('missing')
+            by_sub[sub] = 'missing'
             break
         except RedditUnavailable:
             # Attempted and learned nothing. Recorded as unknown so it is
             # retried soon -- unlike a throttle, a 500 says nothing about
             # whether the next request will work.
             statuses.append('missing')
+            by_sub[sub] = 'missing'
             rates[sub] = None
             continue
         posts.extend(found)
         statuses.append(status)
+        by_sub[sub] = status
         rates[sub] = rate
 
-    return FetchResult(posts=posts, status=_roll_up(statuses), rates=rates)
+    return FetchResult(
+        posts=posts, status=_roll_up(statuses), rates=rates,
+        per_source_status={'reddit:%s' % sub: status
+                           for sub, status in by_sub.items()})
 
 
 def _roll_up(statuses):
