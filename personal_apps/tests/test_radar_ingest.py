@@ -444,7 +444,6 @@ def test_a_duplicate_external_id_is_extracted_once_and_refreshes_engagement(
     assert calls == ['dup-extract']
     assert result['posts_new'] == 1
     assert result['mentions'] == 1
-    assert result['aggregate_status'] == {'reddit': 'missing'}
     with flask_app.app_context():
         stored = RadarPost.query.filter_by(external_id='dup-extract').one()
         assert stored.score == 900

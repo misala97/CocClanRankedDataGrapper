@@ -141,6 +141,19 @@ def test_the_journal_is_pruned_by_when_the_post_was_written(clean_events):
     dev database's Aug-2026 rows. `created_utc < cutoff` is strict, so a row
     exactly at the cutoff has not yet aged out and must survive. This pins the
     boundary: flipping the implementation's `<` to `<=` must fail this test.
+
+    `prune_mention_events` deletes globally -- it is a real production pruner,
+    not scoped by ticker -- so its *return value* is a count over the whole
+    table, not just this fixture's three rows. Asserting that count against a
+    hard-coded literal is a global count over a shared database: any other
+    radar suite that leaves a row inside this same April-2026 window (a stray
+    fixture, an interrupted teardown elsewhere) inflates it, and the test goes
+    red on data it does not own rather than on behaviour. So the expected
+    count is measured from the table itself, immediately before the prune call
+    with the identical predicate, rather than hard-coded -- that number is
+    correct regardless of what else happens to be sitting in the window. The
+    boundary claim itself is then proven the way that survives any such
+    leakage: by exact row identity, not by a count.
     """
     from models import RadarMentionEvent
 
@@ -160,8 +173,16 @@ def test_the_journal_is_pruned_by_when_the_post_was_written(clean_events):
             sentiment=None, engagement=0.0))
     db.session.commit()
 
+    cutoff = now - dt.timedelta(hours=retention.MENTION_EVENT_RETENTION_HOURS)
+    expected_deleted = RadarMentionEvent.query.filter(
+        RadarMentionEvent.created_utc < cutoff).count()
+    # This fixture's own qualifying row is exactly one ('zz-old'); whatever
+    # else the shared database currently holds inside the window, this is the
+    # true pre-delete population the production query will act on.
+    assert expected_deleted >= 1
+
     deleted = retention.prune_mention_events(now)
-    assert deleted == 1
+    assert deleted == expected_deleted
     assert isinstance(deleted, int)
     remaining = {e.external_id for e in
                  RadarMentionEvent.query.filter_by(ticker='ZZA').all()}
