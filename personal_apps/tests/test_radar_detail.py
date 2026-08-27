@@ -581,6 +581,57 @@ def test_a_slot_before_observation_began_is_unknown_not_zero(clean_intraday):
         assert chart.chatter[0] is None
 
 
+@pytest.fixture()
+def clean_intraday_gap():
+    """Own only the rows used to prove an interior coverage gap."""
+    ticker = 'DTGAP12'
+
+    def wipe():
+        RadarBucketSource.query.filter_by(ticker=ticker).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        wipe()
+        yield ticker
+        wipe()
+
+
+def test_an_outage_in_the_middle_of_the_window_is_not_drawn_as_quiet(
+        clean_intraday_gap):
+    """Coverage is per slot, so a resumed daemon cannot fill a gap with zero."""
+    now = dt.datetime(2026, 4, 15, 16, 0, 0)
+    first = dt.datetime(2026, 4, 15, 14, 0, 0)
+    last = dt.datetime(2026, 4, 15, 15, 0, 0)
+    db.session.add_all([
+        RadarBucketSource(
+            ticker=clean_intraday_gap, bucket_start=first, source='bluesky',
+            mention_count=3, high_confidence_count=3, low_count=0,
+            distinct_authors=3, distinct_text_ratio=1.0,
+            engagement_weighted_count=3.0, status='ok',
+            source_config_version=source_config_version()),
+        RadarBucketSource(
+            ticker=clean_intraday_gap, bucket_start=last, source='bluesky',
+            mention_count=0, high_confidence_count=0, low_count=0,
+            distinct_authors=0, distinct_text_ratio=0.0,
+            engagement_weighted_count=0.0, status='truncated',
+            source_config_version=source_config_version()),
+    ])
+    db.session.commit()
+
+    chart = detail.intraday_chart_for(
+        clean_intraday_gap, ['bluesky'], now, '1D')
+    first_index = detail._slot_index(first, chart.start, chart.step_minutes,
+                                     len(chart.chatter))
+    last_index = detail._slot_index(last, chart.start, chart.step_minutes,
+                                    len(chart.chatter))
+
+    assert chart.chatter[first_index] == 3
+    assert chart.chatter[last_index] == 0
+    assert all(value is None for value in chart.chatter[first_index + 1:last_index])
+    assert chart.watched_from == first
+
+
 def test_the_chart_reports_its_own_granularity(clean_intraday):
     """The renderer draws evenly spaced slots and cannot tell minutes from
     days. Without this it would label a 24-hour chart with month names."""

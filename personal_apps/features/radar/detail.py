@@ -197,20 +197,26 @@ def intraday_counts(ticker, sources, start, now, step_minutes, slots):
     return counts, seen
 
 
-def _watched_from_index(sources, start, now, step_minutes, slots):
-    """First slot ANY ticker was observed in.
+def watched_slots(sources, start, now, step_minutes, slots):
+    """Slots in which any bucket was written for the selected sources.
 
-    Per source rather than per ticker, exactly like first_watched_day: the
-    question is when we were watching, not when this symbol was mentioned.
+    This is the same coverage proxy board._covered_hours uses. A quiet source
+    is therefore zero only in a slot we observed; an interior ingest outage is
+    unknown rather than a fabricated run of quiet chatter.
     """
     sources = expand_sources_for_history(sources)
-    earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
-                .filter(RadarBucketSource.source.in_(list(sources)),
-                        RadarBucketSource.bucket_start >= start,
-                        RadarBucketSource.bucket_start < now).scalar())
-    if earliest is None:
-        return None
-    return _slot_index(earliest, start, step_minutes, slots)
+    rows = (db.session.query(RadarBucketSource.bucket_start)
+            .filter(RadarBucketSource.source.in_(list(sources)),
+                    RadarBucketSource.bucket_start >= start,
+                    RadarBucketSource.bucket_start < now,
+                    RadarBucketSource.status.in_(('ok', 'truncated')))
+            .distinct().all())
+    covered = set()
+    for (bucket_start,) in rows:
+        index = _slot_index(bucket_start, start, step_minutes, slots)
+        if index is not None:
+            covered.add(index)
+    return covered
 
 
 def intraday_chart_for(ticker, sources, now, span):
@@ -226,16 +232,16 @@ def intraday_chart_for(ticker, sources, now, span):
     closes = intraday_prices(ticker, start, now, step_minutes, slots)
     counts, _seen = intraday_counts(ticker, sources, start, now,
                                     step_minutes, slots)
-    watched = _watched_from_index(sources, start, now, step_minutes, slots)
+    covered = watched_slots(sources, start, now, step_minutes, slots)
 
     chatter = []
     for index in range(slots):
-        # A slot before observation began is unknown, not silent. Same rule
-        # the daily chart follows, and the reason chatter is nullable at all.
-        chatter.append(None if watched is None or index < watched
-                       else counts[index])
+        chatter.append(counts[index] if index in covered else None)
+
+    first_watched = min(covered) if covered else None
 
     return Chart(start=start, closes=closes, chatter=chatter,
-                 watched_from=(start + dt.timedelta(minutes=watched * step_minutes)
-                               if watched is not None else None),
+                 watched_from=(start + dt.timedelta(
+                     minutes=first_watched * step_minutes)
+                               if first_watched is not None else None),
                  step_minutes=step_minutes)
