@@ -1,5 +1,44 @@
 # HANDOFF — radar pipeline audit fix
 
+## AUTHORITATIVE BLOCKED CHECKPOINT — Sonnet authentication, 2026-08-27
+
+Newest checkpoint; supersedes every section below. Tasks 10-13 remain
+implemented but unreviewed. A fresh baseline verified **633 passed, 646
+deselected, 2 warnings, 0 failures**, and `flask db current` remains
+`08316d3e4d77 (head)`.
+
+The required Sonnet review was attempted from the clean linked worktree using
+the local Claude CLI with explicit `--model sonnet --effort high`. It failed
+**before a reviewer started**:
+
+```text
+Failed to authenticate: OAuth session expired and could not be refreshed
+```
+
+`claude auth status` now reports:
+
+```json
+{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}
+```
+
+There is no active worker/reviewer, no `task-10-13-review.md`, no production or
+test dirt, and no partial reviewer write. Do not infer a verdict from the
+implementation report. The exact review range remains `4264036..d5997c9`; the
+package remains `task-10-13-review-package.md`.
+
+**External action required:** authenticate the local Claude CLI interactively
+(`claude auth login`). Then rerun the single Sonnet review described in the
+next checkpoint below. Do not substitute another model: Michi explicitly bound
+Tasks 10-19 reviews to Sonnet. Do not start Tasks 14-17 before this batch is
+review-approved.
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD before this handoff/docs commit: `5e1ed0b` (`docs(radar): hand off the
+Tasks 10 to 13 review`)
+
+---
+
 ## AUTHORITATIVE STOP CHECKPOINT — Codex before Tasks 10-13 review, 2026-08-27
 
 Newest checkpoint; supersedes every section below. Michi requested a stop

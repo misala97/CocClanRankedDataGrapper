@@ -428,3 +428,20 @@ Controller hardening prepared for later: Task 18 now requires behavioral
   printout alone is insufficient. Task 19's broad gate explicitly permits only
   the two established missing-manifest failures. These brief edits are
   controller-owned and preserved in the handoff commit.
+
+Tasks 10-13 Sonnet review dispatch attempt: BLOCKED BEFORE START on
+  2026-08-27. The explicit local Sonnet command exited 1 with `Failed to
+  authenticate: OAuth session expired and could not be refreshed`.
+  `claude auth status` reports `loggedIn: false`, `authMethod: none`, provider
+  `firstParty`. No reviewer ran, `task-10-13-review.md` is absent, Git remains
+  clean, and the fresh pre-review Radar baseline is 633 passed / 646
+  deselected / 2 warnings / 0 failures. Ruling: do not substitute a GPT review
+  because Michi explicitly bound Tasks 10-19 reviews to Sonnet. Cost if wrong
+  is a pause for interactive Claude authentication; substituting would violate
+  the review-model decision and create a verdict with the wrong authority.
+
+Immediate continuation after authentication: rerun the one Sonnet review over
+  exactly `4264036..d5997c9` using `task-10-brief.md` through
+  `task-13-brief.md`, `task-10-13-report.md`, and
+  `task-10-13-review-package.md`; write `task-10-13-review.md`; return only the
+  prescribed verdict line. Do not begin Tasks 14-17 first.
