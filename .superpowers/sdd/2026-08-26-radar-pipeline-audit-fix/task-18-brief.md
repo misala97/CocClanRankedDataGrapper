@@ -2,6 +2,7 @@
 
 **Files:**
 - Modify: `personal_apps/scripts/discover_reddit_sources.py`
+- Create: `personal_apps/tests/test_radar_discovery.py`
 
 **Interfaces:**
 - Consumes: nothing.
@@ -9,7 +10,28 @@
 
 The script polls the same `/comments/.rss` feeds at `SLEEP = 45.0`. The daemon polls one feed per 120 seconds against a budget measured at `x-ratelimit-remaining = 0.0` after a single request. From one IP they 429 each other, and the daemon's cycle then reports `missing` and writes no buckets.
 
-- [ ] **Step 1: Add the guard**
+- [ ] **Step 1: Write behavioral failing tests**
+
+Create `personal_apps/tests/test_radar_discovery.py`. Exercise behavior at the
+script boundary, not merely the helper's return value:
+
+- when `shutil.which('systemctl')` returns `None`, `_daemon_is_running()` is
+  false and `subprocess.run` is never called;
+- when `systemctl is-active radar_ingest` returns stdout `active`, the helper
+  is true and the exact non-shell argv was used;
+- `main([])` returns `1`, prints stop/override guidance to stderr, and does not
+  enter the app context when the helper is true;
+- `main(['--anyway'])` proceeds past the guard when the helper is true. Stub
+  the app context, universe lookup, candidate list and output file so the test
+  performs no network, sleep, DB, or filesystem write.
+
+Allow `main(argv=None)` and use `parser.parse_args(argv)` so these are direct
+behavioral tests rather than patches of global `sys.argv`.
+
+Run the focused tests before implementation. Expected: the helper/main
+assertions fail because the guard and flag do not exist.
+
+- [ ] **Step 2: Add the guard**
 
 In `personal_apps/scripts/discover_reddit_sources.py`, above `main()`:
 
@@ -48,6 +70,9 @@ and in `main()`, immediately after parsing arguments:
         return 1
 ```
 
+Change the signature to `main(argv=None)` and parse with
+`parser.parse_args(argv)`.
+
 Add the flag to the parser:
 
 ```python
@@ -62,7 +87,19 @@ if __name__ == '__main__':
     sys.exit(main() or 0)
 ```
 
-- [ ] **Step 2: Verify the guard is inert locally**
+- [ ] **Step 3: Prove the guard and override**
+
+Run the new test file. Then perform two mutation checks, restoring the exact
+implementation after each:
+
+1. make `_daemon_is_running()` always return false; the active-daemon refusal
+   test must fail;
+2. remove `and not args.anyway`; the override test must fail.
+
+These are required teeth. A local Windows printout alone is not acceptance
+evidence.
+
+- [ ] **Step 4: Verify the guard is inert locally**
 
 ```bash
 python -c "import sys; sys.path.insert(0,'.'); from scripts.discover_reddit_sources import _daemon_is_running; print(_daemon_is_running())"
@@ -70,12 +107,11 @@ python -c "import sys; sys.path.insert(0,'.'); from scripts.discover_reddit_sour
 
 Expected: `False` on Windows, where `systemctl` does not exist.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add personal_apps/scripts/discover_reddit_sources.py
+git add personal_apps/scripts/discover_reddit_sources.py personal_apps/tests/test_radar_discovery.py
 git commit -m "fix(radar): the discovery script no longer 429s the daemon it shares an IP with"
 ```
 
 ---
-

@@ -112,7 +112,9 @@ Expected: all pass.
 python -m pytest tests/ -v && npm run build
 ```
 
-Expected: everything green.
+Expected: the Radar gate passes except for exactly the two established API
+template failures caused by the absent ignored Vite manifest; no other failure
+is permitted. The frontend build succeeds.
 
 - [ ] **Step 7: Commit**
 

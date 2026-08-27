@@ -378,3 +378,53 @@ Task 8 ruling: truncated rows are eligible for score WRITES but never for
 Continuation order after Task 8: batch Tasks 10-13 under one implementation
   worker and one Sonnet review, then Tasks 14-17, then Tasks 18-19, then final
   branch review. No Task 10 implementation has started at this checkpoint.
+
+Tasks 10-13 implementation batch: COMPLETE BUT NOT REVIEWED (commits
+  af11f2c..d5997c9; review base 4264036, head d5997c9). The single worker
+  completed each task sequentially under TDD and wrote
+  `task-10-13-report.md`; the exact four-commit review input is preserved in
+  `task-10-13-review-package.md`. Stop checkpoint was requested before the
+  required Sonnet review. No reviewer has been dispatched and no review
+  verdict exists.
+
+Task 10 commit af11f2c: empty parsed Reddit feeds return an unknown rate
+  (`None`) and raised fetches record unknown catchup depth (`None`), without
+  changing Task 9's not-due/no-observation behavior. Covering gate 66 passed.
+
+Task 11 commit 8a23a26: unknown model rates return `None`; token/call facts
+  remain recorded, `summary()` reports integer `unpriced_tokens`, and the API,
+  TypeScript type and Spend UI surface the caveat using existing secondary
+  styling. Backend/API focused gate 43 passed with 2 page tests deselected
+  before the build; TypeScript, both frontend test groups (403 + 81), and both
+  Vite builds passed.
+
+Task 12 commit e4de0b5: intraday chart coverage is per slot across `ok` and
+  `truncated` source rows, so interior unobserved gaps are NULL while measured
+  quiet remains zero and `watched_from` remains the first covered slot.
+  Covering gate 67 passed.
+
+Task 13 commit d5997c9: breadth-filter removals increment
+  `excluded['one_venue']`; leaderboard uses the named `VARIANCE_FLOOR`; ingest
+  extracts once per external identity with explicit membership and computes
+  the fresh-ID set once. The eager-`setdefault` mutant was killed by the
+  duplicate-ID call-count regression and restored. Focused three-test gate and
+  51-test covering gate passed.
+
+Tasks 10-13 batch gate: `python -m pytest tests/ -k radar -q` from
+  `personal_apps/` produced 633 passed, 646 deselected and 2 warnings, with no
+  failures because Task 11's frontend build generated the ignored manifest.
+  `git diff --check 4264036..d5997c9` is clean. Shared-DB cleanup added by the
+  batch is exact-owned; the older five-file broad `LIKE 'ZZ%'` debt remains.
+
+Immediate continuation: run ONE independent Sonnet review of the full
+  `4264036..d5997c9` batch using the four task briefs, implementation report
+  and review package. Reviewer writes `task-10-13-review.md` and returns only
+  the prescribed verdict status line. Critical/Important findings require the
+  SDD fix/re-review loop; Minors go to this ledger for final triage. Do not
+  begin Tasks 14-17 until that review is approved.
+
+Controller hardening prepared for later: Task 18 now requires behavioral
+  daemon/refusal/override tests and two mutation teeth; a Windows helper
+  printout alone is insufficient. Task 19's broad gate explicitly permits only
+  the two established missing-manifest failures. These brief edits are
+  controller-owned and preserved in the handoff commit.

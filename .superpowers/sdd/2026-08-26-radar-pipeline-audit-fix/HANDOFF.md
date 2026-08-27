@@ -1,5 +1,99 @@
 # HANDOFF — radar pipeline audit fix
 
+## AUTHORITATIVE STOP CHECKPOINT — Codex before Tasks 10-13 review, 2026-08-27
+
+Newest checkpoint; supersedes every section below. Michi requested a stop
+before the Sonnet review because the Codex session limit was near. **There are
+no active workers or reviewers.**
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD before this handoff/docs commit: `d5997c9` (`fix(radar): account for
+breadth exclusions and extract once`)
+Database: `flask db current` = single head `08316d3e4d77 (head)`.
+
+### Exact state
+
+Complete and review-clean: **Tasks 1, 2, 3, 3b, 3c, 4, 5, 6, 7, 8, 9.**
+
+**Tasks 10-13 are IMPLEMENTED BUT NOT REVIEWED.** The implementation range is
+`4264036..d5997c9` and contains exactly four task commits:
+
+- `af11f2c` — Task 10, unknown rate/depth instead of measured zero;
+- `8a23a26` — Task 11, unknown model pricing and visible unpriced tokens;
+- `e4de0b5` — Task 12, honest interior intraday gaps;
+- `d5997c9` — Task 13, breadth accounting, named floor, extract once.
+
+The single implementation worker completed successfully, wrote the full
+evidence to `task-10-13-report.md`, returned its status line, and was closed.
+The exact four-commit package is `task-10-13-review-package.md`. **No Sonnet
+reviewer was started and there is no verdict yet. Never mark this batch
+review-clean from implementation evidence alone.**
+
+The only dirty/controller artifacts before this docs commit were the hardened
+`task-18-brief.md` and `task-19-brief.md`, plus ignored report/review-package
+files. They are all controller-owned and must be force-added by this handoff
+commit. There is no uncommitted production or test code and no mutation left
+in place.
+
+### Verification already completed
+
+- Task 10 covering gate: 66 passed.
+- Task 11 backend/API focused gate: 43 passed, 2 known page tests deselected
+  before assets existed; `npx tsc --noEmit`, frontend tests (403 + 81), and
+  both Vite builds passed.
+- Task 12 covering gate: 67 passed.
+- Task 13 focused gate: 3 passed; covering gate: 51 passed; required eager
+  `setdefault` mutant failed and the explicit-membership implementation was
+  restored.
+- Broad Radar gate after the frontend build: **633 passed, 646 deselected, 2
+  warnings, 0 failures**. The generated ignored manifest existed for this run.
+- `git diff --check 4264036..d5997c9`: clean.
+- Shared-DB cleanup introduced by this batch uses exact owned identities.
+
+### Claude's immediate next action — review only
+
+1. Verify the worktree/branch/HEAD and DB head above. Evidence beats this file.
+2. Read `task-10-brief.md` through `task-13-brief.md`,
+   `task-10-13-report.md`, and `task-10-13-review-package.md` in full.
+3. Run ONE independent **Sonnet** review over exactly `4264036..d5997c9`.
+   The local noninteractive CLI is available at
+   `C:\Users\michi\AppData\Roaming\npm\claude.ps1` and accepts
+   `-p --model sonnet --effort high`. Keep the reviewer read-only except for
+   its report file.
+4. The reviewer writes the full report to `task-10-13-review.md` and returns
+   only:
+   `VERDICT: APPROVED|NEEDS_FIXES | critical:N | important:N | minor:N |
+   teeth:X/Y | report:task-10-13-review.md`.
+5. Apply the normal SDD fix/re-review loop for Critical/Important findings;
+   ledger Minor findings. Only after approval may work begin on Tasks 14-17.
+
+Review focus must include Task 10's not-due distinction; Task 11's API/UI
+boundary and unknown-price aggregation; Task 12 measured-zero vs uncovered
+slots; Task 13's exact excluded count, named floor and eager-`setdefault`
+mutation tooth; exact shared-DB cleanup; and regression/scope quality across
+all 15 changed files.
+
+### Later ceremony and controller hardening
+
+After approval: Tasks **14-17** one implementation worker + one Sonnet review;
+Tasks **18-19** one implementation worker + one Sonnet review; then final
+branch review. Full reports stay in the SDD directory and subagents return only
+status lines.
+
+Task 18's brief has been hardened at this checkpoint: it now requires direct
+behavioral tests for absent `systemctl`, active-daemon detection, refusal before
+app context, and `--anyway`; it also requires two mutation teeth. Task 19 now
+states that only the two established missing-Vite-manifest page failures are
+permitted if the ignored build artifact is absent.
+
+Carry every deferred Minor below to final triage, especially the pre-existing
+broad `LIKE 'ZZ%'` teardown hazard across five test files. Do not run a
+migration downgrade. Run Flask/pytest from `personal_apps/` and Git from the
+worktree root.
+
+---
+
 ## AUTHORITATIVE CHECKPOINT — Codex after Task 8, 2026-08-27
 
 Newest checkpoint; supersedes every section below.
