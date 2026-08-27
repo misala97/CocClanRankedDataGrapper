@@ -125,13 +125,8 @@ def test_the_parent_bucket_keeps_its_totals(ctx):
         assert hasattr(RadarBucket, kept)
 
 
-def test_a_downgrade_to_truncated_clears_the_stale_score(clean_buckets):
-    """Scoring refuses a row that is not `ok`. Rewriting the status must not
-    leave behind a z that the scorer would no longer produce.
-
-    Found in production 2026-08-26: 399 rows marked truncated and still ranked
-    on a mention_z from when they were ok.
-    """
+def test_current_generation_truncated_preserves_its_score(clean_buckets):
+    """Both ok and truncated are scoreable in the final generation policy."""
     start = {dt.datetime(2026, 4, 15, 14, 0, 0)}
     buckets.roll_up([row(external_id='zz-1')], {'bluesky': 'ok'}, start)
 
@@ -149,7 +144,7 @@ def test_a_downgrade_to_truncated_clears_the_stale_score(clean_buckets):
     after = RadarBucketSource.query.filter_by(
         ticker='ZZA', source='bluesky').one()
     assert after.status == 'truncated'
-    assert after.mention_z is None
-    assert after.expected is None
-    assert after.variance is None
-    assert after.baseline_days is None
+    assert after.mention_z == 4.2
+    assert after.expected == 1.0
+    assert after.variance == 2.0
+    assert after.baseline_days == 9

@@ -32,6 +32,8 @@ sys.path.insert(0, '.')
 from app import app                                        # noqa: E402
 from extensions import db                                  # noqa: E402
 from models import RadarBucketSource                       # noqa: E402
+from features.radar.config import (SCOREABLE_STATUSES,      # noqa: E402
+                                   source_config_version)
 
 _TRUTH = sa.text("""
     SELECT p.source AS src, m.ticker AS tk,
@@ -137,18 +139,25 @@ def repair(apply=False, ticker_prefix=None):
         # retroactively clear: roll_up only revisits a (ticker, bucket_start,
         # source) row when that window is touched again, and a closed
         # historical quarter-hour never is. 399 rows in production carry a
-        # mention_z written while they were `ok` and are ranked on it now that
-        # they are `truncated` -- leaderboard filters on mention_z IS NOT NULL,
-        # so the scorer's refusal to score them buys nothing until this runs.
+        # mention_z written under a status or source generation the final
+        # scorer cannot vouch for. Current-generation `truncated` is scoreable;
+        # missing/unrecognised statuses and old/NULL generations are not.
         #
         # NULL, never 0: a zero z claims the bucket was exactly average, which
         # is a different fact from not having been scored.
+        current_version = source_config_version()
         stale = (RadarBucketSource.query
-                 .filter(RadarBucketSource.status != 'ok',
-                         sa.or_(RadarBucketSource.expected.isnot(None),
-                                RadarBucketSource.variance.isnot(None),
-                                RadarBucketSource.mention_z.isnot(None),
-                                RadarBucketSource.baseline_days.isnot(None))))
+                 .filter(
+                     sa.or_(
+                         RadarBucketSource.status.is_(None),
+                         ~RadarBucketSource.status.in_(SCOREABLE_STATUSES),
+                         RadarBucketSource.source_config_version.is_(None),
+                         RadarBucketSource.source_config_version !=
+                         current_version),
+                     sa.or_(RadarBucketSource.expected.isnot(None),
+                            RadarBucketSource.variance.isnot(None),
+                            RadarBucketSource.mention_z.isnot(None),
+                            RadarBucketSource.baseline_days.isnot(None))))
         if ticker_prefix:
             stale = stale.filter(
                 RadarBucketSource.ticker.like(ticker_prefix + '%'))
@@ -159,7 +168,7 @@ def repair(apply=False, ticker_prefix=None):
                          synchronize_session=False)
 
         print('examined %d bucket rows, %d understated' % (examined, repaired))
-        print('%d rows carry a score they earned under a different status'
+        print('%d rows carry a score outside the final status/generation policy'
               % stale_count)
         if apply:
             db.session.commit()

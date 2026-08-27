@@ -22,6 +22,7 @@ from models import RadarBucketSource
 from . import baselines, profile
 from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
                      MIN_DISTINCT_TEXT_RATIO, MIN_MENTIONS,
+                     SCOREABLE_STATUSES,
                      SUSTAINED_HOURS_CONSIDERED, SUSTAINED_HOURS_REQUIRED,
                      VARIANCE_FLOOR, expand_sources, source_config_version)
 
@@ -29,17 +30,11 @@ from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
 # about eight hours: enough to dominate on day one and vanish by week two.
 PRIOR_WEIGHT = 0.05
 
-# Statuses a score may be written onto. NOT the same set baselines are built
-# from: `truncated` counts are real but incomplete, so they are worth ranking
-# and worthless as a description of normal. baselines.usable and
-# profile.build_profile still take `ok` alone.
-#
 # Widened 2026-08-26. Refusing to score truncated rows excluded 90% of Reddit,
 # which produced four elevated rows in four and a half days. An undercounted
 # observation against a correctly-scaled expectation understates z, so the
 # error runs towards silence rather than towards a false spike -- and the row
 # carries the `partial` mark either way.
-SCOREABLE_STATUSES = frozenset({'ok', 'truncated'})
 
 
 def _rows_by_ticker(source, since, until, config_version):

@@ -6,8 +6,8 @@ quarter-hour touched by several cycles kept only the last one. This suite
 pins scripts.backfill_radar_buckets.repair(): it must recover the retained
 `high` lower bound from radar_posts x radar_mentions, never regress a column,
 never restamp a partially-repaired row onto the current rollup generation,
-and clear a stale score off any row whose status is no longer `ok` -- keyed
-on ANY of the four scoring columns, not just mention_z.
+and clear a stale score off any unscoreable or incompatible-generation row --
+keyed on ANY of the four scoring columns, not just mention_z.
 
 All fixtures live under the ZZBF ticker namespace and channel
 'zzbf-backfill-test', cleaned up by exact identity (never a broad LIKE 'ZZ%'
@@ -22,11 +22,13 @@ import pytest
 from app import app as flask_app
 from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost
+from features.radar.config import source_config_version
 from scripts import backfill_radar_buckets as backfill
 
 BS = dt.datetime(2026, 4, 15, 14, 0, 0)
 CHANNEL = 'zzbf-backfill-test'
-TICKERS = ('ZZBF1', 'ZZBF2', 'ZZBF3', 'ZZBF4', 'ZZBF5')
+TICKERS = ('ZZBF1', 'ZZBF2', 'ZZBF3', 'ZZBF4', 'ZZBF5', 'ZZBF6',
+           'ZZBF7', 'ZZBF8')
 
 
 def _wipe():
@@ -200,47 +202,64 @@ def test_equal_high_confidence_count_does_not_block_other_repairs(clean):
     assert row.engagement_weighted_count == pytest.approx(10.0)  # still repaired
 
 
-# --- 4. Stale scores clear on ANY non-NULL scoring column, keyed off status,
-#        and never on dry-run or on a row that is still `ok` ----------------
+# --- 4. Final scoreability and generation policy, dry-run/apply/rerun -------
 
-def test_stale_scores_clear_on_any_column_and_only_for_non_ok_status(clean):
+def test_stale_scores_follow_final_status_and_generation_policy(clean):
     # No retained high mentions at all -- this row is reachable only through
     # the second, status-driven pass, exactly the case the pre-existing
     # rollup fix (Task 3) could never revisit.
-    _source_row('ZZBF4', status='truncated', source_config_version='old-gen-4',
-               expected=None, variance=None, mention_z=None, baseline_days=7)
-    # Control: still `ok`, so its (legitimately earned) score must survive.
-    _source_row('ZZBF5', status='ok', source_config_version='old-gen-5',
-               expected=1.1, variance=2.2, mention_z=3.3, baseline_days=14)
+    current = source_config_version()
+    # Current-generation truncated is scoreable under the final policy.
+    _source_row('ZZBF4', status='truncated', source_config_version=current,
+                expected=1.0, variance=2.0, mention_z=3.0, baseline_days=7)
+    # The same status under an old or NULL generation is stale.
+    _source_row('ZZBF5', status='truncated', source_config_version='old-gen-5',
+                expected=1.1, variance=2.1, mention_z=3.1, baseline_days=8)
+    _source_row('ZZBF6', status='truncated', source_config_version=None,
+                expected=1.2, variance=2.2, mention_z=3.2, baseline_days=9)
+    # Missing is unscoreable even when its generation is current.
+    _source_row('ZZBF7', status='missing', source_config_version=current,
+                expected=1.3, variance=2.3, mention_z=3.3, baseline_days=10)
+    # Current-generation ok remains the other scoreable control.
+    _source_row('ZZBF8', status='ok', source_config_version=current,
+                expected=1.4, variance=2.4, mention_z=3.4, baseline_days=11)
     db.session.commit()
 
     dry = backfill.repair(apply=False, ticker_prefix='ZZBF')
-    assert dry['stale_scores'] == 1
+    assert dry['stale_scores'] == 3
     # A prefix that owns nothing here must scope the stale query to zero --
     # otherwise this assertion only proves the repair loop is scoped, not the
     # separate stale-score query, and the latter would silently pass by
     # coincidence of whatever else happens to be in the database.
     assert backfill.repair(apply=False, ticker_prefix='ZZNOPE')['stale_scores'] == 0
 
-    stale = _reread('ZZBF4')
-    assert stale.baseline_days == 7            # untouched on dry-run
-    assert stale.status == 'truncated'
-    ok_row = _reread('ZZBF5')
-    assert ok_row.mention_z == 3.3              # untouched on dry-run
+    assert _reread('ZZBF4').mention_z == 3.0
+    assert _reread('ZZBF5').mention_z == 3.1
+    assert _reread('ZZBF6').mention_z == 3.2
+    assert _reread('ZZBF7').mention_z == 3.3
+    assert _reread('ZZBF8').mention_z == 3.4
 
     applied = backfill.repair(apply=True, ticker_prefix='ZZBF')
-    assert applied['stale_scores'] == 1
+    assert applied['stale_scores'] == 3
 
-    stale = _reread('ZZBF4')
-    assert stale.expected is None
-    assert stale.variance is None
-    assert stale.mention_z is None
-    assert stale.baseline_days is None          # cleared though never set itself
-    assert stale.status == 'truncated'           # status is read, not rewritten
-    assert stale.source_config_version == 'old-gen-4'  # never restamped
+    current_truncated = _reread('ZZBF4')
+    assert (current_truncated.expected, current_truncated.variance,
+            current_truncated.mention_z, current_truncated.baseline_days) == (
+                1.0, 2.0, 3.0, 7)
+    assert current_truncated.source_config_version == current
 
-    ok_row = _reread('ZZBF5')
-    assert ok_row.mention_z == 3.3               # an `ok` row keeps its score
-    assert ok_row.expected == 1.1
-    assert ok_row.variance == 2.2
-    assert ok_row.baseline_days == 14
+    for ticker, expected_version in (
+            ('ZZBF5', 'old-gen-5'), ('ZZBF6', None), ('ZZBF7', current)):
+        stale = _reread(ticker)
+        assert (stale.expected, stale.variance, stale.mention_z,
+                stale.baseline_days) == (None, None, None, None)
+        assert stale.source_config_version == expected_version
+
+    current_ok = _reread('ZZBF8')
+    assert (current_ok.expected, current_ok.variance, current_ok.mention_z,
+            current_ok.baseline_days) == (1.4, 2.4, 3.4, 11)
+
+    rerun = backfill.repair(apply=True, ticker_prefix='ZZBF')
+    assert rerun['stale_scores'] == 0
+    assert _reread('ZZBF4').mention_z == 3.0
+    assert _reread('ZZBF8').mention_z == 3.4

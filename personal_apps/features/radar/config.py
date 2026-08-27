@@ -16,6 +16,13 @@ import re
 # nothing else in the pipeline names a source (spec 8.6).
 SOURCES = ('bluesky', 'fourchan', 'reddit')
 
+# Statuses a score may be written onto. This is deliberately not the same
+# policy used to build baselines: `truncated` counts are real but incomplete,
+# so they are worth ranking but not a description of normal. Keep this here,
+# rather than in scoring, so rollup, scoring, and one-shot repair code cannot
+# drift onto different definitions without introducing an import cycle.
+SCOREABLE_STATUSES = frozenset({'ok', 'truncated'})
+
 # Whether a bare uppercase token may be read as a ticker on a given source.
 #
 # Measured on live data with the same extractor: StockTwits' top mentions were

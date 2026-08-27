@@ -19,7 +19,7 @@ import statistics
 from extensions import db
 from models import RadarBucket, RadarBucketSource
 
-from .config import (BUCKET_MINUTES, MAX_BARE_PER_VOUCHER,
+from .config import (BUCKET_MINUTES, MAX_BARE_PER_VOUCHER, SCOREABLE_STATUSES,
                      source_config_version, source_root)
 # Safe at the top because journal.py imports this module as `buckets` rather
 # than pulling MentionRow/bucket_start_for by name -- neither side touches an
@@ -222,11 +222,10 @@ def roll_up(rows, statuses, touched):
             # Two independent reasons a stored score stops being trustworthy,
             # cleared the same way:
             #
-            # scoring.score_source refuses any row that is not `ok`, so a row
-            # leaving `ok` must lose the score it was given while it was one.
-            # It kept it, and leaderboard ranks on mention_z IS NOT NULL --
-            # 399 rows in production were being ranked on a z the scorer would
-            # no longer compute for them (audit 2026-08-26).
+            # A status outside the shared final scoreable set cannot keep a
+            # score. Both `ok` and current-generation `truncated` are valid:
+            # truncated counts are incomplete but real, and their z errs
+            # toward silence rather than a false spike.
             #
             # A row whose generation is NULL or differs from the one about to
             # be stamped was counted under a different aggregation -- Task 3c,
@@ -234,7 +233,8 @@ def roll_up(rows, statuses, touched):
             # 1 rebuilt from one cursor slice. Restamping it to the current
             # version without clearing first would disguise an old-population
             # score as a current one, regardless of the row's status.
-            if child.status != 'ok' or previous_version != version:
+            if (child.status not in SCOREABLE_STATUSES
+                    or previous_version != version):
                 child.expected = None
                 child.variance = None
                 child.mention_z = None
