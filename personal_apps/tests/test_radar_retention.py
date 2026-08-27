@@ -84,3 +84,58 @@ def test_chunking_deletes_everything_across_several_passes(aged_posts):
 def test_pruning_an_empty_window_is_a_no_op(aged_posts):
     retention.prune_posts(NOW)
     assert retention.prune_posts(NOW) == 0
+
+
+# --- mention journal pruning -------------------------------------------------
+#
+# `clean_events` here cleans up by EXACT identity (ticker='ZZA', the two
+# external_ids this suite creates) rather than a broad `ticker.like('ZZ%')`
+# sweep. prune_mention_events's own delete query is unscoped by ticker -- it
+# is a real production pruner, not a test helper -- so the `now` chosen below
+# is deliberately a 2026-04-20 cutoff: the real dev database's
+# radar_mention_events rows are all from 2026-08-22/23 (checked directly
+# against the shared dev DB before writing this test), months after that
+# cutoff, so no real row can ever be `< cutoff` here regardless of what this
+# fixture does or does not clean up.
+
+@pytest.fixture()
+def clean_events():
+    from models import RadarMentionEvent
+    idents = ('zz-new', 'zz-old')
+
+    def clear():
+        RadarMentionEvent.query.filter(
+            RadarMentionEvent.ticker == 'ZZA',
+            RadarMentionEvent.external_id.in_(idents)).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        clear()
+        yield
+        clear()
+
+
+def test_the_journal_is_pruned_by_when_the_post_was_written(clean_events):
+    """By created_utc, not by when the row was inserted. A catch-up after an
+    outage ingests posts hours old, and once their bucket is past the retention
+    window nothing will rewrite it -- so that is what decides."""
+    from models import RadarMentionEvent
+
+    now = dt.datetime(2026, 4, 20, 12, 0, 0)
+    for hours, ident in ((1, 'zz-new'), (72, 'zz-old')):
+        created = now - dt.timedelta(hours=hours)
+        db.session.add(RadarMentionEvent(
+            source='bluesky', external_id=ident, ticker='ZZA', channel='c',
+            created_utc=created,
+            bucket_start=created.replace(minute=0, second=0, microsecond=0),
+            author='u1', simhash=1, confidence='high',
+            sentiment=None, engagement=0.0))
+    db.session.commit()
+
+    deleted = retention.prune_mention_events(now)
+    assert deleted == 1
+    assert isinstance(deleted, int)
+    remaining = [e.external_id for e in
+                 RadarMentionEvent.query.filter_by(ticker='ZZA').all()]
+    assert remaining == ['zz-new']

@@ -455,6 +455,9 @@ def _scheduled_prune():
         quotes = retention.prune_quotes(now)
         if quotes:
             logger.info('radar retention pruned %d quotes', quotes)
+        events = retention.prune_mention_events(now)
+        if events:
+            logger.info('radar retention pruned %d mention events', events)
 
 
 def _scheduled_sentiment():

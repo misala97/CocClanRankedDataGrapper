@@ -10,10 +10,10 @@ import time
 import sqlalchemy as sa
 
 from extensions import db
-from models import RadarPost, RadarQuote
+from models import RadarMentionEvent, RadarPost, RadarQuote
 
-from .config import (POST_RETENTION_DAYS, QUOTE_RETENTION_DAYS,
-                     STALE_QUOTE_POLLS)
+from .config import (MENTION_EVENT_RETENTION_HOURS, POST_RETENTION_DAYS,
+                     QUOTE_RETENTION_DAYS, STALE_QUOTE_POLLS)
 
 # Breathing room between chunks so the daemon's next cycle is not queued behind
 # a long delete on the same connection.
@@ -97,6 +97,40 @@ def prune_quotes(now, keep=STALE_QUOTE_POLLS, chunk_size=5000,
         db.session.commit()
         total += len(batch)
         if pause and start + chunk_size < len(doomed):
+            time.sleep(pause)
+
+    return total
+
+
+def prune_mention_events(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
+    """Delete journal rows whose bucket can no longer be rewritten.
+
+    By created_utc rather than by insertion time. A catch-up after an outage
+    ingests posts hours old, and what decides is when the POST was written --
+    once its quarter-hour is past the window, no cycle will touch that bucket
+    again and the events behind it have nothing left to answer.
+
+    Returns the number deleted.
+    """
+    cutoff = now - dt.timedelta(hours=MENTION_EVENT_RETENTION_HOURS)
+    total = 0
+
+    while True:
+        ids = [
+            row_id for (row_id,) in
+            db.session.query(RadarMentionEvent.id)
+            .filter(RadarMentionEvent.created_utc < cutoff)
+            .order_by(RadarMentionEvent.created_utc)
+            .limit(chunk_size).all()
+        ]
+        if not ids:
+            break
+
+        db.session.query(RadarMentionEvent).filter(
+            RadarMentionEvent.id.in_(ids)).delete(synchronize_session=False)
+        db.session.commit()
+        total += len(ids)
+        if pause:
             time.sleep(pause)
 
     return total

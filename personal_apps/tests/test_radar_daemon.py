@@ -331,6 +331,12 @@ def test_the_nightly_prune_covers_quotes_as_well_as_posts():
     on every load it is the one most able to undo the work that made it fast.
     Asserting both are called, because the failure mode is a function that
     exists and is never reached.
+
+    All three pruners are faked here, never the real ones: the real
+    prune_mention_events would run against actual current time, and the
+    shared dev database's radar_mention_events rows are all older than the
+    48-hour retention window by the time this suite runs -- an unfaked call
+    would delete every real row in the table.
     """
     called = []
 
@@ -338,13 +344,16 @@ def test_the_nightly_prune_covers_quotes_as_well_as_posts():
         lambda now: called.append('posts') or 0, daemon.retention.prune_posts)
     daemon.retention.prune_quotes, real_quotes = (
         lambda now: called.append('quotes') or 0, daemon.retention.prune_quotes)
+    daemon.retention.prune_mention_events, real_events = (
+        lambda now: called.append('events') or 0, daemon.retention.prune_mention_events)
     try:
         daemon._scheduled_prune()
     finally:
         daemon.retention.prune_posts = real_posts
         daemon.retention.prune_quotes = real_quotes
+        daemon.retention.prune_mention_events = real_events
 
-    assert called == ['posts', 'quotes']
+    assert called == ['posts', 'quotes', 'events']
 
 
 def test_the_daemon_schedules_a_profile_job():
