@@ -355,3 +355,26 @@ Task 9 deferred Minors for the final branch review: N1 the downgrade's width
   across five test files (PRE-EXISTING, not introduced here) - the shared-DB
   hazard caught three times on this branch, still live; N4
   `board.excluded['one_venue']` is dead in production (pre-existing).
+
+Task 8: complete (commit aee4e2f, independent high-capability review clean).
+  Scoring writes scores for statuses exactly `ok` and `truncated`, while
+  baseline and profile inputs remain `ok`-only. A persisted current-generation
+  `missing` row retains NULL in all four score fields. Exact cleanup ownership
+  was extended only for `ZZTRUNCATED` and `ZZMISSING`; no broad `LIKE` cleanup
+  was introduced. Focused covering gate: 87 passed. Broad radar gate: 620
+  passed, 2 skipped, plus only the two established missing-Vite-manifest API
+  template failures. Independent Reddit review APPROVED with 0 Critical,
+  0 Important, 0 Minor and teeth 2/2. Both required mutants were killed and
+  restored byte-for-byte: the old `status != 'ok'` guard breaks truncated
+  scoring, and bypassing the scoreable-status guard scores the real missing
+  row and breaks its NULL assertions.
+
+Task 8 ruling: truncated rows are eligible for score WRITES but never for
+  baseline/profile INPUTS. Missing rows remain unscored even when they belong
+  to the current source generation. Cost if wrong is either discarding most
+  Reddit observations from ranking or contaminating expectations with known
+  partial/missing measurements.
+
+Continuation order after Task 8: batch Tasks 10-13 under one implementation
+  worker and one Sonnet review, then Tasks 14-17, then Tasks 18-19, then final
+  branch review. No Task 10 implementation has started at this checkpoint.

@@ -1,5 +1,77 @@
 # HANDOFF — radar pipeline audit fix
 
+## AUTHORITATIVE CHECKPOINT — Codex after Task 8, 2026-08-27
+
+Newest checkpoint; supersedes every section below.
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD before this handoff/docs commit: `aee4e2f` (`fix(radar): rank truncated
+buckets instead of discarding ninety percent of reddit`)
+Working tree before controller artifacts: clean. Task 8's report, review
+package, review, and this checkpoint are controller-owned SDD artifacts and
+must be force-added because the SDD directory is ignored.
+
+### Current plan state
+
+Complete and review-clean: **Tasks 1, 2, 3, 3b, 3c, 4, 5, 6, 7, 8, 9.**
+
+Task 8 is DONE in commit `aee4e2f`. Its independent Reddit review used the
+most capable available reviewer (`gpt-5.6-sol`, ultra) and returned
+**APPROVED: 0 Critical, 0 Important, 0 Minor, teeth 2/2**. The full evidence is
+in `task-8-report.md` and `task-8-review.md`; the exact review range and diff
+are in `task-8-review-package.md`.
+
+Task 8 behavior now has direct persisted-row proof:
+
+- scoring writes accept exactly `ok` and `truncated`;
+- baseline/profile inputs remain `ok`-only;
+- a real current-generation `missing` row receives none of `expected`,
+  `variance`, `mention_z`, or `baseline_days`;
+- restoring the old `status != 'ok'` guard breaks the truncated regression;
+- bypassing the scoreable-status guard breaks the missing-row regression;
+- Task 8 cleanup owns exact `ZZTRUNCATED` and `ZZMISSING` identities only.
+
+Focused covering gate: **87 passed**. Broad Radar gate: **620 passed, 2
+skipped**, with exactly the two established API template failures caused by
+the absent ignored Vite manifest. No other failures.
+
+### Immediate next action
+
+Start the ceremony batch **Tasks 10-13** using one implementation worker, then
+one independent **Sonnet** review for the whole batch. The briefs are
+`task-10-brief.md` through `task-13-brief.md`. Task 13's controller hardening
+is binding: use explicit membership before extraction caching because an
+eager `setdefault` default still calls `_extract_for`; add the duplicate-ID
+call-count regression and kill that mutant.
+
+Continue after that as **Tasks 14-17 (one implementation + one Sonnet review),
+Tasks 18-19 (one implementation + one Sonnet review), then final branch
+review**. Reviews write full reports to files and return only status lines.
+No Task 10 production or test edit has started at this checkpoint.
+
+### Database and workspace invariants
+
+- The shared local DB remains at the single Alembic head `08316d3e4d77`.
+- Do not run a migration downgrade.
+- Run Flask/pytest from `personal_apps/`; run Git from the worktree root.
+- Preserve unrelated dirty work if any appears. Evidence beats handoff prose.
+- The source-expansion, not-due-cycle, population-vs-presentation, and
+  root-venue rulings in the next checkpoint below remain binding.
+- Tasks 10-19 reviews use Sonnet; the Reddit/StockTwits exception ended with
+  Task 8.
+
+### Deferred final-review carries
+
+Carry every deferred Minor listed below, especially the pre-existing broad
+`LIKE 'ZZ%'` cleanup hazard across five shared-DB test files. Task 13 closes
+the pre-existing dead `board.excluded['one_venue']` behavior if implemented as
+briefed. Also reconcile Task 18's manual-only draft with behavioral daemon
+guard tests before accepting that batch, and treat the two known manifest
+failures as the only permitted broad-gate failures.
+
+---
+
 ## AUTHORITATIVE CHECKPOINT — Claude to Codex, 2026-08-27
 
 Newest checkpoint; supersedes every section below. Michi stopped Claude near
