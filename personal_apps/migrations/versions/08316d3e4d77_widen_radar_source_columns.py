@@ -54,29 +54,40 @@ def downgrade():
     A re-upgrade therefore recovers the bucket history intact; it is only
     invisible while rolled back.
 
-    WIDTH DEPENDENCY on radar_bucket_sources. Unlike radar_posts, that table
-    is narrowed 48 -> 24 with no normalisation, so every prefixed name it
-    holds must already fit in 24 characters. The longest configured name is
+    WIDTH DEPENDENCY on radar_poll_state and radar_bucket_sources. Both tables
+    are narrowed 48 -> 24 with no normalisation, so every source name they
+    hold must already fit in 24 characters. The longest configured name is
     `reddit:smallstreetbets` at 22. Adding a subreddit whose name exceeds 17
-    characters -- RadarPollState.symbol's own comment cites the
-    20-character RobinHoodPennyStocks, which would give a 27-character source
-    -- makes this statement fail with MySQL 1406, AFTER the radar_poll_state
-    DDL above has already auto-committed. The check below turns that into a
-    readable error instead of a half-applied rollback.
+    characters -- RadarPollState.symbol's own comment cites the 20-character
+    RobinHoodPennyStocks, which would give a 27-character source -- must abort
+    before either non-transactional MySQL/MariaDB ALTER begins.
     """
+    bind = op.get_bind()
+    limits = (
+        ('radar_poll_state', 24),
+        ('radar_bucket_sources', 24),
+    )
+    lengths = {}
+    for table, _limit in limits:
+        maximum = bind.execute(sa.text(
+            'SELECT MAX(CHAR_LENGTH(source)) FROM %s' % table)).scalar()
+        # int() at the query boundary for both MySQL and MariaDB drivers.
+        lengths[table] = int(maximum or 0)
+
+    violations = [
+        '%s max source length %d exceeds %d' %
+        (table, lengths[table], limit)
+        for table, limit in limits if lengths[table] > limit
+    ]
+    if violations:
+        raise RuntimeError(
+            'source-width downgrade preflight failed before DDL: %s. '
+            'Decide what those rows should become and delete or rename them '
+            'before rolling this migration back.' % '; '.join(violations))
+
     op.alter_column('radar_poll_state', 'source',
                     existing_type=sa.String(length=48),
                     type_=sa.String(length=24), existing_nullable=False)
-    too_long = op.get_bind().execute(sa.text(
-        "SELECT COUNT(*) FROM radar_bucket_sources "
-        "WHERE CHAR_LENGTH(source) > 24")).scalar()
-    # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
-    if int(too_long or 0):
-        raise RuntimeError(
-            'radar_bucket_sources holds %d source name(s) longer than 24 '
-            'characters; narrowing the column would truncate them. Decide '
-            'what those rows should become and delete or rename them before '
-            'rolling this migration back.' % int(too_long))
     op.alter_column('radar_bucket_sources', 'source',
                     existing_type=sa.String(length=48),
                     type_=sa.String(length=24), existing_nullable=False)
