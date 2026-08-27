@@ -113,6 +113,10 @@ export const MARK_WHY: Record<string, string> = {
   partial:
     'A source was truncated during this window, so the count is real but ' +
     'incomplete. The true figure is higher.',
+  'warming-up':
+    'Under a day of baseline history, because the extraction rules changed ' +
+    'recently and older data no longer counts toward it. Not a new ticker -- ' +
+    'every ticker on the board is warming up together.',
 }
 
 /** "22:14 UTC" -- the board's own clock, always UTC.

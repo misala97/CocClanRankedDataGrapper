@@ -63,7 +63,7 @@ class Row:
     price_move: object
     direction: str
     price_status: str
-    baseline_days: int | None
+    baseline_days: float | None
     marks: list
 
 
@@ -287,7 +287,12 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         if venues == 1 and selected_venues > 1:
             marks.append('single-source')
         if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
-            marks.append('provisional')
+            # Two different facts wear this badge, and only one is about the
+            # ticker. A NEW ticker has thin history of its own; every ticker on
+            # the board has thin history when the extraction rules changed
+            # recently, because baselines are built per config version. Saying
+            # `provisional` for both made it fire on all of them.
+            marks.append('provisional' if baseline_days >= 1.0 else 'warming-up')
         if any(part.truncated for part in parts):
             marks.append('partial')
 

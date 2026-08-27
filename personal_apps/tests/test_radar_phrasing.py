@@ -23,7 +23,7 @@ class FakeRow:
     sources: tuple = ('bluesky', 'fourchan')
     price_move: float | None = 0.182
     price_status: str = 'ok'
-    baseline_days: int | None = 30
+    baseline_days: float | None = 30
     mention_z: float | None = 4.1
 
     @property

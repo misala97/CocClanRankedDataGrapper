@@ -21,7 +21,8 @@ export interface Tone {
 
 /** Why a number on this row cannot be taken at face value. Rendered, never
  *  hidden behind a hover -- see PRODUCT.md. */
-export type Mark = 'no-print' | 'provisional' | 'single-source' | 'partial'
+export type Mark =
+  'no-print' | 'provisional' | 'single-source' | 'partial' | 'warming-up'
 
 /** `fund` is a pooled vehicle -- an ETF, an ETN, an index product. It is
  *  deliberately outside the `small` group and therefore off the default

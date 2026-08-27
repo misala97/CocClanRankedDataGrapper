@@ -82,7 +82,7 @@ class Detail:
     # the same numbers.
     mentions: int
     expected: float
-    baseline_days: int | None
+    baseline_days: float | None
 
 
 def window_figures(ticker, sources, since, now):

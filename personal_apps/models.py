@@ -709,7 +709,10 @@ class RadarBucketSource(db.Model):
     expected                  = db.Column(db.Float, nullable=True)
     variance                  = db.Column(db.Float, nullable=True)
     mention_z                 = db.Column(db.Float, nullable=True)
-    baseline_days             = db.Column(db.SmallInteger, nullable=True)
+    # Float since 2026-08-26. SmallInteger meant span.days, and .days truncated
+    # twenty-three hours of history to zero -- which put every row on the board
+    # under PROVISIONAL_BASELINE_DAYS permanently.
+    baseline_days             = db.Column(db.Float, nullable=True)
 
 
 class RadarPollState(db.Model):

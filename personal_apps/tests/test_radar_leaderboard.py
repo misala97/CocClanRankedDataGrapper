@@ -196,7 +196,26 @@ def test_a_thin_baseline_is_marked_provisional(board):
     universe_row('LBH')
     scored('LBH', baseline_days=3)
     db.session.commit()
-    assert 'provisional' in build_rows(['bluesky'], NOW)[0].marks
+    row = build_rows(['bluesky'], NOW)[0]
+    assert 'provisional' in row.marks
+    # A ticker with genuine multi-day history is not "warming up" -- that
+    # word is reserved for a baseline thinner than a day.
+    assert 'warming-up' not in row.marks
+
+
+def test_a_baseline_under_a_day_is_marked_warming_up_not_provisional(board):
+    """Two different facts wear the same badge otherwise: a NEW ticker has
+    thin history of its own, but a config-version change gives EVERY ticker
+    on the board under a day of history at once. Production: baseline_days
+    truncated to 0 on 147,228 of 147,429 scored Bluesky rows, which fired
+    `provisional` on the whole board -- a mark that fires on every row is not
+    a mark."""
+    universe_row('LBW')
+    scored('LBW', baseline_days=0.5)
+    db.session.commit()
+    row = build_rows(['bluesky'], NOW)[0]
+    assert 'warming-up' in row.marks
+    assert 'provisional' not in row.marks
 
 
 def test_a_truncated_source_is_marked_partial(board):

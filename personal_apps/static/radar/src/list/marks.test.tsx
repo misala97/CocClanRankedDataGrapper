@@ -56,3 +56,32 @@ describe('a mark carried by every row', () => {
       .toContain('provisional')
   })
 })
+
+describe('warming-up, a second thin-baseline mark', () => {
+  /* leaderboard.py splits one badge into two: a NEW ticker is `provisional`,
+     but a board-wide config-version change makes EVERY ticker `warming-up`
+     instead -- see leaderboard.py's own comment where the mark is written.
+     A mark the client does not know about renders as a raw key or nothing at
+     all; these pin that it is lifted, rendered and worded the same way
+     `provisional` already is. */
+  it('is lifted off the rows when the whole board has it, like provisional', () => {
+    const rows = [row('A', ['warming-up']), row('B', ['warming-up'])]
+
+    expect(universalMarks(rows)).toEqual(['warming-up'])
+  })
+
+  it('stays on the row when only some rows carry it', () => {
+    const rows = [row('A', ['warming-up']), row('B', [])]
+
+    expect(universalMarks(rows)).toEqual([])
+  })
+
+  it('renders on the row like any other mark', () => {
+    const { container } = render(
+      <TickerRow row={row('A', ['warming-up'])} selected={false}
+                 onSelect={() => {}} />)
+
+    expect(container.querySelector('.meta')!.textContent)
+      .toContain('warming-up')
+  })
+})

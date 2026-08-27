@@ -12,8 +12,9 @@ import pytest
 from app import app as flask_app
 from extensions import db
 from models import RadarBucketSource
-from features.radar import scoring
+from features.radar import buckets, scoring
 from features.radar.config import source_config_version
+from test_radar_buckets import clean_buckets  # noqa: F401
 
 MONDAY = dt.datetime(2026, 8, 17, 0, 0, 0)
 # A concrete stored Reddit source name. Since 2026-08-26 every Reddit
@@ -492,3 +493,42 @@ def test_sustained_needs_several_non_overlapping_hours(rows):
     db.session.commit()
     scoring.score_source('bluesky', NOW)
     assert scoring.is_sustained('SSA', ['bluesky'], end) is True
+
+
+def row(external_id, minute=0, hour=14, ticker='ZZA', source='bluesky'):
+    """A MentionRow for the fractional-baseline test below.
+
+    test_radar_buckets.row() (whose clean_buckets fixture is reused above)
+    hardcodes hour=14, which would collapse all three of that test's
+    roll_up calls onto the same 14:00 bucket -- span would be zero and the
+    assertion the test exists to make would never pass, before or after the
+    fix. This local row() takes `hour` explicitly so the three calls land in
+    three separate buckets, the way the scenario needs.
+    """
+    return buckets.MentionRow(
+        ticker=ticker, external_id=external_id,
+        created_utc=dt.datetime(2026, 4, 15, hour, minute, 0),
+        source=source, channel='c', author='u1', simhash=111,
+        confidence='high', sentiment=0.5, engagement=10.0)
+
+
+def test_a_baseline_shorter_than_a_day_is_not_reported_as_zero_days(clean_buckets):
+    """span.days truncates. Twenty-three hours of history is not no history,
+    and reporting it as zero put every row on the board permanently
+    provisional -- 147,228 of 147,429 in production."""
+    import datetime as dt
+
+    from features.radar import buckets, scoring
+    from models import RadarBucketSource
+
+    now = dt.datetime(2026, 4, 16, 14, 0, 0)
+    for hour in (14, 20, 23):
+        start = dt.datetime(2026, 4, 15, hour, 0, 0)
+        buckets.roll_up([row(external_id='zz-%d' % hour, minute=0, hour=hour)],
+                        {'bluesky': 'ok'}, {start})
+
+    scoring.score_source('bluesky', now)
+
+    scored = RadarBucketSource.query.filter_by(
+        ticker='ZZA', source='bluesky').first()
+    assert 0 < scored.baseline_days < 1

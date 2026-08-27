@@ -20,6 +20,10 @@ const UNIVERSAL: Record<Mark, string> = {
   'single-source': 'every row here came from a single source',
   'no-print': 'no tape has printed in this window',
   partial: 'every source here was truncated, so the counts are low',
+  // Distinct from `provisional`: this fires when the extraction rules
+  // changed recently, not when a ticker itself is new -- see marks.test.tsx.
+  'warming-up': 'the extraction rules changed recently, so every baseline '
+    + 'here is starting over',
 }
 
 /** Marks shared by the whole board, in the order they are written above.
@@ -46,10 +50,16 @@ function Finding({ payload, shared }: {
 }) {
   const count = payload.rows.length
   const tickers = count === 1 ? '1 ticker' : `${count} tickers`
-  const baselines = shared.includes('provisional')
-    ? UNIVERSAL.provisional
-    : 'baselines over 30 days'
-  const rest = shared.filter((mark) => mark !== 'provisional')
+  // The two never both apply to one row -- leaderboard.py picks exactly one
+  // per row, by age -- so at most one is ever universal at a time. Either
+  // way the header must not say "baselines over 30 days" while every row
+  // disagrees; that was the bug this whole section exists to fix.
+  const thinBaseline = shared.includes('provisional') ? 'provisional'
+    : shared.includes('warming-up') ? 'warming-up'
+    : null
+  const baselines = thinBaseline ? UNIVERSAL[thinBaseline] : 'baselines over 30 days'
+  const rest = shared.filter(
+    (mark) => mark !== 'provisional' && mark !== 'warming-up')
 
   return (
     <p className="finding">

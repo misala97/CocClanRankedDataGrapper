@@ -149,7 +149,10 @@ def score_source(source, now, lookback_days=30, excluded=None):
                                         prior_weight=PRIOR_WEIGHT)
         k = baselines.dispersion(good, prof, rate)
         span = max(o.bucket_start for o in good) - min(o.bucket_start for o in good)
-        baseline_days = span.days
+        # Fractional. `.days` truncated twenty-three hours to zero, which put
+        # every row under PROVISIONAL_BASELINE_DAYS forever -- a mark that
+        # fires on 100% of a board carries no information.
+        baseline_days = span.total_seconds() / 86400.0
 
         for row in rows:
             # A source that was DOWN has nothing to be surprised about --
