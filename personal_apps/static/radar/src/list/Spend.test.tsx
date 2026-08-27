@@ -3,12 +3,16 @@ import { describe, expect, it } from 'vitest'
 import { Spend } from './Spend'
 import type { BoardPayload } from '../types'
 
-const payload = (spend?: { today_usd: number; month_usd: number }) =>
+const payload = (spend?: {
+  today_usd: number
+  month_usd: number
+  unpriced_tokens: number
+}) =>
   ({ spend, excluded: {}, rows: [] } as unknown as BoardPayload)
 
 describe('the spend footnote', () => {
   it('reports today and the month', () => {
-    render(<Spend payload={payload({ today_usd: 0.196, month_usd: 4.12 })} />)
+    render(<Spend payload={payload({ today_usd: 0.196, month_usd: 4.12, unpriced_tokens: 0 })} />)
 
     expect(screen.getByText(/\$0\.196/)).toBeTruthy()
     expect(screen.getByText(/\$4\.12/)).toBeTruthy()
@@ -26,7 +30,7 @@ describe('the spend footnote', () => {
 
   it('is silent on a zero rather than drawing an empty band', () => {
     const { container } = render(
-      <Spend payload={payload({ today_usd: 0, month_usd: 0 })} />)
+      <Spend payload={payload({ today_usd: 0, month_usd: 0, unpriced_tokens: 0 })} />)
 
     expect(container.textContent).toBe('')
   })
@@ -35,9 +39,19 @@ describe('the spend footnote', () => {
     /* Three places below a dollar because a day costs about twenty cents and
        "$0.20" reads as a rounding of something unknown. Above a dollar the
        third place is noise. */
-    render(<Spend payload={payload({ today_usd: 1.5, month_usd: 12.345 })} />)
+    render(<Spend payload={payload({ today_usd: 1.5, month_usd: 12.345, unpriced_tokens: 0 })} />)
 
     expect(screen.getByText(/\$1\.50/)).toBeTruthy()
     expect(screen.getByText(/\$12\.35/)).toBeTruthy()
+  })
+
+  it('surfaces tokens that have no price without inventing one', () => {
+    render(<Spend payload={payload({
+      today_usd: 0,
+      month_usd: 0,
+      unpriced_tokens: 501_000,
+    })} />)
+
+    expect(screen.getByText(/tokens at an unknown rate/)).toBeTruthy()
   })
 })

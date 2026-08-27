@@ -189,7 +189,7 @@ export interface BoardPayload {
   /** What the model tone pass has cost. SPEND, never a balance -- the Claude
    *  API has no balance endpoint, so nothing here knows what is left. Absent
    *  until the first pass books something. */
-  spend?: { today_usd: number; month_usd: number }
+  spend?: { today_usd: number; month_usd: number; unpriced_tokens: number }
 }
 
 export interface Selection {

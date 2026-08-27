@@ -28,12 +28,15 @@ export function Spend({ payload }: { payload: BoardPayload }) {
   // Absent until the first pass books something. Rendering "$0.00" before any
   // call has happened would look like a working meter reading zero, which is
   // a different claim from having nothing to report yet.
-  if (!spend || (!spend.today_usd && !spend.month_usd)) return null
+  if (!spend || (!spend.today_usd && !spend.month_usd && !spend.unpriced_tokens)) return null
 
   return (
     <p className="below">
       <b>{usd(spend.today_usd)}</b> spent reading tone today,
       {' '}<b>{usd(spend.month_usd)}</b> this month.
+      {spend.unpriced_tokens > 0 && (
+        <> plus {spend.unpriced_tokens.toLocaleString()} tokens at an unknown rate.</>
+      )}
     </p>
   )
 }

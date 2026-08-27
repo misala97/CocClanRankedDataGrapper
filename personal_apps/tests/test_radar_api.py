@@ -20,6 +20,21 @@ def test_the_board_returns_json(client):
     assert isinstance(payload['rows'], list)
 
 
+def test_the_board_payload_surfaces_unpriced_tokens(client, monkeypatch):
+    """The spend summary crosses the API boundary without becoming dollars."""
+    from features.radar.routes import api
+
+    monkeypatch.setattr(api.spend, 'summary', lambda: {
+        'today_usd': 0.0,
+        'month_usd': 0.0,
+        'unpriced_tokens': 501_000,
+    })
+
+    payload = json.loads(client.get('/radar/api/board').data)
+
+    assert payload['spend']['unpriced_tokens'] == 501_000
+
+
 def test_the_selected_sources_are_echoed_back(client):
     """The surface needs to know which selection produced these rows, or a
     stale request and a fresh one look identical."""

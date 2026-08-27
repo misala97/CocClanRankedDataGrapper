@@ -13,6 +13,7 @@ call and then reports a total nobody can reconcile against a bank statement.
 import datetime as dt
 
 import pytest
+import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
@@ -21,20 +22,29 @@ from features.radar import spend
 
 TODAY = dt.date(2026, 8, 25)
 MODEL = 'claude-haiku-4-5'
+SPEND_IDENTITIES = (
+    (TODAY, MODEL),
+    (TODAY - dt.timedelta(days=5), MODEL),
+    (dt.date(2026, 8, 1), MODEL),
+    (dt.date(2026, 7, 31), MODEL),
+    (TODAY, 'claude-some-future-model'),
+    (dt.date(2026, 4, 15), MODEL),
+    (dt.date(2026, 4, 15), 'claude-unknown-9'),
+)
 
 
 @pytest.fixture()
 def clean_spend():
+    def wipe():
+        RadarLlmSpend.query.filter(sa.tuple_(
+            RadarLlmSpend.day, RadarLlmSpend.model).in_(SPEND_IDENTITIES)
+        ).delete(synchronize_session=False)
+        db.session.commit()
+
     with flask_app.app_context():
-        RadarLlmSpend.query.filter(
-            RadarLlmSpend.day >= dt.date(2026, 8, 1)).delete(
-                synchronize_session=False)
-        db.session.commit()
+        wipe()
         yield
-        RadarLlmSpend.query.filter(
-            RadarLlmSpend.day >= dt.date(2026, 8, 1)).delete(
-                synchronize_session=False)
-        db.session.commit()
+        wipe()
 
 
 def test_a_days_first_call_creates_its_row(clean_spend):
@@ -109,6 +119,25 @@ def test_an_unpriced_model_records_tokens_and_no_cost(clean_spend):
         row = RadarLlmSpend.query.filter_by(model='claude-some-future-model').one()
         assert row.input_tokens == 500
         assert row.cost_micros == 0
+
+
+def test_an_unpriced_model_costs_null_not_nothing():
+    """Zero is a price. Not knowing the price is not one."""
+    assert spend.cost_micros('claude-not-a-real-model', 1000, 100) is None
+    assert spend.cost_micros(MODEL, 1_000_000, 0) == 1_000_000
+
+
+def test_the_summary_surfaces_what_it_could_not_price(clean_spend):
+    day = dt.date(2026, 4, 15)
+    spend.record(MODEL, calls=1, input_tokens=1_000_000,
+                 output_tokens=0, day=day)
+    spend.record('claude-unknown-9', calls=1, input_tokens=500_000,
+                 output_tokens=1000, day=day)
+
+    result = spend.summary(today=day)
+
+    assert result['today_usd'] == 1.0
+    assert result['unpriced_tokens'] == 501_000
 
 
 def test_nothing_is_written_for_a_call_that_used_nothing(clean_spend):
