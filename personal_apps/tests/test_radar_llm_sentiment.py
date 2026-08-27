@@ -176,9 +176,9 @@ def test_the_post_text_is_delimited_as_data():
 
 
 def test_the_model_is_haiku():
-    """Deliberate, and the one place it is decided. 1335 scored mentions a day
-    at Haiku's rates is about twenty cents; the same pass on an Opus-tier
-    model is not a hobby board's bill."""
+    """Deliberate, and the one place it is decided. Measured 2026-08-25: 344
+    calls and $1.2446 for the day at Haiku's rates; the same pass on an
+    Opus-tier model is not a hobby board's bill."""
     client = FakeClient([answer([(1, 'neutral')])])
 
     llm_sentiment.judge([item('a')], client=client)

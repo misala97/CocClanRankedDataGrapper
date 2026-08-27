@@ -19,11 +19,19 @@ counted mention is scored, and rescoring re-reads the same buckets, so there
 is no discontinuity to warm up from. config.source_config_version's own
 docstring draws that line; this stays on the far side of it.
 
-COST. About 1335 scored mentions a day, ~100 input tokens each and one word
-back, batched. At Haiku's rates that is roughly twenty cents a day. The
-estimate in spec 6.11 -- "order of 150k input tokens/day, cents" -- turns out
-to have been accurate for exactly this population, and is wrong by two orders
-of magnitude for any larger one.
+COST. Measured, not estimated, on 2026-08-25: 344 calls, 798,198 input tokens,
+89,281 output, $1.2446 for the day. The earlier figure in this docstring --
+"about 1335 scored mentions a day ... roughly twenty cents" -- was 5x low on
+volume and 6x low on cost, because it counted the mentions a day's BUCKETS
+carry rather than the mentions the pass is handed. spec 6.11's own estimate
+("order of 150k input tokens/day, cents") is wrong by the same factor.
+
+No daily ceiling. PASS_LIMIT caps one pass at 400 and the pass runs every ten
+minutes, so the theoretical maximum is 57,600 mentions a day against an
+observed 6,880 -- the ceiling that matters is how many mentions ingest
+produces, and a spend cap would silently stop reading tone rather than
+signalling that something upstream had changed. The figure is on the board;
+watch it there.
 """
 import json
 import logging

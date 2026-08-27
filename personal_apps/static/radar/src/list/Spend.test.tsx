@@ -36,8 +36,8 @@ describe('the spend footnote', () => {
   })
 
   it('drops to cents once there are dollars to round', () => {
-    /* Three places below a dollar because a day costs about twenty cents and
-       "$0.20" reads as a rounding of something unknown. Above a dollar the
+    /* Three places below a dollar: at two decimal places a sub-dollar spend
+       ("$0.20") reads as a rounding of something unknown. Above a dollar the
        third place is noise. */
     render(<Spend payload={payload({ today_usd: 1.5, month_usd: 12.345, unpriced_tokens: 0 })} />)
 

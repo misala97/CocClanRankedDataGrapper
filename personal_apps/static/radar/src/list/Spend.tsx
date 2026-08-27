@@ -3,8 +3,8 @@ import type { BoardPayload } from '../types'
 /** Money in USD, at the precision the number deserves.
  *
  *  Cents once there are dollars to round; three places below a dollar,
- *  because a day of this costs about twenty cents and "$0.20" reads as a
- *  rounding of something unknown while "$0.196" reads as a measurement.
+ *  because a sub-dollar spend reads as a rounding of something unknown at two
+ *  decimal places ("$0.20") and as a measurement at three ("$0.196").
  */
 function usd(amount: number): string {
   if (amount >= 1) return `$${amount.toFixed(2)}`
