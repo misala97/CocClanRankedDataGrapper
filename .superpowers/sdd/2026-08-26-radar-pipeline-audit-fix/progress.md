@@ -490,3 +490,37 @@ Tasks 14-17 Important 2 (fixed): the disagreement-counting loop in
   class of defect the whole audit exists to find. Closed with a test driving
   real rows carrying disagreeing verdicts, verified under the same `if False:`
   mutation.
+
+Tasks 18-19: implemented and reviewed (commits 5b91a9d..200bde3). The
+  discovery script now yields to the running daemon rather than 429-ing it into
+  reporting `missing` (18), and the journal is pruned past its retention window
+  in chunks (19). Sonnet review returned NEEDS_FIXES with 1 Important and 2
+  Minor; fix round 1 (200bde3) closed all three with the boundary tooth
+  confirmed. Broad gate 645 passed.
+
+Ruling: Tasks 18-19's fix round goes to the FINAL BRANCH REVIEW rather than a
+  separate scoped re-review. The fix is test-only, its teeth were confirmed,
+  and the mandatory whole-branch review runs immediately after on a more
+  capable model - one dispatch instead of two, with no gate dropped. The final
+  review is told to treat commit 200bde3 as an explicit focus item. Task 18-19
+  is NOT marked review-clean until that review returns.
+
+Tasks 18-19 Important (fixed): the retention cutoff boundary was unpinned -
+  mutating `created_utc < cutoff` to `<= cutoff` left the whole retention suite
+  green. An off-by-one on a retention prune's comparison decides whether a row
+  sitting exactly on the cutoff is destroyed or kept. Closed with a row at
+  exactly the cutoff, verified under that mutation.
+
+Task 19 shared-DB safety: `prune_mention_events` is a DELETE tested against the
+  real shared dev database. Scoping was confirmed STRUCTURAL, not incidental -
+  tests use an April-2026 window no real row can enter, rather than being safe
+  only because today's data happens to fall outside. `radar_mention_events`
+  held 1432 rows before and after every run, verified independently by the
+  implementer, the reviewer and the fixer.
+
+Task 19 also patched a PRE-EXISTING prune test in test_radar_daemon.py to fake
+  `prune_mention_events`. Unfaked it would have deleted real rows on every
+  future run, given today's date against the 48-hour window. Reviewer confirmed
+  the claim and the shape of the patch. An unsafe `>` teeth mutation was
+  abandoned before execution because it would have deleted all real rows - the
+  query carries no ticker filter.
