@@ -566,3 +566,50 @@ Codex stop checkpoint: Michi requested stop immediately after Lorentz
   has started. Next controller records this handoff commit as `FIX_BASE`, runs
   the one fix wave, scoped re-review, fresh verification, then presents the
   exact finishing menu for verified base `dev_personal` at `b9c8ef8`.
+
+Final branch review: complete. Reviewer Lorentz (gpt-5.6-sol, ultra) returned
+  NEEDS_FIXES with 0 Critical, 3 Important and 3 Minor, all six ruled into one
+  fix wave. Four deferred Minors were fixed and four accepted.
+
+Final fix wave: commits 3d2dced (I1 exact-identity cleanup across six test
+  files), 2bc2c19 (I2 backfill/Task 8 policy contradiction), f107380 (I3
+  aggregate ingest health reaches a real consumer), 3a3c4b1 (M1 preflight both
+  narrowed tables before any ALTER), 9139749 (M2 strict scored-read teeth),
+  a9055b4 (M3 StockTwits policy-map key absence). Its worker was cut off before
+  writing any report; the reconstruction lives in final-branch-fix-report.md,
+  written by the later repair worker.
+
+The fix wave left the branch RED and nobody noticed, because the worker died
+  before its report and the controller handoff was written before dispatch.
+  Two genuine failures survived: an `aggregate_status` assertion expecting
+  `{'reddit': 'missing'}` was copy-pasted into Task 13's extract-once test,
+  whose fixture is a default-bluesky `ok` cycle; and the retention boundary
+  test took a GLOBAL count over the shared dev database (`assert 3 == 1`),
+  green only while no other suite had written a qualifying row. Repaired in
+  d9c7f76.
+
+Note: the two historically-expected missing-Vite-manifest page failures no
+  longer occur - the manifest now exists in this worktree. Any failure in the
+  radar gate is now real. The gate is 655 passed, 0 failed, confirmed over two
+  consecutive runs because the retention test had been order-dependent.
+
+Ruling: a test that was order-dependent needs TWO consecutive full-suite runs
+  before it counts as fixed. Cost if wrong is one extra minute per gate;
+  a single green run on an order-dependent test proves only that this ordering
+  was lucky.
+
+Final scoped re-review (8752c02..d9c7f76, 7 commits): VERDICT MERGE. All six
+  findings ADDRESSED, 0 Critical, 0 Important, 4 new Minor. The retention
+  count assertion was specifically checked for tautology - measuring the
+  expectation with the implementation's own predicate - and confirmed to still
+  have teeth under predicate mutation. Canary 1432 rows before and after.
+
+Final re-review deferred Minors (all ACCEPT, none blocking merge): N1
+  test_radar_leaderboard.py writes journal identities no fixture owns; N2 the
+  retention identity assertion is scoped by ticker rather than owned identity;
+  N3 the retention test does not pin `created_utc` against `bucket_start`; N4
+  the third narrowing in the source-width downgrade is still unguarded
+  (downgrade remains forbidden in production regardless).
+
+BRANCH STATUS: all 19 tasks complete and review-clean. Final review and its
+  fix wave closed. Ready to finish onto dev_personal (verified base b9c8ef8).
