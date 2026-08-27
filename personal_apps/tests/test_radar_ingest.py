@@ -380,6 +380,32 @@ def test_the_same_post_twice_in_one_batch_is_stored_once(seeded):
         assert RadarBucket.query.filter_by(ticker='ZZG').one().mention_count == 1
 
 
+def test_a_duplicate_external_id_is_extracted_once_and_refreshes_engagement(
+        seeded, monkeypatch):
+    """One identity means one extraction decision, even when it appears twice."""
+    calls = []
+    extract = ingest._extract_for
+
+    def counted(raw, lookup):
+        calls.append(raw.external_id)
+        return extract(raw, lookup)
+
+    monkeypatch.setattr(ingest, '_extract_for', counted)
+    duplicate = [post(ident='dup-extract', score=5),
+                 post(ident='dup-extract', score=900)]
+
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=duplicate, status='ok')))
+
+    assert calls == ['dup-extract']
+    assert result['posts_new'] == 1
+    assert result['mentions'] == 1
+    with flask_app.app_context():
+        stored = RadarPost.query.filter_by(external_id='dup-extract').one()
+        assert stored.score == 900
+        assert RadarBucket.query.filter_by(ticker='ZZG').one().mention_count == 1
+
+
 def test_a_low_only_post_is_counted_but_never_stored(seeded):
     """ROM in "dinosaur fossils at the ROM" is a real ticker and a real bare
     match, and about 12000 an hour of its kind cross the firehose. It is

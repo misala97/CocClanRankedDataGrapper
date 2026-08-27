@@ -20,8 +20,8 @@ from . import journal
 from . import market_calendar
 from . import quotes as quotes_mod
 from . import scoring, universe
-from .config import (PROVISIONAL_BASELINE_DAYS, expand_sources, segments_in,
-                     source_kind, source_root)
+from .config import (PROVISIONAL_BASELINE_DAYS, VARIANCE_FLOOR,
+                     expand_sources, segments_in, source_kind, source_root)
 
 
 @dataclasses.dataclass
@@ -248,7 +248,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
                  text_ratio) in survivors.items():
         parts = grouped[ticker]
         mention_z = ((mentions - expected)
-                     / max(variance, 0.25) ** 0.5) if variance else None
+                     / max(variance, VARIANCE_FLOOR) ** 0.5) if variance else None
 
         contributing = sorted({part.source for part in parts})
         # One venue per ROOT, not per stored name -- see Row.venues.

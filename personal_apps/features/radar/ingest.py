@@ -95,9 +95,10 @@ def _store_mentioning_posts(raw_posts, lookup, now):
     later would be 100 million rows a month to find roughly 250 thousand that
     matter.
 
-    Extraction still runs once per post -- an already-stored post is refreshed
-    for engagement but never re-extracted, so a stopword or universe change
-    cannot silently rewrite history under a bucket that was already counted.
+    Extraction runs once per post per cycle, and the journal keeps the result:
+    a post arriving again in a later cycle upserts its existing event rather
+    than re-deciding it, so a stopword or universe change cannot rewrite
+    history under a bucket that was already counted.
     """
     if not raw_posts:
         return [], 0
@@ -114,9 +115,15 @@ def _store_mentioning_posts(raw_posts, lookup, now):
             existing[row.external_id] = row
 
     fresh, new_count = [], 0
+    extracted = {}
     for raw in raw_posts:
         row = existing.get(raw.external_id)
-        tickers = _extract_for(raw, lookup)
+        # An external identity can appear twice in a source batch. The second
+        # loop below needs the same decision, so cache it explicitly: a
+        # setdefault default would call _extract_for eagerly for duplicates.
+        if raw.external_id not in extracted:
+            extracted[raw.external_id] = _extract_for(raw, lookup)
+        tickers = extracted[raw.external_id]
 
         if row is None:
             # New, and only worth keeping if something scorable was found.
@@ -160,10 +167,11 @@ def _store_mentioning_posts(raw_posts, lookup, now):
     # Every extraction reaches the rollup, stored or not -- bucket counts and
     # corroboration are computed in memory from these rows.
     mention_rows = []
+    fresh_ids = {raw.external_id for raw, _, _ in fresh}
     for raw in raw_posts:
-        if raw.external_id in {r.external_id for r, _, _ in fresh}:
+        if raw.external_id in fresh_ids:
             continue
-        tickers = _extract_for(raw, lookup)
+        tickers = extracted[raw.external_id]
         if not tickers:
             continue
         score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))

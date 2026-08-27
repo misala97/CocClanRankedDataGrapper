@@ -312,7 +312,12 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     if allowed:
         ranked = [row for row in ranked if row.segment in allowed]
     if min_venues > 1:
-        ranked = [row for row in ranked if row.venues >= min_venues]
+        kept = [row for row in ranked if row.venues >= min_venues]
+        removed = len(ranked) - len(kept)
+        if removed:
+            ranking.excluded['one_venue'] = (
+                ranking.excluded.get('one_venue', 0) + removed)
+        ranked = kept
     ranked = ranked[:limit]
 
     tickers = [row.ticker for row in ranked]

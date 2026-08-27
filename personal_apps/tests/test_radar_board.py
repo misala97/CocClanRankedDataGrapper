@@ -364,6 +364,54 @@ def test_venue_counts_are_taken_before_the_venue_filter(clean):
     assert built.venue_counts['multi'] == 1
 
 
+@pytest.fixture()
+def clean_breadth_reporting():
+    """Own exactly the one row used to test the breadth exclusion account."""
+    ticker = 'BDT13'
+
+    def wipe():
+        RadarBucketSource.query.filter_by(ticker=ticker).delete(
+            synchronize_session=False)
+        TickerUniverse.query.filter_by(symbol=ticker).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        wipe()
+        yield ticker
+        wipe()
+
+
+def test_the_breadth_filter_reports_what_it_removed(clean_breadth_reporting):
+    universe(clean_breadth_reporting)
+    bucket(clean_breadth_reporting, minutes_ago=30, source='bluesky')
+    db.session.commit()
+
+    wide_open = board.build(['bluesky'], NOW, min_venues=1)
+    assert any(row.rank.ticker == clean_breadth_reporting
+               for row in wide_open.rows)
+
+    filtered = board.build(['bluesky'], NOW, min_venues=2)
+    assert not any(row.rank.ticker == clean_breadth_reporting
+                   for row in filtered.rows)
+    assert filtered.excluded.get('one_venue', 0) >= 1
+
+
+def test_the_leaderboard_uses_the_named_variance_floor(
+        clean_breadth_reporting, monkeypatch):
+    from features.radar import leaderboard
+
+    monkeypatch.setattr(leaderboard, 'VARIANCE_FLOOR', 4.0, raising=False)
+    universe(clean_breadth_reporting)
+    bucket(clean_breadth_reporting, minutes_ago=30, mentions=10,
+           expected=1.0, variance=0.01)
+    db.session.commit()
+
+    row = only(board.build(['bluesky'], NOW), clean_breadth_reporting).rank
+
+    assert row.mention_z == pytest.approx(4.5)
+
+
 def test_two_subreddits_are_one_venue(clean):
     """The breadth filter's claim is INDEPENDENT corroboration.
 
