@@ -23,7 +23,8 @@ REDDIT = 'reddit:pennystocks'
 NOW = MONDAY + dt.timedelta(days=35)
 _OWNED_TICKERS = (
     'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL',
-    'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED',
+    'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED', 'ZZTRUNCATED',
+    'ZZMISSING',
 )
 
 
@@ -132,6 +133,48 @@ def test_missing_buckets_are_never_scored(rows):
     scoring.score_source('bluesky', NOW)
     assert RadarBucketSource.query.filter_by(
         ticker='SSA', bucket_start=gap).one().mention_z is None
+
+
+def test_a_truncated_bucket_is_scored_from_ok_baselines(rows):
+    """Known undercounts remain rankable against an `ok`-only normal."""
+    steady_history(ticker='ZZTRUNCATED')
+    truncated_at = NOW - dt.timedelta(minutes=15)
+    add(truncated_at, 3, ticker='ZZTRUNCATED', status='truncated')
+    db.session.commit()
+
+    scoring.score_source('bluesky', NOW)
+
+    truncated = RadarBucketSource.query.filter_by(
+        ticker='ZZTRUNCATED', source='bluesky',
+        bucket_start=truncated_at).one()
+    assert truncated.status == 'truncated'
+    assert truncated.expected is not None
+    assert truncated.variance is not None
+    assert truncated.mention_z is not None
+    assert truncated.baseline_days is not None
+
+
+def test_scoreable_statuses_exclude_missing():
+    """The scoring eligibility contract admits incomplete observations only."""
+    assert scoring.SCOREABLE_STATUSES == frozenset({'ok', 'truncated'})
+
+
+def test_a_current_generation_missing_bucket_keeps_all_scores_null(rows):
+    """A source outage is an absence, even when its `ok` history is scoreable."""
+    steady_history(ticker='ZZMISSING')
+    missing_at = NOW - dt.timedelta(minutes=15)
+    add(missing_at, 0, ticker='ZZMISSING', status='missing')
+    db.session.commit()
+
+    scoring.score_source('bluesky', NOW)
+
+    missing = RadarBucketSource.query.filter_by(
+        ticker='ZZMISSING', source='bluesky', bucket_start=missing_at).one()
+    assert missing.status == 'missing'
+    assert missing.expected is None
+    assert missing.variance is None
+    assert missing.mention_z is None
+    assert missing.baseline_days is None
 
 
 def test_a_gap_does_not_depress_the_baseline(rows):

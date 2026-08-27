@@ -29,6 +29,18 @@ from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
 # about eight hours: enough to dominate on day one and vanish by week two.
 PRIOR_WEIGHT = 0.05
 
+# Statuses a score may be written onto. NOT the same set baselines are built
+# from: `truncated` counts are real but incomplete, so they are worth ranking
+# and worthless as a description of normal. baselines.usable and
+# profile.build_profile still take `ok` alone.
+#
+# Widened 2026-08-26. Refusing to score truncated rows excluded 90% of Reddit,
+# which produced four elevated rows in four and a half days. An undercounted
+# observation against a correctly-scaled expectation understates z, so the
+# error runs towards silence rather than towards a false spike -- and the row
+# carries the `partial` mark either way.
+SCOREABLE_STATUSES = frozenset({'ok', 'truncated'})
+
 
 def _rows_by_ticker(source, since, until, config_version):
     """Every row a ticker may be scored or baselined from, THIS generation only.
@@ -140,9 +152,10 @@ def score_source(source, now, lookback_days=30, excluded=None):
         baseline_days = span.days
 
         for row in rows:
-            # A source that was down, or a known undercount, has nothing to be
-            # surprised about. Scoring it would invent a reading from a gap.
-            if row.status != 'ok':
+            # A source that was DOWN has nothing to be surprised about --
+            # scoring it would invent a reading from a gap. A source that was
+            # merely incomplete is a different fact: see SCOREABLE_STATUSES.
+            if row.status not in SCOREABLE_STATUSES:
                 continue
 
             expected = baselines.expected_for(rate, prof, row.bucket_start)
@@ -166,8 +179,8 @@ def pooled_z(ticker, bucket_start, sources):
     over is stronger evidence than either alone; averaging reports the same two
     sigma and throws the corroboration away.
 
-    A source with no scored row for this bucket -- down, or truncated -- drops
-    out of all three sums rather than contributing zero.
+    A source with no scored row for this bucket -- down or otherwise unscored
+    -- drops out of all three sums rather than contributing zero.
 
     `sources` is a selection and expands STRICTLY: this reads `expected` and
     `variance`, and the pre-split root `reddit` rows were baselined against a
