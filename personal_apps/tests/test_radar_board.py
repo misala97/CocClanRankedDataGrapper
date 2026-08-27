@@ -216,6 +216,30 @@ def test_the_triplet_is_the_same_three_windows_whatever_is_selected(clean):
         assert set(only(built, f'{PREFIX}A').triplet) == {1, 4, 24}
 
 
+def test_triplets_exclude_pre_split_root_reddit_scores():
+    ticker = 'ZZM2BOARD'
+
+    def clear():
+        RadarBucketSource.query.filter_by(ticker=ticker).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        clear()
+        try:
+            bucket(ticker, minutes_ago=30, source='reddit:pennystocks',
+                   mentions=5, expected=1.0, variance=4.0, z=2.0)
+            bucket(ticker, minutes_ago=45, source='reddit', mentions=1001,
+                   expected=1.0, variance=1.0, z=1000.0)
+            db.session.commit()
+
+            triplets = board._triplets({ticker}, ['reddit'], NOW)[ticker]
+
+            assert triplets == {1: 2.0, 4: 2.0, 24: 2.0}
+        finally:
+            clear()
+
+
 # ------------------------------------------------------------------- tone ---
 
 def test_tone_counts_neutral_separately_rather_than_folding_it_in(clean):

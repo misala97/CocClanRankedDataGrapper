@@ -25,7 +25,7 @@ NOW = MONDAY + dt.timedelta(days=35)
 _OWNED_TICKERS = (
     'SSA', 'SSB', 'SSNEW', 'SSOLD', 'SSNULL',
     'ZZGEN', 'ZZSCORED', 'ZZSCOPE', 'ZZUNSCORED', 'ZZTRUNCATED',
-    'ZZMISSING',
+    'ZZMISSING', 'ZZM2POOL', 'ZZM2WINDOW',
 )
 
 
@@ -392,6 +392,27 @@ def test_pooling_nothing_returns_none(rows):
     assert scoring.pooled_z('SSNOPE', MONDAY, ['bluesky']) == (None, 0)
 
 
+def test_pooled_z_excludes_pre_split_root_reddit_scores(rows):
+    when = MONDAY + dt.timedelta(days=10)
+    for source, mentions, expected, variance, authors, version in (
+            (REDDIT, 5, 1.0, 4.0, 3, source_config_version()),
+            ('reddit', 1001, 1.0, 1.0, 99, '8106787f1fa72179')):
+        db.session.add(RadarBucketSource(
+            ticker='ZZM2POOL', bucket_start=when, source=source,
+            mention_count=mentions, high_confidence_count=mentions,
+            low_count=0, distinct_authors=authors,
+            distinct_text_ratio=0.8,
+            engagement_weighted_count=float(mentions), status='ok',
+            source_config_version=version, expected=expected,
+            variance=variance, mention_z=2.0, baseline_days=12))
+    db.session.commit()
+
+    pooled, contributing = scoring.pooled_z('ZZM2POOL', when, ['reddit'])
+
+    assert pooled == 2.0
+    assert contributing == 1
+
+
 def _forum(mentions=10, voices=6, text_ratio=0.9):
     return {'forum': scoring.Contribution(mentions, voices, text_ratio)}
 
@@ -466,6 +487,36 @@ def test_a_window_aggregates_its_buckets(rows):
 
 def test_a_window_with_no_scored_buckets_is_none(rows):
     assert scoring.window_z('SSNOPE', ['bluesky'], NOW, hours=1) == (None, {})
+
+
+def test_window_z_excludes_pre_split_root_reddit_scores(rows):
+    end = MONDAY + dt.timedelta(days=10, hours=1)
+    when = end - dt.timedelta(minutes=15)
+    for source, mentions, expected, variance, authors, ratio, version in (
+            (REDDIT, 5, 1.0, 4.0, 3, 0.8, source_config_version()),
+            ('reddit', 1001, 1.0, 1.0, 99, 0.1, '8106787f1fa72179')):
+        db.session.add(RadarBucketSource(
+            ticker='ZZM2WINDOW', bucket_start=when, source=source,
+            mention_count=mentions, high_confidence_count=mentions,
+            low_count=0, distinct_authors=authors,
+            distinct_text_ratio=ratio,
+            engagement_weighted_count=float(mentions), status='ok',
+            source_config_version=version, expected=expected,
+            variance=variance, mention_z=2.0, baseline_days=12))
+    db.session.commit()
+
+    score, parts = scoring.window_z(
+        'ZZM2WINDOW', ['reddit'], end, hours=1)
+
+    assert score == 2.0
+    assert parts == {
+        'mentions': 5,
+        'expected': 1.0,
+        'variance': 4.0,
+        'authors': 3,
+        'text_ratio': pytest.approx(0.8),
+        'buckets': 1,
+    }
 
 
 def test_sustained_needs_several_non_overlapping_hours(rows):

@@ -204,11 +204,10 @@ def test_scoring_columns_are_left_untouched(clean_buckets):
 
     The property still matters: expected/variance/mention_z/baseline_days
     live on RadarBucketSource now, written by scoring.score_source, and a
-    rollup must not clobber them on a source whose status stays `ok`. The
-    complementary case -- a status change DOES clear them -- is
-    test_a_downgrade_to_truncated_clears_the_stale_score in
-    tests/test_radar_bucket_sources.py; this test must use a source that
-    stays `ok`, or the two would contradict each other.
+    rollup must not clobber them while status and generation remain scoreable.
+    The complementary policy is pinned in test_radar_bucket_sources.py:
+    current-generation `truncated` also preserves a score, while an
+    unscoreable status or incompatible generation clears it.
     """
     buckets.roll_up([row()], ALL_OK, {dt.datetime(2026, 4, 15, 14, 0, 0)})
     source = RadarBucketSource.query.filter_by(

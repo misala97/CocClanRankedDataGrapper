@@ -316,6 +316,41 @@ def test_the_breakdown_counts_real_disagreements_not_just_the_tone_helper(
 # `reddit`. This chart's default span is 1Y and buckets are retained forever,
 # so most of what it draws for Reddit is under that older name.
 
+
+def test_window_figures_exclude_pre_split_root_reddit_scores():
+    ticker = 'ZZM2DETAIL'
+
+    def clear():
+        RadarBucketSource.query.filter_by(ticker=ticker).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        clear()
+        try:
+            when = NOW - dt.timedelta(minutes=30)
+            for source, mentions, expected, baseline_days, version in (
+                    ('reddit:pennystocks', 5, 1.0, 12.0,
+                     source_config_version()),
+                    ('reddit', 1001, 901.0, 1.0, '8106787f1fa72179')):
+                db.session.add(RadarBucketSource(
+                    ticker=ticker, bucket_start=when, source=source,
+                    mention_count=mentions, high_confidence_count=mentions,
+                    low_count=0, distinct_authors=5,
+                    distinct_text_ratio=1.0,
+                    engagement_weighted_count=float(mentions), status='ok',
+                    source_config_version=version, expected=expected,
+                    variance=4.0, mention_z=2.0,
+                    baseline_days=baseline_days))
+            db.session.commit()
+
+            figures = detail_panel.window_figures(
+                ticker, ['reddit'], NOW - dt.timedelta(hours=1), NOW)
+
+            assert figures == (5, 1.0, 12.0)
+        finally:
+            clear()
+
 def _old_root_bucket(ticker, days_ago, mentions):
     """A bucket row exactly as production wrote it before the split."""
     db.session.add(RadarBucketSource(
