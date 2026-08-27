@@ -171,9 +171,19 @@ def read_clauses(detail, mentions, expected, voices, session,
     out.extend(_read_price(detail, session))
 
     if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
-        days = 'day' if baseline_days == 1 else 'days'
+        # `baseline_days` is a fraction of a day, not a truncated int, since
+        # Task 16 (2026-08-27) -- an hour-old baseline is `0.0416...`, and
+        # interpolating that raw float into the sentence read as
+        # "0.041666666666666664 days old". Branch instead: sub-day spans are
+        # exactly the population 'warming-up' exists to describe, so they get
+        # their own words rather than a rounded-away lie of precision.
+        if baseline_days < 1:
+            span = 'under a day'
+        else:
+            whole = round(baseline_days)
+            span = f'{whole} day' if whole == 1 else f'{whole} days'
         out.append(Clause('warn',
-                          f'The baseline is {baseline_days} {days} old, not '
+                          f'The baseline is {span} old, not '
                           f'30, so this rests on very little history.'))
     return out
 

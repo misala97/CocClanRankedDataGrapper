@@ -255,8 +255,12 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         venues = len({source_root(name) for name in contributing})
         # MIN already skipped NULLs per source; this skips the sources that
         # had nothing but NULLs, so a row with no usable baseline anywhere
-        # still reports None rather than raising.
-        baseline_days = min((part.baseline_days for part in parts
+        # still reports None rather than raising. Coerced like the aggregates
+        # above for the same reason, even though MIN/MAX over a Float column
+        # (unlike SUM over an Integer one) do not promote to Decimal on
+        # MySQL/MariaDB -- matching the sibling pattern removes the ambiguity
+        # for a future reader rather than relying on that distinction silently.
+        baseline_days = min((float(part.baseline_days) for part in parts
                              if part.baseline_days is not None), default=None)
 
         profile = profiles.get(ticker)

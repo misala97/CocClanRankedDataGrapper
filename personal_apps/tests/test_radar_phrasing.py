@@ -175,6 +175,34 @@ def test_a_full_baseline_earns_no_caveat():
     assert not any('baseline' in c.text for c in clauses)
 
 
+def test_a_fractional_baseline_reads_as_words_not_a_raw_float():
+    """Task 16 made `baseline_days` a fraction of a day, not a truncated int.
+    An hour-old baseline is `0.041666666666666664` -- interpolated straight
+    into the sentence, that read "The baseline is 0.041666666666666664 days
+    old", which is exactly the population 'warming-up' exists to describe
+    correctly. The sentence must not leak the float."""
+    clauses = phrasing.read_clauses(
+        FakeDetail(), mentions=284, expected=7.0, voices=11,
+        session='regular', baseline_days=1 / 24)
+
+    warn = next(c for c in clauses if c.kind == 'warn' and 'baseline' in c.text)
+    assert warn.text == ('The baseline is under a day old, not 30, so this '
+                         'rests on very little history.')
+
+
+def test_a_multi_day_fractional_baseline_rounds_to_a_whole_day():
+    """A span like 2.7 days must round for display, not truncate (`.days`
+    truncation is the exact bug Task 16 fixed) and must not print the
+    fraction either."""
+    clauses = phrasing.read_clauses(
+        FakeDetail(), mentions=284, expected=7.0, voices=11,
+        session='regular', baseline_days=2.7)
+
+    warn = next(c for c in clauses if c.kind == 'warn' and 'baseline' in c.text)
+    assert '3 days' in warn.text
+    assert '2.7' not in warn.text
+
+
 def test_the_read_does_not_paraphrase_what_people_said():
     """Cut during mockup review. The page cannot summarise content it never
     understood, and the posts are directly below it."""

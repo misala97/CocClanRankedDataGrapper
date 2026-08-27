@@ -161,8 +161,14 @@ def test_a_span_shorter_than_a_year_takes_the_recent_end(clean):
 
 # --------------------------------------------------------------- the panel ---
 
-def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None):
-    """One post carrying one scored mention of `ticker`."""
+def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None,
+             llm_sentiment=None):
+    """One post carrying one scored mention of `ticker`.
+
+    `llm_sentiment` defaults to None (no verdict yet, the common case);
+    passing 'bullish'/'bearish'/'unclear' lets a test drive the model side of
+    `_tone_of` against a real row instead of a hand-built one.
+    """
     from models import RadarMention, RadarPost
 
     when = NOW - dt.timedelta(minutes=minutes_ago)
@@ -176,7 +182,8 @@ def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None):
     db.session.flush()
     db.session.add(RadarMention(
         post_id=post.id, ticker=ticker, confidence='high',
-        lexicon_sentiment=0.4 if 'moon' in text else 0.0))
+        lexicon_sentiment=0.4 if 'moon' in text else 0.0,
+        llm_sentiment=llm_sentiment))
 
 
 @pytest.fixture()
@@ -269,6 +276,38 @@ def test_neutral_is_everything_the_lexicon_did_not_score(panel_ticker):
 
     assert b.bullish + b.neutral + b.bearish == b.mentions
     assert b.neutral == 2
+
+
+def test_the_breakdown_counts_real_disagreements_not_just_the_tone_helper(
+        panel_ticker):
+    """`test_the_breakdown_prefers_the_model_verdict_over_the_lexicon` above
+    only drives `_tone_of` directly -- the pure function. Nothing before this
+    test ran the counting LOOP in `breakdown_for` (the thing Task 14 actually
+    built) against real rows with a genuine lexicon/model disagreement:
+    replacing that loop's condition with `if False:` left all 69 tests in
+    this file and test_radar_api.py green (fix-round-1 review, finding I2).
+
+    Three rows, one real disagreement:
+      - 'to the moon' (lexicon bullish) scored 'bearish' by the model: the
+        model outranks and reverses the read -> counted.
+      - 'to the moon' (lexicon bullish) scored 'bullish': they agree -> not
+        counted.
+      - 'still holding' (lexicon carried no directional word) scored
+        'bullish': the lexicon never took a side, so there is nothing to
+        disagree WITH -> not counted, even though the model's tone differs
+        from the row's final tone.
+    """
+    post_for(f'{PREFIX}A', 5, 'frank', 'to the moon',
+             ext=f'{PREFIX}-disagree-reversed', llm_sentiment='bearish')
+    post_for(f'{PREFIX}A', 6, 'grace', 'to the moon',
+             ext=f'{PREFIX}-disagree-agrees', llm_sentiment='bullish')
+    post_for(f'{PREFIX}A', 7, 'heidi', 'still holding',
+             ext=f'{PREFIX}-disagree-no-lexicon-side', llm_sentiment='bullish')
+    db.session.commit()
+
+    b = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW).breakdown
+
+    assert b.disagreements == 1
 
 
 # ------------------------------------------------- pre-split root history ---

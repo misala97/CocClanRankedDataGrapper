@@ -27,6 +27,12 @@ def upgrade():
 
 
 def downgrade():
+    # DESTRUCTIVE: narrows Float back to SMALLINT, which truncates any
+    # fractional value written since the upgrade (e.g. 0.375 -> 0) --
+    # silently reversing the fix this migration exists to make (see
+    # upgrade()'s comment: SmallInteger truncation put 147,228 of 147,429
+    # scored rows under PROVISIONAL_BASELINE_DAYS permanently). Do not run
+    # this against a database carrying real scored history.
     op.alter_column('radar_bucket_sources', 'baseline_days',
                     existing_type=sa.Float(),
                     type_=mysql.SMALLINT(), existing_nullable=True)
