@@ -524,3 +524,45 @@ Task 19 also patched a PRE-EXISTING prune test in test_radar_daemon.py to fake
   the claim and the shape of the patch. An unsafe `>` teeth mutation was
   abandoned before execution because it would have deleted all real rows - the
   query carries no ticker filter.
+
+Final whole-branch review: NEEDS_FIXES (reviewed code package
+  b9c8ef8..3782dd5 at docs-only HEAD 21384ef; 0 Critical, 3 Important,
+  3 Minor; retention teeth 1/1). Full report: `final-branch-review.md`.
+  Reviewer restored the sole mutation byte-for-byte; independent post-review
+  `radar_mention_events` canary remains 1432. No active reviewer or worker.
+
+Final Important I1: six shared-real-DB test files still use broad `ZZ%`
+  cleanup. Replace with exact fixture-owned identities and add an unowned-ZZ
+  sentinel mutation regression. This elevates deferred Task 9 N3 and includes
+  the branch-added broad cleanup in `test_radar_daemon.py`.
+
+Final Important I2: Task 6 backfill treats every scored non-`ok` row as stale,
+  contradicting Task 8's final `{ok, truncated}` write policy. Preserve
+  current-generation truncated scores; clear unscoreable or NULL/incompatible
+  generations; add dry-run/apply/rerun coverage and correct stale comments.
+
+Final Important I3: Reddit aggregate health and failed-fetch unknown catch-up
+  depth are computed but have no production consumer. Keep concrete statuses
+  for rollup, separately report/log root health plus catch-up depth, make the
+  fallback schema consistent, and prove the runtime log without recreating a
+  root storage row.
+
+Final Minors ruled FIX BEFORE MERGE: M1 preflight both source-width downgrade
+  tables before any irreversible ALTER; M2 add direct strict-vs-history
+  mutation teeth for four scored readers; M3 assert direct StockTwits absence
+  from `COIN_SYMBOLS_MEAN_STOCKS` and kill a false-valued-key mutant.
+
+Final deferred-Minor ACCEPT rulings: Task 4+5 `_extract_for` prose omission;
+  Task 6 COUNT/SUM Decimal comment; Task 9 `one_venue` (resolved by Task 13);
+  Tasks 10-13 spend local-name shadow (readability only).
+
+Ruling: execute all six final-review findings in ONE final fix wave, then one
+  scoped re-review — the SDD final-review process permits no second fix wave.
+  Cost if wrong is a larger single worker context; splitting waves would
+  repeat branch-wide context and violate the one-wave final gate.
+
+Codex stop checkpoint: Michi requested stop immediately after Lorentz
+  completed. No fix worker has been dispatched and no branch-finishing action
+  has started. Next controller records this handoff commit as `FIX_BASE`, runs
+  the one fix wave, scoped re-review, fresh verification, then presents the
+  exact finishing menu for verified base `dev_personal` at `b9c8ef8`.

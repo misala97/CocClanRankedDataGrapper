@@ -1,5 +1,111 @@
 # HANDOFF — radar pipeline audit fix
 
+## AUTHORITATIVE STOP CHECKPOINT — final review needs one fix wave, 2026-08-27
+
+Newest checkpoint; supersedes every section below. Michi asked Codex to stop
+immediately after the final-review subagent finished because the session limit
+was near. **There are no active workers or reviewers.**
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD before this handoff/docs commit: `21384ef` (`docs(radar): hand off with
+only the final branch review left`)
+Database: single Alembic head `35c3ae366677`; independent post-review canary
+check: `radar_mention_events = 1432`.
+
+### Final review result
+
+The required whole-branch review is complete. Reviewer Lorentz used the most
+capable available model (`gpt-5.6-sol`, ultra) and reviewed the prebuilt
+`final-branch-review-package.md` without rebuilding it. Full report:
+`final-branch-review.md`.
+
+Verdict:
+
+```text
+VERDICT: NEEDS_FIXES | critical:0 | important:3 | minor:3 | teeth:1/1 | deferred_fixed:4 | deferred_accepted:4
+```
+
+The mandated Task 19 boundary mutation passed 1/1: changing strict `< cutoff`
+to `<= cutoff` failed the exact April-2026 regression, restoration was
+byte-for-byte, and the shared table remained 1432 rows before/after. Reviewer
+was closed. No mutation, production edit, test edit, migration, index change,
+or partial reviewer work remains. The only controller artifacts at this stop
+are this checkpoint, the ledger update, and the ignored review report; force-add
+them in the checkpoint commit.
+
+### Open findings — all enter ONE final fix wave
+
+**I1 Important — shared-real-DB cleanup ownership.** Six test files still use
+broad `LIKE 'ZZ%'`/equivalent deletion, including one branch-added daemon site:
+`test_radar_buckets.py`, `test_radar_bucket_sources.py`,
+`test_radar_journal.py`, `test_radar_retention.py`,
+`test_radar_universe.py`, and `test_radar_daemon.py`. Replace every broad
+delete with exact identities owned by that fixture and add an unowned-ZZ
+sentinel mutation regression.
+
+**I2 Important — Task 6/Task 8 contradiction.** The backfill clears every
+scored non-`ok` row, but final policy makes current-generation `truncated`
+scores legitimate. Clear when status is outside `{ok, truncated}` OR generation
+is NULL/incompatible; preserve current-generation truncated scores. Add
+dry-run/apply/rerun coverage for current- versus old-generation truncated rows
+and update stale comments. Deployment keeps the daemon stopped through
+backfill regardless.
+
+**I3 Important — operational values have no production consumer.** Reddit's
+aggregate root health and failed-fetch `catchup_depth=None` die in test-only
+summary dictionaries. Keep concrete statuses only for rollup, but expose a
+separate root report map/equivalent and log it with catch-up depth in `tick()`;
+make fallback summary shape consistent. Add runtime/log-capture proof that a
+partial Reddit cycle reports root health without writing a root child, and a
+failed fetch visibly reports unknown rather than zero depth.
+
+**M1 Minor, FIX BEFORE MERGE — unsafe downgrade preflight.** Migration
+`08316d3e4d77` checks one table only after irreversible narrowing DDL. Preflight
+both narrowed tables before the first ALTER. Downgrade remains forbidden in
+production.
+
+**M2 Minor, FIX BEFORE MERGE — strict scored-read teeth.** Add direct
+pre-split-root exclusion regressions/mutations for `board._triplets`,
+`detail_panel.window_figures`, `scoring.pooled_z`, and `scoring.window_z`.
+
+**M3 Minor, FIX BEFORE MERGE — StockTwits retirement tooth.** Assert direct
+key absence from `COIN_SYMBOLS_MEAN_STOCKS` and kill the false-valued-key
+mutant.
+
+### Deferred-Minor triage already decided by final review
+
+FIX BEFORE MERGE: Task 7 policy-map key (M3); Task 9 downgrade guard (M1);
+Task 9 scored-read strictness teeth (M2); Task 9 broad cleanup hazard (I1).
+
+ACCEPT: Task 4+5 `_extract_for` prose omission; Task 6 COUNT/SUM Decimal
+comment; Task 9 `one_venue` (resolved by Task 13); Tasks 10-13 `spend.py` local
+name shadowing (readability only).
+
+### Immediate next action — do not run another broad review
+
+1. Read `final-branch-review.md` in full and verify Git/DB/canary.
+2. Record the checkpoint commit's SHA as `FIX_BASE`.
+3. Dispatch **ONE** implementation subagent with I1-I3 and M1-M3 together.
+   This is the sole final-review fix wave permitted by the SDD process. Worker
+   writes a full fix report to `final-branch-fix-report.md` and returns only a
+   status line.
+4. Require focused mutation/contract gates for all six findings, then the
+   normal backend/frontend/migration gates and a 1432-before/after canary.
+5. Generate one scoped package from `FIX_BASE..fix HEAD` and run exactly one
+   independent scoped re-review. Residual load-bearing findings are surfaced
+   to Michi; there is no second fix wave.
+6. If the re-review clears the wave, run fresh completion verification and use
+   `superpowers:finishing-a-development-branch`. Base branch is verified as
+   `dev_personal` at `b9c8ef8`, and the feature branch is currently a clean
+   fast-forward descendant. Integration still requires Michi's menu choice.
+
+The review's ordered 12-step deploy checklist is authoritative and lives in
+`final-branch-review.md`; carry it into the final handoff. Do not deploy, merge,
+push, downgrade, or delete the SDD workspace before the fix/re-review gate.
+
+---
+
 ## AUTHORITATIVE CHECKPOINT — all 19 tasks implemented, 2026-08-27
 
 Newest checkpoint; supersedes every section below. Michi stopped Claude at its
