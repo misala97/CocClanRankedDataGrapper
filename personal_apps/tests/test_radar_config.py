@@ -337,6 +337,7 @@ def test_stocktwits_is_retired():
     assert 'stocktwits' not in config.SOURCES
     assert 'stocktwits' not in config.BARE_TOKENS_ALLOWED
     assert 'stocktwits' not in config.SINGLE_LETTER_CASHTAGS
+    assert 'stocktwits' not in config.COIN_SYMBOLS_MEAN_STOCKS
     assert 'stocktwits' not in config.SOURCE_KIND
     assert not hasattr(config, 'STOCKTWITS_REQUESTS_PER_HOUR')
 
