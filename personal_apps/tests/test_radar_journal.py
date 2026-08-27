@@ -9,29 +9,63 @@ Measured in production 2026-08-26: 43% of the 10+ mention buckets lost.
 import datetime as dt
 
 import pytest
+import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
 from models import RadarMention, RadarMentionEvent, RadarPost
 
+_OWNED_EVENT_IDENTITIES = (
+    ('bluesky', 'zz-a', 'ZZA'),
+    ('bluesky', 'zz-b', 'ZZA'),
+    ('bluesky', 'zz-low', 'ZZA'),
+    ('bluesky', 'zz-high', 'ZZA'),
+    ('bluesky', 'zz-voucher', 'ZZA'),
+    ('bluesky', 'zz-bare-0', 'ZZA'),
+    ('bluesky', 'zz-bare-1', 'ZZA'),
+    ('bluesky', 'zz-bare-2', 'ZZA'),
+    ('bluesky', 'zz-bare-3', 'ZZA'),
+    ('bluesky', 'zz-bare-over-cap', 'ZZA'),
+    ('reddit', 'zz-down', 'ZZA'),
+    ('bluesky', 'zz-bootstrap-high', 'ZZH'),
+    ('bluesky', 'zz-bootstrap-low', 'ZZL'),
+    ('bluesky', 'zz-bootstrap-pre', 'ZZA'),
+    ('bluesky', 'zz-bootstrap-post', 'ZZA'),
+    ('bluesky', 'zz-1', 'ZZA'),
+    ('bluesky', 'zz-dup', 'ZZB'),
+)
+_OWNED_BUCKET_TICKERS = ('ZZA',)
+_OWNED_RETAINED_POST_IDS = (
+    'zz-bootstrap-high', 'zz-bootstrap-low', 'zz-bootstrap-pre',
+)
+
+
+def _clear_owned_events():
+    predicates = [
+        sa.and_(RadarMentionEvent.source == source,
+                RadarMentionEvent.external_id == external_id,
+                RadarMentionEvent.ticker == ticker)
+        for source, external_id, ticker in _OWNED_EVENT_IDENTITIES
+    ]
+    RadarMentionEvent.query.filter(sa.or_(*predicates)).delete(
+        synchronize_session=False)
+    db.session.commit()
+
 
 @pytest.fixture()
 def clean_events():
     with flask_app.app_context():
-        RadarMentionEvent.query.filter(
-            RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
-        db.session.commit()
+        _clear_owned_events()
         yield
-        RadarMentionEvent.query.filter(
-            RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
-        db.session.commit()
+        _clear_owned_events()
 
 
 @pytest.fixture()
 def clean_retained_mentions():
     def clear():
         ids = [post.id for post in RadarPost.query.filter(
-            RadarPost.external_id.like('zz-bootstrap-%')).all()]
+            RadarPost.source == 'bluesky',
+            RadarPost.external_id.in_(_OWNED_RETAINED_POST_IDS)).all()]
         if ids:
             RadarMention.query.filter(RadarMention.post_id.in_(ids)).delete(
                 synchronize_session=False)
@@ -50,12 +84,12 @@ def clean_buckets():
     from models import RadarBucket, RadarBucketSource
     with flask_app.app_context():
         for model in (RadarBucketSource, RadarBucket):
-            model.query.filter(model.ticker.like('ZZ%')).delete(
+            model.query.filter(model.ticker.in_(_OWNED_BUCKET_TICKERS)).delete(
                 synchronize_session=False)
         db.session.commit()
         yield
         for model in (RadarBucketSource, RadarBucket):
-            model.query.filter(model.ticker.like('ZZ%')).delete(
+            model.query.filter(model.ticker.in_(_OWNED_BUCKET_TICKERS)).delete(
                 synchronize_session=False)
         db.session.commit()
 

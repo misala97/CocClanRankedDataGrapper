@@ -17,22 +17,24 @@ from features.radar import buckets
 from test_radar_buckets import row, clean_buckets  # noqa: F401
 
 START = dt.datetime(2026, 8, 21, 14, 0, 0)
+_OWNED_TICKERS = ('ZZA',)
+
+
+def _clear_owned_rows():
+    RadarBucketSource.query.filter(
+        RadarBucketSource.ticker.in_(_OWNED_TICKERS)).delete(
+        synchronize_session=False)
+    RadarBucket.query.filter(RadarBucket.ticker.in_(_OWNED_TICKERS)).delete(
+        synchronize_session=False)
+    db.session.commit()
 
 
 @pytest.fixture()
 def ctx():
     with flask_app.app_context():
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
-        RadarBucket.query.filter(
-            RadarBucket.ticker.like('ZZ%')).delete(synchronize_session=False)
-        db.session.commit()
+        _clear_owned_rows()
         yield
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
-        RadarBucket.query.filter(
-            RadarBucket.ticker.like('ZZ%')).delete(synchronize_session=False)
-        db.session.commit()
+        _clear_owned_rows()
 
 
 def _row(source='bluesky', ticker='ZZA', count=3, status='ok'):

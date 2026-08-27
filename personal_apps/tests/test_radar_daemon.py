@@ -555,8 +555,8 @@ def test_prepare_rollup_generation_fails_closed_on_unrecovered_legacy_evidence(
     since = now.replace(tzinfo=None) - dt.timedelta(
         hours=daemon.MENTION_EVENT_RETENTION_HOURS)
     with flask_app.app_context():
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        RadarBucketSource.query.filter_by(ticker='ZZDAEMON').delete(
+            synchronize_session=False)
         db.session.add(RadarBucketSource(
             ticker='ZZDAEMON', bucket_start=since + dt.timedelta(hours=1),
             source='bluesky', mention_count=9, high_confidence_count=6,
@@ -578,8 +578,8 @@ def test_prepare_rollup_generation_fails_closed_on_unrecovered_legacy_evidence(
             'ingest cycle could still slip in before the process actually exits')
     finally:
         with flask_app.app_context():
-            RadarBucketSource.query.filter(
-                RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+            RadarBucketSource.query.filter_by(ticker='ZZDAEMON').delete(
+                synchronize_session=False)
             db.session.commit()
 
 
@@ -598,8 +598,8 @@ def test_prepare_rollup_generation_continues_when_the_database_is_genuinely_quie
 
     now = _utc(2027, 6, 1, 6, 0)
     with flask_app.app_context():
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
+        RadarBucketSource.query.filter_by(ticker='ZZQUIET').delete(
+            synchronize_session=False)
         db.session.add(RadarBucketSource(
             ticker='ZZQUIET', bucket_start=now.replace(tzinfo=None),
             source='bluesky', mention_count=0, high_confidence_count=0,
@@ -620,8 +620,7 @@ def test_prepare_rollup_generation_continues_when_the_database_is_genuinely_quie
         assert invalidate_called, 'the quiet path must still reach invalidation'
     finally:
         with flask_app.app_context():
-            RadarBucketSource.query.filter(
-                RadarBucketSource.ticker.like('ZZ%')).delete(
+            RadarBucketSource.query.filter_by(ticker='ZZQUIET').delete(
                     synchronize_session=False)
             db.session.commit()
 

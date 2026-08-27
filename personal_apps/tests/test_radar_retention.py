@@ -15,14 +15,29 @@ from models import RadarBucket, RadarMention, RadarPost
 from features.radar import retention
 
 NOW = dt.datetime(2026, 4, 15, 12, 0, 0)
+_AGED_POST_EXTERNAL_IDS = tuple('t3_age%d' % index for index in range(5))
+_AGED_BUCKET_START = NOW - dt.timedelta(days=60)
+
+
+def _clear_owned_aged_rows():
+    post_ids = [row.id for row in RadarPost.query.filter(
+        RadarPost.source == 'reddit',
+        RadarPost.external_id.in_(_AGED_POST_EXTERNAL_IDS)).all()]
+    if post_ids:
+        RadarMention.query.filter(RadarMention.post_id.in_(post_ids)).delete(
+            synchronize_session=False)
+        RadarPost.query.filter(RadarPost.id.in_(post_ids)).delete(
+            synchronize_session=False)
+    RadarBucket.query.filter_by(
+        ticker='ZZR', bucket_start=_AGED_BUCKET_START).delete(
+        synchronize_session=False)
+    db.session.commit()
 
 
 @pytest.fixture()
 def aged_posts():
     with flask_app.app_context():
-        RadarPost.query.filter(RadarPost.channel == 'testsub').delete(
-            synchronize_session=False)
-        db.session.commit()
+        _clear_owned_aged_rows()
 
         for index, age_days in enumerate([1, 10, 29, 31, 60]):
             created = NOW - dt.timedelta(days=age_days)
@@ -37,24 +52,24 @@ def aged_posts():
                                         confidence='high', lexicon_sentiment=0.0))
         db.session.commit()
         yield
-        RadarPost.query.filter(RadarPost.channel == 'testsub').delete(
-            synchronize_session=False)
-        RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
-            synchronize_session=False)
-        db.session.commit()
+        _clear_owned_aged_rows()
 
 
 def test_only_posts_past_the_window_are_deleted(aged_posts):
     deleted = retention.prune_posts(NOW)
     assert deleted == 2
-    remaining = RadarPost.query.filter_by(channel='testsub').count()
+    remaining = RadarPost.query.filter(
+        RadarPost.source == 'reddit',
+        RadarPost.external_id.in_(_AGED_POST_EXTERNAL_IDS)).count()
     assert remaining == 3
 
 
 def test_mentions_go_with_their_posts(aged_posts):
     retention.prune_posts(NOW)
     surviving_ids = {row.id for row in
-                     RadarPost.query.filter_by(channel='testsub').all()}
+                     RadarPost.query.filter(
+                         RadarPost.source == 'reddit',
+                         RadarPost.external_id.in_(_AGED_POST_EXTERNAL_IDS)).all()}
     orphans = RadarMention.query.filter(
         RadarMention.ticker == 'ZZR',
         RadarMention.post_id.notin_(surviving_ids or {0})).count()
@@ -89,8 +104,8 @@ def test_pruning_an_empty_window_is_a_no_op(aged_posts):
 # --- mention journal pruning -------------------------------------------------
 #
 # `clean_events` here cleans up by EXACT identity (ticker='ZZA', the two
-# external_ids this suite creates) rather than a broad `ticker.like('ZZ%')`
-# sweep. prune_mention_events's own delete query is unscoped by ticker -- it
+# external_ids this suite creates) rather than a namespace-wide prefix sweep.
+# prune_mention_events's own delete query is unscoped by ticker -- it
 # is a real production pruner, not a test helper -- so the `now` chosen below
 # is deliberately a 2026-04-20 cutoff: the real dev database's
 # radar_mention_events rows are all from 2026-08-22/23 (checked directly

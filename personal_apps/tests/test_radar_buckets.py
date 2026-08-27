@@ -8,6 +8,7 @@ row at all, because a bucket written `ok` when it was truncated is
 indistinguishable from a genuine quiet period forever after.
 """
 import datetime as dt
+import uuid
 
 import pytest
 
@@ -17,25 +18,27 @@ from models import RadarBucket, RadarBucketSource, RadarMentionEvent
 from features.radar import buckets
 from features.radar.config import source_config_version
 
+_OWNED_TICKERS = ('ZZA',)
+
+
+def _clear_owned_rows():
+    RadarBucketSource.query.filter(
+        RadarBucketSource.ticker.in_(_OWNED_TICKERS)).delete(
+        synchronize_session=False)
+    RadarMentionEvent.query.filter(
+        RadarMentionEvent.ticker.in_(_OWNED_TICKERS)).delete(
+        synchronize_session=False)
+    RadarBucket.query.filter(RadarBucket.ticker.in_(_OWNED_TICKERS)).delete(
+        synchronize_session=False)
+    db.session.commit()
+
 
 @pytest.fixture()
 def clean_buckets():
     with flask_app.app_context():
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
-        RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
-            synchronize_session=False)
-        RadarMentionEvent.query.filter(
-            RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
-        db.session.commit()
+        _clear_owned_rows()
         yield
-        RadarBucketSource.query.filter(
-            RadarBucketSource.ticker.like('ZZ%')).delete(synchronize_session=False)
-        RadarBucket.query.filter(RadarBucket.ticker.like('ZZ%')).delete(
-            synchronize_session=False)
-        RadarMentionEvent.query.filter(
-            RadarMentionEvent.ticker.like('ZZ%')).delete(synchronize_session=False)
-        db.session.commit()
+        _clear_owned_rows()
 
 
 def row(ticker='ZZA', minute=3, source='bluesky', author='u1', simhash=111,
@@ -50,6 +53,45 @@ def row(ticker='ZZA', minute=3, source='bluesky', author='u1', simhash=111,
 
 
 ALL_OK = {'bluesky': 'ok'}
+
+
+def test_clean_buckets_preserves_an_unowned_zz_sentinel():
+    """Fixture setup and teardown may delete only this file's identities."""
+    sentinel = 'ZZ' + uuid.uuid4().hex[:10].upper()
+    fixture = None
+
+    with flask_app.app_context():
+        db.session.add(RadarBucketSource(
+            ticker=sentinel,
+            bucket_start=dt.datetime(2027, 6, 1, 0, 0, 0),
+            source='sentinel',
+            mention_count=1,
+            high_confidence_count=1,
+            low_count=0,
+            distinct_authors=1,
+            distinct_text_ratio=1.0,
+            engagement_weighted_count=1.0,
+            status='ok',
+            source_config_version='sentinel'))
+        db.session.commit()
+
+    try:
+        fixture = clean_buckets.__wrapped__()
+        next(fixture)
+        assert RadarBucketSource.query.filter_by(ticker=sentinel).count() == 1
+
+        with pytest.raises(StopIteration):
+            next(fixture)
+        fixture = None
+        with flask_app.app_context():
+            assert RadarBucketSource.query.filter_by(ticker=sentinel).count() == 1
+    finally:
+        if fixture is not None:
+            fixture.close()
+        with flask_app.app_context():
+            RadarBucketSource.query.filter_by(ticker=sentinel).delete(
+                synchronize_session=False)
+            db.session.commit()
 
 
 def test_bucket_start_floors_to_fifteen_minutes():

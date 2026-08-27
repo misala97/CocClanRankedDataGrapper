@@ -15,17 +15,24 @@ from extensions import db
 from models import TickerUniverse
 from features.radar import universe
 
+_OWNED_SYMBOLS = (
+    'ZZA', 'ZZB', 'ZZBC', 'ZZBT', 'ZZC', 'ZZD', 'ZZE', 'ZZET', 'ZZF',
+    'ZZLK', 'ZZP', 'ZZQ', 'ZZT', 'ZZU', 'ZZXR',
+)
+
+
+def _clear_owned_symbols():
+    TickerUniverse.query.filter(TickerUniverse.symbol.in_(_OWNED_SYMBOLS)).delete(
+        synchronize_session=False)
+    db.session.commit()
+
 
 @pytest.fixture()
 def clean_universe():
     with flask_app.app_context():
-        TickerUniverse.query.filter(TickerUniverse.symbol.like('ZZ%')).delete(
-            synchronize_session=False)
-        db.session.commit()
+        _clear_owned_symbols()
         yield
-        TickerUniverse.query.filter(TickerUniverse.symbol.like('ZZ%')).delete(
-            synchronize_session=False)
-        db.session.commit()
+        _clear_owned_symbols()
 
 
 NOW = dt.datetime(2026, 4, 15, 12, 0, 0)
