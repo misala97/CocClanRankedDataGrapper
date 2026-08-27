@@ -1,5 +1,129 @@
 # HANDOFF — radar pipeline audit fix
 
+## AUTHORITATIVE CHECKPOINT — all 19 tasks implemented, 2026-08-27
+
+Newest checkpoint; supersedes every section below. Michi stopped Claude at its
+session limit. **There are no active workers.** No reviewer was started.
+
+Worktree: `C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-pipeline-audit`
+Branch: `codex/radar-pipeline-audit`
+HEAD: `3782dd5` (`docs(radar): close the ops batch and route its fix to final review`)
+Working tree: **clean**. Nothing to rescue, nothing to discard.
+Database: single Alembic head `35c3ae366677`. `radar_mention_events` holds
+**1432** real rows — that number is the shared-DB canary.
+
+### State of the plan
+
+**Every task 1-19 is implemented and committed.** Tasks 1-17 are review-clean.
+Tasks 18-19 were reviewed (1 Important, 2 Minor) and fixed in `200bde3`, but
+that fix round was **deliberately routed to the final branch review instead of
+a standalone re-review** — it is test-only and its teeth were confirmed, and the
+mandatory whole-branch review runs next on a more capable model. **Tasks 18-19
+are therefore NOT yet marked review-clean.**
+
+**The only work left is the FINAL WHOLE-BRANCH REVIEW.** It has not been
+started. After it (and any fixes it demands), the branch is ready to finish via
+`superpowers:finishing-a-development-branch`.
+
+### Codex's immediate next action
+
+1. Verify `git status --short` clean, `git log -1` = `3782dd5`, `flask db
+   current` = `35c3ae366677`, and the 1432-row count. Evidence beats this file.
+2. Run **one final whole-branch review on the most capable model available**.
+   Michi's Sonnet-except-Reddit rule governed per-task reviews; the final review
+   is an architecture-grade judgement and takes the best model regardless.
+3. **The review package is already built — do not rebuild it.**
+   `final-branch-review-package.md` in this directory (400 KB): commit list,
+   stat and `-U10` diff for the **24 code commits** in `b9c8ef8..3782dd5`,
+   with the force-added SDD documentation commits excluded as noise. The raw
+   40-commit package including docs is 1.4 MB and is too large to be useful.
+4. Apply the normal fix/re-review loop for anything Critical or Important.
+5. Then finish the branch: `dev_personal` fast-forwards onto this branch.
+
+### What the final review must do — it is not a re-review of each task
+
+Every task already had its own independent review against its own brief. The
+final review exists for what per-task review structurally cannot catch:
+
+- **Cross-task coherence.** Do the rulings in `progress.md` contradict each
+  other? In particular: Task 9 established that **two source-expansion helpers
+  exist on purpose** — strict `expand_sources` for scored reads, root-inclusive
+  `expand_sources_for_history` for raw-count reads. Any later task that added a
+  read path and picked the strict form for a historical read has re-opened a
+  Critical. `source_config_version()` moved more than once (Task 7's retirement,
+  Task 9's `SOURCE_NAME_GENERATION`) — confirm nothing scores across a
+  generation boundary. Confirm the two migrations form a single linear head.
+  And check that no value introduced on this branch repeats Task 14's defect:
+  computed, serialized, rendered by nothing.
+- **Triage every deferred Minor in `progress.md`** — FIX BEFORE MERGE or
+  ACCEPT, one line each. Be decisive; this is the last gate.
+- **Verify commit `200bde3` properly**, since it skipped its own re-review:
+  mutate `created_utc < cutoff` to `<= cutoff`, confirm a test FAILS, revert.
+  Keep the mutation inside the tests' own April-2026 window.
+- **Assemble one ordered deploy checklist** from the carries scattered across
+  the ledger (below).
+
+### Give N3 real weight in triage
+
+Broad `LIKE 'ZZ%'` teardowns across **five test files**. Pre-existing — not
+introduced by this branch — but it is the shared-database hazard that was
+caught three separate times during this work: one suite can erase another
+suite's or Michi's namespaced rows. My recommendation is FIX BEFORE MERGE, but
+the final review owns the call.
+
+### Deploy carries — the final review should turn these into one checklist
+
+- **Run the migrations before deploying the new daemon.** Old root writers are
+  physically compatible with widened columns, but old and new daemons must not
+  overlap: root `reddit` and concrete `reddit:<sub>` are different semantic
+  populations and neither reader sees the other's names as its own.
+- **Run Task 6's backfill against production after deploy** — once as a dry
+  run, then `--apply`. It repairs understated bucket counts and clears the 399
+  rows carrying a score they earned under a different status. Local dry run
+  measured 210 examined / 165 understated.
+- **Expect a baseline warm-up.** `source_config_version()` moved twice on this
+  branch, so buckets stamped with an older version sit outside current
+  baselines until enough new-generation history accumulates. Expected, not a bug.
+- **Verify Task 3c's journal bootstrap ran.** The journal is empty at deploy,
+  so the first cycle touching an already-written bucket would otherwise rebuild
+  it from the post-deploy slice alone and erase its pre-deploy counts.
+- **Do not run a migration downgrade.** Task 9's N1 records that the width
+  guard fires only after a DDL has already committed, which MariaDB cannot roll
+  back. Task 16's downgrade also truncates the fractional `baseline_days` that
+  was the entire point of the change.
+
+### Standing conventions
+
+- **cwd is split**: `pytest`/`flask`/`npm` from `personal_apps/`; `git` from the
+  worktree root.
+- **Tests share the REAL local dev MySQL database** — no test DB, no rollback.
+  `retention.prune_mention_events` is a DELETE; never run it with a `now` near
+  the present. Count `radar_mention_events` before and after anything.
+- **Untouched, protected**: `personal_apps/scripts/discover_telegram_sources.py`,
+  `personal_apps/telegram_candidates.json`, `personal_apps/reddit_candidates.json`.
+- **Gates**: `python -m pytest tests/ -k radar -q` from `personal_apps/` gives
+  **645 passed**; if the ignored `personal_apps/static/radar/dist/.vite/manifest.json`
+  is absent, exactly **two** API template page failures are permitted and must
+  never be "fixed". `npx tsc --noEmit`, vitest and the Vite build all work
+  (`node_modules/` is on disk).
+- **The circular import between `buckets.py` and `journal.py` is deliberate and
+  fragile** — verify with fresh processes after any import change.
+- Subagents write full reports to file and return only a status line.
+
+### One process note worth keeping
+
+An earlier checkpoint recorded the Tasks 10-13 Sonnet review as BLOCKED on
+`Failed to authenticate: OAuth session expired`. That blocker was specific to
+Codex shelling out to the local `claude` CLI. **Dispatching a Sonnet subagent
+directly needs no CLI authentication**, and the review ran fine that way. Prefer
+the direct dispatch over the CLI for any remaining review.
+
+---
+
+The material below is historical context from earlier handoffs. Where it
+conflicts with the checkpoint above, the checkpoint above wins.
+
+
 ## AUTHORITATIVE BLOCKED CHECKPOINT — Sonnet authentication, 2026-08-27
 
 Newest checkpoint; supersedes every section below. Tasks 10-13 remain

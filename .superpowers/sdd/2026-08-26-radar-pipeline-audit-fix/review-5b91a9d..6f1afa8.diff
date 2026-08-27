@@ -1,0 +1,418 @@
+# Review package: 5b91a9d..6f1afa8
+
+## Commits
+6f1afa8 feat(radar): prune the journal past its retention window
+6d098e7 fix(radar): the discovery script yields to the running daemon
+
+## Files changed
+ personal_apps/features/radar/retention.py        | 40 +++++++++-
+ personal_apps/run_radar_ingest.py                |  3 +
+ personal_apps/scripts/discover_reddit_sources.py | 38 +++++++++-
+ personal_apps/tests/test_radar_daemon.py         | 11 ++-
+ personal_apps/tests/test_radar_discovery.py      | 95 ++++++++++++++++++++++++
+ personal_apps/tests/test_radar_retention.py      | 55 ++++++++++++++
+ 6 files changed, 235 insertions(+), 7 deletions(-)
+
+## Diff
+diff --git a/personal_apps/features/radar/retention.py b/personal_apps/features/radar/retention.py
+index 3e9dd36..6f04cf5 100644
+--- a/personal_apps/features/radar/retention.py
++++ b/personal_apps/features/radar/retention.py
+@@ -3,24 +3,24 @@
+ Buckets are never touched here. They are the queryable layer and are retained
+ forever; raw posts exist only long enough to be extracted from and read on a
+ detail page (spec 5).
+ """
+ import datetime as dt
+ import time
+ 
+ import sqlalchemy as sa
+ 
+ from extensions import db
+-from models import RadarPost, RadarQuote
++from models import RadarMentionEvent, RadarPost, RadarQuote
+ 
+-from .config import (POST_RETENTION_DAYS, QUOTE_RETENTION_DAYS,
+-                     STALE_QUOTE_POLLS)
++from .config import (MENTION_EVENT_RETENTION_HOURS, POST_RETENTION_DAYS,
++                     QUOTE_RETENTION_DAYS, STALE_QUOTE_POLLS)
+ 
+ # Breathing room between chunks so the daemon's next cycle is not queued behind
+ # a long delete on the same connection.
+ _CHUNK_PAUSE_SECONDS = 0.05
+ 
+ 
+ def prune_posts(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
+     """Delete posts older than the retention window, in chunks.
+ 
+     Mentions follow via ON DELETE CASCADE. Returns the number deleted.
+@@ -93,10 +93,44 @@ def prune_quotes(now, keep=STALE_QUOTE_POLLS, chunk_size=5000,
+     for start in range(0, len(doomed), chunk_size):
+         batch = doomed[start:start + chunk_size]
+         db.session.query(RadarQuote).filter(RadarQuote.id.in_(batch)).delete(
+             synchronize_session=False)
+         db.session.commit()
+         total += len(batch)
+         if pause and start + chunk_size < len(doomed):
+             time.sleep(pause)
+ 
+     return total
++
++
++def prune_mention_events(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
++    """Delete journal rows whose bucket can no longer be rewritten.
++
++    By created_utc rather than by insertion time. A catch-up after an outage
++    ingests posts hours old, and what decides is when the POST was written --
++    once its quarter-hour is past the window, no cycle will touch that bucket
++    again and the events behind it have nothing left to answer.
++
++    Returns the number deleted.
++    """
++    cutoff = now - dt.timedelta(hours=MENTION_EVENT_RETENTION_HOURS)
++    total = 0
++
++    while True:
++        ids = [
++            row_id for (row_id,) in
++            db.session.query(RadarMentionEvent.id)
++            .filter(RadarMentionEvent.created_utc < cutoff)
++            .order_by(RadarMentionEvent.created_utc)
++            .limit(chunk_size).all()
++        ]
++        if not ids:
++            break
++
++        db.session.query(RadarMentionEvent).filter(
++            RadarMentionEvent.id.in_(ids)).delete(synchronize_session=False)
++        db.session.commit()
++        total += len(ids)
++        if pause:
++            time.sleep(pause)
++
++    return total
+diff --git a/personal_apps/run_radar_ingest.py b/personal_apps/run_radar_ingest.py
+index b5281de..2369263 100644
+--- a/personal_apps/run_radar_ingest.py
++++ b/personal_apps/run_radar_ingest.py
+@@ -448,20 +448,23 @@ def _scheduled_prune():
+         now = _utcnow()
+         deleted = retention.prune_posts(now)
+         if deleted:
+             logger.info('radar retention pruned %d posts', deleted)
+         # Quotes were never pruned at all, and since the board began reading
+         # them on every load (2026-08-24) that table is the one most likely to
+         # slowly undo the work that made it fast.
+         quotes = retention.prune_quotes(now)
+         if quotes:
+             logger.info('radar retention pruned %d quotes', quotes)
++        events = retention.prune_mention_events(now)
++        if events:
++            logger.info('radar retention pruned %d mention events', events)
+ 
+ 
+ def _scheduled_sentiment():
+     """The model re-read of tone, spec 6.11.
+ 
+     Its own job rather than part of a cycle, and deliberately: ingest must
+     never wait on an external API, and a source that failed must never be able
+     to fail because sentiment did. Nothing downstream blocks on this -- a
+     mention with no verdict simply keeps answering on its lexicon score.
+     """
+diff --git a/personal_apps/scripts/discover_reddit_sources.py b/personal_apps/scripts/discover_reddit_sources.py
+index 378e10d..deeaa41 100644
+--- a/personal_apps/scripts/discover_reddit_sources.py
++++ b/personal_apps/scripts/discover_reddit_sources.py
+@@ -168,25 +168,57 @@ def passes(entry):
+     talks constantly about nothing tradeable costs requests and contributes
+     noise. Crypto-dominated subs are rejected outright -- coin tickers collide
+     with live equity symbols and would manufacture fake spikes.
+     """
+     return ('skipped' not in entry
+             and entry['equity_per_hour'] >= 1.0
+             and entry['crypto_share'] <= 0.4
+             and entry['distinct_authors'] >= 5)
+ 
+ 
+-def main():
++def _daemon_is_running():
++    """True when radar_ingest holds the Reddit budget.
++
++    Reddit's anonymous feed budget is per IP and is one request per window --
++    `x-ratelimit-remaining` reads 0.0 after a single call, measured on the VPS
++    2026-08-25. This script asks every 45 seconds and the daemon every 120, so
++    run together they refuse each other, and the daemon's cycle then reports
++    `missing` and writes no buckets at all. Nothing else coordinates them.
++
++    systemctl only exists where the daemon is deployed. Anywhere else the
++    answer is no, which is right: a dev machine is not sharing the budget.
++    """
++    import shutil
++    import subprocess
++
++    if shutil.which('systemctl') is None:
++        return False
++    result = subprocess.run(['systemctl', 'is-active', 'radar_ingest'],
++                            capture_output=True, text=True)
++    return result.stdout.strip() == 'active'
++
++
++def main(argv=None):
+     parser = argparse.ArgumentParser()
+     parser.add_argument('--sleep', type=float, default=SLEEP,
+                         help='seconds between requests; lower risks a 429')
+-    args = parser.parse_args()
++    parser.add_argument('--anyway', action='store_true',
++                        help='run even while radar_ingest holds the budget')
++    args = parser.parse_args(argv)
++
++    if _daemon_is_running() and not args.anyway:
++        print('radar_ingest is running and shares this IP\'s Reddit budget --\n'
++              'one request per window, so the two will refuse each other and\n'
++              'the daemon will write no buckets while this runs.\n\n'
++              'Stop it first:  systemctl stop radar_ingest\n'
++              'Or override:    --anyway', file=sys.stderr)
++        return 1
+ 
+     with app.app_context():
+         lookup = universe.load_lookup()
+     print(f'universe: {len(lookup)} symbols\n')
+ 
+     profiles = []
+     for n, sub in enumerate(CANDIDATES, 1):
+         if sub.lower() in SINGLE_TICKER_SUBS:
+             continue
+         if n > 1:
+@@ -214,11 +246,11 @@ def main():
+               f'{p["suggested_poll"]:>6}s  {[t for t, _ in p["top"][:5]]}')
+ 
+     import json
+     with open('reddit_candidates.json', 'w', encoding='utf-8') as handle:
+         json.dump({'kept': [p['sub'] for p in kept], 'profiles': profiles},
+                   handle, indent=2)
+     print('\n-> reddit_candidates.json')
+ 
+ 
+ if __name__ == '__main__':
+-    main()
++    sys.exit(main() or 0)
+diff --git a/personal_apps/tests/test_radar_daemon.py b/personal_apps/tests/test_radar_daemon.py
+index 21d2a67..715fe32 100644
+--- a/personal_apps/tests/test_radar_daemon.py
++++ b/personal_apps/tests/test_radar_daemon.py
+@@ -324,34 +324,43 @@ def test_a_failing_profile_provider_does_not_kill_the_cycle(monkeypatch):
+ 
+ 
+ def test_the_nightly_prune_covers_quotes_as_well_as_posts():
+     """The regression here is an omission, like the profile job's.
+ 
+     retention.py handled posts and mentions and never touched radar_quotes,
+     so that table grew without bound -- and since the board started reading it
+     on every load it is the one most able to undo the work that made it fast.
+     Asserting both are called, because the failure mode is a function that
+     exists and is never reached.
++
++    All three pruners are faked here, never the real ones: the real
++    prune_mention_events would run against actual current time, and the
++    shared dev database's radar_mention_events rows are all older than the
++    48-hour retention window by the time this suite runs -- an unfaked call
++    would delete every real row in the table.
+     """
+     called = []
+ 
+     daemon.retention.prune_posts, real_posts = (
+         lambda now: called.append('posts') or 0, daemon.retention.prune_posts)
+     daemon.retention.prune_quotes, real_quotes = (
+         lambda now: called.append('quotes') or 0, daemon.retention.prune_quotes)
++    daemon.retention.prune_mention_events, real_events = (
++        lambda now: called.append('events') or 0, daemon.retention.prune_mention_events)
+     try:
+         daemon._scheduled_prune()
+     finally:
+         daemon.retention.prune_posts = real_posts
+         daemon.retention.prune_quotes = real_quotes
++        daemon.retention.prune_mention_events = real_events
+ 
+-    assert called == ['posts', 'quotes']
++    assert called == ['posts', 'quotes', 'events']
+ 
+ 
+ def test_the_daemon_schedules_a_profile_job():
+     """The regression this pins is an omission, not a bug: every other piece
+     of the profile path existed and worked, and nothing called it."""
+     import inspect
+     source = inspect.getsource(daemon.main)
+ 
+     assert "id='radar_profiles'" in source
+     assert '_scheduled_profiles' in source
+diff --git a/personal_apps/tests/test_radar_discovery.py b/personal_apps/tests/test_radar_discovery.py
+new file mode 100644
+index 0000000..db309b1
+--- /dev/null
++++ b/personal_apps/tests/test_radar_discovery.py
+@@ -0,0 +1,95 @@
++# personal_apps/tests/test_radar_discovery.py
++"""The discovery script and the daemon share one IP's Reddit budget.
++
++Reddit's anonymous feed budget is one request per window --
++`x-ratelimit-remaining` reads 0.0 after a single call, measured on the VPS
++2026-08-25. This script polls the same `/comments/.rss` feeds at SLEEP=45s
++while the daemon polls one feed per 120s against that same budget. Run
++together, they 429 each other and the daemon's cycle then reports `missing`
++and writes no buckets at all.
++
++These tests exercise the guard at the script boundary -- never by actually
++running a discovery pass. Running discovery for real would hit the network
++and overwrite personal_apps/reddit_candidates.json, which is the user's own
++unrelated work in progress and must not be touched by this suite.
++"""
++from types import SimpleNamespace
++from unittest.mock import Mock, mock_open
++
++import pytest
++
++import scripts.discover_reddit_sources as discovery
++
++
++class _FakeAppContext:
++    def __enter__(self):
++        return self
++
++    def __exit__(self, *exc_info):
++        return False
++
++
++class _FakeApp:
++    """Stands in for the real Flask app so entering it is observable and
++    costs no real database connection."""
++
++    def __init__(self):
++        self.entered = 0
++
++    def app_context(self):
++        self.entered += 1
++        return _FakeAppContext()
++
++
++def test_absent_systemctl_means_not_running_and_never_shells_out(monkeypatch):
++    monkeypatch.setattr('shutil.which', lambda name: None)
++    run = Mock()
++    monkeypatch.setattr('subprocess.run', run)
++
++    assert discovery._daemon_is_running() is False
++    assert run.call_count == 0
++
++
++def test_an_active_daemon_is_detected_via_the_exact_argv(monkeypatch):
++    monkeypatch.setattr('shutil.which', lambda name: '/usr/bin/systemctl')
++    run = Mock(return_value=SimpleNamespace(stdout='active\n'))
++    monkeypatch.setattr('subprocess.run', run)
++
++    assert discovery._daemon_is_running() is True
++    run.assert_called_once_with(
++        ['systemctl', 'is-active', 'radar_ingest'],
++        capture_output=True, text=True)
++
++
++def test_main_refuses_before_entering_the_app_context_when_daemon_runs(monkeypatch):
++    fake_app = _FakeApp()
++    monkeypatch.setattr(discovery, 'app', fake_app)
++    monkeypatch.setattr(discovery, '_daemon_is_running', lambda: True)
++
++    errors = []
++    monkeypatch.setattr('sys.stderr', SimpleNamespace(write=errors.append))
++
++    result = discovery.main([])
++
++    assert result == 1
++    assert fake_app.entered == 0
++    joined = ''.join(errors)
++    assert 'systemctl stop radar_ingest' in joined
++    assert '--anyway' in joined
++
++
++def test_anyway_proceeds_past_the_guard_when_daemon_runs(monkeypatch):
++    fake_app = _FakeApp()
++    monkeypatch.setattr(discovery, 'app', fake_app)
++    monkeypatch.setattr(discovery, '_daemon_is_running', lambda: True)
++    monkeypatch.setattr(discovery, 'CANDIDATES', [])
++    monkeypatch.setattr(discovery.universe, 'load_lookup', lambda: {})
++    fake_open = mock_open()
++    monkeypatch.setattr(discovery, 'open', fake_open, raising=False)
++
++    result = discovery.main(['--anyway'])
++
++    assert result != 1
++    assert fake_app.entered >= 1
++    fake_open.assert_called_once_with(
++        'reddit_candidates.json', 'w', encoding='utf-8')
+diff --git a/personal_apps/tests/test_radar_retention.py b/personal_apps/tests/test_radar_retention.py
+index dfc6734..20f5c10 100644
+--- a/personal_apps/tests/test_radar_retention.py
++++ b/personal_apps/tests/test_radar_retention.py
+@@ -77,10 +77,65 @@ def test_buckets_survive_their_posts(aged_posts):
+ 
+ 
+ def test_chunking_deletes_everything_across_several_passes(aged_posts):
+     deleted = retention.prune_posts(NOW, chunk_size=1)
+     assert deleted == 2
+ 
+ 
+ def test_pruning_an_empty_window_is_a_no_op(aged_posts):
+     retention.prune_posts(NOW)
+     assert retention.prune_posts(NOW) == 0
++
++
++# --- mention journal pruning -------------------------------------------------
++#
++# `clean_events` here cleans up by EXACT identity (ticker='ZZA', the two
++# external_ids this suite creates) rather than a broad `ticker.like('ZZ%')`
++# sweep. prune_mention_events's own delete query is unscoped by ticker -- it
++# is a real production pruner, not a test helper -- so the `now` chosen below
++# is deliberately a 2026-04-20 cutoff: the real dev database's
++# radar_mention_events rows are all from 2026-08-22/23 (checked directly
++# against the shared dev DB before writing this test), months after that
++# cutoff, so no real row can ever be `< cutoff` here regardless of what this
++# fixture does or does not clean up.
++
++@pytest.fixture()
++def clean_events():
++    from models import RadarMentionEvent
++    idents = ('zz-new', 'zz-old')
++
++    def clear():
++        RadarMentionEvent.query.filter(
++            RadarMentionEvent.ticker == 'ZZA',
++            RadarMentionEvent.external_id.in_(idents)).delete(
++            synchronize_session=False)
++        db.session.commit()
++
++    with flask_app.app_context():
++        clear()
++        yield
++        clear()
++
++
++def test_the_journal_is_pruned_by_when_the_post_was_written(clean_events):
++    """By created_utc, not by when the row was inserted. A catch-up after an
++    outage ingests posts hours old, and once their bucket is past the retention
++    window nothing will rewrite it -- so that is what decides."""
++    from models import RadarMentionEvent
++
++    now = dt.datetime(2026, 4, 20, 12, 0, 0)
++    for hours, ident in ((1, 'zz-new'), (72, 'zz-old')):
++        created = now - dt.timedelta(hours=hours)
++        db.session.add(RadarMentionEvent(
++            source='bluesky', external_id=ident, ticker='ZZA', channel='c',
++            created_utc=created,
++            bucket_start=created.replace(minute=0, second=0, microsecond=0),
++            author='u1', simhash=1, confidence='high',
++            sentiment=None, engagement=0.0))
++    db.session.commit()
++
++    deleted = retention.prune_mention_events(now)
++    assert deleted == 1
++    assert isinstance(deleted, int)
++    remaining = [e.external_id for e in
++                 RadarMentionEvent.query.filter_by(ticker='ZZA').all()]
++    assert remaining == ['zz-new']

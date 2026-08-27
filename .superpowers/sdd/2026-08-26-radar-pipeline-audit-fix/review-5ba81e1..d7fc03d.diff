@@ -1,0 +1,268 @@
+# Review package: 5ba81e1..d7fc03d
+
+## Commits
+d7fc03d fix(radar): a baseline measured in hours reads like one
+
+## Files changed
+ personal_apps/features/radar/leaderboard.py        |  8 +++-
+ personal_apps/features/radar/phrasing.py           | 14 ++++++-
+ ...677_widen_radar_bucket_sources_baseline_days.py |  6 +++
+ personal_apps/tests/test_radar_detail.py           | 45 ++++++++++++++++++++--
+ personal_apps/tests/test_radar_phrasing.py         | 28 ++++++++++++++
+ 5 files changed, 94 insertions(+), 7 deletions(-)
+
+## Diff
+diff --git a/personal_apps/features/radar/leaderboard.py b/personal_apps/features/radar/leaderboard.py
+index efe881b..7dcd5bd 100644
+--- a/personal_apps/features/radar/leaderboard.py
++++ b/personal_apps/features/radar/leaderboard.py
+@@ -248,22 +248,26 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+                  text_ratio) in survivors.items():
+         parts = grouped[ticker]
+         mention_z = ((mentions - expected)
+                      / max(variance, VARIANCE_FLOOR) ** 0.5) if variance else None
+ 
+         contributing = sorted({part.source for part in parts})
+         # One venue per ROOT, not per stored name -- see Row.venues.
+         venues = len({source_root(name) for name in contributing})
+         # MIN already skipped NULLs per source; this skips the sources that
+         # had nothing but NULLs, so a row with no usable baseline anywhere
+-        # still reports None rather than raising.
+-        baseline_days = min((part.baseline_days for part in parts
++        # still reports None rather than raising. Coerced like the aggregates
++        # above for the same reason, even though MIN/MAX over a Float column
++        # (unlike SUM over an Integer one) do not promote to Decimal on
++        # MySQL/MariaDB -- matching the sibling pattern removes the ambiguity
++        # for a future reader rather than relying on that distinction silently.
++        baseline_days = min((float(part.baseline_days) for part in parts
+                              if part.baseline_days is not None), default=None)
+ 
+         profile = profiles.get(ticker)
+         status, latest = statuses[ticker]
+         move = moves[ticker]
+         if status == 'unknown':
+             # Kept explicit rather than relying on the batch: 'unknown' means
+             # never quoted, so there is no snapshot to carry even though the
+             # mapping always has an entry for every ticker asked about.
+             latest = None
+diff --git a/personal_apps/features/radar/phrasing.py b/personal_apps/features/radar/phrasing.py
+index f4a7cef..80e4e72 100644
+--- a/personal_apps/features/radar/phrasing.py
++++ b/personal_apps/features/radar/phrasing.py
+@@ -164,23 +164,33 @@ def read_clauses(detail, mentions, expected, voices, session,
+                           f'{voices} distinct voices{where}, so this is not '
+                           f'one account repeating itself.'))
+     else:
+         out.append(Clause('warn',
+                           f'Only {voices} distinct voices — one account can '
+                           f'produce this much on its own.'))
+ 
+     out.extend(_read_price(detail, session))
+ 
+     if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
+-        days = 'day' if baseline_days == 1 else 'days'
++        # `baseline_days` is a fraction of a day, not a truncated int, since
++        # Task 16 (2026-08-27) -- an hour-old baseline is `0.0416...`, and
++        # interpolating that raw float into the sentence read as
++        # "0.041666666666666664 days old". Branch instead: sub-day spans are
++        # exactly the population 'warming-up' exists to describe, so they get
++        # their own words rather than a rounded-away lie of precision.
++        if baseline_days < 1:
++            span = 'under a day'
++        else:
++            whole = round(baseline_days)
++            span = f'{whole} day' if whole == 1 else f'{whole} days'
+         out.append(Clause('warn',
+-                          f'The baseline is {baseline_days} {days} old, not '
++                          f'The baseline is {span} old, not '
+                           f'30, so this rests on very little history.'))
+     return out
+ 
+ 
+ def _read_price(detail, session):
+     """What the tape did, or why there is nothing to say about it."""
+     if session == 'closed' or detail.price_status == 'closed':
+         return [Clause('plain',
+                        'The market is shut, so there is no price move to '
+                        'compare this against — divergence needs a live tape '
+diff --git a/personal_apps/migrations/versions/35c3ae366677_widen_radar_bucket_sources_baseline_days.py b/personal_apps/migrations/versions/35c3ae366677_widen_radar_bucket_sources_baseline_days.py
+index d74df3c..09d6d79 100644
+--- a/personal_apps/migrations/versions/35c3ae366677_widen_radar_bucket_sources_baseline_days.py
++++ b/personal_apps/migrations/versions/35c3ae366677_widen_radar_bucket_sources_baseline_days.py
+@@ -20,13 +20,19 @@ def upgrade():
+     # Float since 2026-08-26. SmallInteger stored span.days, and .days
+     # truncated twenty-three hours of history to zero -- which put every row
+     # on the board under PROVISIONAL_BASELINE_DAYS permanently (147,228 of
+     # 147,429 scored Bluesky rows in production).
+     op.alter_column('radar_bucket_sources', 'baseline_days',
+                     existing_type=mysql.SMALLINT(),
+                     type_=sa.Float(), existing_nullable=True)
+ 
+ 
+ def downgrade():
++    # DESTRUCTIVE: narrows Float back to SMALLINT, which truncates any
++    # fractional value written since the upgrade (e.g. 0.375 -> 0) --
++    # silently reversing the fix this migration exists to make (see
++    # upgrade()'s comment: SmallInteger truncation put 147,228 of 147,429
++    # scored rows under PROVISIONAL_BASELINE_DAYS permanently). Do not run
++    # this against a database carrying real scored history.
+     op.alter_column('radar_bucket_sources', 'baseline_days',
+                     existing_type=sa.Float(),
+                     type_=mysql.SMALLINT(), existing_nullable=True)
+diff --git a/personal_apps/tests/test_radar_detail.py b/personal_apps/tests/test_radar_detail.py
+index 4a42222..5355400 100644
+--- a/personal_apps/tests/test_radar_detail.py
++++ b/personal_apps/tests/test_radar_detail.py
+@@ -154,36 +154,43 @@ def test_a_span_shorter_than_a_year_takes_the_recent_end(clean):
+ 
+     month = chart_for(f'{PREFIX}A', detail.SPAN_DAYS['1M'])
+ 
+     assert len(month.closes) == 30
+     assert float(month.closes[-1]) == 99.0
+     assert all(c is None for c in month.closes[:-1])
+ 
+ 
+ # --------------------------------------------------------------- the panel ---
+ 
+-def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None):
+-    """One post carrying one scored mention of `ticker`."""
++def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None,
++             llm_sentiment=None):
++    """One post carrying one scored mention of `ticker`.
++
++    `llm_sentiment` defaults to None (no verdict yet, the common case);
++    passing 'bullish'/'bearish'/'unclear' lets a test drive the model side of
++    `_tone_of` against a real row instead of a hand-built one.
++    """
+     from models import RadarMention, RadarPost
+ 
+     when = NOW - dt.timedelta(minutes=minutes_ago)
+     post = RadarPost(
+         source=source, external_id=ext or f'{PREFIX}-{author}-{minutes_ago}',
+         channel='feed', author=author, created_utc=when, title=None,
+         body=text, score=0, num_comments=0,
+         url=f'https://example.invalid/{author}/{minutes_ago}',
+         simhash=abs(hash(text)) % (2 ** 63), first_seen=when, last_seen=when)
+     db.session.add(post)
+     db.session.flush()
+     db.session.add(RadarMention(
+         post_id=post.id, ticker=ticker, confidence='high',
+-        lexicon_sentiment=0.4 if 'moon' in text else 0.0))
++        lexicon_sentiment=0.4 if 'moon' in text else 0.0,
++        llm_sentiment=llm_sentiment))
+ 
+ 
+ @pytest.fixture()
+ def panel_ticker(clean):
+     from models import RadarMention, RadarPost
+ 
+     RadarMention.query.filter(RadarMention.ticker.like(f'{PREFIX}%')).delete(
+         synchronize_session=False)
+     RadarPost.query.filter(
+         RadarPost.external_id.like(f'{PREFIX}%')).delete(
+@@ -264,20 +271,52 @@ def test_the_panel_describes_a_ticker_the_board_filtered_out(clean):
+ def test_neutral_is_everything_the_lexicon_did_not_score(panel_ticker):
+     """Most mentions carry no sentiment word at all. Folding them into one
+     percentage would turn a handful of scored posts into a confident-looking
+     reading."""
+     b = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW).breakdown
+ 
+     assert b.bullish + b.neutral + b.bearish == b.mentions
+     assert b.neutral == 2
+ 
+ 
++def test_the_breakdown_counts_real_disagreements_not_just_the_tone_helper(
++        panel_ticker):
++    """`test_the_breakdown_prefers_the_model_verdict_over_the_lexicon` above
++    only drives `_tone_of` directly -- the pure function. Nothing before this
++    test ran the counting LOOP in `breakdown_for` (the thing Task 14 actually
++    built) against real rows with a genuine lexicon/model disagreement:
++    replacing that loop's condition with `if False:` left all 69 tests in
++    this file and test_radar_api.py green (fix-round-1 review, finding I2).
++
++    Three rows, one real disagreement:
++      - 'to the moon' (lexicon bullish) scored 'bearish' by the model: the
++        model outranks and reverses the read -> counted.
++      - 'to the moon' (lexicon bullish) scored 'bullish': they agree -> not
++        counted.
++      - 'still holding' (lexicon carried no directional word) scored
++        'bullish': the lexicon never took a side, so there is nothing to
++        disagree WITH -> not counted, even though the model's tone differs
++        from the row's final tone.
++    """
++    post_for(f'{PREFIX}A', 5, 'frank', 'to the moon',
++             ext=f'{PREFIX}-disagree-reversed', llm_sentiment='bearish')
++    post_for(f'{PREFIX}A', 6, 'grace', 'to the moon',
++             ext=f'{PREFIX}-disagree-agrees', llm_sentiment='bullish')
++    post_for(f'{PREFIX}A', 7, 'heidi', 'still holding',
++             ext=f'{PREFIX}-disagree-no-lexicon-side', llm_sentiment='bullish')
++    db.session.commit()
++
++    b = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW).breakdown
++
++    assert b.disagreements == 1
++
++
+ # ------------------------------------------------- pre-split root history ---
+ #
+ # Before 2026-08-26 every Reddit observation was stored under the bare name
+ # `reddit`. This chart's default span is 1Y and buckets are retained forever,
+ # so most of what it draws for Reddit is under that older name.
+ 
+ def _old_root_bucket(ticker, days_ago, mentions):
+     """A bucket row exactly as production wrote it before the split."""
+     db.session.add(RadarBucketSource(
+         ticker=ticker,
+diff --git a/personal_apps/tests/test_radar_phrasing.py b/personal_apps/tests/test_radar_phrasing.py
+index 0bd78ce..ea7e9bf 100644
+--- a/personal_apps/tests/test_radar_phrasing.py
++++ b/personal_apps/tests/test_radar_phrasing.py
+@@ -168,20 +168,48 @@ def test_the_read_names_its_own_weak_baseline():
+ 
+ 
+ def test_a_full_baseline_earns_no_caveat():
+     clauses = phrasing.read_clauses(
+         FakeDetail(), mentions=284, expected=7.0, voices=11,
+         session='regular', baseline_days=30)
+ 
+     assert not any('baseline' in c.text for c in clauses)
+ 
+ 
++def test_a_fractional_baseline_reads_as_words_not_a_raw_float():
++    """Task 16 made `baseline_days` a fraction of a day, not a truncated int.
++    An hour-old baseline is `0.041666666666666664` -- interpolated straight
++    into the sentence, that read "The baseline is 0.041666666666666664 days
++    old", which is exactly the population 'warming-up' exists to describe
++    correctly. The sentence must not leak the float."""
++    clauses = phrasing.read_clauses(
++        FakeDetail(), mentions=284, expected=7.0, voices=11,
++        session='regular', baseline_days=1 / 24)
++
++    warn = next(c for c in clauses if c.kind == 'warn' and 'baseline' in c.text)
++    assert warn.text == ('The baseline is under a day old, not 30, so this '
++                         'rests on very little history.')
++
++
++def test_a_multi_day_fractional_baseline_rounds_to_a_whole_day():
++    """A span like 2.7 days must round for display, not truncate (`.days`
++    truncation is the exact bug Task 16 fixed) and must not print the
++    fraction either."""
++    clauses = phrasing.read_clauses(
++        FakeDetail(), mentions=284, expected=7.0, voices=11,
++        session='regular', baseline_days=2.7)
++
++    warn = next(c for c in clauses if c.kind == 'warn' and 'baseline' in c.text)
++    assert '3 days' in warn.text
++    assert '2.7' not in warn.text
++
++
+ def test_the_read_does_not_paraphrase_what_people_said():
+     """Cut during mockup review. The page cannot summarise content it never
+     understood, and the posts are directly below it."""
+     joined = ' '.join(c.text for c in phrasing.read_clauses(
+         FakeDetail(), mentions=284, expected=7.0, voices=11,
+         session='regular')).lower()
+ 
+     for word in ('filing', 'squeeze', 'announced', 'news about'):
+         assert word not in joined
+ 
