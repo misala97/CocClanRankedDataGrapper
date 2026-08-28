@@ -3,6 +3,9 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 
 
 def _load_source_width_migration():
@@ -12,6 +15,74 @@ def _load_source_width_migration():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _load_market_migration():
+    path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
+            'a4c8e2f19b70_add_radar_market_instruments.py')
+    assert path.exists(), 'market-instrument migration is missing'
+    spec = importlib.util.spec_from_file_location('radar_market_instruments', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture()
+def market_migration_db():
+    """A real isolated schema, never the configured development database."""
+    engine = sa.create_engine('sqlite://')
+    connection = engine.connect()
+    raw = connection.connection.driver_connection
+    raw.create_collation('utf8mb4_bin', lambda left, right: (left > right) - (left < right))
+
+    metadata = sa.MetaData()
+    sa.Table(
+        'radar_ticker_universe', metadata,
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('symbol', sa.String(12), nullable=False, unique=True),
+        sa.Column('name', sa.String(255)),
+        sa.Column('exchange', sa.String(32)),
+        sa.Column('first_seen', sa.DateTime, nullable=False),
+        sa.Column('delisted_at', sa.DateTime),
+    )
+    sa.Table(
+        'radar_quotes', metadata,
+        sa.Column('id', sa.BigInteger, primary_key=True),
+        sa.Column('ticker', sa.String(12), nullable=False),
+        sa.Column('fetched_at', sa.DateTime, nullable=False),
+        sa.Column('quote_ts', sa.DateTime),
+        sa.Column('price', sa.Numeric(18, 6), nullable=False),
+        sa.Column('prev_close', sa.Numeric(18, 6)),
+        sa.Column('volume', sa.BigInteger),
+        sa.UniqueConstraint('ticker', 'fetched_at', name='uq_radar_quote'),
+    )
+    sa.Table(
+        'radar_daily_closes', metadata,
+        sa.Column('ticker', sa.String(12), primary_key=True),
+        sa.Column('close_date', sa.Date, primary_key=True),
+        sa.Column('close', sa.Numeric(18, 4), nullable=False),
+        sa.Column('fetched_at', sa.DateTime, nullable=False),
+    )
+    metadata.create_all(connection)
+    connection.execute(sa.text(
+        "INSERT INTO radar_ticker_universe "
+        "(id, symbol, name, exchange, first_seen, delisted_at) VALUES "
+        "(1, 'AAPL', 'Apple Inc', 'Q', '2026-01-01', NULL), "
+        "(2, 'ODD', 'Unknown Venue Inc', 'TEST', '2026-01-01', NULL)"))
+    connection.execute(sa.text(
+        "INSERT INTO radar_quotes "
+        "(id, ticker, fetched_at, quote_ts, price, prev_close, volume) VALUES "
+        "(1, 'AAPL', '2026-08-28 12:00:00', '2026-08-28 11:59:00', "
+        "194.2, 193.5, NULL)"))
+    connection.execute(sa.text(
+        "INSERT INTO radar_daily_closes "
+        "(ticker, close_date, close, fetched_at) VALUES "
+        "('AAPL', '2026-08-27', 193.5, '2026-08-28 12:00:00')"))
+    connection.commit()
+
+    yield connection
+    connection.close()
+    engine.dispose()
 
 
 class _ScalarResult:
@@ -90,3 +161,74 @@ def test_source_width_downgrade_checks_both_tables_before_ordered_ddl(
                     "WHERE source LIKE 'reddit:%'"),
         ('alter', 'radar_posts', 'source'),
     ]
+
+
+def test_market_migration_backfills_us_context_and_seeds_instruments(
+        market_migration_db):
+    """Omitting either backfill would make pre-feature prices disappear."""
+    connection = market_migration_db
+    migration = _load_market_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+
+    quote = connection.execute(sa.text(
+        "SELECT market, mic, currency, provider_symbol FROM radar_quotes "
+        "WHERE ticker='AAPL'")) .one()
+    close = connection.execute(sa.text(
+        "SELECT market, mic, currency FROM radar_daily_closes "
+        "WHERE ticker='AAPL'")) .one()
+    apple = connection.execute(sa.text(
+        "SELECT market, venue, mic, provider_symbol, currency, "
+        "mapping_status FROM radar_instruments WHERE ticker='AAPL'")) .one()
+    odd = connection.execute(sa.text(
+        "SELECT mic, mapping_status FROM radar_instruments "
+        "WHERE ticker='ODD'")) .one()
+
+    assert tuple(quote) == ('us', 'XNGS', 'USD', 'AAPL')
+    assert tuple(close) == ('us', 'XNGS', 'USD')
+    assert tuple(apple) == (
+        'us', 'Nasdaq Global Select', 'XNGS', 'AAPL', 'USD', 'mapped')
+    assert tuple(odd) == ('XXXX', 'unverified')
+
+
+def test_market_migration_keeps_legacy_writes_valid_during_overlap(
+        market_migration_db):
+    """The old daemon writes none of the new fields until Task 5."""
+    connection = market_migration_db
+    migration = _load_market_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+
+    connection.execute(sa.text(
+        "INSERT INTO radar_quotes "
+        "(id, ticker, fetched_at, quote_ts, price, prev_close, volume) VALUES "
+        "(2, 'AAPL', '2026-08-28 12:05:00', '2026-08-28 12:04:00', "
+        "194.3, 193.5, NULL)"))
+    connection.commit()
+
+    row = connection.execute(sa.text(
+        "SELECT market, mic, currency, provider_symbol FROM radar_quotes "
+        "WHERE id=2")) .one()
+    assert tuple(row) == (None, None, None, None)
+
+
+def test_market_migration_downgrade_preserves_legacy_price_rows(
+        market_migration_db):
+    connection = market_migration_db
+    migration = _load_market_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+    migration.downgrade()
+
+    quote_columns = {column['name'] for column in
+                     sa.inspect(connection).get_columns('radar_quotes')}
+    close_columns = {column['name'] for column in
+                     sa.inspect(connection).get_columns('radar_daily_closes')}
+    assert quote_columns == {
+        'id', 'ticker', 'fetched_at', 'quote_ts', 'price', 'prev_close',
+        'volume'}
+    assert close_columns == {'ticker', 'close_date', 'close', 'fetched_at'}
+    assert connection.execute(sa.text(
+        "SELECT COUNT(*) FROM radar_quotes WHERE ticker='AAPL'")) .scalar_one() == 1
+    assert connection.execute(sa.text(
+        "SELECT COUNT(*) FROM radar_daily_closes WHERE ticker='AAPL'")) .scalar_one() == 1

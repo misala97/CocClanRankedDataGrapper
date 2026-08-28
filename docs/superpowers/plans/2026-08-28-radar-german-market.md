@@ -71,10 +71,13 @@
 
 **Interfaces:**
 - Produces: `RadarInstrument(ticker, market, venue, mic, provider_symbol, currency, isin, is_primary, mapping_status, mapping_source, mapped_at)`.
-- Produces: `RadarQuote.market`, `.mic`, `.currency`, `.provider_symbol`; unique/index keys include market and MIC.
-- Produces: `RadarDailyClose.market`, `.mic`, `.currency`; primary key becomes `(ticker, market, mic, close_date)`.
+- Produces: transitional nullable `RadarQuote.market`, `.mic`, `.currency`,
+  `.provider_symbol`; new rows can carry market context while legacy writers
+  continue during the overlap.
+- Produces: transitional nullable `RadarDailyClose.market`, `.mic`, `.currency`;
+  a later contraction changes keys only after every writer is market-aware.
 
-- [ ] **Step 1: Write failing model-shape tests**
+- [x] **Step 1: Write failing model-shape tests**
 
 ```python
 def test_radar_instrument_identity_and_market_quote_context():
@@ -90,13 +93,13 @@ def test_radar_instrument_identity_and_market_quote_context():
     assert instrument.currency == quote.currency == 'EUR'
 ```
 
-- [ ] **Step 2: Run the focused tests and confirm they fail because the model/columns do not exist**
+- [x] **Step 2: Run the focused tests and confirm they fail because the model/columns do not exist**
 
 Run: `cd personal_apps && python -m pytest tests/test_radar_models.py tests/test_radar_migration.py -q`
 
 Expected: failure naming `RadarInstrument` or missing market columns.
 
-- [ ] **Step 3: Add the SQLAlchemy model and context columns**
+- [x] **Step 3: Add the SQLAlchemy model and context columns**
 
 Use database enums/checks already established by this repository where portable; keep Python-level string values:
 
@@ -124,15 +127,23 @@ class RadarInstrument(db.Model):
     mapped_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 ```
 
-- [ ] **Step 4: Generate and edit the compatibility migration**
+- [x] **Step 4: Generate and edit the compatibility migration**
 
 Create revision `a4c8e2f19b70` with `down_revision` set to the repository's
 current Alembic head at execution time; confirm it with `flask db heads` before
 writing the file.
 
-Migration order must be: create table; add nullable context columns; seed US instruments from active `radar_ticker_universe`; backfill quote/daily-close rows with `market='us'`, a deterministic MIC from the existing exchange code, `currency='USD'`, and provider symbol equal to ticker; alter columns non-null; replace old unique/primary/index keys. Downgrade deletes non-US rows first, restores the old keys, removes context columns, then drops `radar_instruments`.
+Migration order must be: create table; add nullable context columns; seed US
+instruments from active `radar_ticker_universe`; backfill quote/daily-close rows
+with `market='us'`, a deterministic MIC from the existing exchange code,
+`currency='USD'`, and provider symbol equal to ticker. Preserve the old
+unique/primary/index keys in this expand migration so the legacy daemon can
+continue to write. Task 5 adds market-aware keys and a later contraction makes
+the columns non-null only after a null-row verification. Downgrade removes
+context columns and drops `radar_instruments`; Task 1 creates no German price
+rows, so this stage requires no destructive data deletion.
 
-- [ ] **Step 5: Add migration assertions for preservation and downgrade**
+- [x] **Step 5: Add migration assertions for preservation, overlap and downgrade**
 
 ```python
 def test_market_migration_preserves_existing_us_price_rows(migrated_connection):
@@ -143,11 +154,16 @@ def test_market_migration_preserves_existing_us_price_rows(migrated_connection):
 
 def test_market_migration_downgrade_keeps_us_and_drops_de_context(
         migration_connection):
-    # Insert one US and one DE row under the upgraded schema, downgrade, and
-    # assert the old radar_quotes row is the US value and has no market column.
+    migration_connection.insert_legacy_quote('AAPL')
+    migration_connection.upgrade()
+    migration_connection.downgrade()
+    assert migration_connection.quote_columns() == {
+        'id', 'ticker', 'fetched_at', 'quote_ts', 'price', 'prev_close',
+        'volume'}
+    assert migration_connection.quote_count('AAPL') == 1
 ```
 
-- [ ] **Step 6: Run model and migration tests**
+- [x] **Step 6: Run model and migration tests**
 
 Run: `cd personal_apps && python -m pytest tests/test_radar_models.py tests/test_radar_migration.py -q`
 

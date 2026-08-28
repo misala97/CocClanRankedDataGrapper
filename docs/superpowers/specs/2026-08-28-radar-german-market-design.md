@@ -290,10 +290,17 @@ This is a compatibility migration, not a destructive rewrite.
 1. create `radar_instruments`;
 2. add nullable market context to quote/daily-close tables;
 3. backfill existing rows as US/USD and seed US instruments;
-4. make new context required after backfill within the same migration;
-5. deploy readers that default omitted market to US;
-6. begin German mapping and polling;
-7. expose the switch only when migration and readers are live.
+4. deploy readers and writers that default omitted market to US;
+5. begin German mapping and polling;
+6. verify no writer emits null market context;
+7. make the new context required in a later contraction migration;
+8. expose the switch only when migration and readers are live.
+
+The nullable overlap is deliberate. Task 1 may be deployed while the old
+daemon still writes ticker-only rows; requiring provider symbol, MIC and
+currency before that writer is upgraded would turn a compatibility migration
+into an outage. Null is temporary transition state, not a third market, and
+new readers interpret it as the legacy US instrument until the contraction.
 
 Downgrade removes German-context rows and columns but cannot restore German
 data into the old ticker-only key, so the migration explicitly preserves US
@@ -305,7 +312,8 @@ Backend tests cover:
 
 - Berlin/Xetra and New York calendars, holidays, early closes, and DST mismatch
   weeks;
-- migration backfill and downgrade preservation of US rows;
+- migration backfill, mixed-version nullable writes, and downgrade preservation
+  of US rows;
 - ISIN mapping, Xetra preference, ambiguity rejection, and cached unavailable
   mappings;
 - provider normalization, currency mismatch rejection, partial failure, quote

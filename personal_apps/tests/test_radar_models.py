@@ -13,6 +13,7 @@ import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
+import models
 from models import RadarBucket, RadarMention, RadarPost, TickerUniverse
 
 
@@ -195,3 +196,41 @@ def test_a_daily_close_is_unique_per_ticker_and_date():
         RadarDailyClose.query.filter(
             RadarDailyClose.ticker == 'MDLZZ').delete(synchronize_session=False)
         db.session.commit()
+
+
+def test_market_models_expand_without_breaking_legacy_price_keys():
+    """The expand stage adds context without requiring old writers to know it.
+
+    Removing nullable=True would break the still-deployed ticker-only daemon;
+    changing the legacy keys here would let Task 1 create two price rows that
+    old readers cannot distinguish.
+    """
+    instrument = models.RadarInstrument(
+        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='APC', currency='EUR', isin='US0378331005',
+        is_primary=True, mapping_status='mapped',
+        mapping_source='twelvedata', mapped_at=dt.datetime(2026, 8, 28))
+    quote = models.RadarQuote(
+        ticker='AAPL', market='de', mic='XETR', currency='EUR',
+        provider_symbol='APC', fetched_at=dt.datetime(2026, 8, 28),
+        quote_ts=dt.datetime(2026, 8, 28), price=194.20)
+
+    assert instrument.market == quote.market == 'de'
+    assert instrument.currency == quote.currency == 'EUR'
+    assert instrument.mic == quote.mic == 'XETR'
+
+    quote_columns = models.RadarQuote.__table__.c
+    close_columns = models.RadarDailyClose.__table__.c
+    assert all(quote_columns[name].nullable for name in (
+        'market', 'mic', 'currency', 'provider_symbol'))
+    assert all(close_columns[name].nullable for name in (
+        'market', 'mic', 'currency'))
+
+    quote_unique = next(
+        constraint for constraint in models.RadarQuote.__table__.constraints
+        if isinstance(constraint, sa.UniqueConstraint))
+    assert tuple(column.name for column in quote_unique.columns) == (
+        'ticker', 'fetched_at')
+    assert tuple(column.name for column in
+                 models.RadarDailyClose.__table__.primary_key.columns) == (
+        'ticker', 'close_date')

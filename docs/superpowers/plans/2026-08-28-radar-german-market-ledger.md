@@ -63,6 +63,10 @@ commit, and independent read-only review acceptance.
   look live and never contribute live price divergence.
 - Regular and extended movement are separate values. Green/red retain price
   direction semantics; session colour also requires text/icon labelling.
+- Task 1 is expand-only: market context columns remain nullable through the
+  legacy-writer overlap. Task 5 upgrades writers/keys; a later contraction
+  makes columns required after null-row verification. This corrects the
+  original same-migration non-null plan, which would break the old daemon.
 
 ## Open findings
 
@@ -73,4 +77,3 @@ None. Implementation has not started.
 Execute Task 1 using TDD, commit it, request an independent read-only review,
 then update this ledger and `HANDOFF.md`. Do not start Task 2 until Task 1 is
 accepted.
-
