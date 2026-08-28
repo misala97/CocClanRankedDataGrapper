@@ -27,6 +27,13 @@ FINNHUB_EXCHANGE_BY_MIC = {
     'XNYS': 'US', 'ARCX': 'US', 'XASE': 'US', 'BATS': 'US', 'IEXG': 'US',
 }
 
+# A missing type is not neutral metadata.  Finnhub's country directory also
+# carries instruments that Radar must not map as common shares or ETFs.
+FINNHUB_CATALOG_TYPES = frozenset({
+    'common stock', 'common shares', 'etf', 'exchange traded fund',
+    'exchange-traded fund',
+})
+
 
 class FinnhubHttp:
     """Thin transport, separated so the provider is testable without a network."""
@@ -138,9 +145,8 @@ class FinnhubProvider:
         for row in payload:
             if not isinstance(row, dict):
                 continue
-            kind = str(row.get('type') or '').lower()
-            if kind and not ('stock' in kind or 'etf' in kind or
-                             'exchange traded fund' in kind):
+            kind = str(row.get('type') or '').strip().casefold()
+            if kind not in FINNHUB_CATALOG_TYPES:
                 continue
             symbol = row.get('symbol') or row.get('displaySymbol')
             currency = row.get('currency')

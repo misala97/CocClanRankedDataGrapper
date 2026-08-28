@@ -658,3 +658,57 @@ def test_main_prepares_the_rollup_generation_before_building_fetchers(monkeypatc
     assert not called, ('a failed rollup-generation prepare must never reach '
                         'build_fetchers, or a cycle could run before the '
                         'process actually exits')
+
+
+def test_manual_mapping_refresh_uses_the_catalog_provider(monkeypatch):
+    """A manual operator refresh must run the same safe mapping path as cron."""
+    seen = {}
+    provider = object()
+    from features.radar.instruments import MappingResult
+
+    monkeypatch.setattr(daemon, '_mapping_provider', lambda: provider,
+                        raising=False)
+    monkeypatch.setattr(
+        daemon.instruments, 'refresh_mappings',
+        lambda selected, now: seen.update(provider=selected, now=now) or
+        MappingResult(True, 2, 1, 1, 1))
+
+    daemon.main(['--refresh-mappings'])
+
+    assert seen['provider'] is provider
+    assert seen['now'].tzinfo is dt.timezone.utc
+
+
+def test_daemon_schedules_weekly_mapping_refresh(monkeypatch):
+    """Mappings otherwise stay frozen after the deploy-time probe succeeds."""
+    created = []
+
+    class CapturingScheduler:
+        def __init__(self, **kwargs):
+            self.jobs = []
+            created.append(self)
+
+        def add_job(self, func, trigger, **kwargs):
+            self.jobs.append((func, trigger, kwargs))
+
+        def start(self):
+            pass
+
+        def shutdown(self):
+            pass
+
+    monkeypatch.setattr(daemon, 'BackgroundScheduler', CapturingScheduler)
+    monkeypatch.setattr(daemon, '_prepare_rollup_generation', lambda now: (0, 0))
+    monkeypatch.setattr(daemon, 'build_fetchers', lambda: {})
+    monkeypatch.setattr(daemon.time, 'sleep',
+                        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt))
+
+    daemon.main([])
+
+    jobs = {job[2]['id']: job for job in created[0].jobs}
+    mapping = jobs['radar_mappings']
+    assert mapping[0] is daemon._scheduled_mappings
+    assert mapping[1] == 'interval'
+    assert mapping[2]['weeks'] == 1
+    assert mapping[2]['max_instances'] == 1
+    assert mapping[2]['coalesce'] is True

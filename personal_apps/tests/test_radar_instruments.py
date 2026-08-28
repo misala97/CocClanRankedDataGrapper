@@ -65,17 +65,63 @@ def test_twelve_data_catalog_keeps_stable_identity_fields():
     from features.radar.prices.twelvedata import TwelveDataProvider
 
     http = FakeHttp({'data': [{
+        # Twelve Data names the FIGI field figi_code in its /stocks response.
         'symbol': 'APC', 'name': 'Apple Inc', 'mic_code': 'XETR',
-        'currency': 'EUR', 'isin': APPLE_ISIN, 'figi': 'BBG000B9XRY4',
+        'currency': 'EUR', 'isin': APPLE_ISIN, 'figi_code': 'BBG000B9XRY4',
         'type': 'Common Stock',
-    }]})
+    }], 'meta': {'total_count': 1}})
 
     rows = TwelveDataProvider(http).stock_catalog('XETR')
 
     assert rows == [catalog('APC', 'XETR', 'EUR', APPLE_ISIN,
                             name='Apple Inc', figi='BBG000B9XRY4')]
-    assert http.calls == [('/stocks', {'mic_code': 'XETR',
-                                       'show_plan': 'true'})]
+    assert http.calls == [('/stocks', {'mic_code': 'XETR', 'show_plan': 'true',
+                                       'offset': 0})]
+
+
+def test_twelve_data_catalog_reads_every_page_declared_by_total_count():
+    """Stopping after page one can turn an unreturned ISIN into unavailable."""
+    from features.radar.prices.twelvedata import TwelveDataProvider
+
+    class PagedHttp:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, path, params):
+            self.calls.append((path, dict(params)))
+            if params['offset'] == 0:
+                return {'data': [{
+                    'symbol': 'FIRST', 'name': 'First', 'mic_code': 'XETR',
+                    'currency': 'EUR', 'isin': 'DE0000000001',
+                    'type': 'Common Stock',
+                }], 'meta': {'total_count': 2}}
+            if params['offset'] == 1:
+                return {'data': [{
+                    'symbol': 'APC', 'name': 'Apple Inc', 'mic_code': 'XETR',
+                    'currency': 'EUR', 'isin': APPLE_ISIN,
+                    'type': 'Common Stock',
+                }], 'meta': {'total_count': 2}}
+            raise AssertionError('unexpected page')
+
+    http = PagedHttp()
+
+    assert TwelveDataProvider(http).stock_catalog('XETR') == [
+        catalog('FIRST', 'XETR', 'EUR', 'DE0000000001', name='First'),
+        catalog('APC', 'XETR', 'EUR', APPLE_ISIN, name='Apple Inc'),
+    ]
+    assert [call[1]['offset'] for call in http.calls] == [0, 1]
+
+
+def test_finnhub_catalog_rejects_rows_without_a_recognized_instrument_type():
+    """An untyped directory row is not evidence that it is an eligible stock."""
+    from features.radar.prices.finnhub import FinnhubProvider
+
+    rows = FinnhubProvider(FakeHttp([{
+        'symbol': 'APC', 'description': 'Apple Inc', 'mic': 'XETR',
+        'currency': 'EUR', 'isin': APPLE_ISIN,
+    }])).stock_catalog('XETR')
+
+    assert rows == []
 
 
 def test_mapping_joins_same_isin_and_prefers_xetra():

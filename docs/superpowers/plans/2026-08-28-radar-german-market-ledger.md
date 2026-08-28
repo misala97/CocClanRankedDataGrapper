@@ -152,3 +152,19 @@ Implement Task 4: map verified Xetra instruments from permitted provider catalog
   `tape_status == 'ok'`.
 - Focused green: `python -m pytest tests/test_radar_markets.py
   tests/test_radar_prices.py -q` passed 24 tests in 0.14s.
+
+## Task 4 review remediation — 2026-08-29
+
+- Accepted review findings addressed: Twelve Data now reads provider `figi_code`
+  (falling back to `figi`), requires a declared catalog total and retrieves every
+  `/stocks` page before treating the catalog as complete, and fails closed on
+  incomplete catalog evidence so the existing mapping-preservation path applies.
+- Finnhub directory rows now require a recognized common-stock/ETF instrument
+  type; missing or unknown types cannot establish a mapping.
+- `run_radar_ingest.py` exposes `--refresh-mappings` and schedules the same
+  contained `refresh_mappings` operation weekly as `radar_mappings`.
+- TDD evidence: new provider-shaped, pagination, untyped-Finnhub, manual-CLI,
+  and scheduler tests were observed failing before implementation. Focused
+  green: `python -m pytest tests/test_radar_instruments.py
+  tests/test_radar_daemon.py -q` passed 51 tests; the Task 4 suite including
+  `test_radar_prices.py` remains the commit gate.

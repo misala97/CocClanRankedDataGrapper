@@ -122,6 +122,28 @@ def probe_german_data(provider, now):
             quote_age if quote_age is not None else 'unavailable', quote_quality))
     return result
 
+
+def _mapping_provider():
+    """Build the only provider combination allowed to establish mappings."""
+    return instruments.CatalogFallbackProvider(
+        twelvedata_provider.TwelveDataProvider(twelvedata_provider.TwelveDataHttp()),
+        finnhub_provider.FinnhubProvider(finnhub_provider.FinnhubHttp()))
+
+
+def _scheduled_mappings():
+    """Refresh verified Xetra mappings while containing provider failures."""
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        with app.app_context():
+            result = instruments.refresh_mappings(_mapping_provider(), now)
+    except Exception:
+        logger.exception('radar mapping refresh failed')
+        return None
+    logger.info('radar mapping refresh reachable=%s mapped=%d unavailable=%d',
+                result.catalog_reachable, result.mapped_active_tickers,
+                result.unavailable_active_tickers)
+    return result
+
 def interval_for(state):
     return INTERVALS.get(state, FALLBACK_INTERVAL)
 
@@ -591,16 +613,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='Radar ingest daemon')
     parser.add_argument('--probe-german-data', action='store_true',
                         help='read permitted German reference-data entitlement')
+    parser.add_argument('--refresh-mappings', action='store_true',
+                        help='refresh verified German instrument mappings')
     # Direct callers (including daemon lifecycle tests) retain the old no-arg
     # contract. The executable entry point below explicitly supplies CLI args.
     args = parser.parse_args([] if argv is None else argv)
     logging.basicConfig(level=logging.INFO)
     if args.probe_german_data:
-        provider = instruments.CatalogFallbackProvider(
-            twelvedata_provider.TwelveDataProvider(
-                twelvedata_provider.TwelveDataHttp()),
-            finnhub_provider.FinnhubProvider(finnhub_provider.FinnhubHttp()))
-        probe_german_data(provider, dt.datetime.now(dt.timezone.utc))
+        probe_german_data(_mapping_provider(), dt.datetime.now(dt.timezone.utc))
+        return
+    if args.refresh_mappings:
+        _scheduled_mappings()
         return
     if prefer_ipv4_if_configured():
         logger.info('RADAR_FORCE_IPV4 set -- outbound HTTP will skip AAAA records')
@@ -646,6 +669,8 @@ def main(argv=None):
     scheduler.add_job(_scheduled_quotes, 'interval',
                       minutes=QUOTE_INTERVAL_MINUTES, id='radar_quotes',
                       max_instances=1, coalesce=True)
+    scheduler.add_job(_scheduled_mappings, 'interval', weeks=1,
+                      id='radar_mappings', max_instances=1, coalesce=True)
     scheduler.add_job(_scheduled_volatility, 'interval',
                       hours=SIGMA_INTERVAL_HOURS, id='radar_volatility',
                       max_instances=1, coalesce=True,

@@ -71,13 +71,40 @@ class TwelveDataProvider:
         return sorted(closes)
 
     def stock_catalog(self, mic_code):
-        """Normalized stock/ETF reference data for a permitted MIC catalog."""
-        payload = self._http.get('/stocks', {
-            'mic_code': mic_code, 'show_plan': 'true'})
-        if not isinstance(payload, dict) or payload.get('status') == 'error':
-            raise PriceUnavailable('/stocks: provider returned no catalog')
+        """Normalized, complete stock/ETF reference data for one MIC catalog.
 
-        rows = payload.get('data') or []
+        Mapping writes treat an absent match as durable information.  A partial
+        directory response therefore has to be a failure, not a smaller
+        successful catalog that could incorrectly mark listings unavailable.
+        """
+        rows = []
+        total_count = None
+        offset = 0
+        while total_count is None or len(rows) < total_count:
+            payload = self._http.get('/stocks', {
+                'mic_code': mic_code, 'show_plan': 'true', 'offset': offset})
+            if (not isinstance(payload, dict) or
+                    payload.get('status') == 'error'):
+                raise PriceUnavailable('/stocks: provider returned no catalog')
+
+            meta = payload.get('meta')
+            page_total = meta.get('total_count') if isinstance(meta, dict) else None
+            if (isinstance(page_total, bool) or not isinstance(page_total, int) or
+                    page_total < 0):
+                raise PriceUnavailable('/stocks: provider did not establish total count')
+            if total_count is None:
+                total_count = page_total
+            elif page_total != total_count:
+                raise PriceUnavailable('/stocks: provider changed total count')
+
+            page = payload.get('data')
+            if not isinstance(page, list) or (not page and len(rows) < total_count):
+                raise PriceUnavailable('/stocks: provider returned an incomplete catalog')
+            if len(rows) + len(page) > total_count:
+                raise PriceUnavailable('/stocks: provider exceeded total count')
+            rows.extend(page)
+            offset += len(page)
+
         catalog = []
         for row in rows:
             if not isinstance(row, dict):
@@ -98,5 +125,5 @@ class TwelveDataProvider:
             catalog.append(CatalogInstrument(
                 symbol=str(symbol), name=row.get('name') or row.get('description'),
                 mic=row_mic, currency=currency, isin=row.get('isin'),
-                figi=row.get('figi')))
+                figi=row.get('figi_code') or row.get('figi')))
         return catalog
