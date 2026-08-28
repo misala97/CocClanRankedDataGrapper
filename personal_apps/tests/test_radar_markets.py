@@ -40,6 +40,14 @@ def test_delayed_quote_becomes_stale_after_thirty_minutes():
     assert view.score_eligible is False
 
 
+def test_frozen_tape_status_blocks_an_otherwise_live_quote_from_scoring():
+    """A no-print verdict belongs to quote history, not to market selection."""
+    view = select_quote('AAPL', 'us', {'us': snapshot()}, NOW,
+                        tape_status='stale')
+    assert view.quality == 'live'
+    assert view.score_eligible is False
+
+
 def test_afterhours_move_uses_same_day_regular_close():
     afterhours = dt.datetime(2026, 8, 28, 21, 0)
     view = quote_view(now=afterhours, price='102', previous_close='98',
@@ -50,6 +58,16 @@ def test_afterhours_move_uses_same_day_regular_close():
 
 def test_missing_de_quote_selects_marked_us_fallback():
     selected = select_quote('AAPL', 'de', {'us': snapshot()}, NOW)
+    assert (selected.market, selected.currency, selected.is_fallback) == (
+        'us', 'USD', True)
+
+
+def test_timestamp_less_de_snapshot_does_not_block_marked_us_fallback():
+    selected = select_quote('AAPL', 'de', {
+        'de': snapshot(market='de', venue='Xetra', mic='XETR', currency='EUR',
+                       quote_ts=None),
+        'us': snapshot(),
+    }, NOW)
     assert (selected.market, selected.currency, selected.is_fallback) == (
         'us', 'USD', True)
 

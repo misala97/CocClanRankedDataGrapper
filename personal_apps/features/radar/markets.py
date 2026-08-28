@@ -10,7 +10,9 @@ from .prices import Quote
 
 
 Market = Literal['us', 'de']
+TapeStatus = Literal['ok', 'closed', 'stale', 'unknown']
 QUALITY_STATES = frozenset({'live', 'delayed', 'eod', 'stale', 'unavailable'})
+TAPE_STATUSES = frozenset({'ok', 'closed', 'stale', 'unknown'})
 DELAYED_ELIGIBILITY_SECONDS = 30 * 60
 
 
@@ -91,7 +93,16 @@ class QuoteView:
 
     @classmethod
     def from_snapshot(cls, quote: Quote, now: dt.datetime,
-                      is_fallback: bool = False) -> 'QuoteView':
+                      is_fallback: bool = False,
+                      tape_status: TapeStatus = 'ok') -> 'QuoteView':
+        """Build a view from a provider snapshot and its external tape verdict.
+
+        ``tape_status`` is supplied by quote-history code.  ``'stale'`` means
+        the tape is frozen/no-print and therefore cannot score divergence,
+        even when this provider snapshot is otherwise fresh.
+        """
+        if tape_status not in TAPE_STATUSES:
+            raise ValueError(f'unknown tape status: {tape_status}')
         session = session_state(quote.market, _utc_aware(now))
         age_seconds = _age_seconds(quote.quote_ts, quote.fetched_at, now)
         quality = classify_quality(quote.quote_ts, quote.fetched_at,
@@ -103,7 +114,8 @@ class QuoteView:
             previous_close=quote.previous_close, regular_close=quote.regular_close,
             quote_ts=quote.quote_ts, volume=quote.volume, session=session,
             quality=quality, age_seconds=age_seconds,
-            score_eligible=quality in {'live', 'delayed'},
+            score_eligible=(quality in {'live', 'delayed'} and
+                            tape_status != 'stale'),
             regular_move=_movement(quote.price, quote.previous_close),
             extended_move=(_movement(quote.price, quote.regular_close)
                            if session == 'afterhours' else None),
@@ -137,18 +149,24 @@ def _primary_quote(ticker: str, market: str,
 
 
 def select_quote(ticker: str, requested_market: Market,
-                 snapshots: Mapping[str, object], now: dt.datetime) -> QuoteView:
+                 snapshots: Mapping[str, object], now: dt.datetime,
+                 tape_status: TapeStatus = 'ok') -> QuoteView:
     """Select the honest market quote, retaining stale snapshots before fallback."""
     if requested_market not in {'us', 'de'}:
         raise ValueError(f'unknown market: {requested_market}')
 
     requested = _primary_quote(ticker, requested_market, snapshots)
     if requested is not None:
-        return QuoteView.from_snapshot(requested, now)
+        view = QuoteView.from_snapshot(requested, now, tape_status=tape_status)
+        if view.quality != 'unavailable':
+            return view
 
     if requested_market == 'de':
         us = _primary_quote(ticker, 'us', snapshots)
         if us is not None:
-            return QuoteView.from_snapshot(us, now, is_fallback=True)
+            view = QuoteView.from_snapshot(
+                us, now, is_fallback=True, tape_status=tape_status)
+            if view.quality != 'unavailable':
+                return view
 
     return QuoteView.unavailable(ticker, requested_market)
