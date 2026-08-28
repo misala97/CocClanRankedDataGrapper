@@ -11,7 +11,10 @@ import decimal
 
 import pytest
 
-from features.radar.prices import Profile, PriceUnavailable, Quote
+from dataclasses import dataclass
+
+from features.radar.prices import (CurrencyMismatch, Profile, PriceUnavailable,
+                                   Quote, normalize_snapshot)
 from features.radar.prices import finnhub, twelvedata
 
 
@@ -25,6 +28,28 @@ class FakeHttp:
         if path not in self.payloads:
             raise PriceUnavailable('404 %s' % path)
         return self.payloads[path]
+
+
+@dataclass(frozen=True)
+class Instrument:
+    ticker: str = 'AAPL'
+    market: str = 'de'
+    venue: str = 'Xetra'
+    mic: str = 'XETR'
+    provider_symbol: str = 'APC'
+    currency: str = 'EUR'
+
+
+def test_currency_mismatch_rejects_provider_snapshot():
+    raw = Quote(
+        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='APC', currency='USD', price=decimal.Decimal('194.20'),
+        previous_close=None, regular_close=None, quote_ts=None, volume=None,
+        provider_delay='delayed',
+    )
+
+    with pytest.raises(CurrencyMismatch):
+        normalize_snapshot(Instrument(), raw)
 
 
 def test_a_quote_is_normalized():
