@@ -1,5 +1,5 @@
-import { MARK_WHY } from '../format'
-import type { Mark, Row } from '../types'
+import { MARK_WHY, rankTerm } from '../format'
+import type { Mark, Row, Session } from '../types'
 
 /** What the marks on this board mean.
  *
@@ -20,19 +20,32 @@ import type { Mark, Row } from '../types'
  *  carry: a mark the header has taken over is explained up there instead, and
  *  repeating it here would define the same word twice on one screen.
  */
-export function Marks({ rows, suppress }: {
+export function Marks({ rows, suppress, session }: {
   rows: Row[]
   suppress: readonly Mark[]
+  /** Decides which quantity the board is ordered by, and therefore which
+   *  term this glossary has to define. */
+  session: Session
 }) {
+  const ranked = rankTerm(session)
   const shown = (Object.keys(MARK_WHY) as Mark[]).filter(
     (mark) => !suppress.includes(mark)
       && rows.some((row) => row.marks.includes(mark)))
 
-  if (shown.length === 0) return null
-
   return (
     <div className="below marks">
-      <p className="sub">What the marks on these rows mean</p>
+      {/* The ranking quantity, defined once. It is printed at the end of
+          every row and nothing on the surface said what it was -- the same
+          gap the marks had, on the number the whole board is ordered by. */}
+      <dl className="rank">
+        <div>
+          <dt>{ranked.label}</dt>
+          <dd>{ranked.why}</dd>
+        </div>
+      </dl>
+      {shown.length > 0 && (
+        <p className="sub">What the marks on these rows mean</p>
+      )}
       <dl>
         {shown.map((mark) => (
           <div key={mark}>

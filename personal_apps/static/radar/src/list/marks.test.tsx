@@ -36,7 +36,7 @@ describe('a mark carried by every row', () => {
 
   it('is not rendered twice: the row drops what the header states', () => {
     const { container } = render(
-      <TickerRow row={row('A', ['provisional', 'single-source'])}
+      <TickerRow session="regular" row={row('A', ['provisional', 'single-source'])}
                  selected={false} suppress={['provisional']}
                  onSelect={() => {}} />)
 
@@ -49,7 +49,7 @@ describe('a mark carried by every row', () => {
     /* The teeth check for the one above: if the row rendered no marks at all
        that test would pass on an empty string. */
     const { container } = render(
-      <TickerRow row={row('A', ['provisional'])} selected={false}
+      <TickerRow session="regular" row={row('A', ['provisional'])} selected={false}
                  onSelect={() => {}} />)
 
     expect(container.querySelector('.meta')!.textContent)
@@ -78,7 +78,7 @@ describe('warming-up, a second thin-baseline mark', () => {
 
   it('renders on the row like any other mark', () => {
     const { container } = render(
-      <TickerRow row={row('A', ['warming-up'])} selected={false}
+      <TickerRow session="regular" row={row('A', ['warming-up'])} selected={false}
                  onSelect={() => {}} />)
 
     expect(container.querySelector('.meta')!.textContent)

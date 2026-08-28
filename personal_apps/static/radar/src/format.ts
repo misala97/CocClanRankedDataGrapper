@@ -163,6 +163,31 @@ export function pricesAreMoving(session: string): boolean {
   return session !== 'closed'
 }
 
+/** What the board is ordered by, named and defined in one place.
+ *
+ *  The row prints this number and the glossary defines it, and the two must
+ *  not be able to disagree about which quantity is on screen -- the label and
+ *  the sentence come from here for both. Which of the two applies is a
+ *  function of the session, because the RANKING is: with the exchange shut
+ *  there is no price movement to diverge from and leaderboard.py falls
+ *  through to chatter alone. */
+export function rankTerm(session: string): { label: string; why: string } {
+  if (pricesAreMoving(session)) {
+    return {
+      label: 'div',
+      why: 'Divergence: how far the chatter ran ahead of the price over this '
+        + 'window. The board is ordered by it, highest first. A row with no '
+        + 'usable quote is not scored at all rather than scored zero.',
+    }
+  }
+  return {
+    label: 'z',
+    why: 'Chatter z-score: how unusual this much talk is for this ticker '
+      + 'against its own history. With the market shut there is no price move '
+      + 'to diverge from, so the board is ordered by this instead.',
+  }
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 

@@ -126,7 +126,14 @@ function Finding({ payload, shared }: {
         </>
       ) : (
         <>
-          <b>{tickers}</b> above their normal in the last
+          {/* "cleared the bar", not "above their normal". The board ranks by
+              divergence, not by ratio, so a ticker whose price fell further
+              than its chatter rose is legitimately listed while sitting BELOW
+              its normal -- RIVN at 0.8x and div -0.72 was on the board while
+              this sentence claimed every row was above normal. It is also the
+              wording the closed-market branch below already uses, so the two
+              now describe the list the same way. */}
+          <b>{tickers}</b> cleared the bar in the last
           {' '}<b>{payload.window_hours}h</b> ·{' '}
           <span className={shared.length ? 'shared' : undefined}>{baselines}</span>
         </>
@@ -184,6 +191,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         {payload.rows.map((row) => (
           <TickerRow key={row.ticker} row={row} onSelect={onSelect}
                      magnitude={mags[row.ticker]} suppress={shared}
+                     session={payload.session}
                      selected={row.ticker === selected} />
         ))}
         {payload.rows.length === 0 && (
@@ -203,7 +211,8 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
           </p>
         )}
         <Excluded payload={payload} />
-        <Marks rows={payload.rows} suppress={shared} />
+        <Marks rows={payload.rows} suppress={shared}
+               session={payload.session} />
         <Spend payload={payload} />
       </div>
     </aside>

@@ -605,6 +605,32 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .r1 .spark { width: 56px; height: 17px; flex: none; opacity: 0.7; }
+
+/* The number the board is ORDERED by, at the end of the row's first line.
+   ----------------------------------------------------------------------------
+   Uncoloured, deliberately. It is not a price, and green or red on it would
+   read as a verdict on the ticker -- which is the one thing PRODUCT.md's scope
+   boundary forbids the surface implying. It is not violet either: violet is
+   chatter and selection, and this quantity is the RELATION between chatter and
+   price rather than either one.
+
+   Tabular figures and a fixed slot, because the entire point is comparing it
+   with the number on the row above. `flex: none` and a right-aligned box keep
+   the decimal points in a column no matter how long the company name is. */
+.r1 .score {
+  flex: none; margin-left: auto; text-align: right;
+  display: inline-flex; align-items: baseline; gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.r1 .score .k {
+  font-size: var(--t-ax); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted);
+}
+.r1 .score b {
+  font-size: var(--t-sm); font-weight: 650; color: var(--ink);
+  min-width: 4.2ch;
+}
+.row.on .score b { color: var(--mark); }
 .row.on .spark { opacity: 1; }
 
 /* The phrase, styled per clause kind. The client never parses the text --
@@ -662,7 +688,13 @@ body {
    definition is the one who has just met the word.
    ========================================================================= */
 
-.marks .sub { margin: 0 0 var(--s3); color: var(--muted); }
+.marks .sub { margin: var(--s5) 0 var(--s3); color: var(--muted); }
+/* The ranking quantity, not a caution.
+   Amber is reserved on this surface for a number that cannot be taken at face
+   value -- that is what every mark below it is. Giving DIV the same colour
+   would say the board's own sort key is suspect. It is a term of art, so it
+   is set like one. */
+.marks dl.rank dt { color: var(--ink-2); }
 .marks dl { margin: 0; display: grid; gap: var(--s3); }
 .marks dt {
   font-size: var(--t-ax); font-weight: 600; letter-spacing: 0.04em;

@@ -1,10 +1,27 @@
 import { chatterRuns, peak } from '../board/geometry'
-import { rowPrice, segmentLabel } from '../format'
-import type { Clause, Row } from '../types'
+import { divergence, pricesAreMoving, rankTerm, rowPrice, segmentLabel,
+         zscore } from '../format'
+import type { Clause, Row, Session } from '../types'
 
 /** The row sparkline. Small on purpose: it says "this is building" or "this
  *  faded", and every quantity it implies is in the phrase as text. */
 const BOX = { width: 56, height: 17, pad: 0 }
+
+/** What this row is ranked ON, which is not the same quantity in both
+ *  sessions -- see leaderboard.py and the `Finding` sentence in ListPane.
+ *
+ *  Open: divergence, chatter measured against the price move over the same
+ *  window. Shut: there is no price move to measure, so the board ranks on the
+ *  chatter z-score alone and the label has to say so.
+ */
+function rankedBy(row: Row, session: Session) {
+  const term = rankTerm(session)
+  return {
+    ...term,
+    value: pricesAreMoving(session)
+      ? divergence(row.divergence) : zscore(row.mention_z),
+  }
+}
 
 /** One row of the list.
  *
@@ -22,10 +39,13 @@ const BOX = { width: 56, height: 17, pad: 0 }
  *  copy-link work, and the click handler only exists to avoid a full page
  *  load for a selection the client can make itself.
  */
-export function TickerRow({ row, selected, magnitude, suppress = [], onSelect }: {
+export function TickerRow({ row, selected, magnitude, session,
+                           suppress = [], onSelect }: {
   row: Row
   selected: boolean
   magnitude?: number
+  /** The exchange's state, because it decides WHICH number ranks the row. */
+  session: Session
   /** Marks the whole board carries, which the page states once in its header
    *  instead. A mark on every row is not a mark. */
   suppress?: readonly string[]
@@ -33,6 +53,7 @@ export function TickerRow({ row, selected, magnitude, suppress = [], onSelect }:
 }) {
   const runs = chatterRuns(row.series, BOX, peak(row.series))
   const measured = magnitude !== undefined
+  const ranked = rankedBy(row, session)
 
   return (
     <a className={`row${selected ? ' on' : ''}${measured ? '' : ' unmeasured'}`}
@@ -58,6 +79,29 @@ export function TickerRow({ row, selected, magnitude, suppress = [], onSelect }:
                   strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           ))}
         </svg>
+        {/* The number the list is ORDERED by, on the row, at the end of the
+            line the eye already scans.
+
+            It was rendered nowhere. `divergence()` and `zscore()` have been
+            written, commented and unit-tested in format.ts since the board
+            was built, and no component imported either -- so the board was
+            sorted by a quantity the surface never showed, and the reader had
+            no way to answer "why is this above that". The magnitude bar made
+            it worse rather than better: it draws the RATIO, deliberately (see
+            radar.css), so the longest bar on the board is routinely not the
+            top row.
+
+            Which number this is depends on the session, because the ranking
+            does. With the exchange shut there is no price movement to diverge
+            from and the board falls through to ranking on chatter alone --
+            printing "divergence" over that would be the heading disagreeing
+            with the quantity beneath it, which is the exact bug the header's
+            universal-marks machinery exists to prevent. */}
+        <span className="score" title={ranked.why}
+              aria-label={ranked.why}>
+          <span className="k">{ranked.label}</span>
+          <b>{ranked.value}</b>
+        </span>
       </span>
       <span className="phr">
         {row.clauses.map((clause: Clause, index) => (

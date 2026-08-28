@@ -20,7 +20,7 @@ const row = (over: Partial<Row> = {}): Row => ({
 
 describe('a ticker row', () => {
   it('renders the phrase the server wrote', () => {
-    render(<TickerRow row={row()} selected={false} onSelect={() => {}} />)
+    render(<TickerRow session="regular" row={row()} selected={false} onSelect={() => {}} />)
 
     expect(screen.getByText('40x its normal')).toBeInTheDocument()
     expect(screen.getByText('2 venues')).toBeInTheDocument()
@@ -31,7 +31,7 @@ describe('a ticker row', () => {
        like a price" from the string would be a second implementation of a
        judgement the server already made. */
     const { container } = render(
-      <TickerRow selected={false} onSelect={() => {}} row={row({
+      <TickerRow session="regular" selected={false} onSelect={() => {}} row={row({
         clauses: [{ kind: 'warn', text: 'one venue only' },
                   { kind: 'price-down', text: 'price -7%' }],
       })} />)
@@ -44,7 +44,7 @@ describe('a ticker row', () => {
     /* The live page printed "209 mentions against 0 typical" and scored it
        with an em-dash. The server decides the wording now; this pins that the
        row does not reconstruct its own from the raw numbers. */
-    render(<TickerRow selected={false} onSelect={() => {}} row={row({
+    render(<TickerRow session="regular" selected={false} onSelect={() => {}} row={row({
       expected: 0, ratio: null, mentions: 209, clauses: [
         { kind: 'new', text: 'new here' },
         { kind: 'ratio', text: '209 mentions, nothing to compare against yet' },
@@ -58,7 +58,7 @@ describe('a ticker row', () => {
 
   it('reports selection by ticker without navigating', async () => {
     const onSelect = vi.fn()
-    render(<TickerRow row={row()} selected={false} onSelect={onSelect} />)
+    render(<TickerRow session="regular" row={row()} selected={false} onSelect={onSelect} />)
 
     await userEvent.click(screen.getByRole('link', { name: /HOWL/ }))
 
@@ -66,14 +66,14 @@ describe('a ticker row', () => {
   })
 
   it('is a real link so a ticker can be opened in a new tab', () => {
-    render(<TickerRow row={row()} selected={false} onSelect={() => {}} />)
+    render(<TickerRow session="regular" row={row()} selected={false} onSelect={() => {}} />)
 
     expect(screen.getByRole('link', { name: /HOWL/ }))
       .toHaveAttribute('href', '?t=HOWL')
   })
 
   it('marks the selected row for assistive tech, not only in colour', () => {
-    render(<TickerRow row={row()} selected onSelect={() => {}} />)
+    render(<TickerRow session="regular" row={row()} selected onSelect={() => {}} />)
 
     expect(screen.getByRole('link', { name: /HOWL/ }))
       .toHaveAttribute('aria-current', 'true')
