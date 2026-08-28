@@ -5,9 +5,11 @@
 - Workspace: `C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-german-market`
 - Branch: `codex/radar-german-market`
 - Base/main at worktree creation: `5a741e8bb05e32e8a157a5ddbd899da1603451e0`
-- Current implementation HEAD before this handoff update: `7210ef2`
-- Working tree at this handoff: clean after the status update commit; verify
-  `git status`, `git diff`, `git log -5` before work.
+- Current implementation HEAD before this handoff update: `acd76d1`
+- Working tree at this handoff: intentionally dirty only in
+  `personal_apps/tests/test_radar_quotes.py`, a Task 5 red test created before
+  the user paused work. Preserve it; do not discard or commit it without
+  completing Task 5's TDD cycle.
 
 ## Read completely before editing
 
@@ -101,3 +103,5 @@ the isolated worktree.
 
 Implement Task 5 only: isolate polling, history, and retention by market.
 Then run focused tests, commit, review, and update these handoff artifacts.
+Start from the preserved Task 5 red test asserting German/Xetra/EUR quote
+identity persists separately from US data.
