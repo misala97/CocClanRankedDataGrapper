@@ -88,6 +88,34 @@ describe('every reveal degrades to a finished surface', () => {
   })
 })
 
+describe('accessibility contracts in the stylesheet', () => {
+  it('does not dim the count inside a pressed filter chip', () => {
+    // It was `color: var(--mark); opacity: 0.75`, which measured 3.48:1 in
+    // light and 3.67:1 in dark at 11.5px -- the only text on the surface
+    // under the 4.5 floor. Opacity on small text is the specific move that
+    // caused it, and it is easy to reintroduce because it looks like a
+    // hierarchy decision rather than a contrast one.
+    const rule = rules.match(
+      /\.seg button\[aria-pressed="true"\] \.n \{[^}]*\}/)?.[0] ?? ''
+    expect(rule).not.toContain('opacity')
+  })
+
+  it('raises the touch targets on a coarse pointer', () => {
+    // Measured at 390x844 before this: span buttons 21.4px tall against a
+    // WCAG 2.5.8 floor of 24, chips exactly on the line at 24.3px.
+    expect(rules).toMatch(/@media \(pointer: coarse\)/)
+  })
+
+  it('keeps the column-header styling off the row header', () => {
+    // The venue cell is a `th scope="row"` so a screen reader names the venue
+    // when reading a figure. Styled by a bare `.bd th` it would inherit the
+    // uppercase tracked 10.5px column treatment and render "Bluesky" as a
+    // column heading.
+    expect(rules).toMatch(/\.bd thead th \{/)
+    expect(rules).not.toMatch(/\n\.bd th \{/)
+  })
+})
+
 describe('reduced motion', () => {
   it('still turns everything off', () => {
     // Not new, but the pass above added the first real animations to this

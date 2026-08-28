@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchDetail } from '../api'
 import { Widen } from '../Widen'
 import { Breakdown } from './Breakdown'
@@ -79,6 +79,24 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   // span would miss a source change that redraws the chatter lane; keying on
   // a render would replay the animation on every hover in the panel.
   const [drawn, setDrawn] = useState(0)
+  // Where focus goes when the reader picks a row.
+  const landing = useRef<HTMLElement>(null)
+  // The ticker the panel last handed focus to. Starts at the opening ticker
+  // rather than null, so the FIRST panel does not steal focus from the top of
+  // the document on page load -- arriving at a page with focus already six
+  // hundred pixels in is its own accessibility problem.
+  const focused = useRef<string | null>(ticker)
+
+  useEffect(() => {
+    if (!detail || detail.identity.ticker !== ticker) return
+    if (focused.current === ticker) return
+    focused.current = ticker
+    // Not `preventScroll`. On desktop the panel is already in view so this
+    // does nothing; below 900px the panel sits ~1500px down the document and
+    // scrolling to it is exactly what was missing -- tapping a row used to
+    // change nothing on screen at all.
+    landing.current?.focus()
+  }, [detail, ticker])
 
   useEffect(() => {
     if (!ticker) {
@@ -163,7 +181,15 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     // picking a row and landing halfway down someone else's posts was the old
     // behaviour. And the fresh mount is what runs the settle: the swap
     // between two tickers was a hard cut, on the most repeated action here.
-    <main className="detail" key={ticker}>
+    //
+    // `tabindex=-1` and `aria-labelledby` make it a named, focusable landmark.
+    // Activating a row used to be completely silent to a screen reader --
+    // focus stayed on the link, the panel had no live region, and the only
+    // route to the answer was tabbing through every remaining row. Focus is
+    // moved here on selection instead of announcing, because moving focus
+    // both says where you are and puts you there; see BoardPage.
+    <main className="detail" key={ticker} tabIndex={-1}
+          aria-labelledby="panel-ticker" ref={landing}>
       <Identity identity={detail.identity} />
 
       <p className="read">
@@ -174,8 +200,8 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         ))}
       </p>
 
-      <section className="zone">
-        <h3>
+      <section className="zone" aria-labelledby="zone-chart">
+        <h3 id="zone-chart">
           Price and chatter
           <span className="q">{CAPTIONS[span]}</span>
           <span className="spans" role="group" aria-label="Chart span">

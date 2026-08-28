@@ -112,7 +112,10 @@ function Finding({ payload, shared }: {
     (mark) => mark !== 'provisional' && mark !== 'warming-up')
 
   return (
-    <p className="finding">
+    // role="status" so a filter change is announced. Going from ten rows
+    // to three used to be silent to a screen reader: the rows swapped, the
+    // count in this sentence changed, and nothing told anyone.
+    <p className="finding" role="status">
       {payload.session === 'closed' ? (
         <>
           No price is moving, so these are ranked by <b>chatter against each
@@ -159,7 +162,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   const shared = universalMarks(payload.rows)
 
   return (
-    <aside className="list">
+    <aside className="list" aria-label="Board">
       <div className="lhead">
         <div className="brand">
           <h1>Radar</h1>
@@ -176,7 +179,8 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
 
       {/* The busy signal sits here rather than on the controls: the chips are
           not stale, this list is. */}
-      <div className="rows" aria-busy={busy || undefined}>
+      <div className="rows" id="radar-rows" tabIndex={-1}
+           aria-busy={busy || undefined}>
         {payload.rows.map((row) => (
           <TickerRow key={row.ticker} row={row} onSelect={onSelect}
                      magnitude={mags[row.ticker]} suppress={shared}

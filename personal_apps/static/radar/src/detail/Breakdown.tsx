@@ -29,23 +29,23 @@ export function Breakdown({ breakdown, windowHours }: {
   const two = b.top_two_share
 
   return (
-    <section className="zone">
-      <h3>Chatter breakdown <span className="q">· last {windowHours} hours</span></h3>
+    <section className="zone" aria-labelledby="zone-breakdown">
+      <h3 id="zone-breakdown">Chatter breakdown <span className="q">· last {windowHours} hours</span></h3>
       <div className="bd">
         <div>
           <table>
             <thead>
               <tr>
-                <th>Venue</th>
-                <th className="r">Mentions</th>
-                <th className="r">Voices</th>
-                <th className="r">Share</th>
+                <th scope="col">Venue</th>
+                <th className="r" scope="col">Mentions</th>
+                <th className="r" scope="col">Voices</th>
+                <th className="r" scope="col">Share</th>
               </tr>
             </thead>
             <tbody>
               {b.venues.map((venue) => (
                 <tr key={venue.source}>
-                  <td className="venue">{sourceLabel(venue.source)}</td>
+                  <th scope="row" className="venue">{sourceLabel(venue.source)}</th>
                   <td className="r">{count(venue.mentions)}</td>
                   <td className="r">{count(venue.voices)}</td>
                   <td className="r">

@@ -52,8 +52,8 @@ export function Posts({ posts, total, retentionNote }: {
   retentionNote?: boolean
 }) {
   return (
-    <section className="zone">
-      <h3>What people are saying
+    <section className="zone" aria-labelledby="zone-posts">
+      <h3 id="zone-posts">What people are saying
         <span className="q">
           · {count(total)} {total === 1 ? 'post' : 'posts'}, newest first
         </span>

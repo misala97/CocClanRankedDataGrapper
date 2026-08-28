@@ -474,7 +474,20 @@ body {
   background: var(--mark-soft); color: var(--mark); font-weight: 600;
 }
 .seg .n { font-size: var(--t-xs); color: var(--muted); }
-.seg button[aria-pressed="true"] .n { color: var(--mark); opacity: 0.75; }
+/* No opacity on the count inside a PRESSED chip.
+   ----------------------------------------------------------------------------
+   It was `color: var(--mark); opacity: 0.75`, which measured 3.48:1 in light
+   and 3.67:1 in dark at 11.5px -- under the 4.5 floor, and the only text on
+   the whole surface that failed it. The same badge in an unpressed chip is
+   6.00:1, so the opacity was the entire cause.
+   The badge still reads as secondary to its label, but by one thing rather
+   than three: a size step down, 11.5px against 12.5px. It inherits the
+   pressed button's 600 weight and now shares its colour exactly, so the size
+   is carrying the whole distinction. That is enough here -- the count sits
+   immediately after its own label inside one pill, so it is never read as a
+   separate item -- and it is the reading the unpressed chips have always
+   used. Measured after: 5.60:1 light, 5.25:1 dark. */
+.seg button[aria-pressed="true"] .n { color: var(--mark); }
 
 /* A chip whose count is zero: dimmed, never removed. */
 .seg button.nil, .seg button.nil .n { color: var(--dim); }
@@ -844,13 +857,23 @@ body {
 .bd .sub { margin: 0 0 10px; font-size: 12.5px; color: var(--muted); }
 
 .bd table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
-.bd th {
+.bd thead th {
   text-align: left; padding: 0 0 var(--s2); border-bottom: 1px solid var(--rule);
   font-size: var(--t-ax); font-weight: 500; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--muted);
 }
-.bd td { padding: 8px 0; border-bottom: 1px solid var(--rule-soft); color: var(--ink-2); }
-.bd td.venue { font-variant-numeric: normal; color: var(--ink); }
+.bd td, .bd tbody th {
+  padding: 8px 0; border-bottom: 1px solid var(--rule-soft); color: var(--ink-2);
+}
+/* The venue name is a row header -- `th scope="row"`, so a screen reader
+   names the venue when reading a mentions figure instead of reciting four
+   bare numbers. Scoped to `thead th` above rather than `th`, or this cell
+   would inherit the column styling and render "Bluesky" as uppercase tracked
+   10.5px grey. */
+.bd tbody th.venue {
+  text-align: left; font-weight: 400;
+  font-variant-numeric: normal; color: var(--ink);
+}
 .bd th.r, .bd td.r { text-align: right; }
 
 .stat {
@@ -1043,6 +1066,28 @@ body {
 .detail .failed .acts button:active, .broken button:active {
   transform: scale(0.96);
   transition-duration: var(--tap);
+}
+
+/* ------------------------------------------------------- touch targets ---
+   Measured at 390x844: the six chart span buttons rendered 21.4px tall and
+   the sixteen filter chips 24.3px. WCAG 2.5.8 puts the floor at 24x24, so
+   the span buttons failed outright and everything else sat exactly on the
+   line with a 4px gap to its neighbour.
+
+   Gated on `pointer: coarse` rather than on a width breakpoint, because what
+   changed is the input device and not the viewport -- a touch laptop at 1440
+   has the same problem and a mouse at 390 does not. Desktop density is
+   untouched, which is the point: PRODUCT.md calls this surface
+   desktop-primary and the control block was tuned to fit under 180px there.
+
+   Padding rather than min-height: these are inline-flex pills aligned on the
+   baseline, and a min-height would recentre each label against its count
+   badge instead of growing the hit area around it. */
+@media (pointer: coarse) {
+  .seg button, .chip { padding-block: 8px; }
+  .spans button { padding-block: 7px; }
+  .seg, .spans { gap: var(--s2); }
+  .post .more { padding-block: var(--s2); }
 }
 
 /* -------------------------------------------------------- reduced motion - */

@@ -18,7 +18,10 @@ export function Identity({ identity }: { identity: Detail['identity'] }) {
   return (
     <div className="ident">
       <div>
-        <h2>{identity.ticker}</h2>
+        {/* Named so the panel can be labelled by it: a landmark whose label
+            is the ticker it is showing tells a screen-reader user which
+            ticker they have landed in, without a second announcement. */}
+        <h2 id="panel-ticker">{identity.ticker}</h2>
         <div className="full">{identity.name ?? 'Name unknown'}</div>
         <div className="facts">{facts.join(' · ')}</div>
       </div>

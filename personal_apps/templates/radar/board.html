@@ -34,7 +34,13 @@
 </head>
 <body>
 
-<a class="skip-link" href="#radar-main">Skip to the board</a>
+{# Targets the rows, not the island's own container. It used to point at
+   #radar-main, which WRAPS the controls -- so "skip to the board" landed
+   above the sixteen filter chips it was supposed to skip past and saved
+   nobody a single tab. #radar-rows is rendered by ListPane; when the island
+   has not mounted there is no board to skip to and the link is inert, which
+   is the correct behaviour for the noscript and failure cases below. #}
+<a class="skip-link" href="#radar-rows">Skip to the tickers</a>
 
 {# A div, not a <main>. The island renders the panel as the page's <main>, and
    two of them nested is invalid markup that leaves a screen reader with two
