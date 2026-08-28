@@ -554,13 +554,16 @@ class RadarInstrument(db.Model):
     __table_args__ = (
         db.UniqueConstraint('ticker', 'market', 'mic',
                             name='uq_radar_instrument'),
+        db.CheckConstraint("market IN ('us', 'de')",
+                           name='ck_radar_instrument_market'),
         db.Index('ix_radar_instrument_primary',
                  'ticker', 'market', 'is_primary'),
         {'mysql_charset': 'utf8mb4'},
     )
 
-    id              = db.Column(db.BigInteger, primary_key=True,
-                                autoincrement=True)
+    id              = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
     ticker          = db.Column(db.String(12, collation='utf8mb4_bin'),
                                 nullable=False)
     market          = db.Column(db.String(2), nullable=False)
@@ -808,6 +811,8 @@ class RadarQuote(db.Model):
     __tablename__ = 'radar_quotes'
     __table_args__ = (
         db.UniqueConstraint('ticker', 'fetched_at', name='uq_radar_quote'),
+        db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
+                           name='ck_radar_quotes_market'),
         db.Index('ix_radar_quotes_ticker_fetched', 'ticker', 'fetched_at'),
         {'mysql_charset': 'utf8mb4'},
     )
@@ -843,7 +848,11 @@ class RadarDailyClose(db.Model):
     tickers is small, and rows are replaced by date rather than accumulated.
     """
     __tablename__ = 'radar_daily_closes'
-    __table_args__ = {'mysql_charset': 'utf8mb4'}
+    __table_args__ = (
+        db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
+                           name='ck_radar_daily_closes_market'),
+        {'mysql_charset': 'utf8mb4'},
+    )
 
     ticker     = db.Column(db.String(12, collation='utf8mb4_bin'),
                            primary_key=True)

@@ -234,3 +234,76 @@ def test_market_models_expand_without_breaking_legacy_price_keys():
     assert tuple(column.name for column in
                  models.RadarDailyClose.__table__.primary_key.columns) == (
         'ticker', 'close_date')
+
+
+def test_radar_instrument_assigns_an_id_with_sqlite_orm_persistence():
+    """SQLite requires INTEGER, not BIGINT, for automatic primary-key IDs."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    models.RadarInstrument.__table__.create(engine)
+
+    with sa.orm.Session(engine) as session:
+        instrument = models.RadarInstrument(
+            ticker='SQLITE', market='us', venue='Test venue', mic='XTST',
+            provider_symbol='SQLITE', currency='USD', is_primary=True,
+            mapping_status='mapped', mapped_at=dt.datetime(2026, 8, 28))
+        session.add(instrument)
+        session.commit()
+        assert instrument.id == 1
+
+    engine.dispose()
+
+
+def test_model_schema_rejects_unknown_market_and_allows_null_price_context():
+    """`db.create_all()` must enforce the same overlap contract as Alembic."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    metadata = sa.MetaData()
+    for table in (
+            models.RadarInstrument.__table__, models.RadarQuote.__table__,
+            models.RadarDailyClose.__table__):
+        table.to_metadata(metadata)
+    metadata.create_all(engine)
+
+    with engine.connect() as connection:
+        invalid_inserts = (
+            "INSERT INTO radar_instruments "
+            "(id, ticker, market, venue, mic, provider_symbol, currency, "
+            "is_primary, mapping_status, mapped_at) VALUES "
+            "(1, 'BADINST', 'uk', 'Test', 'XTST', 'BADINST', 'GBP', 0, "
+            "'unverified', CURRENT_TIMESTAMP)",
+            "INSERT INTO radar_quotes "
+            "(id, ticker, market, fetched_at, price) VALUES "
+            "(1, 'BADQUOTE', 'uk', '2026-08-28 12:10:00', 1.0)",
+            "INSERT INTO radar_daily_closes "
+            "(ticker, market, close_date, close, fetched_at) VALUES "
+            "('BADCLOSE', 'uk', '2026-08-28', 1.0, '2026-08-28 12:10:00')",
+        )
+        for statement in invalid_inserts:
+            with pytest.raises(sa.exc.IntegrityError):
+                connection.execute(sa.text(statement))
+            connection.rollback()
+
+        connection.execute(sa.text(
+            "INSERT INTO radar_quotes "
+            "(id, ticker, fetched_at, price) VALUES "
+            "(2, 'LEGACY', '2026-08-28 12:11:00', 1.0)"))
+        connection.execute(sa.text(
+            "INSERT INTO radar_daily_closes "
+            "(ticker, close_date, close, fetched_at) VALUES "
+            "('LEGACY', '2026-08-28', 1.0, '2026-08-28 12:11:00')"))
+        connection.commit()
+
+        assert connection.execute(sa.text(
+            "SELECT market FROM radar_quotes WHERE id=2")).scalar_one() is None
+        assert connection.execute(sa.text(
+            "SELECT market FROM radar_daily_closes WHERE ticker='LEGACY'")) \
+            .scalar_one() is None
+
+    engine.dispose()

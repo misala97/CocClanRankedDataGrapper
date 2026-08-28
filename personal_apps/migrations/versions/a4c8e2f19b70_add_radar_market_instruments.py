@@ -90,6 +90,8 @@ def upgrade():
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('ticker', 'market', 'mic',
                             name='uq_radar_instrument'),
+        sa.CheckConstraint("market IN ('us', 'de')",
+                           name='ck_radar_instrument_market'),
         mysql_charset='utf8mb4',
     )
     with op.batch_alter_table('radar_instruments', schema=None) as batch_op:
@@ -106,6 +108,9 @@ def upgrade():
                                       nullable=True))
         batch_op.add_column(sa.Column('provider_symbol', sa.String(length=32),
                                       nullable=True))
+        batch_op.create_check_constraint(
+            'ck_radar_quotes_market',
+            "market IS NULL OR market IN ('us', 'de')")
 
     with op.batch_alter_table('radar_daily_closes', schema=None) as batch_op:
         batch_op.add_column(sa.Column('market', sa.String(length=2),
@@ -114,6 +119,9 @@ def upgrade():
                                       nullable=True))
         batch_op.add_column(sa.Column('currency', sa.String(length=3),
                                       nullable=True))
+        batch_op.create_check_constraint(
+            'ck_radar_daily_closes_market',
+            "market IS NULL OR market IN ('us', 'de')")
 
     op.execute(_context_update('radar_quotes'))
     # Daily closes have no provider_symbol column.
@@ -141,12 +149,23 @@ def upgrade():
 
 
 def downgrade():
+    # Old ticker-only keys cannot distinguish a German venue price from its
+    # US counterpart. Keep US and mixed-version NULL rows, but remove every
+    # non-US context row before dropping the context that identifies it.
+    op.execute(sa.text(
+        "DELETE FROM radar_quotes WHERE market IS NOT NULL AND market <> 'us'"))
+    op.execute(sa.text(
+        "DELETE FROM radar_daily_closes "
+        "WHERE market IS NOT NULL AND market <> 'us'"))
+
     with op.batch_alter_table('radar_daily_closes', schema=None) as batch_op:
+        batch_op.drop_constraint('ck_radar_daily_closes_market', type_='check')
         batch_op.drop_column('currency')
         batch_op.drop_column('mic')
         batch_op.drop_column('market')
 
     with op.batch_alter_table('radar_quotes', schema=None) as batch_op:
+        batch_op.drop_constraint('ck_radar_quotes_market', type_='check')
         batch_op.drop_column('provider_symbol')
         batch_op.drop_column('currency')
         batch_op.drop_column('mic')

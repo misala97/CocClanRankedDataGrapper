@@ -212,6 +212,88 @@ def test_market_migration_keeps_legacy_writes_valid_during_overlap(
     assert tuple(row) == (None, None, None, None)
 
 
+def test_market_migration_rejects_unknown_market_but_keeps_null_price_rows(
+        market_migration_db):
+    """A typo cannot create a third market while the old writer uses NULL."""
+    connection = market_migration_db
+    migration = _load_market_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+    connection.commit()
+
+    invalid_inserts = (
+        "INSERT INTO radar_instruments "
+        "(ticker, market, venue, mic, provider_symbol, currency, isin, "
+        "is_primary, mapping_status, mapping_source, mapped_at) VALUES "
+        "('BADINST', 'uk', 'Test', 'XTST', 'BADINST', 'GBP', NULL, 0, "
+        "'unverified', NULL, CURRENT_TIMESTAMP)",
+        "INSERT INTO radar_quotes "
+        "(id, ticker, market, fetched_at, quote_ts, price, prev_close, volume) "
+        "VALUES (20, 'BADQUOTE', 'uk', '2026-08-28 12:10:00', NULL, "
+        "1.0, NULL, NULL)",
+        "INSERT INTO radar_daily_closes "
+        "(ticker, market, close_date, close, fetched_at) VALUES "
+        "('BADCLOSE', 'uk', '2026-08-28', 1.0, '2026-08-28 12:10:00')",
+    )
+    for statement in invalid_inserts:
+        with pytest.raises(sa.exc.IntegrityError):
+            connection.execute(sa.text(statement))
+        connection.rollback()
+
+    connection.execute(sa.text(
+        "INSERT INTO radar_quotes "
+        "(id, ticker, fetched_at, quote_ts, price, prev_close, volume) VALUES "
+        "(21, 'LEGACY', '2026-08-28 12:11:00', NULL, 1.0, NULL, NULL)"))
+    connection.execute(sa.text(
+        "INSERT INTO radar_daily_closes "
+        "(ticker, close_date, close, fetched_at) VALUES "
+        "('LEGACY', '2026-08-28', 1.0, '2026-08-28 12:11:00')"))
+    connection.commit()
+
+    quote = connection.execute(sa.text(
+        "SELECT market FROM radar_quotes WHERE id=21")).scalar_one()
+    close = connection.execute(sa.text(
+        "SELECT market FROM radar_daily_closes WHERE ticker='LEGACY'")) \
+        .scalar_one()
+    assert quote is None
+    assert close is None
+
+
+def test_market_migration_downgrade_prunes_de_context_but_keeps_us_and_null(
+        market_migration_db):
+    """Old ticker-only keys cannot safely represent a German price row."""
+    connection = market_migration_db
+    migration = _load_market_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+    connection.commit()
+
+    connection.execute(sa.text(
+        "INSERT INTO radar_quotes "
+        "(id, ticker, market, fetched_at, quote_ts, price, prev_close, volume) "
+        "VALUES (30, 'USROW', 'us', '2026-08-28 12:20:00', NULL, "
+        "1.0, NULL, NULL), "
+        "(31, 'DEROW', 'de', '2026-08-28 12:21:00', NULL, "
+        "1.0, NULL, NULL), "
+        "(32, 'NULLROW', NULL, '2026-08-28 12:22:00', NULL, 1.0, NULL, NULL)"))
+    connection.execute(sa.text(
+        "INSERT INTO radar_daily_closes "
+        "(ticker, market, close_date, close, fetched_at) VALUES "
+        "('USCLOSE', 'us', '2026-08-28', 1.0, '2026-08-28 12:20:00'), "
+        "('DECLOSE', 'de', '2026-08-28', 1.0, '2026-08-28 12:21:00'), "
+        "('NULLCLOSE', NULL, '2026-08-28', 1.0, '2026-08-28 12:22:00')"))
+    connection.commit()
+
+    migration.downgrade()
+
+    quote_tickers = connection.execute(sa.text(
+        "SELECT ticker FROM radar_quotes ORDER BY id")).scalars().all()
+    close_tickers = connection.execute(sa.text(
+        "SELECT ticker FROM radar_daily_closes ORDER BY ticker")).scalars().all()
+    assert quote_tickers == ['AAPL', 'USROW', 'NULLROW']
+    assert close_tickers == ['AAPL', 'NULLCLOSE', 'USCLOSE']
+
+
 def test_market_migration_downgrade_preserves_legacy_price_rows(
         market_migration_db):
     connection = market_migration_db
