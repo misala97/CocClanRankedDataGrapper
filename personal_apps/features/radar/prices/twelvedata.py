@@ -15,6 +15,7 @@ import os
 import requests
 
 from . import PriceUnavailable
+from ..instruments import CatalogInstrument
 
 API_BASE = 'https://api.twelvedata.com'
 
@@ -68,3 +69,34 @@ class TwelveDataProvider:
 
         # Newest first on the wire; volatility wants chronological order.
         return sorted(closes)
+
+    def stock_catalog(self, mic_code):
+        """Normalized stock/ETF reference data for a permitted MIC catalog."""
+        payload = self._http.get('/stocks', {
+            'mic_code': mic_code, 'show_plan': 'true'})
+        if not isinstance(payload, dict) or payload.get('status') == 'error':
+            raise PriceUnavailable('/stocks: provider returned no catalog')
+
+        rows = payload.get('data') or []
+        catalog = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            kind = str(row.get('type') or row.get('instrument_type') or '').lower()
+            if not ('stock' in kind or 'etf' in kind or
+                    'exchange traded fund' in kind):
+                continue
+            symbol = row.get('symbol')
+            currency = row.get('currency')
+            if not symbol or not currency:
+                continue
+            row_mic = row.get('mic_code') or row.get('mic')
+            # A German catalog must explicitly identify an EUR Xetra listing;
+            # do not infer either field from the request parameter.
+            if mic_code == 'XETR' and (row_mic != 'XETR' or currency != 'EUR'):
+                continue
+            catalog.append(CatalogInstrument(
+                symbol=str(symbol), name=row.get('name') or row.get('description'),
+                mic=row_mic, currency=currency, isin=row.get('isin'),
+                figi=row.get('figi')))
+        return catalog

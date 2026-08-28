@@ -15,8 +15,10 @@ an entry in config.SOURCES. StockTwits was one of these until 2026-08-26,
 when Cloudflare bot management -- refusing every request, from launch --
 made it not worth defeating a bot challenge to keep.
 """
+import argparse
 import datetime as dt
 import logging
+import sys
 import time
 
 import sqlalchemy as sa
@@ -24,10 +26,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from app import app
 from extensions import db
-from models import RadarPollState
+from models import RadarPollState, RadarQuote
 from features.radar import (
-    history, ingest, journal, llm_sentiment, market_calendar, quotes,
+    history, ingest, instruments, journal, llm_sentiment, market_calendar, quotes,
     retention, scheduling, scoring, universe)
+from features.radar.markets import classify_quality
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.config import (
@@ -88,6 +91,36 @@ def _utcnow():
     warning into the service log on every cycle.
     """
     return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
+
+def _german_quote_sample(now):
+    """Return safe age/quality metadata for the newest retained Xetra sample."""
+    quote = (RadarQuote.query.filter_by(market='de', mic='XETR')
+             .order_by(RadarQuote.fetched_at.desc()).first())
+    if quote is None:
+        return None, 'unavailable'
+    observed_at = quote.quote_ts or quote.fetched_at
+    age = max(0, int((now.replace(tzinfo=None) - observed_at).total_seconds()))
+    # RadarQuote does not carry the provider-delay field until the polling
+    # migration. Calling retained data "live" without it would mislead; delayed
+    # is the conservative quality used for this read-only probe.
+    return age, classify_quality(quote.quote_ts, quote.fetched_at,
+                                 'delayed', now)
+
+
+def probe_german_data(provider, now):
+    """Read permitted catalogs and print only operational counts, never secrets."""
+    with app.app_context():
+        result = instruments.mapping_preview(provider)
+        quote_age, quote_quality = _german_quote_sample(now)
+    print(
+        'catalog_reachable=%s xetra_rows=%d isin_rows=%d '
+        'mapped_active_tickers=%d unavailable_active_tickers=%d '
+        'quote_sample_age_seconds=%s quote_sample_quality=%s' % (
+            result.catalog_reachable, result.xetra_rows, result.isin_rows,
+            result.mapped_active_tickers, result.unavailable_active_tickers,
+            quote_age if quote_age is not None else 'unavailable', quote_quality))
+    return result
 
 def interval_for(state):
     return INTERVALS.get(state, FALLBACK_INTERVAL)
@@ -554,8 +587,21 @@ def _prepare_rollup_generation(now):
         return recovered, invalidated
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Radar ingest daemon')
+    parser.add_argument('--probe-german-data', action='store_true',
+                        help='read permitted German reference-data entitlement')
+    # Direct callers (including daemon lifecycle tests) retain the old no-arg
+    # contract. The executable entry point below explicitly supplies CLI args.
+    args = parser.parse_args([] if argv is None else argv)
     logging.basicConfig(level=logging.INFO)
+    if args.probe_german_data:
+        provider = instruments.CatalogFallbackProvider(
+            twelvedata_provider.TwelveDataProvider(
+                twelvedata_provider.TwelveDataHttp()),
+            finnhub_provider.FinnhubProvider(finnhub_provider.FinnhubHttp()))
+        probe_german_data(provider, dt.datetime.now(dt.timezone.utc))
+        return
     if prefer_ipv4_if_configured():
         logger.info('RADAR_FORCE_IPV4 set -- outbound HTTP will skip AAAA records')
 
@@ -640,4 +686,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])

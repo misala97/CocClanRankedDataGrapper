@@ -150,3 +150,21 @@ def test_a_rate_limited_response_is_empty_not_a_crash():
     still trip it, and one tripped call must not take down the job."""
     http = FakeHttp({'/time_series': {'status': 'error', 'code': 429}})
     assert twelvedata.TwelveDataProvider(http).daily_closes('AAA', days=30) == []
+
+
+def test_finnhub_directory_keeps_identifiers_without_guessing_the_mic():
+    """Inventing XETR from a country directory would create a false venue claim."""
+    from features.radar.instruments import CatalogInstrument
+
+    http = FakeHttp({'/stock/symbol': [{
+        'symbol': 'APC', 'description': 'Apple Inc', 'displaySymbol': 'APC',
+        'currency': 'EUR', 'figi': 'BBG000B9XRY4', 'isin': 'US0378331005',
+        'mic': 'XETR', 'type': 'Common Stock',
+    }]})
+
+    rows = finnhub.FinnhubProvider(http).stock_catalog('XETR')
+
+    assert rows == [CatalogInstrument(
+        symbol='APC', name='Apple Inc', mic='XETR', currency='EUR',
+        isin='US0378331005', figi='BBG000B9XRY4')]
+    assert http.calls == [('/stock/symbol', {'exchange': 'DE'})]
