@@ -10,12 +10,18 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 
 from features.radar import market_calendar as cal
+from features.radar.market_calendars import session_state
 
 BERLIN = ZoneInfo('Europe/Berlin')
 
 
 def _utc(year, month, day, hour, minute=0):
     return dt.datetime(year, month, day, hour, minute, tzinfo=dt.timezone.utc)
+
+
+def test_registry_preserves_us_dst_and_early_close():
+    assert session_state('us', _utc(2026, 3, 9, 13, 45)) == 'regular'
+    assert session_state('us', _utc(2026, 11, 27, 18, 15)) == 'afterhours'
 
 
 def test_regular_session_on_an_ordinary_wednesday():
