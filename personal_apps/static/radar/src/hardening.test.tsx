@@ -15,6 +15,7 @@ import { BoardPage } from './board/BoardPage'
 import { Boundary } from './Broken'
 import { parsePayload } from './embedded'
 import { Posts } from './detail/Posts'
+import { openingSpan } from './detail/DetailPane'
 import type { BoardPayload, Detail, Post, Row } from './types'
 
 function row(over: Partial<Row> = {}): Row {
@@ -186,6 +187,33 @@ describe('the panel across a row change', () => {
       <Boundary label="The panel" resetKey="BBB"><Sometimes /></Boundary>)
 
     expect(screen.getByText('recovered')).toBeInTheDocument()
+  })
+})
+
+describe('the span the chart opens on', () => {
+  // It was the constant '1Y', where the chatter bars occupy roughly the last
+  // 7% of the plot -- 93% of the hero chart was a price line over an empty
+  // violet lane, and on a phone the opening viewport showed price only.
+  it('opens where the ticker actually has chatter history', () => {
+    expect(openingSpan(5)).toBe('1M')
+    expect(openingSpan(45)).toBe('1M')
+    expect(openingSpan(46)).toBe('6M')
+    expect(openingSpan(200)).toBe('6M')
+    expect(openingSpan(400)).toBe('1Y')
+  })
+
+  it('opens shortest for a ticker with no baseline at all', () => {
+    // Seen for the first time today. The shortest span is the only one with
+    // anything to show it in.
+    expect(openingSpan(null)).toBe('1W')
+  })
+
+  it('is derived, not a second constant', () => {
+    // Chatter history GROWS. A hardcoded 1M is right this month and wrong
+    // once there is a year of it, which is the same mistake as the 1Y it
+    // replaced, just pointing the other way.
+    expect(new Set([openingSpan(10), openingSpan(100), openingSpan(900)]).size)
+      .toBe(3)
   })
 })
 

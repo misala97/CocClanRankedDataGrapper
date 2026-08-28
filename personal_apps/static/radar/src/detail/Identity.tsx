@@ -1,4 +1,4 @@
-import { UNKNOWN, exchangeLabel, money } from '../format'
+import { UNKNOWN, exchangeLabel, money, segmentLabel } from '../format'
 import type { Detail } from '../types'
 
 /** Who this is, and what the tape says right now.
@@ -10,7 +10,7 @@ import type { Detail } from '../types'
 export function Identity({ identity }: { identity: Detail['identity'] }) {
   const facts = [
     exchangeLabel(identity.exchange),
-    `${identity.segment} cap`,
+    segmentPhrase(identity.segment),
     identity.market_cap ? cap(identity.market_cap) : null,
     identity.ipo_date ? `IPO ${identity.ipo_date.slice(0, 7)}` : null,
   ].filter(Boolean)
@@ -63,6 +63,26 @@ function Move({ identity }: { identity: Detail['identity'] }) {
       {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
     </div>
   )
+}
+
+/** The segment, said the way a person would say it.
+ *
+ *  This line printed the raw enum with a word stuck on the end -- `${segment}
+ *  cap` -- which reads as "recent_ipo cap" on the panel while the row two
+ *  inches away says "Recent IPO", because the row uses `segmentLabel()` and
+ *  the panel did not. It also produces "unknown cap" and "fund cap", and
+ *  neither of those is a cap at all: `fund` has no market capitalisation to
+ *  describe and `unknown` is the absence of one.
+ *
+ *  So the three that ARE sizes take "cap" and the two that are not say what
+ *  they are instead. Falls through `segmentLabel` for anything the server
+ *  adds later, which keeps a new segment readable rather than raw.
+ */
+function segmentPhrase(segment: string): string {
+  if (segment === 'fund') return 'a pooled fund'
+  if (segment === 'unknown') return 'size unknown'
+  if (segment === 'recent_ipo') return 'recently listed'
+  return `${segmentLabel(segment).toLowerCase()} cap`
 }
 
 /** Market cap, abbreviated to the unit that fits it.

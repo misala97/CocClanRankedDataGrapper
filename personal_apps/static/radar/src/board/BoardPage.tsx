@@ -113,6 +113,8 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
         <DetailPane ticker={selected} selection={selection}
                     windowHours={payload.window_hours}
                     hasRows={payload.rows.length > 0}
+                    baselineDays={payload.rows.find(
+                      (r) => r.ticker === selected)?.baseline_days ?? null}
                     fallBack={elsewhere
                       ? { ticker: elsewhere, go: () => select(elsewhere) }
                       : undefined} />

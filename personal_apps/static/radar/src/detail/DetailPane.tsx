@@ -9,6 +9,29 @@ import type { Detail, PanelSpan, Selection } from '../types'
 
 const SPANS: PanelSpan[] = ['1D', '1W', '1M', '6M', '1Y', '3Y']
 
+/** The span to open on, from how long this ticker has actually been watched.
+ *
+ *  It was a constant, '1Y', and at 1Y the chatter bars occupy roughly the last
+ *  7% of the plot: 93% of the hero chart is a price line above an empty violet
+ *  lane. The CSS header says every chart here draws exactly two things and
+ *  that the product IS where they disagree -- the default was hiding one of
+ *  them, and on a phone the opening viewport showed price only.
+ *
+ *  Derived rather than moved to another constant, because chatter history
+ *  GROWS. A hardcoded 1M is right this month and wrong once there is a year of
+ *  it. `baseline_days` is how much history the scoring has for this ticker,
+ *  which is the same thing as how long the chatter lane has anything in it.
+ *
+ *  Null means no baseline at all -- a ticker seen for the first time today.
+ *  The shortest span is the only one with anything to show it in.
+ */
+export function openingSpan(baselineDays: number | null): PanelSpan {
+  if (baselineDays === null) return '1W'
+  if (baselineDays <= 45) return '1M'
+  if (baselineDays <= 200) return '6M'
+  return '1Y'
+}
+
 /** What the two lanes are made of, which is not the same on every span.
  *
  *  The long spans price from stored daily closes and count mentions per day.
@@ -53,10 +76,14 @@ const LEGEND: Record<PanelSpan, { price: string; chatter: string }> = {
  *  column header look like the same kind of thing.
  */
 export function DetailPane({ ticker, selection, windowHours, hasRows,
-                            fallBack }: {
+                            baselineDays, fallBack }: {
   ticker: string | null
   selection: Selection
   windowHours: number
+  /** How many days of baseline the SELECTED row has, which decides the span
+   *  the chart opens on. From the board payload, because the span has to be
+   *  chosen before the panel's own request goes out. */
+  baselineDays: number | null
   /** Whether the list beside this has anything in it. An empty panel next to
    *  an empty board must not invite a selection there is nothing to make. */
   hasRows: boolean
@@ -66,7 +93,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
    *  button that says where it goes is right either way. */
   fallBack?: { ticker: string; go: () => void }
 }) {
-  const [span, setSpan] = useState<PanelSpan>('1Y')
+  const [span, setSpan] = useState<PanelSpan>(() => openingSpan(baselineDays))
   const [detail, setDetail] = useState<Detail | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   // Bumped by Retry. A failed panel had no way back at all: the reader had to
