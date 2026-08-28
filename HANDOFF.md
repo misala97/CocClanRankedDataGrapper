@@ -47,11 +47,14 @@ context by market and venue.
   preserves US and legacy-null price rows but deletes non-US market rows before
   context columns are removed; database constraints enforce `us|de` while
   legacy NULL overlap writes remain valid.
+- Task 2 is accepted: the existing US calendar is retained through a
+  compatibility wrapper, and the registry adds tested 2026 Xetra sessions,
+  closures, UTC bounds, and Berlin DST handling.
 
 ## Open work
 
-- Task 1 is accepted and complete.
-- Tasks 2–10 remain pending. Never redispatch a ledger-complete task.
+- Tasks 1–2 are accepted and complete.
+- Tasks 3–10 remain pending. Never redispatch a ledger-complete task.
 - After each task: focused tests, commit, independent read-only review, ruling,
   ledger update, handoff update. One implementation worker at a time.
 
@@ -96,7 +99,6 @@ the isolated worktree.
 
 ## Immediate next action
 
-Implement Task 2 only: introduce the US/Xetra market-calendar registry,
-preserving the current US wrapper and adding tested 2026 Xetra Berlin-local
-session boundaries. Then run focused tests, commit, review, and update these
-handoff artifacts.
+Implement Task 3 only: normalize quote quality, regular/extended movement, and
+explicit German-to-US fallback selection. Then run focused tests, commit,
+review, and update these handoff artifacts.

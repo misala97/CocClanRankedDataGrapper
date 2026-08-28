@@ -18,7 +18,7 @@ commit, and independent read-only review acceptance.
 | Task | Deliverable | Status | Implementation commit | Review |
 |---|---|---|---|---|
 | 1 | Market-aware persistence | complete | `1372193`, `7210ef2` | accepted after fix round 1 |
-| 2 | US/Xetra calendar registry | pending | — | — |
+| 2 | US/Xetra calendar registry | complete | `3350fb4`, `b8731cc` | accepted after fix round 1 |
 | 3 | Quote quality/movement/fallback domain | pending | — | — |
 | 4 | Verified Xetra instrument mapping | pending | — | — |
 | 5 | Per-market polling/history/retention | pending | — | — |
@@ -75,8 +75,8 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Implement Task 2: move the existing US calendar unchanged behind the market
-calendar registry and add the 2026 Xetra calendar with Berlin-local boundaries.
+Implement Task 3: normalize quote quality, regular/extended movement, and
+explicit German-to-US fallback selection.
 
 ## Task 1 evidence — 2026-08-28
 
@@ -113,3 +113,21 @@ calendar registry and add the 2026 Xetra calendar with Berlin-local boundaries.
   reported no new Critical/Important breakage, and confirmed the fix against
   the design downgrade rule.
 - Task 1: complete (commits `62b506b..7210ef2`, review clean after fix round 1).
+
+## Task 2 evidence — 2026-08-28
+
+- TDD red: the focused calendar run initially failed at collection because the
+  registry package did not exist.
+- Initial green: `python -m pytest tests/test_radar_calendar.py
+  tests/test_radar_calendar_de.py -q` passed 19 tests.
+- Independent review found implementation-complete but test coverage gaps for
+  `session_bounds`, exact Xetra boundaries/closures, and registry error/
+  compatibility behaviour.
+- Fix round 1 commit `b8731cc` added black-box registry UTC-bound tests (US
+  normal and early close, DE summer/winter), all seven 2026 Xetra closures,
+  Dec 30 normal close, every requested boundary, exact unknown-market error,
+  and legacy-wrapper equivalence.
+- Focused green after the fix: the same calendar command passed 39 tests in
+  0.20s; `git diff --check` passed. Scoped re-review accepted every finding
+  and reported no new breakage.
+- Task 2: complete (commits `3fce2b3..b8731cc`, review clean after fix round 1).
