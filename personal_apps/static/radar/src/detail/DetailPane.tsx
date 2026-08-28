@@ -73,6 +73,12 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   // pick a different ticker and return, and on a `?t=` link that had 404'd
   // there was no different ticker on screen to pick.
   const [attempt, setAttempt] = useState(0)
+  // Bumped when a fetch RESOLVES, and used as the chart's key so the draw
+  // animation restarts exactly once per chart the reader has not seen yet.
+  // Keying on the ticker alone would miss a span change; keying on ticker and
+  // span would miss a source change that redraws the chatter lane; keying on
+  // a render would replay the animation on every hover in the panel.
+  const [drawn, setDrawn] = useState(0)
 
   useEffect(() => {
     if (!ticker) {
@@ -93,6 +99,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
           return
         }
         setDetail(next)
+        setDrawn((n) => n + 1)
       })
       .catch((error: Error) => {
         // An abort is this effect being superseded, not a failure. Reporting
@@ -150,7 +157,13 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   const rising = firstAndLast(detail.chart.closes)
 
   return (
-    <main className="detail">
+    // Keyed on the ticker, which does two things at once. The panel is the
+    // scroller on desktop, so a fresh mount puts a newly picked ticker at its
+    // own top instead of at the scroll position the last one was left at --
+    // picking a row and landing halfway down someone else's posts was the old
+    // behaviour. And the fresh mount is what runs the settle: the swap
+    // between two tickers was a hard cut, on the most repeated action here.
+    <main className="detail" key={ticker}>
       <Identity identity={detail.identity} />
 
       <p className="read">
@@ -176,7 +189,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         {/* Its own scroller. Below 900px the chart pans instead of being
             scaled until its axis is unreadable -- see radar.css. */}
         <div className="chartwrap">
-          <PriceChart chart={detail.chart} />
+          <PriceChart key={drawn} chart={detail.chart} />
         </div>
         {/* CSS shows this only at the widths where the chart pans. The right
             edge is the most recent price, so a chart silently cut off there

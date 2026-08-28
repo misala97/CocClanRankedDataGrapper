@@ -133,8 +133,11 @@ describe('the axis on an intraday span', () => {
     const { container } = render(<PriceChart chart={intraday(15, '1D')} />)
 
     // The gridlines only. The leftmost label legitimately carries a date --
-    // a bare "00:00" does not say which day it belongs to.
-    const ticks = [...container.querySelectorAll('g text.ax')]
+    // a bare "00:00" does not say which day it belongs to. Selected by
+    // `g.tick`, not by "any text.ax inside any g": the chart's furniture now
+    // shares one `.axes` group so it can fade in as one piece, and a
+    // structural selector quietly widened to include the axis-end labels.
+    const ticks = [...container.querySelectorAll('g.tick text.ax')]
       .map((n) => n.textContent ?? '')
     expect(ticks.length).toBeGreaterThan(0)
     expect(ticks.every((l) => /^\d{2}:\d{2}$/.test(l))).toBe(true)

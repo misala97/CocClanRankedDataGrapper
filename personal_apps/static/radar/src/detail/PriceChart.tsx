@@ -52,88 +52,111 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
   const watchX = watchIndex > 0 ? watchIndex * slot : 0
   const tone = rose(chart.closes) ? 'var(--up)' : 'var(--down)'
 
+  // Two groups, and the split is the animation as much as it is the drawing
+  // order. `.axes` is the furniture a reader needs before the data means
+  // anything -- rules, dates, the gutter numbers -- and it fades in as one
+  // piece. `.plot` is what was measured, and it wipes in along x, which is
+  // time. Doing that as one clip on one group rather than per element is what
+  // makes it affordable: at the 3Y span this draws ~780 bars, and animating
+  // each of them would be 780 animations for one gesture.
+  //
+  // Paint order is unchanged by the grouping: axes first and behind, exactly
+  // as the flat list had it.
   return (
     <svg className="pxchart" viewBox={`0 0 ${W} ${H}`} role="img"
          aria-label={`price over ${chart.span} with chatter beneath`}>
-      {ticks(chart).map(({ x, label }) => (
-        <g key={label + x}>
-          <line x1={x} y1={P_TOP} x2={x} y2={P_BOT} stroke="var(--rule-soft)"
-                strokeWidth="1" vectorEffect="non-scaling-stroke" />
-          <text className="ax" x={x} y={X_LABEL_Y} textAnchor="middle">{label}</text>
-        </g>
-      ))}
+      <g className="axes">
+        {/* Classed rather than left as a bare <g>: the gridline labels are
+            the ones that must never carry a date on an intraday span, and
+            they are told apart from the two labels at the ends of the axis by
+            name now that everything shares one `.axes` parent. */}
+        {ticks(chart).map(({ x, label }) => (
+          <g className="tick" key={label + x}>
+            <line x1={x} y1={P_TOP} x2={x} y2={P_BOT} stroke="var(--rule-soft)"
+                  strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            <text className="ax" x={x} y={X_LABEL_Y} textAnchor="middle">{label}</text>
+          </g>
+        ))}
 
-      <line x1="0" y1={P_BOT} x2={PLOT_R} y2={P_BOT} stroke="var(--rule)"
-            strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        <line x1="0" y1={P_BOT} x2={PLOT_R} y2={P_BOT} stroke="var(--rule)"
+              strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
-      {path ? (
-        <path className="px" d={path} fill="none" strokeWidth="1.5"
-              strokeLinejoin="round" strokeLinecap="round"
-              vectorEffect="non-scaling-stroke" stroke={tone} />
-      ) : (
-        // No stored closes for this span. A dashed rule says so; an empty box
-        // would read as a price that held perfectly steady.
-        <line className="px-none" x1="0" y1={P_BOT / 2} x2={PLOT_R}
-              y2={P_BOT / 2} stroke="var(--rule)" strokeWidth="1"
-              strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-      )}
+        {path && (
+          <>
+            {/* One format for both: `$202` above `$46.33` is two different
+                kinds of number stacked in one gutter. The larger end decides. */}
+            <Gutter y={priceY(high, low, high)} label={money(high, high)} />
+            <Gutter y={priceY(low, low, high)} label={money(low, high)} />
+          </>
+        )}
 
-      {path && (
-        <>
-          {/* Where it left off. The eye looks for the last print first. */}
-          <circle cx={lastX} cy={lastY} r="3.2" fill={tone} />
-          {/* One format for both: `$202` above `$46.33` is two different
-              kinds of number stacked in one gutter. The larger end decides. */}
-          <Gutter y={priceY(high, low, high)} label={money(high, high)} />
-          <Gutter y={priceY(low, low, high)} label={money(low, high)} />
-        </>
-      )}
+        {watchIndex > 0 && (
+          <>
+            <line x1="0" y1={C_BOT} x2={watchX} y2={C_BOT} stroke="var(--rule)"
+                  strokeWidth="1" strokeDasharray="2 4"
+                  vectorEffect="non-scaling-stroke" />
+            <text className="ax" x={watchX - 10} y={C_TOP + 26} textAnchor="end">
+              nothing observed before {slotLabel(chart, watchIndex)}
+            </text>
+          </>
+        )}
 
-      {watchIndex > 0 && (
-        <>
-          <line x1="0" y1={C_BOT} x2={watchX} y2={C_BOT} stroke="var(--rule)"
-                strokeWidth="1" strokeDasharray="2 4"
-                vectorEffect="non-scaling-stroke" />
-          <text className="ax" x={watchX - 10} y={C_TOP + 26} textAnchor="end">
-            nothing observed before {slotLabel(chart, watchIndex)}
-          </text>
+        <line x1={watchX} y1={C_BOT} x2={PLOT_R} y2={C_BOT} stroke="var(--rule)"
+              strokeWidth="1" vectorEffect="non-scaling-stroke" />
+
+        {/* Only where something was actually counted: `1/d` printed over an
+            empty lane would put a number on a measurement nobody took. */}
+        {observed > 0 && (
+          <Gutter y={C_TOP} label={`${count(observed)}${perSlot(chart)}`} />
+        )}
+
+        <text className="ax" x="0" y={X_LABEL_Y}>
+          {startLabel(chart)}
+        </text>
+        {/* "today" names a calendar day. On a chart whose last slot is the last
+            fifteen minutes it names the wrong unit entirely. */}
+        <text className="ax" x={PLOT_R} y={X_LABEL_Y} textAnchor="end">
+          {isIntraday(chart) ? 'now' : 'today'}
+        </text>
+      </g>
+
+      <g className="plot">
+        {path ? (
+          <path className="px" d={path} fill="none" strokeWidth="1.5"
+                strokeLinejoin="round" strokeLinecap="round"
+                vectorEffect="non-scaling-stroke" stroke={tone} />
+        ) : (
+          // No stored closes for this span. A dashed rule says so; an empty box
+          // would read as a price that held perfectly steady.
+          <line className="px-none" x1="0" y1={P_BOT / 2} x2={PLOT_R}
+                y2={P_BOT / 2} stroke="var(--rule)" strokeWidth="1"
+                strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+        )}
+
+        {/* Where it left off. The eye looks for the last print first, and the
+            wipe hands it over last -- the sweep ends on the newest price. */}
+        {path && <circle cx={lastX} cy={lastY} r="3.2" fill={tone} />}
+
+        {watchIndex > 0 && (
           <line className="watch-edge" x1={watchX} y1={C_TOP} x2={watchX}
                 y2={C_BOT} stroke="var(--mark)" strokeWidth="1"
                 strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-        </>
-      )}
+        )}
 
-      <line x1={watchX} y1={C_BOT} x2={PLOT_R} y2={C_BOT} stroke="var(--rule)"
-            strokeWidth="1" vectorEffect="non-scaling-stroke" />
-
-      {chart.chatter.map((value, index) => {
-        // null is a day nobody watched. 0 is a day we watched and nothing was
-        // said. Neither draws a bar -- but a 2px stub for the zero would
-        // overstate it into looking like a little chatter, which is why the
-        // minimum height applies only once there is something to show.
-        if (value === null || value === 0) return null
-        const height = Math.max(2, (value / peak) * (C_BOT - C_TOP))
-        return (
-          <rect className="chat" key={index} x={index * slot}
-                y={C_BOT - height} width={Math.max(slot - 0.4, 1.4)}
-                height={height} fill="var(--mark)" />
-        )
-      })}
-
-      {/* Only where something was actually counted: `1/d` printed over an
-          empty lane would put a number on a measurement nobody took. */}
-      {observed > 0 && (
-        <Gutter y={C_TOP} label={`${count(observed)}${perSlot(chart)}`} />
-      )}
-
-      <text className="ax" x="0" y={X_LABEL_Y}>
-        {startLabel(chart)}
-      </text>
-      {/* "today" names a calendar day. On a chart whose last slot is the last
-          fifteen minutes it names the wrong unit entirely. */}
-      <text className="ax" x={PLOT_R} y={X_LABEL_Y} textAnchor="end">
-        {isIntraday(chart) ? 'now' : 'today'}
-      </text>
+        {chart.chatter.map((value, index) => {
+          // null is a day nobody watched. 0 is a day we watched and nothing was
+          // said. Neither draws a bar -- but a 2px stub for the zero would
+          // overstate it into looking like a little chatter, which is why the
+          // minimum height applies only once there is something to show.
+          if (value === null || value === 0) return null
+          const height = Math.max(2, (value / peak) * (C_BOT - C_TOP))
+          return (
+            <rect className="chat" key={index} x={index * slot}
+                  y={C_BOT - height} width={Math.max(slot - 0.4, 1.4)}
+                  height={height} fill="var(--mark)" />
+          )
+        })}
+      </g>
     </svg>
   )
 }

@@ -107,9 +107,9 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       {/* Its own boundary, and this is the one that earns them: the panel
           renders arbitrary post text and charts built from series with holes
           in them, and a throw in there must not take the readable list with
-          it. Keyed on the ticker so a boundary tripped by one panel resets
-          when the reader moves to another. */}
-      <Boundary label="The panel" key={selected ?? 'none'}>
+          it. `resetKey`, not `key` -- a key would remount the panel and take
+          its span selection with it on every row click. */}
+      <Boundary label="The panel" resetKey={selected ?? 'none'}>
         <DetailPane ticker={selected} selection={selection}
                     windowHours={payload.window_hours}
                     hasRows={payload.rows.length > 0}

@@ -149,6 +149,73 @@ describe('a zone that throws', () => {
   })
 })
 
+describe('the panel across a row change', () => {
+  it('keeps the chart span the reader chose', async () => {
+    // The boundary around the panel was keyed on the selected ticker, which
+    // remounts the CHILD as well as resetting the boundary -- so every row
+    // click threw the panel's own state away and the span snapped back to 1Y.
+    // Comparing three tickers at 1M was not possible. Found while adding the
+    // chart's draw animation, which fires on exactly this path.
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+
+    await userEvent.click(screen.getByRole('button', { name: '1M' }))
+    await userEvent.click(screen.getByRole('link', { name: /BBB/ }))
+    await screen.findByText(/BBB is being discussed/)
+
+    expect(screen.getByRole('button', { name: '1M' }))
+      .toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('still clears a tripped boundary when the ticker changes', () => {
+    // The reason the key was there in the first place. Whatever replaces it
+    // has to keep doing this, or one bad panel poisons every later one.
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    let explode = true
+    function Sometimes() {
+      if (explode) throw new Error('kaboom')
+      return <p>recovered</p>
+    }
+
+    const { rerender } = render(
+      <Boundary label="The panel" resetKey="AAA"><Sometimes /></Boundary>)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    explode = false
+    rerender(
+      <Boundary label="The panel" resetKey="BBB"><Sometimes /></Boundary>)
+
+    expect(screen.getByText('recovered')).toBeInTheDocument()
+  })
+})
+
+describe('the chart draws itself', () => {
+  it('separates the furniture from the data so the wipe has something to wipe', () => {
+    render(<BoardPage initial={payload()} />)
+    // Structural, and it is load-bearing: `.plot` is the group the clip-path
+    // animation runs on. One clip on one group instead of ~780 animated bars
+    // at the 3Y span.
+    return screen.findByText(/AAA is being discussed/).then(() => {
+      expect(document.querySelector('.pxchart .plot')).not.toBeNull()
+      expect(document.querySelector('.pxchart .axes')).not.toBeNull()
+    })
+  })
+
+  it('is drawn by default, not revealed by a class', () => {
+    // The rule the whole motion pass hangs on: every animation here animates
+    // the FROM. Nothing is made visible by an animation completing, so a
+    // headless render, a background tab and prefers-reduced-motion all show a
+    // finished chart. A `.plot` that needed a class to become visible would
+    // ship blank in all three.
+    render(<BoardPage initial={payload()} />)
+    return screen.findByText(/AAA is being discussed/).then(() => {
+      const plot = document.querySelector('.pxchart .plot')!
+      expect(plot.getAttribute('class')).toBe('plot')
+      expect(plot.querySelectorAll('rect.chat').length).toBeGreaterThan(0)
+    })
+  })
+})
+
 describe('what a failing status actually says', () => {
   // Everything that was not a redirect or a timeout collapsed into "Could not
   // reach the board", which reads as an offline browser. A bookmarked `?t=`

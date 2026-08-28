@@ -111,9 +111,27 @@
 
   /* Exponential ease-out. Product motion is 150-220ms: the reader is mid-task
      and a transition they can watch is a transition that is too slow. */
-  --ease:   cubic-bezier(0.22, 1, 0.36, 1);
-  --fast:   140ms;
-  --base:   200ms;
+  --ease:    cubic-bezier(0.22, 1, 0.36, 1);   /* ease-out-quint */
+  --tap:     90ms;
+  --fast:    140ms;
+  --base:    200ms;
+
+  /* The chart sweep is the one curve here that is NOT a hard ease-out, and
+     that is a correction rather than an inconsistency.
+     ------------------------------------------------------------------------
+     It was ease-out-expo, which is right when a small element arrives and
+     should feel decisive. Measured on the real chart it was wrong: at 120ms
+     of a 520ms wipe the sweep had already crossed 85% of the plot, so what
+     the reader saw was a flash followed by 400ms of an edge crawling through
+     the last few bars. The travel IS the content in this one animation --
+     left to right is time -- so the curve has to spend its duration
+     travelling. Fast off the mark, near-linear through the middle, soft
+     landing. Verified by screenshotting the wipe at 100/210/320ms. */
+  --ease-sweep: cubic-bezier(0.3, 0.25, 0.25, 1);
+  /* Trimmed with the curve: 520ms of real travel is longer than a reader
+     mid-task wants to watch, and the old figure was only tolerable because
+     most of it was spent not moving. */
+  --draw:    420ms;
 
   /* Semantic stack. Nothing on this page needs a modal, but the sticky header
      and the popovers do need a defined order. */
@@ -177,6 +195,33 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* Lets a height transition run to `auto`, which is what opening a clipped
+   post needs -- see `.post p`. Inherited, so it is declared once here. Where
+   it is unsupported the transition simply does not run. */
+:root { interpolate-size: allow-keywords; }
+
+/* The row's share of the shared magnitude axis, typed.
+   ----------------------------------------------------------------------------
+   Registered rather than left as a plain custom property, and the difference
+   is whether it can move at all. An UNREGISTERED custom property has no type:
+   its value is a token stream, substituted into `transform: scaleX(var(--mag))`
+   at used-value time, and it does not interpolate -- so a transition declared
+   on the transform has nothing to animate between and the bar jumps. Given a
+   `<number>` syntax the property itself interpolates, and the transform
+   follows it continuously.
+
+   Found by trying to catch the transition in a browser and never seeing one
+   fire. It is worth saying that the case is rare: the magnitude ladder in
+   geometry.ts rounds to a coarse enough rung that most filter changes leave
+   the shared scale exactly where it was, so this moves only when the top of
+   the board genuinely changes size. Rare is not never, and a bar that
+   teleports on the one occasion it matters is the occasion that matters. */
+@property --mag {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -200,6 +245,71 @@ body {
   padding: 10px 16px; border-radius: 0 0 var(--r) 0; font-weight: 600;
 }
 .skip-link:focus { left: 0; }
+
+/* ============================================================================
+   MOTION
+   ----------------------------------------------------------------------------
+   WHAT MOVES, AND WHY IT IS ALLOWED TO
+     This board is read beside a broker window by someone deciding whether to
+     trade, and PRODUCT.md forbids the surface implying a recommendation. That
+     rules out a whole family of motion outright: nothing pulses, nothing
+     throbs, nothing draws the eye to a row on its own initiative. A ticker
+     that started moving does not get to announce itself, because a surface
+     that says "look here" is making a call it is not allowed to make.
+
+     What is left is motion that answers a question the reader already asked.
+     Four things, and nothing else:
+
+       1. THE CHART DRAWS ITSELF, in time order, left to right. It is the one
+          picture the product exists to show -- violet chatter against a price
+          line -- and drawing it in the direction the data runs says "this is
+          time" before any axis label is read. It is also the only feedback
+          the span buttons have: 1D through 3Y each cost a request, and before
+          this the reader clicked 3Y and watched nothing happen for 300ms.
+       2. THE MAGNITUDE BARS MOVE WHEN THE RANKING DOES. The bar is the
+          board's shape (see THE SIGNATURE above). On a filter change the rows
+          that survive keep their identity and their bars travel to the new
+          scale, so the rearrangement is something you watch rather than
+          something you diff against your memory of the last screen.
+       3. PRESSES ANSWER. Every control on the page was hover-and-focus only.
+       4. ARRIVALS SETTLE instead of appearing. A panel, a banner, an age
+          stamp.
+
+   WHAT DELIBERATELY DOES NOT MOVE
+     - No stagger down the list. Thirteen rows at even 25ms is a third of a
+       second before the bottom of the board is readable, and the reader
+       flipping from Small to All wants the whole list now. The rows crossfade
+       as one block; only the bars carry the change.
+     - No scroll-triggered anything. The list scrolls in a 420px column and
+       the panel scrolls beside it; reveal-on-scroll would fire twice for one
+       reader and never for a headless render.
+     - No entrance on first paint beyond the chart and the bars. The board
+       loads into a task.
+
+   THE RULE FOR EVERY REVEAL HERE
+     The animated state is the FROM, never the TO. Every element below is
+     already at its final geometry in its base rule and animates out of an
+     offset; nothing is made visible by a class or an animation completing.
+     A hidden tab, a headless screenshot and prefers-reduced-motion all skip
+     the animation, and all three must still show a finished chart.
+   ========================================================================= */
+
+@keyframes settle {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+}
+
+/* The plot wipes in along the x axis, which is time. One animated property on
+   one group -- the alternative was 365 individually animated <rect> bars. */
+@keyframes wipe-x {
+  from { clip-path: inset(0 100% 0 0); }
+}
+
+/* The press layer lives at the FOOT of this file, after every component rule
+   that declares its own `transition` -- see "the press". */
 
 /* ============================================================================
    LAYOUT  ·  two panes, each scrolling itself
@@ -279,9 +389,14 @@ body {
 /* How old this board is, and only once that is worth saying. The island
    fetches on a control change and never on a clock, so a tab left open shows
    the pre-lunch board with nothing to tell it apart from a live one. */
+/* Arrives once, fifteen minutes into a tab nobody has touched -- so it is the
+   one thing here that appears while the reader is not looking at it. It
+   settles rather than popping, because a stamp that materialises between two
+   glances reads as something the page got wrong. */
 .brand .age {
   margin-left: auto; text-align: right;
   font-size: var(--t-xs); color: var(--muted);
+  animation: settle 300ms var(--ease) backwards;
 }
 .brand .age b { color: var(--warn); font-weight: 600; }
 .brand .age button {
@@ -325,7 +440,16 @@ body {
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
 }
-.controls[aria-busy="true"] button { opacity: 0.55; pointer-events: none; }
+/* While a board is in flight the controls stop accepting clicks -- a second
+   filter change mid-request would abort the first and the reader would be
+   waiting on something they cannot see.
+   ----------------------------------------------------------------------------
+   This used to also drop every button to 0.55 opacity, which put the chip
+   labels under 4.5:1 for the duration and, worse, pointed the signal at the
+   wrong thing: the CONTROLS are not stale, the ROWS are. The chips now stay
+   legible and inert, and the list they are about to replace is what recedes
+   (see .rows[aria-busy]). */
+.controls[aria-busy="true"] { pointer-events: none; cursor: progress; }
 
 .controls > .lbl {
   padding-top: 5px;
@@ -378,13 +502,37 @@ body {
   display: flex; flex-direction: column;
 }
 
+/* The board being replaced goes quiet while the new one is fetched -- and it
+   does so WITHOUT dimming any text.
+   ----------------------------------------------------------------------------
+   The first version put `opacity: 0.8` on the whole block. Measured, that put
+   the row's meta line at 3.98:1 in light mode, under the 4.5 floor, for as
+   long as the fetch took. Dimming a paragraph to say "this is being replaced"
+   is a strange trade: the reason it is still on screen at all is that it is
+   still true and still worth reading.
+   So only the violet recedes -- the magnitude bars and the sparklines, which
+   carry no text and are the most visible thing in the column. Thirteen rows
+   losing their accent at once reads clearly as "settling", and every word on
+   the board stays at full contrast. Measured with the attribute set: 9.15 /
+   6.31 / 7.22:1 for the phrase, the meta line and the ticker -- identical to
+   rest, where the 0.8 version had put the meta line at 3.98. */
+.rows[aria-busy="true"] .row::after,
+.rows[aria-busy="true"] .spark { opacity: 0.3; }
+.row::after, .r1 .spark { transition: opacity var(--base) var(--ease); }
+
 .row {
   display: block; position: relative;
   flex: none;
   padding: 9px var(--s6) 16px;
   border-bottom: 1px solid var(--rule-soft);
   text-decoration: none; color: inherit;
-  transition: background var(--fast) var(--ease);
+  /* `--mag` is transitioned on the ROW, not on the ::after that draws from
+     it: the custom property is what changes, and the transform reads it.
+     Transitioning the transform instead would depend on the pseudo-element
+     noticing a substituted value change, which is the thing that does not
+     work -- see the @property block at the top of this file. */
+  transition: background var(--fast) var(--ease),
+              --mag var(--base) var(--ease);
 }
 
 /* The magnitude axis. Drawn as well as the mark: a bare bar left-aligned
@@ -396,9 +544,27 @@ body {
   border-bottom: 1px solid var(--rule);
   border-right: 1px solid var(--rule);
 }
+/* Full width, scaled down -- not a computed width. Two reasons, and the
+   second is the point of the change:
+
+   `width` is a layout property and the browser lays the bar out again on
+   every frame of a change; `transform` is composited and does not touch
+   layout at all. And a transform can be transitioned honestly, so when the
+   ranking changes under a filter, the bar of a ticker that survived TRAVELS
+   to its new share of the axis instead of teleporting. The scale is shared
+   across the board, so a filter change moves every surviving bar at once and
+   the rearrangement becomes something the reader watches rather than
+   something they diff against their memory of the last screen.
+
+   Deliberately not animated on first paint. Growing thirteen bars from zero
+   on arrival is page-load choreography: it delays the board's shape by a
+   third of a second to show the reader something they did not ask to see.
+   The transition fires on CHANGE, which is when it carries information. */
 .row::after {
   content: ""; position: absolute; left: var(--s6); bottom: 7px; height: 3px;
-  width: calc(var(--axis) * var(--mag, 0));
+  width: var(--axis);
+  transform: scaleX(var(--mag, 0));
+  transform-origin: left center;
   background: var(--mark);
 }
 /* No baseline to measure against draws no scale at all. */
@@ -496,7 +662,20 @@ body {
 .detail {
   min-width: 0; min-height: 0; overflow-y: auto;
   padding: var(--s7) 32px 72px;
+  /* Keyed on the ticker in DetailPane, so this runs on the swap between two
+     tickers -- the most repeated action on the surface and, until now, a hard
+     cut. Short and small: 6px is enough to read as "this replaced that" and
+     not enough to be a transition anyone waits through. */
+  animation: settle 220ms var(--ease) backwards;
 }
+
+/* The loading line only exists for a slow answer.
+   The panel used to print "Loading NVDA…" the instant a row was clicked,
+   which on a local hit is a 60ms flash of grey text -- a flicker that reads
+   as a glitch rather than as progress. The delay outlasts a fast response, so
+   the common case now goes straight from one panel to the next, and the line
+   appears only when there is genuinely something to wait for. */
+.detail[aria-busy="true"] p { animation: fade 160ms var(--ease) 260ms backwards; }
 .detail.empty { display: grid; place-items: center; color: var(--muted); }
 .detail.empty p { max-width: 34ch; text-align: center; text-wrap: pretty; }
 
@@ -585,6 +764,31 @@ body {
 .pxchart { display: block; width: 100%; height: 300px; }
 .pxchart .ax {
   font-size: var(--t-ax); fill: var(--muted); font-variant-numeric: tabular-nums;
+}
+
+/* The hero, and the only thing on the page that takes half a second.
+   ----------------------------------------------------------------------------
+   Fired by a `key` in DetailPane that changes only when a fetch RESOLVES, so
+   this runs exactly once per chart the reader has not seen: a new ticker, a
+   new span, a changed source selection. It does not re-run on a re-render, a
+   hover, or a resize.
+
+   Both rules animate FROM an offset -- the base state of `.plot` is a
+   finished chart at `inset(0)`. If the animation never runs (reduced motion,
+   a background tab, a headless screenshot) the chart is simply drawn, which
+   is the whole point of animating the from and not the to.
+
+   `backwards`, deliberately, and NOT `forwards` or `both`. All three look
+   identical when the animation completes. They differ when it does not: a
+   forwards fill holds whatever frame it was stopped on, so an animation
+   frozen at 0% leaves a chart clipped to nothing and the panel ships blank.
+   A backwards fill falls back to the element's own base state, which is the
+   finished chart. The failure mode is "it did not animate", not "it is not
+   there". */
+.pxchart .axes { animation: fade 180ms var(--ease) backwards; }
+.pxchart .plot {
+  clip-path: inset(0);
+  animation: wipe-x var(--draw) var(--ease-sweep) backwards;
 }
 /* Shown only where the chart actually pans -- see the narrow-viewport block. */
 .panhint {
@@ -722,10 +926,30 @@ body {
 /* One pasted wall of text ran past thirty screen-heights and buried the
    twenty-four posts under it -- the opposite of what this zone is for. The
    post is clipped, never dropped: the control below opens it in place, and
-   `open ↗` still goes to the original. */
+   `open ↗` still goes to the original.
+   ----------------------------------------------------------------------------
+   An explicit height rather than `-webkit-line-clamp`, which is what this was
+   at first. Line-clamp cannot be transitioned -- it is not a length -- so
+   opening a post was a hard jump of several hundred pixels under the
+   reader's eye, on a page where everything below it moved at once. A height
+   in `em` is exactly seven lines and it interpolates.
+
+   `interpolate-size` is what lets it interpolate to `auto`, and it is a
+   progressive enhancement: without it (Firefox today) the transition does not
+   run and the post opens instantly, which is the behaviour that shipped
+   before this. Nothing depends on the animation happening.
+
+   The mask replaces the ellipsis line-clamp used to draw. It says "this
+   continues" more honestly than three dots, which look like an author's own
+   punctuation in a forum post. */
 .post p.clamp {
-  display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical;
+  height: calc(7 * 1.58em);
   overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2em), transparent);
+}
+.post p {
+  height: auto;
+  transition: height 260ms var(--ease);
 }
 .post .more {
   font: inherit; font-size: 12.5px; margin-top: var(--s2);
@@ -776,15 +1000,49 @@ body {
 /* Row 1 of .page, spanning both columns -- see the LAYOUT block. Left to
    auto-flow it took a row between the two panes and pushed the panel out of
    its column. */
+/* Fades, does not slide. The row it occupies snaps to its height either way
+   -- it is a grid row appearing, and animating that would be animating
+   layout for the two panes below it. What a fade buys is that the reader
+   catches the change in peripheral vision; what a slide would buy is nothing,
+   at the cost of the message arriving late. An alert is not coy. */
 .oops {
   grid-row: 1; grid-column: 1 / -1; margin: 0;
   padding: 10px var(--s6); background: var(--warn-soft); color: var(--ink-2);
   font-size: var(--t-sm);
+  animation: fade var(--fast) var(--ease) backwards;
 }
 .oops button {
   font: inherit; margin-left: 10px; border: 1px solid var(--rule);
   background: var(--raise); border-radius: var(--r-pill);
   padding: 2px 10px; cursor: pointer;
+}
+
+/* ------------------------------------------------------------- the press --
+   Every control on this page was hover-and-focus only: pressing one produced
+   nothing until the RESULT of pressing it arrived, which on the span buttons
+   is a network round trip away. One rule for all of them, so a chip, a span
+   button and a retry answer the same way -- the product register's point
+   about a consistent component vocabulary applies to how a control feels as
+   much as to how it looks.
+
+   Last in the file on purpose: several of these components declare their own
+   `transition` for background and colour, and at equal specificity the later
+   declaration is the one that survives. Written earlier, the transform would
+   simply not have been transitioned.
+
+   96%, not 92%: these are 20px pill chips and a deeper press reads as the
+   control shrinking away from the cursor. The release is slower than the
+   press, which is the shape of a real button coming back up. */
+.seg button, .chip, .spans button, .oops button, .post .more,
+.brand .age button, .detail .failed .acts button, .broken button {
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
+              transform var(--fast) var(--ease);
+}
+.seg button:active, .chip:not(:disabled):active, .spans button:active,
+.oops button:active, .post .more:active, .brand .age button:active,
+.detail .failed .acts button:active, .broken button:active {
+  transform: scale(0.96);
+  transition-duration: var(--tap);
 }
 
 /* -------------------------------------------------------- reduced motion - */

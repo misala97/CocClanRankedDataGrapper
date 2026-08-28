@@ -174,7 +174,9 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
       <Controls payload={payload} selection={selection} busy={busy}
                 onChange={onChange} />
 
-      <div className="rows">
+      {/* The busy signal sits here rather than on the controls: the chips are
+          not stale, this list is. */}
+      <div className="rows" aria-busy={busy || undefined}>
         {payload.rows.map((row) => (
           <TickerRow key={row.ticker} row={row} onSelect={onSelect}
                      magnitude={mags[row.ticker]} suppress={shared}

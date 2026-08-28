@@ -40,7 +40,7 @@ export function Broken({ detail }: { detail?: string }) {
  *  selected. Scoped per zone for exactly that reason.
  */
 export class Boundary extends Component<
-  { children: ReactNode; label: string },
+  { children: ReactNode; label: string; resetKey?: string | number },
   { failed: boolean }
 > {
   state = { failed: false }
@@ -53,6 +53,20 @@ export class Boundary extends Component<
     // Logged rather than swallowed: this is the only trace that the zone ever
     // threw, and a silent boundary turns a render bug into a mystery.
     console.error(`radar: ${this.props.label} failed to render`, error, info)
+  }
+
+  /** Clears a tripped boundary when the caller says the situation changed.
+   *
+   *  A prop rather than a `key` on the element, which is what this was at
+   *  first. A key remounts the CHILDREN too, and the child here is the panel:
+   *  keying it on the selected ticker quietly threw away the panel's own
+   *  state on every row click, so the chart span snapped back to 1Y each time
+   *  the reader moved down the list. Comparing three tickers at 1M was not
+   *  possible. The boundary needed to reset; the panel did not. */
+  componentDidUpdate(prev: { resetKey?: string | number }) {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) {
+      this.setState({ failed: false })
+    }
   }
 
   render() {
