@@ -19,7 +19,7 @@ commit, and independent read-only review acceptance.
 |---|---|---|---|---|
 | 1 | Market-aware persistence | complete | `1372193`, `7210ef2` | accepted after fix round 1 |
 | 2 | US/Xetra calendar registry | complete | `3350fb4`, `b8731cc` | accepted after fix round 1 |
-| 3 | Quote quality/movement/fallback domain | pending | — | — |
+| 3 | Quote quality/movement/fallback domain | complete | `ce486d7`, `70ef18a`, `1768074` | accepted after fix rounds |
 | 4 | Verified Xetra instrument mapping | pending | — | — |
 | 5 | Per-market polling/history/retention | pending | — | — |
 | 6 | Market-aware ranking/board/detail/API | pending | — | — |
@@ -75,8 +75,17 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Implement Task 3: normalize quote quality, regular/extended movement, and
-explicit German-to-US fallback selection.
+Implement Task 4: map verified Xetra instruments from permitted provider catalogs.
+
+## Task 3 evidence — 2026-08-28
+
+- Focused quote-domain suite advanced from 18 to 24 passing tests across two
+  review-driven fixes.
+- Accepted corrections: frozen/no-print tape status is injected without DB
+  coupling; timestamp-less DE snapshots do not block US fallback; price
+  divergence eligibility requires tape status exactly `ok`.
+- Final scoped re-review of `70ef18a..1768074` was clean with no Critical or
+  Important findings. Task 3 complete.
 
 ## Task 1 evidence — 2026-08-28
 

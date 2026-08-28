@@ -53,8 +53,8 @@ context by market and venue.
 
 ## Open work
 
-- Tasks 1–2 are accepted and complete.
-- Tasks 3–10 remain pending. Never redispatch a ledger-complete task.
+- Tasks 1–3 are accepted and complete.
+- Tasks 4–10 remain pending. Never redispatch a ledger-complete task.
 - After each task: focused tests, commit, independent read-only review, ruling,
   ledger update, handoff update. One implementation worker at a time.
 
@@ -99,6 +99,6 @@ the isolated worktree.
 
 ## Immediate next action
 
-Implement Task 3 only: normalize quote quality, regular/extended movement, and
-explicit German-to-US fallback selection. Then run focused tests, commit,
-review, and update these handoff artifacts.
+Implement Task 4 only: map verified Xetra instruments from permitted provider
+catalogs. Then run focused tests, commit, review, and update these handoff
+artifacts.
