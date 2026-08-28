@@ -20,7 +20,7 @@ commit, and independent read-only review acceptance.
 | 1 | Market-aware persistence | complete | `1372193`, `7210ef2` | accepted after fix round 1 |
 | 2 | US/Xetra calendar registry | complete | `3350fb4`, `b8731cc` | accepted after fix round 1 |
 | 3 | Quote quality/movement/fallback domain | complete | `ce486d7`, `70ef18a`, `1768074` | accepted after fix rounds |
-| 4 | Verified Xetra instrument mapping | pending | — | — |
+| 4 | Verified Xetra instrument mapping | complete | `1e54ebb`, `7ce012d` | accepted after fix round 1 |
 | 5 | Per-market polling/history/retention | pending | — | — |
 | 6 | Market-aware ranking/board/detail/API | pending | — | — |
 | 7 | Market selection and Berlin formatting | pending | — | — |
@@ -75,7 +75,17 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Implement Task 4: map verified Xetra instruments from permitted provider catalogs.
+Implement Task 5: isolate polling, history and retention by market.
+
+## Task 4 evidence — 2026-08-29
+
+- Initial implementation used ISIN-only Xetra mapping, provider-failure
+  preservation, and a redacting read-only probe; focused gate passed 72 tests.
+- Review-driven correction `7ce012d` added FIGI-code compatibility,
+  fail-closed catalog pagination, strict Finnhub type filtering, and manual
+  plus weekly mapping refresh paths; remediation suite passed 63 tests.
+- Scoped re-review accepted the correction with no Critical/Important findings.
+  Task 4 complete.
 
 ## Task 3 evidence — 2026-08-28
 
