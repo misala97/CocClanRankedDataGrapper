@@ -20,10 +20,10 @@ import sqlalchemy as sa
 
 from app import app
 from extensions import db
-from features.radar import scoring
+from features.radar import buckets, scoring
 from features.radar.config import source_config_version
-from models import (RadarBucketSource, RadarMention, RadarPost, RadarQuote,
-                    TickerUniverse)
+from models import (RadarBucketSource, RadarMention, RadarMentionEvent,
+                    RadarPost, RadarQuote, TickerUniverse)
 
 random.seed(11)
 
@@ -73,7 +73,13 @@ def shape_factor(shape, hours_ago):
 
 
 def wipe():
-    for table in ('radar_mentions', 'radar_posts', 'radar_bucket_sources',
+    # radar_mention_events belongs here for the same reason as the rest: this
+    # script is re-run, and the journal is the one table whose rows are
+    # COUNTED DISTINCTLY rather than aggregated. Leaving it would not simply
+    # duplicate data, it would inflate every voice count on the board by the
+    # number of times the seeder had been run.
+    for table in ('radar_mentions', 'radar_posts', 'radar_mention_events',
+                  'radar_bucket_sources',
                   'radar_buckets', 'radar_quotes', 'radar_daily_closes'):
         db.session.execute(sa.text(f'DELETE FROM {table}'))
     db.session.commit()
@@ -151,13 +157,31 @@ def poisson(mean):
 
 
 def seed_posts():
-    """Real posts and mentions for the last 24h.
+    """Real posts, mentions AND mention events for the last 24h.
 
     The board counts distinct authors and splits tone from the mention rows
     themselves, so bucket counts alone would leave both columns empty.
+
+    The mention JOURNAL is separate from both and this used to skip it, which
+    was not a cosmetic gap. `journal.distinct_voices` reads
+    radar_mention_events, and with the table empty in-window it returns
+    nothing, so leaderboard falls through to
+
+        authors = author_counts.get(ticker, max(part.authors for part in parts))
+
+    -- the bucket maximum, which that function's own docstring documents as
+    systematically undercounting ("NVDA showed 26 real authors against a
+    bucket maximum of 2"). The visible symptom was a row reading "6 people"
+    beside a panel reading "57 distinct voices" for the same ticker in the
+    same window, which looked like a product bug and was a seeding one.
+
+    In production the journal is populated and events are retained 48h against
+    a 24h board window, so that fallback is not the normal path. A dev
+    database that omits the table is not a quiet approximation of production;
+    it exercises a different branch.
     """
     authors = [f'user{n:03d}' for n in range(90)]
-    posts, mentions, external = [], [], 0
+    posts, mentions, events, external = [], [], [], 0
 
     for symbol, _name, _cap, base, shape, _price in PLAN:
         for hours_ago in range(24):
@@ -181,6 +205,21 @@ def seed_posts():
                     'first_seen': at, 'last_seen': at,
                 })
                 mentions.append((external, symbol, score))
+                # The journal row for the same mention. Same author, same
+                # instant, same confidence -- the point is that the two agree,
+                # because the surface reads voice counts from this table and
+                # tone from the one above.
+                events.append({
+                    'source': posts[-1]['source'],
+                    'external_id': posts[-1]['external_id'],
+                    'ticker': symbol, 'channel': 'seed',
+                    'created_utc': at,
+                    'bucket_start': buckets.bucket_start_for(at),
+                    'author': posts[-1]['author'],
+                    'simhash': posts[-1]['simhash'],
+                    'confidence': 'high', 'sentiment': score,
+                    'engagement': 0.0, 'promoted': False,
+                })
 
     db.session.execute(sa.insert(RadarPost), posts)
     db.session.commit()
@@ -190,6 +229,7 @@ def seed_posts():
         'post_id': ids[f'seed-{ext}'], 'ticker': symbol,
         'confidence': 'high', 'lexicon_sentiment': score, 'llm_sentiment': None,
     } for ext, symbol, score in mentions])
+    db.session.execute(sa.insert(RadarMentionEvent), events)
     db.session.commit()
     return len(posts)
 
