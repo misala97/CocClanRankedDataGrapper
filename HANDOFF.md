@@ -5,9 +5,9 @@
 - Workspace: `C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-german-market`
 - Branch: `codex/radar-german-market`
 - Base/main at worktree creation: `5a741e8bb05e32e8a157a5ddbd899da1603451e0`
-- Current approved design commit: `608ce93`
-- Working tree at this handoff: plan/ledger/handoff are being authored after
-  the design commit; verify `git status`, `git diff`, `git log -5` before work.
+- Current implementation HEAD before this handoff-only update: `1372193`
+- Working tree at this handoff: only plan/ledger/handoff status updates should
+  be dirty; verify `git status`, `git diff`, `git log -5` before work.
 
 ## Read completely before editing
 
@@ -36,11 +36,18 @@ context by market and venue.
 - Existing frontend baseline: 539/539 PASS.
 - Production frontend build: PASS.
 - Backend API page tests after build: 2/2 PASS.
+- Task 1 implementation committed as `1372193`.
+- Added expand-only `radar_instruments` plus nullable market context on quotes
+  and daily closes; existing US rows are backfilled and legacy keys remain.
+- Task 1 focused tests: 16/16 PASS.
+- Local MariaDB migration applied at `a4c8e2f19b70`; active universe/instrument
+  counts both 12,509, with zero null market values among 3,744 existing quotes
+  and 11,004 existing daily closes.
 
 ## Open work
 
-- All ten tasks in the implementation plan are pending.
-- Begin at Task 1 only. Never redispatch a ledger-complete task.
+- Task 1 is implemented but awaits independent read-only review.
+- Tasks 2–10 remain pending. Never redispatch a ledger-complete task.
 - After each task: focused tests, commit, independent read-only review, ruling,
   ledger update, handoff update. One implementation worker at a time.
 
@@ -85,5 +92,6 @@ the isolated worktree.
 
 ## Immediate next action
 
-Verify worktree/HEAD/status, commit the plan artifacts, then execute Task 1 with
-the required TDD workflow. Update the exact HEAD in this file after that commit.
+Claude should review only Task 1 (`1372193`) against the spec and migration
+safety rules. Record findings/rulings in the ledger. Do not implement Task 2
+until Task 1 is independently accepted.

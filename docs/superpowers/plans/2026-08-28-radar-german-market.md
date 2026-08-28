@@ -169,7 +169,7 @@ Run: `cd personal_apps && python -m pytest tests/test_radar_models.py tests/test
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit Task 1**
+- [x] **Step 7: Commit Task 1**
 
 ```powershell
 git add personal_apps/models.py personal_apps/migrations/versions personal_apps/tests/test_radar_models.py personal_apps/tests/test_radar_migration.py

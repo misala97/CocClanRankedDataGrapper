@@ -17,7 +17,7 @@ commit, and independent read-only review acceptance.
 
 | Task | Deliverable | Status | Implementation commit | Review |
 |---|---|---|---|---|
-| 1 | Market-aware persistence | pending | — | — |
+| 1 | Market-aware persistence | implemented; review pending | `1372193` | Claude/read-only review required |
 | 2 | US/Xetra calendar registry | pending | — | — |
 | 3 | Quote quality/movement/fallback domain | pending | — | — |
 | 4 | Verified Xetra instrument mapping | pending | — | — |
@@ -70,10 +70,29 @@ commit, and independent read-only review acceptance.
 
 ## Open findings
 
-None. Implementation has not started.
+- Task 1 has no known implementation finding, but its independent read-only
+  review has not happened. It is not accepted and Task 2 must not start.
 
 ## Immediate next action
 
-Execute Task 1 using TDD, commit it, request an independent read-only review,
-then update this ledger and `HANDOFF.md`. Do not start Task 2 until Task 1 is
-accepted.
+Have Claude perform the independent read-only Task 1 review against the spec,
+migration, tests, real MariaDB backfill evidence, and commit `1372193`. Record
+findings/rulings here. Do not start Task 2 until Task 1 is accepted.
+
+## Task 1 evidence — 2026-08-28
+
+- TDD red: 4 intended failures for missing `RadarInstrument`, market columns,
+  and migration.
+- Focused green: `test_radar_models.py` + `test_radar_migration.py` = 16 passed.
+- Isolated real migration path: upgrade, backfill, legacy nullable write, and
+  downgrade preservation all executed on SQLite; 6 migration tests passed.
+- Local MariaDB: upgraded `35c3ae366677 -> a4c8e2f19b70` successfully.
+- MariaDB preservation counts after upgrade: 12,509 active universe rows and
+  12,509 seeded instruments; 3,744/3,744 quotes and 11,004/11,004 daily closes
+  backfilled with non-null market context.
+- Broad Radar regression: 653 passed, with only the same 2 pre-existing
+  shared-database profile-fixture failures documented in the baseline section.
+- `git diff --check`, targeted `compileall`, `flask db heads`, and
+  `flask db current`: clean; Alembic current/head both `a4c8e2f19b70`.
+- Safety correction: the migration is expand-only and retains legacy keys and
+  nullable overlap columns until Task 5 upgrades every writer.
