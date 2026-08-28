@@ -350,18 +350,17 @@ describe('an empty board', () => {
     expect(screen.queryByText(/Select a ticker/)).toBeNull()
   })
 
-  it('names the two controls that would widen the net', () => {
+  it('names the two controls that would widen the net once', () => {
     // With nothing excluded there is no account below to carry the way out,
     // and the board used to end on a full stop.
     render(<BoardPage initial={payload({ rows: [], excluded: {} })} />)
 
     expect(screen.getByText(/Nothing cleared the bar/)).toBeInTheDocument()
-    // Both panes, and the SAME sentence in both. The three places that say
-    // this had drifted into "widen the window", "a longer Score window" and
-    // "switch the segment to All" -- two of which appeared on screen at once,
-    // reading as two different suggestions instead of one.
+    // The list is the place where those controls live. Repeating the same
+    // advice in the empty panel made one action look like two competing next
+    // steps.
     const ways = screen.getAllByText(/Try a longer/)
-    expect(ways).toHaveLength(2)
+    expect(ways).toHaveLength(1)
     for (const way of ways) {
       expect(way.textContent)
         .toContain('Try a longer Score window, or the All segment')
@@ -433,14 +432,22 @@ describe('a post nobody sized', () => {
     expect(container.querySelector('.post p.clamp')).toBeNull()
     expect(screen.queryByRole('button', { name: /whole post/ })).toBeNull()
   })
+
+  it('shows the post date and names UTC', () => {
+    render(<Posts posts={[post()]} total={1} />)
+
+    expect(screen.getByText('22 Aug 2026 · 19:00 UTC')).toBeInTheDocument()
+  })
 })
 
 describe('how old the board is', () => {
-  it('stays quiet while it is still fresh', () => {
+  it('always says when the board was updated, in UTC', () => {
     vi.setSystemTime(new Date('2026-08-22T19:05:00Z'))
     render(<BoardPage initial={payload()} />)
 
-    expect(screen.queryByText(/built/)).toBeNull()
+    expect(screen.getByText('19:00 UTC').closest('.age'))
+      .toHaveTextContent('updated 19:00 UTC')
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
     vi.useRealTimers()
   })
 
@@ -450,7 +457,46 @@ describe('how old the board is', () => {
     vi.setSystemTime(new Date('2026-08-22T22:00:00Z'))
     render(<BoardPage initial={payload()} />)
 
-    expect(await screen.findByText(/built 3 hours ago/)).toBeInTheDocument()
+    expect(await screen.findByText(/3 hours old/)).toBeInTheDocument()
+    expect(screen.getByText(/19:00 UTC/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
     vi.useRealTimers()
+  })
+})
+
+describe('mobile continuity', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('offers a route from the loaded panel back to the selected row', async () => {
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+
+    expect(screen.getByRole('link', { name: 'Back to board' }))
+      .toHaveAttribute('href', '#radar-row-AAA')
+    expect(screen.getByRole('link', { name: /AAA/ }))
+      .toHaveAttribute('id', 'radar-row-AAA')
+  })
+
+  it('opens a panning chart on its newest data', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(920)
+
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+
+    await vi.waitFor(() => {
+      expect((document.querySelector('.chartwrap') as HTMLElement).scrollLeft)
+        .toBe(920)
+    })
+  })
+})
+
+describe('printing the chart', () => {
+  it('keeps the selected span in the printable content', async () => {
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+
+    expect(document.querySelector('.print-span')).toHaveTextContent('1M')
+    await userEvent.click(screen.getByRole('button', { name: '6M' }))
+    expect(document.querySelector('.print-span')).toHaveTextContent('6M')
   })
 })

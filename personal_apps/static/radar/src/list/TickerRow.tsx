@@ -57,6 +57,7 @@ export function TickerRow({ row, selected, magnitude, session,
 
   return (
     <a className={`row${selected ? ' on' : ''}${measured ? '' : ' unmeasured'}`}
+       id={`radar-row-${row.ticker}`}
        href={`?t=${row.ticker}`}
        aria-current={selected ? 'true' : undefined}
        style={measured

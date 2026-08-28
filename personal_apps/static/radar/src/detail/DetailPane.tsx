@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchDetail } from '../api'
-import { Widen } from '../Widen'
 import { Breakdown } from './Breakdown'
 import { Identity } from './Identity'
 import { Posts } from './Posts'
@@ -108,6 +107,9 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   const [drawn, setDrawn] = useState(0)
   // Where focus goes when the reader picks a row.
   const landing = useRef<HTMLElement>(null)
+  // The narrow layout pans the chart rather than crushing its labels. Newest
+  // is the operational end of a market chart, so that is where it opens.
+  const chartScroller = useRef<HTMLDivElement>(null)
   // The ticker the panel last handed focus to. Starts at the opening ticker
   // rather than null, so the FIRST panel does not steal focus from the top of
   // the document on page load -- arriving at a page with focus already six
@@ -124,6 +126,11 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     // change nothing on screen at all.
     landing.current?.focus()
   }, [detail, ticker])
+
+  useEffect(() => {
+    if (!drawn || !chartScroller.current) return
+    chartScroller.current.scrollLeft = chartScroller.current.scrollWidth
+  }, [drawn])
 
   useEffect(() => {
     if (!ticker) {
@@ -165,7 +172,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
               wording the empty board actually shipped with. */}
           {hasRows
             ? 'Select a ticker to see what it has been doing.'
-            : <>Nothing on the board to look at. <Widen /></>}
+            : 'Nothing on the board to look at.'}
         </p>
       </main>
     )
@@ -217,6 +224,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     // both says where you are and puts you there; see BoardPage.
     <main className="detail" key={ticker} tabIndex={-1}
           aria-labelledby="panel-ticker" ref={landing}>
+      <a className="backboard" href={`#radar-row-${ticker}`}>Back to board</a>
       <Identity identity={detail.identity} />
 
       <p className="read">
@@ -231,6 +239,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         <h3 id="zone-chart">
           Price and chatter
           <span className="q">{CAPTIONS[span]}</span>
+          <span className="print-span" aria-hidden="true"> · {span}</span>
           <span className="spans" role="group" aria-label="Chart span">
             {SPANS.map((option) => (
               <button key={option} type="button"
@@ -241,14 +250,13 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         </h3>
         {/* Its own scroller. Below 900px the chart pans instead of being
             scaled until its axis is unreadable -- see radar.css. */}
-        <div className="chartwrap">
+        <div className="chartwrap" ref={chartScroller}>
           <PriceChart key={drawn} chart={detail.chart} />
         </div>
         {/* CSS shows this only at the widths where the chart pans. The right
             edge is the most recent price, so a chart silently cut off there
             hides the part being looked for. */}
-        <p className="panhint">Scroll the chart sideways for the rest of the
-          span.</p>
+        <p className="panhint">Swipe sideways for earlier history.</p>
         <div className="legend">
           <i><span className={`key line${rising ? '' : ' down'}`} />
             price · {LEGEND[span].price}</i>

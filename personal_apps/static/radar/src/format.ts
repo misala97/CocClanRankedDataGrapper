@@ -135,6 +135,18 @@ export function stampTime(iso: string): string {
   return `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())} UTC`
 }
 
+/** A retained post needs a date as well as a clock.
+ *
+ * Posts stay on the panel for thirty days, so a bare `19:04` makes posts from
+ * different days indistinguishable. The UTC suffix is explicit rather than
+ * relying on the rest of the page to teach the convention by implication. */
+export function postStamp(iso: string): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return UNKNOWN
+  return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}`
+    + ` · ${stampTime(iso)}`
+}
+
 export function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many
 }

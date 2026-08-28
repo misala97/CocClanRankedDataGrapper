@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { UNKNOWN, count, dayStamp, divergence, exchangeLabel, money, move,
-         rowPrice, segmentLabel, signed, sourceLabel, stampTime,
+         postStamp, rowPrice, segmentLabel, signed, sourceLabel, stampTime,
          zscore } from './format'
 
 describe('an unknown never renders as a zero', () => {
@@ -73,6 +73,14 @@ describe('the stamp', () => {
 
   it('does not crash on a malformed timestamp', () => {
     expect(stampTime('not a date')).toBe('—')
+  })
+
+  it('dates retained posts and makes their UTC frame explicit', () => {
+    // Posts remain visible for thirty days. A bare "19:04" cannot tell
+    // yesterday from last week, and it silently relies on the reader knowing
+    // that every clock on this surface is UTC.
+    expect(postStamp('2026-08-22T19:04:11Z'))
+      .toBe('22 Aug 2026 · 19:04 UTC')
   })
 })
 

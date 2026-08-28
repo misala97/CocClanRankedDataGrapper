@@ -125,3 +125,27 @@ describe('reduced motion', () => {
     expect(rules).toMatch(/transition-duration:\s*0\.01ms\s*!important/)
   })
 })
+
+describe('expanding retained posts', () => {
+  it('does not animate the height of every post in the panel', () => {
+    // The previous rule matched every retained post (25 in the measured
+    // panel), forcing layout work across the reading column whenever one wall
+    // of text opened. Expansion may be instant; it may not animate height.
+    const postRules = rules.match(/\.post p[^{]*\{[^}]*\}/g) ?? []
+    for (const rule of postRules) {
+      expect(rule, rule).not.toMatch(/transition:[^;]*\bheight\b/)
+    }
+  })
+})
+
+describe('printing from a narrow viewport', () => {
+  it('does not print controls that only make sense on a panning screen', () => {
+    // Width media queries still match while Chromium renders print media. At
+    // 390px the mobile return link and swipe hint leaked onto paper unless the
+    // later print block explicitly hid them again.
+    const print = rules.slice(rules.indexOf('@media print'))
+    const hidden = print.match(/[^{}]+\{\s*display:\s*none;\s*\}/)?.[0] ?? ''
+    expect(hidden).toContain('.backboard')
+    expect(hidden).toContain('.panhint')
+  })
+})

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { count, sourceLabel } from '../format'
+import { count, postStamp, sourceLabel } from '../format'
 import type { Post } from '../types'
 
 /** Past this, one post has stopped being a quote and become the page.
@@ -76,7 +76,7 @@ export function Posts({ posts, total, retentionNote }: {
                   {post.author ?? post.channel}
                 </span>
                 <time className="when" dateTime={post.created}>
-                  {post.created.slice(11, 16)}
+                  {postStamp(post.created)}
                 </time>
                 {post.url && (
                   <a className="out" href={post.url} target="_blank"

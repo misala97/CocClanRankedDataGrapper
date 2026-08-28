@@ -195,11 +195,6 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-/* Lets a height transition run to `auto`, which is what opening a clipped
-   post needs -- see `.post p`. Inherited, so it is declared once here. Where
-   it is unsupported the transition simply does not run. */
-:root { interpolate-size: allow-keywords; }
-
 /* The row's share of the shared magnitude axis, typed.
    ----------------------------------------------------------------------------
    Registered rather than left as a plain custom property, and the difference
@@ -386,13 +381,9 @@ body {
 /* Amber for the fact, not for the timestamp carrying it. */
 .brand .state b { color: var(--warn); font-weight: 600; }
 
-/* How old this board is, and only once that is worth saying. The island
-   fetches on a control change and never on a clock, so a tab left open shows
-   the pre-lunch board with nothing to tell it apart from a live one. */
-/* Arrives once, fifteen minutes into a tab nobody has touched -- so it is the
-   one thing here that appears while the reader is not looking at it. It
-   settles rather than popping, because a stamp that materialises between two
-   glances reads as something the page got wrong. */
+/* When this board was built, always in UTC. After fifteen minutes the same
+   line becomes an amber age warning with a reload control; the geometry does
+   not jump when freshness turns into staleness. */
 .brand .age {
   margin-left: auto; text-align: right;
   font-size: var(--t-xs); color: var(--muted);
@@ -724,6 +715,10 @@ body {
 .detail.empty { display: grid; place-items: center; color: var(--muted); }
 .detail.empty p { max-width: 34ch; text-align: center; text-wrap: pretty; }
 
+/* A return route is needed only in the stacked layout, where selecting a row
+   moves the reader several screens down to this panel. */
+.backboard { display: none; }
+
 /* A failed panel used to be one amber sentence and no way out of it: the
    reader had to pick a different ticker and come back, and on a `?t=` link
    that had 404'd there was no different ticker on screen to pick. */
@@ -788,6 +783,7 @@ body {
   font-size: var(--t-md); font-weight: 600; color: var(--ink);
 }
 .zone h3 .q { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+.print-span { display: none; }
 
 .spans { margin-left: auto; display: inline-flex; gap: 3px; }
 .spans button {
@@ -863,6 +859,15 @@ body {
    at equal specificity the later declaration wins, and `height: 300px` and
    `.panhint { display: none }` are both declared here. */
 @media (max-width: 900px) {
+  .backboard {
+    display: inline-block; margin: 0 0 var(--s5);
+    color: var(--mark); font-size: 14px; font-weight: 600;
+    text-decoration: none;
+  }
+  .backboard::before { content: "← "; }
+  .backboard:focus-visible {
+    outline: 2px solid var(--mark); outline-offset: 3px;
+  }
   .chartwrap { overflow-x: auto; overscroll-behavior-x: contain; }
   /* `height: auto`, because an SVG drawn 204px tall inside a 300px box
      centres itself and leaves 96px of nothing above the chart. The viewBox
@@ -985,14 +990,9 @@ body {
    ----------------------------------------------------------------------------
    An explicit height rather than `-webkit-line-clamp`, which is what this was
    at first. Line-clamp cannot be transitioned -- it is not a length -- so
-   opening a post was a hard jump of several hundred pixels under the
-   reader's eye, on a page where everything below it moved at once. A height
-   in `em` is exactly seven lines and it interpolates.
-
-   `interpolate-size` is what lets it interpolate to `auto`, and it is a
-   progressive enhancement: without it (Firefox today) the transition does not
-   run and the post opens instantly, which is the behaviour that shipped
-   before this. Nothing depends on the animation happening.
+   opening a post changes the reading column's height by definition. That
+   change is intentionally instant: animating `height` matched every retained
+   post in the panel and forced layout work through the whole column.
 
    The mask replaces the ellipsis line-clamp used to draw. It says "this
    continues" more honestly than three dots, which look like an author's own
@@ -1001,10 +1001,6 @@ body {
   height: calc(7 * 1.58em);
   overflow: hidden;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 2em), transparent);
-}
-.post p {
-  height: auto;
-  transition: height 260ms var(--ease);
 }
 .post .more {
   font: inherit; font-size: 12.5px; margin-top: var(--s2);
@@ -1137,7 +1133,8 @@ body {
 /* Not decoration: the plausible use is pasting the morning board into a note.
    Colour survives, chrome does not. */
 @media print {
-  .controls, .skip-link, .spans { display: none; }
+  .controls, .skip-link, .spans, .backboard, .panhint { display: none; }
+  .print-span { display: inline; }
   .page { grid-template-columns: minmax(0, 1fr); height: auto; overflow: visible; }
   .list, .detail, .rows { overflow: visible; }
   .row, .post { break-inside: avoid; }

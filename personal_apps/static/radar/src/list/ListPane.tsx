@@ -10,18 +10,14 @@ import { Spend } from './Spend'
 import { TickerRow } from './TickerRow'
 import type { BoardPayload, Mark, Row, Selection } from '../types'
 
-/** How long a board stays worth reading without saying how old it is.
+/** When the always-visible UTC stamp becomes a stale-board warning.
  *
- *  The island fetches on a control change and never on a clock, which is the
- *  right behaviour for a page read in bursts -- but it means a tab left open
- *  over lunch shows the pre-lunch board with nothing to distinguish it from a
- *  live one. On a surface about what people are saying RIGHT NOW that is the
- *  most expensive silence available. Fifteen minutes is short enough that a
- *  stamp appearing means something and long enough that the ordinary read,
- *  where a control gets touched every couple of minutes, never sees it. */
+ *  The island fetches on a control change and never on a clock, so the stamp
+ *  itself is always useful and the reload action becomes useful once a tab
+ *  has plausibly been left behind. */
 const STALE_MINUTES = 15
 
-/** When this board was built, once it is old enough for that to matter.
+/** When this board was built, always; a reload control once it is stale.
  *
  *  `generated_at` is the request time rather than the last ingest, so it
  *  answers exactly one question and it is the question the reader has: is
@@ -40,17 +36,21 @@ function Age({ iso }: { iso: string }) {
   const at = new Date(iso).getTime()
   if (Number.isNaN(at)) return null
   const minutes = Math.floor((Date.now() - at) / 60_000)
-  if (minutes < STALE_MINUTES) return null
-
+  const stale = minutes >= STALE_MINUTES
   const age = minutes < 120 ? `${minutes} minutes`
     : `${Math.floor(minutes / 60)} hours`
   return (
     <span className="age">
-      <b>built {age} ago</b> at {stampTime(iso)}
-      {' '}
-      <button type="button" onClick={() => window.location.reload()}>
-        Reload
-      </button>
+      {stale ? <><b>{age} old</b> · </> : 'updated '}
+      <time dateTime={iso}>{stampTime(iso)}</time>
+      {stale && (
+        <>
+          {' '}
+          <button type="button" onClick={() => window.location.reload()}>
+            Reload
+          </button>
+        </>
+      )}
     </span>
   )
 }
