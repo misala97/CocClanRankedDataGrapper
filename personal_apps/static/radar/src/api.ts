@@ -10,10 +10,21 @@ const HEADERS = { Accept: 'application/json' }
  *  concludes the page is broken and reloads it. */
 const TIMEOUT_MS = 8000
 
+/** One sentence per way this can fail, and they are deliberately different
+ *  sentences.
+ *
+ *  Everything that was not a redirect or a timeout used to collapse into
+ *  "Could not reach the board", which was read as an offline browser in three
+ *  situations that are nothing of the kind. The one that mattered: a
+ *  bookmarked `?t=` for a ticker that has since dropped off the board answers
+ *  404, and the reader was told their connection was down. */
 const REASON_TEXT = {
   session: 'Session expired — reload to sign in again.',
   timeout: 'The board did not answer in time.',
   network: 'Could not reach the board.',
+  missing: 'Nothing here for that ticker.',
+  server: 'The board answered with an error.',
+  busy: 'The board is rate-limiting requests. Give it a moment.',
 } as const
 
 export class BoardUnavailable extends Error {
@@ -50,14 +61,19 @@ export function queryFor(selection: Selection): string {
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-  signal?.addEventListener('abort', () => controller.abort(), { once: true })
+  // Checked before the listener is attached: a signal that was ALREADY
+  // aborted never fires the event, so the request went out anyway and the
+  // caller's cancellation did nothing.
+  if (signal?.aborted) controller.abort()
+  const relay = () => controller.abort()
+  signal?.addEventListener('abort', relay, { once: true })
 
   try {
     const response = await fetch(url, {
       headers: HEADERS, credentials: 'same-origin', signal: controller.signal,
     })
     if (response.redirected) throw new BoardUnavailable('session')
-    if (!response.ok) throw new BoardUnavailable('network')
+    if (!response.ok) throw new BoardUnavailable(statusReason(response.status))
     return await response.json() as T
   } catch (error) {
     if (error instanceof BoardUnavailable) throw error
@@ -65,7 +81,22 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
       (error as Error)?.name === 'AbortError' ? 'timeout' : 'network')
   } finally {
     clearTimeout(timer)
+    signal?.removeEventListener('abort', relay)
   }
+}
+
+/** Which sentence a status code earns.
+ *
+ *  401 and 403 join `session` rather than getting a permission line of their
+ *  own: the routes are behind @login_required, everyone who can open the page
+ *  can read every row, and the only way to see one is a session that stopped
+ *  being valid. Reloading is the fix in all three cases. */
+function statusReason(status: number): keyof typeof REASON_TEXT {
+  if (status === 401 || status === 403) return 'session'
+  if (status === 404) return 'missing'
+  if (status === 429) return 'busy'
+  if (status >= 500) return 'server'
+  return 'network'
 }
 
 export async function fetchBoard(

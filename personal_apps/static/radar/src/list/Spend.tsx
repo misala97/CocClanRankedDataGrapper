@@ -1,3 +1,4 @@
+import { count } from '../format'
 import type { BoardPayload } from '../types'
 
 /** Money in USD, at the precision the number deserves.
@@ -35,7 +36,11 @@ export function Spend({ payload }: { payload: BoardPayload }) {
       <b>{usd(spend.today_usd)}</b> spent reading tone today,
       {' '}<b>{usd(spend.month_usd)}</b> this month.
       {spend.unpriced_tokens > 0 && (
-        <> plus {spend.unpriced_tokens.toLocaleString()} tokens at an unknown rate.</>
+        // A bare toLocaleString() follows the READER's locale, and under a
+        // German one this came out as `1.284.392` -- the only figure on a
+        // surface that is otherwise entirely en-US and UTC. Seen on the
+        // running board, not reasoned about.
+        <> plus {count(spend.unpriced_tokens)} tokens at an unknown rate.</>
       )}
     </p>
   )

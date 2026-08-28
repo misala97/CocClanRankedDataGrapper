@@ -36,24 +36,32 @@
 
 <a class="skip-link" href="#radar-main">Skip to the board</a>
 
-<main id="radar-main" tabindex="-1">
+{# A div, not a <main>. The island renders the panel as the page's <main>, and
+   two of them nested is invalid markup that leaves a screen reader with two
+   candidates for "the main content" and no way to choose. This element exists
+   only as the skip-link's landing spot and the island's mount point. #}
+<div id="radar-main" tabindex="-1">
   {# The island replaces this. It is not empty on purpose: a bundle that fails
      to load would otherwise leave a blank white page with nothing to read and
-     nothing to search for. #}
+     nothing to search for.
+
+     Styled by .broken, which is the same block the island falls back to when
+     the bundle DOES load and the payload turns out to be unreadable. One
+     appearance for both, because to the reader they are one situation: the
+     board is not here and this is what to do about it. #}
   <div id="radar-root">
     <noscript>
-      <div class="wrap">
-        <header class="masthead"><h1>Radar</h1></header>
-        <div class="empty">
-          <h3>The board needs JavaScript</h3>
-          <p>Every row draws a 24-hour chart, and those are built in the
-             browser. The underlying data is available as JSON at
-             <code>/radar/api/board</code>.</p>
-        </div>
+      <div class="broken">
+        <h1>Radar</h1>
+        <h2>The board needs JavaScript.</h2>
+        <p>Every row draws a 24-hour chart, and those are built in the
+           browser.</p>
+        <p>The underlying board is readable as JSON at
+           <a href="/radar/api/board"><code>/radar/api/board</code></a>.</p>
       </div>
     </noscript>
   </div>
-</main>
+</div>
 
 <script type="application/json" id="radar-data">{{ payload | tojson }}</script>
 <script type="module" src="{{ vite_asset('board', feature='radar') }}"></script>

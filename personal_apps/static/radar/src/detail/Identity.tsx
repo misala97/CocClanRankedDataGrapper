@@ -1,4 +1,4 @@
-import { exchangeLabel } from '../format'
+import { UNKNOWN, exchangeLabel, money } from '../format'
 import type { Detail } from '../types'
 
 /** Who this is, and what the tape says right now.
@@ -24,7 +24,12 @@ export function Identity({ identity }: { identity: Detail['identity'] }) {
       </div>
       <div className="px">
         <div className="v">
-          {identity.price === null ? '—' : money(identity.price)}
+          {/* Zero is not a price. A share does not trade at nothing, so a
+              zero here is an absent quote that arrived as a default -- and
+              `$0.00` printed at 26px is the most confident wrong number on
+              the page. It reads as the em-dash every other unknown does. */}
+          {identity.price === null || identity.price <= 0
+            ? UNKNOWN : money(identity.price)}
         </div>
         <Move identity={identity} />
       </div>
@@ -57,12 +62,16 @@ function Move({ identity }: { identity: Detail['identity'] }) {
   )
 }
 
+/** Market cap, abbreviated to the unit that fits it.
+ *
+ *  The millions rung rounds to whole millions, which printed `$0M` for the
+ *  sub-million shells this board's micro segment is largely made of -- a size
+ *  fact that says the company has no value. Below ten million the decimal is
+ *  the whole content of the number, and below a million the unit changes. */
 function cap(value: number): string {
   if (value >= 1e12) return `$${(value / 1e12).toFixed(1)}T`
   if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`
-  return `$${Math.round(value / 1e6)}M`
-}
-
-function money(value: number): string {
-  return value >= 100 ? `$${value.toFixed(0)}` : `$${value.toFixed(2)}`
+  if (value >= 1e7) return `$${Math.round(value / 1e6)}M`
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(1)}M`
+  return `$${Math.round(value / 1e3)}K`
 }

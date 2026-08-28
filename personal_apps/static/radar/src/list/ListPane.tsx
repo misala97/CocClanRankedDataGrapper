@@ -1,9 +1,59 @@
+import { useEffect, useState } from 'react'
+
 import { Controls } from '../board/Controls'
 import { magnitudes } from '../board/geometry'
+import { stampTime } from '../format'
+import { Widen } from '../Widen'
 import { Excluded } from './Excluded'
+import { Marks } from './Marks'
 import { Spend } from './Spend'
 import { TickerRow } from './TickerRow'
 import type { BoardPayload, Mark, Row, Selection } from '../types'
+
+/** How long a board stays worth reading without saying how old it is.
+ *
+ *  The island fetches on a control change and never on a clock, which is the
+ *  right behaviour for a page read in bursts -- but it means a tab left open
+ *  over lunch shows the pre-lunch board with nothing to distinguish it from a
+ *  live one. On a surface about what people are saying RIGHT NOW that is the
+ *  most expensive silence available. Fifteen minutes is short enough that a
+ *  stamp appearing means something and long enough that the ordinary read,
+ *  where a control gets touched every couple of minutes, never sees it. */
+const STALE_MINUTES = 15
+
+/** When this board was built, once it is old enough for that to matter.
+ *
+ *  `generated_at` is the request time rather than the last ingest, so it
+ *  answers exactly one question and it is the question the reader has: is
+ *  what I am looking at from this visit or from the one before lunch.
+ */
+function Age({ iso }: { iso: string }) {
+  // The page has no other reason to re-render while it sits untouched, which
+  // is precisely the situation this warns about -- computed once at mount it
+  // would be permanently zero minutes old. One timer for the whole board.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const at = new Date(iso).getTime()
+  if (Number.isNaN(at)) return null
+  const minutes = Math.floor((Date.now() - at) / 60_000)
+  if (minutes < STALE_MINUTES) return null
+
+  const age = minutes < 120 ? `${minutes} minutes`
+    : `${Math.floor(minutes / 60)} hours`
+  return (
+    <span className="age">
+      <b>built {age} ago</b> at {stampTime(iso)}
+      {' '}
+      <button type="button" onClick={() => window.location.reload()}>
+        Reload
+      </button>
+    </span>
+  )
+}
 
 /** What a mark means when EVERY row on the board carries it.
  *
@@ -116,6 +166,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
           {payload.session === 'closed' && (
             <span className="state"><b>market closed</b></span>
           )}
+          <Age iso={payload.generated_at} />
         </div>
         <Finding payload={payload} shared={shared} />
       </div>
@@ -132,11 +183,21 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         {payload.rows.length === 0 && (
           // Where the first row would have been, not as a footnote under an
           // empty frame: on this board it is the entire answer.
+          //
+          // With something excluded, the account below carries the way out
+          // and repeating it here would say it twice. With nothing excluded
+          // there is no account, and the empty board used to end in a full
+          // stop -- a state with no next action on a surface whose two
+          // controls are exactly what to reach for.
           <p className="none" role="status">
             Nothing cleared the bar in this window.
+            {Object.keys(payload.excluded).length === 0 && (
+              <span className="pointer"><Widen /></span>
+            )}
           </p>
         )}
         <Excluded payload={payload} />
+        <Marks rows={payload.rows} suppress={shared} />
         <Spend payload={payload} />
       </div>
     </aside>

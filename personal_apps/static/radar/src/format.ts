@@ -1,6 +1,8 @@
 // Number and label formatting. Pure, and tested -- these are the functions
 // that decide whether an unknown reads as unknown or as a zero.
 
+import type { Mark } from './types'
+
 /** The em-dash every unknown renders as. One constant so it cannot drift into
  *  a hyphen in one place and an en-dash in another. */
 export const UNKNOWN = '—'
@@ -99,7 +101,9 @@ export function exchangeLabel(code: string | null): string | null {
   return EXCHANGE_LABELS[code] ?? code
 }
 
-export const MARK_WHY: Record<string, string> = {
+// Typed over Mark rather than string, the way UNIVERSAL in ListPane is: a
+// new mark must not be able to reach a row with no sentence explaining it.
+export const MARK_WHY: Record<Mark, string> = {
   'no-print':
     'The tape has not printed for several polls, so the price looks unmoved ' +
     'because nothing traded. Any divergence here would be an artifact, so the ' +
@@ -174,14 +178,47 @@ export function dayStamp(iso: string | null): string {
   return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}`
 }
 
+/** A dollar figure at the precision the figure deserves.
+ *
+ *  Two decimals is the reflex and it is wrong at both ends of this board. The
+ *  micro segment is the point of the tool and a stock at $0.0031 rendered as
+ *  `$0.00` is not a rounding, it is the assertion that the share is worthless
+ *  -- so below a dollar the figure runs to four places. Above a hundred the
+ *  cents are noise and the column reads better without them.
+ *
+ *  `scale` decides the format from a DIFFERENT number than the one being
+ *  printed, so a pair of axis labels either side of one chart cannot come out
+ *  as `$202` above `$46.33`. It defaults to the value itself.
+ */
+export function money(value: number, scale = value): string {
+  if (scale >= 100) return `$${value.toFixed(0)}`
+  if (scale >= 1) return `$${value.toFixed(2)}`
+  return `$${value.toFixed(4)}`
+}
+
 /** What the row says about the tape, under the ticker.
  *
  *  A shut exchange and a missing quote are different silences: the first says
  *  nothing about this stock and the second says the board does not know its
- *  price at all. Neither may render as a bare number pretending to be live. */
+ *  price at all. Neither may render as a bare number pretending to be live.
+ *
+ *  Zero is a third silence wearing the first one's clothes. No listed share
+ *  prints at $0.00; the quote is absent and the field arrived as a zero
+ *  because something upstream defaulted it. Printed as money it is the most
+ *  confident wrong number on the row.
+ */
 export function rowPrice(price: number | null, status: string): string {
-  if (price === null) return 'no quote'
-  const money = price >= 100 ? `$${price.toFixed(0)}` : `$${price.toFixed(2)}`
-  if (status === 'closed') return `closed at ${money}`
-  return money
+  if (price === null || price <= 0) return 'no quote'
+  if (status === 'closed') return `closed at ${money(price)}`
+  return money(price)
+}
+
+/** Counts, grouped. `1284392` is four glances; `1,284,392` is one.
+ *
+ *  Pinned to en-US rather than the reader's locale for the same reason the
+ *  clock is pinned to UTC: every other figure on the surface is formatted by
+ *  this app, and one number switching to `1.284.392` under a German locale
+ *  would be the only one in a different convention. */
+export function count(value: number): string {
+  return value.toLocaleString('en-US')
 }

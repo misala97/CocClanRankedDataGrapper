@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { UNKNOWN, dayStamp, divergence, exchangeLabel, move, rowPrice,
-         segmentLabel, signed, sourceLabel, stampTime, zscore } from './format'
+import { UNKNOWN, count, dayStamp, divergence, exchangeLabel, money, move,
+         rowPrice, segmentLabel, signed, sourceLabel, stampTime,
+         zscore } from './format'
 
 describe('an unknown never renders as a zero', () => {
   // The single rule PRODUCT.md is most insistent about. A row with no quote,
@@ -105,8 +106,50 @@ describe('the price under a ticker', () => {
     expect(rowPrice(1.84, 'closed')).toBe('closed at $1.84')
   })
 
-  it('separates no quote from a quote of zero', () => {
+  // Was pinned the other way: null said "no quote" and 0 said "$0.00", on the
+  // reading that the two are different facts. They are not. No listed share
+  // prints at zero, so a zero here is an absent quote that arrived as a
+  // default -- and PRODUCT.md's rule is that an empty must read as "not
+  // known", never as a zero. `$0.00` is the most confident wrong number the
+  // row can carry, and it is the one a penny stock is most likely to get.
+  it('treats a quote of zero as no quote, not as a price of nothing', () => {
     expect(rowPrice(null, 'ok')).toBe('no quote')
-    expect(rowPrice(0, 'ok')).toBe('$0.00')
+    expect(rowPrice(0, 'ok')).toBe('no quote')
+    expect(rowPrice(-0.01, 'ok')).toBe('no quote')
+  })
+
+  // The micro segment is what this board is FOR, and two decimals rounds its
+  // entire price range to $0.00.
+  it('keeps a sub-dollar price at a precision that still has a price in it', () => {
+    expect(rowPrice(0.0031, 'ok')).toBe('$0.0031')
+    expect(rowPrice(0.0031, 'closed')).toBe('closed at $0.0031')
+  })
+
+  it('drops the cents once they are noise', () => {
+    expect(rowPrice(1.84, 'ok')).toBe('$1.84')
+    expect(rowPrice(202.4, 'ok')).toBe('$202')
+  })
+})
+
+describe('money', () => {
+  // The two axis labels either side of one chart are formatted from the same
+  // scale so they cannot come out as `$202` above `$46.33`.
+  it('formats both ends of a range by the larger end', () => {
+    expect(money(202.4, 202.4)).toBe('$202')
+    expect(money(46.33, 202.4)).toBe('$46')
+    expect(money(0.0031, 0.0104)).toBe('$0.0031')
+  })
+})
+
+describe('count', () => {
+  it('groups a figure too long to read at a glance', () => {
+    expect(count(1284392)).toBe('1,284,392')
+  })
+
+  // Pinned to en-US for the same reason the clock is pinned to UTC: one
+  // number in `1.284.392` under a German locale would be the only figure on
+  // the surface in a different convention.
+  it('does not follow the reader locale', () => {
+    expect(count(1000)).toBe('1,000')
   })
 })

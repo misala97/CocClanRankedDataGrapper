@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { BoardUnavailable, fetchBoard, queryFor } from '../api'
+import { Boundary } from '../Broken'
 import { DetailPane } from '../detail/DetailPane'
 import { ListPane } from '../list/ListPane'
 import type { BoardPayload, Selection } from '../types'
@@ -71,10 +72,27 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     writeUrl(selection, ticker)
   }, [selection])
 
+  // Where the panel sends a reader whose ticker has no panel to show.
+  //
+  // The first row that is NOT the current one, rather than simply the first:
+  // the board can list a ticker the detail endpoint 404s on -- a symbol the
+  // extraction found that the universe has no profile for lands on the board
+  // as `unknown` and has no panel -- and when that ticker is the top row, an
+  // escape hatch pointing at the top row is a button that does nothing.
+  // Seen on a live board, with QQQ at rank one.
+  //
+  // Null on an empty board, and the panel then offers nothing rather than a
+  // control that would select nothing.
+  const elsewhere = payload.rows.find(
+    (candidate) => candidate.ticker !== selected)?.ticker ?? null
+
   return (
     <div className="page">
-      <ListPane payload={payload} selection={selection} selected={selected}
-                busy={busy} onSelect={select} onChange={setSelection} />
+      {/* Placed in the grid explicitly rather than left to auto-flow. As a
+          plain third child spanning both columns it took a row of its own,
+          which pushed the panel BELOW the list and into the 420px column --
+          the two-pane layout came apart in the one state where the reader
+          most needs to keep reading the board that is still on screen. */}
       {error && (
         <p className="oops" role="alert">
           <b>{error.message}</b> Showing the last board that loaded.
@@ -82,8 +100,23 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                   onClick={() => void load(selection, selected)}>Retry</button>
         </p>
       )}
-      <DetailPane ticker={selected} selection={selection}
-                  windowHours={payload.window_hours} />
+      <Boundary label="The list">
+        <ListPane payload={payload} selection={selection} selected={selected}
+                  busy={busy} onSelect={select} onChange={setSelection} />
+      </Boundary>
+      {/* Its own boundary, and this is the one that earns them: the panel
+          renders arbitrary post text and charts built from series with holes
+          in them, and a throw in there must not take the readable list with
+          it. Keyed on the ticker so a boundary tripped by one panel resets
+          when the reader moves to another. */}
+      <Boundary label="The panel" key={selected ?? 'none'}>
+        <DetailPane ticker={selected} selection={selection}
+                    windowHours={payload.window_hours}
+                    hasRows={payload.rows.length > 0}
+                    fallBack={elsewhere
+                      ? { ticker: elsewhere, go: () => select(elsewhere) }
+                      : undefined} />
+      </Boundary>
     </div>
   )
 }
@@ -96,7 +129,14 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
  */
 function initialTicker(payload: BoardPayload): string | null {
   const asked = new URLSearchParams(window.location.search).get('t')
-  if (asked) return asked.toUpperCase()
+  // Shape-checked before it is used. Anything else in `?t=` is a typed or
+  // pasted address rather than a ticker, and asking the API about it spends a
+  // request to be told what the shape already said. What a ticker CAN be is
+  // decided by the exchanges: letters, with a class suffix on some listings
+  // (BRK.B, RDS-A), and never longer than a handful of characters.
+  if (asked && /^[A-Za-z][A-Za-z0-9.-]{0,9}$/.test(asked)) {
+    return asked.toUpperCase()
+  }
   return payload.rows[0]?.ticker ?? null
 }
 

@@ -54,4 +54,15 @@ describe('the spend footnote', () => {
 
     expect(screen.getByText(/tokens at an unknown rate/)).toBeTruthy()
   })
+
+  it('groups the token count the way every other figure here is grouped', () => {
+    /* A bare toLocaleString() follows the READER's locale. Under a German one
+       this rendered `1.284.392` -- the only figure on a surface that is
+       otherwise entirely en-US and UTC. Seen on the running board. */
+    render(<Spend payload={payload({
+      today_usd: 0, month_usd: 0, unpriced_tokens: 1_284_392,
+    })} />)
+
+    expect(screen.getByText(/1,284,392 tokens/)).toBeTruthy()
+  })
 })

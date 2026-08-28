@@ -215,12 +215,21 @@ body {
    reason the panel sits BESIDE the list rather than under it.
    ========================================================================= */
 
+/* Rows are declared, not inferred. The failure banner spans both columns, and
+   as an auto-placed child that forced a row of its own between the list and
+   the panel -- so a failed refresh dropped the panel BELOW the list and into
+   the 420px column, breaking the two-pane layout in the one state where the
+   reader most needs to keep reading the board that is still on screen.
+   Verified against a served 500. Row 1 is zero-height when no banner exists. */
 .page {
   display: grid;
   grid-template-columns: 420px minmax(0, 1fr);
+  grid-template-rows: min-content minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
 }
+.page > .list   { grid-row: 2; grid-column: 1; }
+.page > .detail { grid-row: 2; grid-column: 2; }
 
 /* Desktop is the primary target by decision, not by accident. Below this the
    panel stacks under the list -- unbroken, undesigned, and its own session if
@@ -229,10 +238,22 @@ body {
 @media (max-width: 900px) {
   .page {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
     height: auto; min-height: 100vh; overflow: visible;
   }
+  /* Back to document order: one column, the panel under the list. */
+  .page > .list, .page > .detail { grid-row: auto; grid-column: 1; }
   .list { border-right: none; border-bottom: 1px solid var(--rule); }
   .detail { overflow: visible; }
+
+  /* The chart keeps its drawn proportions and pans, rather than being scaled
+     down until its own axis labels are 4px tall -- which is what a 912-unit
+     viewBox squeezed into a 326px column produced, measured at 390px. The
+     label size grows in USER units by the same factor the chart shrinks, so
+     it lands back at the 10.5px it is on a desk. */
+  /* The chart's own narrow-viewport rules live beside the chart, further
+     down: they override base rules declared after this block, and at equal
+     specificity the later declaration is the one that wins. */
 }
 
 /* ----------------------------------------------------------- the list ---- */
@@ -254,6 +275,25 @@ body {
 .brand .state { font-size: var(--t-xs); color: var(--muted); }
 /* Amber for the fact, not for the timestamp carrying it. */
 .brand .state b { color: var(--warn); font-weight: 600; }
+
+/* How old this board is, and only once that is worth saying. The island
+   fetches on a control change and never on a clock, so a tab left open shows
+   the pre-lunch board with nothing to tell it apart from a live one. */
+.brand .age {
+  margin-left: auto; text-align: right;
+  font-size: var(--t-xs); color: var(--muted);
+}
+.brand .age b { color: var(--warn); font-weight: 600; }
+.brand .age button {
+  font: inherit; font-size: var(--t-xs);
+  margin-left: var(--s2); padding: 1px 8px;
+  border: 1px solid var(--rule); border-radius: var(--r-pill);
+  background: var(--raise); color: var(--ink-2); cursor: pointer;
+}
+.brand .age button:hover { color: var(--ink); }
+.brand .age button:focus-visible {
+  outline: 2px solid var(--mark); outline-offset: 1px;
+}
 
 .finding {
   margin: 9px 0 0; font-size: var(--t-md); line-height: 1.55;
@@ -432,6 +472,24 @@ body {
   font-size: 14px; line-height: 1.6; color: var(--ink-2);
   font-variant-numeric: normal;
 }
+.none .pointer { color: var(--muted); font-size: 12.5px; }
+.none .pointer b { color: var(--ink-2); font-weight: 600; }
+
+/* ------------------------------------------------------- the mark glossary -
+   PRODUCT.md: the marks are load-bearing rather than metadata. The rows
+   printed `· no-print · warming-up` and nothing on the surface said what
+   either one was, while the sentences sat unrendered in format.ts. A
+   glossary, not a hover: `title` is mouse-only and the reader who needs the
+   definition is the one who has just met the word.
+   ========================================================================= */
+
+.marks .sub { margin: 0 0 var(--s3); color: var(--muted); }
+.marks dl { margin: 0; display: grid; gap: var(--s3); }
+.marks dt {
+  font-size: var(--t-ax); font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--warn);
+}
+.marks dd { margin: 2px 0 0; text-wrap: pretty; }
 
 /* --------------------------------------------------------- the panel ----- */
 
@@ -440,7 +498,24 @@ body {
   padding: var(--s7) 32px 72px;
 }
 .detail.empty { display: grid; place-items: center; color: var(--muted); }
-.detail .failed { color: var(--warn); }
+.detail.empty p { max-width: 34ch; text-align: center; text-wrap: pretty; }
+
+/* A failed panel used to be one amber sentence and no way out of it: the
+   reader had to pick a different ticker and come back, and on a `?t=` link
+   that had 404'd there was no different ticker on screen to pick. */
+.detail .failed { color: var(--warn); max-width: 46ch; }
+.detail .failed b { display: block; font-weight: 600; }
+.detail .failed .acts { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s4); }
+.detail .failed .acts button {
+  font: inherit; font-size: var(--t-sm);
+  padding: 3px 12px; border: 1px solid var(--rule);
+  border-radius: var(--r-pill); background: var(--raise);
+  color: var(--ink-2); cursor: pointer;
+}
+.detail .failed .acts button:hover { color: var(--ink); background: var(--surface); }
+.detail .failed .acts button:focus-visible {
+  outline: 2px solid var(--mark); outline-offset: 1px;
+}
 
 .ident { display: flex; align-items: flex-start; gap: var(--s5); padding-bottom: 18px; }
 .ident h2 {
@@ -449,7 +524,12 @@ body {
 }
 /* Untruncated on purpose. The list truncates because it has 420px; here the
    half that carries the meaning is the half that used to be cut off. */
-.ident .full { font-size: var(--t-base); color: var(--ink-2); }
+/* Wraps anywhere rather than overflowing. Nothing upstream caps the length of
+   a company name, and a long unbroken run in one -- a ticker with no spaces
+   in its registered name, a mangled import -- pushed the panel sideways. */
+.ident .full {
+  font-size: var(--t-base); color: var(--ink-2); overflow-wrap: anywhere;
+}
 .ident .facts { margin-top: 7px; font-size: 12.5px; color: var(--muted); }
 .ident .px { margin-left: auto; text-align: right; flex: none; }
 .ident .px .v {
@@ -475,8 +555,12 @@ body {
    than four identical tracked-uppercase eyebrows down the page, which is the
    scaffold every generated dashboard reaches for. */
 .zone { margin-top: var(--s8); border-top: 1px solid var(--rule); padding-top: 14px; }
+/* Wraps as a row before it wraps inside a word. Without the wrap the heading
+   and its caption were squeezed by the span buttons until "Price and chatter"
+   came out as three stacked words -- measured at 390px. */
 .zone h3 {
-  display: flex; align-items: baseline; gap: 10px; margin: 0 0 var(--s5);
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px;
+  margin: 0 0 var(--s5);
   font-size: var(--t-md); font-weight: 600; color: var(--ink);
 }
 .zone h3 .q { font-weight: 400; font-size: 12.5px; color: var(--muted); }
@@ -502,6 +586,11 @@ body {
 .pxchart .ax {
   font-size: var(--t-ax); fill: var(--muted); font-variant-numeric: tabular-nums;
 }
+/* Shown only where the chart actually pans -- see the narrow-viewport block. */
+.panhint {
+  display: none; margin: 8px 0 0;
+  font-size: var(--t-xs); color: var(--muted); font-variant-numeric: normal;
+}
 .legend {
   display: flex; gap: var(--s6); margin-top: 10px;
   font-size: var(--t-xs); color: var(--muted);
@@ -515,6 +604,24 @@ body {
   height: 2px; border-radius: 0; background: var(--up); vertical-align: 3px;
 }
 .legend .key.line.down { background: var(--down); }
+
+/* A 912-unit viewBox squeezed into a 326px column drew its own axis labels at
+   four pixels -- measured at 390px. The chart keeps its drawn proportions and
+   pans instead, and the label size grows in USER units by the same factor the
+   chart shrinks, so it lands back at the 10.5px it is on a desk.
+
+   Placed after the rules above rather than in the layout block up the file:
+   at equal specificity the later declaration wins, and `height: 300px` and
+   `.panhint { display: none }` are both declared here. */
+@media (max-width: 900px) {
+  .chartwrap { overflow-x: auto; overscroll-behavior-x: contain; }
+  /* `height: auto`, because an SVG drawn 204px tall inside a 300px box
+     centres itself and leaves 96px of nothing above the chart. The viewBox
+     already carries the ratio. */
+  .pxchart { min-width: 620px; height: auto; }
+  .pxchart .ax { font-size: 15.5px; }
+  .panhint { display: block; }
+}
 
 /* ------------------------------------------------------ the breakdown ---- */
 /* Split by kind rather than into "table" and "leftovers". Concentration is
@@ -596,9 +703,15 @@ body {
   text-transform: uppercase; color: var(--ink-2);
   background: var(--rule-soft); padding: 2px 7px; border-radius: 4px;
 }
-.phead .who { color: var(--ink-2); font-weight: 500; }
-.phead .when { color: var(--muted); }
-.phead .out { margin-left: auto; color: var(--muted); text-decoration: none; }
+/* Truncates rather than shoving the outbound link off the row. Handles have
+   no length limit anywhere upstream and a 64-character one did exactly that. */
+.phead .who {
+  color: var(--ink-2); font-weight: 500;
+  min-width: 0; max-width: 22ch;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.phead .when { color: var(--muted); flex: none; }
+.phead .out { margin-left: auto; flex: none; color: var(--muted); text-decoration: none; }
 .phead .out:hover { color: var(--mark); text-decoration: underline; }
 .post p {
   margin: 7px 0 0;
@@ -606,10 +719,65 @@ body {
   font-variant-numeric: normal; overflow-wrap: anywhere;
 }
 
+/* One pasted wall of text ran past thirty screen-heights and buried the
+   twenty-four posts under it -- the opposite of what this zone is for. The
+   post is clipped, never dropped: the control below opens it in place, and
+   `open ↗` still goes to the original. */
+.post p.clamp {
+  display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.post .more {
+  font: inherit; font-size: 12.5px; margin-top: var(--s2);
+  padding: 2px 0; border: 0; background: none;
+  color: var(--mark); cursor: pointer; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.post .more:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+
+/* ------------------------------------------------- when it cannot be drawn -
+   Shared by three situations that are one situation to the reader: no
+   JavaScript, an unreadable embedded payload, and a render that threw. The
+   island used to leave a blank white viewport for the second and third --
+   nothing to read, and nothing to search for.
+   ========================================================================= */
+
+.broken {
+  max-width: 52ch; margin: 0 auto; padding: var(--s9) var(--s6);
+  font-variant-numeric: normal; text-wrap: pretty;
+}
+.broken h1 {
+  margin: 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.015em;
+}
+.broken h2 {
+  margin: var(--s5) 0 var(--s4);
+  font-size: 21px; font-weight: 650; letter-spacing: -0.015em;
+}
+.broken p { margin: 0 0 var(--s4); color: var(--ink-2); line-height: 1.6; }
+.broken .why { color: var(--warn); }
+.broken code { font-size: 13px; }
+.broken a { color: var(--mark); }
+.broken button {
+  font: inherit; padding: 4px 14px;
+  border: 1px solid var(--rule); border-radius: var(--r-pill);
+  background: var(--raise); color: var(--ink); cursor: pointer;
+}
+.broken button:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+
+/* One zone that threw, inside a board that did not. Sits in the panel's own
+   grid cell so the list beside it keeps its width. */
+.zonefail {
+  grid-row: 2; margin: 0; padding: var(--s7) 32px;
+  color: var(--warn); font-size: var(--t-sm); text-wrap: pretty;
+}
+
 /* --------------------------------------------------------- the banner ---- */
 
+/* Row 1 of .page, spanning both columns -- see the LAYOUT block. Left to
+   auto-flow it took a row between the two panes and pushed the panel out of
+   its column. */
 .oops {
-  grid-column: 1 / -1; margin: 0;
+  grid-row: 1; grid-column: 1 / -1; margin: 0;
   padding: 10px var(--s6); background: var(--warn-soft); color: var(--ink-2);
   font-size: var(--t-sm);
 }

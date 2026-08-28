@@ -1,4 +1,4 @@
-import { dayStamp, sourceLabel } from '../format'
+import { count, dayStamp, sourceLabel } from '../format'
 import type { Breakdown as BreakdownData } from '../types'
 
 /** Above these, one or two accounts are carrying the whole thing and the
@@ -46,8 +46,8 @@ export function Breakdown({ breakdown, windowHours }: {
               {b.venues.map((venue) => (
                 <tr key={venue.source}>
                   <td className="venue">{sourceLabel(venue.source)}</td>
-                  <td className="r">{venue.mentions}</td>
-                  <td className="r">{venue.voices}</td>
+                  <td className="r">{count(venue.mentions)}</td>
+                  <td className="r">{count(venue.voices)}</td>
                   <td className="r">
                     {b.mentions
                       ? `${Math.round(venue.mentions / b.mentions * 100)}%`
@@ -65,13 +65,13 @@ export function Breakdown({ breakdown, windowHours }: {
 
           {b.mentions > 0 && (
             <p className="wording">
-              <span><b>{b.bullish}</b> bullish</span>
-              <span><b>{b.bearish}</b> bearish</span>
+              <span><b>{count(b.bullish)}</b> bullish</span>
+              <span><b>{count(b.bearish)}</b> bearish</span>
               {/* Not padding. Most mentions carry no lexicon word at all, and
                   hiding them turns a handful of scored posts into a
                   confident-looking sentiment reading. */}
               <span className="q">
-                <b>{b.neutral}</b> carried no wording at all
+                <b>{count(b.neutral)}</b> carried no wording at all
               </span>
               {/* Both scores are kept precisely so this comparison is
                   possible -- a post the word list and the model read
@@ -80,7 +80,7 @@ export function Breakdown({ breakdown, windowHours }: {
                   nothing else. */}
               {b.disagreements > 0 && (
                 <span className="q">
-                  <b>{b.disagreements}</b> read differently by the model
+                  <b>{count(b.disagreements)}</b> read differently by the model
                 </span>
               )}
             </p>
@@ -91,9 +91,9 @@ export function Breakdown({ breakdown, windowHours }: {
           <p className="plain">
             {b.peak_hour
               ? <>Peak hour <b>{b.peak_hour.slice(11, 16)}</b> at{' '}
-                  <b>{b.peak_count}</b> mentions · </>
+                  <b>{count(b.peak_count)}</b> mentions · </>
               : null}
-            <b>{b.voices}</b> distinct {b.voices === 1 ? 'voice' : 'voices'}
+            <b>{count(b.voices)}</b> distinct {b.voices === 1 ? 'voice' : 'voices'}
             {b.first_seen
               ? <> · first ever seen on <b>{dayStamp(b.first_seen)}</b></>
               : null}
@@ -131,14 +131,14 @@ function Concentration({ one, two, voices }: {
     return (
       <p className="note">
         {Math.round(one * 100)}% of this came from a single account.
-        {' '}{voices} {voices === 1 ? 'voice' : 'voices'} saying it once is a
-        different fact than one account saying it {voices} times.
+        {' '}{count(voices)} {voices === 1 ? 'voice' : 'voices'} saying it once is
+        a different fact than one account saying it {count(voices)} times.
       </p>
     )
   }
   return (
     <p className="note">
-      No single account is carrying this — the loudest of {voices}{' '}
+      No single account is carrying this — the loudest of {count(voices)}{' '}
       {voices === 1 ? 'voice' : 'voices'} is under a third of it.
     </p>
   )

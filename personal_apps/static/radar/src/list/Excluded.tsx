@@ -1,3 +1,4 @@
+import { Widen } from '../Widen'
 import type { BoardPayload } from '../types'
 
 /** Why a ticker is not listed, in the order a reader would ask.
@@ -33,7 +34,11 @@ export function Excluded({ payload }: { payload: BoardPayload }) {
       <b>{total === 1 ? '1 other ticker' : `${total} other tickers`}</b> were
       {' '}mentioned in this window and are not listed
       {counted.length ? <>: {counted.join(', ')}</> : null}.
-      {' '}Widen the window, or switch to <b>All</b>, to see more.
+      {/* Its own line, and the CSS has had a rule for it the whole time: the
+          account of what was excluded is a fact about the board, the way out
+          is a suggestion, and running them together made the suggestion read
+          as part of the count. */}
+      <span className="pointer"><Widen tail=" to see more." /></span>
     </p>
   )
 }

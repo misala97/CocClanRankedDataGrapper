@@ -1,3 +1,4 @@
+import { count, money } from '../format'
 import type { DetailChart, PanelSpan } from '../types'
 
 const W = 912
@@ -45,7 +46,10 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
     (best, v) => (v !== null && v > best ? v : best), 0)
   const peak = observed || 1
   const watchIndex = chart.chatter.findIndex((v) => v !== null)
-  const watchX = watchIndex * slot
+  // -1 is a span nothing was observed in at all, which multiplied out to a
+  // negative x and started the chatter baseline one slot off the left edge of
+  // the viewBox. Nothing observed anywhere is the whole lane, from zero.
+  const watchX = watchIndex > 0 ? watchIndex * slot : 0
   const tone = rose(chart.closes) ? 'var(--up)' : 'var(--down)'
 
   return (
@@ -119,7 +123,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
       {/* Only where something was actually counted: `1/d` printed over an
           empty lane would put a number on a measurement nobody took. */}
       {observed > 0 && (
-        <Gutter y={C_TOP} label={`${observed}${perSlot(chart)}`} />
+        <Gutter y={C_TOP} label={`${count(observed)}${perSlot(chart)}`} />
       )}
 
       <text className="ax" x="0" y={X_LABEL_Y}>
@@ -252,8 +256,4 @@ function priceY(value: number, low: number, high: number): number {
 function rose(closes: (number | null)[]): boolean {
   const real = closes.filter((v): v is number => v !== null)
   return real.length < 2 || real[real.length - 1]! >= real[0]!
-}
-
-function money(value: number, scale = value): string {
-  return scale >= 100 ? `$${value.toFixed(0)}` : `$${value.toFixed(2)}`
 }
