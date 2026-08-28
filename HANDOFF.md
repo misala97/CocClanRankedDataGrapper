@@ -5,9 +5,9 @@
 - Workspace: `C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-german-market`
 - Branch: `codex/radar-german-market`
 - Base/main at worktree creation: `5a741e8bb05e32e8a157a5ddbd899da1603451e0`
-- Current implementation HEAD before this handoff-only update: `1372193`
-- Working tree at this handoff: only plan/ledger/handoff status updates should
-  be dirty; verify `git status`, `git diff`, `git log -5` before work.
+- Current implementation HEAD before this handoff update: `7210ef2`
+- Working tree at this handoff: clean after the status update commit; verify
+  `git status`, `git diff`, `git log -5` before work.
 
 ## Read completely before editing
 
@@ -36,17 +36,21 @@ context by market and venue.
 - Existing frontend baseline: 539/539 PASS.
 - Production frontend build: PASS.
 - Backend API page tests after build: 2/2 PASS.
-- Task 1 implementation committed as `1372193`.
+- Task 1 implementation committed as `1372193`, then hardened in `7210ef2`.
 - Added expand-only `radar_instruments` plus nullable market context on quotes
   and daily closes; existing US rows are backfilled and legacy keys remain.
 - Task 1 focused tests: 16/16 PASS.
 - Local MariaDB migration applied at `a4c8e2f19b70`; active universe/instrument
   counts both 12,509, with zero null market values among 3,744 existing quotes
   and 11,004 existing daily closes.
+- Independent review and scoped re-review accepted Task 1. Downgrade now
+  preserves US and legacy-null price rows but deletes non-US market rows before
+  context columns are removed; database constraints enforce `us|de` while
+  legacy NULL overlap writes remain valid.
 
 ## Open work
 
-- Task 1 is implemented but awaits independent read-only review.
+- Task 1 is accepted and complete.
 - Tasks 2–10 remain pending. Never redispatch a ledger-complete task.
 - After each task: focused tests, commit, independent read-only review, ruling,
   ledger update, handoff update. One implementation worker at a time.
@@ -92,6 +96,7 @@ the isolated worktree.
 
 ## Immediate next action
 
-Claude should review only Task 1 (`1372193`) against the spec and migration
-safety rules. Record findings/rulings in the ledger. Do not implement Task 2
-until Task 1 is independently accepted.
+Implement Task 2 only: introduce the US/Xetra market-calendar registry,
+preserving the current US wrapper and adding tested 2026 Xetra Berlin-local
+session boundaries. Then run focused tests, commit, review, and update these
+handoff artifacts.

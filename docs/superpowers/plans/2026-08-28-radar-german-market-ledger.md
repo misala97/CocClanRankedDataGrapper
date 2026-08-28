@@ -17,7 +17,7 @@ commit, and independent read-only review acceptance.
 
 | Task | Deliverable | Status | Implementation commit | Review |
 |---|---|---|---|---|
-| 1 | Market-aware persistence | implemented; review pending | `1372193` | Claude/read-only review required |
+| 1 | Market-aware persistence | complete | `1372193`, `7210ef2` | accepted after fix round 1 |
 | 2 | US/Xetra calendar registry | pending | — | — |
 | 3 | Quote quality/movement/fallback domain | pending | — | — |
 | 4 | Verified Xetra instrument mapping | pending | — | — |
@@ -70,14 +70,13 @@ commit, and independent read-only review acceptance.
 
 ## Open findings
 
-- Task 1 has no known implementation finding, but its independent read-only
-  review has not happened. It is not accepted and Task 2 must not start.
+- No open Task 1 findings. Continue with Task 2 only after preserving the
+  Task 1 compatibility rules in later writer/key work.
 
 ## Immediate next action
 
-Have Claude perform the independent read-only Task 1 review against the spec,
-migration, tests, real MariaDB backfill evidence, and commit `1372193`. Record
-findings/rulings here. Do not start Task 2 until Task 1 is accepted.
+Implement Task 2: move the existing US calendar unchanged behind the market
+calendar registry and add the 2026 Xetra calendar with Berlin-local boundaries.
 
 ## Task 1 evidence — 2026-08-28
 
@@ -96,3 +95,21 @@ findings/rulings here. Do not start Task 2 until Task 1 is accepted.
   `flask db current`: clean; Alembic current/head both `a4c8e2f19b70`.
 - Safety correction: the migration is expand-only and retains legacy keys and
   nullable overlap columns until Task 5 upgrades every writer.
+
+## Task 1 review and acceptance — 2026-08-28
+
+- Independent read-only review of `62b506b..1372193` found two accepted
+  load-bearing issues: downgrade would retain German rows after context-column
+  removal, and market values lacked database enforcement. It also noted the
+  SQLite autoincrement mismatch between model and migration.
+- Fix round 1 commit `7210ef2` deletes non-US price rows before downgrade,
+  constrains instruments and transitional price rows to `us|de` (or NULL during
+  the legacy overlap), and aligns the SQLite INTEGER autoincrement variant.
+- TDD evidence for the fix: red conditions reproduced for German rollback
+  retention, invalid markets, and ORM ID allocation; focused green command
+  `python -m pytest tests/test_radar_models.py tests/test_radar_migration.py -q`
+  passed 20 tests in 0.56s; `git diff --check` passed.
+- Scoped independent re-review of `1372193..7210ef2` accepted every finding,
+  reported no new Critical/Important breakage, and confirmed the fix against
+  the design downgrade rule.
+- Task 1: complete (commits `62b506b..7210ef2`, review clean after fix round 1).
