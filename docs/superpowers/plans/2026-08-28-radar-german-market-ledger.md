@@ -131,3 +131,15 @@ explicit German-to-US fallback selection.
   0.20s; `git diff --check` passed. Scoped re-review accepted every finding
   and reported no new breakage.
 - Task 2: complete (commits `3fce2b3..b8731cc`, review clean after fix round 1).
+
+## Task 3 scoped re-review fix — 2026-08-28
+
+- Finding: quote scoring excluded only a `stale` tape verdict, allowing fresh
+  live and delayed quotes with externally supplied `closed` or `unknown` tape
+  status to contribute divergence.
+- TDD red: four parameterized black-box cases (`closed|unknown` ×
+  `live|delayed`) failed because `score_eligible` was `True`.
+- Fix: score eligibility now requires both an eligible quote quality and
+  `tape_status == 'ok'`.
+- Focused green: `python -m pytest tests/test_radar_markets.py
+  tests/test_radar_prices.py -q` passed 24 tests in 0.14s.

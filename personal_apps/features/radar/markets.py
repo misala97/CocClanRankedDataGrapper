@@ -97,8 +97,8 @@ class QuoteView:
                       tape_status: TapeStatus = 'ok') -> 'QuoteView':
         """Build a view from a provider snapshot and its external tape verdict.
 
-        ``tape_status`` is supplied by quote-history code.  ``'stale'`` means
-        the tape is frozen/no-print and therefore cannot score divergence,
+        ``tape_status`` is supplied by quote-history code. Only ``'ok'``
+        permits scoring; every other verdict is not a verified open tape,
         even when this provider snapshot is otherwise fresh.
         """
         if tape_status not in TAPE_STATUSES:
@@ -115,7 +115,7 @@ class QuoteView:
             quote_ts=quote.quote_ts, volume=quote.volume, session=session,
             quality=quality, age_seconds=age_seconds,
             score_eligible=(quality in {'live', 'delayed'} and
-                            tape_status != 'stale'),
+                            tape_status == 'ok'),
             regular_move=_movement(quote.price, quote.previous_close),
             extended_move=(_movement(quote.price, quote.regular_close)
                            if session == 'afterhours' else None),

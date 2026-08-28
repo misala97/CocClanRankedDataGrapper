@@ -1,6 +1,8 @@
 import datetime as dt
 import decimal
 
+import pytest
+
 from features.radar.markets import select_quote
 from features.radar.prices import Quote
 
@@ -45,6 +47,18 @@ def test_frozen_tape_status_blocks_an_otherwise_live_quote_from_scoring():
     view = select_quote('AAPL', 'us', {'us': snapshot()}, NOW,
                         tape_status='stale')
     assert view.quality == 'live'
+    assert view.score_eligible is False
+
+
+@pytest.mark.parametrize('provider_delay', ['live', 'delayed'])
+@pytest.mark.parametrize('tape_status', ['closed', 'unknown'])
+def test_non_ok_tape_status_blocks_a_fresh_quote_from_scoring(
+        provider_delay, tape_status):
+    """Only a verified open tape can contribute price divergence."""
+    view = select_quote('AAPL', 'us', {
+        'us': snapshot(provider_delay=provider_delay),
+    }, NOW, tape_status=tape_status)
+    assert view.quality == provider_delay
     assert view.score_eligible is False
 
 
