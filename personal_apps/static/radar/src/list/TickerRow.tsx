@@ -1,7 +1,8 @@
 import { chatterRuns, peak } from '../board/geometry'
 import { divergence, pricesAreMoving, rankTerm, rowPrice, segmentLabel,
          zscore } from '../format'
-import type { Clause, Row, Session } from '../types'
+import { queryFor } from '../api'
+import type { Clause, Row, Selection, Session } from '../types'
 
 /** The row sparkline. Small on purpose: it says "this is building" or "this
  *  faded", and every quantity it implies is in the phrase as text. */
@@ -40,7 +41,7 @@ function rankedBy(row: Row, session: Session) {
  *  load for a selection the client can make itself.
  */
 export function TickerRow({ row, selected, magnitude, session,
-                           suppress = [], onSelect }: {
+                           suppress = [], selection, onSelect }: {
   row: Row
   selected: boolean
   magnitude?: number
@@ -49,6 +50,8 @@ export function TickerRow({ row, selected, magnitude, session,
   /** Marks the whole board carries, which the page states once in its header
    *  instead. A mark on every row is not a mark. */
   suppress?: readonly string[]
+  /** The link is used outside this client too, so it carries the whole view. */
+  selection?: Selection
   onSelect: (ticker: string) => void
 }) {
   const runs = chatterRuns(row.series, BOX, peak(row.series))
@@ -58,7 +61,9 @@ export function TickerRow({ row, selected, magnitude, session,
   return (
     <a className={`row${selected ? ' on' : ''}${measured ? '' : ' unmeasured'}`}
        id={`radar-row-${row.ticker}`}
-       href={`?t=${row.ticker}`}
+       href={selection
+         ? `?${queryFor(selection)}&t=${encodeURIComponent(row.ticker)}`
+         : `?t=${encodeURIComponent(row.ticker)}`}
        aria-current={selected ? 'true' : undefined}
        style={measured
          ? ({ '--mag': magnitude.toFixed(3) } as React.CSSProperties)

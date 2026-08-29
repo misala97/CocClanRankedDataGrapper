@@ -93,7 +93,10 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   fallBack?: { ticker: string; go: () => void }
 }) {
   const [span, setSpan] = useState<PanelSpan>(() => openingSpan(baselineDays))
-  const [detail, setDetail] = useState<Detail | null>(null)
+  const [loaded, setLoaded] = useState<{
+    detail: Detail
+    request: string
+  } | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   // Bumped by Retry. A failed panel had no way back at all: the reader had to
   // pick a different ticker and return, and on a `?t=` link that had 404'd
@@ -110,11 +113,17 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   // The narrow layout pans the chart rather than crushing its labels. Newest
   // is the operational end of a market chart, so that is where it opens.
   const chartScroller = useRef<HTMLDivElement>(null)
+  // Abort is best-effort: a request can resolve after being aborted. Only the
+  // current request may publish detail or failure state.
+  const requestNumber = useRef(0)
   // The ticker the panel last handed focus to. Starts at the opening ticker
   // rather than null, so the FIRST panel does not steal focus from the top of
   // the document on page load -- arriving at a page with focus already six
   // hundred pixels in is its own accessibility problem.
   const focused = useRef<string | null>(ticker)
+  const request = ticker === null ? null
+    : `${ticker}|${selection.market}|${selection.sources.join(',')}|${selection.window}|${span}`
+  const detail = loaded?.request === request ? loaded.detail : null
 
   useEffect(() => {
     if (!detail || detail.identity.ticker !== ticker) return
@@ -134,35 +143,39 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
 
   useEffect(() => {
     if (!ticker) {
-      setDetail(null)
+      requestNumber.current += 1
+      setLoaded(null)
       return
     }
     const controller = new AbortController()
+    const number = ++requestNumber.current
+    const activeRequest = request!
     setFailed(null)
     fetchDetail(ticker, selection, span, controller.signal)
       .then((next) => {
+        if (controller.signal.aborted || requestNumber.current !== number) return
         // The server answering about a different ticker than the one asked
         // for is not something to sit in a spinner over. The guard below
         // renders "Loading" for any mismatch, and a mismatch that is the
         // server's rather than a race would have loaded forever.
-        if (next.identity.ticker !== ticker) {
-          setFailed(`The board answered about ${next.identity.ticker}, `
-            + `not ${ticker}.`)
+        if (next.identity.ticker !== ticker || next.market !== selection.market) {
+          setFailed(`The board answered about ${next.identity.ticker} on ${next.market}, `
+            + `not ${ticker} on ${selection.market}.`)
           return
         }
-        setDetail(next)
+        setLoaded({ detail: next, request: activeRequest })
         setDrawn((n) => n + 1)
       })
       .catch((error: Error) => {
         // An abort is this effect being superseded, not a failure. Reporting
         // it would flash an error every time the reader moves down the list.
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted || requestNumber.current !== number) return
         setFailed(error.message)
       })
     return () => controller.abort()
     // `selection` is a fresh object each render in the parent; the fields it
     // holds are what actually change the request.
-  }, [ticker, span, attempt, selection.market, selection.sources.join(','), selection.window])
+  }, [ticker, span, attempt, request, selection.market, selection.sources.join(','), selection.window])
 
   if (!ticker) {
     return (

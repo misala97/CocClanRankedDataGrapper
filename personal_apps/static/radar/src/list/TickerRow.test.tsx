@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { TickerRow } from './TickerRow'
 import { Excluded } from './Excluded'
-import type { BoardPayload, MarketQuote, Row } from '../types'
+import type { BoardPayload, MarketQuote, Row, Selection } from '../types'
 
 function quote(): MarketQuote {
   return {
@@ -79,6 +79,21 @@ describe('a ticker row', () => {
 
     expect(screen.getByRole('link', { name: /HOWL/ }))
       .toHaveAttribute('href', '?t=HOWL')
+  })
+
+  it('keeps the complete current selection in modified-click and copied links', () => {
+    /* This href is the browser-owned path for new tabs and copied links. A
+       shortened `?t=` silently drops the reader back into the default US
+       board, with different filters and score window. */
+    const selection: Selection = {
+      market: 'de', sources: ['bluesky', 'reddit'], segments: ['micro'],
+      minVenues: 2, window: 24,
+    }
+    render(<TickerRow session="regular" row={row()} selected={false}
+                      selection={selection} onSelect={() => {}} />)
+
+    expect(screen.getByRole('link', { name: /HOWL/ })).toHaveAttribute(
+      'href', '?sources=bluesky%2Creddit&window=24&segment=micro&market=de&venues=2&t=HOWL')
   })
 
   it('marks the selected row for assistive tech, not only in colour', () => {

@@ -48,16 +48,18 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   }
 }
 
-function detail(ticker = 'AAA'): Detail {
+function detail(ticker = 'AAA', market: Detail['market'] = 'us'): Detail {
   return {
-    market: 'us', display_timezone: 'Europe/Berlin',
+    market, display_timezone: 'Europe/Berlin',
     identity: {
       ticker, name: 'Alpha Inc', exchange: 'NASDAQ', segment: 'large',
       market_cap: 1e9, ipo_date: '2020-01-01', price: 10, price_move: 0.012,
       price_status: 'ok', session: 'regular',
       quote: quote(),
     },
-    read: [{ kind: 'plain', text: `${ticker} is being discussed.` }],
+    read: [{ kind: 'plain', text: market === 'de'
+      ? `${ticker} on de is being discussed.`
+      : `${ticker} is being discussed.` }],
     chart: {
       from: '2025-08-23T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
@@ -82,7 +84,9 @@ function stubFetch(board: BoardPayload = payload()) {
     ok: true,
     redirected: false,
     json: async () => (url.includes('/api/ticker/')
-      ? detail(url.split('/api/ticker/')[1]!.split('?')[0]!)
+      ? detail(url.split('/api/ticker/')[1]!.split('?')[0]!,
+        (new URL(url, 'https://radar.test').searchParams.get('market') as Detail['market'])
+          ?? 'us')
       : board),
   }))
   vi.stubGlobal('fetch', spy)
@@ -171,6 +175,67 @@ describe('selecting a ticker', () => {
 })
 
 describe('the controls', () => {
+  it('does not show a loaded US panel while Germany is loading', async () => {
+    /* Detail state is retained so a retry can recover, but it is only valid
+       for the request that produced it. A market change must put that cached
+       US view behind a loader before the German response is available. */
+    let resolveDe!: (response: object) => void
+    const deResponse = new Promise<object>((resolve) => { resolveDe = resolve })
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/api/board')) {
+        return Promise.resolve({ ok: true, redirected: false,
+          json: async () => payload({ market: 'de' }) })
+      }
+      if (url.includes('market=de')) return deResponse
+      return Promise.resolve({ ok: true, redirected: false,
+        json: async () => detail('AAA', 'us') })
+    }))
+
+    render(<BoardPage initial={payload()} />)
+    expect(await screen.findByText(/^AAA is being discussed\.$/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/AAA?') && url.includes('market=de')))
+      .toBe(true))
+    expect(screen.getByRole('main', { busy: true })).toHaveTextContent('Loading AAA')
+    expect(screen.queryByText(/^AAA is being discussed\.$/)).toBeNull()
+
+    resolveDe({ ok: true, redirected: false, json: async () => detail('AAA', 'de') })
+    expect(await screen.findByText(/AAA on de is being discussed/)).toBeInTheDocument()
+  })
+
+  it('keeps the Germany panel when an aborted US response arrives late', async () => {
+    /* An abort asks the transport to stop but cannot unsend a response already
+       in flight. The late US payload used to overwrite Germany's same-ticker
+       panel because only the ticker was checked before rendering it. */
+    let resolveUs!: (response: object) => void
+    let resolveDe!: (response: object) => void
+    const usResponse = new Promise<object>((resolve) => { resolveUs = resolve })
+    const deResponse = new Promise<object>((resolve) => { resolveDe = resolve })
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/api/board')) {
+        return Promise.resolve({ ok: true, redirected: false,
+          json: async () => payload({ market: 'de' }) })
+      }
+      return url.includes('market=de') ? deResponse : usResponse
+    }))
+
+    render(<BoardPage initial={payload()} />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/AAA?') && url.includes('market=de')))
+      .toBe(true))
+    resolveDe({ ok: true, redirected: false, json: async () => detail('AAA', 'de') })
+    expect(await screen.findByText(/AAA on de is being discussed/)).toBeInTheDocument()
+
+    resolveUs({ ok: true, redirected: false, json: async () => detail('AAA', 'us') })
+    await waitFor(() => expect(screen.getByText(/AAA on de is being discussed/))
+      .toBeInTheDocument())
+    expect(screen.queryByText(/^AAA is being discussed\.$/)).toBeNull()
+  })
+
   it('switches market while retaining ticker, filters, and panel span', async () => {
     /* The market is price context, not a reset button: the reader keeps the
        company and every filter while swapping the venue underneath it. */

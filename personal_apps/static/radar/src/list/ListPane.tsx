@@ -191,7 +191,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         {payload.rows.map((row) => (
           <TickerRow key={row.ticker} row={row} onSelect={onSelect}
                      magnitude={mags[row.ticker]} suppress={shared}
-                     session={payload.session}
+                     session={payload.session} selection={selection}
                      selected={row.ticker === selected} />
         ))}
         {payload.rows.length === 0 && (
