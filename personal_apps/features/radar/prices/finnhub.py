@@ -87,6 +87,9 @@ class FinnhubProvider:
                 ticker=symbol,
                 price=price,
                 prev_close=_decimal(payload.get('pc')),
+                # Do not substitute ``pc``: it is yesterday's close, while
+                # this optional provider field is today's regular close.
+                regular_close=_decimal(payload.get('regular_close')),
                 quote_ts=(dt.datetime.fromtimestamp(stamp, dt.timezone.utc)
                           .replace(tzinfo=None, microsecond=0) if stamp else None),
                 # Always None in practice: /quote returns c, d, dp, h, l, o,

@@ -74,20 +74,39 @@ def test_record_quotes_persists_the_verified_market_identity(ctx):
         'EUR', 'QQA1', decimal.Decimal('194.200000'))
 
 
-def test_record_quotes_persists_regular_close_in_an_isolated_store(monkeypatch):
-    """The writer must retain the baseline used by after-hours movement."""
+@pytest.mark.parametrize('provider_kind, payload', [
+    ('finnhub', {
+        'c': '102', 'pc': '98', 'regular_close': '100', 't': 1787950800,
+    }),
+    ('twelvedata', {
+        'status': 'ok', 'close': '102', 'previous_close': '98',
+        'regular_close': '100', 'currency': 'USD', 'timestamp': 1787950800,
+    }),
+])
+def test_provider_regular_close_survives_storage_into_afterhours_view(
+        monkeypatch, provider_kind, payload):
+    """An adapter baseline must survive storage for the after-hours calculation.
+
+    Removing the provider's ``regular_close`` mapping makes this fail with an
+    unavailable extended move even though the snapshot itself remains usable.
+    """
+    from features.radar.prices import finnhub, twelvedata
+
+    class QuoteHttp:
+        def get(self, path, params):
+            assert path == '/quote'
+            return payload
+
+    provider = (finnhub.FinnhubProvider(QuoteHttp()) if provider_kind == 'finnhub'
+                else twelvedata.TwelveDataProvider(QuoteHttp()))
+    quote = provider.quotes(['QQA'])['QQA']
+    afterhours = dt.datetime(2026, 8, 28, 21, 0)
     engine = sa.create_engine('sqlite://')
     sa.event.listen(
         engine, 'connect',
         lambda connection, _: connection.create_collation(
             'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
     RadarQuote.__table__.create(engine)
-    quote = quotes_mod.Quote(
-        ticker='QQA', market='us', venue='NASDAQ', mic='XNAS',
-        provider_symbol='QQA', currency='USD', price=decimal.Decimal('102'),
-        previous_close=decimal.Decimal('98'), regular_close=decimal.Decimal('100'),
-        quote_ts=NOW, provider_delay='live')
-
     def assign_sqlite_id(_, __, row):
         row.id = 1
 
@@ -96,9 +115,17 @@ def test_record_quotes_persists_regular_close_in_an_isolated_store(monkeypatch):
         with sa.orm.Session(engine) as session:
             monkeypatch.setattr(
                 quotes_mod, 'db', SimpleNamespace(session=session))
-            assert quotes_mod.record_quotes({'QQA': quote}, NOW) == 1
+            assert quotes_mod.record_quotes({'QQA': quote}, afterhours) == 1
             stored = session.query(RadarQuote).filter_by(ticker='QQA').one()
             assert stored.regular_close == decimal.Decimal('100.000000')
+            restored = quotes_mod._stored_quote(
+                stored, SimpleNamespace(
+                    venue='NASDAQ', mic='XNAS', provider_symbol='QQA',
+                    currency='USD'), 'us')
+            view = select_quote(
+                'QQA', 'us', {'us': restored}, afterhours)
+            assert view.session == 'afterhours'
+            assert view.extended_move == decimal.Decimal('0.02')
     finally:
         sa.event.remove(RadarQuote, 'before_insert', assign_sqlite_id)
 

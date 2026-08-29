@@ -106,6 +106,10 @@ class TwelveDataProvider:
                 ticker=symbol, price=price,
                 previous_close=(decimal.Decimal(str(payload['previous_close']))
                                 if payload.get('previous_close') is not None else None),
+                # This is not ``previous_close``: after-hours movement needs
+                # the same-day regular-session close when the feed supplies it.
+                regular_close=(decimal.Decimal(str(payload['regular_close']))
+                               if payload.get('regular_close') is not None else None),
                 quote_ts=quote_ts, currency=payload.get('currency') or '',
                 provider_delay='delayed')
         return found
