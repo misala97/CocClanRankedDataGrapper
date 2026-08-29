@@ -24,7 +24,7 @@ commit, and independent read-only review acceptance.
 | 5 | Per-market polling/history/retention | complete | `e21a7da`, `708de59` | accepted after fix round 1 |
 | 6 | Market-aware ranking/board/detail/API | complete | `55a95c5`, `c767c66`, `14d7ec4` | accepted after fixes |
 | 7 | Market selection and Berlin formatting | complete | `55c8392`, `f58d413` | accepted after fix round 1 |
-| 8 | Quote/session/fallback presentation | pending | — | — |
+| 8 | Quote/session/fallback presentation | complete | `27c39e8`, `aee5e507` | accepted after fix round 1 |
 | 9 | Chart session bands | pending | — | — |
 | 10 | Full verification and integration handoff | pending | — | — |
 
@@ -75,8 +75,19 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Paused at the user’s request before Task 8. Resume with quote/session/fallback
-presentation only.
+Implement Task 9: chart session bands and Berlin-time chart labels.
+
+## Task 8 evidence — 2026-08-30
+
+- Initial UI implementation `27c39e8` added shared accessible quote badges,
+  fallback/quality/session labels, separate regular/extended moves, and session
+  tokens; focused and full frontend tests plus production build passed.
+- Review correction `aee5e507` serialized row eligibility/tape state, retained
+  no-print warnings, formatted EOD instants directly in Berlin time, and
+  prevented unavailable rows from rendering `null` labels.
+- Corrected focused suites, full frontend suite (403 + 158), build, and diff
+  check passed. Scoped re-review found no Critical/Important findings.
+  Task 8 complete.
 
 ## Task 7 evidence — 2026-08-29
 

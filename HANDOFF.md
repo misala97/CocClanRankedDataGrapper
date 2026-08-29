@@ -55,8 +55,8 @@ context by market and venue.
 
 ## Open work
 
-- Tasks 1–7 are accepted and complete.
-- Tasks 8–10 remain pending. Never redispatch a ledger-complete task.
+- Tasks 1–8 are accepted and complete.
+- Tasks 9–10 remain pending. Never redispatch a ledger-complete task.
 - After each task: focused tests, commit, independent read-only review, ruling,
   ledger update, handoff update. One implementation worker at a time.
 
@@ -101,7 +101,5 @@ the isolated worktree.
 
 ## Immediate next action
 
-Paused by the user before Task 8 due to session limit. On resume, implement
-Task 8 only: quote source, quality, fallback, and extended-movement
-presentation. Then run focused tests, commit, review, and update these
-handoff artifacts.
+Implement Task 9 only: chart session bands and Berlin-time chart labels. Then
+run focused tests, commit, review, and update these handoff artifacts.
