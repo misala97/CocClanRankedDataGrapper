@@ -147,3 +147,28 @@ def test_moves_distinguishes_no_move_from_no_data(ctx):
 def test_an_empty_ticker_list_asks_the_database_nothing(ctx):
     assert quotes_mod.statuses_for([], NOW, session='regular') == {}
     assert quotes_mod.moves_for([], 4, NOW) == {}
+
+
+def test_explicit_market_windows_never_read_another_venue(ctx):
+    """A shared social ticker has independent US and Xetra tapes."""
+    for market, mic, price in (('us', 'XNAS', '220'), ('de', 'XETR', '194')):
+        for minutes in (10, 5, 0):
+            when = NOW - dt.timedelta(minutes=minutes)
+            db.session.add(RadarQuote(
+                ticker=f'{PREFIX}DUAL', market=market, mic=mic,
+                currency='USD' if market == 'us' else 'EUR',
+                provider_symbol=f'{PREFIX}DUAL', fetched_at=when,
+                quote_ts=when, price=decimal.Decimal(price),
+                prev_close=decimal.Decimal('100.000000')))
+    db.session.commit()
+
+    status, latest = quotes_mod.statuses_for(
+        [(f'{PREFIX}DUAL', 'de', 'XETR')], NOW, session='regular')[
+            (f'{PREFIX}DUAL', 'de')]
+    move = quotes_mod.moves_for(
+        [(f'{PREFIX}DUAL', 'de', 'XETR')], 1, NOW)[(f'{PREFIX}DUAL', 'de')]
+
+    assert status == 'ok'
+    assert latest.mic == 'XETR'
+    assert latest.price == decimal.Decimal('194')
+    assert move == 0

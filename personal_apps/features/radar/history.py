@@ -45,7 +45,18 @@ MIN_STORED_RATIO = 0.9
 STALE_AFTER_DAYS = 2
 
 
-def record_closes(ticker, closes, now):
+def _market_filters(ticker, market, mic):
+    filters = [RadarDailyClose.ticker == ticker,
+               RadarDailyClose.market == market]
+    if market == 'us':
+        filters[-1] = (RadarDailyClose.market == 'us') | \
+                      RadarDailyClose.market.is_(None)
+    if mic is not None:
+        filters.append(RadarDailyClose.mic == mic)
+    return filters
+
+
+def record_closes(ticker, closes, now, *, market='us', mic=None, currency='USD'):
     """Upsert (date, close) pairs for one ticker. Returns rows written.
 
     Upsert rather than append: providers restate recent bars, and a second
@@ -56,23 +67,27 @@ def record_closes(ticker, closes, now):
         return 0
 
     existing = {row.close_date: row for row in RadarDailyClose.query.filter(
-        RadarDailyClose.ticker == ticker,
+        *_market_filters(ticker, market, mic),
         RadarDailyClose.close_date.in_([day for day, _ in closes])).all()}
 
     for day, close in closes:
         row = existing.get(day)
         if row is None:
             db.session.add(RadarDailyClose(
-                ticker=ticker, close_date=day, close=close, fetched_at=now))
+                ticker=ticker, market=market, mic=mic, currency=currency,
+                close_date=day, close=close, fetched_at=now))
         else:
             row.close = close
             row.fetched_at = now
+            row.market = market
+            row.mic = mic
+            row.currency = currency
 
     db.session.commit()
     return len(closes)
 
 
-def closes_for(tickers, days=HISTORY_DAYS, today=None):
+def closes_for(tickers, days=HISTORY_DAYS, today=None, *, market='us', mic=None):
     """{ticker: [(date, close)]} oldest first, for tickers that have any.
 
     A ticker with nothing stored is ABSENT from the result rather than mapped
@@ -86,10 +101,16 @@ def closes_for(tickers, days=HISTORY_DAYS, today=None):
     today = today or dt.date.today()
     since = today - dt.timedelta(days=days)
 
+    market_filter = RadarDailyClose.market == market
+    if market == 'us':
+        market_filter = (RadarDailyClose.market == 'us') | \
+                        RadarDailyClose.market.is_(None)
     rows = (db.session.query(RadarDailyClose.ticker,
                              RadarDailyClose.close_date,
                              RadarDailyClose.close)
             .filter(RadarDailyClose.ticker.in_(list(tickers)),
+                    market_filter,
+                    *([RadarDailyClose.mic == mic] if mic is not None else []),
                     RadarDailyClose.close_date >= since,
                     RadarDailyClose.close_date <= today)
             .order_by(RadarDailyClose.close_date.asc()).all())
@@ -100,7 +121,8 @@ def closes_for(tickers, days=HISTORY_DAYS, today=None):
     return dict(series)
 
 
-def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS):
+def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS,
+                            *, market='us', mic=None):
     """Which of `candidates` to spend requests on, most urgent first.
 
     Missing before stale before shallow, each keeping the caller's order --
@@ -115,11 +137,17 @@ def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS
     if not candidates:
         return []
 
+    market_filter = RadarDailyClose.market == market
+    if market == 'us':
+        market_filter = (RadarDailyClose.market == 'us') | \
+                        RadarDailyClose.market.is_(None)
     rows = (db.session.query(
         RadarDailyClose.ticker,
         db.func.max(RadarDailyClose.close_date),
         db.func.count())
-        .filter(RadarDailyClose.ticker.in_(list(candidates)))
+        .filter(RadarDailyClose.ticker.in_(list(candidates)),
+                market_filter,
+                *([RadarDailyClose.mic == mic] if mic is not None else []))
         .group_by(RadarDailyClose.ticker).all())
     newest = {ticker: day for ticker, day, _ in rows}
     stored = {ticker: count for ticker, _, count in rows}
@@ -135,7 +163,8 @@ def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS
     return missing + stale + shallow
 
 
-def fetch_into_store(provider, tickers, now):
+def fetch_into_store(provider, tickers, now, *, market='us', mic=None,
+                     currency='USD', provider_symbols=None):
     """Fetch a year of closes for each ticker and store it.
 
     Returns how many tickers came back with anything. A provider answering
@@ -144,10 +173,16 @@ def fetch_into_store(provider, tickers, now):
     cycle, which is worse than showing yesterday's.
     """
     stored = 0
+    provider_symbols = provider_symbols or {}
     for ticker in tickers:
-        closes = provider.daily_closes(ticker, HISTORY_DAYS)
+        symbol = provider_symbols.get(ticker, ticker)
+        if mic is None:
+            closes = provider.daily_closes(symbol, HISTORY_DAYS)
+        else:
+            closes = provider.daily_closes(symbol, HISTORY_DAYS, mic_code=mic)
         if not closes:
             continue
-        record_closes(ticker, closes, now)
+        record_closes(ticker, closes, now, market=market, mic=mic,
+                      currency=currency)
         stored += 1
     return stored

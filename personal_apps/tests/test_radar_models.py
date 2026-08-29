@@ -198,13 +198,8 @@ def test_a_daily_close_is_unique_per_ticker_and_date():
         db.session.commit()
 
 
-def test_market_models_expand_without_breaking_legacy_price_keys():
-    """The expand stage adds context without requiring old writers to know it.
-
-    Removing nullable=True would break the still-deployed ticker-only daemon;
-    changing the legacy keys here would let Task 1 create two price rows that
-    old readers cannot distinguish.
-    """
+def test_market_models_partition_price_keys_after_writer_upgrade():
+    """Task 5 makes simultaneous US/Xetra snapshots independently addressable."""
     instrument = models.RadarInstrument(
         ticker='AAPL', market='de', venue='Xetra', mic='XETR',
         provider_symbol='APC', currency='EUR', isin='US0378331005',
@@ -230,10 +225,14 @@ def test_market_models_expand_without_breaking_legacy_price_keys():
         constraint for constraint in models.RadarQuote.__table__.constraints
         if isinstance(constraint, sa.UniqueConstraint))
     assert tuple(column.name for column in quote_unique.columns) == (
-        'ticker', 'fetched_at')
+        'ticker', 'market', 'mic', 'fetched_at')
+    close_unique = next(
+        constraint for constraint in models.RadarDailyClose.__table__.constraints
+        if isinstance(constraint, sa.UniqueConstraint))
+    assert tuple(column.name for column in close_unique.columns) == (
+        'ticker', 'market', 'mic', 'close_date')
     assert tuple(column.name for column in
-                 models.RadarDailyClose.__table__.primary_key.columns) == (
-        'ticker', 'close_date')
+                 models.RadarDailyClose.__table__.primary_key.columns) == ('id',)
 
 
 def test_radar_instrument_assigns_an_id_with_sqlite_orm_persistence():

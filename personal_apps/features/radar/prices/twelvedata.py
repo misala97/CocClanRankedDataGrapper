@@ -14,7 +14,7 @@ import os
 
 import requests
 
-from . import PriceUnavailable
+from . import PriceUnavailable, Quote
 from ..instruments import CatalogInstrument
 
 API_BASE = 'https://api.twelvedata.com'
@@ -43,7 +43,7 @@ class TwelveDataProvider:
     def __init__(self, http):
         self._http = http
 
-    def daily_closes(self, symbol, days):
+    def daily_closes(self, symbol, days, mic_code=None):
         """(date, close) oldest first. Empty when there is no usable history.
 
         Empty rather than raising: an unknown symbol and a tripped rate limit
@@ -51,8 +51,11 @@ class TwelveDataProvider:
         take down the job that asked.
         """
         try:
-            payload = self._http.get('/time_series', {
-                'symbol': symbol, 'interval': '1day', 'outputsize': days})
+            params = {
+                'symbol': symbol, 'interval': '1day', 'outputsize': days}
+            if mic_code is not None:
+                params['mic_code'] = mic_code
+            payload = self._http.get('/time_series', params)
         except PriceUnavailable:
             return []
 
@@ -69,6 +72,43 @@ class TwelveDataProvider:
 
         # Newest first on the wire; volatility wants chronological order.
         return sorted(closes)
+
+    def quotes(self, symbols):
+        """Current snapshots keyed by provider symbol.
+
+        A non-``ok`` payload is omitted, never represented as a zero quote;
+        the caller retains its last verified market snapshot in that case.
+        """
+        found = {}
+        for symbol in symbols:
+            try:
+                payload = self._http.get('/quote', {'symbol': symbol})
+            except PriceUnavailable:
+                continue
+            if (not isinstance(payload, dict) or
+                    payload.get('status') not in (None, 'ok')):
+                continue
+            try:
+                price = decimal.Decimal(str(payload['close']))
+            except (KeyError, decimal.InvalidOperation):
+                continue
+            if not price:
+                continue
+            stamp = payload.get('timestamp')
+            quote_ts = None
+            if stamp:
+                try:
+                    quote_ts = dt.datetime.fromtimestamp(
+                        int(stamp), dt.timezone.utc).replace(tzinfo=None)
+                except (TypeError, ValueError, OSError):
+                    pass
+            found[symbol] = Quote(
+                ticker=symbol, price=price,
+                previous_close=(decimal.Decimal(str(payload['previous_close']))
+                                if payload.get('previous_close') is not None else None),
+                quote_ts=quote_ts, currency=payload.get('currency') or '',
+                provider_delay='delayed')
+        return found
 
     def stock_catalog(self, mic_code):
         """Normalized, complete stock/ETF reference data for one MIC catalog.

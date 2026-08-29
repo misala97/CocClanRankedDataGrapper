@@ -7,6 +7,8 @@ each spring the US session starts an hour earlier in Berlin, and any cadence
 keyed on Berlin hours would poll at overnight rates through a live open.
 """
 import datetime as dt
+import decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -245,6 +247,48 @@ def test_nothing_loud_means_no_provider_call(monkeypatch):
     assert called['n'] == 0
 
 
+def test_german_quote_failure_does_not_block_us_quotes(monkeypatch):
+    """A denied German entitlement is not a US board outage."""
+    us = SimpleNamespace(ticker='AAA', market='us', venue='Nasdaq', mic='XNAS',
+                         provider_symbol='AAA', currency='USD')
+    de = SimpleNamespace(ticker='AAA', market='de', venue='Xetra', mic='XETR',
+                         provider_symbol='AAA1', currency='EUR')
+    calls = []
+
+    class UsProvider:
+        def quotes(self, symbols):
+            calls.append(('us', list(symbols)))
+            from features.radar.prices import Quote
+            return {'AAA': Quote('AAA', decimal.Decimal('220.00'),
+                                 currency='USD')}
+
+    class DeniedGermany:
+        def quotes(self, symbols):
+            calls.append(('de', list(symbols)))
+            raise RuntimeError('entitlement denied')
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
+    monkeypatch.setattr(daemon, 'has_app_context', lambda: True)
+    monkeypatch.setattr(
+        daemon, '_market_instruments',
+        lambda tickers, market: [us] if market == 'us' else [de])
+    monkeypatch.setattr(daemon, '_mapping_refresh_due', lambda now: True)
+    monkeypatch.setattr(daemon.instruments, 'refresh_mappings',
+                        lambda provider, now: calls.append(('mapping', provider)))
+    monkeypatch.setattr(daemon.quotes, 'record_quotes', lambda found, now: len(found))
+
+    mapping_provider = object()
+    result = daemon.poll_quotes(
+        _utc(2026, 8, 21, 14), UsProvider(), de_provider=DeniedGermany(),
+        mapping_provider=mapping_provider)
+
+    assert result['us_stored'] == 1
+    assert result['de_stored'] == 0
+    assert result['de_error'] is True
+    assert calls == [('us', ['AAA']), ('mapping', mapping_provider),
+                     ('de', ['AAA1'])]
+
+
 def test_sigma_refresh_covers_the_board(monkeypatch):
     """Volatility changes on the scale of weeks, so it refreshes on its own
     slow schedule rather than per page load."""
@@ -419,6 +463,30 @@ def test_a_failing_history_provider_does_not_kill_the_cycle(monkeypatch):
     monkeypatch.setattr(daemon.history, 'fetch_into_store', boom)
 
     assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 0
+
+
+def test_german_history_has_its_own_bound_and_provider_symbols(monkeypatch):
+    de = SimpleNamespace(ticker='AAA', market='de', venue='Xetra', mic='XETR',
+                         provider_symbol='APC', currency='EUR')
+    seen = {}
+
+    def fake_fetch(provider, tickers, now, **kwargs):
+        seen['tickers'] = list(tickers)
+        seen.update(kwargs)
+        return len(tickers)
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [de] if market == 'de' else [])
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today, **kwargs: list(candidates))
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+
+    assert daemon.refresh_de_history(_utc(2026, 8, 21, 14), object(), limit=1) == 1
+    assert seen == {
+        'tickers': ['AAA'], 'market': 'de', 'mic': 'XETR', 'currency': 'EUR',
+        'provider_symbols': {'AAA': 'APC'},
+    }
 
 
 def test_nothing_due_spends_no_requests(monkeypatch):

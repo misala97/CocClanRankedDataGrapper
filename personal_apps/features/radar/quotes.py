@@ -32,13 +32,37 @@ def record_quotes(quotes, now):
         db.session.add(RadarQuote(
             ticker=quote.ticker, fetched_at=now, quote_ts=quote.quote_ts,
             price=quote.price, prev_close=quote.prev_close,
-            volume=quote.volume))
+            volume=quote.volume, market=quote.market, mic=quote.mic,
+            currency=quote.currency, provider_symbol=quote.provider_symbol))
         written += 1
     db.session.commit()
     return written
 
 
-def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None):
+def _instrument_identity(instrument):
+    """Return ``(ticker, market, mic, result_key)`` for old and new callers."""
+    if isinstance(instrument, str):
+        return instrument, 'us', None, instrument
+    if isinstance(instrument, tuple):
+        ticker, market, *rest = instrument
+        return ticker, market, rest[0] if rest else None, (ticker, market)
+    return (instrument.ticker, instrument.market, instrument.mic,
+            (instrument.ticker, instrument.market))
+
+
+def _quote_matches(ticker, market, mic):
+    clauses = [RadarQuote.ticker == ticker, RadarQuote.market == market]
+    # During the expand/write overlap, a legacy NULL row still denotes a US
+    # quote.  It is never a German quote.
+    if market == 'us':
+        clauses[-1] = sa.or_(RadarQuote.market == 'us', RadarQuote.market.is_(None))
+    if mic is not None:
+        clauses.append(RadarQuote.mic == mic)
+    return clauses
+
+
+def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None,
+                 market='us', mic=None):
     """'ok', 'closed', 'stale', or 'unknown'.
 
     Each is a different fact and they must not collapse into each other:
@@ -60,7 +84,7 @@ def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None):
     lookup so a caller scoring many tickers computes it once.
     """
     recent = (RadarQuote.query
-              .filter(RadarQuote.ticker == ticker,
+              .filter(*_quote_matches(ticker, market, mic),
                       RadarQuote.fetched_at <= now)
               .order_by(RadarQuote.fetched_at.desc())
               .limit(polls).all())
@@ -99,7 +123,7 @@ def _status_from(recent, polls, session):
     return 'stale' if len(signatures) == 1 else 'ok'
 
 
-def statuses_for(tickers, now, polls=STALE_QUOTE_POLLS, session=None):
+def statuses_for(instruments, now, polls=STALE_QUOTE_POLLS, session=None):
     """`price_status` for many tickers at once, with each latest snapshot.
 
     Returns {ticker: (status, latest_row_or_None)} covering every ticker asked
@@ -119,15 +143,23 @@ def statuses_for(tickers, now, polls=STALE_QUOTE_POLLS, session=None):
     from 'ok' to 'unknown' -- which says something about the stock rather than
     about our polling. Needs MariaDB 10.2+ / MySQL 8+, both long past.
     """
-    if not tickers:
+    instruments = list(instruments)
+    if not instruments:
         return {}
 
+    identities = [_instrument_identity(instrument) for instrument in instruments]
+    tickers = {ticker for ticker, _, _, _ in identities}
+    markets = {market for _, market, _, _ in identities}
+
+    market_clause = RadarQuote.market.in_(markets)
+    if 'us' in markets:
+        market_clause = sa.or_(market_clause, RadarQuote.market.is_(None))
     numbered = sa.select(
         RadarQuote,
         sa.func.row_number().over(
-            partition_by=RadarQuote.ticker,
+            partition_by=(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic),
             order_by=RadarQuote.fetched_at.desc()).label('rn'),
-    ).where(RadarQuote.ticker.in_(list(tickers)),
+    ).where(RadarQuote.ticker.in_(tickers), market_clause,
             RadarQuote.fetched_at <= now).subquery()
 
     entity = sa.orm.aliased(RadarQuote, numbered)
@@ -138,11 +170,24 @@ def statuses_for(tickers, now, polls=STALE_QUOTE_POLLS, session=None):
 
     recent = collections.defaultdict(list)
     for quote, _ in rows:
-        recent[quote.ticker].append(quote)
+        recent[(quote.ticker, quote.market, quote.mic)].append(quote)
 
-    return {ticker: (_status_from(recent.get(ticker, []), polls, session),
-                     recent[ticker][0] if recent.get(ticker) else None)
-            for ticker in tickers}
+    result = {}
+    for ticker, market, mic, key in identities:
+        matching = []
+        for (stored_ticker, stored_market, stored_mic), rows_for_identity in recent.items():
+            if (stored_ticker != ticker or
+                    (stored_market != market and
+                     not (market == 'us' and stored_market is None))):
+                continue
+            if mic is not None and stored_mic != mic:
+                continue
+            matching.extend(rows_for_identity)
+        matching.sort(key=lambda row: row.fetched_at, reverse=True)
+        matching = matching[:polls]
+        result[key] = (_status_from(matching, polls, session),
+                       matching[0] if matching else None)
+    return result
 
 
 def daily_sigma(closes):
@@ -160,7 +205,7 @@ def daily_sigma(closes):
     return statistics.pstdev(returns)
 
 
-def move_since(ticker, hours, now):
+def move_since(ticker, hours, now, market='us', mic=None):
     """Fractional price change across the window, or None.
 
     Measured between the oldest and newest snapshots inside the window, so it
@@ -170,7 +215,7 @@ def move_since(ticker, hours, now):
     """
     since = now - dt.timedelta(hours=hours)
     rows = (RadarQuote.query
-            .filter(RadarQuote.ticker == ticker,
+            .filter(*_quote_matches(ticker, market, mic),
                     RadarQuote.fetched_at >= since,
                     RadarQuote.fetched_at <= now)
             .order_by(RadarQuote.fetched_at.asc()).all())
@@ -188,28 +233,51 @@ def _move_from(prices):
     return (last - first) / first
 
 
-def moves_for(tickers, hours, now):
+def moves_for(instruments, hours, now):
     """`move_since` for many tickers in one query.
 
     Returns {ticker: fraction_or_None} for every ticker asked about. None means
     the window holds fewer than two snapshots, which is not a flat price -- see
     `_move_from`, which both this and the single-ticker version decide with.
     """
-    if not tickers:
+    instruments = list(instruments)
+    if not instruments:
         return {}
 
+    identities = [_instrument_identity(instrument) for instrument in instruments]
+    tickers = {ticker for ticker, _, _, _ in identities}
+    markets = {market for _, market, _, _ in identities}
+
     since = now - dt.timedelta(hours=hours)
-    rows = (db.session.query(RadarQuote.ticker, RadarQuote.price)
-            .filter(RadarQuote.ticker.in_(list(tickers)),
+    market_clause = RadarQuote.market.in_(markets)
+    if 'us' in markets:
+        market_clause = sa.or_(market_clause, RadarQuote.market.is_(None))
+    rows = (db.session.query(RadarQuote.ticker, RadarQuote.market,
+                             RadarQuote.mic, RadarQuote.price)
+            .filter(RadarQuote.ticker.in_(tickers),
+                    market_clause,
                     RadarQuote.fetched_at >= since,
                     RadarQuote.fetched_at <= now)
-            .order_by(RadarQuote.ticker, RadarQuote.fetched_at.asc()).all())
+            .order_by(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic,
+                      RadarQuote.fetched_at.asc()).all())
 
     prices = collections.defaultdict(list)
-    for ticker, price in rows:
-        prices[ticker].append(price)
+    for ticker, market, mic, price in rows:
+        prices[(ticker, market, mic)].append(price)
 
-    return {ticker: _move_from(prices.get(ticker, [])) for ticker in tickers}
+    result = {}
+    for ticker, market, mic, key in identities:
+        matching = []
+        for (stored_ticker, stored_market, stored_mic), values in prices.items():
+            if (stored_ticker != ticker or
+                    (stored_market != market and
+                     not (market == 'us' and stored_market is None))):
+                continue
+            if mic is not None and stored_mic != mic:
+                continue
+            matching.extend(values)
+        result[key] = _move_from(matching)
+    return result
 
 
 def scale_sigma(sigma, hours):

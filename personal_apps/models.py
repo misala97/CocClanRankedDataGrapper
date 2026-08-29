@@ -810,10 +810,12 @@ class RadarQuote(db.Model):
     """
     __tablename__ = 'radar_quotes'
     __table_args__ = (
-        db.UniqueConstraint('ticker', 'fetched_at', name='uq_radar_quote'),
+        db.UniqueConstraint('ticker', 'market', 'mic', 'fetched_at',
+                            name='uq_radar_quote_market'),
         db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
                            name='ck_radar_quotes_market'),
-        db.Index('ix_radar_quotes_ticker_fetched', 'ticker', 'fetched_at'),
+        db.Index('ix_radar_quotes_ticker_market_mic_fetched',
+                 'ticker', 'market', 'mic', 'fetched_at'),
         {'mysql_charset': 'utf8mb4'},
     )
 
@@ -849,19 +851,23 @@ class RadarDailyClose(db.Model):
     """
     __tablename__ = 'radar_daily_closes'
     __table_args__ = (
+        db.UniqueConstraint('ticker', 'market', 'mic', 'close_date',
+                            name='uq_radar_daily_close_market'),
         db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
                            name='ck_radar_daily_closes_market'),
         {'mysql_charset': 'utf8mb4'},
     )
 
-    ticker     = db.Column(db.String(12, collation='utf8mb4_bin'),
-                           primary_key=True)
+    id         = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    ticker     = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
     # Same expand-only overlap as RadarQuote. The legacy primary key remains
     # until the history writer can supply market and MIC on every row.
     market     = db.Column(db.String(2), nullable=True)
     mic        = db.Column(db.String(4), nullable=True)
     currency   = db.Column(db.String(3), nullable=True)
-    close_date = db.Column(db.Date, primary_key=True)
+    close_date = db.Column(db.Date, nullable=False)
     close      = db.Column(db.Numeric(18, 4), nullable=False)
     fetched_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 

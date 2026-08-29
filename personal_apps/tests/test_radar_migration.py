@@ -27,6 +27,16 @@ def _load_market_migration():
     return module
 
 
+def _load_market_key_migration():
+    path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
+            'f5a8c2d91e30_partition_radar_prices_by_market.py')
+    assert path.exists(), 'market-key migration is missing'
+    spec = importlib.util.spec_from_file_location('radar_market_keys', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture()
 def market_migration_db():
     """A real isolated schema, never the configured development database."""
@@ -210,6 +220,41 @@ def test_market_migration_keeps_legacy_writes_valid_during_overlap(
         "SELECT market, mic, currency, provider_symbol FROM radar_quotes "
         "WHERE id=2")) .one()
     assert tuple(row) == (None, None, None, None)
+
+
+def test_market_key_migration_keeps_same_time_us_and_xetra_prices_distinct(
+        market_migration_db):
+    """The writer cannot isolate markets while the old ticker-only keys remain."""
+    connection = market_migration_db
+    market = _load_market_migration()
+    market.op = Operations(MigrationContext.configure(connection))
+    market.upgrade()
+    keys = _load_market_key_migration()
+    keys.op = Operations(MigrationContext.configure(connection))
+    keys.upgrade()
+
+    connection.execute(sa.text("""
+        INSERT INTO radar_quotes
+            (id, ticker, market, mic, currency, provider_symbol, fetched_at,
+             quote_ts, price, prev_close, volume)
+        VALUES
+            (2, 'AAPL', 'de', 'XETR', 'EUR', 'APC',
+             '2026-08-28 12:00:00', '2026-08-28 11:59:00', 194.2, 193.5, NULL)
+    """))
+    connection.execute(sa.text("""
+        INSERT INTO radar_daily_closes
+            (ticker, market, mic, currency, close_date, close, fetched_at)
+        VALUES
+            ('AAPL', 'de', 'XETR', 'EUR', '2026-08-27', 194.2,
+             '2026-08-28 12:00:00')
+    """))
+    connection.commit()
+
+    assert connection.execute(sa.text(
+        "SELECT count(*) FROM radar_quotes WHERE ticker='AAPL'")).scalar_one() == 2
+    assert connection.execute(sa.text(
+        "SELECT count(*) FROM radar_daily_closes WHERE ticker='AAPL'")) \
+        .scalar_one() == 2
 
 
 def test_market_migration_rejects_unknown_market_but_keeps_null_price_rows(

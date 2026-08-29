@@ -35,9 +35,11 @@ def ctx():
         wipe()
 
 
-def add(when, price, volume=1000, ticker='QQA', quote_ts=None):
+def add(when, price, volume=1000, ticker='QQA', quote_ts=None,
+        market='us', mic='XNAS'):
     db.session.add(RadarQuote(
-        ticker=ticker, fetched_at=when,
+        ticker=ticker, market=market, mic=mic, currency='USD',
+        provider_symbol=ticker, fetched_at=when,
         quote_ts=quote_ts or when, price=decimal.Decimal(str(price)),
         prev_close=decimal.Decimal('100.000000'), volume=volume))
 
@@ -49,6 +51,22 @@ def test_a_quote_round_trips_exactly(ctx):
     db.session.commit()
     stored = RadarQuote.query.filter_by(ticker='QQA').one()
     assert stored.price == decimal.Decimal('123.456789')
+
+
+def test_record_quotes_persists_the_verified_market_identity(ctx):
+    """A German EUR print must remain distinguishable from its US ticker."""
+    from features.radar.prices import Quote
+
+    quote = Quote(
+        ticker='QQA', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='QQA1', currency='EUR', price=decimal.Decimal('194.20'),
+        quote_ts=NOW, provider_delay='delayed')
+
+    assert quotes_mod.record_quotes({'QQA': quote}, NOW) == 1
+
+    stored = RadarQuote.query.filter_by(ticker='QQA', market='de', mic='XETR').one()
+    assert (stored.currency, stored.provider_symbol, stored.price) == (
+        'EUR', 'QQA1', decimal.Decimal('194.200000'))
 
 
 def test_consecutive_snapshots_are_both_kept(ctx):

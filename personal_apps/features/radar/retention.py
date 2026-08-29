@@ -81,7 +81,7 @@ def prune_quotes(now, keep=STALE_QUOTE_POLLS, chunk_size=5000,
         RadarQuote.id.label('id'),
         RadarQuote.fetched_at.label('fetched_at'),
         sa.func.row_number().over(
-            partition_by=RadarQuote.ticker,
+            partition_by=(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic),
             order_by=RadarQuote.fetched_at.desc()).label('rn'),
     ).subquery()
 

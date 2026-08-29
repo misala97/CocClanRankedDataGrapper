@@ -152,6 +152,18 @@ def test_a_rate_limited_response_is_empty_not_a_crash():
     assert twelvedata.TwelveDataProvider(http).daily_closes('AAA', days=30) == []
 
 
+def test_quote_without_a_status_field_is_a_usable_snapshot():
+    """Twelve Data's successful /quote shape does not require a status flag."""
+    http = FakeHttp({'/quote': {
+        'symbol': 'APC', 'close': '194.20', 'previous_close': '193.50',
+        'currency': 'EUR', 'timestamp': 1787313600}})
+
+    quote = twelvedata.TwelveDataProvider(http).quotes(['APC'])['APC']
+
+    assert quote.price == decimal.Decimal('194.20')
+    assert quote.currency == 'EUR'
+
+
 def test_finnhub_directory_keeps_identifiers_without_guessing_the_mic():
     """Inventing XETR from a country directory would create a false venue claim."""
     from features.radar.instruments import CatalogInstrument

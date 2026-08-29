@@ -152,3 +152,24 @@ def test_chunking_does_not_change_the_outcome(ctx):
 
     assert deleted == 25 - STALE_QUOTE_POLLS
     assert surviving(f'{PREFIX}CHUNK') == STALE_QUOTE_POLLS
+
+
+def test_retention_keeps_the_required_snapshots_for_each_market(ctx):
+    """A busy US tape must not age Xetra's no-print evidence out."""
+    for market, mic, currency in (('us', 'XNAS', 'USD'), ('de', 'XETR', 'EUR')):
+        for minutes in range(8):
+            when = NOW - dt.timedelta(days=OLD, minutes=minutes)
+            db.session.add(RadarQuote(
+                ticker=f'{PREFIX}DUAL', market=market, mic=mic,
+                currency=currency, provider_symbol=f'{PREFIX}DUAL',
+                fetched_at=when, quote_ts=when,
+                price=decimal.Decimal('10.00'),
+                prev_close=decimal.Decimal('9.00')))
+    db.session.commit()
+
+    retention.prune_quotes(NOW)
+
+    assert RadarQuote.query.filter_by(
+        ticker=f'{PREFIX}DUAL', market='us', mic='XNAS').count() == STALE_QUOTE_POLLS
+    assert RadarQuote.query.filter_by(
+        ticker=f'{PREFIX}DUAL', market='de', mic='XETR').count() == STALE_QUOTE_POLLS

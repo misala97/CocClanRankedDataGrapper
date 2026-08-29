@@ -186,3 +186,44 @@ def test_a_recent_ipo_is_not_refetched_forever(clean):
 
     assert f'{PREFIX}IPO' not in history.tickers_needing_history(
         [f'{PREFIX}IPO'], TODAY)
+
+
+def test_daily_history_stays_with_its_market_and_mic(clean):
+    """EUR/Xetra bars cannot overwrite or appear as US history."""
+    history.record_closes(
+        f'{PREFIX}DUAL', [(TODAY, decimal.Decimal('220.00'))], NOW,
+        market='us', mic='XNAS', currency='USD')
+    history.record_closes(
+        f'{PREFIX}DUAL', [(TODAY, decimal.Decimal('194.00'))], NOW,
+        market='de', mic='XETR', currency='EUR')
+
+    de = history.closes_for(
+        [f'{PREFIX}DUAL'], today=TODAY, market='de', mic='XETR')
+    us = history.closes_for(
+        [f'{PREFIX}DUAL'], today=TODAY, market='us', mic='XNAS')
+
+    assert de[f'{PREFIX}DUAL'] == [(TODAY, decimal.Decimal('194.0000'))]
+    assert us[f'{PREFIX}DUAL'] == [(TODAY, decimal.Decimal('220.0000'))]
+
+
+def test_german_history_uses_the_verified_mic_and_keeps_old_rows_on_error(clean):
+    class MicProvider:
+        def __init__(self):
+            self.asked = []
+
+        def daily_closes(self, symbol, days, mic_code=None):
+            self.asked.append((symbol, days, mic_code))
+            return []  # Twelve Data's non-ok status normalizes to no history.
+
+    history.record_closes(
+        f'{PREFIX}ERR', [(TODAY, decimal.Decimal('194.00'))], NOW,
+        market='de', mic='XETR', currency='EUR')
+    provider = MicProvider()
+
+    assert history.fetch_into_store(
+        provider, [f'{PREFIX}ERR'], NOW, market='de', mic='XETR',
+        currency='EUR', provider_symbols={f'{PREFIX}ERR': 'APC'}) == 0
+    assert provider.asked == [('APC', history.HISTORY_DAYS, 'XETR')]
+    assert history.closes_for(
+        [f'{PREFIX}ERR'], today=TODAY, market='de', mic='XETR')[
+            f'{PREFIX}ERR'] == [(TODAY, decimal.Decimal('194.0000'))]
