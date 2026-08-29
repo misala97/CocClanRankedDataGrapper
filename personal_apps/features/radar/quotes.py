@@ -35,6 +35,7 @@ def record_quotes(quotes, now):
         db.session.add(RadarQuote(
             ticker=quote.ticker, fetched_at=now, quote_ts=quote.quote_ts,
             price=quote.price, prev_close=quote.prev_close,
+            regular_close=quote.regular_close,
             volume=quote.volume, market=quote.market, mic=quote.mic,
             currency=quote.currency, provider_symbol=quote.provider_symbol))
         written += 1
@@ -70,8 +71,12 @@ def _stored_quote(row, instrument, market):
                          (row.provider_symbol or row.ticker)),
         currency=(instrument.currency if instrument else
                   (row.currency or ('USD' if is_us else 'EUR'))),
-        price=row.price, previous_close=row.prev_close, quote_ts=row.quote_ts,
-        volume=row.volume, provider_delay=provider_delay, fetched_at=row.fetched_at)
+        price=row.price, previous_close=row.prev_close,
+        regular_close=getattr(row, 'regular_close', None), quote_ts=row.quote_ts,
+        volume=row.volume, provider_delay=provider_delay,
+        # A poll receipt proves only that the request completed.  Without the
+        # exchange print timestamp it cannot certify quote freshness.
+        fetched_at=row.fetched_at if row.quote_ts is not None else None)
 
 
 def quote_views_for(tickers, requested_market, now):

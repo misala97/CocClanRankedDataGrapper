@@ -235,6 +235,29 @@ def test_market_models_partition_price_keys_after_writer_upgrade():
                  models.RadarDailyClose.__table__.primary_key.columns) == ('id',)
 
 
+def test_radar_quote_regular_close_round_trips_in_isolated_schema():
+    """After-hours movement needs its regular-session baseline after storage."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    models.RadarQuote.__table__.create(engine)
+
+    with sa.orm.Session(engine) as session:
+        quote = models.RadarQuote(
+            id=1, ticker='REGCLOSE', market='us', mic='XNAS', currency='USD',
+            provider_symbol='REGCLOSE', fetched_at=dt.datetime(2026, 8, 28),
+            quote_ts=dt.datetime(2026, 8, 28), price=102,
+            prev_close=98, regular_close=100)
+        session.add(quote)
+        session.commit()
+        session.expire(quote)
+        assert quote.regular_close == 100
+
+    engine.dispose()
+
+
 def test_radar_instrument_assigns_an_id_with_sqlite_orm_persistence():
     """SQLite requires INTEGER, not BIGINT, for automatic primary-key IDs."""
     engine = sa.create_engine('sqlite://')

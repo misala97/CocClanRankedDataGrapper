@@ -7,12 +7,15 @@ against.
 """
 import datetime as dt
 import decimal
+from types import SimpleNamespace
 
 import pytest
+import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
-from models import RadarQuote, TickerUniverse
+from features.radar.markets import select_quote
+from models import RadarInstrument, RadarQuote, TickerUniverse
 
 NOW = dt.datetime(2026, 8, 21, 14, 0, 0)
 
@@ -24,6 +27,8 @@ def ctx():
     # next -- which is how this suite first broke.
     def wipe():
         RadarQuote.query.filter(RadarQuote.ticker.like('QQ%')).delete(
+            synchronize_session=False)
+        RadarInstrument.query.filter(RadarInstrument.ticker.like('QQ%')).delete(
             synchronize_session=False)
         TickerUniverse.query.filter(TickerUniverse.symbol.like('QQ%')).delete(
             synchronize_session=False)
@@ -67,6 +72,100 @@ def test_record_quotes_persists_the_verified_market_identity(ctx):
     stored = RadarQuote.query.filter_by(ticker='QQA', market='de', mic='XETR').one()
     assert (stored.currency, stored.provider_symbol, stored.price) == (
         'EUR', 'QQA1', decimal.Decimal('194.200000'))
+
+
+def test_record_quotes_persists_regular_close_in_an_isolated_store(monkeypatch):
+    """The writer must retain the baseline used by after-hours movement."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    RadarQuote.__table__.create(engine)
+    quote = quotes_mod.Quote(
+        ticker='QQA', market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol='QQA', currency='USD', price=decimal.Decimal('102'),
+        previous_close=decimal.Decimal('98'), regular_close=decimal.Decimal('100'),
+        quote_ts=NOW, provider_delay='live')
+
+    def assign_sqlite_id(_, __, row):
+        row.id = 1
+
+    sa.event.listen(RadarQuote, 'before_insert', assign_sqlite_id)
+    try:
+        with sa.orm.Session(engine) as session:
+            monkeypatch.setattr(
+                quotes_mod, 'db', SimpleNamespace(session=session))
+            assert quotes_mod.record_quotes({'QQA': quote}, NOW) == 1
+            stored = session.query(RadarQuote).filter_by(ticker='QQA').one()
+            assert stored.regular_close == decimal.Decimal('100.000000')
+    finally:
+        sa.event.remove(RadarQuote, 'before_insert', assign_sqlite_id)
+
+    engine.dispose()
+
+
+def test_persisted_timestamp_less_de_quote_allows_valid_us_fallback(monkeypatch):
+    """A recent poll time cannot turn a missing exchange print into a live one."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    RadarInstrument.__table__.create(engine)
+    RadarQuote.__table__.create(engine)
+
+    with sa.orm.Session(engine) as session:
+        session.add_all([
+            RadarInstrument(
+                id=1, ticker='QQA', market='de', venue='Xetra', mic='XETR',
+                provider_symbol='QQA', currency='EUR', is_primary=True,
+                mapping_status='mapped', mapped_at=NOW),
+            RadarInstrument(
+                id=2, ticker='QQA', market='us', venue='NASDAQ', mic='XNAS',
+                provider_symbol='QQA', currency='USD', is_primary=True,
+                mapping_status='mapped', mapped_at=NOW),
+            RadarQuote(
+                id=1, ticker='QQA', market='de', mic='XETR', currency='EUR',
+                provider_symbol='QQA', fetched_at=NOW - dt.timedelta(minutes=1),
+                quote_ts=None, price=decimal.Decimal('194.20'),
+                prev_close=decimal.Decimal('193.50')),
+            RadarQuote(
+                id=2, ticker='QQA', market='us', mic='XNAS', currency='USD',
+                provider_symbol='QQA', fetched_at=NOW - dt.timedelta(minutes=1),
+                quote_ts=NOW - dt.timedelta(minutes=1),
+                price=decimal.Decimal('225.00'),
+                prev_close=decimal.Decimal('224.00')),
+        ])
+        session.commit()
+        with flask_app.app_context():
+            monkeypatch.setattr(
+                quotes_mod, 'db', SimpleNamespace(session=session))
+            monkeypatch.setattr(
+                RadarInstrument, 'query', session.query(RadarInstrument))
+            selected = quotes_mod.quote_views_for(['QQA'], 'de', NOW)['QQA']
+
+        assert (selected.market, selected.quality, selected.is_fallback) == (
+            'us', 'live', True)
+
+    engine.dispose()
+
+
+def test_stored_regular_close_drives_afterhours_extended_move():
+    """The row adapter must restore the regular-session close, not just prev close."""
+    row = SimpleNamespace(
+        ticker='QQA', mic='XNAS', currency='USD', provider_symbol='QQA',
+        fetched_at=NOW, quote_ts=NOW, price=decimal.Decimal('102'),
+        prev_close=decimal.Decimal('98'), regular_close=decimal.Decimal('100'),
+        volume=None)
+    instrument = SimpleNamespace(
+        venue='NASDAQ', mic='XNAS', provider_symbol='QQA', currency='USD')
+
+    quote = quotes_mod._stored_quote(row, instrument, 'us')
+    selected = select_quote(
+        'QQA', 'us', {'us': quote}, dt.datetime(2026, 8, 28, 21, 0))
+
+    assert selected.extended_move == decimal.Decimal('0.02')
 
 
 def test_consecutive_snapshots_are_both_kept(ctx):

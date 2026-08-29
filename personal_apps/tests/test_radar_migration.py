@@ -37,6 +37,16 @@ def _load_market_key_migration():
     return module
 
 
+def _load_regular_close_migration():
+    path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
+            '8b7f2d1c4e90_add_radar_quote_regular_close.py')
+    assert path.exists(), 'regular-close migration is missing'
+    spec = importlib.util.spec_from_file_location('radar_regular_close', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture()
 def market_migration_db():
     """A real isolated schema, never the configured development database."""
@@ -255,6 +265,46 @@ def test_market_key_migration_keeps_same_time_us_and_xetra_prices_distinct(
     assert connection.execute(sa.text(
         "SELECT count(*) FROM radar_daily_closes WHERE ticker='AAPL'")) \
         .scalar_one() == 2
+
+
+def test_regular_close_migration_keeps_mixed_version_quote_writes_valid(
+        market_migration_db):
+    """The new baseline is additive: old writers can still omit it safely."""
+    connection = market_migration_db
+    market = _load_market_migration()
+    market.op = Operations(MigrationContext.configure(connection))
+    market.upgrade()
+    keys = _load_market_key_migration()
+    keys.op = Operations(MigrationContext.configure(connection))
+    keys.upgrade()
+    migration = _load_regular_close_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+
+    columns = {column['name'] for column in
+               sa.inspect(connection).get_columns('radar_quotes')}
+    assert 'regular_close' in columns
+    assert connection.execute(sa.text(
+        "SELECT regular_close FROM radar_quotes WHERE id=1")).scalar_one() is None
+
+    connection.execute(sa.text("""
+        INSERT INTO radar_quotes
+            (id, ticker, market, mic, fetched_at, quote_ts, price, prev_close,
+             volume)
+        VALUES
+            (2, 'OLDWRITER', 'us', 'XNAS', '2026-08-28 12:05:00',
+             '2026-08-28 12:04:00', 194.3, 193.5, NULL)
+    """))
+    connection.commit()
+    assert connection.execute(sa.text(
+        "SELECT regular_close FROM radar_quotes WHERE id=2")).scalar_one() is None
+
+    migration.downgrade()
+    assert 'regular_close' not in {
+        column['name'] for column in sa.inspect(connection).get_columns(
+            'radar_quotes')}
+    assert connection.execute(sa.text(
+        "SELECT count(*) FROM radar_quotes WHERE id=2")).scalar_one() == 1
 
 
 def test_market_key_downgrade_keeps_legacy_us_rows_when_keys_collide(

@@ -835,6 +835,9 @@ class RadarQuote(db.Model):
     quote_ts    = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
     price       = db.Column(db.Numeric(18, 6), nullable=False)
     prev_close  = db.Column(db.Numeric(18, 6), nullable=True)
+    # The current regular-session close is distinct from the previous close:
+    # after-hours movement is measured from this same-day baseline.
+    regular_close = db.Column(db.Numeric(18, 6), nullable=True)
     volume      = db.Column(db.BigInteger, nullable=True)
 
 
