@@ -206,6 +206,18 @@ def test_daily_history_stays_with_its_market_and_mic(clean):
     assert us[f'{PREFIX}DUAL'] == [(TODAY, decimal.Decimal('220.0000'))]
 
 
+def test_primary_mic_us_history_reads_the_null_legacy_identity(clean):
+    """The old history writer had no market or MIC columns to populate."""
+    db.session.add(RadarDailyClose(
+        ticker=f'{PREFIX}LEGACY', market=None, mic=None, close_date=TODAY,
+        close=decimal.Decimal('100.00'), fetched_at=NOW))
+    db.session.commit()
+
+    assert history.closes_for(
+        [f'{PREFIX}LEGACY'], today=TODAY, market='us', mic='XNAS') == {
+            f'{PREFIX}LEGACY': [(TODAY, decimal.Decimal('100.0000'))]}
+
+
 def test_german_history_uses_the_verified_mic_and_keeps_old_rows_on_error(clean):
     class MicProvider:
         def __init__(self):

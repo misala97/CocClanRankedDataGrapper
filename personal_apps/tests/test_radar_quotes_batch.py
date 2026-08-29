@@ -172,3 +172,25 @@ def test_explicit_market_windows_never_read_another_venue(ctx):
     assert latest.mic == 'XETR'
     assert latest.price == decimal.Decimal('194')
     assert move == 0
+
+
+def test_primary_mic_us_batches_read_the_null_legacy_identity(ctx):
+    """Mixed-version reads keep the old NULL US identity visible to batches."""
+    ticker = f'{PREFIX}LEGACY'
+    frozen = NOW - dt.timedelta(minutes=30)
+    for minutes, price in ((10, '100'), (5, '105'), (0, '110')):
+        when = NOW - dt.timedelta(minutes=minutes)
+        db.session.add(RadarQuote(
+            ticker=ticker, market=None, mic=None, fetched_at=when,
+            quote_ts=frozen, price=decimal.Decimal(price),
+            prev_close=decimal.Decimal('100.000000')))
+    db.session.commit()
+
+    identity = (ticker, 'us', 'XNAS')
+    status, latest = quotes_mod.statuses_for(
+        [identity], NOW, session='regular')[(ticker, 'us')]
+    move = quotes_mod.moves_for([identity], 1, NOW)[(ticker, 'us')]
+
+    assert status == 'stale'
+    assert latest.market is None and latest.mic is None
+    assert move == decimal.Decimal('0.1')

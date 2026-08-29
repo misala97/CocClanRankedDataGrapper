@@ -14,6 +14,8 @@ the one the board cannot describe, so it goes first.
 import collections
 import datetime as dt
 
+import sqlalchemy as sa
+
 from extensions import db
 from models import RadarDailyClose
 
@@ -46,14 +48,26 @@ STALE_AFTER_DAYS = 2
 
 
 def _market_filters(ticker, market, mic):
-    filters = [RadarDailyClose.ticker == ticker,
-               RadarDailyClose.market == market]
+    return [RadarDailyClose.ticker == ticker, _market_filter(market, mic)]
+
+
+def _market_filter(market, mic):
+    """Match an instrument while treating `(NULL, NULL)` as legacy US."""
+    if market == 'us' and mic is not None:
+        return sa.or_(
+            sa.and_(RadarDailyClose.market == 'us', RadarDailyClose.mic == mic),
+            sa.and_(RadarDailyClose.market.is_(None),
+                    RadarDailyClose.mic.is_(None)))
+
+    market_filter = RadarDailyClose.market == market
     if market == 'us':
-        filters[-1] = (RadarDailyClose.market == 'us') | \
-                      RadarDailyClose.market.is_(None)
-    if mic is not None:
-        filters.append(RadarDailyClose.mic == mic)
-    return filters
+        market_filter = sa.or_(
+            market_filter,
+            sa.and_(RadarDailyClose.market.is_(None),
+                    RadarDailyClose.mic.is_(None)))
+    if mic is None:
+        return market_filter
+    return sa.and_(market_filter, RadarDailyClose.mic == mic)
 
 
 def record_closes(ticker, closes, now, *, market='us', mic=None, currency='USD'):
@@ -101,16 +115,11 @@ def closes_for(tickers, days=HISTORY_DAYS, today=None, *, market='us', mic=None)
     today = today or dt.date.today()
     since = today - dt.timedelta(days=days)
 
-    market_filter = RadarDailyClose.market == market
-    if market == 'us':
-        market_filter = (RadarDailyClose.market == 'us') | \
-                        RadarDailyClose.market.is_(None)
     rows = (db.session.query(RadarDailyClose.ticker,
                              RadarDailyClose.close_date,
                              RadarDailyClose.close)
             .filter(RadarDailyClose.ticker.in_(list(tickers)),
-                    market_filter,
-                    *([RadarDailyClose.mic == mic] if mic is not None else []),
+                    _market_filter(market, mic),
                     RadarDailyClose.close_date >= since,
                     RadarDailyClose.close_date <= today)
             .order_by(RadarDailyClose.close_date.asc()).all())
@@ -137,17 +146,12 @@ def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS
     if not candidates:
         return []
 
-    market_filter = RadarDailyClose.market == market
-    if market == 'us':
-        market_filter = (RadarDailyClose.market == 'us') | \
-                        RadarDailyClose.market.is_(None)
     rows = (db.session.query(
         RadarDailyClose.ticker,
         db.func.max(RadarDailyClose.close_date),
         db.func.count())
         .filter(RadarDailyClose.ticker.in_(list(candidates)),
-                market_filter,
-                *([RadarDailyClose.mic == mic] if mic is not None else []))
+                _market_filter(market, mic))
         .group_by(RadarDailyClose.ticker).all())
     newest = {ticker: day for ticker, day, _ in rows}
     stored = {ticker: count for ticker, _, count in rows}

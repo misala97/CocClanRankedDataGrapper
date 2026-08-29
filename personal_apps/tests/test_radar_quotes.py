@@ -120,6 +120,18 @@ def test_a_moving_tape_is_ok(ctx):
     assert quotes_mod.price_status('QQA', NOW + dt.timedelta(minutes=3)) == 'ok'
 
 
+def test_primary_mic_us_status_reads_the_null_legacy_identity(ctx):
+    """The old daemon stored US snapshots without either market field."""
+    frozen = NOW - dt.timedelta(minutes=5)
+    for step in range(3):
+        add(NOW + dt.timedelta(minutes=step), '100.0', volume=5000,
+            quote_ts=frozen, market=None, mic=None)
+    db.session.commit()
+
+    assert quotes_mod.price_status(
+        'QQA', NOW + dt.timedelta(minutes=3), market='us', mic='XNAS') == 'stale'
+
+
 def test_an_unchanged_tape_is_stale(ctx):
     """A halted stock keeps its last price while mentions explode BECAUSE it
     halted -- maximum divergence produced entirely by an artifact. The same

@@ -51,14 +51,33 @@ def _instrument_identity(instrument):
 
 
 def _quote_matches(ticker, market, mic):
-    clauses = [RadarQuote.ticker == ticker, RadarQuote.market == market]
-    # During the expand/write overlap, a legacy NULL row still denotes a US
-    # quote.  It is never a German quote.
-    if market == 'us':
-        clauses[-1] = sa.or_(RadarQuote.market == 'us', RadarQuote.market.is_(None))
-    if mic is not None:
-        clauses.append(RadarQuote.mic == mic)
+    clauses = [RadarQuote.ticker == ticker]
+    # During the expand/write overlap, `(NULL, NULL)` is the legacy US
+    # identity.  A requested primary MIC must include that pair; filtering
+    # only `market IS NULL` and then requiring the MIC loses old snapshots.
+    if market == 'us' and mic is not None:
+        clauses.append(sa.or_(
+            sa.and_(RadarQuote.market == 'us', RadarQuote.mic == mic),
+            sa.and_(RadarQuote.market.is_(None), RadarQuote.mic.is_(None))))
+    else:
+        market_clause = RadarQuote.market == market
+        if market == 'us':
+            market_clause = sa.or_(
+                market_clause,
+                sa.and_(RadarQuote.market.is_(None), RadarQuote.mic.is_(None)))
+        clauses.append(market_clause)
+        if mic is not None:
+            clauses.append(RadarQuote.mic == mic)
     return clauses
+
+
+def _stored_identity_matches(stored_market, stored_mic, market, mic):
+    """Whether an already-selected row belongs to the requested instrument."""
+    if stored_market != market:
+        if not (market == 'us' and stored_market is None and stored_mic is None):
+            return False
+    return mic is None or stored_mic == mic or (
+        market == 'us' and stored_market is None and stored_mic is None)
 
 
 def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None,
@@ -177,10 +196,8 @@ def statuses_for(instruments, now, polls=STALE_QUOTE_POLLS, session=None):
         matching = []
         for (stored_ticker, stored_market, stored_mic), rows_for_identity in recent.items():
             if (stored_ticker != ticker or
-                    (stored_market != market and
-                     not (market == 'us' and stored_market is None))):
-                continue
-            if mic is not None and stored_mic != mic:
+                    not _stored_identity_matches(
+                        stored_market, stored_mic, market, mic)):
                 continue
             matching.extend(rows_for_identity)
         matching.sort(key=lambda row: row.fetched_at, reverse=True)
@@ -270,10 +287,8 @@ def moves_for(instruments, hours, now):
         matching = []
         for (stored_ticker, stored_market, stored_mic), values in prices.items():
             if (stored_ticker != ticker or
-                    (stored_market != market and
-                     not (market == 'us' and stored_market is None))):
-                continue
-            if mic is not None and stored_mic != mic:
+                    not _stored_identity_matches(
+                        stored_market, stored_mic, market, mic)):
                 continue
             matching.extend(values)
         result[key] = _move_from(matching)
