@@ -48,6 +48,68 @@ def test_an_unknown_source_is_rejected(client):
     assert client.get('/radar/api/board?sources=nonsense').status_code == 400
 
 
+def test_market_defaults_to_us_and_unknown_market_is_rejected(client):
+    """A missing market preserves old URLs; a misspelled API market is 400."""
+    from features.radar.routes.api import BadQuery, parse_query
+    import pytest
+
+    assert parse_query({}).market == 'us'
+    with pytest.raises(BadQuery, match='unknown market'):
+        parse_query({'market': 'moon'})
+    assert client.get('/radar/api/board?market=moon').status_code == 400
+
+
+def test_human_page_bad_market_falls_back_to_the_us_payload(client):
+    """Address-bar recovery stays friendly while the JSON API remains strict."""
+    import json
+    import re
+
+    response = client.get('/radar/?market=moon')
+    payload = json.loads(re.search(
+        r'<script type="application/json" id="radar-data">(.*?)</script>',
+        response.get_data(as_text=True), re.S).group(1))
+
+    assert response.status_code == 200
+    assert payload['market'] == 'us'
+
+
+def test_board_echoes_market_and_berlin_display_timezone(client):
+    """The selected market is part of the payload, while wire instants stay UTC."""
+    payload = client.get('/radar/api/board?market=de').get_json()
+
+    assert payload['market'] == 'de'
+    assert payload['display_timezone'] == 'Europe/Berlin'
+    assert payload['generated_at'].endswith('Z')
+
+
+def test_quote_serializer_keeps_the_market_quote_contract_and_utc_wire_time():
+    """A row sends its selected venue quote as data, never re-derived UI state."""
+    import datetime as dt
+    import decimal
+
+    from features.radar.markets import select_quote
+    from features.radar.prices import Quote
+    from features.radar.routes import api
+    import pytest
+
+    quoted_at = dt.datetime(2026, 8, 28, 11, 18)
+    view = select_quote('AAPL', 'de', {'de': Quote(
+        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='APC', currency='EUR', price=decimal.Decimal('194.2'),
+        previous_close=decimal.Decimal('193.5'), quote_ts=quoted_at,
+        fetched_at=quoted_at, provider_delay='delayed')}, quoted_at)
+
+    payload = api._quote(view)
+
+    assert payload == {
+        'market': 'de', 'venue': 'Xetra', 'mic': 'XETR', 'currency': 'EUR',
+        'price': 194.2, 'regular_move': pytest.approx(0.0036175710594315244),
+        'extended_move': None, 'session': 'regular', 'quality': 'delayed',
+        'age_seconds': 0, 'quoted_at': '2026-08-28T11:18:00Z',
+        'is_fallback': False,
+    }
+
+
 def test_a_concrete_reddit_source_is_accepted_but_an_unknown_root_is_not():
     from features.radar.routes.api import BadQuery, parse_query
     import pytest
@@ -436,15 +498,17 @@ def _stub_detail(breakdown):
     import datetime as dt
 
     from features.radar import detail, detail_panel
+    from features.radar.markets import QuoteView
 
     return detail_panel.Detail(
         ticker='ZZSTUB', name='Stub Corp', exchange='Q', segment='micro',
         market_cap=None, ipo_date=None, price=None, price_move=None,
         price_status='ok', session='closed', span='1D',
         chart=detail.Chart(start=dt.date(2026, 3, 12), closes=[], chatter=[],
-                           watched_from=None, step_minutes=15),
+                            watched_from=None, step_minutes=15),
         breakdown=breakdown, posts=[], post_total=0,
-        mentions=breakdown.mentions, expected=0.0, baseline_days=None)
+        mentions=breakdown.mentions, expected=0.0, baseline_days=None,
+        market='us', quote=QuoteView.unavailable('ZZSTUB', 'us'))
 
 
 def test_the_detail_payload_carries_the_sarcasm_signal():
@@ -467,3 +531,27 @@ def test_the_detail_payload_carries_the_sarcasm_signal():
 
     payload = api.serialize_detail(built)
     assert payload['breakdown']['disagreements'] == 2
+
+
+def test_detail_intraday_chart_times_remain_explicit_utc_wire_values():
+    """Berlin is presentation metadata; the API never emits a local naive instant."""
+    import dataclasses
+    import datetime as dt
+
+    from features.radar import detail, detail_panel
+    from features.radar.routes import api
+
+    breakdown = detail_panel.Breakdown(
+        venues=[], bullish=0, neutral=0, bearish=0, disagreements=0,
+        top_author_share=None, top_two_share=None, peak_hour=None,
+        peak_count=0, first_seen=None, mentions=0, voices=0)
+    built = _stub_detail(breakdown)
+    built.chart = dataclasses.replace(
+        detail.Chart(start=dt.datetime(2026, 8, 28, 10), closes=[], chatter=[],
+                     watched_from=dt.datetime(2026, 8, 28, 10, 15),
+                     step_minutes=15))
+
+    payload = api.serialize_detail(built)
+
+    assert payload['chart']['from'] == '2026-08-28T10:00:00Z'
+    assert payload['chart']['watched_from'] == '2026-08-28T10:15:00Z'

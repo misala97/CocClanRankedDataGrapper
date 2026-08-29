@@ -20,9 +20,12 @@ import statistics
 import sqlalchemy as sa
 
 from extensions import db
-from models import RadarQuote
+from models import RadarInstrument, RadarQuote
 
 from .config import MIN_CLOSES_FOR_SIGMA, SESSION_HOURS, STALE_QUOTE_POLLS
+from .market_calendars import session_state
+from .markets import QuoteView, select_quote
+from .prices import Quote
 
 
 def record_quotes(quotes, now):
@@ -48,6 +51,83 @@ def _instrument_identity(instrument):
         return ticker, market, rest[0] if rest else None, (ticker, market)
     return (instrument.ticker, instrument.market, instrument.mic,
             (instrument.ticker, instrument.market))
+
+
+def _stored_quote(row, instrument, market):
+    """Adapt one persisted snapshot to the immutable presentation contract."""
+    is_us = market == 'us'
+    # The transitional snapshot table predates a provider-quality column.  A
+    # print from an earlier UTC date is therefore an EOD retention, not a
+    # delayed intraday quote merely because the poll that kept it ran recently.
+    provider_delay = ('eod' if row.quote_ts is not None and
+                      row.quote_ts.date() < row.fetched_at.date() else 'live')
+    return Quote(
+        ticker=row.ticker, market=market,
+        venue=(instrument.venue if instrument else ('US' if is_us else 'Xetra')),
+        mic=(instrument.mic if instrument else
+             (row.mic or ('XNAS' if is_us else 'XETR'))),
+        provider_symbol=(instrument.provider_symbol if instrument else
+                         (row.provider_symbol or row.ticker)),
+        currency=(instrument.currency if instrument else
+                  (row.currency or ('USD' if is_us else 'EUR'))),
+        price=row.price, previous_close=row.prev_close, quote_ts=row.quote_ts,
+        volume=row.volume, provider_delay=provider_delay, fetched_at=row.fetched_at)
+
+
+def quote_views_for(tickers, requested_market, now):
+    """Return one selected, market-honest ``QuoteView`` per ticker.
+
+    The requested market and the fallback market are queried as separate
+    instruments, so frozen-tape eligibility and calendar session remain facts
+    of the selected row rather than a board-wide assumption.
+    """
+    if requested_market not in {'us', 'de'}:
+        raise ValueError(f'unknown market: {requested_market}')
+    tickers = list(tickers)
+    if not tickers:
+        return {}
+
+    instruments = (RadarInstrument.query
+                   .filter(RadarInstrument.ticker.in_(tickers),
+                           RadarInstrument.is_primary.is_(True),
+                           RadarInstrument.mapping_status == 'mapped',
+                           RadarInstrument.market.in_(('us', 'de')))
+                   .order_by(RadarInstrument.ticker, RadarInstrument.market,
+                             RadarInstrument.mic).all())
+    primary = {(row.ticker, row.market): row for row in instruments}
+
+    by_market = {
+        'us': [primary.get((ticker, 'us')) or (ticker, 'us', None)
+               for ticker in tickers],
+        'de': [primary[(ticker, 'de')] for ticker in tickers
+               if (ticker, 'de') in primary],
+    }
+    statuses = {}
+    for market, candidates in by_market.items():
+        if candidates:
+            statuses[market] = statuses_for(
+                candidates, now,
+                session=session_state(
+                    market, now.replace(tzinfo=dt.timezone.utc)))
+
+    views = {}
+    for ticker in tickers:
+        snapshots = {}
+        tape_statuses = {}
+        for market in ('us', 'de'):
+            status, row = statuses.get(market, {}).get((ticker, market),
+                                                        ('unknown', None))
+            if row is None:
+                continue
+            snapshots[market] = _stored_quote(
+                row, primary.get((ticker, market)), market)
+            tape_statuses[market] = status
+
+        provisional = select_quote(ticker, requested_market, snapshots, now)
+        tape_status = tape_statuses.get(provisional.market, 'unknown')
+        views[ticker] = select_quote(
+            ticker, requested_market, snapshots, now, tape_status=tape_status)
+    return views
 
 
 def _quote_matches(ticker, market, mic):

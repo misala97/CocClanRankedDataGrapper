@@ -17,7 +17,6 @@ from models import RadarBucketSource, TickerUniverse
 
 from . import divergence as divergence_mod
 from . import journal
-from . import market_calendar
 from . import quotes as quotes_mod
 from . import scoring, universe
 from .config import (PROVISIONAL_BASELINE_DAYS, VARIANCE_FLOOR,
@@ -63,6 +62,7 @@ class Row:
     price_move: object
     direction: str
     price_status: str
+    quote: object
     baseline_days: float | None
     marks: list
 
@@ -97,7 +97,7 @@ def _universe_rows(tickers):
 
 
 def build_rows(sources, now, window_hours=4, segments=(), limit=50,
-               session=None, min_venues=1):
+               min_venues=1, market='us'):
     """Ranked leaderboard rows for the selected sources.
 
     `sources` is the viewer's SELECTION, root-level or concrete, not an
@@ -110,23 +110,15 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
     The source list is a read-time filter: it re-pools components that were
     stored per source, and never touches how anything was scored (spec 8.6).
 
-    `session` is the exchange state. With the market shut no row gets a
-    divergence, because there is no price movement to be surprised by -- so
-    the sort falls through to mention_z and the board ranks on chatter alone.
-    That is the useful answer at 23:00 on a Sunday (what is worth looking at
-    on Monday), and it is only honest if the surface says which of the two
-    rankings the reader is looking at. Computed once here rather than per
-    ticker; the caller may pass it in to avoid computing it twice.
+    Quote selection supplies its own market/session/tape state per row.  A
+    Germany board can therefore rank a marked US fallback on its US session
+    without treating every row as if it shared the aggregate board session.
     """
     since = now - dt.timedelta(hours=window_hours)
     # A selection may name groups ('small'), single segments, or several of
     # either. Resolved to a flat union.
     # once rather than per row; empty means everything.
     allowed = segments_in(segments)
-    if session is None:
-        session = market_calendar.session_state(
-            now.replace(tzinfo=dt.timezone.utc))
-
     # Aggregated in SQL rather than in Python, and this is the difference
     # between a page and a wait. Every figure the loop below needs is a SUM, a
     # MAX or a MIN over a ticker's buckets, and fetching the buckets themselves
@@ -239,8 +231,10 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
     # The quote lookups were an N+1 here until 2026-08-24 -- a status, a move
     # and a latest snapshot per ticker, ~1200 round trips and 1.58s of TTFB
     # against 30ms for the detail panel doing the same three for one ticker.
-    statuses = quotes_mod.statuses_for(survivors.keys(), now, session=session)
-    moves = quotes_mod.moves_for(survivors.keys(), window_hours, now)
+    quote_views = quotes_mod.quote_views_for(survivors.keys(), market, now)
+    moves = quotes_mod.moves_for(
+        [(ticker, view.market, view.mic) for ticker, view in quote_views.items()
+         if view.price is not None], window_hours, now)
     today = now.date()
     rows = []
 
@@ -264,13 +258,10 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
                              if part.baseline_days is not None), default=None)
 
         profile = profiles.get(ticker)
-        status, latest = statuses[ticker]
-        move = moves[ticker]
-        if status == 'unknown':
-            # Kept explicit rather than relying on the batch: 'unknown' means
-            # never quoted, so there is no snapshot to carry even though the
-            # mapping always has an entry for every ticker asked about.
-            latest = None
+        quote = quote_views[ticker]
+        status = quote.tape_status
+        move = (moves.get((ticker, quote.market))
+                if quote.score_eligible else None)
 
         # A frozen tape reports no movement while mentions explode because it
         # froze. That is maximum divergence produced by an artifact, so the
@@ -278,7 +269,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         # 'closed' lands here too and for the same reason -- but it earns no
         # mark, because the exchange being shut says nothing about the stock.
         value = None
-        if status == 'ok' and move is not None and mention_z is not None:
+        if quote.score_eligible and move is not None and mention_z is not None:
             sigma = profile.daily_sigma if profile else None
             move_z = divergence_mod.price_move_z(
                 move, quotes_mod.scale_sigma(sigma, window_hours))
@@ -303,7 +294,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         row_segment = universe.segment_for(
             profile.market_cap if profile else None,
             profile.ipo_date if profile else None,
-            latest.price if latest else None,
+            quote.price,
             today, profile.name if profile else None,
             profile.is_etf if profile else None)
         if allowed and row_segment not in allowed:
@@ -331,10 +322,11 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
             text_ratio=text_ratio,
             sources=contributing,
             venues=venues,
-            price=latest.price if latest else None,
+            price=quote.price,
             price_move=move,
             direction=divergence_mod.direction(move),
             price_status=status,
+            quote=quote,
             baseline_days=baseline_days,
             marks=marks,
         ))

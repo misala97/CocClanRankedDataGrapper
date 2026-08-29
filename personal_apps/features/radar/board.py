@@ -31,7 +31,8 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
-from . import leaderboard, market_calendar, phrasing
+from . import leaderboard, phrasing
+from .market_calendars import session_state
 from .config import (SEGMENT_GROUPS, VARIANCE_FLOOR, expand_sources,
                      expand_sources_for_history, segments_in)
 
@@ -93,6 +94,8 @@ class BoardRow:
 class Board:
     generated_at: dt.datetime
     sources: list
+    market: str
+    display_timezone: str
     # Several, and a union. Empty means no filter.
     segments: list
     window_hours: int
@@ -271,7 +274,7 @@ def _tones(tickers, sources, since, now):
 
 
 def build(sources, now, window_hours=4, segments=(), limit=50,
-          leads=LEAD_COUNT, min_venues=1):
+          leads=LEAD_COUNT, min_venues=1, market='us'):
     """The whole board.
 
     `sources` is the viewer's SELECTION, root-level (`reddit`) or concrete
@@ -283,9 +286,9 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     label the filter's own buttons -- computing them after it would report the
     selected segment's size in every slot.
     """
-    session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
+    session = session_state(market, now.replace(tzinfo=dt.timezone.utc))
     ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
-                                     segments=(), limit=None, session=session)
+                                     segments=(), limit=None, market=market)
     ranked = ranking.rows
 
     counts = collections.Counter(row.segment for row in ranked)
@@ -334,11 +337,12 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
         series=_series_for(row.ticker, totals, covered, since, now),
         triplet=triplets.get(row.ticker, empty_triplet),
         tone=tones.get(row.ticker, Tone(0, 0, 0)),
-        clauses=phrasing.row_clauses(row, session),
+        clauses=phrasing.row_clauses(row, row.quote.session),
     ) for row in ranked]
 
-    return Board(generated_at=now, sources=list(sources),
-                 segments=list(segments),
+    return Board(generated_at=now, sources=list(sources), market=market,
+                 display_timezone='Europe/Berlin',
+                  segments=list(segments),
                  window_hours=window_hours, segment_counts=segment_counts,
                  rows=rows, session=session, venue_counts=venue_counts,
                  min_venues=min_venues, excluded=ranking.excluded)

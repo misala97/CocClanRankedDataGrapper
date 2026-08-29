@@ -77,6 +77,7 @@ class QuoteView:
     session: str
     quality: str
     age_seconds: int | None
+    tape_status: str
     score_eligible: bool
     regular_move: decimal.Decimal | None
     extended_move: decimal.Decimal | None
@@ -87,8 +88,9 @@ class QuoteView:
         return cls(ticker=ticker, market=market, venue=None, mic=None,
                    provider_symbol=None, currency=None, price=None,
                    previous_close=None, regular_close=None, quote_ts=None,
-                   volume=None, session='closed', quality='unavailable',
-                   age_seconds=None, score_eligible=False, regular_move=None,
+                    volume=None, session='closed', quality='unavailable',
+                   age_seconds=None, tape_status='unknown',
+                   score_eligible=False, regular_move=None,
                    extended_move=None, is_fallback=False)
 
     @classmethod
@@ -114,6 +116,7 @@ class QuoteView:
             previous_close=quote.previous_close, regular_close=quote.regular_close,
             quote_ts=quote.quote_ts, volume=quote.volume, session=session,
             quality=quality, age_seconds=age_seconds,
+            tape_status=tape_status,
             score_eligible=(quality in {'live', 'delayed'} and
                             tape_status == 'ok'),
             regular_move=_movement(quote.price, quote.previous_close),

@@ -12,7 +12,7 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from models import RadarBucketSource, RadarQuote, TickerUniverse
+from models import RadarBucketSource, RadarInstrument, RadarQuote, TickerUniverse
 from features.radar import leaderboard
 from features.radar.config import source_config_version
 from test_radar_journal import _row, _ALL_OK, clean_buckets, clean_events  # noqa: F401
@@ -44,7 +44,7 @@ def board():
         # here too, so this table needs the same LB* cleanup as the others.
         RadarMentionEvent.query.filter(
             RadarMentionEvent.ticker.like('LB%')).delete(synchronize_session=False)
-        for model in (RadarBucketSource, RadarQuote):
+        for model in (RadarBucketSource, RadarInstrument, RadarQuote):
             model.query.filter(model.ticker.like('LB%')).delete(
                 synchronize_session=False)
         TickerUniverse.query.filter(TickerUniverse.symbol.like('LB%')).delete(
@@ -106,6 +106,43 @@ def test_a_scored_eligible_ticker_becomes_a_row(board):
     assert [r.ticker for r in rows] == ['LBA']
     assert rows[0].name == 'Test Corp'
     assert rows[0].mentions == 10
+
+
+def test_germany_row_uses_a_marked_us_quote_fallback(board):
+    """A missing Xetra instrument does not disappear or pretend to be EUR."""
+    universe_row('LBDE')
+    scored('LBDE')
+    quoted('LBDE', '100.00', '98.00')
+    db.session.commit()
+
+    row = build_rows(['bluesky'], NOW, market='de')[0]
+
+    assert row.quote.market == 'us'
+    assert row.quote.currency == 'USD'
+    assert row.quote.is_fallback is True
+    assert row.quote.session == 'regular'
+
+
+def test_eod_german_quote_cannot_produce_divergence(board):
+    """A retained prior-day Xetra print remains readable but never looks live."""
+    ticker = 'LBEOD'
+    universe_row(ticker)
+    scored(ticker)
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+        provider_symbol='LBEOD', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW))
+    db.session.add(RadarQuote(
+        ticker=ticker, market='de', mic='XETR', currency='EUR',
+        provider_symbol='LBEOD', fetched_at=NOW - dt.timedelta(minutes=5),
+        quote_ts=NOW - dt.timedelta(days=1), price=decimal.Decimal('100'),
+        prev_close=decimal.Decimal('98'), volume=1000))
+    db.session.commit()
+
+    row = build_rows(['bluesky'], NOW, market='de')[0]
+
+    assert row.quote.quality == 'eod'
+    assert row.divergence is None
 
 
 def test_an_ineligible_ticker_is_excluded_not_ranked_low(board):

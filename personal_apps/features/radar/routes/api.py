@@ -35,10 +35,40 @@ class Query:
     window: int
     limit: int
     min_venues: int
+    # Omission is the legacy US board.  The API remains strict for any value
+    # that is supplied, so a typo cannot silently return a different market.
+    market: str = 'us'
 
 
 def _decimal_or_none(value):
     return float(value) if value is not None else None
+
+
+def _iso_z(value):
+    """Serialize a UTC instant explicitly, preserving UTC as the wire format."""
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        value = value.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    return value.isoformat() + 'Z'
+
+
+def _quote(view):
+    """The selected market quote shared by board rows and detail identity."""
+    return {
+        'market': view.market,
+        'venue': view.venue,
+        'mic': view.mic,
+        'currency': view.currency,
+        'price': _decimal_or_none(view.price),
+        'regular_move': _decimal_or_none(view.regular_move),
+        'extended_move': _decimal_or_none(view.extended_move),
+        'session': view.session,
+        'quality': view.quality,
+        'age_seconds': view.age_seconds,
+        'quoted_at': _iso_z(view.quote_ts),
+        'is_fallback': view.is_fallback,
+    }
 
 
 class BadQuery(ValueError):
@@ -52,6 +82,10 @@ def parse_query(args):
     unknown source would return the default board under a selection the viewer
     never made, which is worse than an error.
     """
+    market = args.get('market', 'us')
+    if market not in {'us', 'de'}:
+        raise BadQuery('unknown market')
+
     raw_sources = args.get('sources')
     if raw_sources:
         selected = [s.strip() for s in raw_sources.split(',') if s.strip()]
@@ -102,7 +136,7 @@ def parse_query(args):
         raise BadQuery('unsupported venues')
 
     return Query(sources=selected, segments=segments, window=window,
-                 limit=limit, min_venues=min_venues)
+                 limit=limit, min_venues=min_venues, market=market)
 
 
 def serialize(board):
@@ -114,6 +148,8 @@ def serialize(board):
     """
     return {
         'generated_at': board.generated_at.isoformat() + 'Z',
+        'market': board.market,
+        'display_timezone': board.display_timezone,
         'sources': board.sources,
         'all_sources': list(SOURCES),
         'segments': board.segments,
@@ -157,6 +193,7 @@ def _row(entry):
         'price_move': _decimal_or_none(r.price_move),
         'direction': r.direction,
         'price_status': r.price_status,
+        'quote': _quote(r.quote),
         'baseline_days': r.baseline_days,
         'marks': r.marks,
         # `count: null` is a measured gap, not a quiet hour -- see board.py.
@@ -185,7 +222,7 @@ def build_payload(args, now=None):
     board = board_mod.build(query.sources, now,
                             window_hours=query.window,
                             segments=query.segments, limit=query.limit,
-                            min_venues=query.min_venues)
+                            min_venues=query.min_venues, market=query.market)
     # ROOTED, because the payload's `sources` is what lights the chips and
     # there is one chip per root. `?sources=reddit:wallstreetbets` filtered
     # the board to that subreddit above and still lights the Reddit chip
@@ -215,6 +252,8 @@ def serialize_detail(d):
     """
     b = d.breakdown
     return {
+        'market': d.market,
+        'display_timezone': 'Europe/Berlin',
         'identity': {
             'ticker': d.ticker,
             'name': d.name,
@@ -226,6 +265,7 @@ def serialize_detail(d):
             'price_move': _decimal_or_none(d.price_move),
             'price_status': d.price_status,
             'session': d.session,
+            'quote': _quote(d.quote),
         },
         'read': [{'kind': c.kind, 'text': c.text}
                  for c in phrasing.read_clauses(
@@ -244,8 +284,11 @@ def serialize_detail(d):
             'closes': [_decimal_or_none(c) for c in d.chart.closes],
             # null where nobody was watching, never a zero.
             'chatter': d.chart.chatter,
-            'watched_from': (d.chart.watched_from.isoformat()
-                             if d.chart.watched_from else None),
+            'watched_from': (
+                _iso_z(d.chart.watched_from)
+                if isinstance(d.chart.watched_from, dt.datetime)
+                else (d.chart.watched_from.isoformat()
+                      if d.chart.watched_from else None)),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,
@@ -298,7 +341,8 @@ def ticker_detail(ticker):
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     try:
         built = detail_panel.build(ticker.upper(), query.sources, now,
-                                   window_hours=query.window, span=span)
+                                    window_hours=query.window, span=span,
+                                    market=query.market)
     except detail_mod.UnknownTicker:
         return jsonify({'error': 'unknown ticker'}), 404
     return jsonify(serialize_detail(built))
