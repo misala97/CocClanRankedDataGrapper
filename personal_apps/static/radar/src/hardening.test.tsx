@@ -14,16 +14,18 @@ import { BoardUnavailable, fetchBoard } from './api'
 import { BoardPage } from './board/BoardPage'
 import { Boundary } from './Broken'
 import { parsePayload } from './embedded'
+import { Identity } from './detail/Identity'
 import { Posts } from './detail/Posts'
 import { openingSpan } from './detail/DetailPane'
 import type { BoardPayload, Detail, MarketQuote, Post, Row } from './types'
 
-function quote(): MarketQuote {
+function quote(over: Partial<MarketQuote> = {}): MarketQuote {
   return {
     market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 10,
     regular_move: 0.012, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     is_fallback: false,
+    ...over,
   }
 }
 
@@ -138,6 +140,24 @@ describe('the embedded payload', () => {
        default instead of emitting a third market into client state. */
     expect(parsePayload('{"rows":[],"market":"elsewhere"}')?.market)
       .toBe('us')
+  })
+})
+
+describe('quote movement in the identity', () => {
+  it('separates regular and after-hours movement', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ regular_move: 0.012, extended_move: -0.004,
+                     session: 'afterhours' }),
+    }} />)
+
+    expect(screen.getByText((content, node) =>
+      node?.classList.contains('quote-move') === true
+        && node.textContent === '+1,20 % regular')).toBeVisible()
+    expect(screen.getByText((content, node) =>
+      node?.classList.contains('quote-move') === true
+        && node.textContent === '−0,40 % after hours')).toBeVisible()
   })
 })
 

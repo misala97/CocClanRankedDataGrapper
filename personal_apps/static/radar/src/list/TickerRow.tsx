@@ -1,7 +1,8 @@
 import { chatterRuns, peak } from '../board/geometry'
-import { divergence, pricesAreMoving, rankTerm, rowPrice, segmentLabel,
+import { formatPrice, divergence, pricesAreMoving, rankTerm, segmentLabel,
          zscore } from '../format'
 import { queryFor } from '../api'
+import { QuoteBadges } from '../QuoteBadges'
 import type { Clause, Row, Selection, Session } from '../types'
 
 /** The row sparkline. Small on purpose: it says "this is building" or "this
@@ -40,13 +41,12 @@ function rankedBy(row: Row, session: Session) {
  *  copy-link work, and the click handler only exists to avoid a full page
  *  load for a selection the client can make itself.
  */
-export function TickerRow({ row, selected, magnitude, session,
-                           suppress = [], selection, onSelect }: {
+export function TickerRow(props: {
   row: Row
   selected: boolean
   magnitude?: number
-  /** The exchange's state, because it decides WHICH number ranks the row. */
-  session: Session
+  /** Retained for one rendering phase; each quote now owns this decision. */
+  session?: Session
   /** Marks the whole board carries, which the page states once in its header
    *  instead. A mark on every row is not a mark. */
   suppress?: readonly string[]
@@ -54,9 +54,10 @@ export function TickerRow({ row, selected, magnitude, session,
   selection?: Selection
   onSelect: (ticker: string) => void
 }) {
+  const { row, selected, magnitude, suppress = [], selection, onSelect } = props
   const runs = chatterRuns(row.series, BOX, peak(row.series))
   const measured = magnitude !== undefined
-  const ranked = rankedBy(row, session)
+  const ranked = rankedBy(row, row.quote.session)
 
   return (
     <a className={`row${selected ? ' on' : ''}${measured ? '' : ' unmeasured'}`}
@@ -119,11 +120,21 @@ export function TickerRow({ row, selected, magnitude, session,
           act on a number the system already knows is unreliable -- and the
           row rendered its bare segment key and nothing else. */}
       <span className="meta">
-        {segmentLabel(row.segment)} · {rowPrice(row.price, row.price_status)}
+        {segmentLabel(row.segment)} · {quotePrice(row)}
+        <QuoteBadges quote={row.quote} />
         {row.marks.filter((mark) => !suppress.includes(mark)).map((mark) => (
           <span key={mark} className="mark"> · {mark}</span>
         ))}
       </span>
     </a>
   )
+}
+
+function quotePrice(row: Row): string {
+  const price = row.quote.price
+  if (price === null || price <= 0) return 'no quote'
+  const rendered = formatPrice(price, row.quote.currency, {
+    explicitCode: row.quote.is_fallback,
+  })
+  return row.price_status === 'closed' ? `closed at ${rendered}` : rendered
 }

@@ -1,4 +1,5 @@
-import { UNKNOWN, exchangeLabel, money, segmentLabel } from '../format'
+import { UNKNOWN, exchangeLabel, formatPrice, segmentLabel } from '../format'
+import { QuoteBadges } from '../QuoteBadges'
 import type { Detail } from '../types'
 
 /** Who this is, and what the tape says right now.
@@ -31,38 +32,17 @@ export function Identity({ identity }: { identity: Detail['identity'] }) {
               zero here is an absent quote that arrived as a default -- and
               `$0.00` printed at 26px is the most confident wrong number on
               the page. It reads as the em-dash every other unknown does. */}
-          {identity.price === null || identity.price <= 0
-            ? UNKNOWN : money(identity.price)}
+          {identity.quote.price === null || identity.quote.price <= 0
+            ? UNKNOWN : quotePrice(identity.quote.price, identity.quote)}
         </div>
-        <Move identity={identity} />
+        <QuoteBadges quote={identity.quote} moves />
       </div>
     </div>
   )
 }
 
-/** The move, or why there is not one.
- *
- *  Three silences that must not collapse into each other: the exchange is
- *  shut, which says nothing about this stock; the tape has not printed, which
- *  does and is a warning; or there is no quote at all. The live page printed
- *  0.00% for the first, which asserts the price held steady when nothing
- *  traded.
- */
-function Move({ identity }: { identity: Detail['identity'] }) {
-  if (identity.price_status === 'closed' || identity.session === 'closed') {
-    return <div className="st closed">market closed</div>
-  }
-  if (identity.price_status === 'stale') {
-    return <div className="st warn">tape has not printed</div>
-  }
-  if (identity.price_move === null) return <div className="st">no quote</div>
-
-  const pct = identity.price_move * 100
-  return (
-    <div className={`mv ${pct >= 0 ? 'up' : 'down'}`}>
-      {pct >= 0 ? '+' : ''}{pct.toFixed(1)}%
-    </div>
-  )
+function quotePrice(value: number, quote: Detail['identity']['quote']): string {
+  return formatPrice(value, quote.currency, { explicitCode: quote.is_fallback })
 }
 
 /** The segment, said the way a person would say it.

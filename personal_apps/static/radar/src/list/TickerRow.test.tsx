@@ -5,12 +5,13 @@ import { TickerRow } from './TickerRow'
 import { Excluded } from './Excluded'
 import type { BoardPayload, MarketQuote, Row, Selection } from '../types'
 
-function quote(): MarketQuote {
+function quote(over: Partial<MarketQuote> = {}): MarketQuote {
   return {
     market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 0.31,
     regular_move: 0.182, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     is_fallback: false,
+    ...over,
   }
 }
 
@@ -101,6 +102,51 @@ describe('a ticker row', () => {
 
     expect(screen.getByRole('link', { name: /HOWL/ }))
       .toHaveAttribute('aria-current', 'true')
+  })
+
+  it('marks a US fallback without hiding its currency', () => {
+    render(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                      row={row({ quote: quote({ is_fallback: true }) })} />)
+
+    expect(screen.getByText('US fallback · Nasdaq · USD')).toBeVisible()
+  })
+
+  it('names delayed, EOD, and stale quote states', () => {
+    const { rerender } = render(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 row={row({ quote: quote({ quality: 'delayed', age_seconds: 720 }) })} />)
+    expect(screen.getByText('12 min delayed')).toBeVisible()
+
+    rerender(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 row={row({ quote: quote({ quality: 'eod' }) })} />)
+    expect(screen.getByText(/EOD · 22\. Aug\. 2026/)).toBeVisible()
+
+    rerender(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 row={row({ quote: quote({ quality: 'stale', age_seconds: 720 }) })} />)
+    expect(screen.getByText('12 min stale')).toBeVisible()
+  })
+
+  it('names a fallback row\'s own after-hours session', () => {
+    /* Germany's board can be regular while an individual US fallback is in
+       after-hours.  Its explanation must follow the quote, not the board. */
+    render(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                      row={row({ quote: quote({ is_fallback: true,
+                                                 session: 'afterhours' }) })} />)
+
+    expect(screen.getByText('After hours')).toBeVisible()
+  })
+
+  it('explains ranking from the row\'s own session', () => {
+    /* A US fallback can be closed while Germany's board is still regular.
+       The board header remains useful context, but it cannot explain this
+       individual row's chatter-only score. */
+    render(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                      row={row({ quote: quote({ is_fallback: true,
+                                                 session: 'closed' }) })} />)
+
+    expect(screen.getByLabelText(/Chatter z-score/)).toBeVisible()
   })
 })
 
