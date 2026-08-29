@@ -21,7 +21,7 @@ commit, and independent read-only review acceptance.
 | 2 | US/Xetra calendar registry | complete | `3350fb4`, `b8731cc` | accepted after fix round 1 |
 | 3 | Quote quality/movement/fallback domain | complete | `ce486d7`, `70ef18a`, `1768074` | accepted after fix rounds |
 | 4 | Verified Xetra instrument mapping | complete | `1e54ebb`, `7ce012d` | accepted after fix round 1 |
-| 5 | Per-market polling/history/retention | pending | — | — |
+| 5 | Per-market polling/history/retention | complete | `e21a7da`, `708de59` | accepted after fix round 1 |
 | 6 | Market-aware ranking/board/detail/API | pending | — | — |
 | 7 | Market selection and Berlin formatting | pending | — | — |
 | 8 | Quote/session/fallback presentation | pending | — | — |
@@ -75,7 +75,18 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Implement Task 5: isolate polling, history and retention by market.
+Implement Task 6: make ranking, board, detail, and API market-aware.
+
+## Task 5 evidence — 2026-08-29
+
+- Initial implementation `e21a7da` passed 129 focused tests, compile, diff
+  check, and migration-head verification.
+- Review found mixed-version rollback key collisions and legacy NULL/NULL US
+  rows excluded by market-aware primary-MIC readers. Fix `708de59` dedupes
+  rollback collisions deterministically, preserves binary ticker collation,
+  and includes the legacy US identity in single/batched/history reads.
+- Focused regression suite passed 57 tests; scoped re-review found no
+  Critical/Important issues. Task 5 complete.
 
 ## Task 4 evidence — 2026-08-29
 
