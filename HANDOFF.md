@@ -101,5 +101,7 @@ the isolated worktree.
 
 ## Immediate next action
 
-Implement Task 9 only: chart session bands and Berlin-time chart labels. Then
-run focused tests, commit, review, and update these handoff artifacts.
+Paused by the user after Task 8. Do not start Task 9 until the user explicitly
+asks to continue. When authorized, implement Task 9 only: chart session bands
+and Berlin-time chart labels; then run focused tests, commit, review, and
+update these handoff artifacts.
