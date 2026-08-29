@@ -1,4 +1,4 @@
-import { formatQuoteAge, postStamp } from './format'
+import { formatMarketDate, formatQuoteAge } from './format'
 import type { MarketQuote } from './types'
 
 /**
@@ -16,14 +16,19 @@ export function QuoteBadges({ quote, moves = false }: {
     <span className="quote-badges">
       <span className={`quote-source${quote.is_fallback ? ' fallback' : ''}`}>
         {quote.is_fallback
-          ? `US fallback · ${quote.venue ?? 'US venue'} · ${quote.currency}`
-          : `${quote.venue ?? 'Venue unavailable'} · ${quote.currency}`}
+          ? `US fallback · ${quote.venue ?? 'US venue'} · ${currencyLabel(quote.currency)}`
+          : `${quote.venue ?? 'Venue unavailable'} · ${currencyLabel(quote.currency)}`}
       </span>
       <SessionBadge session={quote.session} />
+      <TapeBadge quote={quote} />
       <QualityBadge quote={quote} />
       {moves && <QuoteMoves quote={quote} />}
     </span>
   )
+}
+
+function currencyLabel(currency: string | null): string {
+  return currency ?? 'Currency unavailable'
 }
 
 function SessionBadge({ session }: Pick<MarketQuote, 'session'>) {
@@ -44,6 +49,12 @@ function QualityBadge({ quote }: { quote: MarketQuote }) {
   return text ? <span className={`quote-quality ${quote.quality}`}>{text}</span> : null
 }
 
+function TapeBadge({ quote }: { quote: MarketQuote }) {
+  return quote.tape_status === 'stale'
+    ? <span className="quote-tape frozen">no print</span>
+    : null
+}
+
 function qualityText(quote: MarketQuote): string | null {
   if (quote.quality === 'delayed') return formatQuoteAge(quote.age_seconds)
   if (quote.quality === 'stale') {
@@ -51,8 +62,7 @@ function qualityText(quote: MarketQuote): string | null {
       : `${Math.floor(quote.age_seconds / 60)} min stale`
   }
   if (quote.quality === 'eod') {
-    const date = quote.quoted_at?.split('T')[0]
-    return date ? `EOD · ${postStamp(`${date}T00:00:00Z`).split(' · ')[0]}` : 'EOD'
+    return quote.quoted_at ? `EOD · ${formatMarketDate(quote.quoted_at)}` : 'EOD'
   }
   if (quote.quality === 'unavailable') return 'quote unavailable'
   return null

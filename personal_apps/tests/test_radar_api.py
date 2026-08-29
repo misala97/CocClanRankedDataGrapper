@@ -106,6 +106,7 @@ def test_quote_serializer_keeps_the_market_quote_contract_and_utc_wire_time():
         'price': 194.2, 'regular_move': pytest.approx(0.0036175710594315244),
         'extended_move': None, 'session': 'regular', 'quality': 'delayed',
         'age_seconds': 0, 'quoted_at': '2026-08-28T11:18:00Z',
+        'tape_status': 'ok', 'score_eligible': True, 'score_term': 'divergence',
         'is_fallback': False,
     }
 

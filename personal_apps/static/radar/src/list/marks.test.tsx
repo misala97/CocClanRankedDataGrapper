@@ -12,6 +12,7 @@ const row = (ticker: string, marks: Mark[]): Row => ({
     market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 1.5,
     regular_move: 0.02, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
+    tape_status: 'ok', score_eligible: true, score_term: 'divergence',
     is_fallback: false,
   }, baseline_days: 2, marks, series: [],
   triplet: {}, tone: { bullish: 1, neutral: 1, bearish: 0 },

@@ -10,6 +10,7 @@ function quote(): MarketQuote {
     market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 10,
     regular_move: 0.012, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
+    tape_status: 'ok', score_eligible: true, score_term: 'divergence',
     is_fallback: false,
   }
 }

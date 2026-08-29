@@ -12,6 +12,9 @@ function quote(over: Partial<MarketQuote> = {}): MarketQuote {
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     is_fallback: false,
     ...over,
+    tape_status: over.tape_status ?? 'ok',
+    score_eligible: over.score_eligible ?? true,
+    score_term: over.score_term ?? 'divergence',
   }
 }
 
@@ -144,7 +147,36 @@ describe('a ticker row', () => {
        individual row's chatter-only score. */
     render(<TickerRow session="regular" selected={false} onSelect={() => {}}
                       row={row({ quote: quote({ is_fallback: true,
-                                                 session: 'closed' }) })} />)
+                                                 session: 'closed',
+                                                 score_eligible: false,
+                                                 score_term: 'chatter' }) })} />)
+
+    expect(screen.getByLabelText(/Chatter z-score/)).toBeVisible()
+  })
+
+  it.each([
+    ['EOD quote', { quality: 'eod' as const }],
+    ['stale quote', { quality: 'stale' as const }],
+    ['unavailable quote', { quality: 'unavailable' as const }],
+    ['frozen live tape', { quality: 'live' as const, tape_status: 'stale' as const }],
+  ])('explains a %s row with its serialized chatter score term', (_, state) => {
+    /* A regular-session board still falls back to chatter when THIS quote
+       cannot score.  Re-inferring divergence from the board or quote session
+       falsely explains why the row is positioned. */
+    render(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                      row={row({ quote: quote({ ...state, score_eligible: false,
+                                                 score_term: 'chatter' }) })} />)
+
+    expect(screen.getByLabelText(/Chatter z-score/)).toBeVisible()
+  })
+
+  it('keeps an ineligible row on chatter if an old payload term disagrees', () => {
+    /* Eligibility is the safety verdict. The term is presentation metadata;
+       a cached mixed-version payload must never revive divergence for a quote
+       the server explicitly says cannot score. */
+    render(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                      row={row({ quote: quote({ score_eligible: false,
+                                                 score_term: 'divergence' }) })} />)
 
     expect(screen.getByLabelText(/Chatter z-score/)).toBeVisible()
   })

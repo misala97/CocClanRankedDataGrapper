@@ -686,7 +686,7 @@ body {
    makes room for both move baselines. */
 .quote-badges { display: inline-flex; flex-wrap: wrap; gap: var(--s1); align-items: center; }
 .row .meta > .quote-badges::before { content: " · "; color: var(--muted); }
-.quote-source, .quote-session, .quote-quality, .quote-move {
+.quote-source, .quote-session, .quote-quality, .quote-tape, .quote-move {
   display: inline-flex; align-items: center; gap: 3px;
   font-variant-numeric: tabular-nums;
 }
@@ -701,7 +701,7 @@ body {
 .quote-session.premarket { color: var(--session-pre); background: var(--session-pre-soft); }
 .quote-session.afterhours { color: var(--session-after); background: var(--session-after-soft); }
 .quote-quality.delayed, .quote-quality.eod, .quote-quality.stale,
-.quote-quality.unavailable { color: var(--warn); font-weight: 600; }
+.quote-quality.unavailable, .quote-tape.frozen { color: var(--warn); font-weight: 600; }
 .quote-moves { display: inline-flex; flex-wrap: wrap; gap: var(--s2); }
 .quote-move { font-weight: 650; }
 .quote-move.up { color: var(--up); }
@@ -827,7 +827,8 @@ body {
   max-width: 30ch;
 }
 .ident .px .quote-source, .ident .px .quote-session,
-.ident .px .quote-quality, .ident .px .quote-move { font-size: var(--t-xs); }
+.ident .px .quote-quality, .ident .px .quote-tape,
+.ident .px .quote-move { font-size: var(--t-xs); }
 .ident .px .quote-moves { justify-content: flex-end; flex-basis: 100%; }
 
 /* The one block of prose on the page. Set at reading size and measure, not at

@@ -152,12 +152,16 @@ export const stampTime = formatMarketTime
  * Posts stay on the panel for thirty days, so a bare `19:04` makes posts from
  * different days indistinguishable. Both date and clock use Berlin time. */
 export function postStamp(iso: string): string {
+  return `${formatMarketDate(iso)} · ${formatMarketTime(iso)}`
+}
+
+/** A stored UTC instant's calendar date in Radar's fixed display timezone. */
+export function formatMarketDate(iso: string): string {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return UNKNOWN
-  const date = new Intl.DateTimeFormat('de-DE', {
+  return new Intl.DateTimeFormat('de-DE', {
     timeZone: BERLIN, day: '2-digit', month: 'short', year: 'numeric',
   }).format(at)
-  return `${date} · ${formatMarketTime(iso)}`
 }
 
 export function plural(count: number, one: string, many: string): string {
@@ -197,7 +201,14 @@ export function pricesAreMoving(session: string): boolean {
  *  there is no price movement to diverge from and leaderboard.py falls
  *  through to chatter alone. */
 export function rankTerm(session: string): { label: string; why: string } {
-  if (pricesAreMoving(session)) {
+  return rankTermFor(pricesAreMoving(session) ? 'divergence' : 'chatter')
+}
+
+/** The server-serialized row term, used where an individual quote can no
+ * longer score even though the board's market session is still open. */
+export function rankTermFor(term: 'divergence' | 'chatter'):
+    { label: string; why: string } {
+  if (term === 'divergence') {
     return {
       label: 'div',
       why: 'Divergence: how far the chatter ran ahead of the price over this '

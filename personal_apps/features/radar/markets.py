@@ -83,6 +83,11 @@ class QuoteView:
     extended_move: decimal.Decimal | None
     is_fallback: bool
 
+    @property
+    def score_term(self) -> str:
+        """The term this quote permits the board to use for its row score."""
+        return 'divergence' if self.score_eligible else 'chatter'
+
     @classmethod
     def unavailable(cls, ticker: str, market: str) -> 'QuoteView':
         return cls(ticker=ticker, market=market, venue=None, mic=None,

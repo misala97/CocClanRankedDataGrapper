@@ -59,6 +59,7 @@ export type Market = 'us' | 'de'
 /** The provider's freshness classification, never inferred from a missing
  * price on the client. */
 export type QuoteQuality = 'live' | 'delayed' | 'eod' | 'stale' | 'unavailable'
+export type QuoteScoreTerm = 'divergence' | 'chatter'
 
 /** One selected venue quote. Germany-mode fallbacks retain their real US/USD
  * identity rather than appearing as converted German quotes. */
@@ -66,7 +67,7 @@ export interface MarketQuote {
   market: Market
   venue: string | null
   mic: string | null
-  currency: string
+  currency: string | null
   price: number | null
   regular_move: number | null
   extended_move: number | null
@@ -74,6 +75,11 @@ export interface MarketQuote {
   quality: QuoteQuality
   age_seconds: number | null
   quoted_at: string | null
+  /** Frozen-tape verdict from quote history, independent of provider freshness. */
+  tape_status: 'ok' | 'closed' | 'stale' | 'unknown'
+  /** Server-side decision; never re-derived from the displayed session. */
+  score_eligible: boolean
+  score_term: QuoteScoreTerm
   is_fallback: boolean
 }
 

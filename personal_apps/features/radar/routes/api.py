@@ -67,6 +67,12 @@ def _quote(view):
         'quality': view.quality,
         'age_seconds': view.age_seconds,
         'quoted_at': _iso_z(view.quote_ts),
+        # These are decided from quote quality and tape history server-side.
+        # A client only receives the selected row, so it must not reinvent the
+        # eligibility decision from a session label.
+        'tape_status': view.tape_status,
+        'score_eligible': view.score_eligible,
+        'score_term': view.score_term,
         'is_fallback': view.is_fallback,
     }
 

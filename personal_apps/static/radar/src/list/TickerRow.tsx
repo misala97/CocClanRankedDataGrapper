@@ -1,6 +1,5 @@
 import { chatterRuns, peak } from '../board/geometry'
-import { formatPrice, divergence, pricesAreMoving, rankTerm, segmentLabel,
-         zscore } from '../format'
+import { formatPrice, divergence, rankTermFor, segmentLabel, zscore } from '../format'
 import { queryFor } from '../api'
 import { QuoteBadges } from '../QuoteBadges'
 import type { Clause, Row, Selection, Session } from '../types'
@@ -16,11 +15,14 @@ const BOX = { width: 56, height: 17, pad: 0 }
  *  window. Shut: there is no price move to measure, so the board ranks on the
  *  chatter z-score alone and the label has to say so.
  */
-function rankedBy(row: Row, session: Session) {
-  const term = rankTerm(session)
+function rankedBy(row: Row) {
+  // Eligibility is the server's safety verdict.  Preserve it even if a
+  // cached, mixed-version payload carries an older conflicting display term.
+  const scoreTerm = row.quote.score_eligible ? row.quote.score_term : 'chatter'
+  const term = rankTermFor(scoreTerm)
   return {
     ...term,
-    value: pricesAreMoving(session)
+    value: scoreTerm === 'divergence'
       ? divergence(row.divergence) : zscore(row.mention_z),
   }
 }
@@ -57,7 +59,7 @@ export function TickerRow(props: {
   const { row, selected, magnitude, suppress = [], selection, onSelect } = props
   const runs = chatterRuns(row.series, BOX, peak(row.series))
   const measured = magnitude !== undefined
-  const ranked = rankedBy(row, row.quote.session)
+  const ranked = rankedBy(row)
 
   return (
     <a className={`row${selected ? ' on' : ''}${measured ? '' : ' unmeasured'}`}
@@ -132,7 +134,7 @@ export function TickerRow(props: {
 
 function quotePrice(row: Row): string {
   const price = row.quote.price
-  if (price === null || price <= 0) return 'no quote'
+  if (price === null || price <= 0 || !row.quote.currency) return 'no quote'
   const rendered = formatPrice(price, row.quote.currency, {
     explicitCode: row.quote.is_fallback,
   })

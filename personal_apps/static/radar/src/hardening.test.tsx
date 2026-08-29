@@ -26,6 +26,9 @@ function quote(over: Partial<MarketQuote> = {}): MarketQuote {
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     is_fallback: false,
     ...over,
+    tape_status: over.tape_status ?? 'ok',
+    score_eligible: over.score_eligible ?? true,
+    score_term: over.score_term ?? 'divergence',
   }
 }
 
@@ -158,6 +161,37 @@ describe('quote movement in the identity', () => {
     expect(screen.getByText((content, node) =>
       node?.classList.contains('quote-move') === true
         && node.textContent === '−0,40 % after hours')).toBeVisible()
+  })
+
+  it('names a frozen tape even when its provider quote is live', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ quality: 'live', tape_status: 'stale' }),
+    }} />)
+
+    expect(screen.getByText('no print')).toBeVisible()
+  })
+
+  it('never prints null for an unavailable quote source or currency', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ quality: 'unavailable', venue: null, currency: null }),
+    }} />)
+
+    expect(screen.getByText('Venue unavailable · Currency unavailable')).toBeVisible()
+    expect(screen.queryByText(/null/)).toBeNull()
+  })
+
+  it('uses the quoted instant\'s Berlin date for EOD', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ quality: 'eod', quoted_at: '2026-08-28T22:30:00Z' }),
+    }} />)
+
+    expect(screen.getByText(/EOD · 29\. Aug\. 2026/)).toBeVisible()
   })
 })
 

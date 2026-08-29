@@ -42,6 +42,7 @@ export function Identity({ identity }: { identity: Detail['identity'] }) {
 }
 
 function quotePrice(value: number, quote: Detail['identity']['quote']): string {
+  if (!quote.currency) return UNKNOWN
   return formatPrice(value, quote.currency, { explicitCode: quote.is_fallback })
 }
 
