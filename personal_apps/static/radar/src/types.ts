@@ -53,6 +53,30 @@ export interface Clause {
  *  it changes one ticker's chart, not which rows are listed. */
 export type PanelSpan = '1D' | '1W' | '1M' | '6M' | '1Y' | '3Y'
 
+/** Price context is independent from Radar's stable social ticker identity. */
+export type Market = 'us' | 'de'
+
+/** The provider's freshness classification, never inferred from a missing
+ * price on the client. */
+export type QuoteQuality = 'live' | 'delayed' | 'eod' | 'stale' | 'unavailable'
+
+/** One selected venue quote. Germany-mode fallbacks retain their real US/USD
+ * identity rather than appearing as converted German quotes. */
+export interface MarketQuote {
+  market: Market
+  venue: string | null
+  mic: string | null
+  currency: string
+  price: number | null
+  regular_move: number | null
+  extended_move: number | null
+  session: Session
+  quality: QuoteQuality
+  age_seconds: number | null
+  quoted_at: string | null
+  is_fallback: boolean
+}
+
 /** Price and chatter over the same calendar days, sharing `from`.
  *
  *  `closes[i]` null means the market did not trade that day -- the line is
@@ -110,6 +134,8 @@ export interface Breakdown {
 }
 
 export interface Detail {
+  market: Market
+  display_timezone: 'Europe/Berlin'
   identity: {
     ticker: string
     name: string | null
@@ -121,6 +147,7 @@ export interface Detail {
     price_move: number | null
     price_status: string
     session: Session
+    quote: MarketQuote
   }
   read: Clause[]
   chart: DetailChart
@@ -154,6 +181,7 @@ export interface Row {
    *  while the market is open. Only the second says anything about the stock,
    *  and only the second earns the no-print mark. */
   price_status: 'ok' | 'closed' | 'stale' | 'unknown'
+  quote: MarketQuote
   baseline_days: number | null
   marks: Mark[]
   series: Point[]
@@ -173,6 +201,8 @@ export type Session = 'premarket' | 'regular' | 'afterhours' | 'closed'
 
 export interface BoardPayload {
   generated_at: string
+  market: Market
+  display_timezone: 'Europe/Berlin'
   sources: string[]
   all_sources: string[]
   /** What the board was filtered to. Empty means All. */
@@ -197,6 +227,7 @@ export interface BoardPayload {
 }
 
 export interface Selection {
+  market: Market
   sources: string[]
   /** Server-side filter, unlike the chart span -- changing it refetches. */
   minVenues: number

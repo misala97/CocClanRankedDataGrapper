@@ -3,7 +3,16 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { TickerRow } from './TickerRow'
 import { Excluded } from './Excluded'
-import type { BoardPayload, Row } from '../types'
+import type { BoardPayload, MarketQuote, Row } from '../types'
+
+function quote(): MarketQuote {
+  return {
+    market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 0.31,
+    regular_move: 0.182, extended_move: null, session: 'regular',
+    quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
+    is_fallback: false,
+  }
+}
 
 const row = (over: Partial<Row> = {}): Row => ({
   ticker: 'HOWL', name: 'Werewolf Therapeutics', segment: 'micro',
@@ -15,7 +24,7 @@ const row = (over: Partial<Row> = {}): Row => ({
   tone: { bullish: 1, neutral: 1, bearish: 0 },
   clauses: [{ kind: 'ratio', text: '40x its normal' },
             { kind: 'venues', text: '2 venues' }],
-  ...over,
+  ...over, quote: over.quote ?? quote(),
 })
 
 describe('a ticker row', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { UNKNOWN, count, dayStamp, divergence, exchangeLabel, money, move,
-         postStamp, rowPrice, segmentLabel, signed, sourceLabel, stampTime,
-         zscore } from './format'
+import { UNKNOWN, count, dayStamp, divergence, exchangeLabel, formatPrice,
+         formatQuoteAge, money, move, postStamp, rowPrice, segmentLabel,
+         signed, sourceLabel, stampTime, zscore } from './format'
 
 describe('an unknown never renders as a zero', () => {
   // The single rule PRODUCT.md is most insistent about. A row with no quote,
@@ -67,20 +67,26 @@ describe('labels', () => {
 })
 
 describe('the stamp', () => {
-  it('is UTC, matching every other time on the page', () => {
-    expect(stampTime('2026-08-22T19:04:11Z')).toBe('19:04 UTC')
+  it('formats the same UTC instant in Berlin summer time', () => {
+    /* A date stored as UTC must be read in Radar's fixed display timezone,
+       not in the browser's own timezone. */
+    expect(stampTime('2026-08-28T19:04:11Z')).toBe('21:04 CEST')
+  })
+
+  it('formats Berlin winter time without using the machine timezone', () => {
+    expect(stampTime('2026-01-28T19:04:11Z')).toBe('20:04 CET')
   })
 
   it('does not crash on a malformed timestamp', () => {
     expect(stampTime('not a date')).toBe('—')
   })
 
-  it('dates retained posts and makes their UTC frame explicit', () => {
+  it('dates retained posts in Berlin time', () => {
     // Posts remain visible for thirty days. A bare "19:04" cannot tell
     // yesterday from last week, and it silently relies on the reader knowing
     // that every clock on this surface is UTC.
     expect(postStamp('2026-08-22T19:04:11Z'))
-      .toBe('22 Aug 2026 · 19:04 UTC')
+      .toBe('22. Aug. 2026 · 21:04 CEST')
   })
 })
 
@@ -140,6 +146,19 @@ describe('the price under a ticker', () => {
 })
 
 describe('money', () => {
+  it('formats venue currency explicitly', () => {
+    /* The formatter must report the venue's real currency; Germany-mode US
+       fallbacks are dollars, not synthetic euros. */
+    expect(formatPrice(194.2, 'EUR')).toBe('194,20\u00a0€')
+    expect(formatPrice(220.5, 'USD', { explicitCode: true }))
+      .toBe('220,50\u00a0$ · USD')
+  })
+
+  it('labels delayed quote age and preserves an unknown age', () => {
+    expect(formatQuoteAge(720)).toBe('12 min delayed')
+    expect(formatQuoteAge(null)).toBe(UNKNOWN)
+  })
+
   // The two axis labels either side of one chart are formatted from the same
   // scale so they cannot come out as `$202` above `$46.33`.
   it('formats both ends of a range by the larger end', () => {

@@ -47,6 +47,9 @@ export function queryFor(selection: Selection): string {
   // default, which is Small -- so the All chip would silently do nothing.
   // Comma-separated; empty is how the surface asks for All.
   params.set('segment', selection.segments.join(','))
+  // Always explicit. An omitted market is US for old links, but a selected
+  // market must travel through every request and cache boundary.
+  params.set('market', selection.market)
   // Omitted at 1 so the default board keeps a clean URL.
   if (selection.minVenues > 1) params.set('venues', String(selection.minVenues))
   return params.toString()
@@ -123,6 +126,7 @@ export async function fetchDetail(
   params.set('sources', selection.sources.join(','))
   params.set('window', String(selection.window))
   params.set('span', span)
+  params.set('market', selection.market)
   return getJson<Detail>(
     `/radar/api/ticker/${encodeURIComponent(ticker)}?${params}`, signal)
 }

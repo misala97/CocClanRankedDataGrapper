@@ -1,4 +1,4 @@
-import { count, dayStamp, sourceLabel } from '../format'
+import { count, dayStamp, formatMarketTime, sourceLabel } from '../format'
 import type { Breakdown as BreakdownData } from '../types'
 
 /** Above these, one or two accounts are carrying the whole thing and the
@@ -90,7 +90,7 @@ export function Breakdown({ breakdown, windowHours }: {
               that column stays five lines about one thing. */}
           <p className="plain">
             {b.peak_hour
-              ? <>Peak hour <b>{b.peak_hour.slice(11, 16)}</b> at{' '}
+              ? <>Peak hour <b>{formatMarketTime(b.peak_hour)}</b> at{' '}
                   <b>{count(b.peak_count)}</b> mentions · </>
               : null}
             <b>{count(b.voices)}</b> distinct {b.voices === 1 ? 'voice' : 'voices'}

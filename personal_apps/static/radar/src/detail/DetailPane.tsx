@@ -162,7 +162,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     return () => controller.abort()
     // `selection` is a fresh object each render in the parent; the fields it
     // holds are what actually change the request.
-  }, [ticker, span, attempt, selection.sources.join(','), selection.window])
+  }, [ticker, span, attempt, selection.market, selection.sources.join(','), selection.window])
 
   if (!ticker) {
     return (

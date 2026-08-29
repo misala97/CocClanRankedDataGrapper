@@ -123,28 +123,41 @@ export const MARK_WHY: Record<Mark, string> = {
     'every ticker on the board is warming up together.',
 }
 
-/** "22:14 UTC" -- the board's own clock, always UTC.
+const BERLIN = 'Europe/Berlin'
+
+/** A stored UTC instant in Radar's fixed display timezone.
  *
- *  Not localised on purpose. Market sessions, the ingest cadence and every
- *  stored timestamp are UTC; rendering the stamp in Berlin time would be the
- *  one number on the page in a different frame from all the others. */
-export function stampTime(iso: string): string {
+ * `de-DE` owns the local clock presentation. ICU uses the German spellings
+ * MEZ/MESZ for its short zone names, while the product contract specifies the
+ * internationally recognisable CET/CEST labels, so that part is obtained from
+ * a second fixed-locale formatter over the same Berlin instant. Neither
+ * formatter ever reads the browser's timezone. */
+export function formatMarketTime(iso: string): string {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return UNKNOWN
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())} UTC`
+  const time = new Intl.DateTimeFormat('de-DE', {
+    timeZone: BERLIN, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(at)
+  const zone = new Intl.DateTimeFormat('en-GB', {
+    timeZone: BERLIN, timeZoneName: 'short',
+  }).formatToParts(at).find((part) => part.type === 'timeZoneName')?.value
+  return zone ? `${time} ${zone}` : time
 }
+
+/** Compatibility name for consumers that render board timestamps. */
+export const stampTime = formatMarketTime
 
 /** A retained post needs a date as well as a clock.
  *
  * Posts stay on the panel for thirty days, so a bare `19:04` makes posts from
- * different days indistinguishable. The UTC suffix is explicit rather than
- * relying on the rest of the page to teach the convention by implication. */
+ * different days indistinguishable. Both date and clock use Berlin time. */
 export function postStamp(iso: string): string {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return UNKNOWN
-  return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}`
-    + ` · ${stampTime(iso)}`
+  const date = new Intl.DateTimeFormat('de-DE', {
+    timeZone: BERLIN, day: '2-digit', month: 'short', year: 'numeric',
+  }).format(at)
+  return `${date} · ${formatMarketTime(iso)}`
 }
 
 export function plural(count: number, one: string, many: string): string {
@@ -231,6 +244,25 @@ export function money(value: number, scale = value): string {
   if (scale >= 100) return `$${value.toFixed(0)}`
   if (scale >= 1) return `$${value.toFixed(2)}`
   return `$${value.toFixed(4)}`
+}
+
+/** A venue price in its provider-declared currency.
+ *
+ * `explicitCode` is for a US fallback inside Germany mode: a dollar glyph
+ * alone is too easy to overlook next to German venue rows. */
+export function formatPrice(value: number, currency: string,
+                            { explicitCode = false }: { explicitCode?: boolean } = {}): string {
+  const formatted = new Intl.NumberFormat('de-DE', {
+    style: 'currency', currency,
+  }).format(value)
+  return explicitCode ? `${formatted} · ${currency}` : formatted
+}
+
+/** The exact delayed age, or the normal unknown marker where a provider did
+ * not supply a timestamp. */
+export function formatQuoteAge(ageSeconds: number | null): string {
+  if (ageSeconds === null) return UNKNOWN
+  return `${Math.floor(ageSeconds / 60)} min delayed`
 }
 
 /** What the row says about the tape, under the ticker.

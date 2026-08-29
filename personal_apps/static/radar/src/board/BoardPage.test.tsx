@@ -2,8 +2,17 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BoardPayload, Detail, Row } from '../types'
+import type { BoardPayload, Detail, MarketQuote, Row } from '../types'
 import { BoardPage } from './BoardPage'
+
+function quote(): MarketQuote {
+  return {
+    market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 10,
+    regular_move: 0.012, extended_move: null, session: 'regular',
+    quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
+    is_fallback: false,
+  }
+}
 
 function row(over: Partial<Row> = {}): Row {
   return {
@@ -18,13 +27,14 @@ function row(over: Partial<Row> = {}): Row {
     tone: { bullish: 4, neutral: 10, bearish: 2 },
     clauses: [{ kind: 'ratio', text: '3x its normal' },
               { kind: 'venues', text: '2 venues' }],
-    ...over,
+    ...over, quote: over.quote ?? quote(),
   }
 }
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
     generated_at: '2026-08-22T19:00:00Z',
+    market: 'us', display_timezone: 'Europe/Berlin',
     sources: ['bluesky', 'fourchan', 'reddit'],
     all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,
@@ -40,10 +50,12 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
 
 function detail(ticker = 'AAA'): Detail {
   return {
+    market: 'us', display_timezone: 'Europe/Berlin',
     identity: {
       ticker, name: 'Alpha Inc', exchange: 'NASDAQ', segment: 'large',
       market_cap: 1e9, ipo_date: '2020-01-01', price: 10, price_move: 0.012,
       price_status: 'ok', session: 'regular',
+      quote: quote(),
     },
     read: [{ kind: 'plain', text: `${ticker} is being discussed.` }],
     chart: {
@@ -87,6 +99,13 @@ const boardCalls = () => vi.mocked(fetch).mock.calls
   .map((c) => String(c[0])).filter((u) => u.includes('/api/board'))
 
 describe('the two panes', () => {
+  it('renders the peak chatter hour in Radar\'s Berlin timezone', async () => {
+    render(<BoardPage initial={payload()} />)
+
+    await screen.findByText(/AAA is being discussed/)
+    expect(screen.getByText('16:00 CEST')).toBeInTheDocument()
+  })
+
   it('lists one row per ticker, with no promoted tier', () => {
     /* The two-tier arrangement is gone. It bought visual variety at the cost
        of making identical data look like two different kinds of thing. */
@@ -152,6 +171,29 @@ describe('selecting a ticker', () => {
 })
 
 describe('the controls', () => {
+  it('switches market while retaining ticker, filters, and panel span', async () => {
+    /* The market is price context, not a reset button: the reader keeps the
+       company and every filter while swapping the venue underneath it. */
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+    await userEvent.click(screen.getByRole('button', { name: '1M' }))
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+
+    await waitFor(() => expect(boardCalls()).toContain(
+      '/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=4&segment=&market=de'))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/AAA?')
+        && url.includes('sources=bluesky%2Cfourchan%2Creddit')
+        && url.includes('window=4') && url.includes('span=1M')
+        && url.includes('market=de'))).toBe(true))
+    expect(window.location.search).toContain('market=de')
+    expect(window.location.search).toContain('t=AAA')
+    expect(window.location.search).toContain('window=4')
+    expect(screen.getByRole('button', { name: '1M' }))
+      .toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('refetches and rewrites the address bar when a source is dropped', async () => {
     render(<BoardPage initial={payload()} />)
 
@@ -159,7 +201,7 @@ describe('the controls', () => {
 
     await waitFor(() => expect(boardCalls()).toHaveLength(1))
     expect(boardCalls()[0]).toBe(
-      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=')
+      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=&market=us')
     await waitFor(() =>
       expect(window.location.search)
         .toContain('sources=bluesky%2Creddit&window=4&segment='))

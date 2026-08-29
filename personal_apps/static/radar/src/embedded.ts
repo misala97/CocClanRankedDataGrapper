@@ -22,7 +22,15 @@ export function parsePayload(text: string | null | undefined): BoardPayload | nu
     const parsed = JSON.parse(text ?? '') as unknown
     if (!parsed || typeof parsed !== 'object') return null
     if (!Array.isArray((parsed as BoardPayload).rows)) return null
-    return parsed as BoardPayload
+    // Older server-rendered documents omitted these fields. Keep them usable
+    // at the boundary rather than letting legacy embeds create an untyped
+    // third market inside the page.
+    const embedded = parsed as Partial<BoardPayload>
+    return {
+      ...(parsed as BoardPayload),
+      market: embedded.market === 'de' ? 'de' : 'us',
+      display_timezone: 'Europe/Berlin',
+    }
   } catch {
     return null
   }

@@ -17,6 +17,7 @@ import type { BoardPayload, Selection } from '../types'
 export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [payload, setPayload] = useState(initial)
   const [selection, setSelection] = useState<Selection>({
+    market: initial.market,
     sources: initial.sources,
     segments: initial.segments,
     window: initial.window_hours,
