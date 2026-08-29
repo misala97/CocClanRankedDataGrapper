@@ -55,8 +55,8 @@ context by market and venue.
 
 ## Open work
 
-- Tasks 1–5 are accepted and complete.
-- Tasks 6–10 remain pending. Never redispatch a ledger-complete task.
+- Tasks 1–6 are accepted and complete.
+- Tasks 7–10 remain pending. Never redispatch a ledger-complete task.
 - After each task: focused tests, commit, independent read-only review, ruling,
   ledger update, handoff update. One implementation worker at a time.
 
@@ -101,5 +101,5 @@ the isolated worktree.
 
 ## Immediate next action
 
-Implement Task 6 only: make ranking, board, detail, and API market-aware.
+Implement Task 7 only: add typed market selection and fixed Berlin formatting.
 Then run focused tests, commit, review, and update these handoff artifacts.

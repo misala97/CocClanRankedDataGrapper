@@ -22,7 +22,7 @@ commit, and independent read-only review acceptance.
 | 3 | Quote quality/movement/fallback domain | complete | `ce486d7`, `70ef18a`, `1768074` | accepted after fix rounds |
 | 4 | Verified Xetra instrument mapping | complete | `1e54ebb`, `7ce012d` | accepted after fix round 1 |
 | 5 | Per-market polling/history/retention | complete | `e21a7da`, `708de59` | accepted after fix round 1 |
-| 6 | Market-aware ranking/board/detail/API | pending | — | — |
+| 6 | Market-aware ranking/board/detail/API | complete | `55a95c5`, `c767c66`, `14d7ec4` | accepted after fixes |
 | 7 | Market selection and Berlin formatting | pending | — | — |
 | 8 | Quote/session/fallback presentation | pending | — | — |
 | 9 | Chart session bands | pending | — | — |
@@ -75,7 +75,16 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Implement Task 6: make ranking, board, detail, and API market-aware.
+Implement Task 7: add typed market selection and fixed Berlin formatting.
+
+## Task 6 evidence — 2026-08-29
+
+- Initial backend contract commit `55a95c5` passed 212 focused tests.
+- Review corrections added persistent regular-close data and timestamp-less DE
+  fallback safety (`c767c66`), then provider-to-storage regular-close baselines
+  (`14d7ec4`).
+- Final focused gate passed 89 tests; final scoped review found no
+  Critical/Important issues. Task 6 complete.
 
 ## Task 5 evidence — 2026-08-29
 
