@@ -23,7 +23,7 @@ commit, and independent read-only review acceptance.
 | 4 | Verified Xetra instrument mapping | complete | `1e54ebb`, `7ce012d` | accepted after fix round 1 |
 | 5 | Per-market polling/history/retention | complete | `e21a7da`, `708de59` | accepted after fix round 1 |
 | 6 | Market-aware ranking/board/detail/API | complete | `55a95c5`, `c767c66`, `14d7ec4` | accepted after fixes |
-| 7 | Market selection and Berlin formatting | pending | — | — |
+| 7 | Market selection and Berlin formatting | complete | `55c8392`, `f58d413` | accepted after fix round 1 |
 | 8 | Quote/session/fallback presentation | pending | — | — |
 | 9 | Chart session bands | pending | — | — |
 | 10 | Full verification and integration handoff | pending | — | — |
@@ -75,7 +75,19 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Implement Task 7: add typed market selection and fixed Berlin formatting.
+Paused at the user’s request before Task 8. Resume with quote/session/fallback
+presentation only.
+
+## Task 7 evidence — 2026-08-29
+
+- Initial implementation `55c8392` added typed market/quote contracts,
+  accessible US/Germany selection, Berlin-fixed date formatting, and explicit
+  currency formatting; full frontend suite and production build passed.
+- Review found market-boundary defects in stale detail rendering and ticker
+  links. Fix `f58d413` keys detail response publication to full request identity
+  and retains the complete selection in ticker URLs.
+- Focused 29 tests, full frontend suite 548 tests, and production build passed;
+  scoped re-review found no Critical/Important findings. Task 7 complete.
 
 ## Task 6 evidence — 2026-08-29
 
