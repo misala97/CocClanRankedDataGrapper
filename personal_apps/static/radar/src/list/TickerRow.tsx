@@ -178,6 +178,7 @@ export function TickerRow(props: {
         {warn
           ? <span className="sub warn">{warn.text}</span>
           : breadth && <span className="sub">{breadth}</span>}
+        <Lean tone={row.tone} />
       </span>
 
       {/* Full-width, because marks are load-bearing (PRODUCT.md): crammed
@@ -191,6 +192,33 @@ export function TickerRow(props: {
         </span>
       )}
     </a>
+  )
+}
+
+/** Which way the scored talk leans: `↑4 ↓2`, the dominant side bold.
+ *
+ *  Counts, not a verdict -- the words "4 bullish, 2 bearish" are already how
+ *  the panel reports this, and PRODUCT.md's scope boundary is why this is
+ *  ink rather than green and red: those two colours mean price direction on
+ *  this surface and nothing else (a coloured tone bar was built and deleted
+ *  for exactly that collision). Most mentions carry no wording at all, so a
+ *  row with nothing scored says nothing rather than "0 ↑ 0 ↓".
+ *  Equal counts show their own equality: neither side is bold.
+ */
+function Lean({ tone }: { tone: Row['tone'] }) {
+  const scored = tone.bullish + tone.bearish
+  if (scored === 0) return null
+  const bull = tone.bullish > tone.bearish
+  const bear = tone.bearish > tone.bullish
+  return (
+    <span className="sub lean"
+          aria-label={`${tone.bullish} bullish, ${tone.bearish} bearish`}>
+      {bull ? <b>{'↑'}{tone.bullish}</b>
+            : <span>{'↑'}{tone.bullish}</span>}
+      {' '}
+      {bear ? <b>{'↓'}{tone.bearish}</b>
+            : <span>{'↓'}{tone.bearish}</span>}
+    </span>
   )
 }
 

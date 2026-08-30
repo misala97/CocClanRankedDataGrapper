@@ -643,6 +643,12 @@ body {
    PRODUCT.md forbids hiding what makes a number unreliable. */
 .row .sub.warn { color: var(--warn); font-weight: 600; }
 
+/* Which way the scored talk leans. Ink on purpose: green and red mean price
+   direction here and nothing else, and violet is chatter volume -- the lean
+   is neither. The dominant side carries the weight. */
+.row .sub.lean { color: var(--muted); }
+.row .sub.lean b { color: var(--ink); font-weight: 650; }
+
 /* Marks and deviant quote facts, full width under the drawing: crammed into
    the facts column they truncated, and a caution the reader cannot finish
    reading is not a caution. Present only when there is something to say. */

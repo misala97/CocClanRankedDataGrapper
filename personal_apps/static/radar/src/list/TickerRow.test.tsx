@@ -33,6 +33,28 @@ const row = (over: Partial<Row> = {}): Row => ({
 })
 
 describe('a ticker row', () => {
+  it('shows which way the scored talk leans, in ink, and only when scored', () => {
+    /* Counts, not a verdict: green/red stay price-only on this surface, so
+       the lean is ink with the dominant side bold. Nothing scored says
+       nothing -- most mentions carry no wording at all. */
+    const { container, rerender } = render(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 row={row({ tone: { bullish: 4, neutral: 9, bearish: 2 } })} />)
+    const lean = container.querySelector('.sub.lean')!
+    expect(lean).toHaveTextContent('↑4')
+    expect(lean).toHaveTextContent('↓2')
+    expect(lean.querySelector('b')).toHaveTextContent('↑4')
+
+    rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                        row={row({ tone: { bullish: 2, neutral: 0, bearish: 2 } })} />)
+    // Equal counts: equality shows itself, neither side leads.
+    expect(container.querySelector('.sub.lean b')).toBeNull()
+
+    rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                        row={row({ tone: { bullish: 0, neutral: 7, bearish: 0 } })} />)
+    expect(container.querySelector('.sub.lean')).toBeNull()
+  })
+
   it('summarises the finding in the facts column', () => {
     /* The sentence moved to the panel with the chart-row; the row keeps the
        short figures. 284/7 rounds past ten, so no decimal survives. */
