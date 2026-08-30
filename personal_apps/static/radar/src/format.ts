@@ -39,7 +39,9 @@ const SEGMENT_LABELS: Record<string, string> = {
   mid: 'Mid',
   micro: 'Micro',
   unknown: 'Unknown',
-  recent_ipo: 'Recent IPO',
+  // "IPO", not "Recent IPO": the strip's eight tabs measured wider than the
+  // pane with the long form, and recency is what the segment means anyway.
+  recent_ipo: 'IPO',
   fund: 'Funds',
 }
 

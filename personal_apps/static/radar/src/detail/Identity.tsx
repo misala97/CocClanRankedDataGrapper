@@ -50,7 +50,7 @@ function quotePrice(value: number, quote: Detail['identity']['quote']): string {
  *
  *  This line printed the raw enum with a word stuck on the end -- `${segment}
  *  cap` -- which reads as "recent_ipo cap" on the panel while the row two
- *  inches away says "Recent IPO", because the row uses `segmentLabel()` and
+ *  inches away says "IPO", because the row uses `segmentLabel()` and
  *  the panel did not. It also produces "unknown cap" and "fund cap", and
  *  neither of those is a cap at all: `fund` has no market capitalisation to
  *  describe and `unknown` is the absence of one.

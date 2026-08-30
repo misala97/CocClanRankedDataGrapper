@@ -537,9 +537,11 @@ describe('how old the board is', () => {
     vi.setSystemTime(new Date('2026-08-22T22:00:00Z'))
     render(<BoardPage initial={payload()} />)
 
-    expect(await screen.findByText(/3 hours old/)).toBeInTheDocument()
-    expect(screen.getByText(/21:00 CEST/)).toBeInTheDocument()
+    expect(await screen.findByText(/3h old/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
+    // Stale states the age INSTEAD of the build stamp -- the age is the
+    // actionable number, and the masthead corner does not fit both.
+    expect(screen.queryByText(/updated/)).toBeNull()
     vi.useRealTimers()
   })
 })

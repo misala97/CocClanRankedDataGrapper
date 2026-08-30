@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 
 import { Controls } from '../board/Controls'
+import { MarketSwitch } from '../board/MarketSwitch'
 import { magnitudes } from '../board/geometry'
-import { formatMarketTime } from '../format'
-import { stampTime } from '../format'
+import { formatMarketTime, plural, stampTime } from '../format'
 import { Widen } from '../Widen'
 import { Excluded } from './Excluded'
 import { Marks } from './Marks'
@@ -38,12 +39,14 @@ function Age({ iso }: { iso: string }) {
   if (Number.isNaN(at)) return null
   const minutes = Math.floor((Date.now() - at) / 60_000)
   const stale = minutes >= STALE_MINUTES
-  const age = minutes < 120 ? `${minutes} minutes`
-    : `${Math.floor(minutes / 60)} hours`
+  const age = minutes < 120 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`
+  // Fresh states the build time; stale states the age instead -- the age is
+  // the actionable number, and both never share the line since a masthead
+  // corner does not fit "117m old · 16:46 CEST · Reload".
   return (
     <span className="age">
-      {stale ? <><b>{age} old</b> · </> : 'updated '}
-      <time dateTime={iso}>{stampTime(iso)}</time>
+      {stale ? <b>{age} old</b>
+             : <>updated <time dateTime={iso}>{stampTime(iso)}</time></>}
       {stale && (
         <>
           {' '}
@@ -66,15 +69,18 @@ function Age({ iso }: { iso: string }) {
  */
 // Exhaustive over Mark on purpose: a new mark will not compile until
 // someone decides what the board says when every row carries it.
+//
+// Token-length by design since the 2026-08-30 head rework: these render in
+// a one-line status strip, not a sentence, so each is a clause a scanning
+// reader absorbs whole. Full prose explanations live on the marks legend.
 const UNIVERSAL: Record<Mark, string> = {
-  provisional: 'every baseline here is under 14 days old',
-  'single-source': 'every row here came from a single source',
-  'no-print': 'no tape has printed in this window',
-  partial: 'every source here was truncated, so the counts are low',
+  provisional: 'baselines under 14d',
+  'single-source': 'all single-source',
+  'no-print': 'no tape printed',
+  partial: 'sources truncated',
   // Distinct from `provisional`: this fires when the extraction rules
   // changed recently, not when a ticker itself is new -- see marks.test.tsx.
-  'warming-up': 'the extraction rules changed recently, so every baseline '
-    + 'here is starting over',
+  'warming-up': 'baselines starting over',
 }
 
 /** Marks shared by the whole board, in the order they are written above.
@@ -88,59 +94,109 @@ export function universalMarks(rows: Row[]): Mark[] {
     (mark) => rows.every((row) => row.marks.includes(mark)))
 }
 
-/** The board's state, said once by the page rather than by every row.
+/** The session enum as a status word beside the venue: "US markets open".
+ *  sessionLabel() says "Market open", which next to `market_venue` would
+ *  read "US markets Market open". */
+const SESSION_WORDS: Record<string, string> = {
+  premarket: 'pre-market',
+  regular: 'open',
+  afterhours: 'after hours',
+  closed: 'closed',
+}
+
+/** The board's state as one line of tokens, said once by the page.
+ *
+ *  This replaced a three-sentence paragraph 2026-08-30. The prose restated
+ *  what the rows already show ("what is being talked about more than usual")
+ *  every single visit, and a reader who has seen it once never reads it
+ *  again -- it was 60px of the same words between them and the first ticker.
+ *  What survives is exactly the facts that change: venue and session, the
+ *  next boundary, which ranking is in force, how many rows, and any caution
+ *  the whole board carries.
  *
  *  With the exchange shut there is no price movement to diverge from, so the
- *  ranking falls through to chatter -- which is the useful answer at 23:00 on
- *  a Sunday, and only honest if the page says which of the two rankings the
- *  reader is looking at.
+ *  ranking falls through to chatter -- and the RANKED BY CHATTER token says
+ *  which of the two rankings the reader is looking at. It is the one token
+ *  set in the accent, because it changes what the score column means.
  */
-function Finding({ payload, shared }: {
+function Status({ payload, shared }: {
   payload: BoardPayload
   shared: Mark[]
 }) {
   const count = payload.rows.length
-  const tickers = count === 1 ? '1 ticker' : `${count} tickers`
   // The two never both apply to one row -- leaderboard.py picks exactly one
   // per row, by age -- so at most one is ever universal at a time. Either
-  // way the header must not say "baselines over 30 days" while every row
-  // disagrees; that was the bug this whole section exists to fix.
+  // way the line must not say "30d baselines" while every row disagrees;
+  // that was the bug the shared-marks logic exists to fix.
   const thinBaseline = shared.includes('provisional') ? 'provisional'
     : shared.includes('warming-up') ? 'warming-up'
     : null
-  const baselines = thinBaseline ? UNIVERSAL[thinBaseline] : 'baselines over 30 days'
   const rest = shared.filter(
     (mark) => mark !== 'provisional' && mark !== 'warming-up')
+  const closed = payload.session === 'closed'
+
+  // Composed as a list first so the separating dots can be real text.
+  // A CSS-generated separator is invisible to screen readers AND to the
+  // announcement a role="status" change produces, which would read
+  // "17:30 ranked by chatter" as one runon. The dot rides at the END of
+  // its token, so a wrapped line never opens with punctuation.
+  const tokens: { key: string; node: ReactNode; cls?: string }[] = [
+    {
+      key: 'session',
+      node: (
+        <>
+          {payload.market_venue}{' '}
+          <b className={closed ? 'off' : undefined}>
+            {SESSION_WORDS[payload.session] ?? payload.session}
+          </b>
+          {' '}· {payload.next_boundary_label} {clock(payload.next_boundary_at)}
+        </>
+      ),
+    },
+    // Chatter ranking is a fact about the closed session, so it follows
+    // directly from the session token it is a consequence of.
+    ...(closed
+      ? [{ key: 'mode', cls: 'mode', node: 'ranked by chatter' as ReactNode }]
+      : []),
+    {
+      key: 'count',
+      // The baselines claim only when the board could actually survey it:
+      // universalMarks() answers nothing under two rows, so a one-row board
+      // saying "30d baselines" beside a row marked provisional was the head
+      // contradicting its own list. Seen live 2026-08-30, one SPCX row.
+      node: count < 2
+        ? <>{count} {plural(count, 'ticker', 'tickers')}</>
+        : (
+          <>
+            {count} tickers ·{' '}
+            {thinBaseline
+              ? <span className="shared">{UNIVERSAL[thinBaseline]}</span>
+              : '30d baselines'}
+          </>
+        ),
+    },
+    ...rest.map((mark) => ({
+      key: mark, cls: 'shared', node: UNIVERSAL[mark] as ReactNode,
+    })),
+  ]
 
   return (
     // role="status" so a filter change is announced. Going from ten rows
     // to three used to be silent to a screen reader: the rows swapped, the
-    // count in this sentence changed, and nothing told anyone.
-    <p className="finding" role="status">
-      {payload.session === 'closed' ? (
-        <>
-          No price is moving, so these are ranked by <b>chatter against each
-          ticker&rsquo;s own normal</b> — what to look at when it opens.
-          {' '}<b>{tickers}</b> cleared the bar in the last
-          {' '}<b>{payload.window_hours}h</b>,{' '}
-          <span className={shared.length ? 'shared' : undefined}>{baselines}</span>.
-        </>
-      ) : (
-        <>
-          {/* "cleared the bar", not "above their normal". The board ranks by
-              divergence, not by ratio, so a ticker whose price fell further
-              than its chatter rose is legitimately listed while sitting BELOW
-              its normal -- RIVN at 0.8x and div -0.72 was on the board while
-              this sentence claimed every row was above normal. It is also the
-              wording the closed-market branch below already uses, so the two
-              now describe the list the same way. */}
-          <b>{tickers}</b> cleared the bar in the last
-          {' '}<b>{payload.window_hours}h</b> ·{' '}
-          <span className={shared.length ? 'shared' : undefined}>{baselines}</span>
-        </>
-      )}
-      {rest.map((mark) => (
-        <span key={mark} className="shared"> · {UNIVERSAL[mark]}</span>
+    // count in this line changed, and nothing told anyone.
+    //
+    // Each token is a nowrap span with its separating dot INSIDE it, and the
+    // plain space between spans is the only break opportunity -- so the line
+    // wraps between facts, never inside one, and never opens with a dot.
+    <p className="status" role="status">
+      {tokens.map(({ key, node, cls }, index) => (
+        <Fragment key={key}>
+          <span className={cls ? `tok ${cls}` : 'tok'}>
+            {node}
+            {index < tokens.length - 1 && <span className="dot"> ·</span>}
+          </span>
+          {index < tokens.length - 1 && ' '}
+        </Fragment>
       ))}
     </p>
   )
@@ -172,19 +228,17 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   return (
     <aside className="list" aria-label="Board">
       <div className="lhead">
+        {/* Masthead: identity, the market the prices come from, freshness.
+            The market switch sits beside the wordmark because it changes
+            what the board IS -- unlike the strip below, which narrows it.
+            The session state that used to sit here as a chip lives in the
+            status line now; it was the same fact stated twice. */}
         <div className="brand">
           <h1>Radar</h1>
-          {payload.session === 'closed' && (
-            <span className="state"><b>market closed</b></span>
-          )}
+          <MarketSwitch selection={selection} onChange={onChange} />
           <Age iso={payload.generated_at} />
         </div>
-        <p className="market-context">
-          {payload.market_venue} · {payload.session} ·{' '}
-          {payload.next_boundary_label}{' '}
-          {clock(payload.next_boundary_at)}
-        </p>
-        <Finding payload={payload} shared={shared} />
+        <Status payload={payload} shared={shared} />
       </div>
 
       <Controls payload={payload} selection={selection} busy={busy}

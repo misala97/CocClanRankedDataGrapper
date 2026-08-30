@@ -1,0 +1,570 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Radar head — three real directions</title>
+<style>
+@font-face{font-family:Inter;font-style:normal;font-weight:400 700;font-display:block;
+  src:url("../../static/radar/fonts/inter-latin.woff2") format("woff2");}
+</style>
+<style>
+:root{
+  --bg:oklch(0.988 0.002 290); --surface:oklch(0.970 0.004 290); --raise:oklch(1 0 0);
+  --rule:oklch(0.888 0.007 290); --rule-soft:oklch(0.940 0.005 290);
+  --ink:oklch(0.230 0.021 285); --ink-2:oklch(0.395 0.018 285);
+  --muted:oklch(0.480 0.016 285); --dim:oklch(0.545 0.012 285);
+  --mark:oklch(0.470 0.185 296); --mark-hi:oklch(0.560 0.180 296);
+  --mark-soft:oklch(0.470 0.185 296 / 0.13); --mark-wash:oklch(0.470 0.185 296 / 0.07);
+  --up:oklch(0.470 0.130 150); --down:oklch(0.500 0.175 27);
+  --warn:oklch(0.480 0.110 65); --warn-soft:oklch(0.480 0.110 65 / 0.11);
+  --t-ax:10.5px; --t-xs:11.5px; --t-sm:13px; --t-md:13.5px; --t-lg:17px;
+  --s1:4px; --s2:6px; --s3:8px; --s4:12px; --s5:16px; --s6:20px;
+  --r:8px; --r-pill:100px; --axis:176px;
+  --ease:cubic-bezier(0.22,1,0.36,1);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:26px; background:oklch(0.915 0.005 290);
+  font:15px/1.5 Inter,system-ui,sans-serif; color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  display:flex; gap:26px; align-items:flex-start;
+}
+.col{width:420px;flex:none}
+.tag{font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin:0 0 8px 2px}
+.tag i{font-style:normal;font-weight:400;color:var(--muted);margin-left:6px}
+.pane{
+  background:var(--surface); border:1px solid var(--rule); border-radius:var(--r);
+  overflow:hidden; position:relative;
+}
+
+/* ================= shared rows (prod rendering, untouched) ================= */
+.rows{background:var(--surface)}
+.row{position:relative;padding:9px var(--s6) 16px;border-bottom:1px solid var(--rule-soft)}
+.row::before{content:"";position:absolute;left:var(--s6);bottom:6px;width:var(--axis);
+  height:5px;border-bottom:1px solid var(--rule);border-right:1px solid var(--rule)}
+.row::after{content:"";position:absolute;left:var(--s6);bottom:7px;height:3px;
+  width:var(--axis);transform:scaleX(var(--mag,0));transform-origin:left center;background:var(--mark)}
+.r1{display:flex;align-items:baseline;gap:var(--s3);line-height:1.25}
+.r1 .tk{font-size:var(--t-lg);font-weight:700;letter-spacing:-0.01em}
+.r1 .nm{flex:1;min-width:0;font-size:12.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r1 .score{flex:none;margin-left:auto;display:inline-flex;align-items:baseline;gap:5px;
+  font-variant-numeric:tabular-nums;font-size:var(--t-md)}
+.r1 .score .k{font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
+.r2{margin:3px 0 0;font-size:var(--t-xs);color:var(--muted);font-variant-numeric:tabular-nums}
+.fade{position:relative;max-height:296px;overflow:hidden}
+.fade::after{content:"";position:absolute;inset:auto 0 0 0;height:44px;
+  background:linear-gradient(to bottom,transparent,var(--surface))}
+
+/* ==========================================================================
+   D1 — THE INSTRUMENT STRIP
+   No prose, no pills, no form. The head is a cockpit strip: every scope
+   decision is a flat text tab. Pressed = ink + violet underline. The mode
+   ("ranked by chatter") is a token, not a sentence.
+   ========================================================================== */
+.d1 .mast{
+  display:flex;align-items:baseline;gap:var(--s4);
+  padding:13px var(--s6) 0;
+}
+.d1 h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em}
+.d1 .mkt{display:inline-flex;gap:2px;align-items:baseline}
+.d1 .mkt button{
+  font:inherit;font-size:var(--t-sm);font-weight:600;padding:0 2px 3px;
+  border:0;background:none;color:var(--dim);cursor:pointer;
+  border-bottom:2px solid transparent;
+}
+.d1 .mkt button[aria-pressed=true]{color:var(--ink);border-bottom-color:var(--mark)}
+.d1 .mkt .sep{color:var(--rule);font-size:var(--t-sm)}
+.d1 .age{margin-left:auto;font-size:var(--t-xs);color:var(--warn);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.d1 .age button{font:inherit;font-weight:400;font-size:var(--t-xs);margin-left:var(--s2);
+  padding:1px 8px;border:1px solid var(--rule);border-radius:var(--r-pill);
+  background:var(--raise);color:var(--ink-2);cursor:pointer}
+.d1 .status{
+  display:flex;align-items:baseline;gap:var(--s2);flex-wrap:wrap;
+  margin:8px 0 0;padding:0 var(--s6) 10px;
+  font-size:var(--t-xs);color:var(--muted);font-variant-numeric:tabular-nums;
+}
+.d1 .status .tok{white-space:nowrap}
+.d1 .status .warn{color:var(--warn);font-weight:600}
+.d1 .status .mode{
+  color:var(--mark);font-weight:600;letter-spacing:0.05em;text-transform:uppercase;
+  font-size:var(--t-ax);
+}
+.d1 .status .dot{color:var(--rule)}
+.d1 .strip{
+  display:flex;align-items:baseline;gap:var(--s5);
+  padding:9px var(--s6) 0;border-top:1px solid var(--rule);
+}
+.d1 .strip .grp{display:flex;gap:var(--s4);align-items:baseline}
+.d1 .strip .grp+.grp{padding-left:var(--s5);border-left:1px solid var(--rule-soft)}
+.d1 .t{
+  font:inherit;font-size:var(--t-sm);padding:0 0 8px;border:0;background:none;
+  color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.d1 .t:hover{color:var(--ink-2)}
+.d1 .t[aria-pressed=true]{color:var(--ink);font-weight:600;border-bottom-color:var(--mark)}
+.d1 .t .n{font-size:var(--t-ax);color:var(--muted);margin-left:3px}
+.d1 .t[aria-pressed=true] .n{color:var(--mark)}
+.d1 .strip2{
+  display:flex;align-items:baseline;gap:var(--s4);
+  padding:8px var(--s6) 0;border-top:1px solid var(--rule-soft);
+  border-bottom:1px solid var(--rule);
+}
+.d1 .lab{font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;
+  color:var(--dim);padding-bottom:8px}
+
+/* ==========================================================================
+   D2 — THE CONTROLS DISSOLVE INTO THE LIST
+   There is no filter block. Segments become group rails inside the list
+   (you never filter to see them; they are all there, grouped). The window
+   lives on the list's own column line. Sources are a legend at the bottom.
+   Head shrinks to identity + status.
+   ========================================================================== */
+.d2 .mast{display:flex;align-items:baseline;gap:var(--s4);padding:13px var(--s6) 0}
+.d2 h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em}
+.d2 .mkt{display:inline-flex;gap:2px}
+.d2 .mkt button{font:inherit;font-size:var(--t-sm);font-weight:600;padding:0 2px 3px;
+  border:0;background:none;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent}
+.d2 .mkt button[aria-pressed=true]{color:var(--ink);border-bottom-color:var(--mark)}
+.d2 .age{margin-left:auto;font-size:var(--t-xs);color:var(--warn);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.d2 .age button{font:inherit;font-weight:400;font-size:var(--t-xs);margin-left:var(--s2);
+  padding:1px 8px;border:1px solid var(--rule);border-radius:var(--r-pill);
+  background:var(--raise);color:var(--ink-2);cursor:pointer}
+.d2 .status{margin:8px 0 0;padding:0 var(--s6) 12px;
+  font-size:var(--t-xs);color:var(--muted);font-variant-numeric:tabular-nums}
+.d2 .status .warn{color:var(--warn);font-weight:600}
+.d2 .status .mode{color:var(--mark);font-weight:600;letter-spacing:0.05em;
+  text-transform:uppercase;font-size:var(--t-ax)}
+.d2 .cols{
+  display:flex;align-items:baseline;gap:var(--s3);
+  padding:7px var(--s6);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);
+}
+.d2 .cols .win{margin-left:auto;display:inline-flex;gap:var(--s3)}
+.d2 .cols .win button{font:inherit;letter-spacing:inherit;text-transform:inherit;
+  padding:0;border:0;background:none;color:var(--dim);cursor:pointer;
+  font-variant-numeric:tabular-nums}
+.d2 .cols .win button[aria-pressed=true]{color:var(--mark);font-weight:700}
+.d2 .rail{
+  display:flex;align-items:baseline;gap:var(--s3);
+  padding:10px var(--s6) 4px;
+  font-size:var(--t-ax);letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);
+}
+.d2 .rail::after{content:"";flex:1;border-bottom:1px solid var(--rule-soft);
+  transform:translateY(-3px)}
+.d2 .rail .n{color:var(--dim);letter-spacing:0}
+.d2 .legend{
+  display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap;
+  padding:9px var(--s6) 11px;border-top:1px solid var(--rule);
+  font-size:var(--t-xs);color:var(--muted);
+}
+.d2 .legend .lab{font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim)}
+.d2 .legend button{
+  font:inherit;font-size:var(--t-xs);display:inline-flex;align-items:center;gap:5px;
+  padding:0;border:0;background:none;color:var(--ink-2);cursor:pointer;
+}
+.d2 .legend button .dot{width:6px;height:6px;border-radius:50%;background:var(--mark);flex:none}
+.d2 .legend button[aria-pressed=false]{color:var(--dim);text-decoration:line-through}
+.d2 .legend button[aria-pressed=false] .dot{background:var(--rule)}
+.d2 .legend .venues{margin-left:auto;display:inline-flex;gap:var(--s3)}
+.d2 .legend .venues button[aria-pressed=true]{color:var(--mark);font-weight:600;text-decoration:none}
+
+/* ==========================================================================
+   D3 — SCOPE TOKENS + COMMAND PALETTE
+   The head states the scope as one quiet token line. Changing anything is
+   one interaction: the palette (press / or click the line). Nothing else
+   is chrome. Shown twice: at rest, and with the palette open.
+   ========================================================================== */
+.d3 .mast{display:flex;align-items:baseline;gap:var(--s4);padding:13px var(--s6) 0}
+.d3 h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em}
+.d3 .age{margin-left:auto;font-size:var(--t-xs);color:var(--warn);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.d3 .age button{font:inherit;font-weight:400;font-size:var(--t-xs);margin-left:var(--s2);
+  padding:1px 8px;border:1px solid var(--rule);border-radius:var(--r-pill);
+  background:var(--raise);color:var(--ink-2);cursor:pointer}
+.d3 .status{margin:8px 0 0;padding:0 var(--s6);
+  font-size:var(--t-xs);color:var(--muted);font-variant-numeric:tabular-nums}
+.d3 .status .warn{color:var(--warn);font-weight:600}
+.d3 .status .mode{color:var(--mark);font-weight:600;letter-spacing:0.05em;
+  text-transform:uppercase;font-size:var(--t-ax)}
+.d3 .scope{
+  display:flex;align-items:center;gap:var(--s2);
+  margin:10px var(--s6) 12px;padding:6px 10px;
+  border:1px solid var(--rule);border-radius:var(--r);
+  background:var(--raise);cursor:pointer;
+  font-size:var(--t-sm);color:var(--ink-2);font-variant-numeric:tabular-nums;
+}
+.d3 .scope .tok{white-space:nowrap}
+.d3 .scope .tok.on{color:var(--mark);font-weight:600}
+.d3 .scope .dot{color:var(--rule)}
+.d3 .scope .kbd{
+  margin-left:auto;font-size:var(--t-ax);color:var(--dim);
+  border:1px solid var(--rule);border-radius:4px;padding:0 5px;line-height:1.6;
+}
+.d3 .pane-rule{border-top:1px solid var(--rule)}
+/* palette overlay */
+.d3 .veil{position:absolute;inset:0;background:oklch(0.3 0.02 285 / 0.28)}
+.d3 .pal{
+  position:absolute;left:24px;right:24px;top:64px;
+  background:var(--raise);border:1px solid var(--rule);border-radius:10px;
+  box-shadow:0 18px 50px oklch(0.2 0.03 285 / 0.25);
+  overflow:hidden;
+}
+.d3 .pal .in{
+  display:flex;align-items:center;gap:var(--s3);
+  padding:11px 14px;border-bottom:1px solid var(--rule-soft);
+  font-size:var(--t-base);color:var(--ink);
+}
+.d3 .pal .in .caret{color:var(--mark);font-weight:700}
+.d3 .pal .in .ghost{color:var(--dim)}
+.d3 .pal .sec{
+  padding:8px 14px 3px;font-size:var(--t-ax);letter-spacing:0.07em;
+  text-transform:uppercase;color:var(--dim);
+}
+.d3 .pal .it{
+  display:flex;align-items:baseline;gap:var(--s3);
+  padding:7px 14px;font-size:var(--t-sm);color:var(--ink-2);
+  font-variant-numeric:tabular-nums;
+}
+.d3 .pal .it.sel{background:var(--mark-wash);color:var(--ink)}
+.d3 .pal .it.sel::before{content:"";width:3px;height:14px;border-radius:2px;
+  background:var(--mark);align-self:center;margin-right:2px}
+.d3 .pal .it .n{margin-left:auto;font-size:var(--t-xs);color:var(--muted)}
+.d3 .pal .it b{font-weight:600}
+.d3 .pal .foot{
+  display:flex;gap:var(--s4);padding:8px 14px;border-top:1px solid var(--rule-soft);
+  font-size:var(--t-ax);color:var(--dim);
+}
+</style>
+
+<!-- ======================= D1 — instrument strip ======================= -->
+<div class="col d1">
+  <p class="tag">D1 — the instrument strip<i>no prose, no pills; every choice is a flat tab</i></p>
+  <div class="pane">
+    <div class="mast">
+      <h1>Radar</h1>
+      <span class="mkt">
+        <button aria-pressed="true">US</button><span class="sep">/</span><button aria-pressed="false">DE</button>
+      </span>
+      <span class="age">117m<button>Reload</button></span>
+    </div>
+    <p class="status">
+      <span class="tok">Xetra <span class="warn">closed</span> · opens 10:00</span>
+      <span class="dot">·</span>
+      <span class="mode">ranked by chatter</span>
+      <span class="dot">·</span>
+      <span class="tok">3 of 22 · 30d baselines</span>
+    </p>
+    <div class="strip">
+      <div class="grp">
+        <button class="t" aria-pressed="false">1h</button>
+        <button class="t" aria-pressed="true">4h</button>
+        <button class="t" aria-pressed="false">24h</button>
+      </div>
+      <div class="grp">
+        <button class="t" aria-pressed="false">All<span class="n">22</span></button>
+        <button class="t" aria-pressed="true">Small<span class="n">3</span></button>
+        <button class="t" aria-pressed="false">Large<span class="n">10</span></button>
+        <button class="t" aria-pressed="false">Mid<span class="n">6</span></button>
+        <button class="t" aria-pressed="false">More<span class="n">▾</span></button>
+      </div>
+    </div>
+    <div class="strip2">
+      <span class="lab">on</span>
+      <button class="t" aria-pressed="true">Bluesky</button>
+      <button class="t" aria-pressed="true">4chan</button>
+      <button class="t" aria-pressed="true">Reddit</button>
+      <span class="lab" style="margin-left:auto">venues</span>
+      <button class="t" aria-pressed="true">any</button>
+      <button class="t" aria-pressed="false">2+</button>
+    </div>
+    <div class="rows fade">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">chat</span>7.4&times;</span></div>
+        <p class="r2">61 mentions · 3 venues · z 3.1</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">chat</span>3.1&times;</span></div>
+        <p class="r2">24 mentions · 2 venues · z 2.2</p>
+      </div>
+      <div class="row" style="--mag:0.19">
+        <div class="r1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+          <span class="score"><span class="k">chat</span>1.9&times;</span></div>
+        <p class="r2">12 mentions · 2 venues · z 1.6</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= D2 — controls become the list ======================= -->
+<div class="col d2">
+  <p class="tag">D2 — the filter block dies<i>segments are group rails, window is a column, sources a legend</i></p>
+  <div class="pane">
+    <div class="mast">
+      <h1>Radar</h1>
+      <span class="mkt">
+        <button aria-pressed="true">US</button><button aria-pressed="false" style="margin-left:6px">DE</button>
+      </span>
+      <span class="age">117m<button>Reload</button></span>
+    </div>
+    <p class="status">
+      Xetra <span class="warn">closed</span> · opens 10:00 ·
+      <span class="mode">ranked by chatter</span> · 30d baselines
+    </p>
+    <div class="cols">
+      <span>ticker</span>
+      <span class="win">
+        <span style="letter-spacing:0.06em">window</span>
+        <button aria-pressed="false">1h</button>
+        <button aria-pressed="true">4h</button>
+        <button aria-pressed="false">24h</button>
+      </span>
+    </div>
+    <div class="rows fade" style="max-height:340px">
+      <div class="rail"><span>Small</span><span class="n">3</span></div>
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">chat</span>7.4&times;</span></div>
+        <p class="r2">61 mentions · 3 venues · z 3.1</p>
+      </div>
+      <div class="row" style="--mag:0.19">
+        <div class="r1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+          <span class="score"><span class="k">chat</span>1.9&times;</span></div>
+        <p class="r2">12 mentions · 2 venues · z 1.6</p>
+      </div>
+      <div class="rail"><span>Large</span><span class="n">10</span></div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">chat</span>3.1&times;</span></div>
+        <p class="r2">24 mentions · 2 venues · z 2.2</p>
+      </div>
+      <div class="row" style="--mag:0.31">
+        <div class="r1"><span class="tk">NVDA</span><span class="nm">NVIDIA Corp</span>
+          <span class="score"><span class="k">chat</span>2.4&times;</span></div>
+        <p class="r2">104 mentions · 3 venues · z 1.9</p>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="lab">sources</span>
+      <button aria-pressed="true"><span class="dot"></span>Bluesky</button>
+      <button aria-pressed="true"><span class="dot"></span>4chan</button>
+      <button aria-pressed="true"><span class="dot"></span>Reddit</button>
+      <span class="venues">
+        <span class="lab" style="padding:0">venues</span>
+        <button aria-pressed="true">any</button>
+        <button aria-pressed="false">2+</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= D3 — scope line + palette, at rest ======================= -->
+<div class="col d3">
+  <p class="tag">D3 — one scope line, palette for everything<i>at rest</i></p>
+  <div class="pane">
+    <div class="mast">
+      <h1>Radar</h1>
+      <span class="age">117m<button>Reload</button></span>
+    </div>
+    <p class="status">
+      Xetra <span class="warn">closed</span> · opens 10:00 ·
+      <span class="mode">ranked by chatter</span> · 3 of 22 · 30d baselines
+    </p>
+    <div class="scope" role="button" tabindex="0">
+      <span class="tok on">US</span><span class="dot">·</span>
+      <span class="tok on">4h</span><span class="dot">·</span>
+      <span class="tok on">Small</span><span class="dot">·</span>
+      <span class="tok">all sources</span><span class="dot">·</span>
+      <span class="tok">any venue</span>
+      <span class="kbd">/</span>
+    </div>
+    <div class="pane-rule"></div>
+    <div class="rows fade">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">chat</span>7.4&times;</span></div>
+        <p class="r2">61 mentions · 3 venues · z 3.1</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">chat</span>3.1&times;</span></div>
+        <p class="r2">24 mentions · 2 venues · z 2.2</p>
+      </div>
+      <div class="row" style="--mag:0.19">
+        <div class="r1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+          <span class="score"><span class="k">chat</span>1.9&times;</span></div>
+        <p class="r2">12 mentions · 2 venues · z 1.6</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= D3b — palette open ======================= -->
+<div class="col d3">
+  <p class="tag">D3 — palette open<i>type to scope; everything is one interaction away</i></p>
+  <div class="pane" style="min-height:470px">
+    <div class="mast">
+      <h1>Radar</h1>
+      <span class="age">117m<button>Reload</button></span>
+    </div>
+    <p class="status">
+      Xetra <span class="warn">closed</span> · opens 10:00 ·
+      <span class="mode">ranked by chatter</span> · 3 of 22 · 30d baselines
+    </p>
+    <div class="scope">
+      <span class="tok on">US</span><span class="dot">·</span>
+      <span class="tok on">4h</span><span class="dot">·</span>
+      <span class="tok on">Small</span><span class="dot">·</span>
+      <span class="tok">all sources</span><span class="dot">·</span>
+      <span class="tok">any venue</span>
+      <span class="kbd">/</span>
+    </div>
+    <div class="pane-rule"></div>
+    <div class="rows fade" style="max-height:250px">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">chat</span>7.4&times;</span></div>
+        <p class="r2">61 mentions · 3 venues · z 3.1</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">chat</span>3.1&times;</span></div>
+        <p class="r2">24 mentions · 2 venues · z 2.2</p>
+      </div>
+    </div>
+    <div class="veil"></div>
+    <div class="pal">
+      <div class="in"><span class="caret">›</span>la<span class="ghost">rge</span></div>
+      <div class="sec">Segment</div>
+      <div class="it sel"><b>Large</b> — show only large caps<span class="n">10</span></div>
+      <div class="it">All segments<span class="n">22</span></div>
+      <div class="sec">More</div>
+      <div class="it">24h — widen the window</div>
+      <div class="it">DE — Xetra prices</div>
+      <div class="foot"><span>↑↓ choose</span><span>↵ apply</span><span>esc close</span></div>
+    </div>
+  </div>
+</div>
+<!-- ======================= D1 FINAL — all 8 segments, both sessions ======================= -->
+<div class="col d1">
+  <p class="tag">D1 final — closed market<i>all 8 segments visible, no More menu</i></p>
+  <div class="pane">
+    <div class="mast">
+      <h1>Radar</h1>
+      <span class="mkt">
+        <button aria-pressed="true">US</button><span class="sep">/</span><button aria-pressed="false">DE</button>
+      </span>
+      <span class="age">117m<button>Reload</button></span>
+    </div>
+    <p class="status">
+      <span class="tok">Xetra <span class="warn">closed</span> · opens 10:00</span>
+      <span class="dot">·</span>
+      <span class="mode">ranked by chatter</span>
+      <span class="dot">·</span>
+      <span class="tok">3 tickers · 30d baselines</span>
+    </p>
+    <div class="strip" style="gap:10px;flex-wrap:wrap;font-size:12.5px">
+      <button class="t" aria-pressed="false">Small<span class="n">3</span></button>
+      <button class="t" aria-pressed="true">All<span class="n">22</span></button>
+      <button class="t" aria-pressed="false">Large<span class="n">10</span></button>
+      <button class="t" aria-pressed="false">Mid<span class="n">6</span></button>
+      <button class="t" aria-pressed="false">Micro<span class="n">2</span></button>
+      <span style="flex-basis:100%;height:0"></span>
+      <button class="t" aria-pressed="false">IPO<span class="n">1</span></button>
+      <button class="t" aria-pressed="false" style="color:var(--dim)">Unknown<span class="n">0</span></button>
+      <button class="t" aria-pressed="false">Funds<span class="n">3</span></button>
+    </div>
+    <div class="strip2">
+      <div class="grp" style="padding:0;border:0;display:flex;gap:var(--s4)">
+        <button class="t" aria-pressed="false">1h</button>
+        <button class="t" aria-pressed="true">4h</button>
+        <button class="t" aria-pressed="false">24h</button>
+      </div>
+      <div class="grp" style="display:flex;gap:var(--s4);padding-left:var(--s5);border-left:1px solid var(--rule-soft)">
+        <button class="t" aria-pressed="true">Bluesky</button>
+        <button class="t" aria-pressed="true">4chan</button>
+        <button class="t" aria-pressed="true">Reddit</button>
+      </div>
+      <div class="grp" style="display:flex;gap:var(--s4);padding-left:var(--s5);border-left:1px solid var(--rule-soft);margin-left:auto">
+        <button class="t" aria-pressed="true">any</button>
+        <button class="t" aria-pressed="false">2+<span class="n">18</span></button>
+      </div>
+    </div>
+    <div class="rows fade">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">chat</span>7.4&times;</span></div>
+        <p class="r2">61 mentions · 3 venues · z 3.1</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">chat</span>3.1&times;</span></div>
+        <p class="r2">24 mentions · 2 venues · z 2.2</p>
+      </div>
+      <div class="row" style="--mag:0.19">
+        <div class="r1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+          <span class="score"><span class="k">chat</span>1.9&times;</span></div>
+        <p class="r2">12 mentions · 2 venues · z 1.6</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="tag" style="margin-top:18px">D1 final — open market<i>mode token gone, boundary flips</i></p>
+  <div class="pane">
+    <div class="mast">
+      <h1>Radar</h1>
+      <span class="mkt">
+        <button aria-pressed="true">US</button><span class="sep">/</span><button aria-pressed="false">DE</button>
+      </span>
+      <span class="age" style="color:var(--muted);font-weight:400">updated 16:46</span>
+    </div>
+    <p class="status">
+      <span class="tok">NYSE <b style="color:var(--ink);font-weight:600">open</b> · closes 22:00</span>
+      <span class="dot">·</span>
+      <span class="tok">12 tickers · 30d baselines</span>
+    </p>
+    <div class="strip" style="gap:10px;flex-wrap:wrap;font-size:12.5px">
+      <button class="t" aria-pressed="true">Small<span class="n">7</span></button>
+      <button class="t" aria-pressed="false">All<span class="n">31</span></button>
+      <button class="t" aria-pressed="false">Large<span class="n">12</span></button>
+      <button class="t" aria-pressed="false">Mid<span class="n">8</span></button>
+      <button class="t" aria-pressed="false">Micro<span class="n">3</span></button>
+      <span style="flex-basis:100%;height:0"></span>
+      <button class="t" aria-pressed="false">IPO<span class="n">1</span></button>
+      <button class="t" aria-pressed="false" style="color:var(--dim)">Unknown<span class="n">0</span></button>
+      <button class="t" aria-pressed="false">Funds<span class="n">4</span></button>
+    </div>
+    <div class="strip2">
+      <div class="grp" style="padding:0;border:0;display:flex;gap:var(--s4)">
+        <button class="t" aria-pressed="false">1h</button>
+        <button class="t" aria-pressed="true">4h</button>
+        <button class="t" aria-pressed="false">24h</button>
+      </div>
+      <div class="grp" style="display:flex;gap:var(--s4);padding-left:var(--s5);border-left:1px solid var(--rule-soft)">
+        <button class="t" aria-pressed="true">Bluesky</button>
+        <button class="t" aria-pressed="true">4chan</button>
+        <button class="t" aria-pressed="true">Reddit</button>
+      </div>
+      <div class="grp" style="display:flex;gap:var(--s4);padding-left:var(--s5);border-left:1px solid var(--rule-soft);margin-left:auto">
+        <button class="t" aria-pressed="true">any</button>
+        <button class="t" aria-pressed="false">2+<span class="n">24</span></button>
+      </div>
+    </div>
+    <div class="rows fade">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">div</span>1.42</span></div>
+        <p class="r2">7.4&times; normal · <b style="color:var(--up);font-weight:600">+3.2%</b> · 3 venues</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">div</span>0.88</span></div>
+        <p class="r2">3.1&times; normal · <b style="color:var(--down);font-weight:600">-1.1%</b> · 2 venues</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>

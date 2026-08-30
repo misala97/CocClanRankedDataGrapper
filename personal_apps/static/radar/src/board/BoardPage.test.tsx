@@ -285,8 +285,13 @@ describe('the controls', () => {
       next_boundary_at: '2026-08-28T15:30:00Z',
     })} />)
 
-    expect(screen.getByText('Xetra · regular · closes 17:30'))
-      .toBeInTheDocument()
+    /* The enum used to be printed raw ("regular"); the status line says it
+       as a word now, with real dot separators so the announcement a
+       role="status" change produces keeps them. */
+    // The head's status line is the FIRST status region; the empty-board
+    // account further down is its own.
+    const [head] = screen.getAllByRole('status')
+    expect(head).toHaveTextContent('Xetra open · closes 17:30')
   })
 
   it('refetches and rewrites the address bar when a source is dropped', async () => {
@@ -329,7 +334,7 @@ describe('the controls', () => {
     })} />)
 
     for (const label of ['Small', 'All', 'Large', 'Mid', 'Micro',
-                         'Recent IPO', 'Unknown']) {
+                         'IPO', 'Unknown', 'Funds']) {
       expect(screen.getByRole('button', { name: new RegExp(`^${label}`) }))
         .toBeInTheDocument()
     }

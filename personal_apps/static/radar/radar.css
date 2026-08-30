@@ -388,25 +388,48 @@ body {
   min-height: 0;
 }
 
-.lhead { padding: 18px var(--s6) 14px; }
-.brand { display: flex; align-items: baseline; gap: 10px; }
+.lhead { padding: 14px var(--s6) 11px; }
+.brand { display: flex; align-items: baseline; gap: var(--s4); }
 .brand h1 {
   margin: 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.015em;
 }
-.brand .state { font-size: var(--t-xs); color: var(--muted); }
-.market-context {
-  margin: 7px 0 0; font-size: var(--t-xs); color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-/* Amber for the fact, not for the timestamp carrying it. */
-.brand .state b { color: var(--warn); font-weight: 600; }
 
-/* When this board was built, always in UTC. After fifteen minutes the same
-   line becomes an amber age warning with a reload control; the geometry does
-   not jump when freshness turns into staleness. */
+/* The market beside the wordmark, in the strip's own tab vocabulary. Both
+   labels hold weight 600 in every state -- pressed is said by ink and the
+   underline alone, so nothing changes width when the market flips. */
+.brand .market-switch {
+  display: inline-flex; align-items: baseline;
+  margin: 0; padding: 0; border: 0;
+}
+.market-switch legend {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+.market-switch label { cursor: pointer; }
+.market-switch label + label::before {
+  content: "/"; color: var(--rule); font-size: var(--t-sm); padding: 0 6px;
+}
+.market-switch input { position: absolute; opacity: 0; }
+.market-switch span {
+  font-size: var(--t-sm); font-weight: 600; color: var(--dim);
+  padding: 0 1px 3px; border-bottom: 2px solid transparent;
+  transition: color var(--fast) var(--ease);
+}
+.market-switch label:hover span { color: var(--ink-2); }
+.market-switch input:checked + span {
+  color: var(--ink); border-bottom-color: var(--mark);
+}
+.market-switch input:focus-visible + span {
+  outline: 2px solid var(--mark); outline-offset: 2px;
+}
+
+/* When this board was built. After fifteen minutes the same corner becomes
+   an amber age with a reload control; fresh and stale each state the one
+   number that matters in that state, never both. */
 .brand .age {
   margin-left: auto; text-align: right;
   font-size: var(--t-xs); color: var(--muted);
+  font-variant-numeric: tabular-nums;
   animation: settle 300ms var(--ease) backwards;
 }
 .brand .age b { color: var(--warn); font-weight: 600; }
@@ -421,119 +444,103 @@ body {
   outline: 2px solid var(--mark); outline-offset: 1px;
 }
 
-.finding {
-  margin: 9px 0 0; font-size: var(--t-md); line-height: 1.55;
-  color: var(--ink-2); text-wrap: pretty;
+/* The status line: the board's state as tokens, replacing a three-sentence
+   paragraph (2026-08-30). Plain flowing text, not flex: each token is a
+   nowrap span carrying its own separating dot, and the space between spans
+   is the only break opportunity -- see the JSX. The dots are real text so
+   the role="status" announcement keeps its separators. */
+.status {
+  margin: 8px 0 0;
+  font-size: var(--t-xs); line-height: 1.6; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
-.finding b { font-weight: 600; color: var(--ink); }
+.status .tok { white-space: nowrap; }
+.status .dot { color: var(--dim); font-weight: 400; letter-spacing: 0; }
+.status b { color: var(--ink); font-weight: 600; }
+/* Amber only when the fact is a caution: a shut market, not an open one. */
+.status b.off { color: var(--warn); }
+/* Which ranking is in force. The accent, because it changes what the score
+   column MEANS -- and uppercase-tracked so it reads as a state flag, not a
+   phrase in the sentence it interrupts. */
+.status .mode {
+  color: var(--mark); font-weight: 600;
+  font-size: var(--t-ax); letter-spacing: 0.05em; text-transform: uppercase;
+  white-space: nowrap;
+}
 /* A caution the whole board carries. Amber, because it is the same fact
    the row's own mark would have been. */
-.finding .shared { color: var(--warn); }
+.status .shared { color: var(--warn); font-weight: 600; }
 
 /* --------------------------------------------------------- the controls --
-   A label gutter, not a heading line per group. Four stacked labels over four
-   chip rows was 273px of furniture before the first ticker; the gutter puts
-   each label beside its own chips and gets the block under 180px. Chips wrap
-   within their own column, so a label can never end up next to the wrong
-   group -- which is what happened when they shared one inline flow.
+   The instrument strip (2026-08-30). Replaced a labelled settings form:
+   five uppercase gutter labels over pill chips said what the tabs already
+   say, and the pill treatment made twelve rarely-touched controls the
+   loudest thing on the pane. Every scope choice is now a flat text tab --
+   pressed is ink with a violet underline, unpressed is muted text -- in two
+   lines: the eight segments, then window | sources | venues split by
+   hairlines.
 
-   Fixed slots throughout: a chip whose count is zero dims rather than
-   disappearing. Chips used to be dropped at zero, which made the strip change
-   shape between loads and move things under the cursor.
+   Fixed slots throughout, as before: a tab whose count is zero dims rather
+   than disappearing, the segment strip breaks at a fixed tab, and no state
+   change alters a tab's width (no weight jump on press), so the strip never
+   changes shape and nothing moves under the cursor.
    ========================================================================= */
 
 .controls {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  gap: var(--s3) 10px;
-  align-items: start;
-  padding: var(--s4) var(--s6) 14px;
+  padding: 0 var(--s6);
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
 }
 /* While a board is in flight the controls stop accepting clicks -- a second
    filter change mid-request would abort the first and the reader would be
-   waiting on something they cannot see.
-   ----------------------------------------------------------------------------
-   This used to also drop every button to 0.55 opacity, which put the chip
-   labels under 4.5:1 for the duration and, worse, pointed the signal at the
-   wrong thing: the CONTROLS are not stale, the ROWS are. The chips now stay
-   legible and inert, and the list they are about to replace is what recedes
-   (see .rows[aria-busy]). */
+   waiting on something they cannot see. The tabs stay legible and inert;
+   the list they are about to replace is what recedes (see .rows[aria-busy]). */
 .controls[aria-busy="true"] { pointer-events: none; cursor: progress; }
 
-.controls > .lbl {
-  padding-top: 5px;
-  font-size: var(--t-ax); letter-spacing: 0.07em; text-transform: uppercase;
-  color: var(--muted); white-space: nowrap;
+.tabs {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  gap: 0 var(--s4); padding-top: 9px;
 }
-.market-switch {
-  grid-column: 1 / -1;
-  display: flex; align-items: center; flex-wrap: wrap; gap: var(--s1);
-  margin: 0; padding: 0; border: 0;
-}
-.market-switch legend {
-  float: left; margin-right: 10px; padding: 5px 0 0;
-  font-size: var(--t-ax); letter-spacing: 0.07em; text-transform: uppercase;
-  color: var(--muted);
-}
-.market-switch label { cursor: pointer; }
-.market-switch input { position: absolute; opacity: 0; }
-.market-switch span {
-  font: inherit; font-size: 12.5px; line-height: 1.3; display: inline-flex;
-  padding: 3px 9px; border: 1px solid transparent; border-radius: var(--r-pill);
-  color: var(--ink-2);
-}
-.market-switch input:checked + span {
-  background: var(--mark-soft); color: var(--mark); font-weight: 600;
-}
-.market-switch input:focus-visible + span { outline: 2px solid var(--mark); outline-offset: 1px; }
-.seg { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.tabs + .tabs { border-top: 1px solid var(--rule-soft); }
+/* The deliberate line break in the segment strip -- see Controls.tsx. */
+.tabs .brk { flex-basis: 100%; height: 0; }
 
-.seg button, .chip {
+.grp {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--s4);
+}
+.grp + .grp { padding-left: var(--s5); border-left: 1px solid var(--rule-soft); }
+.grp.end { margin-left: auto; }
+/* On a phone the strip wraps and the venues group lands on its own line;
+   pushed right it hangs over dead air, so below the stack point it follows
+   the flow like everything else. */
+@media (max-width: 900px) {
+  .grp.end { margin-left: 0; }
+}
+
+.t {
   font: inherit; font-size: 12.5px; line-height: 1.3;
-  display: inline-flex; align-items: baseline; gap: 5px;
-  padding: 3px 9px;
-  border: 1px solid transparent; border-radius: var(--r-pill);
-  background: transparent; color: var(--ink-2); cursor: pointer;
-  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  display: inline-flex; align-items: baseline; gap: 4px;
+  padding: 0 0 8px; border: 0; background: none;
+  color: var(--muted); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  transition: color var(--fast) var(--ease),
+              border-color var(--fast) var(--ease);
 }
-.seg button:hover, .chip:hover { background: var(--rule-soft); color: var(--ink); }
-.seg button:focus-visible, .chip:focus-visible {
-  outline: 2px solid var(--mark); outline-offset: 1px;
-}
-.seg button[aria-pressed="true"] {
-  background: var(--mark-soft); color: var(--mark); font-weight: 600;
-}
-.seg .n { font-size: var(--t-xs); color: var(--muted); }
-/* No opacity on the count inside a PRESSED chip.
-   ----------------------------------------------------------------------------
-   It was `color: var(--mark); opacity: 0.75`, which measured 3.48:1 in light
-   and 3.67:1 in dark at 11.5px -- under the 4.5 floor, and the only text on
-   the whole surface that failed it. The same badge in an unpressed chip is
-   6.00:1, so the opacity was the entire cause.
-   The badge still reads as secondary to its label, but by one thing rather
-   than three: a size step down, 11.5px against 12.5px. It inherits the
-   pressed button's 600 weight and now shares its colour exactly, so the size
-   is carrying the whole distinction. That is enough here -- the count sits
-   immediately after its own label inside one pill, so it is never read as a
-   separate item -- and it is the reading the unpressed chips have always
-   used. Measured after: 5.60:1 light, 5.25:1 dark. */
-.seg button[aria-pressed="true"] .n { color: var(--mark); }
+.t:hover { color: var(--ink); }
+.t:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+/* Pressed is ink plus the underline -- deliberately NOT bold. A weight jump
+   changes the tab's width, and a strip that reflows on every click moves
+   the other tabs under the cursor; that instability is the exact complaint
+   fixed slots exist to prevent. */
+.t[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--mark); }
+.t .n { font-size: var(--t-ax); color: var(--muted); }
+.t[aria-pressed="true"] .n { color: var(--mark); font-weight: 600; }
 
-/* A chip whose count is zero: dimmed, never removed. */
-.seg button.nil, .seg button.nil .n { color: var(--dim); }
-
-.chip .dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--rule); flex: none; align-self: center;
-}
-.chip[aria-pressed="true"] {
-  background: var(--mark-soft); color: var(--mark); font-weight: 600;
-}
-.chip[aria-pressed="true"] .dot { background: var(--mark); }
-.chip[aria-pressed="false"] { color: var(--muted); }
-.chip:disabled { cursor: default; opacity: 0.75; }
+/* A tab whose count is zero: dimmed, never removed. --dim still clears
+   4.5:1, because a control's label stays readable even when it is quiet. */
+.t.nil, .t.nil .n { color: var(--dim); }
+.t:disabled { cursor: default; }
 
 /* ------------------------------------------------------------- the rows --
    A column rather than a plain scroller, so `.below` can fall to the bottom
@@ -1167,12 +1174,13 @@ body {
    96%, not 92%: these are 20px pill chips and a deeper press reads as the
    control shrinking away from the cursor. The release is slower than the
    press, which is the shape of a real button coming back up. */
-.seg button, .chip, .spans button, .oops button, .post .more,
+.t, .spans button, .oops button, .post .more,
 .brand .age button, .detail .failed .acts button, .broken button {
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
+              border-color var(--fast) var(--ease),
               transform var(--fast) var(--ease);
 }
-.seg button:active, .chip:not(:disabled):active, .spans button:active,
+.t:not(:disabled):active, .spans button:active,
 .oops button:active, .post .more:active, .brand .age button:active,
 .detail .failed .acts button:active, .broken button:active {
   transform: scale(0.96);
@@ -1195,9 +1203,12 @@ body {
    baseline, and a min-height would recentre each label against its count
    badge instead of growing the hit area around it. */
 @media (pointer: coarse) {
-  .seg button, .chip { padding-block: 8px; }
+  /* The flat tabs keep their baseline geometry; the hit area grows above
+     the text and below the underline instead. */
+  .t { padding-block: 8px; }
+  .market-switch span { padding-block: 8px; }
   .spans button { padding-block: 7px; }
-  .seg, .spans { gap: var(--s2); }
+  .tabs, .grp, .spans { column-gap: var(--s3); }
   .post .more { padding-block: var(--s2); }
 }
 

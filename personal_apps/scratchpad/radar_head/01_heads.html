@@ -1,0 +1,341 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Radar head — three cuts</title>
+<style>
+@font-face{font-family:Inter;font-style:normal;font-weight:400 700;font-display:block;
+  src:url("../../static/radar/fonts/inter-latin.woff2") format("woff2");}
+</style>
+<style>
+:root{
+  --bg:oklch(0.988 0.002 290); --surface:oklch(0.970 0.004 290); --raise:oklch(1 0 0);
+  --rule:oklch(0.888 0.007 290); --rule-soft:oklch(0.940 0.005 290);
+  --ink:oklch(0.230 0.021 285); --ink-2:oklch(0.395 0.018 285);
+  --muted:oklch(0.480 0.016 285); --dim:oklch(0.545 0.012 285);
+  --mark:oklch(0.470 0.185 296); --mark-soft:oklch(0.470 0.185 296 / 0.13);
+  --mark-wash:oklch(0.470 0.185 296 / 0.07);
+  --up:oklch(0.470 0.130 150); --down:oklch(0.500 0.175 27);
+  --warn:oklch(0.480 0.110 65); --warn-soft:oklch(0.480 0.110 65 / 0.11);
+  --t-ax:10.5px; --t-xs:11.5px; --t-sm:13px; --t-md:13.5px; --t-lg:17px;
+  --s1:4px; --s2:6px; --s3:8px; --s4:12px; --s5:16px; --s6:20px;
+  --r:8px; --r-pill:100px; --axis:176px;
+  --ease:cubic-bezier(0.22,1,0.36,1);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:28px; background:oklch(0.93 0.004 290);
+  font:15px/1.5 Inter,system-ui,-apple-system,sans-serif; color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  display:flex; gap:28px; align-items:flex-start;
+}
+.col{width:420px;flex:none}
+.tag{
+  font-size:var(--t-xs); font-weight:600; color:var(--ink-2);
+  margin:0 0 8px 2px; display:flex; gap:8px; align-items:baseline;
+}
+.tag i{font-style:normal;font-weight:400;color:var(--muted)}
+.list{
+  background:var(--surface); border:1px solid var(--rule); border-radius:var(--r);
+  overflow:hidden;
+}
+
+/* ============ shared row rendering (unchanged from prod) ============ */
+.rows{background:var(--surface)}
+.row{position:relative;padding:9px var(--s6) 16px;border-bottom:1px solid var(--rule-soft)}
+.row:last-child{border-bottom:0}
+.row::before{content:"";position:absolute;left:var(--s6);bottom:6px;width:var(--axis);
+  height:5px;border-bottom:1px solid var(--rule);border-right:1px solid var(--rule)}
+.row::after{content:"";position:absolute;left:var(--s6);bottom:7px;height:3px;
+  width:var(--axis);transform:scaleX(var(--mag,0));transform-origin:left center;background:var(--mark)}
+.r1{display:flex;align-items:baseline;gap:var(--s3);line-height:1.25}
+.r1 .tk{font-size:var(--t-lg);font-weight:700;letter-spacing:-0.01em}
+.r1 .nm{flex:1;min-width:0;font-size:12.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r1 .score{flex:none;margin-left:auto;text-align:right;display:inline-flex;
+  align-items:baseline;gap:5px;font-variant-numeric:tabular-nums;font-size:var(--t-md)}
+.r1 .score .k{font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
+.r2{margin:3px 0 0;font-size:var(--t-xs);color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ============ shared chip vocabulary ============ */
+.chips{display:flex;flex-wrap:wrap;gap:var(--s1)}
+.chip{font:inherit;font-size:12.5px;line-height:1.3;display:inline-flex;align-items:baseline;
+  gap:5px;padding:3px 9px;border:1px solid transparent;border-radius:var(--r-pill);
+  background:transparent;color:var(--ink-2);cursor:pointer}
+.chip .n{font-size:var(--t-xs);color:var(--muted)}
+.chip[aria-pressed=true]{background:var(--mark-soft);color:var(--mark);font-weight:600}
+.chip[aria-pressed=true] .n{color:var(--mark)}
+.chip.nil,.chip.nil .n{color:var(--dim)}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--rule);flex:none;align-self:center}
+.chip[aria-pressed=true] .dot{background:var(--mark)}
+.chip[aria-pressed=false]{color:var(--muted)}
+
+/* a hard segmented control — one decision, mutually exclusive, always visible */
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:var(--r-pill);
+  background:var(--raise);padding:1px;flex:none}
+.seg button{font:inherit;font-size:12px;line-height:1.3;padding:2px 9px;border:0;
+  border-radius:var(--r-pill);background:transparent;color:var(--muted);cursor:pointer;
+  font-variant-numeric:tabular-nums}
+.seg button[aria-pressed=true]{background:var(--mark);color:#fff;font-weight:600}
+
+/* ==================================================================
+   A — SCOPE IN THE HEAD, FILTERS IN ONE ROW
+   ================================================================== */
+.a .head{padding:14px var(--s6) 12px}
+.a .top{display:flex;align-items:center;gap:var(--s3)}
+.a h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em}
+.a .top .seg{margin-left:auto}
+.a .state{
+  margin:9px 0 0;font-size:var(--t-xs);color:var(--muted);
+  font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:6px;
+}
+.a .state b{color:var(--warn);font-weight:600}
+.a .state .age{margin-left:auto;color:var(--warn);font-weight:600}
+.a .state button{font:inherit;font-size:var(--t-xs);margin-left:2px;padding:1px 8px;
+  border:1px solid var(--rule);border-radius:var(--r-pill);background:var(--raise);
+  color:var(--ink-2);cursor:pointer}
+.a .mode{
+  margin:10px 0 0;font-size:var(--t-md);line-height:1.45;color:var(--ink-2);
+}
+.a .mode b{font-weight:600;color:var(--ink)}
+.a .filters{
+  padding:10px var(--s6) 11px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  display:flex;flex-direction:column;gap:var(--s2);
+}
+.a .fr{display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap}
+.a .div{width:1px;align-self:stretch;background:var(--rule);margin:0 2px}
+
+/* ==================================================================
+   B — ONE LINE, FILTERS ON DEMAND
+   ================================================================== */
+.b .head{padding:14px var(--s6) 12px}
+.b .top{display:flex;align-items:baseline;gap:var(--s3)}
+.b h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em}
+.b .age{margin-left:auto;font-size:var(--t-xs);color:var(--warn);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.b .age button{font:inherit;font-weight:400;font-size:var(--t-xs);margin-left:var(--s2);
+  padding:1px 8px;border:1px solid var(--rule);border-radius:var(--r-pill);
+  background:var(--raise);color:var(--ink-2);cursor:pointer}
+.b .mode{margin:9px 0 0;font-size:var(--t-md);line-height:1.45;color:var(--ink-2)}
+.b .mode b{font-weight:600;color:var(--ink)}
+.b .mode .warn{color:var(--warn);font-weight:600}
+.b .bar{
+  display:flex;align-items:center;gap:var(--s2);
+  padding:8px var(--s6);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  font-size:12.5px;color:var(--ink-2);
+}
+.b .bar .now{
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--muted);
+}
+.b .bar .now s{text-decoration:none;color:var(--mark);font-weight:600}
+.b .bar .more{font:inherit;font-size:12px;padding:2px 10px;border:1px solid var(--rule);
+  border-radius:var(--r-pill);background:var(--raise);color:var(--ink-2);cursor:pointer;flex:none}
+.b .drawer{padding:10px var(--s6) 12px;border-bottom:1px solid var(--rule);
+  background:var(--raise);display:flex;flex-direction:column;gap:var(--s2)}
+.b .drawer .fr{display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap}
+
+/* ==================================================================
+   C — THE CONTROLS ARE THE SENTENCE
+   ================================================================== */
+.c .head{padding:14px var(--s6) 13px}
+.c .top{display:flex;align-items:baseline;gap:var(--s3)}
+.c h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em}
+.c .age{margin-left:auto;font-size:var(--t-xs);color:var(--warn);font-weight:600;
+  font-variant-numeric:tabular-nums}
+.c .age button{font:inherit;font-weight:400;font-size:var(--t-xs);margin-left:var(--s2);
+  padding:1px 8px;border:1px solid var(--rule);border-radius:var(--r-pill);
+  background:var(--raise);color:var(--ink-2);cursor:pointer}
+.c .sentence{margin:10px 0 0;font-size:var(--t-md);line-height:1.9;color:var(--ink-2)}
+.c .sentence b{color:var(--ink);font-weight:600}
+.c .pick{
+  font:inherit;font-size:var(--t-md);font-weight:600;line-height:1.3;
+  padding:2px 8px 2px 9px;border:1px solid var(--rule);border-radius:var(--r-pill);
+  background:var(--raise);color:var(--mark);cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;vertical-align:baseline;
+}
+.c .pick::after{content:"";width:0;height:0;border:3.5px solid transparent;
+  border-top-color:var(--muted);margin-top:2px}
+.c .strip{
+  padding:9px var(--s6) 11px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap;
+}
+</style>
+
+<!-- ============================ A ============================ -->
+<div class="col a">
+  <p class="tag">A — scope in the head, filters in one row
+    <i>259px before the first ticker</i></p>
+  <div class="list">
+    <div class="head">
+      <div class="top">
+        <h1>Radar</h1>
+        <div class="seg" role="group" aria-label="Market">
+          <button aria-pressed="true">US</button><button aria-pressed="false">DE</button>
+        </div>
+        <div class="seg" role="group" aria-label="Window">
+          <button aria-pressed="false">1h</button><button aria-pressed="true">4h</button><button aria-pressed="false">24h</button>
+        </div>
+      </div>
+      <p class="state">
+        Xetra&nbsp;· <b>closed</b> · opens 10:00
+        <span class="age">117m old<button>Reload</button></span>
+      </p>
+      <p class="mode">
+        Nothing is trading, so this is ranked by <b>chatter against each
+        ticker&rsquo;s own normal</b>. <b>3 tickers</b> over 4h, baselines 30d.
+      </p>
+    </div>
+    <div class="filters">
+      <div class="fr">
+        <button class="chip" aria-pressed="false">All <span class="n">22</span></button>
+        <button class="chip" aria-pressed="true">Small <span class="n">3</span></button>
+        <button class="chip" aria-pressed="false">Mid <span class="n">6</span></button>
+        <button class="chip" aria-pressed="false">Large <span class="n">10</span></button>
+        <button class="chip" aria-pressed="false">Micro <span class="n">2</span></button>
+        <button class="chip" aria-pressed="false">IPO <span class="n">1</span></button>
+        <button class="chip" aria-pressed="false">Funds <span class="n">3</span></button>
+        <button class="chip nil" aria-pressed="false">Unknown <span class="n">0</span></button>
+      </div>
+      <div class="fr">
+        <button class="chip" aria-pressed="true"><span class="dot"></span>Bluesky</button>
+        <button class="chip" aria-pressed="true"><span class="dot"></span>4chan</button>
+        <button class="chip" aria-pressed="true"><span class="dot"></span>Reddit</button>
+        <span class="div"></span>
+        <button class="chip" aria-pressed="false">2+ venues <span class="n">18</span></button>
+      </div>
+    </div>
+    <div class="rows">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">div</span>1.42</span></div>
+        <p class="r2">7.4&times; normal · 61 mentions · 3 venues</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">div</span>0.88</span></div>
+        <p class="r2">3.1&times; normal · 24 mentions · 2 venues</p>
+      </div>
+      <div class="row" style="--mag:0.19">
+        <div class="r1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+          <span class="score"><span class="k">div</span>0.51</span></div>
+        <p class="r2">1.9&times; normal · 12 mentions · 2 venues</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ B ============================ -->
+<div class="col b">
+  <p class="tag">B — one line, filters on demand <i>300px open · 152px closed</i></p>
+  <div class="list">
+    <div class="head">
+      <div class="top">
+        <h1>Radar</h1>
+        <span class="age">117m old<button>Reload</button></span>
+      </div>
+      <p class="mode">
+        Xetra <span class="warn">closed</span> until 10:00, so this is ranked by
+        <b>chatter against each ticker&rsquo;s own normal</b> — <b>3 tickers</b>
+        over 4h, baselines 30d.
+      </p>
+    </div>
+    <div class="bar">
+      <div class="seg" role="group" aria-label="Window">
+        <button aria-pressed="false">1h</button><button aria-pressed="true">4h</button><button aria-pressed="false">24h</button>
+      </div>
+      <span class="now">US · <s>Small</s> · all sources · any venue</span>
+      <button class="more">Filter</button>
+    </div>
+    <div class="drawer">
+      <div class="fr">
+        <button class="chip" aria-pressed="false">All <span class="n">22</span></button>
+        <button class="chip" aria-pressed="true">Small <span class="n">3</span></button>
+        <button class="chip" aria-pressed="false">Mid <span class="n">6</span></button>
+        <button class="chip" aria-pressed="false">Large <span class="n">10</span></button>
+        <button class="chip" aria-pressed="false">Micro <span class="n">2</span></button>
+        <button class="chip" aria-pressed="false">IPO <span class="n">1</span></button>
+        <button class="chip" aria-pressed="false">Funds <span class="n">3</span></button>
+        <button class="chip nil" aria-pressed="false">Unknown <span class="n">0</span></button>
+      </div>
+      <div class="fr">
+        <button class="chip" aria-pressed="true"><span class="dot"></span>Bluesky</button>
+        <button class="chip" aria-pressed="true"><span class="dot"></span>4chan</button>
+        <button class="chip" aria-pressed="true"><span class="dot"></span>Reddit</button>
+        <button class="chip" aria-pressed="false">2+ venues <span class="n">18</span></button>
+        <div class="seg" style="margin-left:auto" role="group" aria-label="Market">
+          <button aria-pressed="true">US</button><button aria-pressed="false">DE</button>
+        </div>
+      </div>
+    </div>
+    <div class="rows">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">div</span>1.42</span></div>
+        <p class="r2">7.4&times; normal · 61 mentions · 3 venues</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">div</span>0.88</span></div>
+        <p class="r2">3.1&times; normal · 24 mentions · 2 venues</p>
+      </div>
+      <div class="row" style="--mag:0.19">
+        <div class="r1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+          <span class="score"><span class="k">div</span>0.51</span></div>
+        <p class="r2">1.9&times; normal · 12 mentions · 2 venues</p>
+      </div>
+    </div>
+  </div>
+  <p class="tag" style="margin-top:10px">
+    <i>drawer shown open; closed it is 146px and the bar line alone carries state</i></p>
+</div>
+
+<!-- ============================ C ============================ -->
+<div class="col c">
+  <p class="tag">C — the controls are the sentence <i>262px before the first ticker</i></p>
+  <div class="list">
+    <div class="head">
+      <div class="top">
+        <h1>Radar</h1>
+        <span class="age">117m old<button>Reload</button></span>
+      </div>
+      <p class="sentence">
+        <b>3 tickers</b> talked about far more than usual over
+        <button class="pick">4h</button> on
+        <button class="pick">US</button>, ranked by
+        <b>chatter</b> because Xetra is shut until <b>10:00</b>.
+      </p>
+    </div>
+    <div class="strip">
+      <button class="chip" aria-pressed="false">All <span class="n">22</span></button>
+      <button class="chip" aria-pressed="true">Small <span class="n">3</span></button>
+      <button class="chip" aria-pressed="false">Mid <span class="n">6</span></button>
+      <button class="chip" aria-pressed="false">Large <span class="n">10</span></button>
+      <button class="chip" aria-pressed="false">Micro <span class="n">2</span></button>
+      <button class="chip" aria-pressed="false">IPO <span class="n">1</span></button>
+      <button class="chip" aria-pressed="false">Funds <span class="n">3</span></button>
+      <button class="chip nil" aria-pressed="false">Unknown <span class="n">0</span></button>
+    </div>
+    <div class="strip" style="border-top:0">
+      <button class="chip" aria-pressed="true"><span class="dot"></span>Bluesky</button>
+      <button class="chip" aria-pressed="true"><span class="dot"></span>4chan</button>
+      <button class="chip" aria-pressed="true"><span class="dot"></span>Reddit</button>
+      <button class="chip" aria-pressed="false">2+ venues <span class="n">18</span></button>
+    </div>
+    <div class="rows">
+      <div class="row" style="--mag:0.92">
+        <div class="r1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+          <span class="score"><span class="k">div</span>1.42</span></div>
+        <p class="r2">7.4&times; normal · 61 mentions · 3 venues</p>
+      </div>
+      <div class="row" style="--mag:0.44">
+        <div class="r1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology</span>
+          <span class="score"><span class="k">div</span>0.88</span></div>
+        <p class="r2">3.1&times; normal · 24 mentions · 2 venues</p>
+      </div>
+      <div class="row" style="--mag:0.19">
+        <div class="r1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+          <span class="score"><span class="k">div</span>0.51</span></div>
+        <p class="r2">1.9&times; normal · 12 mentions · 2 venues</p>
+      </div>
+    </div>
+  </div>
+</div>
