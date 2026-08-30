@@ -25,7 +25,7 @@ commit, and independent read-only review acceptance.
 | 6 | Market-aware ranking/board/detail/API | complete | `55a95c5`, `c767c66`, `14d7ec4` | accepted after fixes |
 | 7 | Market selection and Berlin formatting | complete | `55c8392`, `f58d413` | accepted after fix round 1 |
 | 8 | Quote/session/fallback presentation | complete | `27c39e8`, `aee5e507` | accepted after fix round 1 |
-| 9 | Chart session bands | pending | — | — |
+| 9 | Chart session bands | complete | `28e65f9`, `73464ba` | accepted after fix round 1 |
 | 10 | Full verification and integration handoff | pending | — | — |
 
 ## Baseline evidence — 2026-08-28
@@ -75,7 +75,18 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Implement Task 9: chart session bands and Berlin-time chart labels.
+Paused after Task 9. Do not start Task 10 unless the user explicitly asks.
+
+## Task 9 evidence — 2026-08-30
+
+- Initial implementation `28e65f9` added selected-market UTC intraday session
+  intervals, Berlin chart ticks, and session-band rendering; focused API,
+  calendar, chart tests and build passed.
+- Review correction `73464ba` extended bands across price and chatter lanes,
+  made Xetra 08:55 exclusive consistently, and clipped SVG labels/rectangles.
+- Corrected API/calendar suite passed 62 tests, chart suite 16, and build/diff
+  check passed. Scoped re-review found no Critical/Important findings.
+  Task 9 complete.
 
 ## Task 8 evidence — 2026-08-30
 
