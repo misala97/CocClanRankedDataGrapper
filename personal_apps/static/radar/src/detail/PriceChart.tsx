@@ -123,7 +123,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
         </text>
       </g>
 
-      <SessionBands chart={chart} plotTop={P_TOP} plotBottom={P_BOT}
+      <SessionBands chart={chart} plotTop={P_TOP} plotBottom={C_BOT}
                     plotRight={PLOT_R} />
 
       <g className="plot">

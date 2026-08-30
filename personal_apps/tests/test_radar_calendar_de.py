@@ -39,8 +39,8 @@ def test_xetra_2026_full_closures_are_closed(instant):
 
 
 @pytest.mark.parametrize(('instant', 'expected'), [
-    ((2026, 8, 28, 6, 55), 'premarket'),
-    ((2026, 8, 28, 6, 56), 'closed'),
+    ((2026, 8, 28, 6, 54), 'premarket'),
+    ((2026, 8, 28, 6, 55), 'closed'),
     ((2026, 8, 28, 7, 0), 'regular'),
     ((2026, 8, 28, 15, 30), 'afterhours'),
     ((2026, 8, 28, 20, 0), 'closed'),

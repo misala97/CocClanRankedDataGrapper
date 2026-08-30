@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import type { ChartSession, DetailChart } from '../types'
 
 type SessionBandsProps = {
@@ -14,6 +15,7 @@ const LABELS: Record<ChartSession['kind'], string> = {
 
 /** Extended-session context behind, never over, the measured chart paths. */
 export function SessionBands({ chart, plotTop, plotBottom, plotRight }: SessionBandsProps) {
+  const clipId = `session-band-${useId().replaceAll(':', '')}`
   const slots = Math.max(chart.closes.length, chart.chatter.length)
   const start = Date.parse(chart.from)
   const end = start + slots * chart.step_minutes * 60_000
@@ -21,6 +23,11 @@ export function SessionBands({ chart, plotTop, plotBottom, plotRight }: SessionB
 
   return (
     <g className="session-bands" aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <rect x="0" y={plotTop} width={plotRight} height={plotBottom - plotTop} />
+        </clipPath>
+      </defs>
       {chart.sessions.map((session, index) => {
         const left = Math.max(start, Date.parse(session.start))
         const right = Math.min(end, Date.parse(session.end))
@@ -33,9 +40,11 @@ export function SessionBands({ chart, plotTop, plotBottom, plotRight }: SessionB
         return (
           <g data-session={session.kind} key={`${session.kind}-${session.start}-${index}`}>
             <rect x={x} y={plotTop} width={width} height={plotBottom - plotTop}
+                  clipPath={`url(#${clipId})`}
                   fill={`var(--session-${session.kind === 'premarket' ? 'pre' : 'after'}-soft)`} />
             {showLabel && (
               <text x={x + width / 2} y={plotTop + 13} textAnchor="middle"
+                    clipPath={`url(#${clipId})`}
                     fill={`var(--session-${session.kind === 'premarket' ? 'pre' : 'after'})`}>
                 {label}
               </text>

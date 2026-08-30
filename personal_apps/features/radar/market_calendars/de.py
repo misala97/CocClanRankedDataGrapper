@@ -63,7 +63,7 @@ def session_state(when_utc):
         return 'closed'
 
     now = when_utc.astimezone(BERLIN).time()
-    if EARLY_START <= now <= EARLY_END:
+    if EARLY_START <= now < EARLY_END:
         return 'premarket'
     if REGULAR_START <= now < REGULAR_END:
         return 'regular'
