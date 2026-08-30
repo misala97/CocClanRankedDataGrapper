@@ -227,9 +227,17 @@ def watched_slots(sources, start, now, step_minutes, slots):
 
 def _daily_anchors(ticker, start, now, step_minutes, slots, *, market='us',
                    mic=None):
-    """One price per trading day inside an intraday window, at the slot of
-    that day's close -- so the week line is the same clean shape the month
-    line is, positioned honestly in time.
+    """Up to three REAL prints per trading day, else that day's close.
+
+    The week line wants more shape than one close per day, and the quote
+    store has it -- but only where `quote_ts`, the provider's own print
+    time, actually falls inside that day's regular session. Selecting by
+    `fetched_at` would readmit the stale-repeat disease this replaced: a
+    46-hour-old price re-fetched every five minutes for days, drawn as a
+    flat crawl. Days with real prints get open-ish, midday-ish and
+    close-ish anchors at their honest slots; days without fall back to the
+    stored daily close at the closing slot, which is the month chart's
+    grain and shape.
     """
     from . import history
     from .market_calendars import session_bounds, session_state
@@ -238,18 +246,41 @@ def _daily_anchors(ticker, start, now, step_minutes, slots, *, market='us',
     stored = dict(history.closes_for([ticker], days=days, today=now.date(),
                                      market=market, mic=mic).get(ticker, []))
 
+    prints = (db.session.query(RadarQuote.quote_ts, RadarQuote.price)
+              .filter(*quotes_mod._quote_matches(ticker, market, mic),
+                      RadarQuote.quote_ts.isnot(None),
+                      RadarQuote.quote_ts >= start,
+                      RadarQuote.quote_ts < now)
+              .order_by(RadarQuote.quote_ts).all())
+
     prices = [None] * slots
-    for day, close in stored.items():
+    day = start.date()
+    while day <= now.date():
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
         bounds = session_bounds(market, probe)
         if session_state(market, bounds.regular_opens_at) != 'regular':
+            day += dt.timedelta(days=1)
             continue
-        closes_at = bounds.regular_closes_at
-        if closes_at.tzinfo is not None:
-            closes_at = closes_at.astimezone(dt.timezone.utc).replace(tzinfo=None)
-        index = _slot_index(closes_at, start, step_minutes, slots)
-        if index is not None:
-            prices[index] = float(close)
+        opens = bounds.regular_opens_at.astimezone(
+            dt.timezone.utc).replace(tzinfo=None)
+        closes = bounds.regular_closes_at.astimezone(
+            dt.timezone.utc).replace(tzinfo=None)
+
+        in_session = [(ts, float(price)) for ts, price in prints
+                      if opens <= ts < closes]
+        if in_session:
+            midpoint = opens + (closes - opens) / 2
+            picks = {in_session[0], in_session[-1],
+                     min(in_session, key=lambda p: abs(p[0] - midpoint))}
+            for ts, price in picks:
+                index = _slot_index(ts, start, step_minutes, slots)
+                if index is not None:
+                    prices[index] = price
+        elif day in stored:
+            index = _slot_index(closes, start, step_minutes, slots)
+            if index is not None:
+                prices[index] = float(stored[day])
+        day += dt.timedelta(days=1)
     return prices
 
 
