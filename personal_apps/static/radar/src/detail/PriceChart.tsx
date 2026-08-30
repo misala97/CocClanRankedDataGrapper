@@ -21,9 +21,12 @@ const TICK = PLOT_R + 6
 const TOP = 8
 const FLOOR = 272
 /** Share of the plot the chatter body may fill, from the floor up. */
-const CHAT_BAND = 0.62
-/** Share of the plot the price line is mapped into, from the top down. */
-const PRICE_BAND = 0.5
+const CHAT_BAND = 0.52
+/** Share of the plot the price line is mapped into, from the top down.
+ *  The two bands deliberately sum under 1: with them touching, the price
+ *  low label and the chatter peak label landed on the same gutter pixel
+ *  and the right edge read $256 / 33/h / $203 interleaved. */
+const PRICE_BAND = 0.4
 const X_LABEL_Y = 292
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -50,7 +53,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
 export function PriceChart({ chart }: { chart: DetailChart }) {
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 
-  const { paths, low, high, lastX, lastY } = pricePaths(chart, priced)
+  const { paths, gaps, low, high, lastX, lastY } = pricePaths(chart, priced)
   const slot = PLOT_R / Math.max(chart.chatter.length, 1)
   const observed = chart.chatter.reduce<number>(
     (best, v) => (v !== null && v > best ? v : best), 0)
@@ -164,7 +167,14 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
         )}
 
         {/* Price last: where a spike genuinely meets a move the line reads
-            over the body, not under it. */}
+            over the body, not under it. The dotted bridges go first so the
+            measured runs paint over their endpoints. */}
+        {gaps.map((d, index) => (
+          <path className="px-gap" key={`g${index}`} d={d} fill="none"
+                strokeWidth="1.2" strokeDasharray="2 5" opacity="0.55"
+                strokeLinecap="round" vectorEffect="non-scaling-stroke"
+                stroke={tone} />
+        ))}
         {paths.map((d, index) => (
           <path className="px" key={index} d={d} fill="none" strokeWidth="1.8"
                 strokeLinejoin="round" strokeLinecap="round"
@@ -318,7 +328,9 @@ function dayLabel(date: Date, withYear = false, span?: PanelSpan): string {
  */
 function pricePaths(chart: DetailChart, priced: boolean) {
   const closes = chart.closes
-  if (!priced) return { paths: [], low: 0, high: 0, lastX: 0, lastY: 0 }
+  if (!priced) {
+    return { paths: [], gaps: [], low: 0, high: 0, lastX: 0, lastY: 0 }
+  }
 
   const real: { value: number; index: number }[] = []
   closes.forEach((value, index) => {
@@ -335,19 +347,38 @@ function pricePaths(chart: DetailChart, priced: boolean) {
   })
 
   const paths: string[] = []
+  const gaps: string[] = []
   if (isIntraday(chart)) {
-    let run: string[] = []
+    let runPoints: { x: number; y: number }[] = []
     let previous = -2
-    for (const point of real) {
-      const { x, y } = at(point)
-      if (point.index !== previous + 1 && run.length) {
-        if (run.length > 1) paths.push(run.join(' '))
-        run = []
+    const flush = () => {
+      if (runPoints.length > 1) {
+        paths.push(runPoints.map((p, n) =>
+          `${n ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '))
       }
-      run.push(`${run.length ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`)
+      runPoints = []
+    }
+    let lastOfPrevRun: { x: number; y: number } | null = null
+    for (const point of real) {
+      const here = at(point)
+      if (point.index !== previous + 1 && runPoints.length) {
+        const tail = runPoints[runPoints.length - 1]!
+        lastOfPrevRun = tail
+        flush()
+      }
+      if (!runPoints.length && lastOfPrevRun) {
+        // The dotted bridge: nobody quoted between these two prints, and a
+        // solid line there would be a measurement that was never taken --
+        // but a field of floating dashes was unreadable as a price at all.
+        // Dotted is the chart saying "resumed here", visibly not data.
+        gaps.push(`M${lastOfPrevRun.x.toFixed(1)},${lastOfPrevRun.y.toFixed(1)}`
+          + ` L${here.x.toFixed(1)},${here.y.toFixed(1)}`)
+        lastOfPrevRun = null
+      }
+      runPoints.push(here)
       previous = point.index
     }
-    if (run.length > 1) paths.push(run.join(' '))
+    flush()
   } else {
     paths.push(real.map((point, n) => {
       const { x, y } = at(point)
@@ -356,7 +387,7 @@ function pricePaths(chart: DetailChart, priced: boolean) {
   }
 
   const end = at(real[real.length - 1]!)
-  return { paths, low, high, lastX: end.x, lastY: end.y }
+  return { paths, gaps, low, high, lastX: end.x, lastY: end.y }
 }
 
 /** High maps to the top pad, low to the bottom of the price band -- the top

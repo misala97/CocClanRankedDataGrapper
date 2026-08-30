@@ -50,6 +50,11 @@ export function SessionBands({ chart, plotTop, plotBottom, plotRight }: SessionB
         </clipPath>
       </defs>
       {chart.sessions.map((session, index) => {
+        // The extended-session tints earn their width only at the 1D zoom.
+        // At 1W five days of pre/after/night stripes were a curtain louder
+        // than the data (seen live 2026-08-30); wider slots keep only the
+        // closed wash, whose rhythm is the orientation the bands are for.
+        if (chart.step_minutes >= 60 && session.kind !== 'closed') return null
         const left = Math.max(start, Date.parse(session.start))
         const right = Math.min(end, Date.parse(session.end))
         if (!Number.isFinite(left) || !Number.isFinite(right) || right <= left) return null
