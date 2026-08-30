@@ -11,7 +11,10 @@ import decimal
 
 import pytest
 
-from features.radar.prices import Profile, PriceUnavailable, Quote
+from dataclasses import dataclass
+
+from features.radar.prices import (CurrencyMismatch, Profile, PriceUnavailable,
+                                   Quote, normalize_snapshot)
 from features.radar.prices import finnhub, twelvedata
 
 
@@ -25,6 +28,37 @@ class FakeHttp:
         if path not in self.payloads:
             raise PriceUnavailable('404 %s' % path)
         return self.payloads[path]
+
+
+@dataclass(frozen=True)
+class Instrument:
+    ticker: str = 'AAPL'
+    market: str = 'de'
+    venue: str = 'Xetra'
+    mic: str = 'XETR'
+    provider_symbol: str = 'APC'
+    currency: str = 'EUR'
+
+
+def test_currency_mismatch_rejects_provider_snapshot():
+    raw = Quote(
+        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='APC', currency='USD', price=decimal.Decimal('194.20'),
+        previous_close=None, regular_close=None, quote_ts=None, volume=None,
+        provider_delay='delayed',
+    )
+
+    with pytest.raises(CurrencyMismatch):
+        normalize_snapshot(Instrument(), raw)
+
+
+def test_provider_identity_mismatch_rejects_a_relabelled_snapshot():
+    raw = Quote(
+        ticker='WRONG', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='WRONG', currency='EUR', price=decimal.Decimal('194.20'))
+
+    with pytest.raises(ValueError, match='provider symbol'):
+        normalize_snapshot(Instrument(), raw)
 
 
 def test_a_quote_is_normalized():
@@ -67,6 +101,30 @@ def test_one_bad_symbol_does_not_lose_the_others():
 
     quotes = finnhub.FinnhubProvider(Partial({})).quotes(['AAA', 'BAD', 'BBB'])
     assert set(quotes) == {'AAA', 'BBB'}
+
+
+def test_malformed_finnhub_numeric_field_is_contained_to_its_symbol():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'c': 'not-a-number', 'pc': 9, 't': 1786000000}
+            return {'c': 10, 'pc': 9, 't': 1786000000}
+
+    quotes = finnhub.FinnhubProvider(Mixed({})).quotes(['BAD', 'GOOD'])
+
+    assert set(quotes) == {'GOOD'}
+
+
+def test_out_of_range_finnhub_timestamp_is_contained_to_its_symbol():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'c': 10, 'pc': 9, 't': 10 ** 100}
+            return {'c': 10, 'pc': 9, 't': 1786000000}
+
+    quotes = finnhub.FinnhubProvider(Mixed({})).quotes(['BAD', 'GOOD'])
+
+    assert set(quotes) == {'GOOD'}
 
 
 def test_a_profile_is_normalized():
@@ -125,3 +183,87 @@ def test_a_rate_limited_response_is_empty_not_a_crash():
     still trip it, and one tripped call must not take down the job."""
     http = FakeHttp({'/time_series': {'status': 'error', 'code': 429}})
     assert twelvedata.TwelveDataProvider(http).daily_closes('AAA', days=30) == []
+
+
+def test_quote_without_a_status_field_is_a_usable_snapshot():
+    """Twelve Data's successful /quote shape does not require a status flag."""
+    http = FakeHttp({'/quote': {
+        'symbol': 'APC', 'close': '194.20', 'previous_close': '193.50',
+        'currency': 'EUR', 'timestamp': 1787313600}})
+
+    quote = twelvedata.TwelveDataProvider(http).quotes(['APC'])['APC']
+
+    assert quote.price == decimal.Decimal('194.20')
+    assert quote.currency == 'EUR'
+
+
+def test_xetra_quote_request_is_mic_qualified_and_identity_bound():
+    http = FakeHttp({'/quote': {
+        'symbol': 'APC', 'mic_code': 'XETR', 'close': '194.20',
+        'previous_close': '193.50', 'currency': 'EUR',
+        'timestamp': 1787313600}})
+
+    quotes = twelvedata.TwelveDataProvider(http).quotes_for_instruments(
+        [Instrument()])
+
+    assert http.calls == [('/quote', {'symbol': 'APC', 'mic_code': 'XETR'})]
+    assert quotes['APC'].mic == 'XETR'
+    assert quotes['APC'].provider_symbol == 'APC'
+
+
+def test_malformed_twelve_data_optional_number_does_not_abort_the_batch():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'symbol': 'BAD', 'close': '10',
+                        'previous_close': 'not-a-number', 'currency': 'EUR'}
+            return {'symbol': 'GOOD', 'close': '11',
+                    'previous_close': '10', 'currency': 'EUR'}
+
+    instruments = [
+        Instrument(ticker='BAD', provider_symbol='BAD'),
+        Instrument(ticker='GOOD', provider_symbol='GOOD'),
+    ]
+
+    quotes = twelvedata.TwelveDataProvider(Mixed({})).quotes_for_instruments(
+        instruments)
+
+    assert set(quotes) == {'GOOD'}
+
+
+def test_out_of_range_twelve_data_timestamp_is_contained_to_its_symbol():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'symbol': 'BAD', 'close': '10', 'timestamp': 10 ** 100,
+                        'currency': 'EUR'}
+            return {'symbol': 'GOOD', 'close': '11', 'timestamp': 1787313600,
+                    'currency': 'EUR'}
+
+    instruments = [
+        Instrument(ticker='BAD', provider_symbol='BAD'),
+        Instrument(ticker='GOOD', provider_symbol='GOOD'),
+    ]
+
+    quotes = twelvedata.TwelveDataProvider(Mixed({})).quotes_for_instruments(
+        instruments)
+
+    assert set(quotes) == {'GOOD'}
+
+
+def test_finnhub_directory_keeps_identifiers_without_guessing_the_mic():
+    """Inventing XETR from a country directory would create a false venue claim."""
+    from features.radar.instruments import CatalogInstrument
+
+    http = FakeHttp({'/stock/symbol': [{
+        'symbol': 'APC', 'description': 'Apple Inc', 'displaySymbol': 'APC',
+        'currency': 'EUR', 'figi': 'BBG000B9XRY4', 'isin': 'US0378331005',
+        'mic': 'XETR', 'type': 'Common Stock',
+    }]})
+
+    rows = finnhub.FinnhubProvider(http).stock_catalog('XETR')
+
+    assert rows == [CatalogInstrument(
+        symbol='APC', name='Apple Inc', mic='XETR', currency='EUR',
+        isin='US0378331005', figi='BBG000B9XRY4')]
+    assert http.calls == [('/stock/symbol', {'exchange': 'DE'})]

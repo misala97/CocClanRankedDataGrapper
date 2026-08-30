@@ -2,8 +2,18 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BoardPayload, Detail, Row } from '../types'
+import type { BoardPayload, Detail, MarketQuote, Row } from '../types'
 import { BoardPage } from './BoardPage'
+
+function quote(): MarketQuote {
+  return {
+    market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 10,
+    regular_move: 0.012, extended_move: null, session: 'regular',
+    quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
+    tape_status: 'ok', score_eligible: true, score_term: 'divergence',
+    is_fallback: false,
+  }
+}
 
 function row(over: Partial<Row> = {}): Row {
   return {
@@ -18,13 +28,16 @@ function row(over: Partial<Row> = {}): Row {
     tone: { bullish: 4, neutral: 10, bearish: 2 },
     clauses: [{ kind: 'ratio', text: '3x its normal' },
               { kind: 'venues', text: '2 venues' }],
-    ...over,
+    ...over, quote: over.quote ?? quote(),
   }
 }
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
     generated_at: '2026-08-22T19:00:00Z',
+    market: 'us', display_timezone: 'Europe/Berlin',
+    market_venue: 'US markets', next_boundary_label: 'closes',
+    next_boundary_at: '2026-08-22T20:00:00Z',
     sources: ['bluesky', 'fourchan', 'reddit'],
     all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,
@@ -38,18 +51,23 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   }
 }
 
-function detail(ticker = 'AAA'): Detail {
+function detail(ticker = 'AAA', market: Detail['market'] = 'us'): Detail {
   return {
+    market, display_timezone: 'Europe/Berlin',
     identity: {
       ticker, name: 'Alpha Inc', exchange: 'NASDAQ', segment: 'large',
       market_cap: 1e9, ipo_date: '2020-01-01', price: 10, price_move: 0.012,
       price_status: 'ok', session: 'regular',
+      quote: quote(),
     },
-    read: [{ kind: 'plain', text: `${ticker} is being discussed.` }],
+    read: [{ kind: 'plain', text: market === 'de'
+      ? `${ticker} on de is being discussed.`
+      : `${ticker} is being discussed.` }],
     chart: {
       from: '2025-08-23T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
+      sessions: [],
       watched_from: '2026-08-18',
     },
     breakdown: {
@@ -70,7 +88,9 @@ function stubFetch(board: BoardPayload = payload()) {
     ok: true,
     redirected: false,
     json: async () => (url.includes('/api/ticker/')
-      ? detail(url.split('/api/ticker/')[1]!.split('?')[0]!)
+      ? detail(url.split('/api/ticker/')[1]!.split('?')[0]!,
+        (new URL(url, 'https://radar.test').searchParams.get('market') as Detail['market'])
+          ?? 'us')
       : board),
   }))
   vi.stubGlobal('fetch', spy)
@@ -87,6 +107,13 @@ const boardCalls = () => vi.mocked(fetch).mock.calls
   .map((c) => String(c[0])).filter((u) => u.includes('/api/board'))
 
 describe('the two panes', () => {
+  it('renders the peak chatter hour in Radar\'s Berlin timezone', async () => {
+    render(<BoardPage initial={payload()} />)
+
+    await screen.findByText(/AAA is being discussed/)
+    expect(screen.getByText('16:00 CEST')).toBeInTheDocument()
+  })
+
   it('lists one row per ticker, with no promoted tier', () => {
     /* The two-tier arrangement is gone. It bought visual variety at the cost
        of making identical data look like two different kinds of thing. */
@@ -152,6 +179,116 @@ describe('selecting a ticker', () => {
 })
 
 describe('the controls', () => {
+  it('does not show a loaded US panel while Germany is loading', async () => {
+    /* Detail state is retained so a retry can recover, but it is only valid
+       for the request that produced it. A market change must put that cached
+       US view behind a loader before the German response is available. */
+    let resolveDe!: (response: object) => void
+    const deResponse = new Promise<object>((resolve) => { resolveDe = resolve })
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/api/board')) {
+        return Promise.resolve({ ok: true, redirected: false,
+          json: async () => payload({ market: 'de' }) })
+      }
+      if (url.includes('market=de')) return deResponse
+      return Promise.resolve({ ok: true, redirected: false,
+        json: async () => detail('AAA', 'us') })
+    }))
+
+    render(<BoardPage initial={payload()} />)
+    expect(await screen.findByText(/^AAA is being discussed\.$/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/AAA?') && url.includes('market=de')))
+      .toBe(true))
+    expect(screen.getByRole('main', { busy: true })).toHaveTextContent('Loading AAA')
+    expect(screen.queryByText(/^AAA is being discussed\.$/)).toBeNull()
+
+    resolveDe({ ok: true, redirected: false, json: async () => detail('AAA', 'de') })
+    expect(await screen.findByText(/AAA on de is being discussed/)).toBeInTheDocument()
+  })
+
+  it('keeps the Germany panel when an aborted US response arrives late', async () => {
+    /* An abort asks the transport to stop but cannot unsend a response already
+       in flight. The late US payload used to overwrite Germany's same-ticker
+       panel because only the ticker was checked before rendering it. */
+    let resolveUs!: (response: object) => void
+    let resolveDe!: (response: object) => void
+    const usResponse = new Promise<object>((resolve) => { resolveUs = resolve })
+    const deResponse = new Promise<object>((resolve) => { resolveDe = resolve })
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/api/board')) {
+        return Promise.resolve({ ok: true, redirected: false,
+          json: async () => payload({ market: 'de' }) })
+      }
+      return url.includes('market=de') ? deResponse : usResponse
+    }))
+
+    render(<BoardPage initial={payload()} />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/AAA?') && url.includes('market=de')))
+      .toBe(true))
+    resolveDe({ ok: true, redirected: false, json: async () => detail('AAA', 'de') })
+    expect(await screen.findByText(/AAA on de is being discussed/)).toBeInTheDocument()
+
+    resolveUs({ ok: true, redirected: false, json: async () => detail('AAA', 'us') })
+    await waitFor(() => expect(screen.getByText(/AAA on de is being discussed/))
+      .toBeInTheDocument())
+    expect(screen.queryByText(/^AAA is being discussed\.$/)).toBeNull()
+  })
+
+  it('switches market while retaining ticker, filters, and panel span', async () => {
+    /* The market is price context, not a reset button: the reader keeps the
+       company and every filter while swapping the venue underneath it. */
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+    await userEvent.click(screen.getByRole('button', { name: '1M' }))
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+
+    await waitFor(() => expect(boardCalls()).toContain(
+      '/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=4&segment=&market=de'))
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/AAA?')
+        && url.includes('sources=bluesky%2Cfourchan%2Creddit')
+        && url.includes('window=4') && url.includes('span=1M')
+        && url.includes('market=de'))).toBe(true))
+    expect(window.location.search).toContain('market=de')
+    expect(window.location.search).toContain('t=AAA')
+    expect(window.location.search).toContain('window=4')
+    expect(screen.getByRole('button', { name: '1M' }))
+      .toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps the selected company when the other market board omits it', async () => {
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+    await userEvent.click(screen.getByRole('link', { name: /BBB/ }))
+
+    stubFetch(payload({ market: 'de', market_venue: 'Xetra',
+      rows: [row({ ticker: 'AAA' })] }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+
+    await waitFor(() => expect(window.location.search).toContain('t=BBB'))
+    expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/BBB?') && url.includes('market=de')))
+      .toBe(true)
+  })
+
+  it('names the venue, session, and next boundary in the header', () => {
+    render(<BoardPage initial={payload({
+      market: 'de', market_venue: 'Xetra', session: 'regular',
+      next_boundary_label: 'closes',
+      next_boundary_at: '2026-08-28T15:30:00Z',
+    })} />)
+
+    expect(screen.getByText('Xetra · regular · closes 17:30'))
+      .toBeInTheDocument()
+  })
+
   it('refetches and rewrites the address bar when a source is dropped', async () => {
     render(<BoardPage initial={payload()} />)
 
@@ -159,7 +296,7 @@ describe('the controls', () => {
 
     await waitFor(() => expect(boardCalls()).toHaveLength(1))
     expect(boardCalls()[0]).toBe(
-      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=')
+      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=&market=us')
     await waitFor(() =>
       expect(window.location.search)
         .toContain('sources=bluesky%2Creddit&window=4&segment='))

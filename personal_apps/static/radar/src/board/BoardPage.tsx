@@ -17,6 +17,7 @@ import type { BoardPayload, Selection } from '../types'
 export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [payload, setPayload] = useState(initial)
   const [selection, setSelection] = useState<Selection>({
+    market: initial.market,
     sources: initial.sources,
     segments: initial.segments,
     window: initial.window_hours,
@@ -31,7 +32,8 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // so the first effect run has nothing to fetch.
   const first = useRef(true)
 
-  const load = useCallback(async (next: Selection, ticker: string | null) => {
+  const load = useCallback(async (next: Selection, ticker: string | null,
+                                  preserveTicker = false) => {
     inflight.current?.abort()
     const controller = new AbortController()
     inflight.current = controller
@@ -40,11 +42,12 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       const fresh = await fetchBoard(next, controller.signal)
       setPayload(fresh)
       setError(null)
-      // Selection follows the board: a ticker the new filters excluded is no
-      // longer there to show, and leaving the panel on it would put a ticker
-      // on screen that the list beside it says is not in view.
+      // Selection follows filtering, but a market change is different: the
+      // company identity stays the same even when its new market board does
+      // not rank it. The detail endpoint can still show its marked fallback.
       const stillThere = fresh.rows.some((row) => row.ticker === ticker)
-      const nextTicker = stillThere ? ticker : (fresh.rows[0]?.ticker ?? null)
+      const nextTicker = (preserveTicker || stillThere) ? ticker
+        : (fresh.rows[0]?.ticker ?? null)
       setSelected(nextTicker)
       writeUrl(next, nextTicker)
     } catch (problem) {
@@ -60,9 +63,12 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     }
   }, [])
 
+  const previousMarket = useRef(initial.market)
   useEffect(() => {
     if (first.current) { first.current = false; return }
-    void load(selection, selected)
+    const marketChanged = previousMarket.current !== selection.market
+    previousMarket.current = selection.market
+    void load(selection, selected, marketChanged)
     // Deliberately not keyed on `selected`: picking a ticker is a client-side
     // change that must not refetch the board.
   }, [selection, load])

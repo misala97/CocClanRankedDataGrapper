@@ -1,4 +1,5 @@
 import { SEGMENT_ORDER, segmentLabel, sourceLabel } from '../format'
+import { MarketSwitch } from './MarketSwitch'
 
 import type { BoardPayload, SegmentFilter, Selection } from '../types'
 
@@ -56,6 +57,8 @@ export function Controls({ payload, selection, busy, onChange }: {
     // beside its own chips, so a group can wrap without its label drifting
     // next to another group's -- which is what a single inline flow did.
     <div className="controls" aria-busy={busy}>
+      <MarketSwitch selection={selection} onChange={onChange} />
+
       <span className="lbl" id="seg-lbl">Segment</span>
       <div className="seg" role="group" aria-labelledby="seg-lbl">
         {/* Every slot, always, in one order.

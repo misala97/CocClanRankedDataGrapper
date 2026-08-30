@@ -19,6 +19,7 @@ from extensions import db
 from models import RadarBucketSource, RadarQuote
 
 from .config import expand_sources_for_history
+from . import quotes as quotes_mod
 
 # Calendar days per span, not trading days: the arrays are indexed by calendar
 # day so price and chatter stay aligned through weekends and holidays. A year
@@ -142,7 +143,8 @@ def _slot_index(when, start, step_minutes, slots):
     return index if index < slots else None
 
 
-def intraday_prices(ticker, start, now, step_minutes, slots):
+def intraday_prices(ticker, start, now, step_minutes, slots, *, market='us',
+                    mic=None):
     """Last quoted price per slot, None where nothing was quoted.
 
     The previous price is NOT carried forward. Doing so would draw a flat line
@@ -156,7 +158,7 @@ def intraday_prices(ticker, start, now, step_minutes, slots):
     intraday price at all, which is a real absence and drawn as one.
     """
     rows = (db.session.query(RadarQuote.fetched_at, RadarQuote.price)
-            .filter(RadarQuote.ticker == ticker,
+            .filter(*quotes_mod._quote_matches(ticker, market, mic),
                     RadarQuote.fetched_at >= start,
                     RadarQuote.fetched_at < now)
             .order_by(RadarQuote.fetched_at).all())
@@ -219,7 +221,7 @@ def watched_slots(sources, start, now, step_minutes, slots):
     return covered
 
 
-def intraday_chart_for(ticker, sources, now, span):
+def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
     """One Chart over slots of minutes rather than calendar days.
 
     Same array shape as the daily chart on purpose: the renderer draws evenly
@@ -229,7 +231,8 @@ def intraday_chart_for(ticker, sources, now, span):
     slots, step_minutes = INTRADAY_SPANS[span]
     start = now - dt.timedelta(minutes=slots * step_minutes)
 
-    closes = intraday_prices(ticker, start, now, step_minutes, slots)
+    closes = intraday_prices(ticker, start, now, step_minutes, slots,
+                             market=market, mic=mic)
     counts, _seen = intraday_counts(ticker, sources, start, now,
                                     step_minutes, slots)
     covered = watched_slots(sources, start, now, step_minutes, slots)

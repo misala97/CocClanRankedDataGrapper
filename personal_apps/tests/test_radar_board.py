@@ -113,6 +113,15 @@ def at_hour(series, hours_ago):
     return next(point for point in series if point.hour == want)
 
 
+def test_xetra_gap_before_regular_open_points_to_todays_regular_open():
+    now = dt.datetime(2026, 8, 28, 6, 57)
+
+    label, boundary = board._next_boundary('de', now, 'closed')
+
+    assert (label, boundary) == ('opens', dt.datetime(2026, 8, 28, 7, 0,
+                                                       tzinfo=dt.timezone.utc))
+
+
 # ----------------------------------------------------------------- series ---
 
 def test_an_hour_with_no_mentions_is_a_zero_when_ingest_was_running(clean):

@@ -1,7 +1,8 @@
 import { chatterRuns, peak } from '../board/geometry'
-import { divergence, pricesAreMoving, rankTerm, rowPrice, segmentLabel,
-         zscore } from '../format'
-import type { Clause, Row, Session } from '../types'
+import { formatPrice, divergence, rankTermFor, segmentLabel, zscore } from '../format'
+import { queryFor } from '../api'
+import { QuoteBadges } from '../QuoteBadges'
+import type { Clause, Row, Selection, Session } from '../types'
 
 /** The row sparkline. Small on purpose: it says "this is building" or "this
  *  faded", and every quantity it implies is in the phrase as text. */
@@ -14,11 +15,14 @@ const BOX = { width: 56, height: 17, pad: 0 }
  *  window. Shut: there is no price move to measure, so the board ranks on the
  *  chatter z-score alone and the label has to say so.
  */
-function rankedBy(row: Row, session: Session) {
-  const term = rankTerm(session)
+function rankedBy(row: Row) {
+  // Eligibility is the server's safety verdict.  Preserve it even if a
+  // cached, mixed-version payload carries an older conflicting display term.
+  const scoreTerm = row.quote.score_eligible ? row.quote.score_term : 'chatter'
+  const term = rankTermFor(scoreTerm)
   return {
     ...term,
-    value: pricesAreMoving(session)
+    value: scoreTerm === 'divergence'
       ? divergence(row.divergence) : zscore(row.mention_z),
   }
 }
@@ -39,26 +43,30 @@ function rankedBy(row: Row, session: Session) {
  *  copy-link work, and the click handler only exists to avoid a full page
  *  load for a selection the client can make itself.
  */
-export function TickerRow({ row, selected, magnitude, session,
-                           suppress = [], onSelect }: {
+export function TickerRow(props: {
   row: Row
   selected: boolean
   magnitude?: number
-  /** The exchange's state, because it decides WHICH number ranks the row. */
-  session: Session
+  /** Retained for one rendering phase; each quote now owns this decision. */
+  session?: Session
   /** Marks the whole board carries, which the page states once in its header
    *  instead. A mark on every row is not a mark. */
   suppress?: readonly string[]
+  /** The link is used outside this client too, so it carries the whole view. */
+  selection?: Selection
   onSelect: (ticker: string) => void
 }) {
+  const { row, selected, magnitude, suppress = [], selection, onSelect } = props
   const runs = chatterRuns(row.series, BOX, peak(row.series))
   const measured = magnitude !== undefined
-  const ranked = rankedBy(row, session)
+  const ranked = rankedBy(row)
 
   return (
     <a className={`row${selected ? ' on' : ''}${measured ? '' : ' unmeasured'}`}
        id={`radar-row-${row.ticker}`}
-       href={`?t=${row.ticker}`}
+       href={selection
+         ? `?${queryFor(selection)}&t=${encodeURIComponent(row.ticker)}`
+         : `?t=${encodeURIComponent(row.ticker)}`}
        aria-current={selected ? 'true' : undefined}
        style={measured
          ? ({ '--mag': magnitude.toFixed(3) } as React.CSSProperties)
@@ -114,11 +122,21 @@ export function TickerRow({ row, selected, magnitude, session,
           act on a number the system already knows is unreliable -- and the
           row rendered its bare segment key and nothing else. */}
       <span className="meta">
-        {segmentLabel(row.segment)} · {rowPrice(row.price, row.price_status)}
+        {segmentLabel(row.segment)} · {quotePrice(row)}
+        <QuoteBadges quote={row.quote} />
         {row.marks.filter((mark) => !suppress.includes(mark)).map((mark) => (
           <span key={mark} className="mark"> · {mark}</span>
         ))}
       </span>
     </a>
   )
+}
+
+function quotePrice(row: Row): string {
+  const price = row.quote.price
+  if (price === null || price <= 0 || !row.quote.currency) return 'no quote'
+  const rendered = formatPrice(price, row.quote.currency, {
+    explicitCode: row.quote.is_fallback,
+  })
+  return row.price_status === 'closed' ? `closed at ${rendered}` : rendered
 }

@@ -20,7 +20,8 @@ from app import app as flask_app
 from extensions import db
 from features.radar import detail, detail_panel
 from features.radar.config import source_config_version
-from models import (RadarBucketSource, RadarDailyClose, TickerUniverse)
+from models import (RadarBucketSource, RadarDailyClose, RadarInstrument,
+                    RadarQuote, TickerUniverse)
 
 NOW = dt.datetime(2026, 3, 12, 15, 0, 0)
 PREFIX = 'DT'
@@ -30,7 +31,8 @@ SPAN = detail.SPAN_DAYS['1Y']
 @pytest.fixture()
 def clean():
     def wipe():
-        for model in (RadarBucketSource, RadarDailyClose):
+        for model in (RadarBucketSource, RadarDailyClose, RadarQuote,
+                      RadarInstrument):
             model.query.filter(model.ticker.like(f'{PREFIX}%')).delete(
                 synchronize_session=False)
         TickerUniverse.query.filter(
@@ -590,6 +592,49 @@ def test_price_comes_from_quotes_not_daily_closes(clean_intraday):
 
         assert any(c is not None for c in chart.closes)
         assert chart.closes[-1] == pytest.approx(4.25)
+
+
+def test_a_german_intraday_chart_never_splices_usd_quote_history(clean_intraday):
+    """Germany with no Xetra print is not a USD chart with a German label."""
+    from models import RadarQuote
+
+    with flask_app.app_context():
+        db.session.add(RadarQuote(
+            ticker=f'{PREFIX}A', market='us', mic='XNAS', currency='USD',
+            fetched_at=NOW - dt.timedelta(minutes=10),
+            quote_ts=NOW - dt.timedelta(minutes=10),
+            price=decimal.Decimal('4.25')))
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(
+            f'{PREFIX}A', ['bluesky'], NOW, '1D', market='de', mic='XETR')
+
+        assert all(price is None for price in chart.closes)
+
+
+def test_germany_detail_marks_us_fallback_and_uses_its_us_history(clean):
+    """A fallback has a US quote and history, never an empty EUR-labelled splice."""
+    ticker = f'{PREFIX}FALLBACK'
+    with flask_app.app_context():
+        db.session.add(TickerUniverse(
+            symbol=ticker, name='Fallback Corp', exchange='Nasdaq',
+            first_seen=NOW, market_cap=decimal.Decimal('100000000')))
+        db.session.add(RadarQuote(
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
+            fetched_at=NOW - dt.timedelta(minutes=5),
+            quote_ts=NOW - dt.timedelta(minutes=5),
+            price=decimal.Decimal('4.25'), prev_close=decimal.Decimal('4.00')))
+        db.session.add(RadarDailyClose(
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
+            close_date=NOW.date(), close=decimal.Decimal('4.25'), fetched_at=NOW))
+        db.session.commit()
+
+        built = detail_panel.build(ticker, ['bluesky'], NOW, span='1M', market='de')
+
+        assert built.market == 'de'
+        assert built.quote.is_fallback is True
+        assert built.quote.currency == 'USD'
+        assert built.chart.closes[-1] == decimal.Decimal('4.25')
 
 
 def test_a_slot_with_no_quote_is_none_rather_than_the_last_price(clean_intraday):

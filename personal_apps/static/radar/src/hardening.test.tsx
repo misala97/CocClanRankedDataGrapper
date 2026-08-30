@@ -14,9 +14,23 @@ import { BoardUnavailable, fetchBoard } from './api'
 import { BoardPage } from './board/BoardPage'
 import { Boundary } from './Broken'
 import { parsePayload } from './embedded'
+import { Identity } from './detail/Identity'
 import { Posts } from './detail/Posts'
 import { openingSpan } from './detail/DetailPane'
-import type { BoardPayload, Detail, Post, Row } from './types'
+import type { BoardPayload, Detail, MarketQuote, Post, Row } from './types'
+
+function quote(over: Partial<MarketQuote> = {}): MarketQuote {
+  return {
+    market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 10,
+    regular_move: 0.012, extended_move: null, session: 'regular',
+    quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
+    is_fallback: false,
+    ...over,
+    tape_status: over.tape_status ?? 'ok',
+    score_eligible: over.score_eligible ?? true,
+    score_term: over.score_term ?? 'divergence',
+  }
+}
 
 function row(over: Partial<Row> = {}): Row {
   return {
@@ -29,13 +43,16 @@ function row(over: Partial<Row> = {}): Row {
     triplet: { '1': 1.1, '4': 3.2, '24': 2.0 },
     tone: { bullish: 4, neutral: 10, bearish: 2 },
     clauses: [{ kind: 'ratio', text: '3x its normal' }],
-    ...over,
+    ...over, quote: over.quote ?? quote(),
   }
 }
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
     generated_at: '2026-08-22T19:00:00Z',
+    market: 'us', display_timezone: 'Europe/Berlin',
+    market_venue: 'US markets', next_boundary_label: 'closes',
+    next_boundary_at: '2026-08-22T20:00:00Z',
     sources: ['bluesky', 'fourchan', 'reddit'],
     all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,
@@ -50,16 +67,19 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
 
 function detail(ticker = 'AAA'): Detail {
   return {
+    market: 'us', display_timezone: 'Europe/Berlin',
     identity: {
       ticker, name: 'Alpha Inc', exchange: 'N', segment: 'large',
       market_cap: 1e9, ipo_date: '2020-01-01', price: 10, price_move: 0.012,
       price_status: 'ok', session: 'regular',
+      quote: quote(),
     },
     read: [{ kind: 'plain', text: `${ticker} is being discussed.` }],
     chart: {
       from: '2025-08-23T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
+      sessions: [],
       watched_from: '2026-08-18',
     },
     breakdown: {
@@ -118,6 +138,63 @@ describe('the embedded payload', () => {
     // An empty board is a legitimate answer -- a quiet Sunday -- and must not
     // be confused with a payload that never arrived.
     expect(parsePayload('{"rows":[]}')).not.toBeNull()
+  })
+
+  it('falls back to US for a legacy embedded payload with an invalid market', () => {
+    /* An invalid API query is rejected server-side. The already-embedded page
+       cannot ask the server to correct itself, so it takes the same safe US
+       default instead of emitting a third market into client state. */
+    expect(parsePayload('{"rows":[],"market":"elsewhere"}')?.market)
+      .toBe('us')
+  })
+})
+
+describe('quote movement in the identity', () => {
+  it('separates regular and after-hours movement', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ regular_move: 0.012, extended_move: -0.004,
+                     session: 'afterhours' }),
+    }} />)
+
+    expect(screen.getByText((content, node) =>
+      node?.classList.contains('quote-move') === true
+        && node.textContent === '+1,20 % regular')).toBeVisible()
+    expect(screen.getByText((content, node) =>
+      node?.classList.contains('quote-move') === true
+        && node.textContent === '−0,40 % after hours')).toBeVisible()
+  })
+
+  it('names a frozen tape even when its provider quote is live', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ quality: 'live', tape_status: 'stale' }),
+    }} />)
+
+    expect(screen.getByText('no print')).toBeVisible()
+  })
+
+  it('never prints null for an unavailable quote source or currency', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ quality: 'unavailable', venue: null, currency: null }),
+    }} />)
+
+    expect(screen.getByText('Venue unavailable · Currency unavailable')).toBeVisible()
+    expect(screen.queryByText(/null/)).toBeNull()
+  })
+
+  it('uses the quoted instant\'s Berlin date for EOD', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ quality: 'eod', quoted_at: '2026-08-28T22:30:00Z' }),
+    }} />)
+
+    expect(screen.getByText(/EOD · 29\. Aug\. 2026/)).toBeVisible()
   })
 })
 
@@ -249,7 +326,10 @@ describe('what a failing status actually says', () => {
   // reach the board", which reads as an offline browser. A bookmarked `?t=`
   // for a ticker that has dropped off answers 404, and the reader was told
   // their connection was down.
-  const selection = { sources: ['bluesky'], minVenues: 1, segments: [], window: 4 }
+  const selection = {
+    market: 'us' as const, sources: ['bluesky'], minVenues: 1,
+    segments: [], window: 4,
+  }
 
   it('separates a missing ticker from an unreachable board', async () => {
     stubStatus(404)
@@ -433,20 +513,20 @@ describe('a post nobody sized', () => {
     expect(screen.queryByRole('button', { name: /whole post/ })).toBeNull()
   })
 
-  it('shows the post date and names UTC', () => {
+  it('shows the post date in Radar\'s Berlin timezone', () => {
     render(<Posts posts={[post()]} total={1} />)
 
-    expect(screen.getByText('22 Aug 2026 · 19:00 UTC')).toBeInTheDocument()
+    expect(screen.getByText('22. Aug. 2026 · 21:00 CEST')).toBeInTheDocument()
   })
 })
 
 describe('how old the board is', () => {
-  it('always says when the board was updated, in UTC', () => {
+  it('always says when the board was updated, in Berlin time', () => {
     vi.setSystemTime(new Date('2026-08-22T19:05:00Z'))
     render(<BoardPage initial={payload()} />)
 
-    expect(screen.getByText('19:00 UTC').closest('.age'))
-      .toHaveTextContent('updated 19:00 UTC')
+    expect(screen.getByText('21:00 CEST').closest('.age'))
+      .toHaveTextContent('updated 21:00 CEST')
     expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
     vi.useRealTimers()
   })
@@ -458,7 +538,7 @@ describe('how old the board is', () => {
     render(<BoardPage initial={payload()} />)
 
     expect(await screen.findByText(/3 hours old/)).toBeInTheDocument()
-    expect(screen.getByText(/19:00 UTC/)).toBeInTheDocument()
+    expect(screen.getByText(/21:00 CEST/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
     vi.useRealTimers()
   })

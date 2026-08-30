@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { PLOT_R, PriceChart } from './PriceChart'
 import type { DetailChart } from '../types'
@@ -9,6 +9,7 @@ const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
   step_minutes: 1440,
   closes: Array.from({ length: 365 }, (_, i) => 1 + i / 100),
   chatter: Array.from({ length: 365 }, (_, i) => (i < 362 ? null : i)),
+  sessions: [],
   watched_from: '2026-08-21',
   ...over,
 })
@@ -124,6 +125,7 @@ describe('the axis on an intraday span', () => {
     step_minutes: step,
     closes: Array.from({ length: 96 }, (_, i) => 10 + i * 0.01),
     chatter: Array.from({ length: 96 }, () => 1),
+    sessions: [],
     watched_from: null,
   })
 
@@ -157,11 +159,73 @@ describe('the axis on an intraday span', () => {
     const daily: DetailChart = {
       from: '2026-01-01T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, () => 5),
-      chatter: Array.from({ length: 365 }, () => 1), watched_from: null,
+      chatter: Array.from({ length: 365 }, () => 1), sessions: [], watched_from: null,
     }
 
     const { container } = render(<PriceChart chart={daily} />)
 
     expect(container.textContent).toContain('today')
+  })
+
+  it('labels chart ticks in Berlin rather than UTC', () => {
+    const inBerlin = {
+      ...intraday(15, '1D'),
+      from: '2026-08-28T19:00:00Z',
+    }
+    const { container } = render(<PriceChart chart={inBerlin} />)
+
+    expect(container.textContent).toContain('21:00')
+  })
+
+  it('renders named extended-session bands', () => {
+    const withSessions = {
+      ...intraday(15, '1D'),
+      sessions: [{
+        start: '2026-08-25T18:00:00Z',
+        end: '2026-08-25T20:00:00Z',
+        kind: 'afterhours',
+      }],
+    } as unknown as DetailChart
+    const { container } = render(<PriceChart chart={withSessions} />)
+
+    expect(container.querySelector('[data-session="afterhours"]')).not.toBeNull()
+    expect(screen.getByText('After hours')).toBeInTheDocument()
+  })
+
+  it('extends an extended-session band through the chatter lane', () => {
+    /* Removing the lower part makes the context stop at price, leaving the
+       chatter it belongs to outside the same session. */
+    const withSessions = {
+      ...intraday(15, '1D'),
+      sessions: [{
+        start: '2026-08-25T18:00:00Z',
+        end: '2026-08-25T20:00:00Z',
+        kind: 'afterhours',
+      }],
+    } as unknown as DetailChart
+    const { container } = render(<PriceChart chart={withSessions} />)
+
+    expect(container.querySelector('[data-session="afterhours"] rect'))
+      .toHaveAttribute('height', '264')
+  })
+
+  it('clips session bands and their labels to the shared plot', () => {
+    /* A band that begins or ends beside the plot must not paint into the
+       axis gutter, and the label needs the same boundary as its rectangle. */
+    const withSessions = {
+      ...intraday(15, '1D'),
+      sessions: [{
+        start: '2026-08-25T18:00:00Z',
+        end: '2026-08-25T20:00:00Z',
+        kind: 'afterhours',
+      }],
+    } as unknown as DetailChart
+    const { container } = render(<PriceChart chart={withSessions} />)
+
+    const clip = container.querySelector('clipPath')!
+    const reference = `url(#${clip.id})`
+    const band = container.querySelector('[data-session="afterhours"]')!
+    expect(band.querySelector('rect')).toHaveAttribute('clip-path', reference)
+    expect(band.querySelector('text')).toHaveAttribute('clip-path', reference)
   })
 })

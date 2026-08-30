@@ -7,6 +7,8 @@ each spring the US session starts an hour earlier in Berlin, and any cadence
 keyed on Berlin hours would poll at overnight rates through a live open.
 """
 import datetime as dt
+import decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -245,6 +247,48 @@ def test_nothing_loud_means_no_provider_call(monkeypatch):
     assert called['n'] == 0
 
 
+def test_german_quote_failure_does_not_block_us_quotes(monkeypatch):
+    """A denied German entitlement is not a US board outage."""
+    us = SimpleNamespace(ticker='AAA', market='us', venue='Nasdaq', mic='XNAS',
+                         provider_symbol='AAA', currency='USD')
+    de = SimpleNamespace(ticker='AAA', market='de', venue='Xetra', mic='XETR',
+                         provider_symbol='AAA1', currency='EUR')
+    calls = []
+
+    class UsProvider:
+        def quotes(self, symbols):
+            calls.append(('us', list(symbols)))
+            from features.radar.prices import Quote
+            return {'AAA': Quote('AAA', decimal.Decimal('220.00'),
+                                 currency='USD')}
+
+    class DeniedGermany:
+        def quotes(self, symbols):
+            calls.append(('de', list(symbols)))
+            raise RuntimeError('entitlement denied')
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
+    monkeypatch.setattr(daemon, 'has_app_context', lambda: True)
+    monkeypatch.setattr(
+        daemon, '_market_instruments',
+        lambda tickers, market: [us] if market == 'us' else [de])
+    monkeypatch.setattr(daemon, '_mapping_refresh_due', lambda now: True)
+    monkeypatch.setattr(daemon.instruments, 'refresh_mappings',
+                        lambda provider, now: calls.append(('mapping', provider)))
+    monkeypatch.setattr(daemon.quotes, 'record_quotes', lambda found, now: len(found))
+
+    mapping_provider = object()
+    result = daemon.poll_quotes(
+        _utc(2026, 8, 21, 14), UsProvider(), de_provider=DeniedGermany(),
+        mapping_provider=mapping_provider)
+
+    assert result['us_stored'] == 1
+    assert result['de_stored'] == 0
+    assert result['de_error'] is True
+    assert calls == [('us', ['AAA']), ('mapping', mapping_provider),
+                     ('de', ['AAA1'])]
+
+
 def test_sigma_refresh_covers_the_board(monkeypatch):
     """Volatility changes on the scale of weeks, so it refreshes on its own
     slow schedule rather than per page load."""
@@ -382,12 +426,42 @@ def test_history_is_fetched_for_tickers_that_have_none(monkeypatch):
         return len(tickers)
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
+    # This is the mixed-version path: no primary instruments have been seeded
+    # yet, so refresh_history must retain the old ticker-only request instead
+    # of reaching into the application database from this unit test.
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [])
     monkeypatch.setattr(daemon.history, 'tickers_needing_history',
                         lambda candidates, today: ['BBB'])
     monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
 
     assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 1
     assert seen['tickers'] == ['BBB']
+
+
+def test_us_history_uses_the_primary_instrument_mic_and_provider_symbol(monkeypatch):
+    instrument = SimpleNamespace(
+        ticker='AAA', market='us', venue='NYSE', mic='XNYS',
+        provider_symbol='AAA.US', currency='USD')
+    seen = {}
+
+    def fake_fetch(provider, tickers, now, **kwargs):
+        seen['tickers'] = list(tickers)
+        seen.update(kwargs)
+        return len(tickers)
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [instrument] if market == 'us' else [])
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today, **kwargs: list(candidates))
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+
+    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 1
+    assert seen == {
+        'tickers': ['AAA'], 'market': 'us', 'mic': 'XNYS', 'currency': 'USD',
+        'provider_symbols': {'AAA': 'AAA.US'},
+    }
 
 
 def test_the_history_job_respects_its_per_cycle_cap(monkeypatch):
@@ -401,6 +475,8 @@ def test_the_history_job_respects_its_per_cycle_cap(monkeypatch):
 
     many = [f'T{n}' for n in range(100)]
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: many)
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [])
     monkeypatch.setattr(daemon.history, 'tickers_needing_history',
                         lambda candidates, today: list(candidates))
     monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
@@ -419,6 +495,30 @@ def test_a_failing_history_provider_does_not_kill_the_cycle(monkeypatch):
     monkeypatch.setattr(daemon.history, 'fetch_into_store', boom)
 
     assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 0
+
+
+def test_german_history_has_its_own_bound_and_provider_symbols(monkeypatch):
+    de = SimpleNamespace(ticker='AAA', market='de', venue='Xetra', mic='XETR',
+                         provider_symbol='APC', currency='EUR')
+    seen = {}
+
+    def fake_fetch(provider, tickers, now, **kwargs):
+        seen['tickers'] = list(tickers)
+        seen.update(kwargs)
+        return len(tickers)
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [de] if market == 'de' else [])
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today, **kwargs: list(candidates))
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+
+    assert daemon.refresh_de_history(_utc(2026, 8, 21, 14), object(), limit=1) == 1
+    assert seen == {
+        'tickers': ['AAA'], 'market': 'de', 'mic': 'XETR', 'currency': 'EUR',
+        'provider_symbols': {'AAA': 'APC'},
+    }
 
 
 def test_nothing_due_spends_no_requests(monkeypatch):
@@ -658,3 +758,57 @@ def test_main_prepares_the_rollup_generation_before_building_fetchers(monkeypatc
     assert not called, ('a failed rollup-generation prepare must never reach '
                         'build_fetchers, or a cycle could run before the '
                         'process actually exits')
+
+
+def test_manual_mapping_refresh_uses_the_catalog_provider(monkeypatch):
+    """A manual operator refresh must run the same safe mapping path as cron."""
+    seen = {}
+    provider = object()
+    from features.radar.instruments import MappingResult
+
+    monkeypatch.setattr(daemon, '_mapping_provider', lambda: provider,
+                        raising=False)
+    monkeypatch.setattr(
+        daemon.instruments, 'refresh_mappings',
+        lambda selected, now: seen.update(provider=selected, now=now) or
+        MappingResult(True, 2, 1, 1, 1))
+
+    daemon.main(['--refresh-mappings'])
+
+    assert seen['provider'] is provider
+    assert seen['now'].tzinfo is dt.timezone.utc
+
+
+def test_daemon_schedules_weekly_mapping_refresh(monkeypatch):
+    """Mappings otherwise stay frozen after the deploy-time probe succeeds."""
+    created = []
+
+    class CapturingScheduler:
+        def __init__(self, **kwargs):
+            self.jobs = []
+            created.append(self)
+
+        def add_job(self, func, trigger, **kwargs):
+            self.jobs.append((func, trigger, kwargs))
+
+        def start(self):
+            pass
+
+        def shutdown(self):
+            pass
+
+    monkeypatch.setattr(daemon, 'BackgroundScheduler', CapturingScheduler)
+    monkeypatch.setattr(daemon, '_prepare_rollup_generation', lambda now: (0, 0))
+    monkeypatch.setattr(daemon, 'build_fetchers', lambda: {})
+    monkeypatch.setattr(daemon.time, 'sleep',
+                        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt))
+
+    daemon.main([])
+
+    jobs = {job[2]['id']: job for job in created[0].jobs}
+    mapping = jobs['radar_mappings']
+    assert mapping[0] is daemon._scheduled_mappings
+    assert mapping[1] == 'interval'
+    assert mapping[2]['weeks'] == 1
+    assert mapping[2]['max_instances'] == 1
+    assert mapping[2]['coalesce'] is True

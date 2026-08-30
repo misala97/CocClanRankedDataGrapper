@@ -542,6 +542,42 @@ class TickerUniverse(db.Model):
     profile_refreshed_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
 
 
+class RadarInstrument(db.Model):
+    """One venue-specific price instrument beneath a Radar ticker.
+
+    `TickerUniverse.symbol` remains the social identity. This table answers a
+    different question: which actual instrument supplies a price in one market
+    and currency. The mapping may be unverified during the compatibility
+    window, but venue and currency are never inferred by a reader from a price.
+    """
+    __tablename__ = 'radar_instruments'
+    __table_args__ = (
+        db.UniqueConstraint('ticker', 'market', 'mic',
+                            name='uq_radar_instrument'),
+        db.CheckConstraint("market IN ('us', 'de')",
+                           name='ck_radar_instrument_market'),
+        db.Index('ix_radar_instrument_primary',
+                 'ticker', 'market', 'is_primary'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id              = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    ticker          = db.Column(db.String(12, collation='utf8mb4_bin'),
+                                nullable=False)
+    market          = db.Column(db.String(2), nullable=False)
+    venue           = db.Column(db.String(48), nullable=False)
+    mic             = db.Column(db.String(4), nullable=False)
+    provider_symbol = db.Column(db.String(32), nullable=False)
+    currency        = db.Column(db.String(3), nullable=False)
+    isin            = db.Column(db.String(12), nullable=True)
+    is_primary      = db.Column(db.Boolean, nullable=False, default=False)
+    mapping_status  = db.Column(db.String(12), nullable=False)
+    mapping_source  = db.Column(db.String(24), nullable=True)
+    mapped_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
 class RadarPost(db.Model):
     """One ingested post or comment. 30-day rolling retention.
 
@@ -774,13 +810,24 @@ class RadarQuote(db.Model):
     """
     __tablename__ = 'radar_quotes'
     __table_args__ = (
-        db.UniqueConstraint('ticker', 'fetched_at', name='uq_radar_quote'),
-        db.Index('ix_radar_quotes_ticker_fetched', 'ticker', 'fetched_at'),
+        db.UniqueConstraint('ticker', 'market', 'mic', 'fetched_at',
+                            name='uq_radar_quote_market'),
+        db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
+                           name='ck_radar_quotes_market'),
+        db.Index('ix_radar_quotes_ticker_market_mic_fetched',
+                 'ticker', 'market', 'mic', 'fetched_at'),
         {'mysql_charset': 'utf8mb4'},
     )
 
     id          = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     ticker      = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    # Expand-stage columns. Nullable until every daemon writer is market-aware;
+    # old rows and mixed-version writes mean US during that compatibility
+    # window. The contraction migration belongs after the writer rollout.
+    market      = db.Column(db.String(2), nullable=True)
+    mic         = db.Column(db.String(4), nullable=True)
+    currency    = db.Column(db.String(3), nullable=True)
+    provider_symbol = db.Column(db.String(32), nullable=True)
     fetched_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 
     # The exchange's timestamp for the print, not ours. A tape that has not
@@ -788,6 +835,12 @@ class RadarQuote(db.Model):
     quote_ts    = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
     price       = db.Column(db.Numeric(18, 6), nullable=False)
     prev_close  = db.Column(db.Numeric(18, 6), nullable=True)
+    # The current regular-session close is distinct from the previous close:
+    # after-hours movement is measured from this same-day baseline.
+    regular_close = db.Column(db.Numeric(18, 6), nullable=True)
+    # Provider-declared provenance, distinct from age-derived ``stale``.
+    # Nullable for snapshots written before this field was deployed.
+    provider_delay = db.Column(db.String(8), nullable=True)
     volume      = db.Column(db.BigInteger, nullable=True)
 
 
@@ -803,11 +856,24 @@ class RadarDailyClose(db.Model):
     tickers is small, and rows are replaced by date rather than accumulated.
     """
     __tablename__ = 'radar_daily_closes'
-    __table_args__ = {'mysql_charset': 'utf8mb4'}
+    __table_args__ = (
+        db.UniqueConstraint('ticker', 'market', 'mic', 'close_date',
+                            name='uq_radar_daily_close_market'),
+        db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
+                           name='ck_radar_daily_closes_market'),
+        {'mysql_charset': 'utf8mb4'},
+    )
 
-    ticker     = db.Column(db.String(12, collation='utf8mb4_bin'),
-                           primary_key=True)
-    close_date = db.Column(db.Date, primary_key=True)
+    id         = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    ticker     = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    # Same expand-only overlap as RadarQuote. The legacy primary key remains
+    # until the history writer can supply market and MIC on every row.
+    market     = db.Column(db.String(2), nullable=True)
+    mic        = db.Column(db.String(4), nullable=True)
+    currency   = db.Column(db.String(3), nullable=True)
+    close_date = db.Column(db.Date, nullable=False)
     close      = db.Column(db.Numeric(18, 4), nullable=False)
     fetched_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 

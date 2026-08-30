@@ -14,11 +14,10 @@ import datetime as dt
 import sqlalchemy as sa
 
 from extensions import db
-from models import (RadarBucketSource, RadarMention, RadarPost, RadarQuote,
-                    TickerUniverse)
+from models import RadarBucketSource, RadarMention, RadarPost, TickerUniverse
 
 from . import detail as chart_mod
-from . import history, market_calendar, universe
+from . import history, universe
 from . import quotes as quotes_mod
 from .config import (expand_sources, expand_sources_for_history, source_kind,
                      source_root)
@@ -83,6 +82,8 @@ class Detail:
     mentions: int
     expected: float
     baseline_days: float | None
+    market: str = 'us'
+    quote: object = None
 
 
 def window_figures(ticker, sources, since, now):
@@ -251,7 +252,8 @@ def first_mention_day(ticker):
     return first.date() if first else None
 
 
-def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
+def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN,
+          market='us'):
     """One ticker's panel. Raises UnknownTicker if it is not in the universe.
 
     `sources` is the viewer's SELECTION, unexpanded -- each query below picks
@@ -267,28 +269,26 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
         raise chart_mod.UnknownTicker(ticker)
 
     since = now - dt.timedelta(hours=window_hours)
-    session = market_calendar.session_state(now.replace(tzinfo=dt.timezone.utc))
-    status = quotes_mod.price_status(ticker, now, session=session)
-    move = quotes_mod.move_since(ticker, hours=window_hours, now=now)
-
-    latest = None
-    if status != 'unknown':
-        latest = (RadarQuote.query
-                  .filter(RadarQuote.ticker == ticker,
-                          RadarQuote.fetched_at <= now)
-                  .order_by(RadarQuote.fetched_at.desc()).first())
+    quote = quotes_mod.quote_views_for([ticker], market, now)[ticker]
+    session = quote.session
+    status = quote.tape_status
+    move = (quotes_mod.move_since(ticker, hours=window_hours, now=now,
+                                  market=quote.market, mic=quote.mic)
+            if quote.score_eligible else None)
 
     # Intraday spans price from radar_quotes and slot by minutes; the daily
     # ones price from radar_daily_closes and slot by calendar day. Different
     # sources, different granularity, same array shape out.
     if chart_mod.is_intraday(span):
-        chart = chart_mod.intraday_chart_for(ticker, sources, now, span)
+        chart = chart_mod.intraday_chart_for(
+            ticker, sources, now, span, market=quote.market, mic=quote.mic)
     else:
         days = chart_mod.SPAN_DAYS[span]
         start = now.date() - dt.timedelta(days=days - 1)
         from_dt = dt.datetime.combine(start, dt.time.min)
         stored = dict(history.closes_for([ticker], days=days,
-                                         today=now.date()).get(ticker, []))
+                                          today=now.date(), market=quote.market,
+                                          mic=quote.mic).get(ticker, []))
         chart = chart_mod.chart_for(
             ticker, start, days, stored,
             chart_mod.daily_counts([ticker], sources, from_dt, now),
@@ -305,12 +305,12 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
         name=profile.name,
         exchange=profile.exchange,
         segment=universe.segment_for(profile.market_cap, profile.ipo_date,
-                                     latest.price if latest else None,
+                                      quote.price,
                                      now.date(), profile.name,
                                      profile.is_etf),
         market_cap=profile.market_cap,
         ipo_date=profile.ipo_date,
-        price=latest.price if latest else None,
+        price=quote.price,
         price_move=move,
         price_status=status,
         session=session,
@@ -322,4 +322,6 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN):
         mentions=mentions,
         expected=expected,
         baseline_days=baseline_days,
+        market=market,
+        quote=quote,
     )

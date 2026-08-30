@@ -15,21 +15,26 @@ an entry in config.SOURCES. StockTwits was one of these until 2026-08-26,
 when Cloudflare bot management -- refusing every request, from launch --
 made it not worth defeating a bot challenge to keep.
 """
+import argparse
 import datetime as dt
 import logging
+import sys
 import time
 
 import sqlalchemy as sa
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask import has_app_context
 
 from app import app
 from extensions import db
-from models import RadarPollState
+from models import RadarInstrument, RadarPollState, RadarQuote
 from features.radar import (
-    history, ingest, journal, llm_sentiment, market_calendar, quotes,
+    history, ingest, instruments, journal, llm_sentiment, market_calendar, quotes,
     retention, scheduling, scoring, universe)
+from features.radar.markets import classify_quality
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
+from features.radar.prices import normalize_snapshot
 from features.radar.config import (
     MENTION_EVENT_RETENTION_HOURS, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
     REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
@@ -53,6 +58,7 @@ FALLBACK_INTERVAL = 1800
 # on the board, not to all 12,000 in the universe -- a quote for a ticker
 # nobody is discussing answers a question nobody asked.
 QUOTE_LIMIT = 50
+DE_QUOTE_LIMIT = 20
 QUOTE_INTERVAL_MINUTES = 5
 
 # Twelve Data allows 800 requests a day and volatility moves on the scale of
@@ -78,6 +84,7 @@ PROFILE_MAX_AGE_DAYS = 7
 # Data's EIGHT REQUESTS PER MINUTE, not its 800/day quota: 20 per five-minute
 # cycle is four a minute, leaving room for the quote job alongside.
 HISTORY_LIMIT = 20
+DE_HISTORY_LIMIT = 20
 HISTORY_INTERVAL_MINUTES = 5
 
 
@@ -88,6 +95,58 @@ def _utcnow():
     warning into the service log on every cycle.
     """
     return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
+
+def _german_quote_sample(now):
+    """Return safe age/quality metadata for the newest retained Xetra sample."""
+    quote = (RadarQuote.query.filter_by(market='de', mic='XETR')
+             .order_by(RadarQuote.fetched_at.desc()).first())
+    if quote is None:
+        return None, 'unavailable'
+    observed_at = quote.quote_ts or quote.fetched_at
+    age = max(0, int((now.replace(tzinfo=None) - observed_at).total_seconds()))
+    # RadarQuote does not carry the provider-delay field until the polling
+    # migration. Calling retained data "live" without it would mislead; delayed
+    # is the conservative quality used for this read-only probe.
+    return age, classify_quality(quote.quote_ts, quote.fetched_at,
+                                 'delayed', now)
+
+
+def probe_german_data(provider, now):
+    """Read permitted catalogs and print only operational counts, never secrets."""
+    with app.app_context():
+        result = instruments.mapping_preview(provider)
+        quote_age, quote_quality = _german_quote_sample(now)
+    print(
+        'catalog_reachable=%s xetra_rows=%d isin_rows=%d '
+        'mapped_active_tickers=%d unavailable_active_tickers=%d '
+        'quote_sample_age_seconds=%s quote_sample_quality=%s' % (
+            result.catalog_reachable, result.xetra_rows, result.isin_rows,
+            result.mapped_active_tickers, result.unavailable_active_tickers,
+            quote_age if quote_age is not None else 'unavailable', quote_quality))
+    return result
+
+
+def _mapping_provider():
+    """Build the only provider combination allowed to establish mappings."""
+    return instruments.CatalogFallbackProvider(
+        twelvedata_provider.TwelveDataProvider(twelvedata_provider.TwelveDataHttp()),
+        finnhub_provider.FinnhubProvider(finnhub_provider.FinnhubHttp()))
+
+
+def _scheduled_mappings():
+    """Refresh verified Xetra mappings while containing provider failures."""
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        with app.app_context():
+            result = instruments.refresh_mappings(_mapping_provider(), now)
+    except Exception:
+        logger.exception('radar mapping refresh failed')
+        return None
+    logger.info('radar mapping refresh reachable=%s mapped=%d unavailable=%d',
+                result.catalog_reachable, result.mapped_active_tickers,
+                result.unavailable_active_tickers)
+    return result
 
 def interval_for(state):
     return INTERVALS.get(state, FALLBACK_INTERVAL)
@@ -278,30 +337,104 @@ def _loud_tickers(now, limit):
     return [ticker for ticker, _ in rows]
 
 
-def poll_quotes(now_utc, provider, limit=QUOTE_LIMIT):
-    """Fetch and store quotes for the loudest tickers."""
+def _market_instruments(tickers, market):
+    """Primary, verified instruments for a bounded market poll."""
+    return (RadarInstrument.query
+            .filter(RadarInstrument.ticker.in_(tickers),
+                    RadarInstrument.market == market,
+                    RadarInstrument.is_primary.is_(True),
+                    RadarInstrument.mapping_status == 'mapped')
+            .order_by(RadarInstrument.ticker, RadarInstrument.mic).all())
+
+
+def _mapping_refresh_due(now):
+    newest = (db.session.query(sa.func.max(RadarInstrument.mapped_at))
+              .filter(RadarInstrument.market == 'de').scalar())
+    return newest is None or newest <= now.replace(tzinfo=None) - dt.timedelta(days=7)
+
+
+def _poll_instruments(provider, instruments, now):
+    """Fetch and normalize a market batch without inventing missing prices."""
+    if not instruments:
+        return 0
+    if hasattr(provider, 'quotes_for_instruments'):
+        raw_quotes = provider.quotes_for_instruments(instruments)
+    else:
+        raw_quotes = provider.quotes(
+            [row.provider_symbol for row in instruments])
+    normalized = {}
+    for instrument in instruments:
+        raw = raw_quotes.get(instrument.provider_symbol)
+        if raw is None:
+            continue
+        try:
+            quote = normalize_snapshot(instrument, raw)
+        except Exception:
+            logger.warning('radar quote rejected ticker=%s market=%s mic=%s',
+                           instrument.ticker, instrument.market, instrument.mic)
+            continue
+        normalized[(quote.ticker, quote.market, quote.mic)] = quote
+    return quotes.record_quotes(normalized, now.replace(tzinfo=None))
+
+
+def poll_quotes(now_utc, provider, limit=QUOTE_LIMIT, *, de_provider=None,
+                de_limit=DE_QUOTE_LIMIT, mapping_provider=None):
+    """Poll US and German primary instruments in independent bounded batches."""
     symbols = _loud_tickers(now_utc, limit)
     if not symbols:
         # No board, so no reason to spend rate limit on an empty request.
-        return {'requested': 0, 'stored': 0, 'error': False}
+        return {'requested': 0, 'stored': 0, 'error': False,
+                'us_requested': 0, 'us_stored': 0, 'us_error': False,
+                'de_requested': 0, 'de_stored': 0, 'de_error': False}
 
     try:
-        found = provider.quotes(symbols)
-        stored = quotes.record_quotes(found, now_utc.replace(tzinfo=None))
+        us_instruments = (_market_instruments(symbols, 'us')
+                          if has_app_context() else [])
+        if us_instruments:
+            us_stored = _poll_instruments(provider, us_instruments, now_utc)
+        else:
+            # Compatibility for a deployment where the Task 1 seed has not
+            # reached this daemon yet; the established US cadence remains.
+            found = provider.quotes(symbols)
+            us_stored = quotes.record_quotes(found, now_utc.replace(tzinfo=None))
+        us_error = False
     except Exception:
-        logger.exception('radar quote poll failed')
-        return {'requested': len(symbols), 'stored': 0, 'error': True}
+        logger.exception('radar US quote poll failed')
+        us_stored = 0
+        us_error = True
 
-    return {'requested': len(symbols), 'stored': stored, 'error': False}
+    de_instruments = []
+    de_stored = 0
+    de_error = False
+    if de_provider is not None:
+        try:
+            if mapping_provider is not None and _mapping_refresh_due(now_utc):
+                instruments.refresh_mappings(mapping_provider, now_utc)
+            de_instruments = (_market_instruments(symbols, 'de')
+                              if has_app_context() else [])[:de_limit]
+            de_stored = _poll_instruments(de_provider, de_instruments, now_utc)
+        except Exception:
+            logger.exception('radar German quote poll failed')
+            de_error = True
+
+    return {'requested': len(symbols), 'stored': us_stored,
+            'error': us_error, 'us_requested': len(symbols),
+            'us_stored': us_stored, 'us_error': us_error,
+            'de_requested': len(de_instruments), 'de_stored': de_stored,
+            'de_error': de_error}
 
 
 def _scheduled_quotes():
     now = dt.datetime.now(dt.timezone.utc)
     provider = finnhub_provider.FinnhubProvider(finnhub_provider.FinnhubHttp())
+    de_provider = twelvedata_provider.TwelveDataProvider(
+        twelvedata_provider.TwelveDataHttp())
     with app.app_context():
-        result = poll_quotes(now, provider)
-    logger.info('radar quotes requested=%d stored=%d error=%s',
-                result['requested'], result['stored'], result['error'])
+        result = poll_quotes(now, provider, de_provider=de_provider,
+                             mapping_provider=_mapping_provider())
+    logger.info('radar quotes us=%d/%d us_error=%s de=%d/%d de_error=%s',
+                result['us_stored'], result['us_requested'], result['us_error'],
+                result['de_stored'], result['de_requested'], result['de_error'])
 
 
 def refresh_volatility(now_utc, limit=SIGMA_LIMIT):
@@ -402,12 +535,71 @@ def refresh_history(now_utc, provider, limit=HISTORY_LIMIT):
 
     naive = now_utc.replace(tzinfo=None)
     try:
-        due = history.tickers_needing_history(candidates, naive.date())[:limit]
-        if not due:
-            return 0
-        return history.fetch_into_store(provider, due, naive)
+        primary = _market_instruments(candidates, 'us')
+        if not primary:
+            # Mixed-version compatibility before instrument seeding lands.
+            due = history.tickers_needing_history(
+                candidates, naive.date())[:limit]
+            if not due:
+                return 0
+            return history.fetch_into_store(provider, due, naive)
+
+        stored = 0
+        remaining = limit
+        by_mic = {}
+        for instrument in primary:
+            by_mic.setdefault(instrument.mic, []).append(instrument)
+        for mic, rows in by_mic.items():
+            if remaining <= 0:
+                break
+            tickers = [row.ticker for row in rows]
+            due = history.tickers_needing_history(
+                tickers, naive.date(), market='us', mic=mic)[:remaining]
+            if not due:
+                continue
+            symbols = {row.ticker: row.provider_symbol for row in rows
+                       if row.ticker in due}
+            stored += history.fetch_into_store(
+                provider, due, naive, market='us', mic=mic, currency='USD',
+                provider_symbols=symbols)
+            remaining -= len(due)
+        return stored
     except Exception:
         logger.exception('radar history refresh failed')
+        return 0
+
+
+def refresh_de_history(now_utc, provider, limit=DE_HISTORY_LIMIT):
+    """Refresh mapped Xetra daily bars without spending the US history budget."""
+    candidates = _loud_tickers(now_utc, limit * 5)
+    if not candidates:
+        return 0
+
+    naive = now_utc.replace(tzinfo=None)
+    try:
+        german = _market_instruments(candidates, 'de')[:limit]
+        if not german:
+            return 0
+        # Xetra is the only supported German venue in this release; retaining
+        # the MIC grouping keeps this correct when a future venue is added.
+        stored = 0
+        by_mic = {}
+        for instrument in german:
+            by_mic.setdefault(instrument.mic, []).append(instrument)
+        for mic, rows in by_mic.items():
+            tickers = [row.ticker for row in rows]
+            due = history.tickers_needing_history(
+                tickers, naive.date(), market='de', mic=mic)[:limit]
+            if not due:
+                continue
+            symbols = {row.ticker: row.provider_symbol for row in rows
+                       if row.ticker in due}
+            stored += history.fetch_into_store(
+                provider, due, naive, market='de', mic=mic, currency='EUR',
+                provider_symbols=symbols)
+        return stored
+    except Exception:
+        logger.exception('radar German history refresh failed')
         return 0
 
 
@@ -417,7 +609,8 @@ def _scheduled_history():
         twelvedata_provider.TwelveDataHttp())
     with app.app_context():
         stored = refresh_history(now, provider)
-    logger.info('radar history stored %d tickers', stored)
+        de_stored = refresh_de_history(now, provider)
+    logger.info('radar history us=%d de=%d', stored, de_stored)
 
 
 def _scheduled_volatility():
@@ -554,8 +747,22 @@ def _prepare_rollup_generation(now):
         return recovered, invalidated
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Radar ingest daemon')
+    parser.add_argument('--probe-german-data', action='store_true',
+                        help='read permitted German reference-data entitlement')
+    parser.add_argument('--refresh-mappings', action='store_true',
+                        help='refresh verified German instrument mappings')
+    # Direct callers (including daemon lifecycle tests) retain the old no-arg
+    # contract. The executable entry point below explicitly supplies CLI args.
+    args = parser.parse_args([] if argv is None else argv)
     logging.basicConfig(level=logging.INFO)
+    if args.probe_german_data:
+        probe_german_data(_mapping_provider(), dt.datetime.now(dt.timezone.utc))
+        return
+    if args.refresh_mappings:
+        _scheduled_mappings()
+        return
     if prefer_ipv4_if_configured():
         logger.info('RADAR_FORCE_IPV4 set -- outbound HTTP will skip AAAA records')
 
@@ -600,6 +807,8 @@ def main():
     scheduler.add_job(_scheduled_quotes, 'interval',
                       minutes=QUOTE_INTERVAL_MINUTES, id='radar_quotes',
                       max_instances=1, coalesce=True)
+    scheduler.add_job(_scheduled_mappings, 'interval', weeks=1,
+                      id='radar_mappings', max_instances=1, coalesce=True)
     scheduler.add_job(_scheduled_volatility, 'interval',
                       hours=SIGMA_INTERVAL_HOURS, id='radar_volatility',
                       max_instances=1, coalesce=True,
@@ -640,4 +849,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])

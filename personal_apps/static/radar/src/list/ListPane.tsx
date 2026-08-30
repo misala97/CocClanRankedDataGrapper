@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { Controls } from '../board/Controls'
 import { magnitudes } from '../board/geometry'
+import { formatMarketTime } from '../format'
 import { stampTime } from '../format'
 import { Widen } from '../Widen'
 import { Excluded } from './Excluded'
@@ -178,6 +179,11 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
           )}
           <Age iso={payload.generated_at} />
         </div>
+        <p className="market-context">
+          {payload.market_venue} · {payload.session} ·{' '}
+          {payload.next_boundary_label}{' '}
+          {clock(payload.next_boundary_at)}
+        </p>
         <Finding payload={payload} shared={shared} />
       </div>
 
@@ -191,7 +197,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         {payload.rows.map((row) => (
           <TickerRow key={row.ticker} row={row} onSelect={onSelect}
                      magnitude={mags[row.ticker]} suppress={shared}
-                     session={payload.session}
+                     session={payload.session} selection={selection}
                      selected={row.ticker === selected} />
         ))}
         {payload.rows.length === 0 && (
@@ -217,4 +223,11 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
       </div>
     </aside>
   )
+}
+
+/** Header boundaries are local Berlin clock times; the zone is fixed elsewhere
+ * in the board's timestamp treatment and would only make this terse context
+ * line wrap sooner on a phone. */
+function clock(iso: string): string {
+  return formatMarketTime(iso).replace(/ (?:CET|CEST)$/, '')
 }

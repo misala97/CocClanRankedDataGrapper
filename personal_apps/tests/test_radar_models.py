@@ -13,6 +13,7 @@ import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
+import models
 from models import RadarBucket, RadarMention, RadarPost, TickerUniverse
 
 
@@ -195,3 +196,159 @@ def test_a_daily_close_is_unique_per_ticker_and_date():
         RadarDailyClose.query.filter(
             RadarDailyClose.ticker == 'MDLZZ').delete(synchronize_session=False)
         db.session.commit()
+
+
+def test_market_models_partition_price_keys_after_writer_upgrade():
+    """Task 5 makes simultaneous US/Xetra snapshots independently addressable."""
+    instrument = models.RadarInstrument(
+        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='APC', currency='EUR', isin='US0378331005',
+        is_primary=True, mapping_status='mapped',
+        mapping_source='twelvedata', mapped_at=dt.datetime(2026, 8, 28))
+    quote = models.RadarQuote(
+        ticker='AAPL', market='de', mic='XETR', currency='EUR',
+        provider_symbol='APC', fetched_at=dt.datetime(2026, 8, 28),
+        quote_ts=dt.datetime(2026, 8, 28), price=194.20)
+
+    assert instrument.market == quote.market == 'de'
+    assert instrument.currency == quote.currency == 'EUR'
+    assert instrument.mic == quote.mic == 'XETR'
+
+    quote_columns = models.RadarQuote.__table__.c
+    close_columns = models.RadarDailyClose.__table__.c
+    assert all(quote_columns[name].nullable for name in (
+        'market', 'mic', 'currency', 'provider_symbol'))
+    assert all(close_columns[name].nullable for name in (
+        'market', 'mic', 'currency'))
+
+    quote_unique = next(
+        constraint for constraint in models.RadarQuote.__table__.constraints
+        if isinstance(constraint, sa.UniqueConstraint))
+    assert tuple(column.name for column in quote_unique.columns) == (
+        'ticker', 'market', 'mic', 'fetched_at')
+    close_unique = next(
+        constraint for constraint in models.RadarDailyClose.__table__.constraints
+        if isinstance(constraint, sa.UniqueConstraint))
+    assert tuple(column.name for column in close_unique.columns) == (
+        'ticker', 'market', 'mic', 'close_date')
+    assert tuple(column.name for column in
+                 models.RadarDailyClose.__table__.primary_key.columns) == ('id',)
+
+
+def test_radar_quote_regular_close_round_trips_in_isolated_schema():
+    """After-hours movement needs its regular-session baseline after storage."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    models.RadarQuote.__table__.create(engine)
+
+    with sa.orm.Session(engine) as session:
+        quote = models.RadarQuote(
+            id=1, ticker='REGCLOSE', market='us', mic='XNAS', currency='USD',
+            provider_symbol='REGCLOSE', fetched_at=dt.datetime(2026, 8, 28),
+            quote_ts=dt.datetime(2026, 8, 28), price=102,
+            prev_close=98, regular_close=100)
+        session.add(quote)
+        session.commit()
+        session.expire(quote)
+        assert quote.regular_close == 100
+
+    engine.dispose()
+
+
+def test_radar_quote_provider_delay_round_trips_in_isolated_schema():
+    """Stored snapshots retain whether the provider called them delayed or EOD."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    models.RadarQuote.__table__.create(engine)
+
+    with sa.orm.Session(engine) as session:
+        quote = models.RadarQuote(
+            id=1, ticker='QUALITY', market='de', mic='XETR', currency='EUR',
+            provider_symbol='QUALITY', fetched_at=dt.datetime(2026, 8, 28),
+            quote_ts=dt.datetime(2026, 8, 28), price=102,
+            provider_delay='eod')
+        session.add(quote)
+        session.commit()
+        session.expire(quote)
+        assert quote.provider_delay == 'eod'
+
+    engine.dispose()
+
+
+def test_radar_instrument_assigns_an_id_with_sqlite_orm_persistence():
+    """SQLite requires INTEGER, not BIGINT, for automatic primary-key IDs."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    models.RadarInstrument.__table__.create(engine)
+
+    with sa.orm.Session(engine) as session:
+        instrument = models.RadarInstrument(
+            ticker='SQLITE', market='us', venue='Test venue', mic='XTST',
+            provider_symbol='SQLITE', currency='USD', is_primary=True,
+            mapping_status='mapped', mapped_at=dt.datetime(2026, 8, 28))
+        session.add(instrument)
+        session.commit()
+        assert instrument.id == 1
+
+    engine.dispose()
+
+
+def test_model_schema_rejects_unknown_market_and_allows_null_price_context():
+    """`db.create_all()` must enforce the same overlap contract as Alembic."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    metadata = sa.MetaData()
+    for table in (
+            models.RadarInstrument.__table__, models.RadarQuote.__table__,
+            models.RadarDailyClose.__table__):
+        table.to_metadata(metadata)
+    metadata.create_all(engine)
+
+    with engine.connect() as connection:
+        invalid_inserts = (
+            "INSERT INTO radar_instruments "
+            "(id, ticker, market, venue, mic, provider_symbol, currency, "
+            "is_primary, mapping_status, mapped_at) VALUES "
+            "(1, 'BADINST', 'uk', 'Test', 'XTST', 'BADINST', 'GBP', 0, "
+            "'unverified', CURRENT_TIMESTAMP)",
+            "INSERT INTO radar_quotes "
+            "(id, ticker, market, fetched_at, price) VALUES "
+            "(1, 'BADQUOTE', 'uk', '2026-08-28 12:10:00', 1.0)",
+            "INSERT INTO radar_daily_closes "
+            "(ticker, market, close_date, close, fetched_at) VALUES "
+            "('BADCLOSE', 'uk', '2026-08-28', 1.0, '2026-08-28 12:10:00')",
+        )
+        for statement in invalid_inserts:
+            with pytest.raises(sa.exc.IntegrityError):
+                connection.execute(sa.text(statement))
+            connection.rollback()
+
+        connection.execute(sa.text(
+            "INSERT INTO radar_quotes "
+            "(id, ticker, fetched_at, price) VALUES "
+            "(2, 'LEGACY', '2026-08-28 12:11:00', 1.0)"))
+        connection.execute(sa.text(
+            "INSERT INTO radar_daily_closes "
+            "(ticker, close_date, close, fetched_at) VALUES "
+            "('LEGACY', '2026-08-28', 1.0, '2026-08-28 12:11:00')"))
+        connection.commit()
+
+        assert connection.execute(sa.text(
+            "SELECT market FROM radar_quotes WHERE id=2")).scalar_one() is None
+        assert connection.execute(sa.text(
+            "SELECT market FROM radar_daily_closes WHERE ticker='LEGACY'")) \
+            .scalar_one() is None
+
+    engine.dispose()

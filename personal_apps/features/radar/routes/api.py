@@ -10,6 +10,7 @@ from .. import board as board_mod
 from .. import detail as detail_mod
 from .. import detail_panel, phrasing, spend
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
+from ..market_calendars import session_bounds, session_state
 from ._blueprint import radar_bp
 
 SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
@@ -35,10 +36,93 @@ class Query:
     window: int
     limit: int
     min_venues: int
+    # Omission is the legacy US board.  The API remains strict for any value
+    # that is supplied, so a typo cannot silently return a different market.
+    market: str = 'us'
 
 
 def _decimal_or_none(value):
     return float(value) if value is not None else None
+
+
+def _iso_z(value):
+    """Serialize a UTC instant explicitly, preserving UTC as the wire format."""
+    if value is None:
+        return None
+    if value.tzinfo is not None:
+        value = value.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    return value.isoformat() + 'Z'
+
+
+def _chart_sessions(chart, market):
+    """Extended-session intervals in UTC, confined to an intraday chart.
+
+    A chart may represent a real German quote or an explicit US fallback.  Its
+    bands must follow the quote's actual market calendar, not the selected
+    surface's market label.  Daily charts deliberately omit bands: hundreds of
+    regular-session windows would be visual noise rather than useful context.
+    """
+    if chart.step_minutes >= 1440:
+        return []
+
+    slots = max(len(chart.closes), len(chart.chatter))
+    if not slots or not isinstance(chart.start, dt.datetime):
+        return []
+
+    start = chart.start
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=dt.timezone.utc)
+    else:
+        start = start.astimezone(dt.timezone.utc)
+    end = start + dt.timedelta(minutes=slots * chart.step_minutes)
+
+    intervals = []
+    day = start.date() - dt.timedelta(days=1)
+    last_day = end.date() + dt.timedelta(days=1)
+    while day <= last_day:
+        # Noon UTC unambiguously selects this local US or German calendar day;
+        # the extra day at either side covers a session crossing a UTC date.
+        probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
+        bounds = session_bounds(market, probe)
+        if session_state(market, bounds.regular_opens_at) == 'regular':
+            for kind, left, right in (
+                ('premarket', bounds.opens_at, bounds.premarket_closes_at),
+                ('afterhours', bounds.regular_closes_at, bounds.closes_at),
+            ):
+                clipped_start = max(start, left)
+                clipped_end = min(end, right)
+                if clipped_start < clipped_end:
+                    intervals.append({
+                        'start': _iso_z(clipped_start),
+                        'end': _iso_z(clipped_end),
+                        'kind': kind,
+                    })
+        day += dt.timedelta(days=1)
+    return intervals
+
+
+def _quote(view):
+    """The selected market quote shared by board rows and detail identity."""
+    return {
+        'market': view.market,
+        'venue': view.venue,
+        'mic': view.mic,
+        'currency': view.currency,
+        'price': _decimal_or_none(view.price),
+        'regular_move': _decimal_or_none(view.regular_move),
+        'extended_move': _decimal_or_none(view.extended_move),
+        'session': view.session,
+        'quality': view.quality,
+        'age_seconds': view.age_seconds,
+        'quoted_at': _iso_z(view.quote_ts),
+        # These are decided from quote quality and tape history server-side.
+        # A client only receives the selected row, so it must not reinvent the
+        # eligibility decision from a session label.
+        'tape_status': view.tape_status,
+        'score_eligible': view.score_eligible,
+        'score_term': view.score_term,
+        'is_fallback': view.is_fallback,
+    }
 
 
 class BadQuery(ValueError):
@@ -52,6 +136,10 @@ def parse_query(args):
     unknown source would return the default board under a selection the viewer
     never made, which is worse than an error.
     """
+    market = args.get('market', 'us')
+    if market not in {'us', 'de'}:
+        raise BadQuery('unknown market')
+
     raw_sources = args.get('sources')
     if raw_sources:
         selected = [s.strip() for s in raw_sources.split(',') if s.strip()]
@@ -102,7 +190,7 @@ def parse_query(args):
         raise BadQuery('unsupported venues')
 
     return Query(sources=selected, segments=segments, window=window,
-                 limit=limit, min_venues=min_venues)
+                 limit=limit, min_venues=min_venues, market=market)
 
 
 def serialize(board):
@@ -114,6 +202,11 @@ def serialize(board):
     """
     return {
         'generated_at': board.generated_at.isoformat() + 'Z',
+        'market': board.market,
+        'display_timezone': board.display_timezone,
+        'market_venue': board.market_venue,
+        'next_boundary_label': board.next_boundary_label,
+        'next_boundary_at': _iso_z(board.next_boundary_at),
         'sources': board.sources,
         'all_sources': list(SOURCES),
         'segments': board.segments,
@@ -157,6 +250,7 @@ def _row(entry):
         'price_move': _decimal_or_none(r.price_move),
         'direction': r.direction,
         'price_status': r.price_status,
+        'quote': _quote(r.quote),
         'baseline_days': r.baseline_days,
         'marks': r.marks,
         # `count: null` is a measured gap, not a quiet hour -- see board.py.
@@ -185,7 +279,7 @@ def build_payload(args, now=None):
     board = board_mod.build(query.sources, now,
                             window_hours=query.window,
                             segments=query.segments, limit=query.limit,
-                            min_venues=query.min_venues)
+                            min_venues=query.min_venues, market=query.market)
     # ROOTED, because the payload's `sources` is what lights the chips and
     # there is one chip per root. `?sources=reddit:wallstreetbets` filtered
     # the board to that subreddit above and still lights the Reddit chip
@@ -215,6 +309,8 @@ def serialize_detail(d):
     """
     b = d.breakdown
     return {
+        'market': d.market,
+        'display_timezone': 'Europe/Berlin',
         'identity': {
             'ticker': d.ticker,
             'name': d.name,
@@ -226,6 +322,7 @@ def serialize_detail(d):
             'price_move': _decimal_or_none(d.price_move),
             'price_status': d.price_status,
             'session': d.session,
+            'quote': _quote(d.quote),
         },
         'read': [{'kind': c.kind, 'text': c.text}
                  for c in phrasing.read_clauses(
@@ -244,8 +341,12 @@ def serialize_detail(d):
             'closes': [_decimal_or_none(c) for c in d.chart.closes],
             # null where nobody was watching, never a zero.
             'chatter': d.chart.chatter,
-            'watched_from': (d.chart.watched_from.isoformat()
-                             if d.chart.watched_from else None),
+            'watched_from': (
+                _iso_z(d.chart.watched_from)
+                if isinstance(d.chart.watched_from, dt.datetime)
+                else (d.chart.watched_from.isoformat()
+                      if d.chart.watched_from else None)),
+            'sessions': _chart_sessions(d.chart, d.quote.market),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,
@@ -298,7 +399,8 @@ def ticker_detail(ticker):
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     try:
         built = detail_panel.build(ticker.upper(), query.sources, now,
-                                   window_hours=query.window, span=span)
+                                    window_hours=query.window, span=span,
+                                    market=query.market)
     except detail_mod.UnknownTicker:
         return jsonify({'error': 'unknown ticker'}), 404
     return jsonify(serialize_detail(built))
