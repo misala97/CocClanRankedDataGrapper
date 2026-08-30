@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The board's identity at 16px: the chart-row's own shape - talk flat at
+     its normal, then the spike. Ground is the accent (#6838b4 is radar.css's
+     resolved --mark, oklch(0.470 0.185 296) - canvas and favicons cannot read
+     CSS variables), the line is white for legibility on light AND dark tab
+     bars. Deliberately not the gym's icon set: the two products share
+     nothing visual on purpose. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="8" fill="#6838b4"/>
+  <path d="M5 22.5 H14 L19.5 8.5 L23 22.5 H27"
+        fill="none" stroke="#ffffff" stroke-width="2.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

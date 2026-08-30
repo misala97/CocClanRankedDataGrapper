@@ -23,6 +23,12 @@
   <meta name="theme-color" content="#FBFBFC" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111017" media="(prefers-color-scheme: dark)">
 
+  {# The chart-row's own shape on the accent ground -- see the SVG's header.
+     SVG only: every browser this desk tool meets understands it, and one
+     vector file beats maintaining a PNG ladder. #}
+  <link rel="icon" type="image/svg+xml"
+        href="{{ url_for('static', filename='radar/favicon.svg') }}">
+
   {# Inter is served from this app, not linked from Google -- see the header of
      static/radar/inter.css. Only the latin subset is preloaded: latin-ext
      carries the long tail of company names and most page views never touch it,
