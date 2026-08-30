@@ -138,6 +138,12 @@ def _next_boundary(market, now, session):
     if (bounds.opens_at > aware_now and
             session_state(market, bounds.opens_at) == 'premarket'):
         return 'opens', bounds.opens_at
+    # Xetra has a closed gap between its 08:55 extended session and the 09:00
+    # regular session.  It is still today's trading day, so do not skip to the
+    # next premarket opening.
+    if (bounds.regular_opens_at > aware_now and
+            session_state(market, bounds.regular_opens_at) == 'regular'):
+        return 'opens', bounds.regular_opens_at
     # Nights, weekends and closures need the next actual trading day rather
     # than a calendar date that happens to contain no session.
     for days in range(1, 8):

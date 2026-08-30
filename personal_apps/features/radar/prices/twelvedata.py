@@ -100,7 +100,7 @@ class TwelveDataProvider:
             quote_ts = (dt.datetime.fromtimestamp(
                 int(stamp), dt.timezone.utc).replace(tzinfo=None)
                 if stamp else None)
-        except (KeyError, TypeError, ValueError, OSError,
+        except (KeyError, TypeError, ValueError, OSError, OverflowError,
                 decimal.InvalidOperation):
             return None
         if not price:

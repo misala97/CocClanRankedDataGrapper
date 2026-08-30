@@ -98,7 +98,8 @@ class FinnhubProvider:
                     volume=(int(payload['v'])
                             if payload.get('v') is not None else None),
                 )
-            except (TypeError, ValueError, OSError, decimal.InvalidOperation):
+            except (TypeError, ValueError, OSError, OverflowError,
+                    decimal.InvalidOperation):
                 continue
         return found
 

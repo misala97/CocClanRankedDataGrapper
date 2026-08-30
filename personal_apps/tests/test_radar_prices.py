@@ -115,6 +115,18 @@ def test_malformed_finnhub_numeric_field_is_contained_to_its_symbol():
     assert set(quotes) == {'GOOD'}
 
 
+def test_out_of_range_finnhub_timestamp_is_contained_to_its_symbol():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'c': 10, 'pc': 9, 't': 10 ** 100}
+            return {'c': 10, 'pc': 9, 't': 1786000000}
+
+    quotes = finnhub.FinnhubProvider(Mixed({})).quotes(['BAD', 'GOOD'])
+
+    assert set(quotes) == {'GOOD'}
+
+
 def test_a_profile_is_normalized():
     http = FakeHttp({'/stock/profile2': {
         'marketCapitalization': 3500.5, 'ipo': '2004-08-19', 'exchange': 'NASDAQ'}})
@@ -207,6 +219,26 @@ def test_malformed_twelve_data_optional_number_does_not_abort_the_batch():
                         'previous_close': 'not-a-number', 'currency': 'EUR'}
             return {'symbol': 'GOOD', 'close': '11',
                     'previous_close': '10', 'currency': 'EUR'}
+
+    instruments = [
+        Instrument(ticker='BAD', provider_symbol='BAD'),
+        Instrument(ticker='GOOD', provider_symbol='GOOD'),
+    ]
+
+    quotes = twelvedata.TwelveDataProvider(Mixed({})).quotes_for_instruments(
+        instruments)
+
+    assert set(quotes) == {'GOOD'}
+
+
+def test_out_of_range_twelve_data_timestamp_is_contained_to_its_symbol():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'symbol': 'BAD', 'close': '10', 'timestamp': 10 ** 100,
+                        'currency': 'EUR'}
+            return {'symbol': 'GOOD', 'close': '11', 'timestamp': 1787313600,
+                    'currency': 'EUR'}
 
     instruments = [
         Instrument(ticker='BAD', provider_symbol='BAD'),
