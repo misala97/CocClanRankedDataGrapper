@@ -635,6 +635,13 @@ body {
   top: -10px; bottom: -17px; right: -21px; width: 1px;
   background: var(--bg);
 }
+/* Stacked layout has no divider to punch: the pseudo's 21px reach past the
+   pane edge was the only horizontal overflow on the page, and it put a
+   sideways scrollbar on .rows whenever a row was selected. Measured at 800
+   and 390. */
+@media (max-width: 900px) {
+  .row.on .r1::after { content: none; }
+}
 .row.on .tk { color: var(--mark); }
 
 .r1 { display: flex; align-items: baseline; gap: var(--s3); line-height: 1.25; }

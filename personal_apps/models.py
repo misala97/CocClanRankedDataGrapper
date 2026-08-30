@@ -709,6 +709,11 @@ class RadarBucketSource(db.Model):
     __tablename__ = 'radar_bucket_sources'
     __table_args__ = (
         db.Index('ix_radar_bucket_sources_start', 'bucket_start', 'source'),
+        # How the board's coverage probe reads it: DISTINCT bucket_start by
+        # source and status. Covering -- without it MySQL walked every live
+        # index entry and heap-read each for status (10.8s at 864k rows).
+        db.Index('ix_radar_bucket_sources_coverage',
+                 'source', 'status', 'bucket_start'),
         {'mysql_charset': 'utf8mb4'},
     )
 
@@ -932,6 +937,11 @@ class RadarMentionEvent(db.Model):
         db.Index('ix_radar_mention_events_bucket', 'ticker', 'bucket_start'),
         # How retention finds what to drop.
         db.Index('ix_radar_mention_events_created', 'created_utc'),
+        # How the board counts distinct voices: one ticker's events inside a
+        # created_utc window. The bucket index above cannot serve it, and
+        # without this every candidate's whole history was read (6.7s).
+        db.Index('ix_radar_mention_events_ticker_time',
+                 'ticker', 'created_utc'),
         {'mysql_charset': 'utf8mb4'},
     )
 
