@@ -48,18 +48,19 @@ def test_an_unknown_source_is_rejected(client):
     assert client.get('/radar/api/board?sources=nonsense').status_code == 400
 
 
-def test_market_defaults_to_us_and_unknown_market_is_rejected(client):
-    """A missing market preserves old URLs; a misspelled API market is 400."""
+def test_market_defaults_to_de_and_unknown_market_is_rejected(client):
+    """The board opens on the German view (Michi, 2026-08-30) -- an old URL
+    without ?market now means DE too. A misspelled API market stays 400."""
     from features.radar.routes.api import BadQuery, parse_query
     import pytest
 
-    assert parse_query({}).market == 'us'
+    assert parse_query({}).market == 'de'
     with pytest.raises(BadQuery, match='unknown market'):
         parse_query({'market': 'moon'})
     assert client.get('/radar/api/board?market=moon').status_code == 400
 
 
-def test_human_page_bad_market_falls_back_to_the_us_payload(client):
+def test_human_page_bad_market_falls_back_to_the_default_payload(client):
     """Address-bar recovery stays friendly while the JSON API remains strict."""
     import json
     import re
@@ -70,7 +71,7 @@ def test_human_page_bad_market_falls_back_to_the_us_payload(client):
         response.get_data(as_text=True), re.S).group(1))
 
     assert response.status_code == 200
-    assert payload['market'] == 'us'
+    assert payload['market'] == 'de'
 
 
 def test_board_echoes_market_and_berlin_display_timezone(client):
@@ -233,7 +234,7 @@ def test_defaults_are_every_source_and_the_small_segment(client):
     payload = json.loads(client.get('/radar/api/board').data)
     from features.radar.config import DEFAULT_SEGMENT, SOURCES
     assert set(payload['sources']) == set(SOURCES)
-    assert payload['segments'] == [DEFAULT_SEGMENT]
+    assert payload['segments'] == DEFAULT_SEGMENT.split(',')
 
 
 def test_an_empty_segment_still_asks_for_everything(client):
@@ -418,7 +419,7 @@ def test_the_board_opens_on_the_small_stuff(client):
     megacaps and micro-caps in one list."""
     payload = json.loads(client.get('/radar/api/board').data)
 
-    assert payload['segments'] == ['small']
+    assert payload['segments'] == ['small', 'micro']
 
 
 def test_the_payload_says_what_the_floor_left_out(client):
@@ -473,7 +474,7 @@ def test_the_default_is_still_the_discovery_segment():
     buries them under megacap chatter."""
     from features.radar.config import DEFAULT_SEGMENT
 
-    assert _parse().segments == [DEFAULT_SEGMENT]
+    assert _parse().segments == DEFAULT_SEGMENT.split(',')
 
 
 def test_one_unknown_name_rejects_the_whole_selection():

@@ -765,9 +765,13 @@ SEGMENT_GROUPS = {
     'small': ('micro', 'unknown', 'recent_ipo'),
 }
 
-# What the board opens on. It is a discovery radar for the things nobody has
-# heard of; opening on everything buries them under megacap chatter.
-DEFAULT_SEGMENT = 'small'
+# What the board opens on, as the raw query-string value the parser splits.
+# It is a discovery radar for the things nobody has heard of; opening on
+# everything buries them under megacap chatter. Micro is named beside Small
+# even though the Small GROUP already covers it: the selection drives which
+# tabs read pressed, and a pressed Small with an unpressed Micro would claim
+# micro rows are not being shown while they are.
+DEFAULT_SEGMENT = 'small,micro'
 
 
 def segments_in(selection):

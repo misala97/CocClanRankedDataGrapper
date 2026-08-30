@@ -313,7 +313,7 @@ def test_a_fund_stays_a_fund_even_when_newly_listed():
 def test_a_fund_is_not_on_the_default_board():
     """The requirement, asserted against the group rather than by eye."""
     from features.radar.config import DEFAULT_SEGMENT, segments_in
-    assert 'fund' not in segments_in(DEFAULT_SEGMENT)
+    assert 'fund' not in segments_in(DEFAULT_SEGMENT.split(','))
 
 
 def test_an_adr_is_a_company_not_a_fund():

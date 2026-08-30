@@ -136,7 +136,10 @@ def parse_query(args):
     unknown source would return the default board under a selection the viewer
     never made, which is worse than an error.
     """
-    market = args.get('market', 'us')
+    # DE by decision (Michi, 2026-08-30): the reader trades Xetra hours, so
+    # the board opens on the German view -- marked US/USD fallback quotes and
+    # all -- and an old URL without ?market now means that too.
+    market = args.get('market', 'de')
     if market not in {'us', 'de'}:
         raise BadQuery('unknown market')
 
