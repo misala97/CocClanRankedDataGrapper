@@ -81,6 +81,11 @@
   /* ---- reserved: price direction, and nothing else --------------------- */
   --up:        oklch(0.470 0.130 150);
   --down:      oklch(0.500 0.175 27);
+  /* Washes for the lean chip -- the ONE sanctioned exception (Michi,
+     2026-08-31) to green/red meaning price direction alone. Tint, never
+     saturated: the chip is an annotation, not a verdict. */
+  --up-soft:   oklch(0.470 0.130 150 / 0.14);
+  --down-soft: oklch(0.500 0.175 27 / 0.13);
 
   /* ---- reserved: a number that cannot be taken at face value ----------- */
   --warn:      oklch(0.480 0.110 65);
@@ -163,6 +168,8 @@
 
     --up:        oklch(0.760 0.150 150);
     --down:      oklch(0.715 0.165 27);
+    --up-soft:   oklch(0.760 0.150 150 / 0.16);
+    --down-soft: oklch(0.715 0.165 27 / 0.15);
 
     --warn:      oklch(0.800 0.115 70);
     --warn-soft: oklch(0.800 0.115 70 / 0.16);
@@ -194,6 +201,8 @@
 
   --up:        oklch(0.760 0.150 150);
   --down:      oklch(0.715 0.165 27);
+  --up-soft:   oklch(0.760 0.150 150 / 0.16);
+  --down-soft: oklch(0.715 0.165 27 / 0.15);
 
   --warn:      oklch(0.800 0.115 70);
   --warn-soft: oklch(0.800 0.115 70 / 0.16);
@@ -643,10 +652,18 @@ body {
    PRODUCT.md forbids hiding what makes a number unreliable. */
 .row .sub.warn { color: var(--warn); font-weight: 600; }
 
-/* Which way the scored talk leans. Ink on purpose: green and red mean price
-   direction here and nothing else, and violet is chatter volume -- the lean
-   is neither. The dominant side carries the weight. */
-.row .sub.lean { color: var(--muted); }
+/* Which way the scored talk leans, as a washed chip: green-tinted when the
+   scored talk leans bullish, red-tinted bearish, neutral gray when even or
+   unscored. Michi's 2026-08-31 call, and the one sanctioned exception to
+   green/red meaning price direction alone -- confined to this chip, faint,
+   with the counts still carrying the fact and the dominant side the weight. */
+.row .sub.lean {
+  color: var(--muted);
+  display: inline-block; padding: 0 6px 1px; border-radius: var(--r-pill);
+  background: var(--rule-soft);
+}
+.row .sub.lean.bull { background: var(--up-soft); }
+.row .sub.lean.bear { background: var(--down-soft); }
 .row .sub.lean b { color: var(--ink); font-weight: 650; }
 
 /* Marks and deviant quote facts, full width under the drawing: crammed into

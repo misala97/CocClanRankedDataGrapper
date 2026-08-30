@@ -195,23 +195,22 @@ export function TickerRow(props: {
   )
 }
 
-/** Which way the scored talk leans: `↑4 ↓2`, the dominant side bold.
+/** Which way the scored talk leans: `↑4 ↓2` on a washed chip --
+ *  green-tinted bullish, red-tinted bearish, gray when even or unscored.
  *
- *  Counts, not a verdict -- the words "4 bullish, 2 bearish" are already how
- *  the panel reports this, and PRODUCT.md's scope boundary is why this is
- *  ink rather than green and red: those two colours mean price direction on
- *  this surface and nothing else (a coloured tone bar was built and deleted
- *  for exactly that collision). Most mentions carry no wording at all, so a
- *  row with nothing scored says nothing rather than "0 ↑ 0 ↓".
- *  Equal counts show their own equality: neither side is bold.
+ *  The tint is Michi's 2026-08-31 call and the one sanctioned exception to
+ *  green/red meaning price direction alone; it stays confined to this chip
+ *  and faint, so it reads as annotation rather than verdict. The counts
+ *  still carry the fact, the dominant side is bold, and equal counts show
+ *  their own equality: neither bold, no tint.
  */
 function Lean({ tone }: { tone: Row['tone'] }) {
-  const scored = tone.bullish + tone.bearish
-  if (scored === 0) return null
   const bull = tone.bullish > tone.bearish
   const bear = tone.bearish > tone.bullish
+  // Unscored renders too, on gray -- "no wording at all" is itself worth a
+  // glance (Michi, 2026-08-31; supersedes the render-nothing first cut).
   return (
-    <span className="sub lean"
+    <span className={`sub lean${bull ? ' bull' : bear ? ' bear' : ''}`}
           aria-label={`${tone.bullish} bullish, ${tone.bearish} bearish`}>
       {bull ? <b>{'↑'}{tone.bullish}</b>
             : <span>{'↑'}{tone.bullish}</span>}

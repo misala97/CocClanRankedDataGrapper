@@ -33,26 +33,33 @@ const row = (over: Partial<Row> = {}): Row => ({
 })
 
 describe('a ticker row', () => {
-  it('shows which way the scored talk leans, in ink, and only when scored', () => {
-    /* Counts, not a verdict: green/red stay price-only on this surface, so
-       the lean is ink with the dominant side bold. Nothing scored says
-       nothing -- most mentions carry no wording at all. */
+  it('shows the lean as a washed chip: green bullish, red bearish, gray even', () => {
+    /* The one sanctioned exception to green/red meaning price direction --
+       confined to this chip, faint, counts still carrying the fact and the
+       dominant side bold. Unscored renders too, on gray: "no wording at
+       all" is itself worth a glance. */
     const { container, rerender } = render(
       <TickerRow session="regular" selected={false} onSelect={() => {}}
                  row={row({ tone: { bullish: 4, neutral: 9, bearish: 2 } })} />)
     const lean = container.querySelector('.sub.lean')!
+    expect(lean.className).toContain('bull')
     expect(lean).toHaveTextContent('↑4')
-    expect(lean).toHaveTextContent('↓2')
     expect(lean.querySelector('b')).toHaveTextContent('↑4')
 
     rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                        row={row({ tone: { bullish: 1, neutral: 0, bearish: 5 } })} />)
+    expect(container.querySelector('.sub.lean')!.className).toContain('bear')
+
+    rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
                         row={row({ tone: { bullish: 2, neutral: 0, bearish: 2 } })} />)
-    // Equal counts: equality shows itself, neither side leads.
-    expect(container.querySelector('.sub.lean b')).toBeNull()
+    // Even: gray chip, neither side bold, neither tint.
+    const even = container.querySelector('.sub.lean')!
+    expect(even.className).not.toMatch(/bull|bear/)
+    expect(even.querySelector('b')).toBeNull()
 
     rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
                         row={row({ tone: { bullish: 0, neutral: 7, bearish: 0 } })} />)
-    expect(container.querySelector('.sub.lean')).toBeNull()
+    expect(container.querySelector('.sub.lean')).toHaveTextContent('↑0')
   })
 
   it('summarises the finding in the facts column', () => {
