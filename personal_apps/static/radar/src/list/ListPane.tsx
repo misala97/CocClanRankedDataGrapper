@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
 import { magnitudes } from '../board/geometry'
-import { formatMarketTime, plural, stampTime } from '../format'
+import { formatMarketTime, humanAge, plural, stampTime } from '../format'
 import { Widen } from '../Widen'
 import { Excluded } from './Excluded'
 import { Marks } from './Marks'
@@ -94,6 +94,41 @@ export function universalMarks(rows: Row[]): Mark[] {
     (mark) => rows.every((row) => row.marks.includes(mark)))
 }
 
+/** Quote provenance the whole board carries, lifted the same way.
+ *
+ *  On the German board with no Xetra entitlement EVERY row's quote is a US
+ *  fallback, aged the same ~46 hours -- and five badges times seventeen rows
+ *  all saying one thing is how the old row drowned. The board states it once,
+ *  in amber, and each row keeps only what deviates (see deviantQuoteFacts).
+ *
+ *  `keys` is the suppression contract with TickerRow; `tokens` is what the
+ *  Status line prints. Same two-row floor as universalMarks, same reason.
+ */
+export function universalQuoteFacts(rows: Row[]): {
+  keys: string[]
+  tokens: string[]
+} {
+  if (rows.length < 2) return { keys: [], tokens: [] }
+  const keys: string[] = []
+  const tokens: string[] = []
+
+  if (rows.every((row) => row.quote.is_fallback)) {
+    keys.push('fallback')
+    tokens.push('US prices')
+  }
+  const aged = rows.every((row) =>
+    row.quote.quality === 'stale' || row.quote.quality === 'eod')
+  if (aged) {
+    keys.push('aged')
+    const oldest = rows.reduce<number | null>(
+      (best, row) => (row.quote.age_seconds !== null
+        && (best === null || row.quote.age_seconds > best)
+        ? row.quote.age_seconds : best), null)
+    tokens.push(oldest !== null ? `quotes ${humanAge(oldest)} old` : 'EOD quotes')
+  }
+  return { keys, tokens }
+}
+
 /** The session enum as a status word beside the venue: "US markets open".
  *  sessionLabel() says "Market open", which next to `market_venue` would
  *  read "US markets Market open". */
@@ -119,9 +154,10 @@ const SESSION_WORDS: Record<string, string> = {
  *  which of the two rankings the reader is looking at. It is the one token
  *  set in the accent, because it changes what the score column means.
  */
-function Status({ payload, shared }: {
+function Status({ payload, shared, quoteTokens }: {
   payload: BoardPayload
   shared: Mark[]
+  quoteTokens: string[]
 }) {
   const count = payload.rows.length
   // The two never both apply to one row -- leaderboard.py picks exactly one
@@ -178,6 +214,10 @@ function Status({ payload, shared }: {
     ...rest.map((mark) => ({
       key: mark, cls: 'shared', node: UNIVERSAL[mark] as ReactNode,
     })),
+    // Quote provenance the whole board carries -- see universalQuoteFacts.
+    ...quoteTokens.map((token) => ({
+      key: `q-${token}`, cls: 'shared', node: token as ReactNode,
+    })),
   ]
 
   return (
@@ -224,6 +264,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
 }) {
   const mags = magnitudes(payload.rows)
   const shared = universalMarks(payload.rows)
+  const quoteShared = universalQuoteFacts(payload.rows)
 
   return (
     <aside className="list" aria-label="Board">
@@ -238,7 +279,8 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
           <MarketSwitch selection={selection} onChange={onChange} />
           <Age iso={payload.generated_at} />
         </div>
-        <Status payload={payload} shared={shared} />
+        <Status payload={payload} shared={shared}
+                quoteTokens={quoteShared.tokens} />
       </div>
 
       <Controls payload={payload} selection={selection} busy={busy}
@@ -251,6 +293,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         {payload.rows.map((row) => (
           <TickerRow key={row.ticker} row={row} onSelect={onSelect}
                      magnitude={mags[row.ticker]} suppress={shared}
+                     quoteSuppress={quoteShared.keys}
                      session={payload.session} selection={selection}
                      selected={row.ticker === selected} />
         ))}

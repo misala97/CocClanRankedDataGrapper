@@ -1,15 +1,16 @@
-import { chatterRuns, peak } from '../board/geometry'
-import { formatPrice, divergence, rankTermFor, segmentLabel, zscore } from '../format'
+import { chatterAreas, chatterRuns, chatterY, peak, priceRuns }
+  from '../board/geometry'
+import { divergence, formatPrice, humanAge, ratioShort, rankTermFor, zscore }
+  from '../format'
 import { queryFor } from '../api'
-import { QuoteBadges } from '../QuoteBadges'
 import type { Clause, Row, Selection, Session } from '../types'
 
-/** The row sparkline. Small on purpose: it says "this is building" or "this
- *  faded", and every quantity it implies is in the phrase as text. */
-const BOX = { width: 56, height: 17, pad: 0 }
+/** The chart-row's drawing box. Stretched to the pane width by the SVG
+ *  (`preserveAspectRatio="none"`), so these are proportions, not pixels. */
+const BOX = { width: 300, height: 44, pad: 2 }
 
 /** What this row is ranked ON, which is not the same quantity in both
- *  sessions -- see leaderboard.py and the `Finding` sentence in ListPane.
+ *  sessions -- see leaderboard.py and the `Status` line in ListPane.
  *
  *  Open: divergence, chatter measured against the price move over the same
  *  window. Shut: there is no price move to measure, so the board ranks on the
@@ -27,17 +28,22 @@ function rankedBy(row: Row) {
   }
 }
 
-/** One row of the list.
+/** One row of the list: a chart with a caption, not a paragraph with a
+ *  sparkline.
  *
- *  The middle line is the row's reason for existing, and it arrives from the
- *  server as typed clauses. This component styles by `kind` and never reads
- *  the numbers to build wording of its own -- that judgement lives in
- *  phrasing.py and having it in two places is having two answers.
+ *  This replaced the three-line text row 2026-08-30. The product's one hard
+ *  requirement -- chatter and price legible TOGETHER (PRODUCT.md) -- was
+ *  only ever satisfied by the detail panel; the row said "7.4x its normal"
+ *  in words and "+3%" in different words and left the comparison to the
+ *  reader. Now every row draws both on one 24h axis: the violet body is the
+ *  talk, the dashed line is this ticker's own normal, and the price line
+ *  rides above -- talk swelling while the line stays flat IS the board's
+ *  question, visible per row.
  *
- *  `magnitude` is this row's share of the board's shared axis: how far above
- *  its own normal it is, against a scale every row draws on. `undefined` is
- *  not zero -- it is a row with no baseline to be above, and it draws no axis
- *  at all rather than an empty one.
+ *  The right cap carries the numbers the drawing summarises: the ranking
+ *  score, the ratio and price, and the breadth or its warning. Wording
+ *  still arrives as typed clauses (phrasing.py) -- the cap styles by kind
+ *  and never re-derives a judgement; full sentences live in the panel.
  *
  *  A link, not a button, because a ticker has a URL. Middle-click and
  *  copy-link work, and the click handler only exists to avoid a full page
@@ -46,97 +52,191 @@ function rankedBy(row: Row) {
 export function TickerRow(props: {
   row: Row
   selected: boolean
+  /** Kept for the shared-scale contract with ListPane; the chart-row scales
+   *  within itself, so this no longer draws anything. */
   magnitude?: number
   /** Retained for one rendering phase; each quote now owns this decision. */
   session?: Session
   /** Marks the whole board carries, which the page states once in its header
    *  instead. A mark on every row is not a mark. */
   suppress?: readonly string[]
+  /** Quote facts the whole board carries -- 'fallback', 'aged' -- lifted to
+   *  the header the same way. See universalQuoteFacts in ListPane. */
+  quoteSuppress?: readonly string[]
   /** The link is used outside this client too, so it carries the whole view. */
   selection?: Selection
   onSelect: (ticker: string) => void
 }) {
-  const { row, selected, magnitude, suppress = [], selection, onSelect } = props
-  const runs = chatterRuns(row.series, BOX, peak(row.series))
-  const measured = magnitude !== undefined
+  const { row, selected, suppress = [], quoteSuppress = [],
+          selection, onSelect } = props
   const ranked = rankedBy(row)
 
+  // Mixed-version tolerance: an embedded payload cached from before the
+  // chart-row has no price series. An empty drawing is the honest render of
+  // a payload that carried nothing to draw.
+  const priceSeries = row.price_series ?? []
+  const normalPerHour = row.normal_per_hour ?? null
+  // One y scale for talk AND its normal, so the dashed line is honest about
+  // where normal sits under the spike.
+  const yMax = Math.max(peak(row.series), normalPerHour ?? 0)
+  const areas = chatterAreas(row.series, BOX, yMax)
+  const outline = chatterRuns(row.series, BOX, yMax)
+  // The line draws only when there is a price STORY -- the same condition
+  // under which phrasing.py writes a price clause at all. On a shut
+  // exchange or a frozen tape the scattered stale fragments rendered as
+  // context-free gray dashes at arbitrary heights; seen on the live DE
+  // board 2026-08-30, twelve rows of chart glitch.
+  const price = row.price_status === 'ok' ? priceRuns(priceSeries, BOX) : []
+  // Colour is the window's verdict, not the line's own slope: green and red
+  // mean price direction over the score window and nothing else. Without a
+  // move to judge, the line is neutral ink.
+  const priceTone = row.price_move === null ? 'var(--ink-2)'
+    : row.direction === 'down' ? 'var(--down)' : 'var(--up)'
+
+  const clause = (kind: string) =>
+    row.clauses.find((c: Clause) => c.kind === kind)
+  const breadth = row.clauses
+    .filter((c: Clause) => c.kind === 'venues' || c.kind === 'people')
+    .map((c: Clause) => c.text).join(' · ')
+  const warn = clause('warn')
+  const moveClause = row.clauses.find(
+    (c: Clause) => c.kind.startsWith('price-'))
+
+  const marks = row.marks.filter((mark) => !suppress.includes(mark))
+  const quoteFacts = deviantQuoteFacts(row, quoteSuppress)
+
   return (
-    <a className={`row${selected ? ' on' : ''}${measured ? '' : ' unmeasured'}`}
+    <a className={`row${selected ? ' on' : ''}`}
        id={`radar-row-${row.ticker}`}
        href={selection
          ? `?${queryFor(selection)}&t=${encodeURIComponent(row.ticker)}`
          : `?t=${encodeURIComponent(row.ticker)}`}
        aria-current={selected ? 'true' : undefined}
-       style={measured
-         ? ({ '--mag': magnitude.toFixed(3) } as React.CSSProperties)
-         : undefined}
        onClick={(event) => {
          // Leave modified clicks to the browser -- they mean "open elsewhere".
          if (event.metaKey || event.ctrlKey || event.shiftKey) return
          event.preventDefault()
          onSelect(row.ticker)
        }}>
-      <span className="r1">
+      <span className="cap">
         <span className="tk">{row.ticker}</span>
         <span className="nm">{row.name ?? '—'}</span>
-        <svg className="spark" viewBox="0 0 56 17" aria-hidden="true"
-             focusable="false" preserveAspectRatio="none">
-          {runs.map((d, index) => (
-            <path key={index} d={d} fill="none" stroke="var(--mark)"
-                  strokeWidth="1.6" strokeLinejoin="round"
+      </span>
+
+      {/* Decorative to a screen reader: every quantity it draws is text in
+          the cap and the facts column. */}
+      <span className="chart">
+        <svg viewBox={`0 0 ${BOX.width} ${BOX.height}`}
+             preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <line x1="0" y1={BOX.height - BOX.pad}
+                x2={BOX.width} y2={BOX.height - BOX.pad}
+                stroke="var(--rule)" strokeWidth="1"
+                vectorEffect="non-scaling-stroke" />
+          {areas.map((d, index) => (
+            <path key={`a${index}`} d={d} fill="var(--mark-soft)" />
+          ))}
+          {outline.map((d, index) => (
+            <path key={`o${index}`} d={d} fill="none" stroke="var(--mark)"
+                  strokeWidth="1.5" strokeLinejoin="round"
                   strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           ))}
+          {normalPerHour !== null && (
+            <line x1="0" x2={BOX.width}
+                  y1={chatterY(normalPerHour, BOX, yMax)}
+                  y2={chatterY(normalPerHour, BOX, yMax)}
+                  stroke="var(--dim)" strokeWidth="1"
+                  strokeDasharray="3 4" opacity="0.55"
+                  vectorEffect="non-scaling-stroke" />
+          )}
+          {price.map((d, index) => (
+            <path key={`p${index}`} d={d} fill="none" stroke={priceTone}
+                  strokeWidth="1.5" strokeLinecap="round" opacity="0.9"
+                  vectorEffect="non-scaling-stroke" />
+          ))}
         </svg>
-        {/* The number the list is ORDERED by, on the row, at the end of the
-            line the eye already scans.
+      </span>
 
-            It was rendered nowhere. `divergence()` and `zscore()` have been
-            written, commented and unit-tested in format.ts since the board
-            was built, and no component imported either -- so the board was
-            sorted by a quantity the surface never showed, and the reader had
-            no way to answer "why is this above that". The magnitude bar made
-            it worse rather than better: it draws the RATIO, deliberately (see
-            radar.css), so the longest bar on the board is routinely not the
-            top row.
-
-            Which number this is depends on the session, because the ranking
-            does. With the exchange shut there is no price movement to diverge
-            from and the board falls through to ranking on chatter alone --
-            printing "divergence" over that would be the heading disagreeing
-            with the quantity beneath it, which is the exact bug the header's
-            universal-marks machinery exists to prevent. */}
-        <span className="score" title={ranked.why}
-              aria-label={ranked.why}>
+      <span className="facts">
+        <span className="score" title={ranked.why} aria-label={ranked.why}>
           <span className="k">{ranked.label}</span>
           <b>{ranked.value}</b>
         </span>
+        <span className="fig">
+          {ratioShort(row.ratio) ?? <span className="warn">new here</span>}
+          {' · '}
+          {rowFigPrice(row)}
+          {moveClause && (
+            <>
+              {' · '}
+              <span className={moveClause.kind === 'price-up' ? 'up'
+                : moveClause.kind === 'price-down' ? 'down' : undefined}>
+                {shortMove(moveClause, row.price_move)}
+              </span>
+            </>
+          )}
+        </span>
+        {warn
+          ? <span className="sub warn">{warn.text}</span>
+          : breadth && <span className="sub">{breadth}</span>}
       </span>
-      <span className="phr">
-        {row.clauses.map((clause: Clause, index) => (
-          <span key={index} className={`c-${clause.kind}`}>{clause.text}</span>
-        ))}
-      </span>
-      {/* The marks are the reason this line exists. PRODUCT.md: they are
-          load-bearing rather than metadata -- hiding one would let a reader
-          act on a number the system already knows is unreliable -- and the
-          row rendered its bare segment key and nothing else. */}
-      <span className="meta">
-        {segmentLabel(row.segment)} · {quotePrice(row)}
-        <QuoteBadges quote={row.quote} />
-        {row.marks.filter((mark) => !suppress.includes(mark)).map((mark) => (
-          <span key={mark} className="mark"> · {mark}</span>
-        ))}
-      </span>
+
+      {/* Full-width, because marks are load-bearing (PRODUCT.md): crammed
+          into the facts column they truncated -- "single-source · war…" on
+          the live board -- and a caution the reader cannot finish reading
+          is not a caution. The row grows only when it has something amber
+          to say. */}
+      {(marks.length > 0 || quoteFacts.length > 0) && (
+        <span className="flags">
+          {[...quoteFacts, ...marks].join(' · ')}
+        </span>
+      )}
     </a>
   )
 }
 
-function quotePrice(row: Row): string {
+/** Quote provenance THIS row carries that the board as a whole does not.
+ *
+ *  The badges said "US fallback - NYSE - USD - After hours - 2740 min stale"
+ *  on every row of a board where every one of those was true of every row.
+ *  What the whole board shares, the header states once; what remains here is
+ *  only the deviation worth noticing.
+ */
+function deviantQuoteFacts(row: Row,
+                           quoteSuppress: readonly string[]): string[] {
+  const facts: string[] = []
+  const quote = row.quote
+  if (quote.is_fallback && !quoteSuppress.includes('fallback')) {
+    facts.push('US price')
+  }
+  if (!quoteSuppress.includes('aged')) {
+    if (quote.quality === 'stale') {
+      facts.push(`quote ${humanAge(quote.age_seconds)} old`)
+    } else if (quote.quality === 'eod') {
+      facts.push('EOD quote')
+    } else if (quote.quality === 'unavailable') {
+      facts.push('no live quote')
+    }
+  }
+  return facts
+}
+
+/** The price figure beside the ratio. The "closed at" prefix the old row
+ *  carried is the session's fact, said once by the header; the currency code
+ *  a fallback used to append is covered by the 'US price' fact (or by the
+ *  header, when every row is a fallback). */
+function rowFigPrice(row: Row): string {
   const price = row.quote.price
   if (price === null || price <= 0 || !row.quote.currency) return 'no quote'
-  const rendered = formatPrice(price, row.quote.currency, {
-    explicitCode: row.quote.is_fallback,
-  })
-  return row.price_status === 'closed' ? `closed at ${rendered}` : rendered
+  return formatPrice(price, row.quote.currency)
+}
+
+/** `+3%` from the clause's own verdict: the KIND (up/down/flat, and whether
+ *  a move is worth stating at all) is phrasing.py's judgement; only the
+ *  digits are formatted here. */
+function shortMove(clause: Clause, fraction: number | null): string {
+  if (clause.kind === 'price-flat') return 'flat'
+  if (fraction === null) return clause.text
+  const pct = fraction * 100
+  const sign = pct > 0 ? '+' : '−'
+  return `${sign}${Math.abs(pct).toFixed(Math.abs(pct) >= 10 ? 0 : 1)}%`
 }

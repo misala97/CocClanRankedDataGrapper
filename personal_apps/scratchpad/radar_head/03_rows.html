@@ -1,0 +1,331 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Radar rows — three reworks</title>
+<style>
+@font-face{font-family:Inter;font-style:normal;font-weight:400 700;font-display:block;
+  src:url("../../static/radar/fonts/inter-latin.woff2") format("woff2");}
+</style>
+<style>
+:root{
+  --bg:oklch(0.988 0.002 290); --surface:oklch(0.970 0.004 290); --raise:oklch(1 0 0);
+  --rule:oklch(0.888 0.007 290); --rule-soft:oklch(0.940 0.005 290);
+  --ink:oklch(0.230 0.021 285); --ink-2:oklch(0.395 0.018 285);
+  --muted:oklch(0.480 0.016 285); --dim:oklch(0.545 0.012 285);
+  --mark:oklch(0.470 0.185 296); --mark-soft:oklch(0.470 0.185 296 / 0.13);
+  --mark-wash:oklch(0.470 0.185 296 / 0.07);
+  --up:oklch(0.470 0.130 150); --down:oklch(0.500 0.175 27);
+  --warn:oklch(0.480 0.110 65);
+  --t-ax:10.5px; --t-xs:11.5px; --t-sm:13px; --t-md:13.5px; --t-lg:17px;
+  --s1:4px; --s2:6px; --s3:8px; --s4:12px; --s5:16px; --s6:20px;
+  --r:8px; --axis:176px;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:26px;background:oklch(0.915 0.005 290);
+  font:15px/1.5 Inter,system-ui,sans-serif;color:var(--ink);
+  -webkit-font-smoothing:antialiased;display:flex;gap:26px;align-items:flex-start}
+.col{width:420px;flex:none}
+.tag{font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin:18px 0 8px 2px}
+.tag:first-child{margin-top:0}
+.tag i{font-style:normal;font-weight:400;color:var(--muted);margin-left:6px}
+.pane{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+
+/* shared head condensed (the shipped design, for context) */
+.head{padding:12px var(--s6) 9px;border-bottom:1px solid var(--rule);
+  font-size:var(--t-xs);color:var(--muted)}
+.head .b1{display:flex;align-items:baseline;gap:var(--s4)}
+.head h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em;color:var(--ink)}
+.head .mkt{font-size:var(--t-sm);font-weight:600;color:var(--dim)}
+.head .mkt b{color:var(--ink);border-bottom:2px solid var(--mark);padding-bottom:2px}
+.head .age{margin-left:auto}
+.head .st{margin-top:6px;font-variant-numeric:tabular-nums}
+.head .st b{color:var(--warn);font-weight:600}
+.head .st .mode{color:var(--mark);font-weight:600;font-size:var(--t-ax);
+  letter-spacing:0.05em;text-transform:uppercase}
+.head .st .lift{color:var(--warn);font-weight:600}
+
+svg.spark{width:56px;height:17px;flex:none;opacity:0.7}
+
+/* magnitude bar shared */
+.row{position:relative;display:block;border-bottom:1px solid var(--rule-soft)}
+.row.bar::before{content:"";position:absolute;left:var(--s6);bottom:6px;width:var(--axis);
+  height:5px;border-bottom:1px solid var(--rule);border-right:1px solid var(--rule)}
+.row.bar::after{content:"";position:absolute;left:var(--s6);bottom:7px;height:3px;
+  width:var(--axis);transform:scaleX(var(--mag,0));transform-origin:left center;background:var(--mark)}
+
+/* ==========================================================================
+   A — THE DISCIPLINED GRAMMAR: three fixed lines, no pills
+   L1 identity+score, L2 the finding, L3 quiet provenance. Anything true of
+   every row lives in the head, not here.
+   ========================================================================== */
+.a .row{padding:9px var(--s6) 15px}
+.a .l1{display:flex;align-items:baseline;gap:var(--s3);line-height:1.25}
+.a .tk{font-size:var(--t-lg);font-weight:700;letter-spacing:-0.01em}
+.a .nm{flex:1;min-width:0;font-size:12.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.a .score{flex:none;margin-left:auto;display:inline-flex;align-items:baseline;gap:5px;
+  font-variant-numeric:tabular-nums;font-size:var(--t-md)}
+.a .score .k{font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
+.a .score b{font-weight:600}
+.a .l2{margin:2px 0 0;font-size:var(--t-md);line-height:1.4;color:var(--ink-2)}
+.a .l2 b{font-weight:600;color:var(--ink)}
+.a .l2 .warn{color:var(--warn);font-weight:600}
+.a .l2 .up{color:var(--up);font-weight:600}
+.a .l2 .down{color:var(--down);font-weight:600}
+.a .l3{margin:2px 0 0;font-size:var(--t-xs);color:var(--muted);
+  font-variant-numeric:tabular-nums;display:flex;gap:var(--s2);flex-wrap:wrap}
+.a .l3 .m{color:var(--warn);font-weight:600}
+.a .l3 .sep{color:var(--dim)}
+
+/* ==========================================================================
+   B — THE LEDGER: identity left, numbers right, two lines
+   Score and price form a right-aligned column the eye can run down like a
+   ledger. The finding stays left. Marks close the finding line in amber.
+   ========================================================================== */
+.b .row{padding:9px var(--s6) 15px;display:grid;
+  grid-template-columns:minmax(0,1fr) auto;column-gap:var(--s4)}
+.b .id{display:flex;align-items:baseline;gap:var(--s3);min-width:0;line-height:1.25}
+.b .tk{font-size:var(--t-lg);font-weight:700;letter-spacing:-0.01em}
+.b .nm{min-width:0;font-size:12.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b .right{grid-column:2;grid-row:1 / span 2;display:flex;flex-direction:column;
+  align-items:flex-end;gap:1px;font-variant-numeric:tabular-nums}
+.b .score{display:inline-flex;align-items:baseline;gap:5px;font-size:var(--t-md)}
+.b .score .k{font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
+.b .score b{font-weight:600}
+.b .price{font-size:var(--t-xs);color:var(--muted)}
+.b .price .up{color:var(--up);font-weight:600}
+.b .price .down{color:var(--down);font-weight:600}
+.b .f{grid-column:1;margin:2px 0 0;font-size:var(--t-md);line-height:1.4;color:var(--ink-2);
+  display:flex;align-items:baseline;gap:var(--s2);flex-wrap:wrap}
+.b .f b{font-weight:600;color:var(--ink)}
+.b .f .warn,.b .f .m{color:var(--warn);font-weight:600}
+.b .f .m{font-size:var(--t-xs)}
+.b .f .sep{color:var(--dim)}
+.b .f .spark{align-self:center}
+
+/* ==========================================================================
+   C — THE METER: the ratio anchors the row on the left
+   The number the chatter finding IS -- n× normal -- becomes the row's
+   left-hand meter reading. Identity sits beside it; everything quiet
+   underneath. Score column stays right for the ordering.
+   ========================================================================== */
+.c .row{padding:10px var(--s6) 15px;display:grid;
+  grid-template-columns:64px minmax(0,1fr) auto;column-gap:var(--s4);align-items:baseline}
+.c .meter{grid-row:1 / span 2;font-variant-numeric:tabular-nums;line-height:1.05}
+.c .meter .x{font-size:22px;font-weight:700;letter-spacing:-0.02em;color:var(--mark)}
+.c .meter .xl{display:block;font-size:var(--t-ax);letter-spacing:0.06em;
+  text-transform:uppercase;color:var(--muted);margin-top:2px}
+.c .meter.new .x{font-size:var(--t-md);color:var(--warn)}
+.c .id{display:flex;align-items:baseline;gap:var(--s3);min-width:0;line-height:1.25}
+.c .tk{font-size:var(--t-lg);font-weight:700;letter-spacing:-0.01em}
+.c .nm{flex:1;min-width:0;font-size:12.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c .score{display:inline-flex;align-items:baseline;gap:5px;
+  font-variant-numeric:tabular-nums;font-size:var(--t-md)}
+.c .score .k{font-size:var(--t-ax);letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)}
+.c .score b{font-weight:600}
+.c .sub{grid-column:2 / span 2;margin-top:1px;font-size:var(--t-xs);color:var(--muted);
+  display:flex;gap:var(--s2);flex-wrap:wrap;font-variant-numeric:tabular-nums;align-items:baseline}
+.c .sub .warn,.c .sub .m{color:var(--warn);font-weight:600}
+.c .sub .up{color:var(--up);font-weight:600}
+.c .sub .sep{color:var(--dim)}
+.c .sub .spark{align-self:center}
+</style>
+
+<!-- ================================ A ================================ -->
+<div class="col a">
+  <p class="tag">A — the disciplined grammar<i>3 fixed lines · board-wide facts live in the head</i></p>
+  <div class="pane">
+    <div class="head">
+      <div class="b1"><h1>Radar</h1><span class="mkt">US / <b>DE</b></span>
+        <span class="age">updated 19:38</span></div>
+      <p class="st">Xetra <b>closed</b> · opens 08:00 · <span class="mode">ranked by chatter</span>
+        · 17 tickers · <span class="lift">US prices, 46h old</span></p>
+    </div>
+
+    <div class="row bar" style="--mag:0.86">
+      <span class="l1"><span class="tk">OLED</span><span class="nm">Universal Display Corporation</span>
+        <svg class="spark" viewBox="0 0 56 17"><path d="M0 15 L8 14 L16 15 L24 12 L32 8 L40 4 L48 6 L56 2" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="score"><span class="k">z</span><b>5.5</b></span></span>
+      <p class="l2"><b>6.9× its normal</b> · 2 venues · 9 people</p>
+      <p class="l3"><span>Mid</span><span class="sep">·</span><span>82,98 $</span></p>
+    </div>
+
+    <div class="row bar" style="--mag:0.62">
+      <span class="l1"><span class="tk">ONON</span><span class="nm">On Holding AG Class A</span>
+        <svg class="spark" viewBox="0 0 56 17"><path d="M0 16 L14 15 L28 13 L40 3 L48 9 L56 7" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="score"><span class="k">z</span><b>8.1</b></span></span>
+      <p class="l2"><b>4.5× its normal</b> · <span class="warn">one venue only</span></p>
+      <p class="l3"><span>Mid</span><span class="sep">·</span><span>28,85 $</span>
+        <span class="sep">·</span><span class="m">single-source</span>
+        <span class="sep">·</span><span class="m">partial</span></p>
+    </div>
+
+    <div class="row">
+      <span class="l1"><span class="tk">RGTI</span><span class="nm">Rigetti Computing, Inc.</span>
+        <svg class="spark" viewBox="0 0 56 17"><path d="M28 16 L36 15 L44 9 L56 3" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="score"><span class="k">z</span><b>—</b></span></span>
+      <p class="l2"><span class="warn">new here</span> · 14 mentions, nothing to compare against yet</p>
+      <p class="l3"><span>Micro</span><span class="sep">·</span><span>no quote</span></p>
+    </div>
+
+    <div class="row bar" style="--mag:0.31">
+      <span class="l1"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology Group</span>
+        <svg class="spark" viewBox="0 0 56 17"><path d="M0 8 L10 12 L20 6 L30 10 L40 7 L50 12 L56 10" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="score"><span class="k">z</span><b>2.2</b></span></span>
+      <p class="l2"><b>2.2× its normal</b> · 2 venues · 28 people</p>
+      <p class="l3"><span>Mid</span><span class="sep">·</span><span>9,64 $</span></p>
+    </div>
+  </div>
+
+  <p class="tag">A — open market<i>price move joins the finding, green/red returns</i></p>
+  <div class="pane">
+    <div class="row bar" style="--mag:0.7">
+      <span class="l1"><span class="tk">IREN</span><span class="nm">IREN Ltd</span>
+        <svg class="spark" viewBox="0 0 56 17"><path d="M0 15 L14 13 L28 9 L42 4 L56 3" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="score"><span class="k">div</span><b>1.42</b></span></span>
+      <p class="l2"><b>7.4× its normal</b> · 3 venues · 12 people · <span class="up">price +3%</span></p>
+      <p class="l3"><span>Small</span><span class="sep">·</span><span>14,02 $</span></p>
+    </div>
+    <div class="row bar" style="--mag:0.4">
+      <span class="l1"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span>
+        <svg class="spark" viewBox="0 0 56 17"><path d="M0 6 L14 9 L28 8 L42 12 L56 13" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="score"><span class="k">div</span><b>0.88</b></span></span>
+      <p class="l2"><b>3.1× its normal</b> · 2 venues · 8 people · <span class="down">price −4%</span></p>
+      <p class="l3"><span>Mid</span><span class="sep">·</span><span>31,20 $</span>
+        <span class="sep">·</span><span>quote 22 min old</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- ================================ B ================================ -->
+<div class="col b">
+  <p class="tag">B — the ledger<i>2 lines · numbers form a right column</i></p>
+  <div class="pane">
+    <div class="head">
+      <div class="b1"><h1>Radar</h1><span class="mkt">US / <b>DE</b></span>
+        <span class="age">updated 19:38</span></div>
+      <p class="st">Xetra <b>closed</b> · opens 08:00 · <span class="mode">ranked by chatter</span>
+        · 17 tickers · <span class="lift">US prices, 46h old</span></p>
+    </div>
+
+    <div class="row bar" style="--mag:0.86">
+      <span class="id"><span class="tk">OLED</span><span class="nm">Universal Display Corporation</span></span>
+      <span class="right"><span class="score"><span class="k">z</span><b>5.5</b></span>
+        <span class="price">82,98 $</span></span>
+      <p class="f"><svg class="spark" viewBox="0 0 56 17"><path d="M0 15 L8 14 L16 15 L24 12 L32 8 L40 4 L48 6 L56 2" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <b>6.9× normal</b><span class="sep">·</span>2 venues<span class="sep">·</span>9 people</p>
+    </div>
+
+    <div class="row bar" style="--mag:0.62">
+      <span class="id"><span class="tk">ONON</span><span class="nm">On Holding AG Class A</span></span>
+      <span class="right"><span class="score"><span class="k">z</span><b>8.1</b></span>
+        <span class="price">28,85 $</span></span>
+      <p class="f"><svg class="spark" viewBox="0 0 56 17"><path d="M0 16 L14 15 L28 13 L40 3 L48 9 L56 7" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <b>4.5× normal</b><span class="sep">·</span><span class="warn">one venue only</span>
+        <span class="sep">·</span><span class="m">single-source · partial</span></p>
+    </div>
+
+    <div class="row">
+      <span class="id"><span class="tk">RGTI</span><span class="nm">Rigetti Computing, Inc.</span></span>
+      <span class="right"><span class="score"><span class="k">z</span><b>—</b></span>
+        <span class="price">no quote</span></span>
+      <p class="f"><svg class="spark" viewBox="0 0 56 17"><path d="M28 16 L36 15 L44 9 L56 3" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="warn">new here</span><span class="sep">·</span>14 mentions, no baseline yet</p>
+    </div>
+
+    <div class="row bar" style="--mag:0.31">
+      <span class="id"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Technology Group</span></span>
+      <span class="right"><span class="score"><span class="k">z</span><b>2.2</b></span>
+        <span class="price">9,64 $</span></span>
+      <p class="f"><svg class="spark" viewBox="0 0 56 17"><path d="M0 8 L10 12 L20 6 L30 10 L40 7 L50 12 L56 10" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <b>2.2× normal</b><span class="sep">·</span>2 venues<span class="sep">·</span>28 people</p>
+    </div>
+  </div>
+
+  <p class="tag">B — open market<i>move rides under the price, right column</i></p>
+  <div class="pane">
+    <div class="row bar" style="--mag:0.7">
+      <span class="id"><span class="tk">IREN</span><span class="nm">IREN Ltd</span></span>
+      <span class="right"><span class="score"><span class="k">div</span><b>1.42</b></span>
+        <span class="price">14,02 $ <span class="up">+3%</span></span></span>
+      <p class="f"><svg class="spark" viewBox="0 0 56 17"><path d="M0 15 L14 13 L28 9 L42 4 L56 3" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <b>7.4× normal</b><span class="sep">·</span>3 venues<span class="sep">·</span>12 people</p>
+    </div>
+    <div class="row bar" style="--mag:0.4">
+      <span class="id"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span></span>
+      <span class="right"><span class="score"><span class="k">div</span><b>0.88</b></span>
+        <span class="price">31,20 $ <span class="down">−4%</span></span></span>
+      <p class="f"><svg class="spark" viewBox="0 0 56 17"><path d="M0 6 L14 9 L28 8 L42 12 L56 13" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <b>3.1× normal</b><span class="sep">·</span>2 venues<span class="sep">·</span>8 people</p>
+    </div>
+  </div>
+</div>
+
+<!-- ================================ C ================================ -->
+<div class="col c">
+  <p class="tag">C — the meter<i>the ratio anchors the row; violet number IS the chatter</i></p>
+  <div class="pane">
+    <div class="head">
+      <div class="b1"><h1>Radar</h1><span class="mkt">US / <b>DE</b></span>
+        <span class="age">updated 19:38</span></div>
+      <p class="st">Xetra <b>closed</b> · opens 08:00 · <span class="mode">ranked by chatter</span>
+        · 17 tickers · <span class="lift">US prices, 46h old</span></p>
+    </div>
+
+    <div class="row">
+      <span class="meter"><span class="x">6.9×</span><span class="xl">normal</span></span>
+      <span class="id"><span class="tk">OLED</span><span class="nm">Universal Display Corp</span></span>
+      <span class="score"><span class="k">z</span><b>5.5</b></span>
+      <p class="sub"><svg class="spark" viewBox="0 0 56 17"><path d="M0 15 L8 14 L16 15 L24 12 L32 8 L40 4 L48 6 L56 2" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        2 venues<span class="sep">·</span>9 people<span class="sep">·</span>82,98 $</p>
+    </div>
+
+    <div class="row">
+      <span class="meter"><span class="x">4.5×</span><span class="xl">normal</span></span>
+      <span class="id"><span class="tk">ONON</span><span class="nm">On Holding AG Class A</span></span>
+      <span class="score"><span class="k">z</span><b>8.1</b></span>
+      <p class="sub"><svg class="spark" viewBox="0 0 56 17"><path d="M0 16 L14 15 L28 13 L40 3 L48 9 L56 7" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        <span class="warn">one venue only</span><span class="sep">·</span>28,85 $
+        <span class="sep">·</span><span class="m">single-source · partial</span></p>
+    </div>
+
+    <div class="row">
+      <span class="meter new"><span class="x">new</span><span class="xl">here</span></span>
+      <span class="id"><span class="tk">RGTI</span><span class="nm">Rigetti Computing, Inc.</span></span>
+      <span class="score"><span class="k">z</span><b>—</b></span>
+      <p class="sub"><svg class="spark" viewBox="0 0 56 17"><path d="M28 16 L36 15 L44 9 L56 3" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        14 mentions<span class="sep">·</span>no baseline yet<span class="sep">·</span>no quote</p>
+    </div>
+
+    <div class="row">
+      <span class="meter"><span class="x">2.2×</span><span class="xl">normal</span></span>
+      <span class="id"><span class="tk">DJT</span><span class="nm">Trump Media &amp; Tech</span></span>
+      <span class="score"><span class="k">z</span><b>2.2</b></span>
+      <p class="sub"><svg class="spark" viewBox="0 0 56 17"><path d="M0 8 L10 12 L20 6 L30 10 L40 7 L50 12 L56 10" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        2 venues<span class="sep">·</span>28 people<span class="sep">·</span>9,64 $</p>
+    </div>
+  </div>
+
+  <p class="tag">C — open market<i>move in green/red inside the sub-line</i></p>
+  <div class="pane">
+    <div class="row">
+      <span class="meter"><span class="x">7.4×</span><span class="xl">normal</span></span>
+      <span class="id"><span class="tk">IREN</span><span class="nm">IREN Ltd</span></span>
+      <span class="score"><span class="k">div</span><b>1.42</b></span>
+      <p class="sub"><svg class="spark" viewBox="0 0 56 17"><path d="M0 15 L14 13 L28 9 L42 4 L56 3" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        3 venues<span class="sep">·</span>12 people<span class="sep">·</span>14,02 $
+        <span class="sep">·</span><span class="up">+3%</span></p>
+    </div>
+    <div class="row">
+      <span class="meter"><span class="x">3.1×</span><span class="xl">normal</span></span>
+      <span class="id"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span></span>
+      <span class="score"><span class="k">div</span><b>0.88</b></span>
+      <p class="sub"><svg class="spark" viewBox="0 0 56 17"><path d="M0 6 L14 9 L28 8 L42 12 L56 13" fill="none" stroke="var(--mark)" stroke-width="1.6"/></svg>
+        2 venues<span class="sep">·</span>8 people<span class="sep">·</span>31,20 $
+        <span class="sep">·</span><span class="down">−4%</span></p>
+    </div>
+  </div>
+  <p class="tag"><i>note: C drops the magnitude bar — the meter number replaces it.
+    A and B keep the bar.</i></p>
+</div>

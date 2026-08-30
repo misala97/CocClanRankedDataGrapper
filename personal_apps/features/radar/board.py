@@ -33,6 +33,7 @@ from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
 from . import leaderboard, phrasing
 from .market_calendars import session_bounds, session_state
+from .quotes import _quote_matches
 from .config import (SEGMENT_GROUPS, VARIANCE_FLOOR, expand_sources,
                      expand_sources_for_history, segments_in)
 
@@ -78,6 +79,14 @@ class BoardRow:
     """A ranked row plus what the surface needs to draw it."""
     rank: leaderboard.Row
     series: list          # list[Point], oldest first
+    # Price per hour over the same grid as `series`, None where no quote
+    # landed -- the chart-row draws both on one time axis.
+    price_series: list
+    # The ticker's own normal chatter rate, as mentions per hour, or None
+    # when the baseline is too thin to divide by (phrasing.ratio_value's
+    # guard). The chart draws it as the dashed line "above normal" is
+    # measured against.
+    normal_per_hour: object
     triplet: dict         # hours -> z or None
     tone: Tone
     # Why this row is on the list, in words -- see phrasing.py. The client
@@ -205,6 +214,61 @@ def _series_for(ticker, totals, covered, since, now):
             points.append(Point(hour=hour, count=None))
         hour += dt.timedelta(hours=1)
     return points
+
+
+def _hourly_prices(ranked, since, now):
+    """Last quoted price per (ticker, hour), for the rows' own quote identity.
+
+    The chart-rows draw price against chatter on one axis, so this walks the
+    same 24 hours the chatter series covers. One query for the whole board --
+    the per-ticker version of this on the detail page is fine there because
+    the panel shows one ticker, but a board did that once for quotes and it
+    was the 1.58s TTFB bug.
+
+    Identity per row, not per market: each row's quote already names the
+    venue that answered (market, mic), including the US-fallback case on the
+    German board, and the history drawn beside a quote must be the history
+    OF that quote. `_quote_matches` is reused so the two cannot disagree.
+
+    No carry-forward, same as the detail chart: an hour nobody priced is
+    None, and the line breaks rather than flat-lining through it.
+    """
+    if not ranked:
+        return {}
+
+    identity = sa.or_(*[
+        sa.and_(*_quote_matches(row.ticker, row.quote.market or 'us',
+                                row.quote.mic))
+        for row in ranked])
+    rows = (db.session.query(RadarQuote.ticker, RadarQuote.fetched_at,
+                             RadarQuote.price)
+            .filter(identity,
+                    RadarQuote.fetched_at >= since,
+                    RadarQuote.fetched_at < now)
+            .order_by(RadarQuote.fetched_at)
+            .all())
+
+    prices = {}
+    for ticker, fetched_at, price in rows:
+        # Ascending order, so the last write per hour is that hour's close.
+        prices[(ticker, _hour_floor(fetched_at))] = float(price)
+    return prices
+
+
+def _price_series_for(ticker, prices, since, now):
+    """One price per hour across the window, oldest first; None is a gap.
+
+    Not gated on `covered` -- that set says whether CHATTER ingest was alive,
+    which proves nothing about the quote poller. Price coverage is its own
+    fact: a slot is None exactly when no quote landed in it.
+    """
+    series = []
+    hour = _hour_floor(since)
+    end = _hour_floor(now)
+    while hour <= end:
+        series.append(prices.get((ticker, hour)))
+        hour += dt.timedelta(hours=1)
+    return series
 
 
 def _triplets(tickers, sources, now):
@@ -363,6 +427,7 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
 
     covered = _covered_hours(sources, since, now)
     totals = _hourly_counts(tickers, sources, since, now)
+    prices = _hourly_prices(ranked, since, now)
     triplets = _triplets(tickers, sources, now)
     tones = _tones(tickers, sources, since, now)
 
@@ -370,6 +435,14 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     rows = [BoardRow(
         rank=row,
         series=_series_for(row.ticker, totals, covered, since, now),
+        price_series=_price_series_for(row.ticker, prices, since, now),
+        # Guarded by the same rule as the ratio wording: an expected under
+        # the baseline floor is noise, and drawing a "normal" line off it
+        # would be the bar version of "200x normal".
+        normal_per_hour=(row.expected / window_hours
+                         if phrasing.ratio_value(row.mentions,
+                                                 row.expected) is not None
+                         else None),
         triplet=triplets.get(row.ticker, empty_triplet),
         tone=tones.get(row.ticker, Tone(0, 0, 0)),
         clauses=phrasing.row_clauses(row, row.quote.session),

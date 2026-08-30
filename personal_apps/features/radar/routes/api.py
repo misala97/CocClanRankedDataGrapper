@@ -259,6 +259,10 @@ def _row(entry):
         # `count: null` is a measured gap, not a quiet hour -- see board.py.
         'series': [{'hour': p.hour.isoformat() + 'Z', 'count': p.count}
                    for p in entry.series],
+        # Same hour grid as `series`; null is an hour nobody priced. The
+        # chart-row draws both on one time axis.
+        'price_series': [_decimal_or_none(p) for p in entry.price_series],
+        'normal_per_hour': _decimal_or_none(entry.normal_per_hour),
         'triplet': {str(hours): value for hours, value in entry.triplet.items()},
         'tone': {'bullish': entry.tone.bullish,
                  'neutral': entry.tone.neutral,

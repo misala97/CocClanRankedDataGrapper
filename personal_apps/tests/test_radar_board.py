@@ -13,7 +13,7 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from features.radar import board
+from features.radar import board, phrasing
 from features.radar.config import source_config_version
 from models import (RadarBucketSource, RadarDailyClose, RadarMention,
                     RadarPost, RadarQuote, TickerUniverse)
@@ -596,3 +596,43 @@ def test_a_row_in_small_still_reports_its_own_segment(clean):
     built = board.build(['bluesky'], NOW, segments=['small'])
 
     assert built.rows[0].rank.segment == 'micro'
+
+
+# ------------------------------------------------------------- chart-row ---
+
+def test_price_series_shares_the_chatter_grid_and_keeps_gaps():
+    """The chart-row draws price and chatter on ONE time axis, so the price
+    series walks exactly the hours the chatter series walks -- and an hour
+    nobody priced is None, never a carried-forward flat line."""
+    since = NOW - dt.timedelta(hours=board.SERIES_HOURS)
+    hour = board._hour_floor(since)
+    prices = {('ZZT', hour): 10.0,
+              ('ZZT', hour + dt.timedelta(hours=2)): 10.5}
+
+    series = board._price_series_for('ZZT', prices, since, NOW)
+
+    chatter = board._series_for('ZZT', {}, set(), since, NOW)
+    assert len(series) == len(chatter)
+    assert series[0] == 10.0
+    assert series[1] is None
+    assert series[2] == 10.5
+    assert all(slot is None for slot in series[3:])
+
+
+def test_normal_line_obeys_the_ratio_guard(clean):
+    """The dashed own-normal line and the "n x normal" wording must come to
+    the same conclusion about whether a baseline is thick enough to draw --
+    both run through phrasing.ratio_value. An expected under the floor draws
+    no line rather than a bar version of "200x normal"."""
+    universe(f'{PREFIX}B', cap='100000000')
+    bucket(f'{PREFIX}B', minutes_ago=30)
+    db.session.commit()
+
+    built = board.build(['bluesky'], NOW, segments=['small'])
+    entry = built.rows[0]
+
+    expected = entry.rank.expected
+    if expected and expected >= phrasing.MIN_RATIO_BASELINE:
+        assert entry.normal_per_hour == expected / built.window_hours
+    else:
+        assert entry.normal_per_hour is None

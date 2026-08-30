@@ -40,6 +40,8 @@ function row(over: Partial<Row> = {}): Row {
     price: 10, price_move: 0.012, direction: 'up', price_status: 'ok',
     baseline_days: 30, marks: [],
     series: Array.from({ length: 25 }, (_, i) => ({ hour: `h${i}`, count: i })),
+    price_series: Array.from({ length: 25 }, () => null),
+    normal_per_hour: null,
     triplet: { '1': 1.1, '4': 3.2, '24': 2.0 },
     tone: { bullish: 4, neutral: 10, bearish: 2 },
     clauses: [{ kind: 'ratio', text: '3x its normal' }],

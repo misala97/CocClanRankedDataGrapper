@@ -277,6 +277,30 @@ export function formatQuoteAge(ageSeconds: number | null): string {
   return `${Math.floor(ageSeconds / 60)} min delayed`
 }
 
+/** An age in the unit a person would pick: 45 min, 46h, 3d.
+ *
+ *  Replaces the raw minute count the row badges used to print -- "2740 min
+ *  stale" is a subtraction the reader has to finish themselves. */
+export function humanAge(ageSeconds: number | null): string {
+  if (ageSeconds === null) return UNKNOWN
+  const minutes = Math.floor(ageSeconds / 60)
+  if (minutes < 90) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `${hours}h`
+  return `${Math.floor(hours / 24)}d`
+}
+
+/** The ratio as the chart-row's short figure: `4.5×`, `40×`.
+ *
+ *  Same rounding rules as phrasing.py's `_ratio` -- a tenth matters at 3.5
+ *  and is noise at 40 -- but formatting only: whether a row HAS a ratio was
+ *  already decided by the server (`ratio` is null past the guard). */
+export function ratioShort(value: number | null): string | null {
+  if (value === null) return null
+  if (value >= 10) return `${Math.round(value)}×`
+  return `${value.toFixed(1)}×`.replace('.0×', '×')
+}
+
 /** What the row says about the tape, under the ticker.
  *
  *  A shut exchange and a missing quote are different silences: the first says

@@ -1,0 +1,382 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Radar rows — three actual reworks</title>
+<style>
+@font-face{font-family:Inter;font-style:normal;font-weight:400 700;font-display:block;
+  src:url("../../static/radar/fonts/inter-latin.woff2") format("woff2");}
+</style>
+<style>
+:root{
+  --bg:oklch(0.988 0.002 290); --surface:oklch(0.970 0.004 290); --raise:oklch(1 0 0);
+  --rule:oklch(0.888 0.007 290); --rule-soft:oklch(0.940 0.005 290);
+  --ink:oklch(0.230 0.021 285); --ink-2:oklch(0.395 0.018 285);
+  --muted:oklch(0.480 0.016 285); --dim:oklch(0.545 0.012 285);
+  --mark:oklch(0.470 0.185 296); --mark-soft:oklch(0.470 0.185 296 / 0.13);
+  --mark-wash:oklch(0.470 0.185 296 / 0.07);
+  --up:oklch(0.470 0.130 150); --down:oklch(0.500 0.175 27);
+  --warn:oklch(0.480 0.110 65);
+  --t-ax:10.5px; --t-xs:11.5px; --t-sm:13px; --t-md:13.5px; --t-lg:17px;
+  --s2:6px; --s3:8px; --s4:12px; --s5:16px; --s6:20px; --r:8px;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:26px;background:oklch(0.915 0.005 290);
+  font:15px/1.5 Inter,system-ui,sans-serif;color:var(--ink);
+  -webkit-font-smoothing:antialiased;display:flex;gap:26px;align-items:flex-start}
+.col{width:430px;flex:none}
+.wide{width:640px}
+.tag{font-size:var(--t-xs);font-weight:600;color:var(--ink-2);margin:18px 0 8px 2px}
+.tag:first-child{margin-top:0}
+.tag i{font-style:normal;font-weight:400;color:var(--muted);margin-left:6px}
+.pane{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.head{padding:12px var(--s6) 9px;border-bottom:1px solid var(--rule);
+  font-size:var(--t-xs);color:var(--muted)}
+.head .b1{display:flex;align-items:baseline;gap:var(--s4)}
+.head h1{margin:0;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.015em;color:var(--ink)}
+.head .mkt{font-size:var(--t-sm);font-weight:600;color:var(--dim)}
+.head .mkt b{color:var(--ink);border-bottom:2px solid var(--mark);padding-bottom:2px}
+.head .age{margin-left:auto}
+.head .st{margin-top:6px;font-variant-numeric:tabular-nums}
+.head .st b{color:var(--warn);font-weight:600}
+.head .st .mode{color:var(--mark);font-weight:600;font-size:var(--t-ax);
+  letter-spacing:0.05em;text-transform:uppercase}
+.head .st .lift{color:var(--warn);font-weight:600}
+.note{font-size:var(--t-xs);color:var(--muted);margin:8px 2px 0;line-height:1.5}
+
+/* ==========================================================================
+   D1 — SMALL MULTIPLES: the row IS the chart
+   Chatter (violet area) and price (line) share one 24h axis on every row.
+   The product's thesis -- talk rising while price has not moved -- becomes
+   something you SEE seventeen times in one scroll, not a number you decode.
+   ========================================================================== */
+.d1 .row{display:grid;grid-template-columns:92px minmax(0,1fr) 96px;
+  column-gap:var(--s4);padding:8px var(--s6);border-bottom:1px solid var(--rule-soft);
+  align-items:center}
+.d1 .cap{min-width:0}
+.d1 .tk{display:block;font-size:var(--t-lg);font-weight:700;letter-spacing:-0.01em;line-height:1.2}
+.d1 .nm{display:block;font-size:10.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d1 .chart{position:relative;height:44px}
+.d1 .chart svg{position:absolute;inset:0;width:100%;height:100%}
+.d1 .facts{text-align:right;font-variant-numeric:tabular-nums;line-height:1.35}
+.d1 .facts .score{font-size:var(--t-md);display:block}
+.d1 .facts .score .k{font-size:var(--t-ax);letter-spacing:0.06em;
+  text-transform:uppercase;color:var(--muted);margin-right:4px}
+.d1 .facts .score b{font-weight:600}
+.d1 .facts .sub{display:block;font-size:var(--t-ax);color:var(--muted)}
+.d1 .facts .sub.warn{color:var(--warn);font-weight:600}
+.d1 .facts .sub .up{color:var(--up);font-weight:600}
+
+/* ==========================================================================
+   D3 — THE MONITOR: a true table, no sentences
+   Fixed columns, aligned figures, a header instead of per-row labels.
+   The words happen in the panel; the list is pure triage.
+   ========================================================================== */
+.d3 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.d3 th{padding:7px 0 6px;font-size:var(--t-ax);letter-spacing:0.06em;
+  text-transform:uppercase;color:var(--dim);font-weight:400;text-align:right;
+  border-bottom:1px solid var(--rule)}
+.d3 th:first-child{text-align:left;padding-left:var(--s6)}
+.d3 th:last-child{padding-right:var(--s6)}
+.d3 td{padding:8px 0;border-bottom:1px solid var(--rule-soft);
+  font-size:var(--t-sm);text-align:right;color:var(--ink-2)}
+.d3 td:first-child{text-align:left;padding-left:var(--s6)}
+.d3 td:last-child{padding-right:var(--s6)}
+.d3 .tk{font-size:15px;font-weight:700;letter-spacing:-0.01em;color:var(--ink)}
+.d3 .tk .fl{margin-left:5px;font-size:var(--t-ax);font-weight:600;color:var(--warn);
+  letter-spacing:0.02em;vertical-align:2px}
+.d3 .nm{display:block;font-size:10.5px;color:var(--muted);font-weight:400;
+  max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d3 .x{color:var(--mark);font-weight:600}
+.d3 .z b{font-weight:600;color:var(--ink)}
+.d3 .dimc{color:var(--dim)}
+.d3 .warnc{color:var(--warn);font-weight:600}
+.d3 .up{color:var(--up);font-weight:600}
+.d3 .down{color:var(--down);font-weight:600}
+.d3 .legend{padding:7px var(--s6) 9px;font-size:var(--t-ax);color:var(--muted)}
+.d3 .legend .m{color:var(--warn);font-weight:600}
+
+/* ==========================================================================
+   D2 — THE FIELD: the board is one chart, rows become positions
+   x = price move, y = chatter vs normal. Divergence is DISTANCE from the
+   diagonal. The ranked rail keeps the reading order.
+   ========================================================================== */
+.d2 .wrap{display:grid;grid-template-columns:112px minmax(0,1fr)}
+.d2 .rail{border-right:1px solid var(--rule);padding:6px 0}
+.d2 .rail a{display:flex;align-items:baseline;gap:6px;padding:4px var(--s4);
+  font-size:var(--t-sm);text-decoration:none;color:var(--ink-2);
+  font-variant-numeric:tabular-nums}
+.d2 .rail a b{font-weight:700;color:var(--ink)}
+.d2 .rail a .v{margin-left:auto;font-size:var(--t-xs);color:var(--mark);font-weight:600}
+.d2 .rail a.on{background:var(--mark-wash)}
+.d2 .field{position:relative;height:380px}
+.d2 .field svg{position:absolute;inset:0;width:100%;height:100%}
+</style>
+
+<!-- ============================ D1 ============================ -->
+<div class="col d1">
+  <p class="tag">D1 — small multiples<i>every row draws chatter against price on one axis</i></p>
+  <div class="pane">
+    <div class="head">
+      <div class="b1"><h1>Radar</h1><span class="mkt">US / <b>DE</b></span>
+        <span class="age">updated 19:38</span></div>
+      <p class="st">Xetra <b>closed</b> · opens 08:00 · <span class="mode">ranked by chatter</span>
+        · 17 tickers · <span class="lift">US prices, 46h old</span></p>
+    </div>
+
+    <!-- ONON: dead quiet then one 38-mention spike at 16:00 (real series) -->
+    <div class="row">
+      <span class="cap"><span class="tk">ONON</span><span class="nm">On Holding AG</span></span>
+      <span class="chart"><svg viewBox="0 0 300 44" preserveAspectRatio="none">
+        <line x1="0" y1="40" x2="300" y2="40" stroke="var(--rule)" stroke-width="1"/>
+        <path d="M0 40 L262 40 L268 40 L275 4 L282 40 L300 40 Z" fill="var(--mark-soft)"/>
+        <path d="M262 40 L268 40 L275 4 L282 40" fill="none" stroke="var(--mark)" stroke-width="1.5"/>
+        <line x1="0" y1="24" x2="300" y2="24" stroke="var(--dim)" stroke-width="1"
+              stroke-dasharray="3 4" opacity="0.55"/>
+      </svg></span>
+      <span class="facts">
+        <span class="score"><span class="k">z</span><b>8.1</b></span>
+        <span class="sub">4.5× · 28,85 $</span>
+        <span class="sub warn">one venue</span>
+      </span>
+    </div>
+
+    <!-- OLED: build across the afternoon (real series 3,4,2) -->
+    <div class="row">
+      <span class="cap"><span class="tk">OLED</span><span class="nm">Universal Display Corp</span></span>
+      <span class="chart"><svg viewBox="0 0 300 44" preserveAspectRatio="none">
+        <line x1="0" y1="40" x2="300" y2="40" stroke="var(--rule)" stroke-width="1"/>
+        <path d="M0 40 L240 40 L252 14 L264 8 L276 20 L288 40 L300 40 Z" fill="var(--mark-soft)"/>
+        <path d="M240 40 L252 14 L264 8 L276 20 L288 40" fill="none" stroke="var(--mark)" stroke-width="1.5"/>
+        <line x1="0" y1="24" x2="300" y2="24" stroke="var(--dim)" stroke-width="1"
+              stroke-dasharray="3 4" opacity="0.55"/>
+      </svg></span>
+      <span class="facts">
+        <span class="score"><span class="k">z</span><b>5.5</b></span>
+        <span class="sub">6.9× · 82,98 $</span>
+        <span class="sub">2 venues · 9 ppl</span>
+      </span>
+    </div>
+
+    <!-- DB: scattered mentions overnight (real series) -->
+    <div class="row">
+      <span class="cap"><span class="tk">DB</span><span class="nm">Deutsche Bank AG</span></span>
+      <span class="chart"><svg viewBox="0 0 300 44" preserveAspectRatio="none">
+        <line x1="0" y1="40" x2="300" y2="40" stroke="var(--rule)" stroke-width="1"/>
+        <path d="M0 40 L48 40 L60 22 L72 40 L96 40 L108 22 L120 34 L132 40 L168 40 L180 28 L192 40 L276 40 L288 10 L300 40 Z" fill="var(--mark-soft)"/>
+        <path d="M48 40 L60 22 L72 40 M96 40 L108 22 L120 34 L132 40 M168 40 L180 28 L192 40 M276 40 L288 10 L300 40" fill="none" stroke="var(--mark)" stroke-width="1.5"/>
+        <line x1="0" y1="24" x2="300" y2="24" stroke="var(--dim)" stroke-width="1"
+              stroke-dasharray="3 4" opacity="0.55"/>
+      </svg></span>
+      <span class="facts">
+        <span class="score"><span class="k">z</span><b>4.8</b></span>
+        <span class="sub">7.3× · 40,36 $</span>
+        <span class="sub">2 venues · 5 ppl</span>
+      </span>
+    </div>
+  </div>
+
+  <p class="tag">D1 — open market<i>the price line joins in green/red; divergence becomes visible</i></p>
+  <div class="pane">
+    <!-- open: chatter swells, price line flat = THE signal -->
+    <div class="row">
+      <span class="cap"><span class="tk">IREN</span><span class="nm">IREN Ltd</span></span>
+      <span class="chart"><svg viewBox="0 0 300 44" preserveAspectRatio="none">
+        <line x1="0" y1="40" x2="300" y2="40" stroke="var(--rule)" stroke-width="1"/>
+        <path d="M0 40 L120 40 L160 30 L200 22 L240 10 L270 6 L300 8 L300 40 Z" fill="var(--mark-soft)"/>
+        <path d="M120 40 L160 30 L200 22 L240 10 L270 6 L300 8" fill="none" stroke="var(--mark)" stroke-width="1.5"/>
+        <path d="M0 22 L60 23 L120 21 L180 22 L240 21 L300 20" fill="none"
+              stroke="var(--up)" stroke-width="1.5" opacity="0.9"/>
+      </svg></span>
+      <span class="facts">
+        <span class="score"><span class="k">div</span><b>1.42</b></span>
+        <span class="sub">7.4× · <span class="up">+0.8%</span></span>
+        <span class="sub">3 venues · 12 ppl</span>
+      </span>
+    </div>
+    <!-- open: price already chased the chatter -->
+    <div class="row">
+      <span class="cap"><span class="tk">MRNA</span><span class="nm">Moderna Inc</span></span>
+      <span class="chart"><svg viewBox="0 0 300 44" preserveAspectRatio="none">
+        <line x1="0" y1="40" x2="300" y2="40" stroke="var(--rule)" stroke-width="1"/>
+        <path d="M0 40 L80 40 L120 26 L160 18 L200 24 L240 30 L300 34 L300 40 Z" fill="var(--mark-soft)"/>
+        <path d="M80 40 L120 26 L160 18 L200 24 L240 30 L300 34" fill="none" stroke="var(--mark)" stroke-width="1.5"/>
+        <path d="M0 30 L60 28 L120 22 L180 12 L240 8 L300 6" fill="none"
+              stroke="var(--down)" stroke-width="1.5" opacity="0.9"/>
+      </svg></span>
+      <span class="facts">
+        <span class="score"><span class="k">div</span><b>0.88</b></span>
+        <span class="sub">3.1× · <span class="up">+6.2%</span></span>
+        <span class="sub">2 venues · 8 ppl</span>
+      </span>
+    </div>
+  </div>
+  <p class="note">Needs one backend addition: an hourly price line per row (the
+    quote store already holds 5-minute snapshots). Dashed gray line = the
+    ticker's own normal level of talk, so "above normal" is visible, not told.
+    Ratio, breadth and marks compress into the right cap; full wording stays
+    in the panel.</p>
+</div>
+
+<!-- ============================ D3 ============================ -->
+<div class="col d3">
+  <p class="tag">D3 — the monitor<i>a true table; no sentences, aligned figures, header once</i></p>
+  <div class="pane">
+    <div class="head">
+      <div class="b1"><h1>Radar</h1><span class="mkt">US / <b>DE</b></span>
+        <span class="age">updated 19:38</span></div>
+      <p class="st">Xetra <b>closed</b> · opens 08:00 · <span class="mode">ranked by chatter</span>
+        · 17 tickers · <span class="lift">US prices, 46h old</span></p>
+    </div>
+    <table>
+      <thead><tr>
+        <th>ticker</th><th>talk</th><th>z</th><th>voices</th><th>price</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="tk">ONON<span class="fl">◆1</span></span>
+            <span class="nm">On Holding AG</span></td>
+          <td><span class="x">4.5×</span></td>
+          <td class="z"><b>8.1</b></td>
+          <td class="warnc">1 venue</td>
+          <td>28,85&nbsp;$</td>
+        </tr>
+        <tr>
+          <td><span class="tk">OLED</span><span class="nm">Universal Display</span></td>
+          <td><span class="x">6.9×</span></td>
+          <td class="z"><b>5.5</b></td>
+          <td>9 · 2 ven</td>
+          <td>82,98&nbsp;$</td>
+        </tr>
+        <tr>
+          <td><span class="tk">DB</span><span class="nm">Deutsche Bank AG</span></td>
+          <td><span class="x">7.3×</span></td>
+          <td class="z"><b>4.8</b></td>
+          <td>5 · 2 ven</td>
+          <td>40,36&nbsp;$</td>
+        </tr>
+        <tr>
+          <td><span class="tk">RGTI<span class="fl">◆2</span></span>
+            <span class="nm">Rigetti Computing</span></td>
+          <td class="warnc">new</td>
+          <td class="z dimc">—</td>
+          <td>6 · 2 ven</td>
+          <td class="dimc">—</td>
+        </tr>
+        <tr>
+          <td><span class="tk">DJT</span><span class="nm">Trump Media &amp; Tech</span></td>
+          <td><span class="x">2.2×</span></td>
+          <td class="z"><b>2.2</b></td>
+          <td>28 · 2 ven</td>
+          <td>9,64&nbsp;$</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="legend"><span class="m">◆1</span> single-source · partial
+      &nbsp;&nbsp;<span class="m">◆2</span> no baseline yet</p>
+  </div>
+
+  <p class="tag">D3 — open market<i>a Δ column appears; green/red only there</i></p>
+  <div class="pane">
+    <table>
+      <thead><tr>
+        <th>ticker</th><th>talk</th><th>div</th><th>voices</th><th>price</th><th>Δ</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="tk">IREN</span><span class="nm">IREN Ltd</span></td>
+          <td><span class="x">7.4×</span></td>
+          <td class="z"><b>1.42</b></td>
+          <td>12 · 3 ven</td>
+          <td>14,02&nbsp;$</td>
+          <td class="up">+0.8%</td>
+        </tr>
+        <tr>
+          <td><span class="tk">MRNA</span><span class="nm">Moderna Inc</span></td>
+          <td><span class="x">3.1×</span></td>
+          <td class="z"><b>0.88</b></td>
+          <td>8 · 2 ven</td>
+          <td>31,20&nbsp;$</td>
+          <td class="up">+6.2%</td>
+        </tr>
+        <tr>
+          <td><span class="tk">RIVN</span><span class="nm">Rivian Automotive</span></td>
+          <td><span class="x">0.8×</span></td>
+          <td class="z"><b>0.72</b></td>
+          <td>9 · 2 ven</td>
+          <td>11,80&nbsp;$</td>
+          <td class="down">−5.1%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">The sentence grammar dies entirely — clauses become cells.
+    Marks become flagged footnotes (still visible, one legend). The sparkline
+    dies too; trend lives in the panel. This is the fastest board to SCAN and
+    the least explanatory: it assumes the reader knows the vocabulary, which
+    after two weeks of daily use is true.</p>
+</div>
+
+<!-- ============================ D2 ============================ -->
+<div class="col wide d2">
+  <p class="tag">D2 — the field<i>the board IS one chart; a row is a position on it</i></p>
+  <div class="pane">
+    <div class="head">
+      <div class="b1"><h1>Radar</h1><span class="mkt">US / <b>DE</b></span>
+        <span class="age">updated 14:32</span></div>
+      <p class="st">NYSE open · closes 22:00 · 12 tickers · 30d baselines</p>
+    </div>
+    <div class="wrap">
+      <div class="rail">
+        <a class="on"><b>IREN</b><span class="v">1.42</span></a>
+        <a><b>ONON</b><span class="v">1.10</span></a>
+        <a><b>OLED</b><span class="v">0.95</span></a>
+        <a><b>MRNA</b><span class="v">0.88</span></a>
+        <a><b>RIVN</b><span class="v">0.72</span></a>
+        <a><b>DJT</b><span class="v">0.61</span></a>
+        <a><b>DB</b><span class="v">0.44</span></a>
+        <a><b>HD</b><span class="v">0.31</span></a>
+      </div>
+      <div class="field">
+        <svg viewBox="0 0 520 380">
+          <!-- axes -->
+          <line x1="260" y1="16" x2="260" y2="352" stroke="var(--rule)" stroke-width="1"/>
+          <line x1="24" y1="330" x2="500" y2="330" stroke="var(--rule)" stroke-width="1"/>
+          <text x="497" y="346" font-size="10.5" fill="var(--dim)" text-anchor="end">price move →</text>
+          <text x="30" y="28" font-size="10.5" fill="var(--dim)">talk vs normal ↑</text>
+          <!-- the diagonal: talk already priced in -->
+          <line x1="260" y1="330" x2="490" y2="40" stroke="var(--dim)" stroke-width="1"
+                stroke-dasharray="4 5" opacity="0.5"/>
+          <text x="452" y="76" font-size="10" fill="var(--dim)" opacity="0.8"
+                transform="rotate(-51 452 76)">priced in</text>
+          <!-- interesting region: high talk, no move -->
+          <rect x="200" y="16" width="120" height="150" fill="var(--mark-wash)"/>
+          <!-- dots -->
+          <g font-size="12" font-weight="700">
+            <circle cx="268" cy="52" r="5" fill="var(--mark)"/>
+            <text x="280" y="56" fill="var(--ink)">IREN</text>
+            <circle cx="246" cy="96" r="4.5" fill="var(--mark)"/>
+            <text x="196" y="100" fill="var(--ink)">ONON</text>
+            <circle cx="300" cy="122" r="4.5" fill="var(--mark)"/>
+            <text x="312" y="126" fill="var(--ink)">OLED</text>
+            <circle cx="396" cy="140" r="4.5" fill="var(--mark)" opacity="0.75"/>
+            <text x="408" y="144" fill="var(--ink-2)">MRNA</text>
+            <circle cx="150" cy="182" r="4.5" fill="var(--mark)" opacity="0.75"/>
+            <text x="100" y="186" fill="var(--ink-2)">RIVN</text>
+            <circle cx="286" cy="216" r="4" fill="var(--mark)" opacity="0.65"/>
+            <text x="298" y="220" fill="var(--ink-2)">DJT</text>
+            <circle cx="330" cy="252" r="4" fill="var(--mark)" opacity="0.65"/>
+            <text x="342" y="256" fill="var(--ink-2)">DB</text>
+            <circle cx="272" cy="286" r="4" fill="var(--mark)" opacity="0.6"/>
+            <text x="284" y="290" fill="var(--ink-2)">HD</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <p class="note">Divergence stops being a number: it is DISTANCE above the
+    "priced in" diagonal, and the violet region is where the product's whole
+    question lives. The rail keeps the ranked reading order and the click
+    targets. Honest costs: with the market closed the x-axis collapses and
+    the field degenerates to one column — it is a daytime surface; and it
+    replaces the whole list pane, not just the row.</p>
+</div>

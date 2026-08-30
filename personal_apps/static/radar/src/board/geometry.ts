@@ -73,6 +73,83 @@ export function chatterRuns(points: Point[], box: Box, yMax: number): string[] {
   return runs.map((run) => (run.includes('L') ? run : `${run}l0.01,0`))
 }
 
+/** The chatter line closed to the floor, one polygon per unbroken run.
+ *
+ *  The chart-row's violet body. Same runs discipline as `chatterRuns`: a
+ *  null hour breaks the shape, because filling across it would paint a
+ *  measurement nobody took. */
+export function chatterAreas(points: Point[], box: Box, yMax: number): string[] {
+  const top = Math.max(yMax, 1)
+  const floor = box.height - box.pad
+  const areas: string[] = []
+  let run: { x: number; y: number }[] = []
+
+  const flush = () => {
+    const first = run[0]
+    const last = run[run.length - 1]
+    if (first === undefined || last === undefined) return
+    // A one-point run still gets a sliver, matching chatterRuns' dot.
+    const x1 = run.length === 1 ? last.x + 0.5 : last.x
+    const line = run.map((p, i) =>
+      `${i ? 'L' : ''}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+    areas.push(`M${first.x.toFixed(1)},${floor.toFixed(1)} L${line}`
+      + ` L${x1.toFixed(1)},${floor.toFixed(1)} Z`)
+    run = []
+  }
+
+  points.forEach((point, index) => {
+    if (point.count === null) { flush(); return }
+    run.push({
+      x: xAt(index, points.length, box),
+      y: floor - (point.count / top) * plot(box) * (box.barBand ?? 1),
+    })
+  })
+  flush()
+  return areas
+}
+
+/** Where a chatter value sits on the shared y scale -- for the dashed
+ *  own-normal line the chart-row draws through its body. */
+export function chatterY(value: number, box: Box, yMax: number): number {
+  const top = Math.max(yMax, 1)
+  return box.height - box.pad - (value / top) * plot(box) * (box.barBand ?? 1)
+}
+
+/** SVG path segments for the price line, one per unbroken run of quotes.
+ *
+ *  Its own scale, min..max padded -- a stock does not trade down to zero
+ *  (see the axis note at the top of this file) -- and mapped into the upper
+ *  `band` share of the box so the line rides above the chatter body and the
+ *  two only meet where a spike actually meets a move. All-equal prices draw
+ *  a mid-band flat line rather than dividing by zero. */
+export function priceRuns(values: (number | null)[], box: Box,
+                          band = 0.55): string[] {
+  const seen = values.filter((v): v is number => v !== null)
+  if (!seen.length) return []
+  const min = Math.min(...seen)
+  const max = Math.max(...seen)
+  const span = max - min
+  const height = plot(box) * band
+  const runs: string[] = []
+  let current: string[] = []
+
+  values.forEach((value, index) => {
+    if (value === null) {
+      if (current.length) runs.push(current.join(' '))
+      current = []
+      return
+    }
+    const x = xAt(index, values.length, box)
+    const share = span === 0 ? 0.5 : (value - min) / span
+    const y = box.pad + (1 - share) * height
+    current.push(`${current.length ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`)
+  })
+  if (current.length) runs.push(current.join(' '))
+  // A lone quoted hour has no shape to contribute -- unlike the chatter
+  // sliver, a price dot at an arbitrary height only reads as a glitch.
+  return runs.filter((run) => run.includes('L'))
+}
+
 /** One bar per hour, for the lead chart. Unmeasured hours emit no bar. */
 export interface Bar { x: number; y: number; width: number; height: number; ratio: number }
 

@@ -200,6 +200,15 @@ export interface Row {
   baseline_days: number | null
   marks: Mark[]
   series: Point[]
+  /** Price per hour on the SAME grid as `series`; null is an hour nobody
+   *  priced, and the chart-row's line breaks there rather than flat-lining
+   *  through a stretch that was never quoted. */
+  price_series: (number | null)[]
+  /** The ticker's own normal chatter rate, mentions per hour, drawn as the
+   *  dashed line the chart-row measures "above normal" against. null when
+   *  the baseline is too thin to divide by -- phrasing.py's guard, decided
+   *  server-side like `ratio`. */
+  normal_per_hour: number | null
   /** Keyed by window length in hours, as a string: {"1": 3.1, "4": ...}. */
   triplet: Record<string, number | null>
   tone: Tone

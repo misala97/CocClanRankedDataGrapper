@@ -14,7 +14,8 @@ const row = (ticker: string, marks: Mark[]): Row => ({
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     tape_status: 'ok', score_eligible: true, score_term: 'divergence',
     is_fallback: false,
-  }, baseline_days: 2, marks, series: [],
+  }, baseline_days: 2, marks, series: [], price_series: [],
+  normal_per_hour: null,
   triplet: {}, tone: { bullish: 1, neutral: 1, bearish: 0 },
   clauses: [{ kind: 'ratio', text: '3.3x its normal' }],
 })
@@ -46,7 +47,7 @@ describe('a mark carried by every row', () => {
                  selected={false} suppress={['provisional']}
                  onSelect={() => {}} />)
 
-    const meta = container.querySelector('.meta')!.textContent!
+    const meta = container.querySelector('.flags')!.textContent!
     expect(meta).toContain('single-source')
     expect(meta).not.toContain('provisional')
   })
@@ -58,7 +59,7 @@ describe('a mark carried by every row', () => {
       <TickerRow session="regular" row={row('A', ['provisional'])} selected={false}
                  onSelect={() => {}} />)
 
-    expect(container.querySelector('.meta')!.textContent)
+    expect(container.querySelector('.flags')!.textContent)
       .toContain('provisional')
   })
 })
@@ -87,7 +88,7 @@ describe('warming-up, a second thin-baseline mark', () => {
       <TickerRow session="regular" row={row('A', ['warming-up'])} selected={false}
                  onSelect={() => {}} />)
 
-    expect(container.querySelector('.meta')!.textContent)
+    expect(container.querySelector('.flags')!.textContent)
       .toContain('warming-up')
   })
 })

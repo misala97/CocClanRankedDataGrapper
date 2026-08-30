@@ -111,9 +111,6 @@
   --r:      8px;
   --r-pill: 100px;
   --pad:    24px;
-  /* How far the row's magnitude axis runs. Fixed rather than a share of the
-     row, so the axis is the same length in a 420px pane and a 900px one. */
-  --axis:   176px;
 
   /* Exponential ease-out. Product motion is 150-220ms: the reader is mid-task
      and a transition they can watch is a transition that is too slow. */
@@ -211,27 +208,11 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-/* The row's share of the shared magnitude axis, typed.
-   ----------------------------------------------------------------------------
-   Registered rather than left as a plain custom property, and the difference
-   is whether it can move at all. An UNREGISTERED custom property has no type:
-   its value is a token stream, substituted into `transform: scaleX(var(--mag))`
-   at used-value time, and it does not interpolate -- so a transition declared
-   on the transform has nothing to animate between and the bar jumps. Given a
-   `<number>` syntax the property itself interpolates, and the transform
-   follows it continuously.
-
-   Found by trying to catch the transition in a browser and never seeing one
-   fire. It is worth saying that the case is rare: the magnitude ladder in
-   geometry.ts rounds to a coarse enough rung that most filter changes leave
-   the shared scale exactly where it was, so this moves only when the top of
-   the board genuinely changes size. Rare is not never, and a bar that
-   teleports on the one occasion it matters is the occasion that matters. */
-@property --mag {
-  syntax: '<number>';
-  inherits: true;
-  initial-value: 0;
-}
+/* Retired with the chart-row (2026-08-30): the magnitude bar this typed
+   property animated is gone -- "how far above its own normal" is drawn
+   inside each row's chart against its dashed normal line instead. The
+   registration lesson (unregistered custom properties do not interpolate)
+   is kept in git history at this spot. */
 
 body {
   margin: 0;
@@ -568,59 +549,31 @@ body {
    the board stays at full contrast. Measured with the attribute set: 9.15 /
    6.31 / 7.22:1 for the phrase, the meta line and the ticker -- identical to
    rest, where the 0.8 version had put the meta line at 3.98. */
-.rows[aria-busy="true"] .row::after,
-.rows[aria-busy="true"] .spark { opacity: 0.3; }
-.row::after, .r1 .spark { transition: opacity var(--base) var(--ease); }
+.rows[aria-busy="true"] .chart svg { opacity: 0.3; }
+.chart svg { transition: opacity var(--base) var(--ease); }
+
+/* --------------------------------------------------------- the chart-row --
+   A chart with a caption, not a paragraph with a sparkline (2026-08-30).
+   Grid: identity cap | the drawing | the figures. The violet body is 24h of
+   chatter, the dashed line is this ticker's own normal, and the price line
+   rides the upper band -- talk swelling while the line stays flat IS the
+   board's question, visible on every row. The magnitude bar and its shared
+   axis retired with the text row: "how far above its own normal" is now IN
+   the drawing, against the ticker's own dashed normal.
+   ========================================================================= */
 
 .row {
-  display: block; position: relative;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 118px;
+  column-gap: var(--s4);
+  align-items: center;
+  position: relative;
   flex: none;
-  padding: 9px var(--s6) 16px;
+  padding: 8px var(--s6);
   border-bottom: 1px solid var(--rule-soft);
   text-decoration: none; color: inherit;
-  /* `--mag` is transitioned on the ROW, not on the ::after that draws from
-     it: the custom property is what changes, and the transform reads it.
-     Transitioning the transform instead would depend on the pseudo-element
-     noticing a substituted value change, which is the thing that does not
-     work -- see the @property block at the top of this file. */
-  transition: background var(--fast) var(--ease),
-              --mag var(--base) var(--ease);
+  transition: background var(--fast) var(--ease);
 }
-
-/* The magnitude axis. Drawn as well as the mark: a bare bar left-aligned
-   under a left-aligned meta line read as an underline of that line, and with
-   its own extent and end tick visible it reads as what it is. */
-.row::before {
-  content: ""; position: absolute; left: var(--s6); bottom: 6px;
-  width: var(--axis); height: 5px;
-  border-bottom: 1px solid var(--rule);
-  border-right: 1px solid var(--rule);
-}
-/* Full width, scaled down -- not a computed width. Two reasons, and the
-   second is the point of the change:
-
-   `width` is a layout property and the browser lays the bar out again on
-   every frame of a change; `transform` is composited and does not touch
-   layout at all. And a transform can be transitioned honestly, so when the
-   ranking changes under a filter, the bar of a ticker that survived TRAVELS
-   to its new share of the axis instead of teleporting. The scale is shared
-   across the board, so a filter change moves every surviving bar at once and
-   the rearrangement becomes something the reader watches rather than
-   something they diff against their memory of the last screen.
-
-   Deliberately not animated on first paint. Growing thirteen bars from zero
-   on arrival is page-load choreography: it delays the board's shape by a
-   third of a second to show the reader something they did not ask to see.
-   The transition fires on CHANGE, which is when it carries information. */
-.row::after {
-  content: ""; position: absolute; left: var(--s6); bottom: 7px; height: 3px;
-  width: var(--axis);
-  transform: scaleX(var(--mag, 0));
-  transform-origin: left center;
-  background: var(--mark);
-}
-/* No baseline to measure against draws no scale at all. */
-.row.unmeasured::before, .row.unmeasured::after { content: none; }
 
 .row:hover { background: var(--mark-wash); }
 .row:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
@@ -629,81 +582,81 @@ body {
    divider, so the row and the panel it opened read as one continuous surface.
    Replaces a 3px left stripe, which said the same thing by decorating an edge. */
 .row.on { background: var(--bg); }
-.row.on .r1 { position: relative; }
-.row.on .r1::after {
+.row.on::after {
   content: ""; position: absolute;
-  top: -10px; bottom: -17px; right: -21px; width: 1px;
+  top: -1px; bottom: -1px; right: -1px; width: 1px;
   background: var(--bg);
 }
-/* Stacked layout has no divider to punch: the pseudo's 21px reach past the
-   pane edge was the only horizontal overflow on the page, and it put a
-   sideways scrollbar on .rows whenever a row was selected. Measured at 800
-   and 390. */
+/* Stacked layout has no divider to punch -- and the pseudo reaching past the
+   pane edge was the page's only horizontal overflow. Measured at 800 and 390. */
 @media (max-width: 900px) {
-  .row.on .r1::after { content: none; }
+  .row.on::after { content: none; }
 }
 .row.on .tk { color: var(--mark); }
 
-.r1 { display: flex; align-items: baseline; gap: var(--s3); line-height: 1.25; }
-.r1 .tk { font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.01em; }
-.r1 .nm {
-  flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted);
+.row .cap { min-width: 0; }
+.row .tk {
+  display: block; font-size: var(--t-lg); font-weight: 700;
+  letter-spacing: -0.01em; line-height: 1.2;
+}
+.row .nm {
+  display: block; font-size: var(--t-ax); color: var(--muted);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.r1 .spark { width: 56px; height: 17px; flex: none; opacity: 0.7; }
 
-/* The number the board is ORDERED by, at the end of the row's first line.
-   ----------------------------------------------------------------------------
+.row .chart { position: relative; height: 44px; }
+.row .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* The figures the drawing summarises. Tabular and right-aligned so the
+   score, ratio and price each form a column the eye can run down. */
+.row .facts {
+  text-align: right; font-variant-numeric: tabular-nums; line-height: 1.35;
+  min-width: 0;
+}
+/* The number the board is ORDERED by.
    Uncoloured, deliberately. It is not a price, and green or red on it would
-   read as a verdict on the ticker -- which is the one thing PRODUCT.md's scope
-   boundary forbids the surface implying. It is not violet either: violet is
-   chatter and selection, and this quantity is the RELATION between chatter and
-   price rather than either one.
-
-   Tabular figures and a fixed slot, because the entire point is comparing it
-   with the number on the row above. `flex: none` and a right-aligned box keep
-   the decimal points in a column no matter how long the company name is. */
-.r1 .score {
-  flex: none; margin-left: auto; text-align: right;
-  display: inline-flex; align-items: baseline; gap: 5px;
-  font-variant-numeric: tabular-nums;
+   read as a verdict on the ticker -- which is the one thing PRODUCT.md's
+   scope boundary forbids the surface implying. It is not violet either:
+   violet is chatter and selection, and this quantity is the RELATION between
+   chatter and price rather than either one. */
+.row .score {
+  display: block;
+  font-size: var(--t-md);
 }
-.r1 .score .k {
+.row .score .k {
   font-size: var(--t-ax); letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted); margin-right: 4px;
 }
-.r1 .score b {
-  font-size: var(--t-sm); font-weight: 650; color: var(--ink);
-  min-width: 4.2ch;
-}
+.row .score b { font-weight: 650; color: var(--ink); }
 .row.on .score b { color: var(--mark); }
-.row.on .spark { opacity: 1; }
 
-/* The phrase, styled per clause kind. The client never parses the text --
-   see features/radar/phrasing.py, which decides the wording. */
-.phr {
-  display: block; margin-top: var(--s1);
-  font-size: var(--t-md); line-height: 1.4; color: var(--ink-2);
-}
-.phr > span + span::before { content: " · "; color: var(--muted); opacity: 0.5; }
-.phr .c-ratio { color: var(--ink); font-weight: 650; }
-.phr .c-venues, .phr .c-people { color: var(--ink-2); }
-.phr .c-new { color: var(--mark); font-weight: 650; }
-.phr .c-warn { color: var(--warn); }
-.phr .c-price-up { color: var(--up); font-weight: 650; }
-.phr .c-price-down { color: var(--down); font-weight: 650; }
-.phr .c-price-flat { color: var(--muted); }
+.row .fig { display: block; font-size: var(--t-xs); color: var(--ink-2); }
+.row .fig .up { color: var(--up); font-weight: 600; }
+.row .fig .down { color: var(--down); font-weight: 600; }
+.row .fig .warn { color: var(--warn); font-weight: 600; }
 
-.row .meta {
-  display: block; margin-top: 3px; font-size: var(--t-xs); color: var(--muted);
+.row .sub {
+  display: block; font-size: var(--t-ax); color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.row .meta .mark { color: var(--warn); }
+/* A caution -- narrow breadth, a deviant quote, a mark. Amber, load-bearing:
+   PRODUCT.md forbids hiding what makes a number unreliable. */
+.row .sub.warn { color: var(--warn); font-weight: 600; }
+
+/* Marks and deviant quote facts, full width under the drawing: crammed into
+   the facts column they truncated, and a caution the reader cannot finish
+   reading is not a caution. Present only when there is something to say. */
+.row .flags {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  font-size: var(--t-ax); color: var(--warn); font-weight: 600;
+  text-align: right;
+}
 
 /* The source, session and freshness of a quote are a single semantic unit.
    The compact list keeps it inline; detail lets the same component wrap and
    makes room for both move baselines. */
 .quote-badges { display: inline-flex; flex-wrap: wrap; gap: var(--s1); align-items: center; }
-.row .meta > .quote-badges::before { content: " · "; color: var(--muted); }
 .quote-source, .quote-session, .quote-quality, .quote-tape, .quote-move {
   display: inline-flex; align-items: center; gap: 3px;
   font-variant-numeric: tabular-nums;

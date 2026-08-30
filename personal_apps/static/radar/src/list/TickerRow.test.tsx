@@ -24,7 +24,8 @@ const row = (over: Partial<Row> = {}): Row => ({
   authors: 11,
   text_ratio: 0.9, sources: ['bluesky', 'fourchan'], price: 0.31,
   price_move: 0.182, direction: 'up', price_status: 'ok', baseline_days: 2,
-  marks: [], series: [], triplet: {},
+  marks: [], series: [], price_series: [], normal_per_hour: null,
+  triplet: {},
   tone: { bullish: 1, neutral: 1, bearish: 0 },
   clauses: [{ kind: 'ratio', text: '40x its normal' },
             { kind: 'venues', text: '2 venues' }],
@@ -32,25 +33,36 @@ const row = (over: Partial<Row> = {}): Row => ({
 })
 
 describe('a ticker row', () => {
-  it('renders the phrase the server wrote', () => {
+  it('summarises the finding in the facts column', () => {
+    /* The sentence moved to the panel with the chart-row; the row keeps the
+       short figures. 284/7 rounds past ten, so no decimal survives. */
     render(<TickerRow session="regular" row={row()} selected={false} onSelect={() => {}} />)
 
-    expect(screen.getByText('40x its normal')).toBeInTheDocument()
+    expect(screen.getByText(/41×/)).toBeInTheDocument()
     expect(screen.getByText('2 venues')).toBeInTheDocument()
   })
 
-  it('styles each clause by its kind, never by parsing the text', () => {
-    /* The contract with phrasing.py. A component that decided "this looks
-       like a price" from the string would be a second implementation of a
-       judgement the server already made. */
-    const { container } = render(
+  it('takes the move verdict from the clause kind, never from the text', () => {
+    /* The contract with phrasing.py survives the chart-row: whether a move
+       is worth stating, and which way it went, is the price clause's KIND.
+       The row formats digits from price_move but renders nothing when the
+       server sent no price clause. */
+    const { container, rerender } = render(
       <TickerRow session="regular" selected={false} onSelect={() => {}} row={row({
+        price_move: -0.07,
         clauses: [{ kind: 'warn', text: 'one venue only' },
                   { kind: 'price-down', text: 'price -7%' }],
       })} />)
 
-    expect(container.querySelector('.c-warn')).toHaveTextContent('one venue only')
-    expect(container.querySelector('.c-price-down')).toHaveTextContent('price -7%')
+    expect(container.querySelector('.facts .down')).toHaveTextContent('7.0%')
+    expect(container.querySelector('.sub.warn')).toHaveTextContent('one venue only')
+
+    rerender(
+      <TickerRow session="regular" selected={false} onSelect={() => {}} row={row({
+        price_move: -0.07, clauses: [{ kind: 'ratio', text: '40x its normal' }],
+      })} />)
+    // Same number, no clause: the server judged it not worth stating.
+    expect(container.querySelector('.facts .down')).toBeNull()
   })
 
   it('never renders a ratio against a zero baseline', () => {
@@ -65,8 +77,8 @@ describe('a ticker row', () => {
     })} />)
 
     expect(screen.queryByText(/0 typical/)).not.toBeInTheDocument()
-    expect(screen.getByText(/nothing to compare against yet/))
-      .toBeInTheDocument()
+    // ratio null -> the guard's wording, not a number the client re-divided.
+    expect(screen.getByText('new here')).toBeInTheDocument()
   })
 
   it('reports selection by ticker without navigating', async () => {
@@ -107,38 +119,65 @@ describe('a ticker row', () => {
       .toHaveAttribute('aria-current', 'true')
   })
 
-  it('marks a US fallback without hiding its currency', () => {
-    render(<TickerRow session="regular" selected={false} onSelect={() => {}}
-                      row={row({ quote: quote({ is_fallback: true }) })} />)
-
-    expect(screen.getByText('US fallback · Nasdaq · USD')).toBeVisible()
-  })
-
-  it('names delayed, EOD, and stale quote states', () => {
+  it('marks a deviant US fallback, and stays quiet when the header already said it', () => {
+    /* The badge essay ("US fallback · NYSE · USD") died with the chart-row.
+       A fallback row on a mostly-live board says so in two words; on the
+       all-fallback German board the header says it once and the row adds
+       nothing (quoteSuppress, from universalQuoteFacts). */
     const { rerender } = render(
       <TickerRow session="regular" selected={false} onSelect={() => {}}
-                 row={row({ quote: quote({ quality: 'delayed', age_seconds: 720 }) })} />)
-    expect(screen.getByText('12 min delayed')).toBeVisible()
+                 row={row({ quote: quote({ is_fallback: true }) })} />)
+    expect(screen.getByText(/US price/)).toBeVisible()
+
+    rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
+                        quoteSuppress={['fallback']}
+                        row={row({ quote: quote({ is_fallback: true }) })} />)
+    expect(screen.queryByText(/US price/)).toBeNull()
+  })
+
+  it('warns about stale, EOD, and unavailable quotes in a human unit', () => {
+    /* "2740 min stale" asked the reader to finish a subtraction. Delayed is
+       deliberately absent: a 15-minute provider delay is this feed's normal
+       operating state, not a caution -- the panel still details it. */
+    const { rerender } = render(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 row={row({ quote: quote({ quality: 'stale', age_seconds: 164600 }) })} />)
+    expect(screen.getByText(/quote 45h old/)).toBeVisible()
 
     rerender(
       <TickerRow session="regular" selected={false} onSelect={() => {}}
                  row={row({ quote: quote({ quality: 'eod' }) })} />)
-    expect(screen.getByText(/EOD · 22\. Aug\. 2026/)).toBeVisible()
+    expect(screen.getByText(/EOD quote/)).toBeVisible()
 
     rerender(
       <TickerRow session="regular" selected={false} onSelect={() => {}}
-                 row={row({ quote: quote({ quality: 'stale', age_seconds: 720 }) })} />)
-    expect(screen.getByText('12 min stale')).toBeVisible()
+                 row={row({ quote: quote({ quality: 'unavailable' }) })} />)
+    expect(screen.getByText(/no live quote/)).toBeVisible()
+
+    rerender(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 row={row({ quote: quote({ quality: 'delayed', age_seconds: 720 }) })} />)
+    expect(screen.queryByText(/delayed/)).toBeNull()
   })
 
-  it('names a fallback row\'s own after-hours session', () => {
-    /* Germany's board can be regular while an individual US fallback is in
-       after-hours.  Its explanation must follow the quote, not the board. */
-    render(<TickerRow session="regular" selected={false} onSelect={() => {}}
-                      row={row({ quote: quote({ is_fallback: true,
-                                                 session: 'afterhours' }) })} />)
+  it('draws honest chart runs: a gap splits the area, and no prices means no line', () => {
+    /* The chart inherits the sparkline's discipline -- a null hour breaks
+       the shape rather than being interpolated -- and a payload with nothing
+       priced draws no price line at all. */
+    const hours = (counts: (number | null)[]) => counts.map((count, i) => ({
+      hour: `2026-08-30T0${i}:00:00Z`, count,
+    }))
+    const { container } = render(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 row={row({ series: hours([2, 5, null, 4, 1]),
+                            price_series: [null, null, null, null, null],
+                            normal_per_hour: 1.5 })} />)
 
-    expect(screen.getByText('After hours')).toBeVisible()
+    const areas = container.querySelectorAll('path[fill="var(--mark-soft)"]')
+    expect(areas).toHaveLength(2)
+    // the dashed own-normal line plus the floor
+    expect(container.querySelectorAll('line')).toHaveLength(2)
+    expect(container.querySelector('path[stroke="var(--up)"]')).toBeNull()
   })
 
   it('explains ranking from the row\'s own session', () => {

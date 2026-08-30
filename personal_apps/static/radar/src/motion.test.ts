@@ -23,32 +23,14 @@ import css from '../radar.css?raw'
  *  that also appears in the prose explaining it. */
 const rules = css.replace(/\/\*[\s\S]*?\*\//g, '')
 
-describe('the magnitude bar can actually move', () => {
-  it('registers --mag so it interpolates', () => {
-    // Without the @property block `--mag` is an untyped token stream. It
-    // substitutes into `scaleX(var(--mag))` fine, so the board looks correct
-    // and every screenshot passes -- but the value cannot interpolate, so the
-    // bar teleports instead of travelling and the transition below silently
-    // does nothing. Confirmed both ways in Chromium.
-    expect(rules).toMatch(/@property\s+--mag\s*\{/)
-    expect(rules).toMatch(/syntax:\s*'<number>'/)
-  })
-
-  it('transitions --mag on the row, not the transform on its ::after', () => {
-    // The custom property is what changes; the pseudo-element's transform
-    // only reads it. A transition declared on the transform depends on the
-    // pseudo-element noticing a substituted value change, which is the thing
-    // that does not work.
-    const row = rules.match(/\n\.row \{[^}]*\}/)?.[0] ?? ''
-    expect(row).toContain('--mag var(--base)')
-    // The pseudo-element may transition its own opacity -- it recedes with
-    // the sparkline while a new board is in flight. What it must not do is
-    // try to transition the transform, which is the approach that silently
-    // did nothing.
-    const after = rules.match(/\.row::after[^{]*\{[^}]*\}/g) ?? []
-    for (const rule of after) {
-      expect(rule, rule).not.toMatch(/transition:[^;]*transform/)
-    }
+describe('the busy board recedes without dimming text', () => {
+  it('quiets the chart drawing, not the words beside it', () => {
+    // The magnitude bar this block used to police retired with the
+    // chart-row (2026-08-30); what recedes while a new board is in flight
+    // is the chart SVG, which carries no text and so cannot fail the 4.5:1
+    // floor the old opacity-on-everything version failed.
+    expect(rules).toMatch(
+      /\.rows\[aria-busy="true"\] \.chart svg \{[^}]*opacity/)
   })
 })
 
@@ -96,7 +78,10 @@ describe('accessibility contracts in the stylesheet', () => {
     // caused it, and it is easy to reintroduce because it looks like a
     // hierarchy decision rather than a contrast one.
     const rule = rules.match(
-      /\.seg button\[aria-pressed="true"\] \.n \{[^}]*\}/)?.[0] ?? ''
+      /\.t\[aria-pressed="true"\] \.n \{[^}]*\}/)?.[0] ?? ''
+    // A vacuous match would pass on an empty string; pin that the selector
+    // still exists before checking what it avoids.
+    expect(rule).not.toBe('')
     expect(rule).not.toContain('opacity')
   })
 
