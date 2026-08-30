@@ -45,11 +45,10 @@ const SEGMENT_LABELS: Record<string, string> = {
   fund: 'Funds',
 }
 
-/** Size order, with the two that are not sizes last. `small` leads because it
- *  is what the board opens on and what it is for; `all` sits beside it as the
- *  way back out. The three it covers stay listed -- Small is a shortcut to the
- *  common reading, not a replacement for reading them apart. */
-export const SEGMENT_ORDER = ['small', 'all', 'large', 'mid', 'micro',
+/** All first as the way out of any filter, then the sizes descending, then
+ *  the three that are not sizes. Michi's order, 2026-08-30 -- it replaced a
+ *  small-leads arrangement; descending cap is how he scans the strip. */
+export const SEGMENT_ORDER = ['all', 'large', 'mid', 'small', 'micro',
                               'recent_ipo', 'unknown', 'fund']
 
 export function segmentLabel(key: string): string {
