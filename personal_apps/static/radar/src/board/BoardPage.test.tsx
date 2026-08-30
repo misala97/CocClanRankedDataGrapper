@@ -36,6 +36,8 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
+    market_venue: 'US markets', next_boundary_label: 'closes',
+    next_boundary_at: '2026-08-22T20:00:00Z',
     sources: ['bluesky', 'fourchan', 'reddit'],
     all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,
@@ -259,6 +261,32 @@ describe('the controls', () => {
     expect(window.location.search).toContain('window=4')
     expect(screen.getByRole('button', { name: '1M' }))
       .toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps the selected company when the other market board omits it', async () => {
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+    await userEvent.click(screen.getByRole('link', { name: /BBB/ }))
+
+    stubFetch(payload({ market: 'de', market_venue: 'Xetra',
+      rows: [row({ ticker: 'AAA' })] }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+
+    await waitFor(() => expect(window.location.search).toContain('t=BBB'))
+    expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+      .some((url) => url.includes('/api/ticker/BBB?') && url.includes('market=de')))
+      .toBe(true)
+  })
+
+  it('names the venue, session, and next boundary in the header', () => {
+    render(<BoardPage initial={payload({
+      market: 'de', market_venue: 'Xetra', session: 'regular',
+      next_boundary_label: 'closes',
+      next_boundary_at: '2026-08-28T15:30:00Z',
+    })} />)
+
+    expect(screen.getByText('Xetra · regular · closes 17:30'))
+      .toBeInTheDocument()
   })
 
   it('refetches and rewrites the address bar when a source is dropped', async () => {

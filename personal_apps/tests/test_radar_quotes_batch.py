@@ -194,3 +194,24 @@ def test_primary_mic_us_batches_read_the_null_legacy_identity(ctx):
     assert status == 'stale'
     assert latest.market is None and latest.mic is None
     assert move == decimal.Decimal('0.1')
+
+
+def test_mixed_legacy_and_primary_rows_are_merged_in_global_time_order(ctx):
+    """Identity grouping must not make an older explicit row look newest."""
+    ticker = f'{PREFIX}MERGED'
+    samples = (
+        (NOW - dt.timedelta(minutes=50), None, None, '100'),
+        (NOW - dt.timedelta(minutes=40), 'us', 'XNAS', '110'),
+        (NOW - dt.timedelta(minutes=30), None, None, '120'),
+    )
+    for when, market, mic, price in samples:
+        db.session.add(RadarQuote(
+            ticker=ticker, market=market, mic=mic, fetched_at=when,
+            quote_ts=when, price=decimal.Decimal(price),
+            prev_close=decimal.Decimal('100')))
+    db.session.commit()
+
+    move = quotes_mod.moves_for(
+        [(ticker, 'us', 'XNAS')], 1, NOW)[(ticker, 'us')]
+
+    assert move == decimal.Decimal('0.2')

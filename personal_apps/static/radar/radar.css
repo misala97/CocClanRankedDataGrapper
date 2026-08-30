@@ -394,6 +394,10 @@ body {
   margin: 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.015em;
 }
 .brand .state { font-size: var(--t-xs); color: var(--muted); }
+.market-context {
+  margin: 7px 0 0; font-size: var(--t-xs); color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 /* Amber for the fact, not for the timestamp carrying it. */
 .brand .state b { color: var(--warn); font-weight: 600; }
 
@@ -946,6 +950,14 @@ body {
   .pxchart { min-width: 620px; height: auto; }
   .pxchart .ax { font-size: 15.5px; }
   .panhint { display: block; }
+  /* A price and its quote labels need their own full-width lane here. Keeping
+     them beside a long issuer name clipped the right edge at 390px. */
+  .ident { flex-wrap: wrap; }
+  .ident > :first-child { min-width: 0; flex: 1 1 14ch; }
+  .ident .px {
+    flex-basis: 100%; margin-left: 0; text-align: left;
+  }
+  .ident .px .quote-badges, .ident .px .quote-moves { justify-content: flex-start; }
 }
 
 /* ------------------------------------------------------ the breakdown ---- */

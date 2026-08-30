@@ -26,7 +26,7 @@ commit, and independent read-only review acceptance.
 | 7 | Market selection and Berlin formatting | complete | `55c8392`, `f58d413` | accepted after fix round 1 |
 | 8 | Quote/session/fallback presentation | complete | `27c39e8`, `aee5e507` | accepted after fix round 1 |
 | 9 | Chart session bands | complete | `28e65f9`, `73464ba` | accepted after fix round 1 |
-| 10 | Full verification and integration handoff | verification complete; independent review pending | — | pending parent-dispatched whole-branch review |
+| 10 | Full verification and integration handoff | final-review fixes committed; parent integration decision pending | final-review fix commit | accepted findings fixed; no new review dispatched |
 
 ## Baseline evidence — 2026-08-28
 
@@ -73,10 +73,24 @@ commit, and independent read-only review acceptance.
 - No open Task 1 findings. Continue with Task 2 only after preserving the
   Task 1 compatibility rules in later writer/key work.
 
+## Final-review remediation — 2026-08-30
+
+- The parent-dispatched whole-branch review returned 10 Important and 2 Minor
+  findings. The tracked fix wave persists provider quality, uses primary-MIC
+  US history, derives quote session/baselines from quote timestamps, validates
+  MIC-qualified Twelve Data snapshots, contains malformed per-symbol payloads,
+  derives sigma from the selected quote identity, retains a market-switched
+  ticker, orders/coalesces mixed snapshots, renders venue/session/boundary
+  context, and avoids 390px identity-price clipping.
+- Fresh verification: isolated schema-created 39-file Radar gate **756 passed
+  in 45.87s**; frontend **403 general + 165 Radar passed**; `npm run build`
+  passed. The disposable database was dropped afterwards. Ignored frontend
+  stdout is retained under `.artifacts/radar-german-market/` only.
+
 ## Immediate next action
 
-Dispatch the independent whole-branch read-only review. Do not merge, push, or
-deploy until it is clean and a final integration decision is made.
+Parent should inspect the final-review fix commit and make the integration
+decision. Do not merge, push, or deploy from this task.
 
 ## Task 10 verification evidence — 2026-08-30
 

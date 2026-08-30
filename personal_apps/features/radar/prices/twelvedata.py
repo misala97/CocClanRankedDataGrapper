@@ -73,6 +73,45 @@ class TwelveDataProvider:
         # Newest first on the wire; volatility wants chronological order.
         return sorted(closes)
 
+    def _quote(self, symbol, mic_code=None):
+        params = {'symbol': symbol}
+        if mic_code is not None:
+            params['mic_code'] = mic_code
+        try:
+            payload = self._http.get('/quote', params)
+        except PriceUnavailable:
+            return None
+        if (not isinstance(payload, dict) or
+                payload.get('status') not in (None, 'ok')):
+            return None
+        if payload.get('symbol') not in (None, symbol):
+            return None
+        if payload.get('mic_code') not in (None, mic_code):
+            return None
+        try:
+            price = decimal.Decimal(str(payload['close']))
+            previous_close = (
+                decimal.Decimal(str(payload['previous_close']))
+                if payload.get('previous_close') is not None else None)
+            regular_close = (
+                decimal.Decimal(str(payload['regular_close']))
+                if payload.get('regular_close') is not None else None)
+            stamp = payload.get('timestamp')
+            quote_ts = (dt.datetime.fromtimestamp(
+                int(stamp), dt.timezone.utc).replace(tzinfo=None)
+                if stamp else None)
+        except (KeyError, TypeError, ValueError, OSError,
+                decimal.InvalidOperation):
+            return None
+        if not price:
+            return None
+        return Quote(
+            ticker=symbol, provider_symbol=symbol,
+            mic=mic_code or 'XNAS', provider_mic=mic_code,
+            price=price, previous_close=previous_close,
+            regular_close=regular_close, quote_ts=quote_ts,
+            currency=payload.get('currency') or '', provider_delay='delayed')
+
     def quotes(self, symbols):
         """Current snapshots keyed by provider symbol.
 
@@ -81,37 +120,18 @@ class TwelveDataProvider:
         """
         found = {}
         for symbol in symbols:
-            try:
-                payload = self._http.get('/quote', {'symbol': symbol})
-            except PriceUnavailable:
-                continue
-            if (not isinstance(payload, dict) or
-                    payload.get('status') not in (None, 'ok')):
-                continue
-            try:
-                price = decimal.Decimal(str(payload['close']))
-            except (KeyError, decimal.InvalidOperation):
-                continue
-            if not price:
-                continue
-            stamp = payload.get('timestamp')
-            quote_ts = None
-            if stamp:
-                try:
-                    quote_ts = dt.datetime.fromtimestamp(
-                        int(stamp), dt.timezone.utc).replace(tzinfo=None)
-                except (TypeError, ValueError, OSError):
-                    pass
-            found[symbol] = Quote(
-                ticker=symbol, price=price,
-                previous_close=(decimal.Decimal(str(payload['previous_close']))
-                                if payload.get('previous_close') is not None else None),
-                # This is not ``previous_close``: after-hours movement needs
-                # the same-day regular-session close when the feed supplies it.
-                regular_close=(decimal.Decimal(str(payload['regular_close']))
-                               if payload.get('regular_close') is not None else None),
-                quote_ts=quote_ts, currency=payload.get('currency') or '',
-                provider_delay='delayed')
+            quote = self._quote(symbol)
+            if quote is not None:
+                found[symbol] = quote
+        return found
+
+    def quotes_for_instruments(self, instruments):
+        """MIC-qualified snapshots keyed by the requested provider symbol."""
+        found = {}
+        for instrument in instruments:
+            quote = self._quote(instrument.provider_symbol, instrument.mic)
+            if quote is not None:
+                found[instrument.provider_symbol] = quote
         return found
 
     def stock_catalog(self, mic_code):

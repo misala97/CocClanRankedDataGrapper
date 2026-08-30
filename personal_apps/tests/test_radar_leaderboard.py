@@ -12,7 +12,8 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from models import RadarBucketSource, RadarInstrument, RadarQuote, TickerUniverse
+from models import (RadarBucketSource, RadarDailyClose, RadarInstrument,
+                    RadarQuote, TickerUniverse)
 from features.radar import leaderboard
 from features.radar.config import source_config_version
 from test_radar_journal import _row, _ALL_OK, clean_buckets, clean_events  # noqa: F401
@@ -44,7 +45,7 @@ def board():
         # here too, so this table needs the same LB* cleanup as the others.
         RadarMentionEvent.query.filter(
             RadarMentionEvent.ticker.like('LB%')).delete(synchronize_session=False)
-        for model in (RadarBucketSource, RadarInstrument, RadarQuote):
+        for model in (RadarBucketSource, RadarDailyClose, RadarInstrument, RadarQuote):
             model.query.filter(model.ticker.like('LB%')).delete(
                 synchronize_session=False)
         TickerUniverse.query.filter(TickerUniverse.symbol.like('LB%')).delete(
@@ -142,6 +143,32 @@ def test_eod_german_quote_cannot_produce_divergence(board):
     row = build_rows(['bluesky'], NOW, market='de')[0]
 
     assert row.quote.quality == 'eod'
+    assert row.divergence is None
+
+
+def test_german_quote_does_not_use_the_us_cached_sigma(board):
+    """No Xetra close history means no German volatility opinion."""
+    ticker = 'LBDESIG'
+    universe_row(ticker)
+    scored(ticker)
+    profile = TickerUniverse.query.filter_by(symbol=ticker).one()
+    profile.daily_sigma = 0.01
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+        provider_symbol=ticker, currency='EUR', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW))
+    for minutes, price in ((30, '100'), (5, '101')):
+        when = NOW - dt.timedelta(minutes=minutes)
+        db.session.add(RadarQuote(
+            ticker=ticker, market='de', mic='XETR', currency='EUR',
+            provider_symbol=ticker, fetched_at=when, quote_ts=when,
+            price=decimal.Decimal(price), prev_close=decimal.Decimal('100')))
+    db.session.commit()
+
+    row = build_rows(['bluesky'], NOW, market='de')[0]
+
+    assert row.quote.market == 'de'
+    assert row.price_move == decimal.Decimal('0.01')
     assert row.divergence is None
 
 

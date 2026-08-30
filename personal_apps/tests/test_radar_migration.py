@@ -47,6 +47,16 @@ def _load_regular_close_migration():
     return module
 
 
+def _load_quote_quality_migration():
+    path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
+            'd0a4b9c72e11_add_radar_quote_provider_delay.py')
+    assert path.exists(), 'quote-provider-delay migration is missing'
+    spec = importlib.util.spec_from_file_location('radar_quote_provider_delay', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 @pytest.fixture()
 def market_migration_db():
     """A real isolated schema, never the configured development database."""
@@ -301,6 +311,44 @@ def test_regular_close_migration_keeps_mixed_version_quote_writes_valid(
 
     migration.downgrade()
     assert 'regular_close' not in {
+        column['name'] for column in sa.inspect(connection).get_columns(
+            'radar_quotes')}
+    assert connection.execute(sa.text(
+        "SELECT count(*) FROM radar_quotes WHERE id=2")).scalar_one() == 1
+
+
+def test_quote_quality_migration_preserves_old_rows_and_accepts_new_quality(
+        market_migration_db):
+    connection = market_migration_db
+    market = _load_market_migration()
+    market.op = Operations(MigrationContext.configure(connection))
+    market.upgrade()
+    keys = _load_market_key_migration()
+    keys.op = Operations(MigrationContext.configure(connection))
+    keys.upgrade()
+    regular_close = _load_regular_close_migration()
+    regular_close.op = Operations(MigrationContext.configure(connection))
+    regular_close.upgrade()
+    quality = _load_quote_quality_migration()
+    quality.op = Operations(MigrationContext.configure(connection))
+
+    quality.upgrade()
+
+    assert connection.execute(sa.text(
+        "SELECT provider_delay FROM radar_quotes WHERE id=1")).scalar_one() is None
+    connection.execute(sa.text("""
+        INSERT INTO radar_quotes
+            (id, ticker, market, mic, fetched_at, quote_ts, price, provider_delay)
+        VALUES
+            (2, 'QUALITY', 'de', 'XETR', '2026-08-28 12:05:00',
+             '2026-08-28 12:04:00', 194.3, 'eod')
+    """))
+    connection.commit()
+    assert connection.execute(sa.text(
+        "SELECT provider_delay FROM radar_quotes WHERE id=2")).scalar_one() == 'eod'
+
+    quality.downgrade()
+    assert 'provider_delay' not in {
         column['name'] for column in sa.inspect(connection).get_columns(
             'radar_quotes')}
     assert connection.execute(sa.text(

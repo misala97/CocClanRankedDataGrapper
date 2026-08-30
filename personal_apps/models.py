@@ -838,6 +838,9 @@ class RadarQuote(db.Model):
     # The current regular-session close is distinct from the previous close:
     # after-hours movement is measured from this same-day baseline.
     regular_close = db.Column(db.Numeric(18, 6), nullable=True)
+    # Provider-declared provenance, distinct from age-derived ``stale``.
+    # Nullable for snapshots written before this field was deployed.
+    provider_delay = db.Column(db.String(8), nullable=True)
     volume      = db.Column(db.BigInteger, nullable=True)
 
 

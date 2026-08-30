@@ -32,7 +32,7 @@ from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
 from . import leaderboard, phrasing
-from .market_calendars import session_state
+from .market_calendars import session_bounds, session_state
 from .config import (SEGMENT_GROUPS, VARIANCE_FLOOR, expand_sources,
                      expand_sources_for_history, segments_in)
 
@@ -96,6 +96,9 @@ class Board:
     sources: list
     market: str
     display_timezone: str
+    market_venue: str
+    next_boundary_label: str
+    next_boundary_at: dt.datetime
     # Several, and a union. Empty means no filter.
     segments: list
     window_hours: int
@@ -118,6 +121,31 @@ class Board:
 
 def _hour_floor(when):
     return when.replace(minute=0, second=0, microsecond=0)
+
+
+def _next_boundary(market, now, session):
+    """The selected market's next meaningful open/close in aware UTC."""
+    aware_now = now.replace(tzinfo=dt.timezone.utc)
+    bounds = session_bounds(market, aware_now)
+    if session == 'premarket':
+        return 'opens', bounds.regular_opens_at
+    if session == 'regular':
+        return 'closes', bounds.regular_closes_at
+    if session == 'afterhours':
+        return 'closes', bounds.closes_at
+
+    # Before the local premarket opens, the current calendar day is useful.
+    if (bounds.opens_at > aware_now and
+            session_state(market, bounds.opens_at) == 'premarket'):
+        return 'opens', bounds.opens_at
+    # Nights, weekends and closures need the next actual trading day rather
+    # than a calendar date that happens to contain no session.
+    for days in range(1, 8):
+        candidate = aware_now + dt.timedelta(days=days)
+        future = session_bounds(market, candidate)
+        if session_state(market, future.opens_at) == 'premarket':
+            return 'opens', future.opens_at
+    raise RuntimeError(f'no trading boundary found for {market}')
 
 
 def _covered_hours(sources, since, now):
@@ -287,6 +315,7 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     selected segment's size in every slot.
     """
     session = session_state(market, now.replace(tzinfo=dt.timezone.utc))
+    boundary_label, boundary_at = _next_boundary(market, now, session)
     ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
                                      segments=(), limit=None, market=market)
     ranked = ranking.rows
@@ -342,6 +371,8 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
 
     return Board(generated_at=now, sources=list(sources), market=market,
                  display_timezone='Europe/Berlin',
+                 market_venue='Xetra' if market == 'de' else 'US markets',
+                 next_boundary_label=boundary_label, next_boundary_at=boundary_at,
                   segments=list(segments),
                  window_hours=window_hours, segment_counts=segment_counts,
                  rows=rows, session=session, venue_counts=venue_counts,

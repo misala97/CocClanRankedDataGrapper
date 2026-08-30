@@ -51,6 +51,8 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
+    market_venue: 'US markets', next_boundary_label: 'closes',
+    next_boundary_at: '2026-08-22T20:00:00Z',
     sources: ['bluesky', 'fourchan', 'reddit'],
     all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,

@@ -258,6 +258,29 @@ def test_radar_quote_regular_close_round_trips_in_isolated_schema():
     engine.dispose()
 
 
+def test_radar_quote_provider_delay_round_trips_in_isolated_schema():
+    """Stored snapshots retain whether the provider called them delayed or EOD."""
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    models.RadarQuote.__table__.create(engine)
+
+    with sa.orm.Session(engine) as session:
+        quote = models.RadarQuote(
+            id=1, ticker='QUALITY', market='de', mic='XETR', currency='EUR',
+            provider_symbol='QUALITY', fetched_at=dt.datetime(2026, 8, 28),
+            quote_ts=dt.datetime(2026, 8, 28), price=102,
+            provider_delay='eod')
+        session.add(quote)
+        session.commit()
+        session.expire(quote)
+        assert quote.provider_delay == 'eod'
+
+    engine.dispose()
+
+
 def test_radar_instrument_assigns_an_id_with_sqlite_orm_persistence():
     """SQLite requires INTEGER, not BIGINT, for automatic primary-key IDs."""
     engine = sa.create_engine('sqlite://')

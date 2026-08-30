@@ -36,6 +36,7 @@ def record_quotes(quotes, now):
             ticker=quote.ticker, fetched_at=now, quote_ts=quote.quote_ts,
             price=quote.price, prev_close=quote.prev_close,
             regular_close=quote.regular_close,
+            provider_delay=quote.provider_delay,
             volume=quote.volume, market=quote.market, mic=quote.mic,
             currency=quote.currency, provider_symbol=quote.provider_symbol))
         written += 1
@@ -60,8 +61,9 @@ def _stored_quote(row, instrument, market):
     # The transitional snapshot table predates a provider-quality column.  A
     # print from an earlier UTC date is therefore an EOD retention, not a
     # delayed intraday quote merely because the poll that kept it ran recently.
-    provider_delay = ('eod' if row.quote_ts is not None and
-                      row.quote_ts.date() < row.fetched_at.date() else 'live')
+    provider_delay = getattr(row, 'provider_delay', None) or (
+        'eod' if row.quote_ts is not None and
+        row.quote_ts.date() < row.fetched_at.date() else 'live')
     return Quote(
         ticker=row.ticker, market=market,
         venue=(instrument.venue if instrument else ('US' if is_us else 'Xetra')),
@@ -355,7 +357,8 @@ def moves_for(instruments, hours, now):
     if 'us' in markets:
         market_clause = sa.or_(market_clause, RadarQuote.market.is_(None))
     rows = (db.session.query(RadarQuote.ticker, RadarQuote.market,
-                             RadarQuote.mic, RadarQuote.price)
+                             RadarQuote.mic, RadarQuote.fetched_at,
+                             RadarQuote.price)
             .filter(RadarQuote.ticker.in_(tickers),
                     market_clause,
                     RadarQuote.fetched_at >= since,
@@ -364,8 +367,8 @@ def moves_for(instruments, hours, now):
                       RadarQuote.fetched_at.asc()).all())
 
     prices = collections.defaultdict(list)
-    for ticker, market, mic, price in rows:
-        prices[(ticker, market, mic)].append(price)
+    for ticker, market, mic, fetched_at, price in rows:
+        prices[(ticker, market, mic)].append((fetched_at, price))
 
     result = {}
     for ticker, market, mic, key in identities:
@@ -375,8 +378,16 @@ def moves_for(instruments, hours, now):
                     not _stored_identity_matches(
                         stored_market, stored_mic, market, mic)):
                 continue
-            matching.extend(values)
-        result[key] = _move_from(matching)
+            priority = int(stored_market == market and
+                           (mic is None or stored_mic == mic))
+            matching.extend((when, priority, price) for when, price in values)
+        # Mixed-version overlap can hold legacy NULL and primary-MIC rows at
+        # the same instant. Coalesce that instant in favour of the explicit
+        # identity, then measure the globally chronological series.
+        by_instant = {}
+        for when, _, price in sorted(matching, key=lambda item: (item[0], item[1])):
+            by_instant[when] = price
+        result[key] = _move_from([by_instant[when] for when in sorted(by_instant)])
     return result
 
 

@@ -77,29 +77,29 @@ class FinnhubProvider:
             except PriceUnavailable:
                 continue
 
-            price = _decimal(payload.get('c'))
-            # Finnhub answers c=0 for an unknown symbol rather than erroring.
-            if not price:
-                continue
+            try:
+                price = _decimal(payload.get('c'))
+                # Finnhub answers c=0 for an unknown symbol rather than erroring.
+                if not price:
+                    continue
 
-            stamp = payload.get('t')
-            found[symbol] = Quote(
-                ticker=symbol,
-                price=price,
-                prev_close=_decimal(payload.get('pc')),
-                # Do not substitute ``pc``: it is yesterday's close, while
-                # this optional provider field is today's regular close.
-                regular_close=_decimal(payload.get('regular_close')),
-                quote_ts=(dt.datetime.fromtimestamp(stamp, dt.timezone.utc)
-                          .replace(tzinfo=None, microsecond=0) if stamp else None),
-                # Always None in practice: /quote returns c, d, dp, h, l, o,
-                # pc and t, with no volume field. Verified against the live
-                # API rather than inferred. The read is left in place because
-                # it costs nothing and a future provider behind this adapter
-                # may supply it -- see quotes.price_status for what depends on
-                # it, and what currently does not.
-                volume=int(payload['v']) if payload.get('v') is not None else None,
-            )
+                stamp = payload.get('t')
+                found[symbol] = Quote(
+                    ticker=symbol,
+                    price=price,
+                    prev_close=_decimal(payload.get('pc')),
+                    # Do not substitute ``pc``: it is yesterday's close, while
+                    # this optional provider field is today's regular close.
+                    regular_close=_decimal(payload.get('regular_close')),
+                    quote_ts=(dt.datetime.fromtimestamp(stamp, dt.timezone.utc)
+                              .replace(tzinfo=None, microsecond=0)
+                              if stamp else None),
+                    # Always None in practice: /quote returns no volume field.
+                    volume=(int(payload['v'])
+                            if payload.get('v') is not None else None),
+                )
+            except (TypeError, ValueError, OSError, decimal.InvalidOperation):
+                continue
         return found
 
     def profile(self, symbol):

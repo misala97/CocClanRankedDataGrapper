@@ -357,7 +357,11 @@ def _poll_instruments(provider, instruments, now):
     """Fetch and normalize a market batch without inventing missing prices."""
     if not instruments:
         return 0
-    raw_quotes = provider.quotes([row.provider_symbol for row in instruments])
+    if hasattr(provider, 'quotes_for_instruments'):
+        raw_quotes = provider.quotes_for_instruments(instruments)
+    else:
+        raw_quotes = provider.quotes(
+            [row.provider_symbol for row in instruments])
     normalized = {}
     for instrument in instruments:
         raw = raw_quotes.get(instrument.provider_symbol)
@@ -531,10 +535,35 @@ def refresh_history(now_utc, provider, limit=HISTORY_LIMIT):
 
     naive = now_utc.replace(tzinfo=None)
     try:
-        due = history.tickers_needing_history(candidates, naive.date())[:limit]
-        if not due:
-            return 0
-        return history.fetch_into_store(provider, due, naive)
+        primary = _market_instruments(candidates, 'us')
+        if not primary:
+            # Mixed-version compatibility before instrument seeding lands.
+            due = history.tickers_needing_history(
+                candidates, naive.date())[:limit]
+            if not due:
+                return 0
+            return history.fetch_into_store(provider, due, naive)
+
+        stored = 0
+        remaining = limit
+        by_mic = {}
+        for instrument in primary:
+            by_mic.setdefault(instrument.mic, []).append(instrument)
+        for mic, rows in by_mic.items():
+            if remaining <= 0:
+                break
+            tickers = [row.ticker for row in rows]
+            due = history.tickers_needing_history(
+                tickers, naive.date(), market='us', mic=mic)[:remaining]
+            if not due:
+                continue
+            symbols = {row.ticker: row.provider_symbol for row in rows
+                       if row.ticker in due}
+            stored += history.fetch_into_store(
+                provider, due, naive, market='us', mic=mic, currency='USD',
+                provider_symbols=symbols)
+            remaining -= len(due)
+        return stored
     except Exception:
         logger.exception('radar history refresh failed')
         return 0

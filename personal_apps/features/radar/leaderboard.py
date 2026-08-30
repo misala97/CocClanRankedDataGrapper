@@ -16,7 +16,7 @@ from extensions import db
 from models import RadarBucketSource, TickerUniverse
 
 from . import divergence as divergence_mod
-from . import journal
+from . import history, journal
 from . import quotes as quotes_mod
 from . import scoring, universe
 from .config import (PROVISIONAL_BASELINE_DAYS, VARIANCE_FLOOR,
@@ -94,6 +94,26 @@ def _universe_rows(tickers):
     rows = TickerUniverse.query.filter(
         TickerUniverse.symbol.in_(list(tickers))).all()
     return {row.symbol: row for row in rows}
+
+
+def _quote_sigmas(quote_views, today):
+    """Volatility from the history belonging to each selected quote identity.
+
+    A company-level cached US sigma is not evidence about its Xetra listing.
+    Grouping preserves the batched read for normal US boards while allowing a
+    Germany board's genuine and fallback rows to use their actual markets.
+    """
+    by_identity = collections.defaultdict(list)
+    for ticker, quote in quote_views.items():
+        by_identity[(quote.market, quote.mic)].append(ticker)
+
+    sigmas = {}
+    for (market, mic), tickers in by_identity.items():
+        closes = history.closes_for(tickers, days=history.HISTORY_DAYS,
+                                    today=today, market=market, mic=mic)
+        for ticker in tickers:
+            sigmas[ticker] = quotes_mod.daily_sigma(closes.get(ticker, []))
+    return sigmas
 
 
 def build_rows(sources, now, window_hours=4, segments=(), limit=50,
@@ -236,6 +256,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         [(ticker, view.market, view.mic) for ticker, view in quote_views.items()
          if view.price is not None], window_hours, now)
     today = now.date()
+    quote_sigmas = _quote_sigmas(quote_views, today)
     rows = []
 
     for ticker, (mentions, expected, variance, authors,
@@ -270,7 +291,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
         # mark, because the exchange being shut says nothing about the stock.
         value = None
         if quote.score_eligible and move is not None and mention_z is not None:
-            sigma = profile.daily_sigma if profile else None
+            sigma = quote_sigmas.get(ticker)
             move_z = divergence_mod.price_move_z(
                 move, quotes_mod.scale_sigma(sigma, window_hours))
             if move_z is not None:

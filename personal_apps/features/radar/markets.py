@@ -110,7 +110,8 @@ class QuoteView:
         """
         if tape_status not in TAPE_STATUSES:
             raise ValueError(f'unknown tape status: {tape_status}')
-        session = session_state(quote.market, _utc_aware(now))
+        observed_at = quote.quote_ts or quote.fetched_at or now
+        session = session_state(quote.market, _utc_aware(observed_at))
         age_seconds = _age_seconds(quote.quote_ts, quote.fetched_at, now)
         quality = classify_quality(quote.quote_ts, quote.fetched_at,
                                    quote.provider_delay, now)
@@ -125,8 +126,11 @@ class QuoteView:
             score_eligible=(quality in {'live', 'delayed'} and
                             tape_status == 'ok'),
             regular_move=_movement(quote.price, quote.previous_close),
-            extended_move=(_movement(quote.price, quote.regular_close)
-                           if session == 'afterhours' else None),
+            extended_move=(
+                _movement(quote.price, quote.previous_close)
+                if session == 'premarket' else
+                _movement(quote.price, quote.regular_close)
+                if session == 'afterhours' else None),
             is_fallback=is_fallback,
         )
 

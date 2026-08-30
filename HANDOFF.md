@@ -5,12 +5,13 @@
 - Workspace: `C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-german-market`
 - Branch: `codex/radar-german-market`
 - Base/main at worktree creation: `5a741e8bb05e32e8a157a5ddbd899da1603451e0`
-- Current implementation HEAD before Task 10 documentation: `8aabbec`
-  (`docs(radar): checkpoint chart sessions`).
-- Working tree at this handoff: Task 10 documentation changes plus local-only
-  untracked `.artifacts/radar-german-market/` verification logs, helper
-  scripts, and screenshots. The artifacts contain no secrets and must not be
-  committed. No protected primary-checkout file was touched.
+- HEAD when the final whole-branch review was dispatched: `9dd1cbc`
+  (`docs(radar): record German market verification`).
+- The final-review fix commit follows this handoff update. Its intended tracked
+  scope is the 10 accepted Important fixes, their regression tests, and this
+  handoff/ledger; `.artifacts/radar-german-market/` remains ignored local-only
+  evidence and must not be committed. No protected primary-checkout file was
+  touched.
 
 ## Read completely before editing
 
@@ -57,11 +58,9 @@ context by market and venue.
 ## Open work
 
 - Tasks 1–9 are accepted and complete.
-- Task 10 verification gates are complete, but Task 10 awaits the
-  parent-dispatched independent whole-branch read-only review. Never
-  redispatch a ledger-complete task.
-- After each task: focused tests, commit, independent read-only review, ruling,
-  ledger update, handoff update. One implementation worker at a time.
+- The parent-dispatched final review returned 10 Important and 2 Minor
+  findings. Their fixes are complete and await only this focused commit and a
+  parent-owned integration decision; do not rerun a branch-final review here.
 
 ## Known baseline issue
 
@@ -112,9 +111,24 @@ the isolated worktree.
   only marked US/USD fallbacks (or clearly EOD Xetra data if that entitlement
   later becomes available); never relabel either as live.
 
+## Final-review fix evidence — 2026-08-30
+
+- Accepted Important fixes: provider-declared quality persistence and migration;
+  primary US MIC history; quote-timestamp session/baseline handling;
+  MIC-qualified Twelve Data identity; per-symbol malformed-payload containment;
+  per-market/MIC sigma; market-switch ticker retention; chronological mixed
+  legacy/market movement; venue/session/next-boundary header; and a 390px
+  identity price lane.
+- Fresh gates: isolated schema-created Radar suite **756 passed in 45.87s**;
+  frontend **403 general + 165 Radar passed**; production `npm run build`
+  passed. Frontend stdout is retained only at
+  `.artifacts/radar-german-market/frontend-final-review-tests.log`.
+- The disposable `personal_apps_radar_finalreview_20260830` database was
+  dropped after verification. The shared development database was not migrated
+  as part of this branch work.
+
 ## Immediate next action
 
-Task 10 verification evidence is complete. Parent must dispatch the independent
-whole-branch read-only review next; resolve any accepted findings in focused
-commits, then update this handoff/ledger before offering an integration decision.
-Do not merge, push, deploy, or start a branch-final review from this task.
+Parent should inspect the final-review fix commit, then make the integration
+decision. Do not merge, push, deploy, or start a branch-final review from this
+task.

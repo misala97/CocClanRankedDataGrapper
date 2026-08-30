@@ -218,6 +218,11 @@ export interface BoardPayload {
   generated_at: string
   market: Market
   display_timezone: 'Europe/Berlin'
+  /** Selected market context, stated once above its rows. */
+  market_venue: string
+  next_boundary_label: 'opens' | 'closes'
+  /** Explicit UTC wire time for the selected market's next transition. */
+  next_boundary_at: string
   sources: string[]
   all_sources: string[]
   /** What the board was filtered to. Empty means All. */

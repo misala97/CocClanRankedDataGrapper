@@ -426,12 +426,42 @@ def test_history_is_fetched_for_tickers_that_have_none(monkeypatch):
         return len(tickers)
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
+    # This is the mixed-version path: no primary instruments have been seeded
+    # yet, so refresh_history must retain the old ticker-only request instead
+    # of reaching into the application database from this unit test.
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [])
     monkeypatch.setattr(daemon.history, 'tickers_needing_history',
                         lambda candidates, today: ['BBB'])
     monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
 
     assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 1
     assert seen['tickers'] == ['BBB']
+
+
+def test_us_history_uses_the_primary_instrument_mic_and_provider_symbol(monkeypatch):
+    instrument = SimpleNamespace(
+        ticker='AAA', market='us', venue='NYSE', mic='XNYS',
+        provider_symbol='AAA.US', currency='USD')
+    seen = {}
+
+    def fake_fetch(provider, tickers, now, **kwargs):
+        seen['tickers'] = list(tickers)
+        seen.update(kwargs)
+        return len(tickers)
+
+    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [instrument] if market == 'us' else [])
+    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
+                        lambda candidates, today, **kwargs: list(candidates))
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+
+    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 1
+    assert seen == {
+        'tickers': ['AAA'], 'market': 'us', 'mic': 'XNYS', 'currency': 'USD',
+        'provider_symbols': {'AAA': 'AAA.US'},
+    }
 
 
 def test_the_history_job_respects_its_per_cycle_cap(monkeypatch):
@@ -445,6 +475,8 @@ def test_the_history_job_respects_its_per_cycle_cap(monkeypatch):
 
     many = [f'T{n}' for n in range(100)]
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: many)
+    monkeypatch.setattr(daemon, '_market_instruments',
+                        lambda tickers, market: [])
     monkeypatch.setattr(daemon.history, 'tickers_needing_history',
                         lambda candidates, today: list(candidates))
     monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)

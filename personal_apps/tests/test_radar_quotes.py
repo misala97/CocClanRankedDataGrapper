@@ -70,8 +70,23 @@ def test_record_quotes_persists_the_verified_market_identity(ctx):
     assert quotes_mod.record_quotes({'QQA': quote}, NOW) == 1
 
     stored = RadarQuote.query.filter_by(ticker='QQA', market='de', mic='XETR').one()
-    assert (stored.currency, stored.provider_symbol, stored.price) == (
-        'EUR', 'QQA1', decimal.Decimal('194.200000'))
+    assert (stored.currency, stored.provider_symbol, stored.price,
+            stored.provider_delay) == (
+        'EUR', 'QQA1', decimal.Decimal('194.200000'), 'delayed')
+
+
+def test_persisted_eod_quality_is_not_reconstructed_as_live():
+    row = SimpleNamespace(
+        ticker='QQA', mic='XETR', currency='EUR', provider_symbol='QQA1',
+        fetched_at=NOW, quote_ts=NOW, price=decimal.Decimal('194.20'),
+        prev_close=decimal.Decimal('193.50'), regular_close=None, volume=None,
+        provider_delay='eod')
+    instrument = SimpleNamespace(
+        venue='Xetra', mic='XETR', provider_symbol='QQA1', currency='EUR')
+
+    restored = quotes_mod._stored_quote(row, instrument, 'de')
+
+    assert restored.provider_delay == 'eod'
 
 
 @pytest.mark.parametrize('provider_kind, payload', [
@@ -180,17 +195,17 @@ def test_persisted_timestamp_less_de_quote_allows_valid_us_fallback(monkeypatch)
 
 def test_stored_regular_close_drives_afterhours_extended_move():
     """The row adapter must restore the regular-session close, not just prev close."""
+    afterhours = dt.datetime(2026, 8, 28, 21, 0)
     row = SimpleNamespace(
         ticker='QQA', mic='XNAS', currency='USD', provider_symbol='QQA',
-        fetched_at=NOW, quote_ts=NOW, price=decimal.Decimal('102'),
+        fetched_at=afterhours, quote_ts=afterhours, price=decimal.Decimal('102'),
         prev_close=decimal.Decimal('98'), regular_close=decimal.Decimal('100'),
         volume=None)
     instrument = SimpleNamespace(
         venue='NASDAQ', mic='XNAS', provider_symbol='QQA', currency='USD')
 
     quote = quotes_mod._stored_quote(row, instrument, 'us')
-    selected = select_quote(
-        'QQA', 'us', {'us': quote}, dt.datetime(2026, 8, 28, 21, 0))
+    selected = select_quote('QQA', 'us', {'us': quote}, afterhours)
 
     assert selected.extended_move == decimal.Decimal('0.02')
 

@@ -114,6 +114,17 @@ describe('accessibility contracts in the stylesheet', () => {
     expect(rules).toMatch(/\.bd thead th \{/)
     expect(rules).not.toMatch(/\n\.bd th \{/)
   })
+
+  it('stacks the identity price below its facts on a 390px screen', () => {
+    /* The compact USD fallback label can be longer than the available inline
+       space beside an unbroken company name.  Keeping price as a flex item
+       made its right edge clip; the small layout needs one full-width price
+       lane instead. */
+    const mobile = rules.slice(rules.indexOf('@media (max-width: 900px)'))
+    expect(mobile).toMatch(/\.ident\s*\{[^}]*flex-wrap:\s*wrap/)
+    expect(mobile).toMatch(/\.ident \.px\s*\{[^}]*flex-basis:\s*100%/)
+    expect(mobile).toMatch(/\.ident \.px\s*\{[^}]*text-align:\s*left/)
+  })
 })
 
 describe('reduced motion', () => {

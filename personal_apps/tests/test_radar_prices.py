@@ -52,6 +52,15 @@ def test_currency_mismatch_rejects_provider_snapshot():
         normalize_snapshot(Instrument(), raw)
 
 
+def test_provider_identity_mismatch_rejects_a_relabelled_snapshot():
+    raw = Quote(
+        ticker='WRONG', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='WRONG', currency='EUR', price=decimal.Decimal('194.20'))
+
+    with pytest.raises(ValueError, match='provider symbol'):
+        normalize_snapshot(Instrument(), raw)
+
+
 def test_a_quote_is_normalized():
     http = FakeHttp({'/quote': {'c': 123.45, 'pc': 120.0, 'v': 900000,
                                 't': 1786000000}})
@@ -92,6 +101,18 @@ def test_one_bad_symbol_does_not_lose_the_others():
 
     quotes = finnhub.FinnhubProvider(Partial({})).quotes(['AAA', 'BAD', 'BBB'])
     assert set(quotes) == {'AAA', 'BBB'}
+
+
+def test_malformed_finnhub_numeric_field_is_contained_to_its_symbol():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'c': 'not-a-number', 'pc': 9, 't': 1786000000}
+            return {'c': 10, 'pc': 9, 't': 1786000000}
+
+    quotes = finnhub.FinnhubProvider(Mixed({})).quotes(['BAD', 'GOOD'])
+
+    assert set(quotes) == {'GOOD'}
 
 
 def test_a_profile_is_normalized():
@@ -162,6 +183,40 @@ def test_quote_without_a_status_field_is_a_usable_snapshot():
 
     assert quote.price == decimal.Decimal('194.20')
     assert quote.currency == 'EUR'
+
+
+def test_xetra_quote_request_is_mic_qualified_and_identity_bound():
+    http = FakeHttp({'/quote': {
+        'symbol': 'APC', 'mic_code': 'XETR', 'close': '194.20',
+        'previous_close': '193.50', 'currency': 'EUR',
+        'timestamp': 1787313600}})
+
+    quotes = twelvedata.TwelveDataProvider(http).quotes_for_instruments(
+        [Instrument()])
+
+    assert http.calls == [('/quote', {'symbol': 'APC', 'mic_code': 'XETR'})]
+    assert quotes['APC'].mic == 'XETR'
+    assert quotes['APC'].provider_symbol == 'APC'
+
+
+def test_malformed_twelve_data_optional_number_does_not_abort_the_batch():
+    class Mixed(FakeHttp):
+        def get(self, path, params):
+            if params['symbol'] == 'BAD':
+                return {'symbol': 'BAD', 'close': '10',
+                        'previous_close': 'not-a-number', 'currency': 'EUR'}
+            return {'symbol': 'GOOD', 'close': '11',
+                    'previous_close': '10', 'currency': 'EUR'}
+
+    instruments = [
+        Instrument(ticker='BAD', provider_symbol='BAD'),
+        Instrument(ticker='GOOD', provider_symbol='GOOD'),
+    ]
+
+    quotes = twelvedata.TwelveDataProvider(Mixed({})).quotes_for_instruments(
+        instruments)
+
+    assert set(quotes) == {'GOOD'}
 
 
 def test_finnhub_directory_keeps_identifiers_without_guessing_the_mic():

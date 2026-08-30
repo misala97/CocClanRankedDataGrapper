@@ -39,6 +39,7 @@ class Quote:
     volume: int | None
     provider_delay: str
     fetched_at: dt.datetime | None
+    provider_mic: str | None
 
     def __init__(self, ticker: str, price: decimal.Decimal,
                  prev_close: decimal.Decimal | None = None,
@@ -49,7 +50,8 @@ class Quote:
                  previous_close: decimal.Decimal | None = None,
                  regular_close: decimal.Decimal | None = None,
                  provider_delay: str = 'delayed',
-                 fetched_at: dt.datetime | None = None):
+                 fetched_at: dt.datetime | None = None,
+                 provider_mic: str | None = None):
         if provider_delay not in {'live', 'delayed', 'eod'}:
             raise ValueError(f'unknown provider delay: {provider_delay}')
         if previous_close is not None and prev_close is not None and \
@@ -69,6 +71,7 @@ class Quote:
         object.__setattr__(self, 'volume', volume)
         object.__setattr__(self, 'provider_delay', provider_delay)
         object.__setattr__(self, 'fetched_at', fetched_at)
+        object.__setattr__(self, 'provider_mic', provider_mic)
 
     @property
     def prev_close(self):
@@ -94,6 +97,17 @@ def normalize_snapshot(instrument: Any, raw: Any) -> Quote:
         raise CurrencyMismatch(
             f'{_value(instrument, "ticker")} expects {instrument_currency}, '
             f'provider supplied {raw_currency}')
+
+    expected_symbol = _value(instrument, 'provider_symbol')
+    raw_symbol = _value(raw, 'provider_symbol') or _value(raw, 'ticker')
+    if raw_symbol and raw_symbol != expected_symbol:
+        raise ValueError(
+            f'provider symbol {raw_symbol} does not match {expected_symbol}')
+    provider_mic = _value(raw, 'provider_mic')
+    if provider_mic and provider_mic != _value(instrument, 'mic'):
+        raise ValueError(
+            f'provider MIC {provider_mic} does not match '
+            f'{_value(instrument, "mic")}')
 
     return Quote(
         ticker=_value(instrument, 'ticker'), market=_value(instrument, 'market'),

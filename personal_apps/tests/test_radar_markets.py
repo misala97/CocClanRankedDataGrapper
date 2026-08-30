@@ -70,6 +70,19 @@ def test_afterhours_move_uses_same_day_regular_close():
     assert view.extended_move == decimal.Decimal('0.02')
 
 
+def test_quote_timestamp_decides_premarket_session_and_close_baseline():
+    """A later poll cannot relabel an early print as regular-session trading."""
+    premarket_print = dt.datetime(2026, 8, 28, 11, 0)
+    viewed_during_regular = dt.datetime(2026, 8, 28, 15, 0)
+
+    view = quote_view(now=viewed_during_regular, price='102',
+                      previous_close='100', regular_close='999',
+                      quote_ts=premarket_print)
+
+    assert view.session == 'premarket'
+    assert view.extended_move == decimal.Decimal('0.02')
+
+
 def test_missing_de_quote_selects_marked_us_fallback():
     selected = select_quote('AAPL', 'de', {'us': snapshot()}, NOW)
     assert (selected.market, selected.currency, selected.is_fallback) == (

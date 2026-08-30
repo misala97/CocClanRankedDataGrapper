@@ -80,6 +80,9 @@ def test_board_echoes_market_and_berlin_display_timezone(client):
     assert payload['market'] == 'de'
     assert payload['display_timezone'] == 'Europe/Berlin'
     assert payload['generated_at'].endswith('Z')
+    assert payload['market_venue'] == 'Xetra'
+    assert payload['next_boundary_label'] in {'opens', 'closes'}
+    assert payload['next_boundary_at'].endswith('Z')
 
 
 def test_quote_serializer_keeps_the_market_quote_contract_and_utc_wire_time():
