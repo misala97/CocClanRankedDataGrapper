@@ -10,6 +10,7 @@ from .. import board as board_mod
 from .. import detail as detail_mod
 from .. import detail_panel, phrasing, spend
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
+from ..market_calendars import session_bounds, session_state
 from ._blueprint import radar_bp
 
 SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
@@ -51,6 +52,53 @@ def _iso_z(value):
     if value.tzinfo is not None:
         value = value.astimezone(dt.timezone.utc).replace(tzinfo=None)
     return value.isoformat() + 'Z'
+
+
+def _chart_sessions(chart, market):
+    """Extended-session intervals in UTC, confined to an intraday chart.
+
+    A chart may represent a real German quote or an explicit US fallback.  Its
+    bands must follow the quote's actual market calendar, not the selected
+    surface's market label.  Daily charts deliberately omit bands: hundreds of
+    regular-session windows would be visual noise rather than useful context.
+    """
+    if chart.step_minutes >= 1440:
+        return []
+
+    slots = max(len(chart.closes), len(chart.chatter))
+    if not slots or not isinstance(chart.start, dt.datetime):
+        return []
+
+    start = chart.start
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=dt.timezone.utc)
+    else:
+        start = start.astimezone(dt.timezone.utc)
+    end = start + dt.timedelta(minutes=slots * chart.step_minutes)
+
+    intervals = []
+    day = start.date() - dt.timedelta(days=1)
+    last_day = end.date() + dt.timedelta(days=1)
+    while day <= last_day:
+        # Noon UTC unambiguously selects this local US or German calendar day;
+        # the extra day at either side covers a session crossing a UTC date.
+        probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
+        bounds = session_bounds(market, probe)
+        if session_state(market, bounds.regular_opens_at) == 'regular':
+            for kind, left, right in (
+                ('premarket', bounds.opens_at, bounds.premarket_closes_at),
+                ('afterhours', bounds.regular_closes_at, bounds.closes_at),
+            ):
+                clipped_start = max(start, left)
+                clipped_end = min(end, right)
+                if clipped_start < clipped_end:
+                    intervals.append({
+                        'start': _iso_z(clipped_start),
+                        'end': _iso_z(clipped_end),
+                        'kind': kind,
+                    })
+        day += dt.timedelta(days=1)
+    return intervals
 
 
 def _quote(view):
@@ -295,6 +343,7 @@ def serialize_detail(d):
                 if isinstance(d.chart.watched_from, dt.datetime)
                 else (d.chart.watched_from.isoformat()
                       if d.chart.watched_from else None)),
+            'sessions': _chart_sessions(d.chart, d.quote.market),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,

@@ -1,5 +1,6 @@
 import { count, money } from '../format'
 import type { DetailChart, PanelSpan } from '../types'
+import { SessionBands, sessionNames } from './SessionBands'
 
 const W = 912
 const H = 300
@@ -51,6 +52,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
   // the viewBox. Nothing observed anywhere is the whole lane, from zero.
   const watchX = watchIndex > 0 ? watchIndex * slot : 0
   const tone = rose(chart.closes) ? 'var(--up)' : 'var(--down)'
+  const sessionContext = sessionNames(chart.sessions)
 
   // Two groups, and the split is the animation as much as it is the drawing
   // order. `.axes` is the furniture a reader needs before the data means
@@ -64,7 +66,8 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
   // as the flat list had it.
   return (
     <svg className="pxchart" viewBox={`0 0 ${W} ${H}`} role="img"
-         aria-label={`price over ${chart.span} with chatter beneath`}>
+         aria-label={`price over ${chart.span} with chatter beneath${
+           sessionContext ? `; extended sessions: ${sessionContext}` : ''}`}>
       <g className="axes">
         {/* Classed rather than left as a bare <g>: the gridline labels are
             the ones that must never carry a date on an intraday span, and
@@ -119,6 +122,9 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
           {isIntraday(chart) ? 'now' : 'today'}
         </text>
       </g>
+
+      <SessionBands chart={chart} plotTop={P_TOP} plotBottom={P_BOT}
+                    plotRight={PLOT_R} />
 
       <g className="plot">
         {path ? (
@@ -208,12 +214,20 @@ function slotAt(chart: DetailChart, index: number): Date {
 function slotLabel(chart: DetailChart, index: number, withDate = false): string {
   const at = slotAt(chart, index)
   if (isIntraday(chart)) {
-    const hh = String(at.getUTCHours()).padStart(2, '0')
-    const mm = String(at.getUTCMinutes()).padStart(2, '0')
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Berlin', day: 'numeric', month: 'short',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(at)
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((candidate) => candidate.type === type)?.value ?? ''
+    const day = part('day')
+    const month = part('month')
+    const hh = part('hour')
+    const mm = part('minute')
     // On a week of hourly slots the time alone repeats seven times over, so
     // the day has to ride along or three identical labels appear.
     if (withDate || chart.step_minutes >= 60) {
-      return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]!} ${hh}:${mm}`
+      return `${day} ${month} ${hh}:${mm}`
     }
     return `${hh}:${mm}`
   }

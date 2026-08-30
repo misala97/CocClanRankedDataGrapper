@@ -556,3 +556,49 @@ def test_detail_intraday_chart_times_remain_explicit_utc_wire_values():
 
     assert payload['chart']['from'] == '2026-08-28T10:00:00Z'
     assert payload['chart']['watched_from'] == '2026-08-28T10:15:00Z'
+
+
+def test_intraday_chart_serializes_clipped_selected_market_session_intervals():
+    """Bands describe the actual quote venue and do not escape the chart."""
+    import dataclasses
+    import datetime as dt
+
+    from features.radar import detail, detail_panel
+    from features.radar.routes import api
+
+    breakdown = detail_panel.Breakdown(
+        venues=[], bullish=0, neutral=0, bearish=0, disagreements=0,
+        top_author_share=None, top_two_share=None, peak_hour=None,
+        peak_count=0, first_seen=None, mentions=0, voices=0)
+    built = _stub_detail(breakdown)
+    built.quote = dataclasses.replace(built.quote, market='de', mic='XETR')
+    built.chart = detail.Chart(
+        start=dt.datetime(2026, 8, 28, 5, 30),
+        closes=[None] * 6, chatter=[None] * 6, watched_from=None,
+        step_minutes=15)
+
+    payload = api.serialize_detail(built)
+
+    assert payload['chart']['sessions'] == [{
+        'start': '2026-08-28T06:00:00Z',
+        'end': '2026-08-28T06:55:00Z',
+        'kind': 'premarket',
+    }]
+
+
+def test_daily_chart_serializes_no_session_bands():
+    """Daily history carries context through prices, not hundreds of bands."""
+    import dataclasses
+
+    from features.radar import detail_panel
+    from features.radar.routes import api
+
+    breakdown = detail_panel.Breakdown(
+        venues=[], bullish=0, neutral=0, bearish=0, disagreements=0,
+        top_author_share=None, top_two_share=None, peak_hour=None,
+        peak_count=0, first_seen=None, mentions=0, voices=0)
+    built = _stub_detail(breakdown)
+    built.chart = dataclasses.replace(built.chart, closes=[1], chatter=[None],
+                                      step_minutes=1440)
+
+    assert api.serialize_detail(built)['chart']['sessions'] == []

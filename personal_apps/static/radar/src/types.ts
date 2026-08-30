@@ -61,6 +61,13 @@ export type Market = 'us' | 'de'
 export type QuoteQuality = 'live' | 'delayed' | 'eod' | 'stale' | 'unavailable'
 export type QuoteScoreTerm = 'divergence' | 'chatter'
 
+/** A named extended trading range, kept in UTC like every chart instant. */
+export interface ChartSession {
+  start: string
+  end: string
+  kind: Extract<Session, 'premarket' | 'afterhours'>
+}
+
 /** One selected venue quote. Germany-mode fallbacks retain their real US/USD
  * identity rather than appearing as converted German quotes. */
 export interface MarketQuote {
@@ -99,6 +106,8 @@ export interface DetailChart {
   step_minutes: number
   closes: (number | null)[]
   chatter: (number | null)[]
+  /** Extended-session ranges, clipped to this chart's intraday window. */
+  sessions: ChartSession[]
   /** The day observation began. Before it the chatter lane is unobserved
    *  rather than silent, and the panel draws that boundary. */
   watched_from: string | null

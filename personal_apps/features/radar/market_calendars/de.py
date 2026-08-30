@@ -49,6 +49,7 @@ def session_bounds(when_utc):
 
     return SessionBounds(
         opens_at=at(EARLY_START),
+        premarket_closes_at=at(EARLY_END),
         regular_opens_at=at(REGULAR_START),
         regular_closes_at=at(REGULAR_END),
         closes_at=at(LATE_END),

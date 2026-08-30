@@ -9,6 +9,7 @@ Session = Literal['premarket', 'regular', 'afterhours', 'closed']
 @dataclasses.dataclass(frozen=True)
 class SessionBounds:
     opens_at: datetime
+    premarket_closes_at: datetime
     regular_opens_at: datetime
     regular_closes_at: datetime
     closes_at: datetime
