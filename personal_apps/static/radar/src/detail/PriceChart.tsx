@@ -61,6 +61,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
   // One scale for the talk AND its normal, exactly as the rows do it.
   const peak = Math.max(observed, normal ?? 0) || 1
   const watchIndex = chart.chatter.findIndex((v) => v !== null)
+  const peakIndex = chart.chatter.findIndex((v) => v === observed)
   // -1 is a span nothing was observed in at all, which multiplied out to a
   // negative x and started the chatter baseline one slot off the left edge of
   // the viewBox. Nothing observed anywhere is the whole lane, from zero.
@@ -125,11 +126,18 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
               stroke="var(--rule)"
               strokeWidth="1" vectorEffect="non-scaling-stroke" />
 
-        {/* Only where something was actually counted: `1/d` printed over an
-            empty lane would put a number on a measurement nobody took. */}
-        {observed > 0 && (
-          <Gutter y={chatterY(observed, peak, band)}
-                  label={`${count(observed)}${perSlot(chart)}`} />
+        {/* The peak annotates itself, in violet, at its own spike -- the
+            right gutter belongs to price alone. Sharing it stacked `$203`
+            over `33/h` into one unreadable block (seen live twice). Only
+            where something was counted: a number over an empty lane would
+            label a measurement nobody took. */}
+        {observed > 0 && peakIndex >= 0 && (
+          <text className="ax peak" fill="var(--mark)"
+                x={Math.min(peakIndex * slot + slot / 2, PLOT_R - 4)}
+                y={Math.max(chatterY(observed, peak, band) - 6, 12)}
+                textAnchor={peakIndex * slot > PLOT_R - 60 ? 'end' : 'middle'}>
+            {count(observed)}{perSlot(chart)}
+          </text>
         )}
 
         <text className="ax" x="0" y={X_LABEL_Y}>
@@ -348,7 +356,10 @@ function pricePaths(chart: DetailChart, priced: boolean) {
 
   const paths: string[] = []
   const gaps: string[] = []
-  if (isIntraday(chart)) {
+  // Splitting and bridging is the 15-minute chart's honesty; the hourly
+  // week prices from daily-close anchors, whose gaps are structural, and
+  // spans them exactly as the month does.
+  if (chart.step_minutes < 60) {
     let runPoints: { x: number; y: number }[] = []
     let previous = -2
     const flush = () => {

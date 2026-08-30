@@ -79,6 +79,14 @@ def _chart_sessions(chart, market, span):
     if not isinstance(chart.start, dt.datetime):
         return []
 
+    # The hourly week works like the month: whole non-trading DAYS wash
+    # gray and nothing else. Night-by-night slats plus a merged weekend
+    # monolith were most of what made the week view unreadable; the daily
+    # rhythm carries the orientation on its own.
+    if chart.step_minutes >= 60:
+        return _closed_day_intervals(chart.start, slots * chart.step_minutes,
+                                     market)
+
     start = chart.start
     if start.tzinfo is None:
         start = start.replace(tzinfo=dt.timezone.utc)
@@ -125,6 +133,39 @@ def _chart_sessions(chart, market, span):
     if cursor < end:
         intervals.append({'start': _iso_z(cursor), 'end': _iso_z(end),
                           'kind': 'closed'})
+    return intervals
+
+
+def _closed_day_intervals(start, minutes, market):
+    """Runs of non-trading local calendar days inside an intraday window,
+    as UTC intervals clipped to it.
+    """
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=dt.timezone.utc)
+    end = start + dt.timedelta(minutes=minutes)
+
+    intervals = []
+    run_start = None
+    day = start.date() - dt.timedelta(days=1)
+    last_day = end.date() + dt.timedelta(days=1)
+    while day <= last_day + dt.timedelta(days=1):
+        probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
+        bounds = session_bounds(market, probe)
+        trading = (day <= last_day
+                   and session_state(market, bounds.regular_opens_at) == 'regular')
+        if not trading and day <= last_day:
+            if run_start is None:
+                run_start = day
+        elif run_start is not None:
+            left = max(start, dt.datetime.combine(
+                run_start, dt.time.min, tzinfo=dt.timezone.utc))
+            right = min(end, dt.datetime.combine(
+                day, dt.time.min, tzinfo=dt.timezone.utc))
+            if left < right:
+                intervals.append({'start': _iso_z(left), 'end': _iso_z(right),
+                                  'kind': 'closed'})
+            run_start = None
+        day += dt.timedelta(days=1)
     return intervals
 
 

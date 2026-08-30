@@ -225,6 +225,34 @@ def watched_slots(sources, start, now, step_minutes, slots):
     return covered
 
 
+def _daily_anchors(ticker, start, now, step_minutes, slots, *, market='us',
+                   mic=None):
+    """One price per trading day inside an intraday window, at the slot of
+    that day's close -- so the week line is the same clean shape the month
+    line is, positioned honestly in time.
+    """
+    from . import history
+    from .market_calendars import session_bounds, session_state
+
+    days = int(slots * step_minutes / 1440) + 2
+    stored = dict(history.closes_for([ticker], days=days, today=now.date(),
+                                     market=market, mic=mic).get(ticker, []))
+
+    prices = [None] * slots
+    for day, close in stored.items():
+        probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
+        bounds = session_bounds(market, probe)
+        if session_state(market, bounds.regular_opens_at) != 'regular':
+            continue
+        closes_at = bounds.regular_closes_at
+        if closes_at.tzinfo is not None:
+            closes_at = closes_at.astimezone(dt.timezone.utc).replace(tzinfo=None)
+        index = _slot_index(closes_at, start, step_minutes, slots)
+        if index is not None:
+            prices[index] = float(close)
+    return prices
+
+
 def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
     """One Chart over slots of minutes rather than calendar days.
 
@@ -235,8 +263,18 @@ def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
     slots, step_minutes = INTRADAY_SPANS[span]
     start = now - dt.timedelta(minutes=slots * step_minutes)
 
-    closes = intraday_prices(ticker, start, now, step_minutes, slots,
-                             market=market, mic=mic)
+    # 1D prices from the quote snapshots, at their own grain. 1W prices from
+    # DAILY CLOSES anchored at each day's closing slot: at hourly grain the
+    # snapshot store for anything but the loudest tickers is a repeated stale
+    # price for days and then a cliff, and the week view drew exactly that --
+    # a morse-code crawl (seen live 2026-08-30, twice). Five clean anchors
+    # beat a hundred and sixty stale fragments.
+    if span == '1D':
+        closes = intraday_prices(ticker, start, now, step_minutes, slots,
+                                 market=market, mic=mic)
+    else:
+        closes = _daily_anchors(ticker, start, now, step_minutes, slots,
+                                market=market, mic=mic)
     counts, _seen = intraday_counts(ticker, sources, start, now,
                                     step_minutes, slots)
     covered = watched_slots(sources, start, now, step_minutes, slots)

@@ -845,6 +845,8 @@ body {
    around a chart that already draws its own axes is furniture drawn twice. */
 
 .pxchart { display: block; width: 100%; height: 300px; }
+/* The chatter peak's own annotation, violet over its spike. */
+.pxchart .ax.peak { fill: var(--mark); font-weight: 600; }
 .pxchart .ax {
   font-size: var(--t-ax); fill: var(--muted); font-variant-numeric: tabular-nums;
 }
