@@ -17,6 +17,7 @@ from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, TickerUniverse
 
 from . import detail as chart_mod
+from . import phrasing
 from . import history, universe
 from . import quotes as quotes_mod
 from .config import (expand_sources, expand_sources_for_history, source_kind,
@@ -299,6 +300,13 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN,
     posts, post_total = _posts(ticker, sources, since, now)
     mentions, expected, baseline_days = window_figures(
         ticker, sources, since, now)
+
+    # The chart's own-normal line, through the same guard as the "n x normal"
+    # wording -- the drawing and the words must not disagree about whether a
+    # baseline is thick enough to mean anything.
+    if phrasing.ratio_value(mentions, expected) is not None:
+        per_hour = expected / window_hours
+        chart.normal_per_slot = per_hour * (chart.step_minutes / 60.0)
 
     return Detail(
         ticker=ticker,

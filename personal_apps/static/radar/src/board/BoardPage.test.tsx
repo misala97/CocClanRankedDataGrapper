@@ -70,6 +70,7 @@ function detail(ticker = 'AAA', market: Detail['market'] = 'us'): Detail {
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
       sessions: [],
+      normal_per_slot: null,
       watched_from: '2026-08-18',
     },
     breakdown: {

@@ -65,7 +65,7 @@ export type QuoteScoreTerm = 'divergence' | 'chatter'
 export interface ChartSession {
   start: string
   end: string
-  kind: Extract<Session, 'premarket' | 'afterhours'>
+  kind: Extract<Session, 'premarket' | 'afterhours' | 'closed'>
 }
 
 /** One selected venue quote. Germany-mode fallbacks retain their real US/USD
@@ -106,6 +106,10 @@ export interface DetailChart {
   step_minutes: number
   closes: (number | null)[]
   chatter: (number | null)[]
+  /** The ticker's own normal chatter rate per SLOT of this chart, through
+   *  the same server-side guard as `ratio` -- null when the baseline is too
+   *  thin to divide by. Drawn as the dashed line, exactly as on the rows. */
+  normal_per_slot: number | null
   /** Extended-session ranges, clipped to this chart's intraday window. */
   sessions: ChartSession[]
   /** The day observation began. Before it the chatter lane is unobserved

@@ -54,19 +54,29 @@ def _iso_z(value):
     return value.isoformat() + 'Z'
 
 
-def _chart_sessions(chart, market):
-    """Extended-session intervals in UTC, confined to an intraday chart.
+def _chart_sessions(chart, market, span):
+    """What kind of time each stretch of the chart is, in UTC intervals.
 
     A chart may represent a real German quote or an explicit US fallback.  Its
     bands must follow the quote's actual market calendar, not the selected
-    surface's market label.  Daily charts deliberately omit bands: hundreds of
-    regular-session windows would be visual noise rather than useful context.
+    surface's market label.
+
+    Three kinds since the single-lane chart (2026-08-30): premarket and
+    afterhours as before, plus `closed` -- nights, weekends and holidays --
+    so a missing stretch of price line inside an UNSHADED band reads as what
+    it is, an outage, and inside a gray band as what THAT is, a shut market.
+    The daily 1M span gets its closed days too (weekends are the reader's
+    orientation marks at that zoom); the longer daily spans stay bare, where
+    a hundred weekend stripes would be noise rather than context.
     """
-    if chart.step_minutes >= 1440:
+    slots = max(len(chart.closes), len(chart.chatter))
+    if not slots:
         return []
 
-    slots = max(len(chart.closes), len(chart.chatter))
-    if not slots or not isinstance(chart.start, dt.datetime):
+    if chart.step_minutes >= 1440:
+        return _daily_closed_days(chart, market, slots, span)
+
+    if not isinstance(chart.start, dt.datetime):
         return []
 
     start = chart.start
@@ -77,6 +87,10 @@ def _chart_sessions(chart, market):
     end = start + dt.timedelta(minutes=slots * chart.step_minutes)
 
     intervals = []
+    # Every stretch outside [opens_at, closes_at) of a trading day is closed.
+    # Collected as trading windows first, then complemented, so a holiday
+    # falls out as closed without being special-cased.
+    windows = []
     day = start.date() - dt.timedelta(days=1)
     last_day = end.date() + dt.timedelta(days=1)
     while day <= last_day:
@@ -85,6 +99,7 @@ def _chart_sessions(chart, market):
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
         bounds = session_bounds(market, probe)
         if session_state(market, bounds.regular_opens_at) == 'regular':
+            windows.append((bounds.opens_at, bounds.closes_at))
             for kind, left, right in (
                 ('premarket', bounds.opens_at, bounds.premarket_closes_at),
                 ('afterhours', bounds.regular_closes_at, bounds.closes_at),
@@ -98,6 +113,45 @@ def _chart_sessions(chart, market):
                         'kind': kind,
                     })
         day += dt.timedelta(days=1)
+
+    cursor = start
+    for opens_at, closes_at in sorted(windows):
+        if opens_at > cursor:
+            left, right = cursor, min(opens_at, end)
+            if left < right:
+                intervals.append({'start': _iso_z(left), 'end': _iso_z(right),
+                                  'kind': 'closed'})
+        cursor = max(cursor, min(closes_at, end))
+    if cursor < end:
+        intervals.append({'start': _iso_z(cursor), 'end': _iso_z(end),
+                          'kind': 'closed'})
+    return intervals
+
+
+def _daily_closed_days(chart, market, slots, span):
+    """Runs of non-trading calendar days on the 1M chart, nothing elsewhere."""
+    if span != '1M' or not isinstance(chart.start, dt.date):
+        return []
+
+    intervals = []
+    run_start = None
+    for offset in range(slots + 1):
+        day = chart.start + dt.timedelta(days=offset)
+        probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
+        bounds = session_bounds(market, probe)
+        trading = (offset < slots
+                   and session_state(market, bounds.regular_opens_at) == 'regular')
+        if not trading and offset < slots:
+            if run_start is None:
+                run_start = day
+        elif run_start is not None:
+            intervals.append({
+                'start': dt.datetime.combine(run_start, dt.time.min)
+                    .isoformat() + 'Z',
+                'end': dt.datetime.combine(day, dt.time.min).isoformat() + 'Z',
+                'kind': 'closed',
+            })
+            run_start = None
     return intervals
 
 
@@ -346,6 +400,7 @@ def serialize_detail(d):
             'step_minutes': d.chart.step_minutes,
             'span': d.span,
             'closes': [_decimal_or_none(c) for c in d.chart.closes],
+            'normal_per_slot': _decimal_or_none(d.chart.normal_per_slot),
             # null where nobody was watching, never a zero.
             'chatter': d.chart.chatter,
             'watched_from': (
@@ -353,7 +408,7 @@ def serialize_detail(d):
                 if isinstance(d.chart.watched_from, dt.datetime)
                 else (d.chart.watched_from.isoformat()
                       if d.chart.watched_from else None)),
-            'sessions': _chart_sessions(d.chart, d.quote.market),
+            'sessions': _chart_sessions(d.chart, d.quote.market, d.span),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,

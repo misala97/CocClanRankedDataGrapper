@@ -10,6 +10,7 @@ const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
   closes: Array.from({ length: 365 }, (_, i) => 1 + i / 100),
   chatter: Array.from({ length: 365 }, (_, i) => (i < 362 ? null : i)),
   sessions: [],
+  normal_per_slot: null,
   watched_from: '2026-08-21',
   ...over,
 })
@@ -29,12 +30,14 @@ describe('the panel chart', () => {
     }
   })
 
-  it('draws no chatter bar where nothing was observed', () => {
-    /* null is "not watched", not "zero mentions". A zero-height bar and no
-       bar look the same; a bar drawn FROM a null does not. */
+  it('draws no chatter where nothing was observed', () => {
+    /* null is "not watched", not "zero mentions". The violet area begins at
+       the first observed slot and nothing is drawn left of it. The fixture
+       observes only the last 3 of 365 slots, so exactly one run renders. */
     const { container } = render(<PriceChart chart={chart()} />)
 
-    expect(container.querySelectorAll('rect.chat')).toHaveLength(3)
+    const areas = container.querySelectorAll('path[fill="var(--mark-soft)"]')
+    expect(areas).toHaveLength(1)
   })
 
   it('marks where watching began', () => {
@@ -63,14 +66,16 @@ describe('the panel chart', () => {
     expect(d.match(/M/g)).toHaveLength(1)
   })
 
-  it('says so when there are no closes at all, rather than drawing flat', () => {
-    /* An empty box reads as a price that held perfectly steady. */
-    const { container } = render(<PriceChart chart={chart({
+  it('says so when there are no closes at all, rather than framing a void', () => {
+    /* The old layout kept the full price lane as empty frame with a dashed
+       rule floating in it. The chatter lane takes the whole plot now, and
+       one line of text says why there is no price. */
+    const { container, getByText } = render(<PriceChart chart={chart({
       closes: Array.from({ length: 365 }, () => null),
     })} />)
 
     expect(container.querySelector('path.px')).toBeNull()
-    expect(container.querySelector('.px-none')).toBeTruthy()
+    expect(getByText('no stored price for this span')).toBeTruthy()
   })
 
   it('colours the line by direction and nothing else', () => {
@@ -86,16 +91,21 @@ describe('the panel chart', () => {
       'stroke', 'var(--down)')
   })
 
-  it('emits nothing for a measured zero, and something for a one', () => {
-    /* Ported from the geometry suite when the chart moved here. A zero is a
-       day we watched and nothing was said; a 2px stub would overstate it into
-       looking like a little chatter. */
+  it('rides the floor for a measured zero rather than overstating it', () => {
+    /* A zero is a day we watched and nothing was said. As an area it sits ON
+       the baseline -- present, flat, honest -- where the old 2px bar stub
+       would have overstated it into looking like a little chatter. */
     const { container } = render(<PriceChart chart={chart({
       closes: [1, 2],
       chatter: [0, 1],
     })} />)
 
-    expect(container.querySelectorAll('rect.chat')).toHaveLength(1)
+    const area = container.querySelector('path[fill="var(--mark-soft)"]')!
+    const d = area.getAttribute('d')!
+    // One run covering both slots: the zero anchors the shape at the floor.
+    expect(container.querySelectorAll('path[fill="var(--mark-soft)"]'))
+      .toHaveLength(1)
+    expect(d).toContain('Z')
   })
 
   it('keeps calendar position, not the order of surviving points', () => {
@@ -126,6 +136,7 @@ describe('the axis on an intraday span', () => {
     closes: Array.from({ length: 96 }, (_, i) => 10 + i * 0.01),
     chatter: Array.from({ length: 96 }, () => 1),
     sessions: [],
+    normal_per_slot: null,
     watched_from: null,
   })
 
@@ -159,7 +170,8 @@ describe('the axis on an intraday span', () => {
     const daily: DetailChart = {
       from: '2026-01-01T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, () => 5),
-      chatter: Array.from({ length: 365 }, () => 1), sessions: [], watched_from: null,
+      chatter: Array.from({ length: 365 }, () => 1), sessions: [],
+      normal_per_slot: null, watched_from: null,
     }
 
     const { container } = render(<PriceChart chart={daily} />)

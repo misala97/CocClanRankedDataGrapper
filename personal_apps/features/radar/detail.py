@@ -20,6 +20,7 @@ from models import RadarBucketSource, RadarQuote
 
 from .config import expand_sources_for_history
 from . import quotes as quotes_mod
+from . import coverage
 
 # Calendar days per span, not trading days: the arrays are indexed by calendar
 # day so price and chatter stay aligned through weekends and holidays. A year
@@ -75,6 +76,12 @@ class Chart:
     # minutes from days on its own -- without this it labels a 24-hour chart
     # with month names.
     step_minutes: int = 1440
+    # The ticker's own normal chatter rate scaled to ONE SLOT of this chart,
+    # or None when the baseline is too thin to divide by (phrasing.py's
+    # ratio guard, applied by detail_panel.build). The chart draws it as the
+    # dashed line the row charts already carry, so "above its normal" reads
+    # the same at every zoom.
+    normal_per_slot: object = None
 
 
 def daily_counts(tickers, sources, start, now):
@@ -205,16 +212,13 @@ def watched_slots(sources, start, now, step_minutes, slots):
     This is the same coverage proxy board._covered_hours uses. A quiet source
     is therefore zero only in a slot we observed; an interior ingest outage is
     unknown rather than a fabricated run of quiet chatter.
+
+    The scan lives in coverage.py, hinted and memoised -- unhinted, this one
+    query was 6-9 of the panel's 7-9 seconds at the 1W span, which is what
+    "the chart does not load" was.
     """
-    sources = expand_sources_for_history(sources)
-    rows = (db.session.query(RadarBucketSource.bucket_start)
-            .filter(RadarBucketSource.source.in_(list(sources)),
-                    RadarBucketSource.bucket_start >= start,
-                    RadarBucketSource.bucket_start < now,
-                    RadarBucketSource.status.in_(('ok', 'truncated')))
-            .distinct().all())
     covered = set()
-    for (bucket_start,) in rows:
+    for bucket_start in coverage.covered_bucket_starts(sources, start, now):
         index = _slot_index(bucket_start, start, step_minutes, slots)
         if index is not None:
             covered.add(index)

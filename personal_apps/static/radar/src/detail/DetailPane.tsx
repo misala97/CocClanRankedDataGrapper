@@ -123,7 +123,20 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   const focused = useRef<string | null>(ticker)
   const request = ticker === null ? null
     : `${ticker}|${selection.market}|${selection.sources.join(',')}|${selection.window}|${span}`
-  const detail = loaded?.request === request ? loaded.detail : null
+  const fresh = loaded !== null && loaded.request === request
+  // Stale-while-revalidate, but only within one ticker and market: a span,
+  // source or window change keeps the previous chart on screen, dimmed,
+  // instead of blanking the whole panel into "Loading" -- which is what a
+  // span click did for the full length of the fetch (measured at 7s on 1W
+  // before coverage.py; the blank was most of "the chart does not load").
+  // A different ticker or market still gets the loading state: showing
+  // MRNA's chart under NVDA's name would be worse than a blank.
+  const detail = fresh ? loaded.detail
+    : loaded !== null
+        && loaded.detail.identity.ticker === ticker
+        && loaded.detail.market === selection.market
+      ? loaded.detail : null
+  const revalidating = !fresh && detail !== null
 
   useEffect(() => {
     if (!detail || detail.identity.ticker !== ticker) return
@@ -263,7 +276,8 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         </h3>
         {/* Its own scroller. Below 900px the chart pans instead of being
             scaled until its axis is unreadable -- see radar.css. */}
-        <div className="chartwrap" ref={chartScroller}>
+        <div className="chartwrap" ref={chartScroller}
+             aria-busy={revalidating || undefined}>
           <PriceChart key={drawn} chart={detail.chart} />
         </div>
         {/* CSS shows this only at the widths where the chart pans. The right

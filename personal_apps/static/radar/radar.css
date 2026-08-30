@@ -910,7 +910,14 @@ body {
   .backboard:focus-visible {
     outline: 2px solid var(--mark); outline-offset: 3px;
   }
-  .chartwrap { overflow-x: auto; overscroll-behavior-x: contain; }
+  /* A span or filter change keeps the previous chart on screen while the new
+   one is fetched; the dim is the only signal, so it must be unmistakable
+   without dropping any label under the contrast floor -- the SVG carries
+   the text, so the whole drawing recedes together. */
+.chartwrap[aria-busy="true"] .pxchart { opacity: 0.35; }
+.pxchart { transition: opacity var(--base) var(--ease); }
+
+.chartwrap { overflow-x: auto; overscroll-behavior-x: contain; }
   /* `height: auto`, because an SVG drawn 204px tall inside a 300px box
      centres itself and leaves 96px of nothing above the chart. The viewBox
      already carries the ratio. */

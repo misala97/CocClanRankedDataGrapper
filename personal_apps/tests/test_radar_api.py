@@ -583,11 +583,18 @@ def test_intraday_chart_serializes_clipped_selected_market_session_intervals():
 
     payload = api.serialize_detail(built)
 
-    assert payload['chart']['sessions'] == [{
+    # Closed stretches ride along since the single-lane chart; the
+    # pre-market interval itself must stay exactly as it was.
+    sessions = payload['chart']['sessions']
+    assert [b for b in sessions if b['kind'] == 'premarket'] == [{
         'start': '2026-08-28T06:00:00Z',
         'end': '2026-08-28T06:55:00Z',
         'kind': 'premarket',
     }]
+    closed = [b for b in sessions if b['kind'] == 'closed']
+    # The chart opens at 05:30Z, half an hour before Xetra's pre-market.
+    assert closed and closed[0]['start'] == '2026-08-28T05:30:00Z'
+    assert closed[0]['end'] == '2026-08-28T06:00:00Z'
 
 
 def test_intraday_chart_at_xetra_premarket_end_has_no_premarket_band():

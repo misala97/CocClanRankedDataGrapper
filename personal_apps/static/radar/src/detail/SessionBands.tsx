@@ -11,9 +11,30 @@ type SessionBandsProps = {
 const LABELS: Record<ChartSession['kind'], string> = {
   premarket: 'Pre-market',
   afterhours: 'After hours',
+  closed: 'Closed',
 }
 
-/** Extended-session context behind, never over, the measured chart paths. */
+const FILLS: Record<ChartSession['kind'], string> = {
+  premarket: 'var(--session-pre-soft)',
+  afterhours: 'var(--session-after-soft)',
+  // The neutral wash: a shut market is not a caution, it is furniture. The
+  // token flips with the theme on its own.
+  closed: 'var(--rule-soft)',
+}
+
+const INKS: Record<ChartSession['kind'], string> = {
+  premarket: 'var(--session-pre)',
+  afterhours: 'var(--session-after)',
+  closed: 'var(--muted)',
+}
+
+/** What kind of time each stretch is, behind -- never over -- the data.
+ *
+ *  Three kinds since the single-lane chart: the extended sessions in their
+ *  own tints and `closed` as a neutral wash. The wash is what makes a gap in
+ *  the price line legible at a glance: no line inside gray is a weekend, no
+ *  line on paper is an outage.
+ */
 export function SessionBands({ chart, plotTop, plotBottom, plotRight }: SessionBandsProps) {
   const clipId = `session-band-${useId().replaceAll(':', '')}`
   const slots = Math.max(chart.closes.length, chart.chatter.length)
@@ -36,16 +57,18 @@ export function SessionBands({ chart, plotTop, plotBottom, plotRight }: SessionB
         const x = ((left - start) / (end - start)) * plotRight
         const width = ((right - left) / (end - start)) * plotRight
         const label = LABELS[session.kind]
-        const showLabel = width >= 56
+        // Closed stretches carry no label: on a week they are every night,
+        // and seven "Closed" captions say less than the wash itself.
+        const showLabel = session.kind !== 'closed' && width >= 56
         return (
           <g data-session={session.kind} key={`${session.kind}-${session.start}-${index}`}>
             <rect x={x} y={plotTop} width={width} height={plotBottom - plotTop}
                   clipPath={`url(#${clipId})`}
-                  fill={`var(--session-${session.kind === 'premarket' ? 'pre' : 'after'}-soft)`} />
+                  fill={FILLS[session.kind]} />
             {showLabel && (
               <text x={x + width / 2} y={plotTop + 13} textAnchor="middle"
                     clipPath={`url(#${clipId})`}
-                    fill={`var(--session-${session.kind === 'premarket' ? 'pre' : 'after'})`}>
+                    fill={INKS[session.kind]}>
                 {label}
               </text>
             )}
@@ -56,6 +79,11 @@ export function SessionBands({ chart, plotTop, plotBottom, plotRight }: SessionB
   )
 }
 
+/** The extended sessions present, for the chart's aria label. Closed is
+ *  deliberately absent: "closed" as session context reads as the chart
+ *  apologising for the calendar. */
 export function sessionNames(sessions: ChartSession[]): string {
-  return [...new Set(sessions.map((session) => LABELS[session.kind]))].join(', ')
+  return [...new Set(sessions
+    .filter((session) => session.kind !== 'closed')
+    .map((session) => LABELS[session.kind]))].join(', ')
 }

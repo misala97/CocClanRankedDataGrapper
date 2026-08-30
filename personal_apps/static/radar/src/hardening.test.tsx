@@ -82,6 +82,7 @@ function detail(ticker = 'AAA'): Detail {
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
       sessions: [],
+      normal_per_slot: null,
       watched_from: '2026-08-18',
     },
     breakdown: {
@@ -318,7 +319,8 @@ describe('the chart draws itself', () => {
     return screen.findByText(/AAA is being discussed/).then(() => {
       const plot = document.querySelector('.pxchart .plot')!
       expect(plot.getAttribute('class')).toBe('plot')
-      expect(plot.querySelectorAll('rect.chat').length).toBeGreaterThan(0)
+      expect(plot.querySelectorAll('path[fill="var(--mark-soft)"]').length)
+        .toBeGreaterThan(0)
     })
   })
 })

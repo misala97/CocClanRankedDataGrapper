@@ -152,3 +152,14 @@ def acting_as(user_id):
     with flask_app.test_request_context():
         flask_session['user_id'] = user_id
         yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_radar_coverage():
+    """The coverage memo (features/radar/coverage.py) caches for 60s, which
+    is longer than a test: a suite that writes buckets and then asks what was
+    covered would read the answer from before its own writes."""
+    from features.radar import coverage
+    coverage.clear_memo()
+    yield
+    coverage.clear_memo()

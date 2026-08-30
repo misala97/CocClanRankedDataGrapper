@@ -31,7 +31,7 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarBucketSource, RadarMention, RadarPost, RadarQuote
 
-from . import leaderboard, phrasing
+from . import coverage, leaderboard, phrasing
 from .market_calendars import session_bounds, session_state
 from .quotes import _quote_matches
 from .config import (SEGMENT_GROUPS, VARIANCE_FLOOR, expand_sources,
@@ -170,15 +170,13 @@ def _covered_hours(sources, since, now):
     board-wide silence reads the same as a stopped daemon. Both resolve to
     "not measured", which is the honest half of the ambiguity -- the dishonest
     half would be drawing a zero.
+
+    The scan itself lives in coverage.py, hinted and memoised, shared with
+    the panel chart's watched_slots -- see that module's header for the
+    measured reasons.
     """
-    sources = expand_sources_for_history(sources)
-    rows = (db.session.query(RadarBucketSource.bucket_start)
-            .filter(RadarBucketSource.source.in_(list(sources)),
-                    RadarBucketSource.bucket_start >= since,
-                    RadarBucketSource.bucket_start < now,
-                    RadarBucketSource.status.in_(('ok', 'truncated')))
-            .distinct().all())
-    return {_hour_floor(start) for (start,) in rows}
+    starts = coverage.covered_bucket_starts(sources, since, now)
+    return {_hour_floor(start) for start in starts}
 
 
 def _hourly_counts(tickers, sources, since, now):
