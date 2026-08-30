@@ -5,13 +5,11 @@
 - Workspace: `C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-german-market`
 - Branch: `codex/radar-german-market`
 - Base/main at worktree creation: `5a741e8bb05e32e8a157a5ddbd899da1603451e0`
-- HEAD when the final whole-branch review was dispatched: `9dd1cbc`
-  (`docs(radar): record German market verification`).
-- The final-review fix commit follows this handoff update. Its intended tracked
-  scope is the 10 accepted Important fixes, their regression tests, and this
-  handoff/ledger; `.artifacts/radar-german-market/` remains ignored local-only
-  evidence and must not be committed. No protected primary-checkout file was
-  touched.
+- Current functional HEAD: `5b40bff`
+  (`fix(radar): contain timestamp and Xetra gap errors`).
+- This handoff update follows that commit. `.artifacts/radar-german-market/`
+  remains ignored local-only evidence and must not be committed. No protected
+  primary-checkout file was touched.
 
 ## Read completely before editing
 
@@ -127,8 +125,20 @@ the isolated worktree.
   dropped after verification. The shared development database was not migrated
   as part of this branch work.
 
+## Final blocker evidence — 2026-08-30
+
+- `5b40bff` contains the last three focused fixes: provider timestamps outside
+  the platform range are contained per symbol for both Finnhub and Twelve
+  Data, and Xetra's 08:55–09:00 closed interval now points to today's 09:00
+  regular open.
+- Focused tests passed: **20 passed** (`test_radar_prices.py` plus the Xetra
+  boundary regression). Production frontend build passed; `git diff --check`
+  passed.
+- Regenerated mobile fixture evidence:
+  `.artifacts/radar-german-market/screenshots/de-xetra-mobile-light.png`.
+
 ## Immediate next action
 
-Parent should inspect the final-review fix commit, then make the integration
-decision. Do not merge, push, deploy, or start a branch-final review from this
-task.
+Parent should inspect `5b40bff` and the following handoff-only commit, then
+make the integration decision. Do not merge, push, deploy, or start a
+branch-final review from this task.
