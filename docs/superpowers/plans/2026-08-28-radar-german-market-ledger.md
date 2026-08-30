@@ -26,7 +26,7 @@ commit, and independent read-only review acceptance.
 | 7 | Market selection and Berlin formatting | complete | `55c8392`, `f58d413` | accepted after fix round 1 |
 | 8 | Quote/session/fallback presentation | complete | `27c39e8`, `aee5e507` | accepted after fix round 1 |
 | 9 | Chart session bands | complete | `28e65f9`, `73464ba` | accepted after fix round 1 |
-| 10 | Full verification and integration handoff | final-review fixes committed; parent integration decision pending | final-review fix commit | accepted findings fixed; no new review dispatched |
+| 10 | Full verification and integration handoff | complete; ready for integration | `9dd1cbc`, `3367c7b`, `5b40bff`, `5047bac` | final blockers verified |
 
 ## Baseline evidence — 2026-08-28
 
@@ -89,8 +89,9 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Parent should inspect the final-review fix commit and make the integration
-decision. Do not merge, push, or deploy from this task.
+User authorized integration. Merge/push, then deploy in this order: pull the
+merged commit, run `flask db upgrade`, run `npm run build`, restart app/daemon,
+then probe German entitlement without printing secrets.
 
 ## Task 10 verification evidence — 2026-08-30
 

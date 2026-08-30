@@ -55,10 +55,8 @@ context by market and venue.
 
 ## Open work
 
-- Tasks 1–9 are accepted and complete.
-- The parent-dispatched final review returned 10 Important and 2 Minor
-  findings. Their fixes are complete and await only this focused commit and a
-  parent-owned integration decision; do not rerun a branch-final review here.
+- Tasks 1–10 are complete; final review blockers were fixed and targeted
+  verification passed. User authorized merge/push and deployment preparation.
 
 ## Known baseline issue
 
@@ -139,6 +137,6 @@ the isolated worktree.
 
 ## Immediate next action
 
-Parent should inspect `5b40bff` and the following handoff-only commit, then
-make the integration decision. Do not merge, push, deploy, or start a
-branch-final review from this task.
+Merge/push now authorized. On the VPS: pull the merged commit, run `flask db
+upgrade`, run `npm run build`, restart app/daemon, then probe German provider
+entitlement without printing secrets. Do not start the daemon before migration.
