@@ -5,11 +5,12 @@
 - Workspace: `C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-german-market`
 - Branch: `codex/radar-german-market`
 - Base/main at worktree creation: `5a741e8bb05e32e8a157a5ddbd899da1603451e0`
-- Current implementation HEAD before this handoff update: `acd76d1`
-- Working tree at this handoff: intentionally dirty only in
-  `personal_apps/tests/test_radar_quotes.py`, a Task 5 red test created before
-  the user paused work. Preserve it; do not discard or commit it without
-  completing Task 5's TDD cycle.
+- Current implementation HEAD before Task 10 documentation: `8aabbec`
+  (`docs(radar): checkpoint chart sessions`).
+- Working tree at this handoff: Task 10 documentation changes plus local-only
+  untracked `.artifacts/radar-german-market/` verification logs, helper
+  scripts, and screenshots. The artifacts contain no secrets and must not be
+  committed. No protected primary-checkout file was touched.
 
 ## Read completely before editing
 
@@ -56,7 +57,9 @@ context by market and venue.
 ## Open work
 
 - Tasks 1–9 are accepted and complete.
-- Task 10 remains pending. Never redispatch a ledger-complete task.
+- Task 10 verification gates are complete, but Task 10 awaits the
+  parent-dispatched independent whole-branch read-only review. Never
+  redispatch a ledger-complete task.
 - After each task: focused tests, commit, independent read-only review, ruling,
   ledger update, handoff update. One implementation worker at a time.
 
@@ -83,11 +86,20 @@ the isolated worktree.
 
 ## Tests and setup already run
 
-- `npm install` in worktree `personal_apps`: complete, 0 vulnerabilities.
-- `npm test`: 403 + 136 PASS.
-- `npm run build`: PASS.
-- Broad backend `python -m pytest tests -q -k radar`: 649 PASS, 2 skipped;
-  setup API failures resolved after build; 2 profile isolation failures remain.
+- Isolated backend: all 39 `test_radar_*.py` files passed 745/745 in 52.26s
+  against disposable `personal_apps_radar_verify_20260830`; the database was
+  schema-created and minimally seeded locally for this run, not shared with
+  development data, then dropped after the gate.
+- Frontend `npm test`: 403 general + 162 Radar = 565 PASS.
+- Frontend `npm run build`: PASS, including gym and Radar Vite manifests.
+- Redacted provider smoke test: configured Twelve Data + Finnhub credentials
+  were unable to obtain a usable Xetra catalog: reachable false, all catalog/
+  mapping counts zero, and no retained German quote sample. No keys or payloads
+  were printed. Treat current German intraday/catalog entitlement as unavailable.
+- Playwright fixture audit: desktop 1440×1000 light/dark, mobile 390×844
+  light/dark, and print; US regular/after-hours, Xetra EUR, and explicit US
+  fallback were each exercised. No console errors or body horizontal overflow;
+  local-only PNGs live under `.artifacts/radar-german-market/screenshots/`.
 
 ## Deploy carries
 
@@ -96,11 +108,13 @@ the isolated worktree.
 - VPS needs `flask db upgrade` before the new daemon writes market columns.
 - `npm run build` remains required after checkout/reset on the VPS.
 - German data must be probed with configured keys without printing them.
-- If German intraday entitlement is absent, deploy marked fallbacks/EOD honesty;
-  never relabel EOD as live.
+- Current probe result is unavailable Xetra catalog/intraday entitlement. Deploy
+  only marked US/USD fallbacks (or clearly EOD Xetra data if that entitlement
+  later becomes available); never relabel either as live.
 
 ## Immediate next action
 
-Paused by the user after Task 9. Do not start Task 10 until the user explicitly
-asks to continue. When authorized, perform Task 10 full verification, provider
-probe, visual audit, independent whole-branch review, and deployment handoff.
+Task 10 verification evidence is complete. Parent must dispatch the independent
+whole-branch read-only review next; resolve any accepted findings in focused
+commits, then update this handoff/ledger before offering an integration decision.
+Do not merge, push, deploy, or start a branch-final review from this task.

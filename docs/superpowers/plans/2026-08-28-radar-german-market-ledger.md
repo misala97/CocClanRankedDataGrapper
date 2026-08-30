@@ -26,7 +26,7 @@ commit, and independent read-only review acceptance.
 | 7 | Market selection and Berlin formatting | complete | `55c8392`, `f58d413` | accepted after fix round 1 |
 | 8 | Quote/session/fallback presentation | complete | `27c39e8`, `aee5e507` | accepted after fix round 1 |
 | 9 | Chart session bands | complete | `28e65f9`, `73464ba` | accepted after fix round 1 |
-| 10 | Full verification and integration handoff | pending | — | — |
+| 10 | Full verification and integration handoff | verification complete; independent review pending | — | pending parent-dispatched whole-branch review |
 
 ## Baseline evidence — 2026-08-28
 
@@ -75,7 +75,45 @@ commit, and independent read-only review acceptance.
 
 ## Immediate next action
 
-Paused after Task 9. Do not start Task 10 unless the user explicitly asks.
+Dispatch the independent whole-branch read-only review. Do not merge, push, or
+deploy until it is clean and a final integration decision is made.
+
+## Task 10 verification evidence — 2026-08-30
+
+- Isolated backend gate: created the disposable local MariaDB database
+  `personal_apps_radar_verify_20260830`, applied the current SQLAlchemy schema
+  and only the minimal admin/exercise seed required by Radar's shared client
+  fixture. The runner prevented `.env` from overwriting that database target.
+  `python -m pytest` over the explicit list of all 39
+  `tests/test_radar_*.py` files passed **745/745** in **52.26s**. This avoids
+  the shared-development-database contamination documented in the baseline.
+  The exact disposable database was dropped after the gate.
+- Frontend gate: `npm test` passed **403 general + 162 Radar = 565** tests.
+  `npm run build` passed, producing both gym and Radar Vite manifests.
+- Redacted provider probe: configured Twelve Data and Finnhub credentials were
+  detected without printing their values. The permitted combined catalog probe
+  returned `catalog_reachable=False`, `xetra_rows=0`, `isin_rows=0`,
+  `mapped_active_tickers=0`, `unavailable_active_tickers=0`, and no retained
+  German quote sample (`age=unavailable`, `quality=unavailable`). Therefore
+  current German intraday/catalog entitlement is **unavailable**; deployment
+  must retain the explicit US/USD fallback path and must not present an Xetra
+  quote as live. No catalog payload or credential was recorded.
+- Playwright audit used the built local app and deterministic fixture payloads:
+  US regular at 1440×1000/light, US after-hours at 1440×1000/dark, genuine
+  Xetra EUR at 390×844/light, explicit US/USD fallback at 390×844/dark, plus
+  print. Every page had a visible market radiogroup, no body horizontal
+  overflow, and no console errors. Screenshots are local-only under
+  `.artifacts/radar-german-market/screenshots/`; desktop light and mobile dark
+  samples were inspected with the local image viewer. The narrow fallback
+  header is dense but did not overflow its viewport.
+- Diff hygiene: after removing two pre-existing trailing spaces from the
+  approved design header, `git diff --check main...HEAD` is clean. The focused
+  secret scan found only its documented search pattern and historical `...`
+  placeholders in an older plan; it found no key value. Local-only artifacts
+  remain intentionally untracked and must not be committed.
+- Task 10 is not accepted yet: whole-branch independent review is intentionally
+  deferred to the parent dispatch. No merge, push, deploy, or broad review was
+  performed in this task.
 
 ## Task 9 evidence — 2026-08-30
 

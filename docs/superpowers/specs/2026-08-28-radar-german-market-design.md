@@ -1,7 +1,7 @@
 # Radar German-market view and Berlin time
 
-**Status:** approved in conversation on 2026-08-28  
-**Owner:** Michi  
+**Status:** approved in conversation on 2026-08-28
+**Owner:** Michi
 **Execution:** shared across Codex and Claude through the tracked plan, ledger,
 and `HANDOFF.md`; repository evidence wins over chat memory.
 
