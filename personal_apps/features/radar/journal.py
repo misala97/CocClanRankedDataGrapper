@@ -7,6 +7,7 @@ in the pipeline reads it, and nothing reads it after retention drops the row --
 the bucket is the durable artifact.
 """
 import collections
+import datetime as dt
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -24,7 +25,7 @@ from models import RadarMention, RadarMentionEvent, RadarPost
 from . import buckets
 # Safe as a name import: config imports nothing from this package, so it is
 # never the module mid-import. Only `buckets` is in the cycle.
-from .config import expand_sources_for_history
+from .config import MENTION_EVENT_RETENTION_HOURS, expand_sources_for_history
 
 # Rows per INSERT. Large enough that a busy Bluesky cycle is a handful of
 # statements, small enough to stay well inside max_allowed_packet.
@@ -110,6 +111,24 @@ def bootstrap_from_mentions(since):
         for (ticker, confidence, sentiment, source, external_id, channel,
              author, created_utc, simhash, score, num_comments) in rows]
     record(recovered)
+
+    # Replayed events default to NULL eligibility; mentions already carrying
+    # a final v2 judgment know better. Re-derive the flag from the
+    # materialized verdict so a bootstrap never resurrects a confirmed
+    # non-chatter mention into the counts. Lazy import: llm_sentiment
+    # imports this module inside its pass functions, and this is the
+    # matching half of that cycle-avoidance.
+    from . import llm_sentiment
+    judged = (db.session.query(RadarMention, RadarPost)
+              .join(RadarPost, RadarPost.id == RadarMention.post_id)
+              .filter(RadarPost.created_utc >= since,
+                      RadarMention.sentiment_judged_at.isnot(None)).all())
+    pairs = [((post.source, post.external_id, mention.ticker),
+              llm_sentiment.final_eligibility(mention))
+             for mention, post in judged]
+    if pairs:
+        sync_chatter_eligibility(pairs)
+        db.session.commit()
     return len(recovered)
 
 
@@ -133,7 +152,13 @@ def events_for(keys):
                        RadarMentionEvent.ticker.in_(list(tickers)))
                for start, tickers in by_window.items()]
 
-    rows = RadarMentionEvent.query.filter(sa.or_(*clauses)).all()
+    # Chatter eligibility (spec §7.2): a FINAL irrelevant/broadcast verdict
+    # (False) removes the event from every rebuild; NULL (undecided) and
+    # True both count. isnot(False), not is_(True) -- provisional rows must
+    # keep counting.
+    rows = (RadarMentionEvent.query.filter(sa.or_(*clauses))
+            .filter(RadarMentionEvent.counts_as_human_chatter.isnot(False))
+            .all())
     return [buckets.MentionRow(ticker=row.ticker, external_id=row.external_id,
                                created_utc=row.created_utc, source=row.source,
                                channel=row.channel, author=row.author,
@@ -176,6 +201,69 @@ def mark_promoted(rows):
     db.session.commit()
 
 
+def sync_chatter_eligibility(pairs):
+    """Set each event's chatter flag to the mention's FINAL eligibility.
+
+    pairs: iterable of ((source, external_id, ticker), True | False | None).
+    False excludes, True counts (an explicit decision -- a Sonnet reversal
+    lands here and RESTORES counting), None returns a mention to
+    provisional. Returns only windows whose stored value actually CHANGED,
+    so unchanged re-syncs rebuild nothing.
+
+    No commit of its own: runs inside the caller's judgment transaction,
+    so the mention's materialized verdict and the journal's flag can never
+    disagree across a crash.
+    """
+    pairs = list(pairs)
+    changed = set()
+    for start in range(0, len(pairs), _CHUNK):
+        chunk = pairs[start:start + _CHUNK]
+        by_identity = {identity: value for identity, value in chunk}
+        clauses = [sa.and_(RadarMentionEvent.source == source,
+                           RadarMentionEvent.external_id == external_id,
+                           RadarMentionEvent.ticker == ticker)
+                   for source, external_id, ticker in by_identity]
+        for row in RadarMentionEvent.query.filter(sa.or_(*clauses)).all():
+            value = by_identity[(row.source, row.external_id, row.ticker)]
+            if row.counts_as_human_chatter is not value:
+                row.counts_as_human_chatter = value
+                changed.add((row.ticker, row.bucket_start))
+    return changed
+
+
+def recent_decided_windows(now, minutes=30):
+    """Windows holding a recently DECIDED flag -- the durable retry net.
+
+    A crash between the judgment commit and the bucket rebuild loses only
+    that rebuild; the next pass re-collects these windows and rebuilds
+    idempotently. Bounded by event recency so it stays one indexed read.
+    """
+    since = now - dt.timedelta(minutes=minutes)
+    rows = (db.session.query(RadarMentionEvent.ticker,
+                             RadarMentionEvent.bucket_start)
+            .filter(RadarMentionEvent.counts_as_human_chatter.isnot(None),
+                    RadarMentionEvent.created_utc >= since)
+            .distinct().all())
+    return {(ticker, start) for ticker, start in rows}
+
+
+def rebuild_windows(windows, now=None):
+    """Recompute the buckets behind these windows from the filtered journal.
+
+    Refuses windows older than the journal horizon: their events are
+    pruned, and bootstrap_from_mentions cannot restore low-confidence-only
+    posts (never stored as mentions), so a rebuild there would silently
+    collapse low_count -- corrupting forever-retained history to fix its
+    tone eligibility. Documented deviation from a literal spec §9 step 7.
+    """
+    now = now or dt.datetime.utcnow()
+    horizon = now - dt.timedelta(hours=MENTION_EVENT_RETENTION_HOURS)
+    inside = [(ticker, start) for ticker, start in windows if start >= horizon]
+    if not inside:
+        return 0
+    return buckets.rebuild_windows(inside)
+
+
 def distinct_voices(tickers, sources, since, now, field):
     """Distinct authors or channels per ticker over the SCORED mentions.
 
@@ -207,7 +295,10 @@ def distinct_voices(tickers, sources, since, now, field):
                     RadarMentionEvent.created_utc >= since,
                     RadarMentionEvent.created_utc < now,
                     sa.or_(RadarMentionEvent.confidence == 'high',
-                           RadarMentionEvent.promoted.is_(True)))
+                           RadarMentionEvent.promoted.is_(True)),
+                    # A confirmed non-chatter voice is not a voice (spec
+                    # §7.2); NULL/True keep counting.
+                    RadarMentionEvent.counts_as_human_chatter.isnot(False))
             .group_by(RadarMentionEvent.ticker).all())
     # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
     return {ticker: int(count) for ticker, count in rows}

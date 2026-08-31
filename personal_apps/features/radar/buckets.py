@@ -20,7 +20,7 @@ from extensions import db
 from models import RadarBucket, RadarBucketSource
 
 from .config import (BUCKET_MINUTES, MAX_BARE_PER_VOUCHER, SCOREABLE_STATUSES,
-                     source_config_version, source_root)
+                     VARIANCE_FLOOR, source_config_version, source_root)
 # Safe at the top because journal.py imports this module as `buckets` rather
 # than pulling MentionRow/bucket_start_for by name -- neither side touches an
 # attribute of the other until a function actually runs, so it no longer
@@ -239,6 +239,94 @@ def roll_up(rows, statuses, touched):
                 child.variance = None
                 child.mention_z = None
                 child.baseline_days = None
+            child.source_config_version = version
+
+        written += 1
+
+    db.session.commit()
+    return written
+
+
+def rebuild_windows(windows):
+    """Status-preserving re-rollup of specific windows from the journal.
+
+    The chatter-eligibility correction path (spec §7.2): after a final
+    irrelevant/broadcast verdict flips an event's flag -- or a review
+    reversal flips it back -- the affected quarter-hours are recomputed
+    from the complete, eligibility-filtered journal. Differences from the
+    live roll_up, all deliberate:
+
+    - Only windows with EXISTING child rows are touched; a window nothing
+      ever counted has nothing to correct.
+    - `status` is preserved from the stored children (source health is a
+      fact about the cycle that observed it, not about this correction),
+      and the parent's sources_ok likewise stays.
+    - Removing the last eligible event leaves EXPLICIT ZEROS: a counted
+      window whose chatter was all disqualified is a real measurement of
+      zero, not an absence.
+    - A same-generation scoreable child keeps expected/variance/
+      baseline_days (the baseline inputs are still valid) and has its
+      mention_z recomputed IMMEDIATELY from the corrected count -- a
+      corrected bucket must not keep a stale z until the next scoring
+      pass. A generation mismatch clears all four, exactly as the live
+      path does.
+
+    Idempotent: rebuilding twice from the same journal writes the same
+    numbers.
+    """
+    windows = set(windows)
+    if not windows:
+        return 0
+
+    version = source_config_version()
+    complete = journal.events_for(windows)
+    promoted_rows = _promote(complete)
+    journal.mark_promoted(promoted_rows)
+
+    grouped = collections.defaultdict(list)
+    for row in promoted_rows:
+        key = (row.ticker, bucket_start_for(row.created_utc))
+        if key in windows:
+            grouped[key].append(row)
+
+    written = 0
+    for ticker, start in windows:
+        children = RadarBucketSource.query.filter_by(
+            ticker=ticker, bucket_start=start).all()
+        if not children:
+            continue
+        bucket_rows = grouped.get((ticker, start), [])
+
+        bucket = RadarBucket.query.filter_by(
+            ticker=ticker, bucket_start=start).one_or_none()
+        if bucket is None:
+            bucket = RadarBucket(ticker=ticker, bucket_start=start,
+                                 sources_ok=0)
+            db.session.add(bucket)
+        totals = _summarize(bucket_rows)
+        for field, value in totals.items():
+            setattr(bucket, field, value)
+        bucket.source_config_version = version
+
+        by_source = collections.defaultdict(list)
+        for row in bucket_rows:
+            by_source[row.source].append(row)
+
+        for child in children:
+            per = _summarize(by_source.get(child.source, []))
+            previous_version = child.source_config_version
+            for field, value in per.items():
+                setattr(child, field, value)
+            if (child.status not in SCOREABLE_STATUSES
+                    or previous_version != version):
+                child.expected = None
+                child.variance = None
+                child.mention_z = None
+                child.baseline_days = None
+            elif child.expected is not None and child.variance is not None:
+                child.mention_z = ((per['mention_count'] - child.expected)
+                                   / max(child.variance,
+                                         VARIANCE_FLOOR) ** 0.5)
             child.source_config_version = version
 
         written += 1

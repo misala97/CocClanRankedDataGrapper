@@ -624,9 +624,14 @@ MAX_BARE_PER_VOUCHER = 4
 
 # Counts written by generation 1 were rebuilt from one cursor slice and lost
 # up to 42.9% of the busiest buckets. Generation 2 rebuilds from the complete
-# mention journal. This is hashed because the two populations are not valid
-# inputs to one baseline, even though the extractor admitted the same symbols.
-ROLLUP_GENERATION = 2
+# mention journal. Generation 3 (sentiment v2, spec §7.2) excludes events a
+# FINAL irrelevant/broadcast judgment disqualified from every rollup and
+# rebuild -- a smaller population than generation 2 counted, and tone
+# judgments that REMOVE mentions from counts ride this generation, unlike
+# judgments that merely rescore them. Hashed because two populations are not
+# valid inputs to one baseline, even when the extractor admitted the same
+# symbols.
+ROLLUP_GENERATION = 3
 
 # Generation 1 stored every subreddit under the aggregate name `reddit`.
 # Generation 2 makes the subreddit part of the durable source name. The

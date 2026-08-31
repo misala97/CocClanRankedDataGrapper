@@ -21,6 +21,14 @@ Missing, malformed, refused, or partial answers remain unjudged and
 retry on a later pass; they never default to neutral, relevant, or
 human chatter.
 
+WHAT TOUCHES THE COUNTING POPULATION. A judgment that merely rescores a
+counted mention stays outside source_config_version, as tone always has.
+A FINAL irrelevant or broadcast_or_automated verdict is different: it
+REMOVES the mention from bucket counts and distinct-voice reads (spec
+§7.2), which changes which mentions get counted -- exactly what the
+stamp exists to version. That population change rides ROLLUP_GENERATION
+(bumped to 3 with this feature); see config.ROLLUP_GENERATION.
+
 COST. The v1 pass measured $1.24/day at ~6,880 mentions (2026-08-25);
 the v2 prompt is larger, so expect roughly 2-3x input tokens -- the
 figure is on the board, watch it there. No daily ceiling by design:
@@ -559,9 +567,45 @@ def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL):
     spend.record(model, calls=meter['calls'], input_tokens=meter['input'],
                  output_tokens=meter['output'])
     written = apply_judgments(rows, judgments, stage='primary', model=model)
-    # Task 10 inserts journal-eligibility sync HERE, inside this commit.
+    changed = _sync_eligibility(rows, judgments)
     db.session.commit()
+    _rebuild_corrected(changed)
     return written
+
+
+def _sync_eligibility(rows, judgments):
+    """Push each judged mention's FINAL eligibility onto its journal event.
+
+    Runs inside the caller's open transaction (no commit): the mention's
+    verdict and the journal flag land together. Returns the CHANGED
+    windows for the rebuild that follows the commit. Lazy import: journal
+    imports this module inside bootstrap_from_mentions, and this is the
+    matching half of that cycle-avoidance.
+    """
+    from . import journal
+    judged = [(mention, post) for mention, post in rows
+              if mention.id in judgments]
+    pairs = [((post.source, post.external_id, mention.ticker),
+              final_eligibility(mention))
+             for mention, post in judged]
+    if not pairs:
+        return set()
+    return journal.sync_chatter_eligibility(pairs)
+
+
+def _rebuild_corrected(changed):
+    """Rebuild corrected windows, plus the durable-retry net.
+
+    Runs AFTER the judgment commit: the flags are durable first, and a
+    crash before or during this rebuild is healed on the next pass because
+    recent_decided_windows re-collects fresh decisions and rebuilds are
+    idempotent (spec §7.2, Codex correction 4).
+    """
+    from . import journal
+    now = dt.datetime.utcnow()
+    windows = set(changed) | journal.recent_decided_windows(now)
+    if windows:
+        journal.rebuild_windows(windows, now=now)
 
 
 def run_review_pass(client=None, now=None):
@@ -636,9 +680,11 @@ def run_review_pass(client=None, now=None):
                  input_tokens=meter['input'], output_tokens=meter['output'])
     written = apply_judgments(take, judgments, stage='review',
                               model=REVIEW_MODEL)
-    # Task 10 inserts journal-eligibility sync HERE, inside this commit --
-    # a review REVERSAL must restore counting in the same transaction.
+    # A review REVERSAL must restore counting in the same transaction the
+    # verdict lands in.
+    changed = _sync_eligibility(take, judgments)
     db.session.commit()
+    _rebuild_corrected(changed)
     if written:
         _meter_add(today, served=written)
     return written
