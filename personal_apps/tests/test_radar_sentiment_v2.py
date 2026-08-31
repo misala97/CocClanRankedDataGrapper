@@ -480,6 +480,26 @@ def clean_meter_all():
         db.session.commit()
 
 
+@pytest.fixture()
+def own_candidates(monkeypatch):
+    """Scope the review scan to this suite's fixtures.
+
+    The dev database is shared and now carries REAL v2 judgments (a live
+    daemon ran locally on 2026-08-31); the recency scan would otherwise
+    pull those into demand counts and ceiling math. The wrapper keeps the
+    production query, ordering, and triggers under test and drops only
+    foreign rows -- the same own-your-rows discipline every suite here
+    uses.
+    """
+    real = llm_sentiment.review_candidates
+
+    def scoped(now, limit=llm_sentiment.PASS_LIMIT):
+        return [(mention, post) for mention, post in real(now, limit)
+                if post.external_id.startswith('zztest')]
+
+    monkeypatch.setattr(llm_sentiment, 'review_candidates', scoped)
+
+
 def primary_judged(external_id, confidence='low'):
     """A mention with a primary judgment whose confidence triggers review."""
     mention_id = make_post(external_id)
@@ -491,7 +511,7 @@ def primary_judged(external_id, confidence='low'):
 
 
 def test_review_pass_is_off_without_the_flag(clean_posts, clean_meter_all,
-                                             monkeypatch):
+                                             own_candidates, monkeypatch):
     monkeypatch.delenv('RADAR_SONNET_REVIEW', raising=False)
     with flask_app.app_context():
         primary_judged('zztest-rv-off')
@@ -500,7 +520,7 @@ def test_review_pass_is_off_without_the_flag(clean_posts, clean_meter_all,
 
 
 def test_shadow_mode_meters_but_never_calls(clean_posts, clean_meter_all,
-                                            monkeypatch):
+                                            own_candidates, monkeypatch):
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-shadow')
@@ -512,7 +532,7 @@ def test_shadow_mode_meters_but_never_calls(clean_posts, clean_meter_all,
 
 
 def test_demand_is_counted_once_across_passes(clean_posts, clean_meter_all,
-                                              monkeypatch):
+                                              own_candidates, monkeypatch):
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
     with flask_app.app_context():
         primary_judged('zztest-rv-once')
@@ -523,7 +543,7 @@ def test_demand_is_counted_once_across_passes(clean_posts, clean_meter_all,
 
 
 def test_the_ceiling_caps_on_attempted_and_priority_wins(
-        clean_posts, clean_meter_all, monkeypatch):
+        clean_posts, clean_meter_all, own_candidates, monkeypatch):
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'true')
     with flask_app.app_context():
         # Two candidates, ceiling budget for one: the higher-priority
@@ -534,8 +554,10 @@ def test_the_ceiling_caps_on_attempted_and_priority_wins(
             rows_for([uncertain]), {uncertain: ja(relevance='uncertain')},
             stage='primary', model=llm_sentiment.PRIMARY_MODEL)
         db.session.commit()
-        # 2 primary judgments today -> ceiling int(0.10 * 2) = 0. Give
-        # budget for exactly one by patching the share.
+        # Pin the fixture arithmetic: 2 primary judgments, share 0.5 ->
+        # budget for exactly one. _primary_count is the seam so the real
+        # daemon's history cannot move `allowed`.
+        monkeypatch.setattr(llm_sentiment, '_primary_count', lambda day: 2)
         monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 0.5)
         client = FakeClient([answer([full(1)])])
         served = llm_sentiment.run_review_pass(client=client)
@@ -552,8 +574,9 @@ def test_the_ceiling_caps_on_attempted_and_priority_wins(
 
 
 def test_a_failed_sonnet_call_meters_attempted_but_not_served(
-        clean_posts, clean_meter_all, monkeypatch):
+        clean_posts, clean_meter_all, own_candidates, monkeypatch):
     monkeypatch.setenv('RADAR_SONNET_REVIEW', '1')
+    monkeypatch.setattr(llm_sentiment, '_primary_count', lambda day: 10)
     monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-fail')
@@ -569,8 +592,9 @@ def test_a_failed_sonnet_call_meters_attempted_but_not_served(
 
 
 def test_sonnet_result_overwrites_and_carries_the_preamble(
-        clean_posts, clean_meter_all, monkeypatch):
+        clean_posts, clean_meter_all, own_candidates, monkeypatch):
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'true')
+    monkeypatch.setattr(llm_sentiment, '_primary_count', lambda day: 10)
     monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-serve')
@@ -809,6 +833,7 @@ def test_a_non_dict_entry_is_skipped():
 
 def test_the_meter_lands_on_the_utc_day_of_the_pass(clean_posts,
                                                     clean_meter_all,
+                                                    own_candidates,
                                                     monkeypatch):
     """Finding 7: date.today() is the machine's local calendar; around
     midnight it disagrees with the UTC clock every other figure uses."""

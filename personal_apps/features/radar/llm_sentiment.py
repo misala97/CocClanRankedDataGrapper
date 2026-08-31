@@ -633,6 +633,17 @@ def _rebuild_corrected(changed):
         journal.rebuild_windows(windows, now=now)
 
 
+def _primary_count(today):
+    """Primary judgments booked on this UTC day. Its own seam: the review
+    ceiling and the ops gauge share it, and tests running against the
+    shared dev database patch it rather than fighting real history."""
+    return (db.session.query(
+        sa.func.count(RadarSentimentJudgment.id))
+        .filter(RadarSentimentJudgment.stage == 'primary',
+                sa.func.date(RadarSentimentJudgment.created_utc) == today)
+        .scalar() or 0)
+
+
 def run_review_pass(client=None, now=None):
     """The selective Sonnet tier (spec §5.3). Returns mentions reviewed.
 
@@ -662,11 +673,7 @@ def run_review_pass(client=None, now=None):
     if not candidates:
         return 0
 
-    primary_today = (db.session.query(
-        sa.func.count(RadarSentimentJudgment.id))
-        .filter(RadarSentimentJudgment.stage == 'primary',
-                sa.func.date(RadarSentimentJudgment.created_utc) == today)
-        .scalar() or 0)
+    primary_today = _primary_count(today)
     meter_row = db.session.get(RadarReviewMeter, today)
     attempted_today = meter_row.attempted if meter_row else 0
     allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
@@ -794,12 +801,7 @@ def _over_ceiling_gauge(now, attempted_today):
     cached_at = _gauge_cache['at']
     if cached_at is not None and (now - cached_at).total_seconds() < 60:
         return _gauge_cache['value']
-    primary_today = (db.session.query(
-        sa.func.count(RadarSentimentJudgment.id))
-        .filter(RadarSentimentJudgment.stage == 'primary',
-                sa.func.date(RadarSentimentJudgment.created_utc)
-                == now.date())
-        .scalar() or 0)
+    primary_today = _primary_count(now.date())
     allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
                   - attempted_today)
     candidates = review_candidates(now)
