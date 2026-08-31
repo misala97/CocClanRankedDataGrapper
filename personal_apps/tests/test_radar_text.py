@@ -61,3 +61,23 @@ def test_negation_flips_the_sign():
 def test_score_is_bounded():
     shouting = 'bullish ' * 200
     assert -1.0 <= sentiment.lexicon_score(shouting) <= 1.0
+
+
+def test_score_on_a_reddit_comment_ignores_the_parent_title():
+    from features.radar.sentiment_input import prepare_sentiment_input
+    p = prepare_sentiment_input(
+        'reddit:wallstreetbets',
+        '/u/x on HUGE upside great buy bullish',   # parent words, not the author's
+        'this dumps, terrible', 'ZZA')
+    assert sentiment.score(p) < 0
+
+
+def test_score_unescapes_entities_before_the_lexicon():
+    from features.radar.sentiment_input import prepare_sentiment_input
+    p = prepare_sentiment_input('bluesky', None,
+                                'don&#39;t buy, this is a scam', 'ZZA')
+    assert sentiment.score(p) < 0
+
+
+def test_active_version_is_the_lexicon_until_an_artifact_is_promoted():
+    assert sentiment.active_version() == 'lexicon-v1'

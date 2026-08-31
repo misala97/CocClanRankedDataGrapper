@@ -34,6 +34,30 @@ _NEGATION_SCOPE = 3
 _SCALE = 8.0
 
 
+LEXICON_VERSION = 'lexicon-v1'
+
+
+def active_version():
+    """Which local scorer is live.
+
+    'lexicon-v1' until a classifier artifact passes its promotion gates
+    (spec 2026-08-31 §8); the artifact dispatch extends this later.
+    """
+    return LEXICON_VERSION
+
+
+def score(prepared):
+    """The local sentiment float for one prepared (post, ticker) input.
+
+    [-1, 1]; 0.0 means no signal. Provisional by design: it covers the
+    minutes before the LLM verdict and the tiers the LLM never reads.
+    Takes a sentiment_input.PreparedInput so cleaning (HTML entities,
+    reddit parent-title stripping) can never diverge from what the LLM
+    judge and the trainer see.
+    """
+    return lexicon_score(prepared.author_text)
+
+
 def lexicon_score(text):
     """A sentiment score in [-1.0, 1.0]. 0.0 means no lexicon words matched."""
     tokens = _WORD_RE.findall((text or '').lower())

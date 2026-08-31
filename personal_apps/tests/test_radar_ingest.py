@@ -647,3 +647,11 @@ def test_a_source_can_opt_into_single_letter_cashtags(monkeypatch):
                    source='bluesky')
 
     assert ingest._extract_for(finance, lookup) == [('B', 'high')]
+
+
+def test_fresh_mentions_carry_the_local_model_version(seeded):
+    ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[post()], status='ok')))
+    with flask_app.app_context():
+        mention = RadarMention.query.filter_by(ticker=TEST_TICKER).one()
+        assert mention.local_sentiment_model_version == 'lexicon-v1'

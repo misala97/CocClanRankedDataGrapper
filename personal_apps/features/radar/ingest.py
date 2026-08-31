@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarMention, RadarPost, RadarSourceCursor
 
-from . import buckets, extraction, fingerprint, sentiment, universe
+from . import buckets, extraction, fingerprint, sentiment, sentiment_input, universe
 from .config import (
     BUCKET_MINUTES, bare_token_confidence, bare_tokens_allowed,
     coin_collision_dropped, looks_like_bot_feed,
@@ -174,29 +174,35 @@ def _store_mentioning_posts(raw_posts, lookup, now):
         tickers = extracted[raw.external_id]
         if not tickers:
             continue
-        score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))
         for symbol, confidence in tickers:
+            prepared = sentiment_input.prepare_sentiment_input(
+                raw.source, raw.title, raw.body, symbol,
+                author=raw.author, channel=raw.channel)
             mention_rows.append(buckets.MentionRow(
                 ticker=symbol, external_id=raw.external_id,
                 created_utc=raw.created_utc, source=raw.source,
                 channel=raw.channel,
                 author=raw.author, simhash=fingerprint.simhash64(
                     '%s %s' % (raw.title or '', raw.body)),
-                confidence=confidence, sentiment=score,
+                confidence=confidence, sentiment=sentiment.score(prepared),
                 engagement=float(raw.score + raw.num_comments)))
 
     for raw, row, tickers in fresh:
-        score = sentiment.lexicon_score('%s %s' % (raw.title or '', raw.body))
         for symbol, confidence in tickers:
-            db.session.add(RadarMention(post_id=row.id, ticker=symbol,
-                                        confidence=confidence,
-                                        lexicon_sentiment=score))
+            prepared = sentiment_input.prepare_sentiment_input(
+                raw.source, raw.title, raw.body, symbol,
+                author=raw.author, channel=raw.channel)
+            local = sentiment.score(prepared)
+            db.session.add(RadarMention(
+                post_id=row.id, ticker=symbol, confidence=confidence,
+                lexicon_sentiment=local,
+                local_sentiment_model_version=sentiment.active_version()))
             mention_rows.append(buckets.MentionRow(
                 ticker=symbol, external_id=raw.external_id,
                 created_utc=raw.created_utc, source=raw.source,
                 channel=raw.channel,
                 author=raw.author, simhash=row.simhash, confidence=confidence,
-                sentiment=score,
+                sentiment=local,
                 engagement=float(raw.score + raw.num_comments)))
 
     return mention_rows, new_count
