@@ -1,10 +1,49 @@
 # Radar market data v2: German-first prices
 
-**Status:** approved in conversation on 2026-08-31
+**Status:** approved in conversation on 2026-08-31; amended 2026-09-01 (US-arm
+sources), amendment approved by Michi, pending Codex review
 
 **Owner:** Michi
 
 **Scope:** binding design only; implementation requires a separate reviewed plan
+
+## Amendment log (2026-09-01)
+
+An independent provider sweep (12-agent research run, primary sources fetched
+2026-08-31) confirmed the German arm of this design as the best available
+option and produced three US-arm amendments, folded in below and marked
+`[A1]`/`[A2]`/`[A3]` where they change binding text:
+
+- **A1 — US daily closes come from Massive's free grouped-daily endpoint,
+  not per-symbol Yahoo.** Massive (the former Polygon.io; the rebrand kept the
+  API unchanged) includes `GET /v2/aggs/grouped/locale/us/market/stocks/{date}`
+  on its free tier: one request returns the daily OHLCV for every US stock.
+  Verified on massive.com/pricing and the endpoint's plan-access statement
+  ("Included in all Stocks plans") on 2026-08-31. One official call per
+  trading day covers the entire ~12.6k-ticker universe, so every US ticker
+  has chart history before it ever becomes loud, and the free-quota
+  exhaustion that made charts stale disappears. Free-tier limits: 5 calls per
+  minute, 2 years of history, end-of-day recency — all sufficient for this
+  role. Requires a free API key (operator signup).
+- **A2 — Finnhub remains the US quote source; Yahoo US is rollback/fallback
+  only.** Finnhub's free tier documents real-time US quotes on an official,
+  keyed API at 60 calls/minute; replacing a working official real-time feed
+  with an unofficial delayed one is a regression, so the
+  `RADAR_US_PRICE_PROVIDER=yahoo` flag exists as a fallback path and is not a
+  planned activation. (The ~20-minute-delay comment in
+  `features/radar/prices/finnhub.py` contradicts Finnhub's current
+  documentation and gets corrected in passing.) Yahoo's remaining bounded
+  roles: the German Xetra history backfill proxy of §8, the deep-tail US
+  history backfill beyond Massive's two-year window for active-union
+  tickers, and the flag-gated US fallback.
+- **A3 — two measured truthfulness fixes ride along:** the 1D chart still
+  slots prices by fetch time, so a days-old print re-fetched every five
+  minutes draws as a fresh flat line (the repository's own "stale-repeat
+  disease", previously fixed only for the 1W span); intraday chart slotting
+  moves to provider event time. And quote polling now pauses outside the
+  covered venue's session instead of storing repeats of Friday's print all
+  weekend (measured: weekend p50 print age ~55 hours across 10k stored
+  rows).
 
 ## 1. Outcome
 
@@ -14,10 +53,14 @@ German-first market-data architecture:
 - **Germany:** Deutsche Börse's free 15-minute-delayed files, with Tradegate
   BSX (`XGAT`) as the preferred venue and Xetra (`XETR`) as the German
   fallback venue.
-- **United States:** Yahoo Finance's chart endpoint, treated as a useful but
-  non-contractual best-effort source.
-- **History:** Yahoo performs the initial one-year backfill. Deutsche Börse
-  then builds native German history forward from observed venue data.
+- **United States:** Finnhub's official free feed remains the quote source
+  `[A2]`; Massive's free grouped-daily endpoint supplies daily closes for the
+  entire US universe `[A1]`; Yahoo Finance's chart endpoint is retained as a
+  flag-gated best-effort US fallback.
+- **History:** Yahoo performs the initial backfill for German (Xetra-proxy)
+  history and the deep tail of active US instruments; Massive's grouped
+  endpoint backfills and maintains universe-wide US closes `[A1]`. Deutsche
+  Börse then builds native German history forward from observed venue data.
 
 The design optimizes for the user's actual use: a dependable German price is
 far more valuable than an exact benchmark-venue price, differences of a few
@@ -41,12 +84,19 @@ no-FX rule, explicit provenance, and honest stale/unavailable states.
    hours and broader international equity coverage matter more here than a
    few cents of venue difference.
 6. Xetra is the German fallback when no verified Tradegate listing exists.
-7. US prices use Yahoo only. A Yahoo outage may degrade the US view but must
-   not affect German collection or the rest of Radar.
+7. ~~US prices use Yahoo only.~~ *(amended 2026-09-01, approved by Michi)*
+   US quotes stay on Finnhub's official free feed; US daily closes come from
+   Massive's free grouped-daily endpoint; Yahoo serves the German history
+   backfill, the bounded US deep-tail history backfill for active-union
+   instruments, and remains a flag-gated US fallback `[A1]``[A2]`. A failure of
+   any US-side source may degrade only its own slice and must not affect
+   German collection or the rest of Radar.
 8. German historical backfill is important. Yahoo may supply Xetra history as
    an explicitly identified proxy for the same EUR security.
 9. The UI shows the actual venue, currency, freshness, and whether the value
    is a trade or an indicative midpoint.
+10. Recurring spend stays EUR 0: Massive's free tier and free API key satisfy
+    that constraint; its paid tiers are out of scope `[A1]`.
 
 ## 3. Non-negotiable truth rules
 
@@ -119,7 +169,7 @@ When no German listing can be verified, Germany mode may retain the existing
 explicit `US fallback` presentation for availability. That fallback is used
 only for a genuinely absent German mapping, never for a transient German feed
 failure, and is excluded from German price scoring. The user can switch to the
-US view for the normal Yahoo-backed US price.
+US view for the normal Finnhub-backed US price `[A2]`.
 
 ### 4.3 Price selection within a German venue
 
@@ -161,10 +211,38 @@ other venue.
 
 ### 4.5 US data
 
-US quotes and history use Yahoo's per-symbol chart endpoint. The implementation
-must not depend on the currently unauthorized batch quote endpoint. Requests
-use bounded concurrency, a cache, explicit timeouts, exponential backoff, and
-a conservative application-side rate limit.
+`[A1]``[A2]` The US arm uses three sources with disjoint roles:
+
+**Quotes — Finnhub (primary).** The existing official free feed stays the US
+quote source: documented real-time US quotes, keyed API, 60 calls/minute.
+Polling covers the active board union on the established five-minute cadence
+while the US session (including pre/post phases the calendar recognizes) is
+open, plus one post-close cycle to capture the closing print; outside those
+windows the poller stores nothing rather than re-storing an unchanged print
+`[A3]`.
+
+**Daily closes — Massive grouped-daily (primary).** One
+`grouped-daily` request per US trading day returns every US stock's OHLCV.
+The daily job ingests the most recent unfetched trading days (bounded, within
+the free tier's 5-calls/minute limit) with `source='massive_grouped'` and
+`adjusted=true` — split-adjusted, matching the series the store actually
+holds (the incumbent provider's documented default is split adjustment).
+Universe-wide coverage is deliberate: a ticker gets its chart
+before it first becomes loud. Rows are joined to universe tickers by exact
+symbol; unmatched symbols on either side are counted and logged, and any
+normalization mapping is added only from observed mismatches, never guessed.
+The free key is operator-provisioned; the base URL is configuration because
+of the Polygon→Massive rebrand.
+
+**Fallback and backfill — Yahoo chart endpoint.** Yahoo's per-symbol chart
+endpoint backs three bounded roles: the German Xetra history backfill of §8,
+the deep-tail US history backfill beyond Massive's two-year window for
+active-union tickers (§8.1),
+and a flag-gated US quote/history fallback that is not a planned activation
+`[A2]`. The implementation must not depend on the currently unauthorized
+batch quote endpoint. Requests use bounded concurrency, a cache, explicit
+timeouts, exponential backoff, and a conservative application-side rate
+limit.
 
 Every Yahoo result is checked against the requested provider symbol, expected
 currency, exchange metadata where present, and provider timestamp. HTTP 401,
@@ -173,8 +251,10 @@ that instrument unavailable for the cycle. There is no cookie scraping,
 browser automation, or escalating retry storm.
 
 Yahoo is an unofficial, unsupported source without an availability contract.
-Its failure degrades only US quotes/history and operational status. It cannot
-block German ingestion, chatter ingestion, board rendering, or daemon health.
+Massive is official but free-tier: a quota or availability failure is
+tolerated, logged, and retried the next cycle. A failure of any US-side
+source degrades only its own slice and operational status. It cannot block
+German ingestion, chatter ingestion, board rendering, or daemon health.
 
 ## 5. Binding German instrument mapping
 
@@ -283,7 +363,7 @@ Binding normalized additions are:
 
 | Field | Values / meaning |
 |---|---|
-| `source` | `deutsche_boerse_delayed`, `yahoo_chart`, or explicit migration-era legacy source |
+| `source` | `deutsche_boerse_delayed`, `yahoo_chart`, `massive_grouped` (daily closes only, never an intraday quote) `[A1]`, `finnhub` (the permanent US quote source `[A2]`), or an explicit migration-era value (`legacy`, `twelvedata`) |
 | `price_basis` | `trade`, `midpoint`, or `close` |
 | `bid`, `ask` | nullable original EUR book values; both required to derive midpoint |
 | `quote_ts` | provider event time in UTC; never replaced by `fetched_at` |
@@ -297,7 +377,10 @@ that evidence; processing the same file twice within one poll does not create
 duplicates.
 
 `RadarDailyClose` gains source provenance. A daily-close write is uniquely
-identified by ticker, market, MIC, and date. For the same identity/date,
+identified by ticker, market, MIC, date, and shadow state `[A1]` — shadow
+rows are a parallel measurement lane, invisible to every live read, that
+lets a shadow close and the incumbent live close coexist for the same
+identity and date during an agreement gate. For the same identity/date,
 verified Deutsche Börse data wins over Yahoo backfill; a lower-priority source
 cannot overwrite it.
 
@@ -313,13 +396,18 @@ message was already normalized.
 
 ## 8. Historical backfill and forward history
 
-### 8.1 Yahoo backfill
+### 8.1 Backfill
 
-After mappings are frozen, a bounded, resumable job fetches at least the last
+After mappings are frozen, bounded, resumable jobs fetch at least the last
 400 calendar days at daily resolution:
 
-- US instruments use their verified Yahoo US symbol and are stored under
-  their US MIC/currency.
+- `[A1]` The whole US universe is backfilled from Massive's grouped-daily
+  endpoint, one request per trading day, to the free tier's two-year depth.
+  Rows are stored under each ticker's US MIC/currency with
+  `source='massive_grouped'`.
+- Active-union US instruments additionally use their verified Yahoo US symbol
+  for the deeper tail beyond Massive's two-year window, so the shipped 3Y
+  chart span does not regress for the tickers the board actually shows.
 - German instruments use the verified Xetra mnemonic plus Yahoo's `.DE`
   convention only when Yahoo response metadata confirms the expected EUR
   Xetra identity.
@@ -381,10 +469,21 @@ the board can display.
 
 ### 9.2 US cycle
 
-Yahoo polling runs independently on a 15-minute cadence for the same
-board-eligible union. It uses a fair due queue, bounded concurrency, cache,
-and backoff. Repeated provider failure may leave US stale without slowing the
-German cycle.
+`[A2]` Finnhub quote polling runs independently on the established
+five-minute cadence for the same board-eligible union, gated to the US
+session plus one post-close cycle `[A3]`. Under the Yahoo fallback flag the
+cadence widens to 15 minutes with a fair due queue, bounded concurrency,
+cache, and backoff. Repeated provider failure may leave US stale without
+slowing the German cycle.
+
+`[A1]` The Massive grouped-close job runs once per day after the US close,
+ingesting every unfetched recent US trading day (bounded catch-up after
+downtime) in the shadow state the close-source flag dictates. Daily closes
+older than the widest chart span (in calendar days) plus a buffer are pruned
+on the existing retention schedule — native Deutsche Börse closes excepted,
+because they are observed, not refetchable — so universe-wide ingestion
+cannot grow unboundedly; measured table growth is listed for review at the
+US-close activation gate of §12.
 
 ### 9.3 Quality and eligibility
 
@@ -399,6 +498,12 @@ German cycle.
 
 Age is computed from the provider event time. Fetch time is shown separately
 in diagnostics and never makes old market data fresh.
+
+`[A3]` The same rule governs chart slotting: intraday chart spans place each
+print by its provider event time, so an unchanged print re-fetched across
+many polls occupies one slot and the line honestly ends, instead of drawing a
+fresh flat crawl from fetch receipts. This closes the "stale-repeat disease"
+the repository previously fixed only for the 1W span.
 
 ## 10. API and interface contract
 
@@ -450,6 +555,8 @@ every board request:
 - mapped/unverified/unavailable counts and mapping refusal reasons;
 - current trade/midpoint/stale/unavailable proportions;
 - Yahoo success, latency, 401/403/429, identity mismatch, and backoff state;
+- `[A1]` Massive grouped-close job state: last ingested trading date, rows
+  matched/unmatched against the universe, quota/backoff state;
 - history coverage and native/proxy seam counts.
 
 Safety limits reject unexpectedly large downloads, excessive decompression
@@ -457,8 +564,10 @@ ratios, invalid archives, malformed JSON, and unbounded collections before
 they exhaust VPS memory. Logs contain remote identities and reason codes but
 not cookies, terms tokens, API keys, or full licensed payloads.
 
-German and Yahoo workers have separate schedules, state, transactions, and
-feature switches. A failure in one is recorded and contained; neither worker
+German, Finnhub, Massive, and Yahoo workers have separate schedules, state,
+transactions, and
+feature switches `[A1]``[A2]`. A failure in one is recorded and contained;
+no provider worker
 may terminate the general Radar daemon.
 
 ## 12. Rollout and activation gates
@@ -470,12 +579,24 @@ Deployment is staged and independently reversible:
    writers continue safely.
 3. **Mapping shadow:** build `XGAT`/`XETR` mappings without changing board
    selection; audit refusals and overrides.
-4. **History:** run the resumable Yahoo backfill and expose no proxy as native.
+4. **History:** run the resumable Yahoo backfill (German proxy + active-union
+   US deep tail) and expose no proxy as native. `[A1]` The Massive universe
+   backfill is NOT part of this stage: it runs only in stage 7's shadow state
+   or after its gate, never as ungated live writes.
 5. **German shadow:** collect for one complete Tradegate trading session
    without serving the new source.
 6. **German activation:** switch Germany reads only after all gates below pass.
-7. **US activation:** switch US reads to Yahoo independently; it is not a
-   prerequisite for German activation.
+7. **US closes activation `[A1]`:** switch US daily closes to the Massive
+   grouped job independently, after at least three consecutive trading days
+   of shadow ingestion whose overlapping dates agree with the incumbent
+   source within a small tolerance and whose unmatched-symbol counts and
+   measured table growth are
+   reviewed. The two-year universe backfill runs in shadow state before the
+   gate and in live state only after it. US quotes remain Finnhub `[A2]`;
+   the Yahoo US flag stays a
+   fallback and its activation is not planned. None of this is a
+   prerequisite for German activation, and German activation does not wait
+   for it.
 8. **Contract:** make transition-null fields required only after every writer
    and rollback-compatible reader has been deployed.
 
@@ -508,9 +629,11 @@ not waived inside the implementation plan.
 Rollback disables the new reader/writer independently per market and restores
 the previous compatible read path. It does not delete captured quotes,
 history, mappings, or cursors. A mapping rollback restores the previous atomic
-mapping generation. Old Finnhub/Twelve Data adapters may remain for one
-release as rollback code, but they receive no routine calls after the new
-sources activate and are removed only in a later cleanup.
+mapping generation. `[A1]``[A2]` The Twelve Data adapter may remain for one
+release as rollback code, receiving no routine calls after German activation
+and the Massive close switch, and is removed only in a later cleanup. The
+Finnhub adapter is NOT rollback code: it keeps serving US quotes and company
+profiles indefinitely.
 
 ## 13. Required verification
 
@@ -548,12 +671,25 @@ sources activate and are removed only in a later cleanup.
 - Xetra proxy requires exact ISIN+EUR, stops at one seam, is labelled in API
   and UI, and never supplies a current Tradegate quote;
 - US/USD history cannot enter German sigma or chart data;
-- native close selection never uses a midpoint and reconciles idempotently.
+- native close selection never uses a midpoint and reconciles idempotently;
+- `[A1]` Massive grouped payloads are validated per row (symbol, positive
+  close, event date); one malformed row does not discard the day's other
+  rows; a malformed day does not advance the ingested-date cursor; unmatched
+  symbols are counted, never guessed into the universe; a grouped write
+  addresses only US-market identities and can never match a German-market
+  row (identity isolation, proven with a seeded same-ticker German close
+  left untouched); and a Massive close never appears as an intraday quote.
 
 ### 13.4 Board and compatibility
 
 - actual venue, currency, basis, age, fallback, proxy, and score eligibility
   agree across board, detail, and legacy projection;
+- `[A3]` the 1D span slots prints by provider event time: a test first makes
+  the stale-repeat visible (an old print re-fetched across several polls
+  drawn as multiple fresh slots) and shows the assertion fail, then proves
+  the fixed chart collapses it to one slot with an honestly ending line;
+- `[A3]` the US quote poller performs no request while the US calendar says
+  closed, except the single post-close cycle;
 - a transient `XGAT` outage ages the pinned quote and never switches to Xetra
   or US;
 - an unmapped German instrument may use only the explicitly marked,
@@ -576,7 +712,8 @@ report, and desktop/mobile visual checks for every quote state.
 
 ## 14. Out of scope
 
-- paid data subscriptions or automatic upgrades;
+- paid data subscriptions or automatic upgrades (Massive's paid tiers
+  included `[A1]`);
 - real-time rather than delayed Deutsche Börse data;
 - broker execution, portfolio valuation, or tax accounting;
 - synthetic FX prices;
@@ -607,3 +744,15 @@ report, and desktop/mobile visual checks for every quote state.
 - yfinance's statement that Yahoo Finance has no supported public API and is
   intended for research/personal use:
   <https://github.com/ranaroussi/yfinance>
+
+`[A1]``[A2]` Checked on 2026-08-31 for the amendment:
+
+- Massive (ex-Polygon) pricing, free Stocks Basic tier (5 calls/min, 2 years
+  history, end-of-day recency): <https://massive.com/pricing>
+- Massive Daily Market Summary (grouped daily) endpoint, "Included in all
+  Stocks plans":
+  <https://massive.com/docs/rest/stocks/aggregates/daily-market-summary>
+- Polygon→Massive rebrand, API unchanged:
+  <https://massive.com/blog/polygon-is-now-massive>
+- Finnhub free-tier real-time US quote documentation:
+  <https://finnhub.io/docs/api/quote>
