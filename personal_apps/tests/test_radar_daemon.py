@@ -812,3 +812,16 @@ def test_daemon_schedules_weekly_mapping_refresh(monkeypatch):
     assert mapping[2]['weeks'] == 1
     assert mapping[2]['max_instances'] == 1
     assert mapping[2]['coalesce'] is True
+
+
+def test_a_broken_review_pass_does_not_take_the_daemon_down(monkeypatch):
+    """The review tier sits on top of the primary the way the primary sits on
+    top of ingest: optional, isolated, never fatal."""
+    monkeypatch.setattr(daemon.llm_sentiment, 'run_pass', lambda: 0)
+
+    def explode():
+        raise RuntimeError('sonnet is unreachable')
+
+    monkeypatch.setattr(daemon.llm_sentiment, 'run_review_pass', explode)
+
+    daemon._scheduled_sentiment()   # must not raise

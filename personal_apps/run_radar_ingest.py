@@ -687,6 +687,16 @@ def _scheduled_sentiment():
         if judged:
             logger.info('radar sentiment judged %d mentions, %d still waiting',
                         judged, llm_sentiment.pending_count())
+        try:
+            reviewed = llm_sentiment.run_review_pass()
+        except Exception:
+            # Same isolation as the primary: the review tier is optional on
+            # top of an optional enrichment, and it must never cost the
+            # primary pass its turn.
+            logger.exception('radar review pass failed')
+            return
+        if reviewed:
+            logger.info('radar review judged %d mentions', reviewed)
 
 
 def _prepare_rollup_generation(now):

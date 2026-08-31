@@ -32,6 +32,7 @@ import dataclasses
 import datetime as dt
 import json
 import logging
+import os
 
 import anthropic
 import sqlalchemy as sa
@@ -560,6 +561,86 @@ def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL):
     written = apply_judgments(rows, judgments, stage='primary', model=model)
     # Task 10 inserts journal-eligibility sync HERE, inside this commit.
     db.session.commit()
+    return written
+
+
+def run_review_pass(client=None, now=None):
+    """The selective Sonnet tier (spec §5.3). Returns mentions reviewed.
+
+    Gated by RADAR_SONNET_REVIEW following the house flag idiom
+    (RADAR_FORCE_IPV4): off by default, 'shadow' measures routing share
+    and demand without a single call, truthy goes live. The primary pass
+    never waits on this one.
+
+    The ceiling consumes ATTEMPTED sends -- a failed call still spent
+    budget -- and the meter's demanded/capped counters are unique per
+    mention, anchored on review_requested_at, so a candidate waiting
+    across 10-minute passes is counted once.
+    """
+    mode = os.getenv('RADAR_SONNET_REVIEW', '').strip()
+    if mode not in ('shadow', '1', 'true', 'True'):
+        return 0
+    now = now or dt.datetime.utcnow()
+    today = dt.date.today()
+
+    candidates = review_candidates(now)   # priority-ordered, read-only
+    if not candidates:
+        return 0
+
+    primary_today = (db.session.query(
+        sa.func.count(RadarSentimentJudgment.id))
+        .filter(RadarSentimentJudgment.stage == 'primary',
+                sa.func.date(RadarSentimentJudgment.created_utc) == today)
+        .scalar() or 0)
+    meter_row = db.session.get(RadarReviewMeter, today)
+    attempted_today = meter_row.attempted if meter_row else 0
+    allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
+                  - attempted_today)
+    take = candidates[:allowed]
+    over = candidates[allowed:]
+
+    # Unique-demand accounting: only FIRST-time candidates move the meter.
+    new_demand = new_capped = 0
+    for index, (mention, _post) in enumerate(candidates):
+        if mention.review_requested_at is None:
+            mention.review_requested_at = now
+            new_demand += 1
+            if index >= allowed:
+                new_capped += 1
+    db.session.commit()
+    if new_demand or new_capped:
+        _meter_add(today, demanded=new_demand, capped=new_capped)
+
+    if mode == 'shadow':
+        logger.info('radar review shadow: %d candidates (%d new), %d over '
+                    'ceiling, vs %d primary today',
+                    len(candidates), new_demand, len(over), primary_today)
+        return 0
+    if not take:
+        return 0
+
+    # Reserve budget BEFORE the calls: attempted counts what was sent.
+    _meter_add(today, attempted=len(take))
+
+    meter = {'calls': 0, 'input': 0, 'output': 0}
+
+    def count(usage):
+        meter['calls'] += 1
+        meter['input'] += getattr(usage, 'input_tokens', 0) or 0
+        meter['output'] += getattr(usage, 'output_tokens', 0) or 0
+
+    judgments = judge(items_for(take), client=client, model=REVIEW_MODEL,
+                      on_usage=count, effort='low',
+                      preamble=REVIEW_PREAMBLE)
+    spend.record(REVIEW_MODEL, calls=meter['calls'],
+                 input_tokens=meter['input'], output_tokens=meter['output'])
+    written = apply_judgments(take, judgments, stage='review',
+                              model=REVIEW_MODEL)
+    # Task 10 inserts journal-eligibility sync HERE, inside this commit --
+    # a review REVERSAL must restore counting in the same transaction.
+    db.session.commit()
+    if written:
+        _meter_add(today, served=written)
     return written
 
 

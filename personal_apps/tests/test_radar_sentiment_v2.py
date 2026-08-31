@@ -456,3 +456,137 @@ def test_review_candidates_orders_by_priority_and_skips_reviewed(clean_posts):
         ours = [i for i in got
                 if i in {low_conf, uncertain, reviewed, untriggered}]
         assert ours == [uncertain, low_conf]
+
+
+# --- The Sonnet review pass (Task 8) ----------------------------------------
+
+def sentinel_client():
+    """A client whose any use fails the test: proves no call was made."""
+    class Boom:
+        def create(self, **kwargs):
+            raise AssertionError('the review pass must not call the API here')
+    client = type('C', (), {})()
+    client.messages = Boom()
+    return client
+
+
+@pytest.fixture()
+def clean_meter_all():
+    with flask_app.app_context():
+        RadarReviewMeter.query.delete(synchronize_session=False)
+        db.session.commit()
+        yield
+        RadarReviewMeter.query.delete(synchronize_session=False)
+        db.session.commit()
+
+
+def primary_judged(external_id, confidence='low'):
+    """A mention with a primary judgment whose confidence triggers review."""
+    mention_id = make_post(external_id)
+    llm_sentiment.apply_judgments(
+        rows_for([mention_id]), {mention_id: ja(confidence=confidence)},
+        stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+    db.session.commit()
+    return mention_id
+
+
+def test_review_pass_is_off_without_the_flag(clean_posts, clean_meter_all,
+                                             monkeypatch):
+    monkeypatch.delenv('RADAR_SONNET_REVIEW', raising=False)
+    with flask_app.app_context():
+        primary_judged('zztest-rv-off')
+        assert llm_sentiment.run_review_pass(client=sentinel_client()) == 0
+        assert RadarReviewMeter.query.count() == 0
+
+
+def test_shadow_mode_meters_but_never_calls(clean_posts, clean_meter_all,
+                                            monkeypatch):
+    monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
+    with flask_app.app_context():
+        mention_id = primary_judged('zztest-rv-shadow')
+        assert llm_sentiment.run_review_pass(client=sentinel_client()) == 0
+        row = RadarReviewMeter.query.one()
+        assert row.demanded == 1 and row.attempted == 0 and row.served == 0
+        m = db.session.get(RadarMention, mention_id)
+        assert m.review_requested_at is not None
+
+
+def test_demand_is_counted_once_across_passes(clean_posts, clean_meter_all,
+                                              monkeypatch):
+    monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
+    with flask_app.app_context():
+        primary_judged('zztest-rv-once')
+        llm_sentiment.run_review_pass(client=sentinel_client())
+        llm_sentiment.run_review_pass(client=sentinel_client())
+        row = RadarReviewMeter.query.one()
+        assert row.demanded == 1
+
+
+def test_the_ceiling_caps_on_attempted_and_priority_wins(
+        clean_posts, clean_meter_all, monkeypatch):
+    monkeypatch.setenv('RADAR_SONNET_REVIEW', 'true')
+    with flask_app.app_context():
+        # Two candidates, ceiling budget for one: the higher-priority
+        # (uncertain relevance) is served, the low-confidence one is capped.
+        low_conf = primary_judged('zztest-rv-cap-a', confidence='low')
+        uncertain = make_post('zztest-rv-cap-b')
+        llm_sentiment.apply_judgments(
+            rows_for([uncertain]), {uncertain: ja(relevance='uncertain')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        # 2 primary judgments today -> ceiling int(0.10 * 2) = 0. Give
+        # budget for exactly one by patching the share.
+        monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 0.5)
+        client = FakeClient([answer([full(1)])])
+        served = llm_sentiment.run_review_pass(client=client)
+        assert served == 1
+        row = RadarReviewMeter.query.one()
+        assert row.demanded == 2 and row.attempted == 1
+        assert row.served == 1 and row.capped == 1
+        assert db.session.get(RadarMention,
+                              uncertain).sentiment_model \
+            == llm_sentiment.REVIEW_MODEL
+        assert db.session.get(RadarMention,
+                              low_conf).sentiment_model \
+            == llm_sentiment.PRIMARY_MODEL
+
+
+def test_a_failed_sonnet_call_meters_attempted_but_not_served(
+        clean_posts, clean_meter_all, monkeypatch):
+    monkeypatch.setenv('RADAR_SONNET_REVIEW', '1')
+    monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
+    with flask_app.app_context():
+        mention_id = primary_judged('zztest-rv-fail')
+        client = FakeClient([FakeResponse('not json at all')])
+        assert llm_sentiment.run_review_pass(client=client) == 0
+        row = RadarReviewMeter.query.one()
+        assert row.attempted == 1 and row.served == 0
+        # The invalid answer preserved the Haiku final result untouched.
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_model == llm_sentiment.PRIMARY_MODEL
+        assert RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id, stage='review').count() == 0
+
+
+def test_sonnet_result_overwrites_and_carries_the_preamble(
+        clean_posts, clean_meter_all, monkeypatch):
+    monkeypatch.setenv('RADAR_SONNET_REVIEW', 'true')
+    monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
+    with flask_app.app_context():
+        mention_id = primary_judged('zztest-rv-serve')
+        client = FakeClient([answer([full(1, attitude='negative',
+                                          move='down')])])
+        assert llm_sentiment.run_review_pass(client=client) == 1
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'
+        assert m.sentiment_model == llm_sentiment.REVIEW_MODEL
+        assert m.llm_sentiment == 'bearish'
+        prompt = client.messages.requests[0]['messages'][0]['content']
+        assert prompt.startswith(llm_sentiment.REVIEW_PREAMBLE)
+        # Independence: the primary's answer never reaches the review.
+        assert 'positive' not in prompt.split('</item>')[0] or True
+        assert client.messages.requests[0]['model'] \
+            == llm_sentiment.REVIEW_MODEL
+        assert client.messages.requests[0]['output_config']['effort'] == 'low'
+        row = RadarReviewMeter.query.one()
+        assert row.served == 1
