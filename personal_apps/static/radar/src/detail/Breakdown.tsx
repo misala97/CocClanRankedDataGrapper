@@ -80,7 +80,8 @@ export function Breakdown({ breakdown, windowHours }: {
                   nothing else. */}
               {b.disagreements > 0 && (
                 <span className="q">
-                  <b>{count(b.disagreements)}</b> read differently by the model
+                  <b>{count(b.disagreements)}</b> flagged for review by
+                  local/model disagreement
                 </span>
               )}
             </p>

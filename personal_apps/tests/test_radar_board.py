@@ -75,7 +75,8 @@ def bucket(ticker, minutes_ago, source='bluesky', mentions=10, authors=6,
 
 
 def post(ticker, external, minutes_ago, sentiment, author=None,
-         source='bluesky', llm=None):
+         source='bluesky', llm=None, attitude=None, relevance=None,
+         origin=None):
     # A distinct author per post unless one is named: the eligibility floor
     # needs three, and reusing one name silently drops the row from the board
     # before any assertion about tone gets a chance to run.
@@ -87,9 +88,14 @@ def post(ticker, external, minutes_ago, sentiment, author=None,
                     first_seen=when, last_seen=when)
     db.session.add(row)
     db.session.flush()
-    db.session.add(RadarMention(post_id=row.id, ticker=ticker,
-                                confidence='high', lexicon_sentiment=sentiment,
-                                llm_sentiment=llm))
+    judged = attitude is not None or relevance is not None or origin is not None
+    db.session.add(RadarMention(
+        post_id=row.id, ticker=ticker, confidence='high',
+        lexicon_sentiment=sentiment, llm_sentiment=llm,
+        sentiment_attitude=attitude,
+        sentiment_relevance=relevance or ('relevant' if judged else None),
+        sentiment_content_origin=origin or ('human_chatter' if judged else None),
+        sentiment_judged_at=when if judged else None))
 
 
 def quote(ticker, minutes_ago, price):
@@ -636,3 +642,63 @@ def test_normal_line_obeys_the_ratio_guard(clean):
         assert entry.normal_per_hour == expected / built.window_hours
     else:
         assert entry.normal_per_hour is None
+
+
+# ------------------------------------------------- sentiment v2 tone (§7.1) ---
+
+def test_attitude_outranks_the_legacy_projection(clean):
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    # legacy says bearish, the v2 attitude says positive: attitude wins.
+    post(f'{PREFIX}A', f'{PREFIX}1', 30, 0.0, llm='bearish',
+         attitude='positive')
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    assert (tone.bullish, tone.bearish) == (1, 0)
+
+
+def test_a_decided_attitude_blocks_legacy_and_local(clean):
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    post(f'{PREFIX}A', f'{PREFIX}1', 30, 0.9, llm='bullish', attitude='none')
+    post(f'{PREFIX}A', f'{PREFIX}2', 30, 0.9, llm='bullish', attitude='mixed')
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    assert (tone.bullish, tone.bearish, tone.neutral) == (0, 0, 2)
+
+
+def test_null_attitude_falls_back_to_legacy_then_local(clean):
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    post(f'{PREFIX}A', f'{PREFIX}1', 30, -0.9, llm='bullish')   # legacy vote
+    post(f'{PREFIX}A', f'{PREFIX}2', 30, 0.6)                   # local vote
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    assert (tone.bullish, tone.bearish) == (2, 0)
+
+
+def test_confirmed_non_chatter_leaves_the_denominator(clean):
+    """Spec §7.2: a confirmed irrelevant or broadcast mention does not turn
+    neutral -- it leaves tone entirely. `uncertain` stays provisional."""
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    post(f'{PREFIX}A', f'{PREFIX}1', 30, 0.6, attitude='positive')
+    post(f'{PREFIX}A', f'{PREFIX}2', 30, 0.6, attitude='none',
+         relevance='irrelevant')
+    post(f'{PREFIX}A', f'{PREFIX}3', 30, 0.6, attitude='positive',
+         origin='broadcast_or_automated')
+    post(f'{PREFIX}A', f'{PREFIX}4', 30, 0.6, attitude='positive',
+         relevance='uncertain')
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    # 1 judged bullish + 1 uncertain-but-counted bullish; the excluded two
+    # are absent from every column, neutral included.
+    assert (tone.bullish, tone.bearish, tone.neutral) == (2, 0, 0)

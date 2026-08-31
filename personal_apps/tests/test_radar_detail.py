@@ -164,12 +164,13 @@ def test_a_span_shorter_than_a_year_takes_the_recent_end(clean):
 # --------------------------------------------------------------- the panel ---
 
 def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None,
-             llm_sentiment=None):
+             llm_sentiment=None, attitude=None, relevance=None, origin=None):
     """One post carrying one scored mention of `ticker`.
 
     `llm_sentiment` defaults to None (no verdict yet, the common case);
-    passing 'bullish'/'bearish'/'unclear' lets a test drive the model side of
-    `_tone_of` against a real row instead of a hand-built one.
+    passing 'bullish'/'bearish'/'unclear' lets a test drive the legacy side
+    of `_tone_of` against a real row. The v2 fields (attitude, relevance,
+    origin) mark the mention as judged when any is given.
     """
     from models import RadarMention, RadarPost
 
@@ -182,10 +183,15 @@ def post_for(ticker, minutes_ago, author, text, source='bluesky', ext=None,
         simhash=abs(hash(text)) % (2 ** 63), first_seen=when, last_seen=when)
     db.session.add(post)
     db.session.flush()
+    judged = attitude is not None or relevance is not None or origin is not None
     db.session.add(RadarMention(
         post_id=post.id, ticker=ticker, confidence='high',
         lexicon_sentiment=0.4 if 'moon' in text else 0.0,
-        llm_sentiment=llm_sentiment))
+        llm_sentiment=llm_sentiment,
+        sentiment_attitude=attitude,
+        sentiment_relevance=relevance or ('relevant' if judged else None),
+        sentiment_content_origin=origin or ('human_chatter' if judged else None),
+        sentiment_judged_at=when if judged else None))
 
 
 @pytest.fixture()
@@ -310,6 +316,52 @@ def test_the_breakdown_counts_real_disagreements_not_just_the_tone_helper(
     b = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW).breakdown
 
     assert b.disagreements == 1
+
+
+def test_confirmed_non_chatter_leaves_the_breakdown_and_the_post_list(
+        panel_ticker):
+    """Spec §7.2 on the panel: a confirmed irrelevant or broadcast mention
+    vanishes from the tallies AND from the sample-post list -- calling it
+    neutral would fix the color while leaving the spike false. `uncertain`
+    stays provisional and visible."""
+    post_for(f'{PREFIX}A', 5, 'ivan', 'to the moon',
+             ext=f'{PREFIX}-elig-keep', attitude='positive')
+    post_for(f'{PREFIX}A', 6, 'judy', 'to the moon',
+             ext=f'{PREFIX}-elig-irrelevant', attitude='none',
+             relevance='irrelevant')
+    post_for(f'{PREFIX}A', 7, 'karl', 'price feed says up',
+             ext=f'{PREFIX}-elig-broadcast', attitude='positive',
+             origin='broadcast_or_automated')
+    post_for(f'{PREFIX}A', 8, 'lena', 'to the moon',
+             ext=f'{PREFIX}-elig-uncertain', attitude='positive',
+             relevance='uncertain')
+    db.session.commit()
+
+    panel = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
+    b = panel.breakdown
+
+    # panel_ticker seeds 3 posts (one locally bullish); on top of those,
+    # keep + uncertain count while the two excluded rows vanish.
+    assert b.mentions == 5
+    assert b.bullish == 3
+    posts = {p.external_id for p in panel.posts}
+    assert f'{PREFIX}-elig-keep' in posts
+    assert f'{PREFIX}-elig-uncertain' in posts
+    assert f'{PREFIX}-elig-irrelevant' not in posts
+    assert f'{PREFIX}-elig-broadcast' not in posts
+
+
+def test_a_v2_attitude_drives_the_breakdown_tone(panel_ticker):
+    post_for(f'{PREFIX}A', 5, 'mia', 'to the moon',
+             ext=f'{PREFIX}-att-neg', llm_sentiment='bullish',
+             attitude='negative')
+    db.session.commit()
+
+    b = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW).breakdown
+
+    # The fixture's own locally-bullish post is the 1; the new row's
+    # legacy 'bullish' is overridden by attitude='negative'.
+    assert (b.bullish, b.bearish) == (1, 1)
 
 
 # ------------------------------------------------- pre-split root history ---
@@ -773,18 +825,21 @@ def test_a_daily_chart_still_reports_a_days_step(clean):
         assert chart.step_minutes == 1440
 
 
-def test_the_breakdown_prefers_the_model_verdict_over_the_lexicon():
-    """The one surface that draws a tone bar never read the verdicts.
-
-    Production 2026-08-26: 11,789 of 11,794 scored mentions carried a model
-    verdict, at $1.24 a day, and the panel rendered the forty-word lexicon.
-    """
+def test_the_breakdown_tone_precedence_is_attitude_legacy_local():
+    """Spec §7.1: attitude first, the legacy projection next, the local
+    float last -- and every decided non-directional read blocks the
+    fallbacks below it."""
     from features.radar import detail_panel
 
-    assert detail_panel._tone_of(lexicon=0.8, verdict='bearish') == 'bearish'
-    assert detail_panel._tone_of(lexicon=0.8, verdict=None) == 'bullish'
-    # `unclear` votes neither way AND blocks the lexicon: it means the post
-    # named the ticker without saying anything about it, and that read is
-    # better informed than the word list it overrides.
-    assert detail_panel._tone_of(lexicon=0.8, verdict='unclear') is None
-    assert detail_panel._tone_of(lexicon=None, verdict=None) is None
+    # attitude outranks everything, including a contradicting legacy verdict
+    assert detail_panel._tone_of(0.8, 'bullish', 'negative') == 'bearish'
+    assert detail_panel._tone_of(-0.8, None, 'positive') == 'bullish'
+    # decided mixed/none blocks legacy AND local
+    assert detail_panel._tone_of(0.8, 'bullish', 'none') is None
+    assert detail_panel._tone_of(0.8, 'bullish', 'mixed') is None
+    # NULL attitude falls back to the legacy projection
+    assert detail_panel._tone_of(0.8, 'bearish', None) == 'bearish'
+    assert detail_panel._tone_of(0.8, 'unclear', None) is None
+    # NULL both falls back to the local float
+    assert detail_panel._tone_of(0.8, None, None) == 'bullish'
+    assert detail_panel._tone_of(None, None, None) is None

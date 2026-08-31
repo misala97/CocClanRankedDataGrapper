@@ -138,8 +138,9 @@ export interface Breakdown {
   bullish: number
   neutral: number
   bearish: number
-  /** How often the word list and the model read the same post the opposite
-   *  way -- the sarcasm the lexicon alone cannot see. */
+  /** The review signal: how often the local scorer and the model's final
+   *  judgment read the same post differently. A strong contradiction marks
+   *  an item worth reviewing (sentiment v2 §7.1). */
   disagreements: number
   /** The pump tell: one account posting forty times reads as forty mentions
    *  everywhere else on the surface. */

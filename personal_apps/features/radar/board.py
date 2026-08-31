@@ -329,25 +329,28 @@ def _tones(tickers, sources, since, now):
         return {}
 
     sources = expand_sources_for_history(sources)
-    # A model verdict outranks the word list on the same post, and a NULL
-    # verdict falls back to it rather than counting as toneless. The lexicon
-    # is forty words with a negation window: it reads "great, another green
-    # day" after a crash as bullish, which is exactly the case spec 6.11
-    # specified a re-read for. Verdicts arrive on a scheduled pass, so most
-    # rows carry none at any given moment and the fallback is the normal path,
-    # not the exception.
-    #
-    # `unclear` deliberately votes neither way AND blocks the lexicon from
-    # voting: it means the post named the ticker without saying anything about
-    # it, and the read is better informed than the word list it overrides.
+    # Attitude first (sentiment v2, spec §7.1), the legacy projection next,
+    # the local float last. A DECIDED attitude that is not positive/negative
+    # (mixed, none) blocks the fallbacks the same way a legacy
+    # neutral/unclear verdict does. Judgments arrive on a scheduled pass, so
+    # fresh rows carry none and the fallback chain is the normal path.
+    att = RadarMention.sentiment_attitude
+    legacy = RadarMention.llm_sentiment
     score = RadarMention.lexicon_sentiment
-    verdict = RadarMention.llm_sentiment
+    rel = RadarMention.sentiment_relevance
+    origin = RadarMention.sentiment_content_origin
     bullish = sa.case(
-        (verdict.is_(None), sa.case((score > 0, 1), else_=0)),
-        (verdict == 'bullish', 1), else_=0)
+        (att == 'positive', 1),
+        (att.isnot(None), 0),
+        (legacy == 'bullish', 1),
+        (legacy.isnot(None), 0),
+        (score > 0, 1), else_=0)
     bearish = sa.case(
-        (verdict.is_(None), sa.case((score < 0, 1), else_=0)),
-        (verdict == 'bearish', 1), else_=0)
+        (att == 'negative', 1),
+        (att.isnot(None), 0),
+        (legacy == 'bearish', 1),
+        (legacy.isnot(None), 0),
+        (score < 0, 1), else_=0)
     rows = (db.session.query(
                 RadarMention.ticker,
                 sa.func.sum(bullish),
@@ -358,7 +361,16 @@ def _tones(tickers, sources, since, now):
                     RadarPost.source.in_(list(sources)),
                     RadarPost.created_utc >= since,
                     RadarPost.created_utc < now,
-                    RadarMention.confidence.in_(('high', 'medium')))
+                    RadarMention.confidence.in_(('high', 'medium')),
+                    # NULL-safe eligibility: unjudged (NULL) rows stay
+                    # counted; only a FINAL irrelevant/broadcast verdict
+                    # leaves the DENOMINATOR (spec §7.2), `uncertain` stays.
+                    # Written as AND of OR-IS-NULL legs because
+                    # NOT(a OR b) is NULL -- and therefore filtered out --
+                    # for every unjudged row under three-valued logic.
+                    sa.or_(rel.is_(None), rel != 'irrelevant'),
+                    sa.or_(origin.is_(None),
+                           origin != 'broadcast_or_automated'))
             .group_by(RadarMention.ticker).all())
 
     out = {}

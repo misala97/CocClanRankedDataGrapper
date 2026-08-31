@@ -47,9 +47,11 @@ class Breakdown:
     bullish: int
     neutral: int
     bearish: int
-    # How often the word list and the model read the same post the opposite
-    # way. Both scores are kept precisely so this is answerable -- a
-    # disagreement is the sarcasm the lexicon alone cannot see.
+    # THE REVIEW SIGNAL: how often the local scorer and the model's final
+    # judgment read the same post differently. Not claimed as an
+    # independent sarcasm detector any more (the local arm is distilled
+    # from model labels, spec §7.1) -- a strong contradiction marks an
+    # item worth reviewing, and the Sonnet routing uses the same signal.
     disagreements: int
     top_author_share: float | None
     top_two_share: float | None
@@ -124,36 +126,55 @@ def _posts(ticker, sources, since, now):
                     RadarPost.source.in_(list(sources)),
                     RadarPost.created_utc >= since,
                     RadarPost.created_utc < now,
-                    RadarMention.confidence.in_(('high', 'medium'))))
+                    RadarMention.confidence.in_(('high', 'medium')),
+                    *_eligibility_filter()))
     rows = base.order_by(RadarPost.created_utc.desc()).limit(POST_LIMIT).all()
     return rows, base.count()
 
 
-def _tone_of(lexicon, verdict):
-    """'bullish', 'bearish' or None, from the two scores together.
+def _eligibility_filter():
+    """The NULL-safe chatter-eligibility legs (spec §7.2).
 
-    The model outranks the word list where both spoke. The lexicon is forty
-    words with a negation window: it reads "great, another green day" after a
-    crash as bullish, which is exactly the case spec 6.11 specified a re-read
-    for.
-
-    `unclear` votes neither way and BLOCKS the lexicon. It means the post named
-    the ticker without expressing a view, and that read is better informed than
-    the word list it overrides.
-
-    A NULL verdict falls back to the lexicon rather than counting as toneless:
-    verdicts arrive on a scheduled pass, so a fresh mention has none, and
-    treating that as silence would make the newest posts look even-handed.
+    A confirmed irrelevant or broadcast/automated mention leaves every
+    surface -- tallies AND the sample-post list -- while unjudged (NULL)
+    and `uncertain` rows stay. AND of OR-IS-NULL legs, because NOT(a OR b)
+    is NULL for unjudged rows under three-valued logic and would silently
+    drop them.
     """
-    if verdict == 'bullish':
+    rel = RadarMention.sentiment_relevance
+    origin = RadarMention.sentiment_content_origin
+    return (sa.or_(rel.is_(None), rel != 'irrelevant'),
+            sa.or_(origin.is_(None), origin != 'broadcast_or_automated'))
+
+
+def _tone_of(local, legacy, attitude):
+    """'bullish' | 'bearish' | None under spec §7.1 precedence.
+
+    Attitude is the primary Radar tone (sentiment v2); the legacy
+    projection covers rows judged before the migration; the local float
+    covers the minutes before any judgment and the tiers the model never
+    reads. A DECIDED attitude that is not positive/negative (mixed, none)
+    blocks the fallbacks, the same way a legacy neutral/unclear verdict
+    blocks the local score -- that read is better informed than the
+    scorer it overrides. NULLs fall through rather than counting as
+    toneless: treating a fresh mention as silence would make the newest
+    posts look even-handed.
+    """
+    if attitude == 'positive':
         return 'bullish'
-    if verdict == 'bearish':
+    if attitude == 'negative':
         return 'bearish'
-    if verdict is not None:            # 'neutral' or 'unclear'
+    if attitude is not None:               # mixed / none
         return None
-    if lexicon and lexicon > 0:
+    if legacy == 'bullish':
         return 'bullish'
-    if lexicon and lexicon < 0:
+    if legacy == 'bearish':
+        return 'bearish'
+    if legacy is not None:                 # neutral / unclear
+        return None
+    if local and local > 0:
+        return 'bullish'
+    if local and local < 0:
         return 'bearish'
     return None
 
@@ -168,23 +189,25 @@ def breakdown_for(ticker, sources, since, now):
     """
     sources = expand_sources_for_history(sources)
     score = RadarMention.lexicon_sentiment
-    verdict = RadarMention.llm_sentiment
+    legacy = RadarMention.llm_sentiment
+    attitude = RadarMention.sentiment_attitude
     rows = (db.session.query(RadarPost.source, RadarPost.author,
                              RadarPost.channel, RadarPost.created_utc, score,
-                             verdict)
+                             legacy, attitude)
             .join(RadarMention, RadarMention.post_id == RadarPost.id)
             .filter(RadarMention.ticker == ticker,
                     RadarPost.source.in_(list(sources)),
                     RadarPost.created_utc >= since,
                     RadarPost.created_utc < now,
-                    RadarMention.confidence.in_(('high', 'medium'))).all())
+                    RadarMention.confidence.in_(('high', 'medium')),
+                    *_eligibility_filter()).all())
 
     by_source = {}
     by_author = collections.Counter()
     by_hour = collections.Counter()
     bullish = bearish = disagreements = 0
 
-    for source, author, channel, when, sentiment, llm in rows:
+    for source, author, channel, when, sentiment, llm, attitude_v in rows:
         # A VENUE IS A ROOT. Every stored Reddit name -- the eight
         # `reddit:<sub>` and the pre-split bare `reddit` -- pools into one
         # `reddit` row, which is what this table showed before the subreddit
@@ -203,16 +226,20 @@ def breakdown_for(ticker, sources, since, now):
         entry[1].add(channel if source_kind(source) == 'broadcast' else author)
         by_author[author] += 1
         by_hour[when.replace(minute=0, second=0, microsecond=0)] += 1
-        tone = _tone_of(sentiment, llm)
+        tone = _tone_of(sentiment, llm, attitude_v)
         if tone == 'bullish':
             bullish += 1
         elif tone == 'bearish':
             bearish += 1
-        # A post the word list read one way and the model read the other is a
-        # post that was being sarcastic. Both scores are kept precisely so this
-        # comparison is possible; nothing performed it until now.
-        lexicon_only = _tone_of(sentiment, None)
-        if llm is not None and lexicon_only is not None and tone != lexicon_only:
+        # THE REVIEW SIGNAL (spec §7.1): a post the local scorer read one
+        # way and the model read another. The local arm is distilled from
+        # model labels eventually, so this is no longer claimed as an
+        # independent sarcasm detector -- but a strong contradiction still
+        # marks an item worth reviewing, and the review triggers use the
+        # same comparison.
+        local_only = _tone_of(sentiment, None, None)
+        final_exists = attitude_v is not None or llm is not None
+        if final_exists and local_only is not None and tone != local_only:
             disagreements += 1
 
     total = len(rows)
