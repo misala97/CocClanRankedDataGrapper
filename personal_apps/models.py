@@ -624,6 +624,27 @@ class RadarMention(db.Model):
     __table_args__ = (
         db.Index('ix_radar_mentions_ticker_post', 'ticker', 'post_id'),
         db.Index('ix_radar_mentions_post', 'post_id'),
+        db.Index('ix_radar_mentions_judged', 'confidence', 'sentiment_judged_at'),
+        db.CheckConstraint(
+            "sentiment_relevance IS NULL OR sentiment_relevance IN "
+            "('relevant','irrelevant','uncertain')",
+            name='ck_radar_mentions_relevance'),
+        db.CheckConstraint(
+            "sentiment_content_origin IS NULL OR sentiment_content_origin IN "
+            "('human_chatter','broadcast_or_automated','uncertain')",
+            name='ck_radar_mentions_origin'),
+        db.CheckConstraint(
+            "sentiment_attitude IS NULL OR sentiment_attitude IN "
+            "('positive','negative','mixed','none')",
+            name='ck_radar_mentions_attitude'),
+        db.CheckConstraint(
+            "sentiment_expected_move IS NULL OR sentiment_expected_move IN "
+            "('up','down','flat','unknown')",
+            name='ck_radar_mentions_move'),
+        db.CheckConstraint(
+            "sentiment_confidence IS NULL OR sentiment_confidence IN "
+            "('high','medium','low')",
+            name='ck_radar_mentions_conf'),
         {'mysql_charset': 'utf8mb4'},
     )
 
@@ -642,6 +663,28 @@ class RadarMention(db.Model):
         nullable=False)
     lexicon_sentiment = db.Column(db.Float, nullable=True)
     llm_sentiment     = db.Column(db.String(16), nullable=True)
+
+    # ---- sentiment v2 (spec 2026-08-31 §6). Materialized FINAL result the
+    # board reads; the append-only history lives in RadarSentimentJudgment.
+    # Nullable strings + CHECK, not ENUM: additive, and MariaDB ENUM
+    # widening is a rewrite. llm_sentiment above stays as the written
+    # compatibility projection until the cleanup release.
+    sentiment_relevance      = db.Column(db.String(12), nullable=True)
+    sentiment_content_origin = db.Column(db.String(24), nullable=True)
+    sentiment_attitude       = db.Column(db.String(8), nullable=True)
+    sentiment_expected_move  = db.Column(db.String(8), nullable=True)
+    sentiment_confidence     = db.Column(db.String(8), nullable=True)
+    sentiment_model          = db.Column(db.String(40), nullable=True)
+    # 64, not 16: spec §5.2.1 version strings are long, e.g.
+    # 'radar-sentiment-v2-attitude-origin-candidate-1' (46 chars).
+    sentiment_prompt_version = db.Column(db.String(64), nullable=True)
+    sentiment_judged_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    local_sentiment_model_version = db.Column(db.String(24), nullable=True)
+    # First time the review triggers selected this mention. The dedupe
+    # anchor for the review meter: demanded/capped increment only when
+    # this is first stamped, so a candidate waiting across scheduler
+    # passes is never recounted.
+    review_requested_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
 
     post = db.relationship('RadarPost', back_populates='mentions')
 
@@ -909,6 +952,77 @@ class RadarLlmSpend(db.Model):
     cost_micros   = db.Column(db.BigInteger, nullable=False, default=0)
 
 
+class RadarSentimentJudgment(db.Model):
+    """Append-only record of every successful primary or review answer.
+
+    Never overwritten: the mention's materialized fields are the FINAL
+    result, this table is the evidence -- Haiku-vs-Sonnet comparisons,
+    prompt regressions, routing rates, and exact cost attribution all
+    read from here. Follows mention retention via ON DELETE CASCADE.
+    """
+    __tablename__ = 'radar_sentiment_judgments'
+    __table_args__ = (
+        db.Index('ix_radar_sentiment_judgments_mention', 'mention_id'),
+        db.Index('ix_radar_sentiment_judgments_created', 'created_utc'),
+        db.CheckConstraint("stage IN ('primary','review')",
+                           name='ck_radar_judgment_stage'),
+        db.CheckConstraint(
+            "relevance IN ('relevant','irrelevant','uncertain')",
+            name='ck_radar_judgment_relevance'),
+        db.CheckConstraint(
+            "content_origin IN ('human_chatter','broadcast_or_automated',"
+            "'uncertain')",
+            name='ck_radar_judgment_origin'),
+        db.CheckConstraint(
+            "attitude IN ('positive','negative','mixed','none')",
+            name='ck_radar_judgment_attitude'),
+        db.CheckConstraint(
+            "expected_move IN ('up','down','flat','unknown')",
+            name='ck_radar_judgment_move'),
+        db.CheckConstraint("confidence IN ('high','medium','low')",
+                           name='ck_radar_judgment_conf'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id             = db.Column(db.BigInteger, primary_key=True,
+                               autoincrement=True)
+    mention_id     = db.Column(db.BigInteger,
+                               db.ForeignKey('radar_mentions.id',
+                                             ondelete='CASCADE'),
+                               nullable=False)
+    stage          = db.Column(db.String(8), nullable=False)
+    model          = db.Column(db.String(40), nullable=False)
+    prompt_version = db.Column(db.String(64), nullable=False)
+    relevance      = db.Column(db.String(12), nullable=False)
+    content_origin = db.Column(db.String(24), nullable=False)
+    attitude       = db.Column(db.String(8), nullable=False)
+    expected_move  = db.Column(db.String(8), nullable=False)
+    confidence     = db.Column(db.String(8), nullable=False)
+    input_tokens   = db.Column(db.Integer, nullable=False, default=0)
+    output_tokens  = db.Column(db.Integer, nullable=False, default=0)
+    created_utc    = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
+class RadarReviewMeter(db.Model):
+    """Review-tier demand accounting, one row per UTC day.
+
+    All four counters are UNIQUE-mention counts anchored on
+    RadarMention.review_requested_at: `demanded` and `capped` increment
+    only when that stamp is first written, `attempted` when a mention is
+    actually sent to the review model (a failed call still consumed
+    ceiling), `served` when a valid answer was written. Hitting the
+    ceiling must be visible, not silent (spec §5.3).
+    """
+    __tablename__ = 'radar_review_meter'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
+
+    day       = db.Column(db.Date, primary_key=True)
+    demanded  = db.Column(db.Integer, nullable=False, default=0)
+    attempted = db.Column(db.Integer, nullable=False, default=0)
+    served    = db.Column(db.Integer, nullable=False, default=0)
+    capped    = db.Column(db.Integer, nullable=False, default=0)
+
+
 class RadarMentionEvent(db.Model):
     """Every extracted mention, kept just long enough to rebuild its bucket.
 
@@ -975,3 +1089,10 @@ class RadarMentionEvent(db.Model):
     # way -- promotion is a property of the quarter-hour and legitimately
     # changes as more of it arrives, so the two facts are stored apart.
     promoted     = db.Column(db.Boolean, nullable=False, default=False)
+    # Chatter eligibility (spec 2026-08-31 §7.2). NULL = not yet decided
+    # (provisional: counts as before); False = a FINAL irrelevant or
+    # broadcast_or_automated judgment excluded it from scored bucket
+    # summaries and distinct-voice reads; True = explicitly judged
+    # eligible (a review reversal restores counting through here). Only
+    # an explicit final verdict moves it off NULL.
+    counts_as_human_chatter = db.Column(db.Boolean, nullable=True)

@@ -352,3 +352,43 @@ def test_model_schema_rejects_unknown_market_and_allows_null_price_context():
             .scalar_one() is None
 
     engine.dispose()
+
+
+# ---- sentiment v2 schema (spec 2026-08-31 §6) ------------------------------
+
+def test_sentiment_v2_columns_exist_and_are_nullable():
+    m = RadarMention.__table__.c
+    for name in ('sentiment_relevance', 'sentiment_content_origin',
+                 'sentiment_attitude', 'sentiment_expected_move',
+                 'sentiment_confidence', 'sentiment_model',
+                 'sentiment_prompt_version', 'sentiment_judged_at',
+                 'local_sentiment_model_version', 'review_requested_at'):
+        assert m[name].nullable, name
+
+
+def test_judgment_history_row_cascades_with_its_mention():
+    from models import RadarSentimentJudgment
+    fk = list(RadarSentimentJudgment.__table__.c.mention_id.foreign_keys)[0]
+    assert fk.ondelete == 'CASCADE'
+
+
+def test_review_meter_shape():
+    from models import RadarReviewMeter
+    c = RadarReviewMeter.__table__.c
+    assert c.day.primary_key
+    for name in ('demanded', 'attempted', 'served', 'capped'):
+        assert not c[name].nullable
+
+
+def test_judgment_history_carries_all_five_enum_checks():
+    from models import RadarSentimentJudgment
+    names = {c.name for c in RadarSentimentJudgment.__table__.constraints
+             if isinstance(c, sa.CheckConstraint)}
+    assert {'ck_radar_judgment_stage', 'ck_radar_judgment_relevance',
+            'ck_radar_judgment_origin', 'ck_radar_judgment_attitude',
+            'ck_radar_judgment_move', 'ck_radar_judgment_conf'} <= names
+
+
+def test_journal_chatter_flag_is_nullable_boolean():
+    c = models.RadarMentionEvent.__table__.c.counts_as_human_chatter
+    assert c.nullable
