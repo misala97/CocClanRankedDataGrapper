@@ -18,7 +18,7 @@ export function toggleSegment(current: SegmentFilter[],
     : [...current, value]
 }
 
-const WINDOWS = [1, 4, 24]
+const WINDOWS = [1, 4, 12, 24]
 
 /** Where the segment strip breaks. The five size tiers on one line, the
  *  three that are not sizes on the next: 2026-08-30 the eight tabs with

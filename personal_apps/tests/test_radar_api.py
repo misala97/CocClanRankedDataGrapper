@@ -227,6 +227,13 @@ def test_the_window_is_bounded(client):
     assert client.get('/radar/api/board?window=99999').status_code == 400
 
 
+def test_every_offered_window_is_accepted(client):
+    for hours in (1, 4, 12, 24):
+        response = client.get(f'/radar/api/board?window={hours}')
+        assert response.status_code == 200, hours
+        assert response.get_json()['window_hours'] == hours
+
+
 def test_defaults_are_every_source_and_the_small_segment(client):
     """Every source, because none is primary. But not every segment: the
     board is for the stuff nobody has heard of, and megacap chatter is not

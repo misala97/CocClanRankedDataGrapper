@@ -17,7 +17,7 @@ from ._blueprint import radar_bp
 # bookmarked URLs; config.SEGMENT_GROUPS resolves both to the same segments.
 SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund',
             'discover', 'small')
-WINDOWS = (1, 4, 24)
+WINDOWS = (1, 4, 12, 24)
 VENUE_FLOORS = (1, 2)
 MAX_LIMIT = 100
 # Every root plus every configured subreddit. See parse_query.
