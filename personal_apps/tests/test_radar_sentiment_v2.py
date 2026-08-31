@@ -195,3 +195,177 @@ def test_legacy_projection_matches_the_spec_table():
     assert legacy_projection(j(attitude='negative')) == 'bearish'
     assert legacy_projection(j(attitude='mixed')) == 'neutral'
     assert legacy_projection(j(attitude='none')) == 'unclear'
+
+
+# --- Storage: history, materialization, projection (Task 4) -----------------
+
+import datetime as dt
+
+import pytest
+
+from app import app as flask_app
+from extensions import db
+from models import RadarMention, RadarPost, RadarSentimentJudgment
+
+# Future-dated: these suites run against the real local development
+# database with no transactional isolation, and pending_v2 returns
+# newest-first.
+NOW = dt.datetime(2027, 1, 1, 12, 0, 0)
+
+
+@pytest.fixture()
+def clean_posts():
+    with flask_app.app_context():
+        RadarPost.query.filter(RadarPost.external_id.like('zztest%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+        yield
+        RadarPost.query.filter(RadarPost.external_id.like('zztest%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+
+def make_post(external_id, ticker='ZZA', confidence='high',
+              llm=None, body='ZZA ripping'):
+    post = RadarPost(source='bluesky', external_id=external_id,
+                     channel='firehose', author='someone', created_utc=NOW,
+                     title=None, body=body, first_seen=NOW, last_seen=NOW)
+    db.session.add(post)
+    db.session.flush()
+    mention = RadarMention(post_id=post.id, ticker=ticker,
+                           confidence=confidence, lexicon_sentiment=0.25,
+                           llm_sentiment=llm)
+    db.session.add(mention)
+    db.session.commit()
+    return mention.id
+
+
+def rows_for(mention_ids):
+    return (db.session.query(RadarMention, RadarPost)
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarMention.id.in_(list(mention_ids))).all())
+
+
+def ja(relevance='relevant', origin='human_chatter', attitude='positive',
+       move='up', confidence='high', input_tokens=40, output_tokens=7):
+    return llm_sentiment.JudgedAnswer(
+        judgment=Judgment(relevance, origin, attitude, move, confidence),
+        input_tokens=input_tokens, output_tokens=output_tokens)
+
+
+def test_apply_writes_history_final_fields_and_projection(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-v2-a', body='love it, calls')
+        written = llm_sentiment.apply_judgments(
+            rows_for([mention_id]), {mention_id: ja()},
+            stage='primary', model='claude-haiku-4-5')
+        db.session.commit()      # apply never commits; the caller owns it
+        assert written == 1
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'positive'
+        assert m.sentiment_relevance == 'relevant'
+        assert m.llm_sentiment == 'bullish'          # projection
+        assert m.sentiment_model == 'claude-haiku-4-5'
+        assert m.sentiment_prompt_version == llm_sentiment.PROMPT_VERSION
+        assert m.sentiment_judged_at is not None
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).all()
+        assert len(history) == 1 and history[0].stage == 'primary'
+        assert history[0].input_tokens == 40
+
+
+def test_review_overwrites_primary_but_not_vice_versa(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-v2-b')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='negative', move='down')},
+            stage='review', model=llm_sentiment.REVIEW_MODEL)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'    # review still stands
+        assert m.sentiment_model == llm_sentiment.REVIEW_MODEL
+        assert m.llm_sentiment == 'bearish'
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).order_by(RadarSentimentJudgment.id).all()
+        assert [h.stage for h in history] == ['primary', 'review', 'primary']
+
+
+def test_an_unjudged_mention_stays_null(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-v2-c')
+        written = llm_sentiment.apply_judgments(
+            rows_for([mention_id]), {}, stage='primary',
+            model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        assert written == 0
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude is None
+        assert m.sentiment_judged_at is None
+        assert RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).count() == 0
+
+
+def test_final_eligibility_maps_the_materialized_fields(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-v2-d')
+        rows = rows_for([mention_id])
+        m = rows[0][0]
+        assert llm_sentiment.final_eligibility(m) is None   # unjudged
+
+        cases = [
+            (ja(relevance='irrelevant', attitude='none', move='unknown'), False),
+            (ja(origin='broadcast_or_automated'), False),
+            (ja(), True),
+            (ja(relevance='uncertain'), None),
+            (ja(origin='uncertain'), None),
+        ]
+        for answer_, expected in cases:
+            llm_sentiment.apply_judgments(rows, {mention_id: answer_},
+                                          stage='review',
+                                          model=llm_sentiment.REVIEW_MODEL)
+            db.session.commit()
+            assert llm_sentiment.final_eligibility(m) is expected, answer_
+
+
+def test_a_sonnet_reversal_restores_eligibility(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-v2-e')
+        rows = rows_for([mention_id])
+        m = rows[0][0]
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(relevance='irrelevant', attitude='none',
+                                  move='unknown')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        assert llm_sentiment.final_eligibility(m) is False
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja()}, stage='review',
+            model=llm_sentiment.REVIEW_MODEL)
+        db.session.commit()
+        assert llm_sentiment.final_eligibility(m) is True
+
+
+def test_pending_v2_targets_unjudged_v2_not_legacy(clean_posts):
+    with flask_app.app_context():
+        legacy_only = make_post('zztest-v2-f', llm='bullish')
+        judged = make_post('zztest-v2-g')
+        llm_sentiment.apply_judgments(
+            rows_for([judged]), {judged: ja()}, stage='primary',
+            model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        waiting = {mention.id for mention, _post
+                   in llm_sentiment.pending_v2(50)}
+        assert legacy_only in waiting
+        assert judged not in waiting
+        # The v1 pending() is untouched AND the projection keeps v2-judged
+        # mentions out of it -- the transition window cannot double-bill.
+        v1 = {mention.id for mention, _post in llm_sentiment.pending(50)}
+        assert legacy_only not in v1     # has a legacy verdict
+        assert judged not in v1          # projection filled llm_sentiment

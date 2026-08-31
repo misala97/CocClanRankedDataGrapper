@@ -34,6 +34,7 @@ signalling that something upstream had changed. The figure is on the board;
 watch it there.
 """
 import dataclasses
+import datetime as dt
 import json
 import logging
 
@@ -41,7 +42,7 @@ import anthropic
 import sqlalchemy as sa
 
 from extensions import db
-from models import RadarMention, RadarPost
+from models import RadarMention, RadarPost, RadarSentimentJudgment
 
 from . import spend
 
@@ -385,6 +386,90 @@ def judge_v2(items, client=None, model=PRIMARY_MODEL, on_usage=None,
         if on_usage is not None and usage is not None:
             on_usage(usage)
     return got
+
+
+def pending_v2(limit=PASS_LIMIT):
+    """[(mention, post)] for high-confidence mentions with no v2 judgment.
+
+    Newest first, same reasoning as v1. Keyed on sentiment_judged_at, not
+    the legacy llm_sentiment: the projection column keeps being written
+    for compatibility and must not hide unjudged rows. Namespaced beside
+    the untouched v1 pending() until Task 6 activates v2 atomically.
+    """
+    return (db.session.query(RadarMention, RadarPost)
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarMention.confidence == 'high',
+                    RadarMention.sentiment_judged_at.is_(None))
+            .order_by(RadarPost.created_utc.desc())
+            .limit(limit).all())
+
+
+def apply_judgments(rows, judgments, stage, model):
+    """Write the answers that arrived, and only those. Returns how many.
+
+    History is append-only. Final fields: review always wins; a primary
+    answer does not demote a standing review verdict of the same prompt
+    generation. The legacy projection is written beside the final fields
+    until the compatibility cleanup removes it.
+
+    FLUSHES, NEVER COMMITS. The caller synchronizes journal eligibility
+    from the materialized fields and commits both together -- one
+    transaction, so a crash can never leave the mention saying
+    'irrelevant' while the journal still counts it.
+    """
+    now = dt.datetime.utcnow()
+    by_id = {mention.id: mention for mention, _post in rows}
+    written = 0
+    for key, answer in judgments.items():
+        mention = by_id.get(key)
+        if mention is None:
+            continue
+        j = answer.judgment
+        db.session.add(RadarSentimentJudgment(
+            mention_id=mention.id, stage=stage, model=model,
+            prompt_version=PROMPT_VERSION,
+            relevance=j.relevance, content_origin=j.content_origin,
+            attitude=j.attitude, expected_move=j.expected_move,
+            confidence=j.confidence,
+            input_tokens=answer.input_tokens,
+            output_tokens=answer.output_tokens, created_utc=now))
+        review_stands = (stage == 'primary'
+                         and mention.sentiment_model == REVIEW_MODEL
+                         and mention.sentiment_prompt_version == PROMPT_VERSION)
+        if not review_stands:
+            mention.sentiment_relevance = j.relevance
+            mention.sentiment_content_origin = j.content_origin
+            mention.sentiment_attitude = j.attitude
+            mention.sentiment_expected_move = j.expected_move
+            mention.sentiment_confidence = j.confidence
+            mention.sentiment_model = model
+            mention.sentiment_prompt_version = PROMPT_VERSION
+            mention.sentiment_judged_at = now
+            mention.llm_sentiment = legacy_projection(j)
+        written += 1
+    if written:
+        db.session.flush()
+    return written
+
+
+def final_eligibility(mention):
+    """Chatter eligibility from the MATERIALIZED final judgment.
+
+    Derived from what the mention now says, never from an incoming
+    answer, so it is correct across primary/review overwrite order and a
+    Sonnet reversal restores counting. `uncertain` (either kind) stays
+    provisional (None) -- a visible questionable mention beats silently
+    deleting real chatter (spec §7.2).
+    """
+    if mention.sentiment_judged_at is None:
+        return None
+    if (mention.sentiment_relevance == 'irrelevant'
+            or mention.sentiment_content_origin == 'broadcast_or_automated'):
+        return False
+    if (mention.sentiment_relevance == 'relevant'
+            and mention.sentiment_content_origin == 'human_chatter'):
+        return True
+    return None
 
 
 class Item:
