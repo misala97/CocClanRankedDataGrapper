@@ -373,3 +373,24 @@ def test_no_source_reads_a_coin_symbol_as_a_company():
 
     assert not any(config.COIN_SYMBOLS_MEAN_STOCKS.values())
     assert config.coin_collision_dropped('bluesky', 'LINK') is True
+
+
+# --- Extraction policy generation (extractor plan, Task 4) ------------------
+
+def test_the_extraction_policy_generation_is_hashed_into_the_version():
+    import unittest.mock
+    from features.radar import config
+    before = config.source_config_version()
+    with unittest.mock.patch.object(config, 'EXTRACTION_POLICY_GENERATION', 99):
+        assert config.source_config_version() != before
+    assert config.source_config_version() == before
+
+
+def test_automated_author_membership_is_hashed_into_the_version():
+    import unittest.mock
+    from features.radar import config
+    before = config.source_config_version()
+    grown = frozenset(config.AUTOMATED_AUTHORS | {'zz_new_bot'})
+    with unittest.mock.patch.object(config, 'AUTOMATED_AUTHORS', grown):
+        assert config.source_config_version() != before
+    assert config.source_config_version() == before

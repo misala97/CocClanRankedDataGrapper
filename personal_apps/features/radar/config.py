@@ -329,6 +329,17 @@ def bare_token_confidence(source):
 AUTOMATED_AUTHORS = frozenset({'automoderator'})
 
 
+def _extraction_input_version():
+    """extraction.EXTRACTION_INPUT_VERSION, imported at call time.
+
+    extraction imports this module at its top, so the dependency cannot
+    run the other way at module level -- the same cycle-avoidance the
+    journal/buckets pair documents.
+    """
+    from . import extraction
+    return extraction.EXTRACTION_INPUT_VERSION
+
+
 def is_automated_author(source, author):
     """True when this author is Reddit's automation, in any of the three
     upstream spellings (AutoModerator, u/AutoModerator, /u/AutoModerator),
@@ -656,6 +667,14 @@ MAX_BARE_PER_VOUCHER = 4
 # symbols.
 ROLLUP_GENERATION = 3
 
+# Extractor policy generation (extractor-feedback spec §5.3). Bumped when
+# WHAT extraction counts changes: generation 1 = canonical input (the
+# synthetic Reddit username discarded, parent title split into thread
+# context) plus the automated-author drop. A ROLLBACK also increments
+# this -- it must never restore an older stamp and mix post-rollback
+# observations into the pre-release baseline.
+EXTRACTION_POLICY_GENERATION = 1
+
 # Generation 1 stored every subreddit under the aggregate name `reddit`.
 # Generation 2 makes the subreddit part of the durable source name. The
 # configured roots and subreddit membership stay unchanged across that split,
@@ -714,6 +733,12 @@ def source_config_version():
         # the ceiling mixes populations judged under two different rules
         # inside one baseline unless the stamp moves with it.
         'bare_per_voucher': MAX_BARE_PER_VOUCHER,
+        # Extractor policy: stable explicit data, never an incidental
+        # function hash (extractor-feedback spec §5.3). The input version
+        # is imported lazily because extraction imports this module.
+        'extraction_policy_generation': EXTRACTION_POLICY_GENERATION,
+        'extraction_input_version': _extraction_input_version(),
+        'automated_authors': sorted(AUTOMATED_AUTHORS),
         # Not an extraction rule -- the extractor admits the same symbols
         # either way. What changed is how completely a bucket's count is
         # aggregated (audit 2026-08-26), and that is exactly as valid a
