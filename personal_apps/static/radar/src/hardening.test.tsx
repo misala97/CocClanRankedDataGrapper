@@ -488,7 +488,7 @@ describe('a post nobody sized', () => {
     return {
       source: 'fourchan', author: 'anon', channel: '/biz/',
       created: '2026-08-22T19:00:00Z', title: null, body: 'short one',
-      url: null, ...over,
+      url: null, tone: 'neutral', ...over,
     }
   }
 

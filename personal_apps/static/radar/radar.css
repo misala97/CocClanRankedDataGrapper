@@ -1039,6 +1039,19 @@ body {
 
 .posts { list-style: none; margin: 0; padding: 0; max-width: 660px; }
 .post { padding: 14px 0 15px; border-bottom: 1px solid var(--rule-soft); }
+/* Per-post tone: the lean chip's sanctioned green/red exception, extended
+   to the post itself. A light wash, never a loud fill -- the text stays
+   the surface, the tone stays a hint. Neutral posts keep the plain ground
+   so the washed ones read as the exceptions they are. */
+.post.bull, .post.bear { padding-left: 10px; padding-right: 10px; }
+.post.bull { background: var(--up-soft); }
+.post.bear { background: var(--down-soft); }
+.phead .ptone {
+  flex: none; font-weight: 650; text-transform: uppercase;
+  font-size: var(--t-xs); letter-spacing: 0.04em; color: var(--muted);
+}
+.post.bull .ptone { color: var(--up); }
+.post.bear .ptone { color: var(--down); }
 .phead { display: flex; align-items: baseline; gap: 10px; font-size: var(--t-xs); }
 /* The venue tag stays neutral. Violet is chatter and selection; a violet badge
    on every post would spend the accent on a label. Fixed width so the author

@@ -118,9 +118,18 @@ def window_figures(ticker, sources, since, now):
 
 
 def _posts(ticker, sources, since, now):
-    """The newest posts, and how many there were in all."""
+    """The newest posts with their tone, and how many there were in all.
+
+    Returns ([(post, tone)], total) where tone is 'bullish', 'bearish' or
+    'neutral' -- the same §7.1 precedence the tallies use, so a post can
+    never disagree with the counts it sits under. 'neutral' covers both a
+    decided even-handed read and a mention nothing has scored yet; the
+    tallies make the same collapse.
+    """
     sources = expand_sources_for_history(sources)
-    base = (db.session.query(RadarPost)
+    base = (db.session.query(RadarPost, RadarMention.lexicon_sentiment,
+                             RadarMention.llm_sentiment,
+                             RadarMention.sentiment_attitude)
             .join(RadarMention, RadarMention.post_id == RadarPost.id)
             .filter(RadarMention.ticker == ticker,
                     RadarPost.source.in_(list(sources)),
@@ -129,7 +138,9 @@ def _posts(ticker, sources, since, now):
                     RadarMention.confidence.in_(('high', 'medium')),
                     *_eligibility_filter()))
     rows = base.order_by(RadarPost.created_utc.desc()).limit(POST_LIMIT).all()
-    return rows, base.count()
+    posts = [(post, _tone_of(local, legacy, attitude) or 'neutral')
+             for post, local, legacy, attitude in rows]
+    return posts, base.count()
 
 
 def _eligibility_filter():

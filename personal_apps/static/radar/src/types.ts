@@ -125,6 +125,9 @@ export interface Post {
   title: string | null
   body: string | null
   url: string | null
+  /** The §7.1 tone read the tallies use, per post -- 'neutral' covers a
+   *  decided even-handed read and a not-yet-scored mention alike. */
+  tone: 'bullish' | 'bearish' | 'neutral'
 }
 
 export interface Venue {

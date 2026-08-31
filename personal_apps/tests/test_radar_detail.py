@@ -256,8 +256,26 @@ def test_the_panel_returns_the_posts_themselves(panel_ticker):
     built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
 
     assert built.post_total == 3
-    assert built.posts[0].body == 'to the moon'
-    assert built.posts[0].url
+    post, tone = built.posts[0]
+    assert post.body == 'to the moon'
+    assert post.url
+    # The fixture's newest post carries a locally-bullish float and no
+    # judgment: the per-post tone mirrors the tallies' read.
+    assert tone == 'bullish'
+
+
+def test_each_post_carries_the_tone_the_tallies_use(panel_ticker):
+    post_for(f'{PREFIX}A', 1, 'nils', 'to the moon',
+             ext=f'{PREFIX}-tone-neg', attitude='negative')
+    post_for(f'{PREFIX}A', 2, 'olaf', 'to the moon',
+             ext=f'{PREFIX}-tone-none', attitude='none')
+    db.session.commit()
+
+    built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
+    tones = {post.external_id: tone for post, tone in built.posts}
+
+    assert tones[f'{PREFIX}-tone-neg'] == 'bearish'    # attitude beats local
+    assert tones[f'{PREFIX}-tone-none'] == 'neutral'   # decided, undirected
 
 
 def test_the_panel_describes_a_ticker_the_board_filtered_out(clean):
@@ -344,7 +362,7 @@ def test_confirmed_non_chatter_leaves_the_breakdown_and_the_post_list(
     # keep + uncertain count while the two excluded rows vanish.
     assert b.mentions == 5
     assert b.bullish == 3
-    posts = {p.external_id for p in panel.posts}
+    posts = {p.external_id for p, _tone in panel.posts}
     assert f'{PREFIX}-elig-keep' in posts
     assert f'{PREFIX}-elig-uncertain' in posts
     assert f'{PREFIX}-elig-irrelevant' not in posts

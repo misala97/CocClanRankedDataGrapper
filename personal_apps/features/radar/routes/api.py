@@ -482,7 +482,10 @@ def serialize_detail(d):
             'title': p.title,
             'body': p.body,
             'url': p.url,
-        } for p in d.posts],
+            # The same §7.1 read the tallies use, per post, so the list
+            # and the counts above it can never disagree.
+            'tone': tone,
+        } for p, tone in d.posts],
         'post_total': d.post_total,
     }
 

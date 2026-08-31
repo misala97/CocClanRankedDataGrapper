@@ -66,9 +66,17 @@ export function Posts({ posts, total, retentionNote }: {
       ) : (
         <ul className="posts">
           {posts.map((post, index) => (
-            <li className="post" key={`${post.source}-${post.created}-${index}`}>
+            <li
+              className={`post${post.tone === 'bullish' ? ' bull'
+                : post.tone === 'bearish' ? ' bear' : ''}`}
+              key={`${post.source}-${post.created}-${index}`}
+            >
               <div className="phead">
                 <span className="src">{sourceLabel(post.source)}</span>
+                {/* The same read the tallies use, on the post itself --
+                    the lean chip's sanctioned green/red exception extends
+                    here so a post can never disagree with the counts. */}
+                <span className={`ptone ${post.tone}`}>{post.tone}</span>
                 {/* Handles have no length limit anywhere upstream, and a long
                     one used to push the outbound link off the row. It
                     truncates and keeps its full value for a hover. */}
