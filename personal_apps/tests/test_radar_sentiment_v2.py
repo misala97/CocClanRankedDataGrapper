@@ -360,12 +360,10 @@ def test_pending_v2_targets_unjudged_v2_not_legacy(clean_posts):
             rows_for([judged]), {judged: ja()}, stage='primary',
             model=llm_sentiment.PRIMARY_MODEL)
         db.session.commit()
+        # pending() is the activated v2 selection (pending_v2 aliases it):
+        # keyed on sentiment_judged_at, so a legacy verdict does not hide
+        # an unjudged row, and a judged row never comes back.
         waiting = {mention.id for mention, _post
-                   in llm_sentiment.pending_v2(50)}
+                   in llm_sentiment.pending(50)}
         assert legacy_only in waiting
         assert judged not in waiting
-        # The v1 pending() is untouched AND the projection keeps v2-judged
-        # mentions out of it -- the transition window cannot double-bill.
-        v1 = {mention.id for mention, _post in llm_sentiment.pending(50)}
-        assert legacy_only not in v1     # has a legacy verdict
-        assert judged not in v1          # projection filled llm_sentiment
