@@ -210,21 +210,38 @@ def test_a_window_nothing_ever_counted_is_skipped(clean):
         assert buckets.rebuild_windows({(TICKER, WINDOW)}) == 0
 
 
-def test_recent_decided_windows_is_the_retry_net(clean):
+def test_recent_decided_windows_keys_on_decision_time_not_event_age(clean):
+    """The Codex blocker-2 case: a backfill decides an event HOURS after it
+    was created. A crash between the flag commit and the rebuild must be
+    rediscovered by the next pass -- so the net keys on when the flag was
+    DECIDED, never on created_utc."""
     with flask_app.app_context():
         now = dt.datetime.utcnow()
-        row = event('zze-fresh', flag=False)
-        row.created_utc = now - dt.timedelta(minutes=5)
+        row = event('zze-old')
+        row.created_utc = now - dt.timedelta(hours=6)     # old event...
         row.bucket_start = buckets.bucket_start_for(row.created_utc)
         db.session.commit()
 
-        got = journal.recent_decided_windows(now)
+        journal.sync_chatter_eligibility([(identity('zze-old'), False)])
+        db.session.commit()                                # ...decided NOW
+
+        got = journal.recent_decided_windows(now + dt.timedelta(seconds=1))
         assert (TICKER, row.bucket_start) in got
 
-        # Outside the recency bound the net lets go -- it is a retry net,
-        # not a standing rescan.
-        narrow = journal.recent_decided_windows(now, minutes=1)
-        assert (TICKER, row.bucket_start) not in narrow
+        # An event whose flag was never decided is not in the net...
+        undecided = event('zze-undecided')
+        undecided.created_utc = now
+        undecided.bucket_start = buckets.bucket_start_for(now)
+        db.session.commit()
+        got = journal.recent_decided_windows(now + dt.timedelta(seconds=1))
+        assert (TICKER, undecided.bucket_start) not in got or \
+            undecided.bucket_start == row.bucket_start
+
+        # ...and outside the recency bound the net lets go: it is a retry
+        # net, not a standing rescan.
+        later = now + dt.timedelta(hours=2)
+        assert (TICKER, row.bucket_start) not in \
+            journal.recent_decided_windows(later, minutes=1)
 
 
 def test_distinct_voices_stops_counting_an_excluded_author(clean):

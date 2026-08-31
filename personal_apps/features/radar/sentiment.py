@@ -158,7 +158,16 @@ def score(prepared):
     """
     artifact = _load_active()
     if artifact is not None:
-        return _classifier_score(artifact, prepared)
+        try:
+            return _classifier_score(artifact, prepared)
+        except Exception as exc:
+            # A LOADABLE artifact can still be broken -- a missing key, a
+            # transformer that raises. Ingest must never die for the local
+            # score: disable the artifact for this process and fall back
+            # (Codex review, finding 8).
+            logger.warning('radar sentiment artifact failed at scoring '
+                           '(%s) -- falling back to the lexicon', exc)
+            _active_cache.update(artifact=None)
     return lexicon_score(prepared.author_text)
 
 

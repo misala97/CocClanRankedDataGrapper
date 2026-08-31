@@ -582,9 +582,16 @@ def test_sonnet_result_overwrites_and_carries_the_preamble(
         assert m.sentiment_model == llm_sentiment.REVIEW_MODEL
         assert m.llm_sentiment == 'bearish'
         prompt = client.messages.requests[0]['messages'][0]['content']
-        assert prompt.startswith(llm_sentiment.REVIEW_PREAMBLE)
-        # Independence: the primary's answer never reaches the review.
-        assert 'positive' not in prompt.split('</item>')[0] or True
+        # INDEPENDENCE, proven by construction: the review prompt must be
+        # EXACTLY preamble + binding instructions + serialized items --
+        # nothing else can carry the primary's answer in (Codex review,
+        # finding 10 killed the previous vacuous `or True` assertion).
+        rows = [(mention, post) for mention, post
+                in rows_for([mention_id])]
+        expected = llm_sentiment._prompt_v2(
+            llm_sentiment.items_for(rows),
+            preamble=llm_sentiment.REVIEW_PREAMBLE)
+        assert prompt == expected
         assert client.messages.requests[0]['model'] \
             == llm_sentiment.REVIEW_MODEL
         assert client.messages.requests[0]['output_config']['effort'] == 'low'
@@ -702,6 +709,7 @@ def test_macro_f1_and_removal_precision_arithmetic():
 
 def test_llm_gates_flag_a_broken_source_even_when_the_aggregate_passes():
     tables = {
+        'schema_invalid': 0,
         'attitude_exact': 0.9, 'directional_agreement': 0.9,
         'reversal_rate': 0.0, 'relevance_f1': 0.95, 'origin_f1': 0.95,
         'removal_precision': 1.0,
@@ -710,6 +718,45 @@ def test_llm_gates_flag_a_broken_source_even_when_the_aggregate_passes():
     ok, reasons = scorer.llm_gates_pass(tables)
     assert not ok
     assert any('bluesky' in reason for reason in reasons)
+
+
+def test_unjudged_reference_items_count_as_misses():
+    """Blocker 4: coverage is part of the grade -- a pipeline that judged
+    half the set cannot score like one that judged all of it."""
+    def row(predicted, truth='positive'):
+        return {'truth': {'relevance': 'relevant',
+                          'content_origin': 'human_chatter',
+                          'attitude': truth, 'expected_move': 'up',
+                          'confidence': 'high'},
+                'predicted': predicted, 'source_root': 'reddit', 'tags': []}
+    good = {'relevance': 'relevant', 'content_origin': 'human_chatter',
+            'attitude': 'positive', 'expected_move': 'up',
+            'confidence': 'high'}
+    tables = scorer.attitude_tables([row(good), row(None)])
+    assert tables['coverage'] == pytest.approx(0.5)
+    assert tables['attitude_exact'] == pytest.approx(0.5)
+
+
+def test_a_hard_slice_regression_beyond_two_points_is_flagged():
+    tables = {'per_tag_attitude': {'question': 0.70, 'multi_ticker': 0.90}}
+    previous = {'per_tag_attitude': {'question': 0.75, 'multi_ticker': 0.91}}
+    drops = scorer.hard_slice_regressions(tables, previous)
+    assert len(drops) == 1 and 'question' in drops[0]
+
+
+def test_the_ledger_dedups_on_identity_not_bare_candidate(tmp_path,
+                                                          monkeypatch):
+    from features.radar import sentiment
+    monkeypatch.setattr(sentiment, 'ARTIFACT_DIR', str(tmp_path))
+    scorer.ledger_append({'candidate': 'clf-v2-x', 'identity': 'clf-v2-x#aaa',
+                          'kind': 'local', 'passes_10_3': True})
+    assert scorer.ledger_lookup_identity('clf-v2-x#aaa') is not None
+    # Same artifact, different predictions (retrained scorer state): a new
+    # identity is NOT refused...
+    assert scorer.ledger_lookup_identity('clf-v2-x#bbb') is None
+    # ...while the trainer's promotion gate finds the candidate by version.
+    from scripts import train_radar_sentiment as trainer_mod
+    assert trainer_mod.reference_verdict('clf-v2-x') is True
 
 
 def test_the_frozen_manifest_is_enforced(tmp_path, monkeypatch):
@@ -724,3 +771,60 @@ def test_the_frozen_manifest_is_enforced(tmp_path, monkeypatch):
     blind.write_text('{"n": 1, "tampered": true}\n', encoding='utf-8')
     with pytest.raises(SystemExit):
         scorer.verify_manifest()
+
+
+# --- Codex deploy-review fixes (2026-08-31 round 2) -------------------------
+
+def test_the_activation_cutoff_fences_the_legacy_backlog(clean_posts):
+    """Blocker 1: without the cutoff, the ten-minute scheduler would bill
+    through the entire pre-v2 backlog on deploy day, bypassing the rejudge
+    script's dry-run and --limit controls."""
+    with flask_app.app_context():
+        legacy = make_post('zztest-cut-legacy')
+        m = db.session.get(RadarMention, legacy)
+        m.post.created_utc = llm_sentiment.V2_ACTIVATION_CUTOFF \
+            - dt.timedelta(days=1)
+        db.session.commit()
+
+        live = {mention.id for mention, _post in llm_sentiment.pending(50)}
+        assert legacy not in live
+
+        # The rejudge script, and only it, still reaches behind the fence.
+        backlog = {mention.id for mention, _post
+                   in rejudge.rejudge_backlog(100000)}
+        assert legacy in backlog
+
+
+def test_a_dict_shaped_verdicts_value_costs_only_the_batch():
+    """Finding 8: {"verdicts": {"n": 1}} is well-formed JSON whose iteration
+    yielded strings and let an AttributeError kill the whole pass."""
+    client = FakeClient([FakeResponse(json.dumps({'verdicts': {'n': 1}}))])
+    assert judge([jitem(1)], client=client) == {}
+
+
+def test_a_non_dict_entry_is_skipped():
+    client = FakeClient([FakeResponse(json.dumps({'verdicts': ['what']}))])
+    assert judge([jitem(1)], client=client) == {}
+
+
+def test_the_meter_lands_on_the_utc_day_of_the_pass(clean_posts,
+                                                    clean_meter_all,
+                                                    monkeypatch):
+    """Finding 7: date.today() is the machine's local calendar; around
+    midnight it disagrees with the UTC clock every other figure uses."""
+    monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
+    with flask_app.app_context():
+        mention_id = primary_judged('zztest-utc-day')
+        # Move the judgment history onto the future UTC day so the pass's
+        # ceiling math and the meter share that day.
+        target_day = dt.datetime(2027, 6, 1, 23, 59, 0)
+        RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).update(
+                {'created_utc': target_day},
+                synchronize_session=False)
+        db.session.commit()
+
+        llm_sentiment.run_review_pass(client=sentinel_client(),
+                                      now=target_day)
+        row = RadarReviewMeter.query.one()
+        assert row.day == target_day.date()

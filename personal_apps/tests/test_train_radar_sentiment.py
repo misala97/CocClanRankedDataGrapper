@@ -220,3 +220,101 @@ def test_cold_start_and_stale_artifacts_fall_back_to_the_lexicon(
         assert sentiment.active_version() == 'lexicon-v1'
     assert any('falling back to the lexicon' in message
                for message in caplog.messages)
+
+
+# --- Codex deploy-review fixes (round 2) ------------------------------------
+
+def test_an_unrelated_anchor_cannot_obscure_a_near_duplicate():
+    """Blocker 6 repro: with anchor-only comparison, a far-off post that
+    happened to head the shared band bucket kept two Hamming-1 posts in
+    different groups. All nominated pairs must be checked."""
+    base = 0x0123456789ABCDEF
+    near = base ^ 0b1                             # Hamming 1 from base
+    # Same low 16-bit band as both, far everywhere else: >3 flips outside
+    # band 0 keeps its distance large while it shares the bucket.
+    obscurer = base ^ (0b11111111 << 40)
+    groups = trainer.near_duplicate_groups(
+        [(1, obscurer), (2, base), (3, near)])
+    assert groups[2] == groups[3]
+    assert groups[1] != groups[2]
+
+
+def test_any_label_disagreement_drops_the_text_from_training():
+    rows = [{'text': 't1', 'label': 'positive'},
+            {'text': 't1', 'label': 'none'},          # not pos-vs-neg...
+            {'text': 't2', 'label': 'negative'}]
+    kept, dropped = trainer.drop_contradictions(rows)
+    assert dropped == 2                                # ...still dropped
+    assert [row['text'] for row in kept] == ['t2']
+
+
+def test_exclusions_drop_reference_and_burned_near_duplicates():
+    base = 0xFEDCBA9876543210
+    rows = [{'simhash': base, 'post_id': 1},
+            {'simhash': base ^ 0b11, 'post_id': 2},    # Hamming 2: excluded
+            {'simhash': base ^ ((1 << 60) | (1 << 40) | (1 << 20) | 1),
+             'post_id': 3}]                            # Hamming 4: kept
+    kept, dropped = trainer.apply_exclusions(rows, [base])
+    assert dropped == 2
+    assert [row['post_id'] for row in kept] == [3]
+
+
+def test_the_artifact_records_its_training_cutoff(artifact_dir):
+    import joblib
+    result = trainer.train_candidate(_rows())
+    path = trainer.write_artifact(result, 'clf-v2-cutoff')
+    stored = joblib.load(path)
+    assert stored['training_cutoff'] is not None
+
+
+def test_promote_command_gates_an_existing_artifact(artifact_dir, capsys):
+    """Blocker 5: promotion must gate the SAME file the reference scored --
+    the old flow minted a fresh version at promote time, unscoreable by
+    construction."""
+    import json as json_mod
+    import os as os_mod
+    result = trainer.train_candidate(_rows())
+    path = trainer.write_artifact(result, 'clf-v2-cli')
+
+    # Unscored: blocked.
+    assert trainer.cmd_promote(path) == 1
+    assert 'reference set has not passed' in capsys.readouterr().out
+    assert not os_mod.path.exists(
+        os_mod.path.join(artifact_dir, 'active.json'))
+
+    # A failing reference verdict: still blocked.
+    ledger = os_mod.path.join(artifact_dir, 'evaluations.jsonl')
+    with open(ledger, 'w', encoding='utf-8') as handle:
+        handle.write(json_mod.dumps({'candidate': 'clf-v2-cli',
+                                     'passes_10_3': False}) + '\n')
+    assert trainer.cmd_promote(path) == 1
+
+    # A passing verdict for THIS version: promoted.
+    with open(ledger, 'a', encoding='utf-8') as handle:
+        handle.write(json_mod.dumps({'candidate': 'clf-v2-cli',
+                                     'passes_10_3': True}) + '\n')
+    assert trainer.cmd_promote(path) == 0
+    assert sentiment.active_version() == 'clf-v2-cli'
+
+
+def test_a_loadable_but_corrupt_artifact_falls_back_at_scoring(
+        artifact_dir, caplog):
+    """Finding 8: a loadable artifact missing a key must not raise into
+    ingest -- scoring falls back to the lexicon and disables it."""
+    import joblib
+    result = trainer.train_candidate(_rows())
+    path = trainer.write_artifact(result, 'clf-v2-corrupt')
+    stored = joblib.load(path)
+    del stored['tau']
+    joblib.dump(stored, path)
+    trainer.promote('clf-v2-corrupt', path)
+    sentiment._active_cache.update(pointer_mtime=None, artifact=None,
+                                   warned=False)
+    prepared = sentiment_input.prepare_sentiment_input(
+        'bluesky', None, 'this is a scam, terrible', 'ZZT')
+    from app import app as flask_app
+    with flask_app.app_context():
+        with caplog.at_level('WARNING', logger='radar.sentiment'):
+            assert sentiment.score(prepared) == sentiment.lexicon_score(
+                prepared.author_text)
+    assert any('failed at scoring' in message for message in caplog.messages)

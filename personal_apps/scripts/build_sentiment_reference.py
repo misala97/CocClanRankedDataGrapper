@@ -43,10 +43,16 @@ from app import app  # noqa: E402
 from extensions import db  # noqa: E402
 from features.radar import llm_sentiment, sentiment, sentiment_input  # noqa: E402
 from models import RadarMention, RadarPost  # noqa: E402
-from scripts.train_radar_sentiment import HAMMING_LIMIT, hamming  # noqa: E402
+from scripts.train_radar_sentiment import (  # noqa: E402
+    BURNED_MANIFEST, HAMMING_LIMIT, hamming)
 
 REFERENCE_DIR = os.path.join(sentiment.ARTIFACT_DIR, '..', 'reference')
 MIN_TOTAL, MIN_PER_SOURCE = 300, 100
+# Every §10.1 hard-slice category must be represented, separately
+# guaranteed rather than hoped for (Codex review, blocker 4).
+HARD_SLICE_FLOOR = 10
+HARD_SLICE_TAGS = ('multi_ticker', 'question', 'likely_false_ticker',
+                   'neutral_info', 'attitude_move_conflict')
 LABEL_FIELDS = ('relevance', 'content_origin', 'attitude', 'expected_move',
                 'confidence')
 
@@ -59,8 +65,9 @@ def sha256_of(path):
     return hashlib.sha256(open(path, 'rb').read()).hexdigest()
 
 
-def sampling_ok(rows):
-    """(ok, reasons) against the §10.1 floor. rows carry 'source' roots."""
+def sampling_ok(rows, check_hard_slice=False):
+    """(ok, reasons) against the §10.1 floors. rows carry 'source_root'
+    and (when check_hard_slice) 'tags'."""
     reasons = []
     if len(rows) < MIN_TOTAL:
         reasons.append('%d rows < %d' % (len(rows), MIN_TOTAL))
@@ -68,6 +75,12 @@ def sampling_ok(rows):
         got = sum(1 for row in rows if row['source_root'] == root)
         if got < MIN_PER_SOURCE:
             reasons.append('%s %d < %d' % (root, got, MIN_PER_SOURCE))
+    if check_hard_slice:
+        for tag in HARD_SLICE_TAGS:
+            got = sum(1 for row in rows if tag in row.get('tags', ()))
+            if got < HARD_SLICE_FLOOR:
+                reasons.append('hard slice %s: %d < %d'
+                               % (tag, got, HARD_SLICE_FLOOR))
     return (not reasons), reasons
 
 
@@ -93,23 +106,21 @@ def hard_slice_tags(mention, post, sibling_count):
 
 
 def load_burned():
-    path = _path('burned-manifest.json')
-    if not os.path.exists(path):
+    """The committed burn list. REQUIRED -- no bypass flag exists: a
+    reference set sampled without it can test on design-process data
+    (Codex review, blocker 3)."""
+    if not os.path.exists(BURNED_MANIFEST):
         return None
-    data = json.load(open(path, encoding='utf-8'))
+    data = json.load(open(BURNED_MANIFEST, encoding='utf-8'))
     return [int(h) for h in data.get('simhashes', [])]
 
 
-def cmd_sample(cutoff, allow_missing_burned=False):
+def cmd_sample(cutoff, thin_slice_reason=None):
     burned = load_burned()
     if burned is None:
-        if not allow_missing_burned:
-            print('no burned-manifest.json in %s -- the 160-item audit set '
-                  'MUST be excluded. Write it (post simhashes) or pass '
-                  '--allow-missing-burned to state there is nothing to burn.'
-                  % os.path.abspath(REFERENCE_DIR))
-            return 1
-        burned = []
+        print('missing %s -- the burned post list is committed to the repo '
+              'and required; there is no bypass.' % BURNED_MANIFEST)
+        return 1
 
     with app.app_context():
         rows = (db.session.query(RadarMention, RadarPost)
@@ -147,32 +158,48 @@ def cmd_sample(cutoff, allow_missing_burned=False):
                 'ticker': mention.ticker,
                 'tags': hard_slice_tags(mention, post, siblings[post.id]),
                 'author_text': prepared.author_text,
+                # The exact classifier feature text, frozen at sample time
+                # with the live universe -- scoring must mask identically
+                # to training, not with an empty ticker set (blocker 5).
+                'masked_text': sentiment.classifier_text(prepared),
                 'is_comment': prepared.is_comment,
                 'author': prepared.author, 'channel': prepared.channel,
             })
             if len(sample) >= MIN_TOTAL + 60:
-                ok, _ = sampling_ok(sample)
+                ok, _ = sampling_ok(sample, check_hard_slice=True)
                 if ok:
                     break
 
-    ok, reasons = sampling_ok(sample)
+    ok, reasons = sampling_ok(sample, check_hard_slice=True)
     if not ok:
-        print('sampling floor not met: %s -- widen the cutoff window or '
-              'wait for more data' % '; '.join(reasons))
-        return 1
+        hard_only = all(reason.startswith('hard slice') for reason in reasons)
+        if hard_only and thin_slice_reason:
+            print('hard-slice floors unmet (%s) -- ACCEPTED with recorded '
+                  'ruling: %s' % ('; '.join(reasons), thin_slice_reason))
+        else:
+            print('sampling floor not met: %s -- widen the cutoff window, '
+                  'wait for more data, or (hard-slice floors only) rule it '
+                  'through --accept-thin-slice "reason"'
+                  % '; '.join(reasons))
+            return 1
 
     os.makedirs(REFERENCE_DIR, exist_ok=True)
     with open(_path('reference-blind.jsonl'), 'w', encoding='utf-8') as out:
         for row in sample:
             blind = {key: row[key] for key in
                      ('n', 'source_root', 'ticker', 'author_text',
-                      'is_comment', 'author', 'channel', 'source', 'tags')}
+                      'masked_text', 'is_comment', 'author', 'channel',
+                      'source', 'tags')}
             out.write(json.dumps(blind, ensure_ascii=False) + '\n')
     with open(_path('reference-key-skeleton.json'), 'w',
               encoding='utf-8') as out:
         json.dump([{key: row[key] for key in
                     ('n', 'mention_id', 'post_external_id', 'simhash')}
                    for row in sample], out)
+    with open(_path('sampling-meta.json'), 'w', encoding='utf-8') as out:
+        json.dump({'sample_cutoff': cutoff.isoformat(),
+                   'thin_slice_reason': thin_slice_reason,
+                   'sampled_at': dt.datetime.utcnow().isoformat()}, out)
     print('sampled %d items (%d reddit, %d bluesky) -> reference-blind.jsonl'
           % (len(sample),
              sum(1 for r in sample if r['source_root'] == 'reddit'),
@@ -267,14 +294,31 @@ def cmd_freeze():
     with open(key_path, 'w', encoding='utf-8') as out:
         json.dump(key, out)
 
+    # The FINAL keyed set must still clear the §10.1 floors: missing label
+    # answers can silently shrink it below 300 between sampling and freeze
+    # (Codex review, blocker 4).
+    blind = {row['n']: row for row in
+             map(json.loads,
+                 open(_path('reference-blind.jsonl'), encoding='utf-8'))}
+    keyed_blind = [blind[entry['n']] for entry in key if entry['n'] in blind]
+    meta = json.load(open(_path('sampling-meta.json'), encoding='utf-8'))
+    ok, reasons = sampling_ok(keyed_blind, check_hard_slice=True)
+    if not ok:
+        hard_only = all(reason.startswith('hard slice') for reason in reasons)
+        if not (hard_only and meta.get('thin_slice_reason')):
+            print('the keyed set no longer clears the floors: %s -- relabel '
+                  'the missing items or resample' % '; '.join(reasons))
+            return 1
+
     files = ['reference-blind.jsonl', 'reference-key-skeleton.json',
              'reference-labels-one.jsonl', 'reference-labels-two.jsonl',
-             'reference-key.json']
+             'reference-key.json', 'sampling-meta.json']
     if os.path.exists(adjudication_path):
         files.append('reference-adjudication.jsonl')
-    burned = _path('burned-manifest.json')
     manifest = {
         'frozen_at': dt.datetime.utcnow().isoformat(),
+        'sample_cutoff': meta['sample_cutoff'],
+        'thin_slice_reason': meta.get('thin_slice_reason'),
         'prompt_version': llm_sentiment.PROMPT_VERSION,
         'labeling_models': sorted({row['model'] for row in one.values()}
                                   | {row['model'] for row in two.values()}),
@@ -282,7 +326,8 @@ def cmd_freeze():
             'two blind model passes; disagreements human-resolved without '
             'production predictions in view',
         'burned_manifest_sha256':
-            sha256_of(burned) if os.path.exists(burned) else None,
+            sha256_of(BURNED_MANIFEST) if os.path.exists(BURNED_MANIFEST)
+            else None,
         'files': {name: sha256_of(_path(name)) for name in files},
         'items': len(key),
     }
@@ -298,7 +343,10 @@ def main():
     sample = sub.add_parser('sample')
     sample.add_argument('--cutoff', required=True,
                         help='YYYY-MM-DD; posts strictly after this date')
-    sample.add_argument('--allow-missing-burned', action='store_true')
+    sample.add_argument('--accept-thin-slice', default=None,
+                        help='recorded ruling accepting unmet HARD-SLICE '
+                             'floors (total/source floors are never '
+                             'waivable)')
     label = sub.add_parser('label')
     label.add_argument('--label-pass', required=True, choices=('one', 'two'))
     label.add_argument('--model', required=True)
@@ -308,7 +356,7 @@ def main():
 
     if args.command == 'sample':
         cutoff = dt.datetime.strptime(args.cutoff, '%Y-%m-%d')
-        return cmd_sample(cutoff, args.allow_missing_burned)
+        return cmd_sample(cutoff, thin_slice_reason=args.accept_thin_slice)
     if args.command == 'label':
         return cmd_label(args.label_pass, args.model)
     if args.command == 'export-disagreements':

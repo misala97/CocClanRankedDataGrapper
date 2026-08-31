@@ -1096,3 +1096,8 @@ class RadarMentionEvent(db.Model):
     # eligible (a review reversal restores counting through here). Only
     # an explicit final verdict moves it off NULL.
     counts_as_human_chatter = db.Column(db.Boolean, nullable=True)
+    # WHEN the flag above was last decided. The rebuild retry net keys on
+    # this, never on created_utc: a backfill decides OLD events, and a
+    # crash between the flag commit and the rebuild must be rediscovered
+    # by the next pass regardless of the post's age.
+    chatter_decided_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)

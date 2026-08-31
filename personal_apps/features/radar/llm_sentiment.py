@@ -66,6 +66,16 @@ PROMPT_VERSION = 'radar-sentiment-v2-attitude-origin-candidate-1'
 PRIMARY_MODEL = 'claude-haiku-4-5'
 REVIEW_MODEL = 'claude-sonnet-5'
 
+# The live pass never reaches behind this line. The migration leaves every
+# pre-v2 mention with sentiment_judged_at NULL, and without a cutoff the
+# ten-minute scheduler would treat the entire legacy backlog (38.5k rows on
+# the prod snapshot, ~$90) as pending and bill through it in 400-row passes
+# on its first day -- bypassing the rejudge script's dry-run and --limit
+# controls entirely (Codex deploy review, blocker 1). Historical rejudging
+# happens ONLY through scripts/rejudge_radar_sentiment.py, which selects by
+# prompt version and deliberately ignores this cutoff.
+V2_ACTIVATION_CUTOFF = dt.datetime(2026, 8, 31)
+
 RELEVANCE = ('relevant', 'irrelevant', 'uncertain')
 CONTENT_ORIGIN = ('human_chatter', 'broadcast_or_automated', 'uncertain')
 ATTITUDE = ('positive', 'negative', 'mixed', 'none')
@@ -284,9 +294,18 @@ def _judge_batch_v2(batch, client, model, effort, preamble=None):
         verdicts = json.loads(text)['verdicts']
     except (StopIteration, ValueError, KeyError, TypeError) as exc:
         raise SentimentUnavailable('unparseable response: %s' % exc)
+    # Well-formed JSON with the wrong SHAPE ({"verdicts": {"n": 1}}) must
+    # cost only this batch, exactly like malformed JSON -- iterating a
+    # dict here yielded strings and an AttributeError escaped the whole
+    # pass (Codex review, finding 8).
+    if not isinstance(verdicts, list):
+        raise SentimentUnavailable('verdicts is %s, not a list'
+                                   % type(verdicts).__name__)
 
     got = {}
     for entry in verdicts:
+        if not isinstance(entry, dict):
+            continue
         number = entry.get('n')
         if not isinstance(number, int) or not 1 <= number <= len(batch):
             continue
@@ -360,7 +379,8 @@ def pending(limit=PASS_LIMIT):
     return (db.session.query(RadarMention, RadarPost)
             .join(RadarPost, RadarPost.id == RadarMention.post_id)
             .filter(RadarMention.confidence == 'high',
-                    RadarMention.sentiment_judged_at.is_(None))
+                    RadarMention.sentiment_judged_at.is_(None),
+                    RadarPost.created_utc >= V2_ACTIVATION_CUTOFF)
             .order_by(RadarPost.created_utc.desc())
             .limit(limit).all())
 
@@ -519,7 +539,11 @@ def review_candidates(now, limit=PASS_LIMIT):
     return [(mention, post) for _p, mention, post in selected[:limit]]
 
 
-def _meter_add(day, demanded=0, attempted=0, served=0, capped=0):
+def _meter_add(day, demanded=0, attempted=0, served=0, capped=0,
+               commit=True):
+    """commit=False lets a caller land the meter change in ITS transaction
+    -- demand stamping and its meter increment must be one commit, or a
+    crash between them undercounts forever (Codex review, finding 7)."""
     row = db.session.get(RadarReviewMeter, day)
     if row is None:
         row = RadarReviewMeter(day=day, demanded=0, attempted=0, served=0,
@@ -529,7 +553,8 @@ def _meter_add(day, demanded=0, attempted=0, served=0, capped=0):
     row.attempted += attempted
     row.served += served
     row.capped += capped
-    db.session.commit()
+    if commit:
+        db.session.commit()
 
 
 def items_for(rows):
@@ -625,9 +650,15 @@ def run_review_pass(client=None, now=None):
     if mode not in ('shadow', '1', 'true', 'True'):
         return 0
     now = now or dt.datetime.utcnow()
-    today = dt.date.today()
+    # UTC day from the pass's own clock, not the machine's local calendar
+    # (Codex review, finding 7).
+    today = now.date()
 
-    candidates = review_candidates(now)   # priority-ordered, read-only
+    # A WIDER scan than one pass can serve, so demand beyond the serving
+    # head gets stamped and counted instead of hiding behind the same
+    # unserved top rows forever (finding 7). Serving still takes the
+    # priority-ordered head, capped by PASS_LIMIT.
+    candidates = review_candidates(now, limit=PASS_LIMIT * 5)
     if not candidates:
         return 0
 
@@ -640,25 +671,28 @@ def run_review_pass(client=None, now=None):
     attempted_today = meter_row.attempted if meter_row else 0
     allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
                   - attempted_today)
-    take = candidates[:allowed]
-    over = candidates[allowed:]
+    take = candidates[:min(allowed, PASS_LIMIT)]
 
-    # Unique-demand accounting: only FIRST-time candidates move the meter.
+    # Unique-demand accounting: only FIRST-time candidates move the meter,
+    # and the stamps land in the SAME commit as their meter increments --
+    # a crash between the two must not undercount (finding 7).
     new_demand = new_capped = 0
     for index, (mention, _post) in enumerate(candidates):
         if mention.review_requested_at is None:
             mention.review_requested_at = now
             new_demand += 1
-            if index >= allowed:
+            if index >= len(take):
                 new_capped += 1
-    db.session.commit()
     if new_demand or new_capped:
-        _meter_add(today, demanded=new_demand, capped=new_capped)
+        _meter_add(today, demanded=new_demand, capped=new_capped,
+                   commit=False)
+    db.session.commit()
 
     if mode == 'shadow':
         logger.info('radar review shadow: %d candidates (%d new), %d over '
                     'ceiling, vs %d primary today',
-                    len(candidates), new_demand, len(over), primary_today)
+                    len(candidates), new_demand,
+                    len(candidates) - len(take), primary_today)
         return 0
     if not take:
         return 0
@@ -691,10 +725,18 @@ def run_review_pass(client=None, now=None):
 
 
 def pending_count():
-    """How many mentions are waiting for a v2 judgment. For the daemon log."""
+    """How many mentions the LIVE pass still owes. For the daemon log.
+
+    Same activation cutoff as pending(): the legacy backlog is the rejudge
+    script's business and must not read as a live backlog here or in
+    ops_summary's p95.
+    """
     return (db.session.query(sa.func.count(RadarMention.id))
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
             .filter(RadarMention.confidence == 'high',
-                    RadarMention.sentiment_judged_at.is_(None)).scalar() or 0)
+                    RadarMention.sentiment_judged_at.is_(None),
+                    RadarPost.created_utc >= V2_ACTIVATION_CUTOFF).scalar()
+            or 0)
 
 
 def ops_summary(now=None):
@@ -715,13 +757,16 @@ def ops_summary(now=None):
                       .join(RadarMention,
                             RadarMention.post_id == RadarPost.id)
                       .filter(RadarMention.confidence == 'high',
-                              RadarMention.sentiment_judged_at.is_(None))
+                              RadarMention.sentiment_judged_at.is_(None),
+                              RadarPost.created_utc >= V2_ACTIVATION_CUTOFF)
                       .order_by(RadarPost.created_utc.asc())
                       .offset(offset).limit(1).scalar())
         if oldest_5th is not None:
             p95 = max(0.0, (now - oldest_5th).total_seconds() / 60.0)
 
-    today = dt.date.today()
+    # UTC day, from the supplied clock -- date.today() is the machine's
+    # local day and disagrees with every other UTC figure around midnight.
+    today = now.date()
     meter_row = db.session.get(RadarReviewMeter, today)
     review = {
         'demanded': meter_row.demanded if meter_row else 0,
@@ -729,13 +774,35 @@ def ops_summary(now=None):
         'served': meter_row.served if meter_row else 0,
         'capped': meter_row.capped if meter_row else 0,
     }
+    review['over_ceiling'] = _over_ceiling_gauge(now, review['attempted'])
+    return {'pending': waiting, 'p95_age_minutes': p95, 'review': review}
+
+
+_gauge_cache = {'at': None, 'value': 0}
+
+
+def _over_ceiling_gauge(now, attempted_today):
+    """Candidates currently waiting beyond today's remaining budget.
+
+    Costs a candidate scan, so it runs only while the review tier is even
+    enabled and is cached for a minute -- the board polls far more often
+    than this number can change (Codex review, finding 12).
+    """
+    if os.getenv('RADAR_SONNET_REVIEW', '').strip() not in ('shadow', '1',
+                                                            'true', 'True'):
+        return 0
+    cached_at = _gauge_cache['at']
+    if cached_at is not None and (now - cached_at).total_seconds() < 60:
+        return _gauge_cache['value']
     primary_today = (db.session.query(
         sa.func.count(RadarSentimentJudgment.id))
         .filter(RadarSentimentJudgment.stage == 'primary',
-                sa.func.date(RadarSentimentJudgment.created_utc) == today)
+                sa.func.date(RadarSentimentJudgment.created_utc)
+                == now.date())
         .scalar() or 0)
     allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
-                  - review['attempted'])
+                  - attempted_today)
     candidates = review_candidates(now)
-    review['over_ceiling'] = max(0, len(candidates) - allowed)
-    return {'pending': waiting, 'p95_age_minutes': p95, 'review': review}
+    value = max(0, len(candidates) - allowed)
+    _gauge_cache.update(at=now, value=value)
+    return value

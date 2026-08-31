@@ -83,10 +83,19 @@ def near_duplicate_groups(post_hashes):
             key = (band, (simhash >> (band * 16)) & 0xFFFF)
             bands[key].append((post_id, simhash))
     for members in bands.values():
-        anchor_id, anchor_hash = members[0]
-        for post_id, simhash in members[1:]:
-            if hamming(anchor_hash, simhash) <= HAMMING_LIMIT:
-                union(anchor_id, post_id)
+        # EVERY nominated pair, not members-vs-first-anchor: an unrelated
+        # anchor sharing the band obscured genuine near-duplicates behind
+        # it (Codex review, blocker 6). Buckets are tiny in practice; a
+        # pathological bucket is capped rather than allowed to go
+        # quadratic on the whole corpus.
+        if len(members) > 200:
+            members = members[:200]
+        for left in range(len(members)):
+            left_id, left_hash = members[left]
+            for right in range(left + 1, len(members)):
+                right_id, right_hash = members[right]
+                if hamming(left_hash, right_hash) <= HAMMING_LIMIT:
+                    union(left_id, right_id)
     return {post_id: find(post_id) for post_id, _ in post_hashes}
 
 
@@ -157,6 +166,39 @@ def gates_pass(metrics, lexicon_metrics):
     return (not reasons), reasons
 
 
+# Committed to the repo, small and public: the posts burned by the design
+# process (the 160-item audit set, prompt-development samples). Training
+# and reference sampling both exclude anything within HAMMING_LIMIT of
+# these, so the burn is enforced by code rather than remembered by people.
+BURNED_MANIFEST = os.path.join(os.path.dirname(__file__),
+                               'burned_sentiment_posts.json')
+
+
+def exclusion_hashes():
+    """Simhashes no training run may learn from: the committed burned set
+    plus the frozen reference sample, when one exists (Codex blocker 3)."""
+    hashes = []
+    if os.path.exists(BURNED_MANIFEST):
+        data = json.load(open(BURNED_MANIFEST, encoding='utf-8'))
+        hashes.extend(int(h) for h in data.get('simhashes', []))
+    skeleton = os.path.join(sentiment.ARTIFACT_DIR, '..', 'reference',
+                            'reference-key-skeleton.json')
+    if os.path.exists(skeleton):
+        for row in json.load(open(skeleton, encoding='utf-8')):
+            hashes.append(int(row['simhash']))
+    return hashes
+
+
+def apply_exclusions(rows, hashes):
+    """Drop rows near-duplicate to any excluded simhash. Returns (kept, n)."""
+    if not hashes:
+        return rows, 0
+    kept = [row for row in rows
+            if not any(hamming(row['simhash'], burnt) <= HAMMING_LIMIT
+                       for burnt in hashes)]
+    return kept, len(rows) - len(kept)
+
+
 def load_rows():
     """Finalized v2 training rows: (post_id, simhash, created, text, label, local)."""
     rows = (db.session.query(RadarMention, RadarPost)
@@ -182,13 +224,14 @@ def load_rows():
 
 
 def drop_contradictions(rows):
-    """Training rule 6: identical prepared inputs with clashing directional
-    labels teach nothing a full-text model can learn."""
+    """Training rule 6: identical prepared inputs with ANY unresolved label
+    disagreement teach noise -- not only positive-vs-negative clashes
+    (Codex review, blocker 6)."""
     by_text = collections.defaultdict(set)
     for row in rows:
         by_text[row['text']].add(row['label'])
     contradictory = {text for text, labels in by_text.items()
-                     if {'positive', 'negative'} <= labels}
+                     if len(labels) > 1}
     kept = [row for row in rows if row['text'] not in contradictory]
     return kept, len(rows) - len(kept)
 
@@ -275,6 +318,8 @@ def train_candidate(rows):
         'word_vec': word_vec, 'char_vec': char_vec, 'clf': clf,
         'sweep': sweep, 'tau': chosen,
         'lexicon_validation': lexicon_validation,
+        'training_cutoff': max(row['created'] for row in train_rows)
+        .isoformat() if train_rows else None,
     }
     if chosen is not None:
         # The locked test is scored ONCE, here, for this candidate.
@@ -321,9 +366,11 @@ def write_artifact(result, version):
         'classes': list(result['clf'].classes_),
         'preparation_version': sentiment_input.PREPARATION_VERSION,
         'trained_at': dt.datetime.utcnow().isoformat(),
+        'training_cutoff': result.get('training_cutoff'),
         'counts': result['counts'],
         'validation_metrics': result.get('validation_metrics'),
         'locked_test_metrics': result.get('locked_test_metrics'),
+        'lexicon_test': result.get('lexicon_test'),
         'sklearn_version': sklearn.__version__,
     }, path)
     return path
@@ -339,14 +386,18 @@ def promote(version, path):
     os.replace(staging, pointer)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--promote', action='store_true',
-                        help='promote the candidate if every gate passes')
-    args = parser.parse_args()
-
+def cmd_train():
+    """Train a candidate, report every gate, write the artifact. Never
+    promotes -- score it against the frozen reference first, then run
+    `promote --artifact <path>` on the SAME file (Codex blocker 5: the old
+    single-command flow minted a fresh version at promote time, which the
+    reference ledger could never have scored)."""
     with app.app_context():
         rows = load_rows()
+    excluded_hashes = exclusion_hashes()
+    rows, excluded = apply_exclusions(rows, excluded_hashes)
+    if excluded:
+        print('excluded %d rows near the burned/reference sets' % excluded)
     if len(rows) < 500:
         print('only %d finalized v2 training rows -- not enough to bother'
               % len(rows))
@@ -373,12 +424,24 @@ def main():
     version = 'clf-v2-%s' % dt.datetime.utcnow().strftime('%Y%m%d%H%M%S')
     path = write_artifact(result, version)
     print('candidate written: %s' % path)
+    print('next: python -m scripts.score_sentiment_reference --classifier '
+          '%s, then python -m scripts.train_radar_sentiment promote '
+          '--artifact %s' % (path, path))
+    return 0
 
-    if not args.promote:
-        return 0
 
-    test_ok, test_reasons = gates_pass(result['locked_test_metrics'],
-                                       result['lexicon_test'])
+def cmd_promote(artifact_path):
+    """Gate and promote an EXISTING artifact. All three gates, spec §10.3:
+    validation constraints (already enforced at training -- a tau exists),
+    the teacher locked test, and the frozen adjudicated reference set."""
+    import joblib
+    stored = joblib.load(artifact_path)
+    version = stored['version']
+    if stored.get('tau') is None:
+        print('PROMOTION BLOCKED: artifact carries no passing tau')
+        return 1
+    test_ok, test_reasons = gates_pass(stored['locked_test_metrics'],
+                                       stored['lexicon_test'])
     if not test_ok:
         print('PROMOTION BLOCKED by the locked test: %s'
               % '; '.join(test_reasons))
@@ -386,12 +449,25 @@ def main():
     ref = reference_verdict(version)
     if ref is not True:
         print('PROMOTION BLOCKED: the frozen reference set has not passed '
-              'this candidate (score it with score_sentiment_reference.py '
-              '--classifier %s first)' % path)
+              '%s (score it with score_sentiment_reference.py --classifier '
+              '%s first)' % (version, artifact_path))
         return 1
-    promote(version, path)
+    promote(version, artifact_path)
     print('promoted %s' % version)
     return 0
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest='command')
+    sub.add_parser('train')
+    promote_cmd = sub.add_parser('promote')
+    promote_cmd.add_argument('--artifact', required=True,
+                             help='path to an already-scored candidate')
+    args = parser.parse_args()
+    if args.command == 'promote':
+        return cmd_promote(args.artifact)
+    return cmd_train()
 
 
 if __name__ == '__main__':

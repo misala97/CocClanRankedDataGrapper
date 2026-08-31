@@ -223,10 +223,15 @@ def sync_chatter_eligibility(pairs):
                            RadarMentionEvent.external_id == external_id,
                            RadarMentionEvent.ticker == ticker)
                    for source, external_id, ticker in by_identity]
+        decided_at = dt.datetime.utcnow()
         for row in RadarMentionEvent.query.filter(sa.or_(*clauses)).all():
             value = by_identity[(row.source, row.external_id, row.ticker)]
             if row.counts_as_human_chatter is not value:
                 row.counts_as_human_chatter = value
+                # Decision time, not event time: the retry net keys on
+                # this so a crash after the commit is rediscovered even
+                # when the EVENT is hours old (Codex review, blocker 2).
+                row.chatter_decided_at = decided_at
                 changed.add((row.ticker, row.bucket_start))
     return changed
 
@@ -241,8 +246,7 @@ def recent_decided_windows(now, minutes=30):
     since = now - dt.timedelta(minutes=minutes)
     rows = (db.session.query(RadarMentionEvent.ticker,
                              RadarMentionEvent.bucket_start)
-            .filter(RadarMentionEvent.counts_as_human_chatter.isnot(None),
-                    RadarMentionEvent.created_utc >= since)
+            .filter(RadarMentionEvent.chatter_decided_at >= since)
             .distinct().all())
     return {(ticker, start) for ticker, start in rows}
 

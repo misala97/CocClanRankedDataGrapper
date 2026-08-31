@@ -110,12 +110,18 @@ def run(apply=False, limit=2000):
             print('dry run -- nothing judged, pass --apply')
             return 0
 
+        # --limit bounds ATTEMPTS, not successes: a partially failing run
+        # must not keep pulling fresh slices past the requested spend
+        # ceiling while retrying its failures (Codex review, finding 9).
+        attempted_total = 0
         judged_total = 0
-        while judged_total < limit:
-            slice_limit = min(llm_sentiment.PASS_LIMIT, limit - judged_total)
+        while attempted_total < limit:
+            slice_limit = min(llm_sentiment.PASS_LIMIT,
+                              limit - attempted_total)
             rows = rejudge_backlog(slice_limit)
             if not rows:
                 break
+            attempted_total += len(rows)
             meter = {'calls': 0, 'input': 0, 'output': 0}
 
             def count(usage):
@@ -142,7 +148,8 @@ def run(apply=False, limit=2000):
                 # Every batch in the slice failed; stop rather than spin.
                 print('  no batch succeeded -- stopping, rerun to retry')
                 break
-        print('judged %d mentions this run' % judged_total)
+        print('attempted %d, judged %d mentions this run'
+              % (attempted_total, judged_total))
         return judged_total
 
 
