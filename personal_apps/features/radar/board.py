@@ -439,7 +439,10 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     totals = _hourly_counts(tickers, sources, since, now)
     prices = _hourly_prices(ranked, since, now)
     triplets = _triplets(tickers, sources, now)
-    tones = _tones(tickers, sources, since, now)
+    # The lean arrows must agree with the detail panel's chatter breakdown,
+    # which counts the SELECTED window -- not the sparkline's 24h axis.
+    tones = _tones(tickers, sources,
+                   now - dt.timedelta(hours=window_hours), now)
 
     empty_triplet = {hours: None for hours in TRIPLET_HOURS}
     rows = [BoardRow(

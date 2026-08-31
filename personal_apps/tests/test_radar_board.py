@@ -328,6 +328,21 @@ def test_an_unclear_verdict_is_not_a_bullish_or_bearish_vote(clean):
     assert (tone.bullish, tone.bearish, tone.neutral) == (1, 0, 2)
 
 
+def test_tone_counts_the_selected_window_not_the_sparkline_axis(clean):
+    """The lean arrows must agree with the panel's chatter breakdown, which
+    counts the selected window. Counting the sparkline's 24h axis instead made
+    the row say 8/6 while the panel said 1/2 for the same ticker."""
+    universe(f'{PREFIX}A')
+    bucket(f'{PREFIX}A', minutes_ago=30)
+    post(f'{PREFIX}A', f'{PREFIX}in', 30, -0.4)
+    post(f'{PREFIX}A', f'{PREFIX}out', 6 * 60, 0.6)
+    db.session.commit()
+
+    tone = only(board.build(['bluesky'], NOW), f'{PREFIX}A').tone
+
+    assert (tone.bullish, tone.bearish) == (0, 1)
+
+
 def test_tone_ignores_posts_from_a_source_that_is_switched_off(clean):
     universe(f'{PREFIX}A')
     bucket(f'{PREFIX}A', minutes_ago=30)
