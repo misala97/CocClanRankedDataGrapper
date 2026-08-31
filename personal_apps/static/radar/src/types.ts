@@ -258,6 +258,20 @@ export interface BoardPayload {
    *  API has no balance endpoint, so nothing here knows what is left. Absent
    *  until the first pass books something. */
   spend?: { today_usd: number; month_usd: number; unpriced_tokens: number }
+  /** Judgment-pipeline health (sentiment v2 §10.4): pending backlog and its
+   *  p95 post age, plus the review tier's unique-demand meters and the live
+   *  over-ceiling gauge. Visibility, never control. */
+  sentiment_ops?: {
+    pending: number
+    p95_age_minutes: number | null
+    review: {
+      demanded: number
+      attempted: number
+      served: number
+      capped: number
+      over_ceiling: number
+    }
+  }
 }
 
 export interface Selection {

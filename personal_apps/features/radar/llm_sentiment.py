@@ -695,3 +695,47 @@ def pending_count():
     return (db.session.query(sa.func.count(RadarMention.id))
             .filter(RadarMention.confidence == 'high',
                     RadarMention.sentiment_judged_at.is_(None)).scalar() or 0)
+
+
+def ops_summary(now=None):
+    """The board's sentiment_ops block (spec §10.4).
+
+    `p95_age_minutes` is the 95th percentile of the pending backlog's post
+    age -- one COUNT plus one OFFSET read, no full scan. `over_ceiling` is
+    a live gauge of candidates currently waiting beyond today's remaining
+    review budget; the four meter counters are today's row (zeros when
+    absent).
+    """
+    now = now or dt.datetime.utcnow()
+    waiting = pending_count()
+    p95 = None
+    if waiting:
+        offset = int(waiting * 0.05)
+        oldest_5th = (db.session.query(RadarPost.created_utc)
+                      .join(RadarMention,
+                            RadarMention.post_id == RadarPost.id)
+                      .filter(RadarMention.confidence == 'high',
+                              RadarMention.sentiment_judged_at.is_(None))
+                      .order_by(RadarPost.created_utc.asc())
+                      .offset(offset).limit(1).scalar())
+        if oldest_5th is not None:
+            p95 = max(0.0, (now - oldest_5th).total_seconds() / 60.0)
+
+    today = dt.date.today()
+    meter_row = db.session.get(RadarReviewMeter, today)
+    review = {
+        'demanded': meter_row.demanded if meter_row else 0,
+        'attempted': meter_row.attempted if meter_row else 0,
+        'served': meter_row.served if meter_row else 0,
+        'capped': meter_row.capped if meter_row else 0,
+    }
+    primary_today = (db.session.query(
+        sa.func.count(RadarSentimentJudgment.id))
+        .filter(RadarSentimentJudgment.stage == 'primary',
+                sa.func.date(RadarSentimentJudgment.created_utc) == today)
+        .scalar() or 0)
+    allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
+                  - review['attempted'])
+    candidates = review_candidates(now)
+    review['over_ceiling'] = max(0, len(candidates) - allowed)
+    return {'pending': waiting, 'p95_age_minutes': p95, 'review': review}

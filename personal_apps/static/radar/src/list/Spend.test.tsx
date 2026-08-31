@@ -66,3 +66,38 @@ describe('the spend footnote', () => {
     expect(screen.getByText(/1,284,392 tokens/)).toBeTruthy()
   })
 })
+
+describe('the review meter line', () => {
+  const withReview = (review: {
+    demanded: number; attempted: number; served: number
+    capped: number; over_ceiling: number
+  }) =>
+    ({
+      spend: { today_usd: 1.0, month_usd: 2.0, unpriced_tokens: 0 },
+      sentiment_ops: { pending: 3, p95_age_minutes: 4, review },
+      excluded: {},
+      rows: [],
+    } as unknown as BoardPayload)
+
+  it('shows served over unique demand once the tier wants anything', () => {
+    render(
+      <Spend
+        payload={withReview({ demanded: 12, attempted: 9, served: 8, capped: 3, over_ceiling: 1 })}
+      />,
+    )
+
+    expect(screen.getByText(/Review:/)).toBeTruthy()
+    expect(screen.getByText(/12 served/)).toBeTruthy()
+    expect(screen.getByText(/3 capped/)).toBeTruthy()
+  })
+
+  it('stays silent while the review tier has demanded nothing', () => {
+    const { container } = render(
+      <Spend
+        payload={withReview({ demanded: 0, attempted: 0, served: 0, capped: 0, over_ceiling: 0 })}
+      />,
+    )
+
+    expect(container.textContent).not.toContain('Review')
+  })
+})

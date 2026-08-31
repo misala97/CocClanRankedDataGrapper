@@ -634,3 +634,16 @@ def test_daily_chart_serializes_no_session_bands():
                                       step_minutes=1440)
 
     assert api.serialize_detail(built)['chart']['sessions'] == []
+
+
+def test_the_board_payload_carries_sentiment_ops(client):
+    """Judgment-pipeline health (sentiment v2 §10.4) rides the board payload:
+    backlog + p95 age + the review tier's four unique-demand meters and the
+    live over-ceiling gauge."""
+    payload = json.loads(client.get('/radar/api/board').data)
+
+    ops = payload['sentiment_ops']
+    assert isinstance(ops['pending'], int)
+    assert ops['p95_age_minutes'] is None or ops['p95_age_minutes'] >= 0
+    for key in ('demanded', 'attempted', 'served', 'capped', 'over_ceiling'):
+        assert isinstance(ops['review'][key], int), key

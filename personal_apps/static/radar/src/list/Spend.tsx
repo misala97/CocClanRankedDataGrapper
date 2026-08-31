@@ -31,6 +31,7 @@ export function Spend({ payload }: { payload: BoardPayload }) {
   // a different claim from having nothing to report yet.
   if (!spend || (!spend.today_usd && !spend.month_usd && !spend.unpriced_tokens)) return null
 
+  const review = payload.sentiment_ops?.review
   return (
     <p className="below">
       <b>{usd(spend.today_usd)}</b> spent reading tone today,
@@ -41,6 +42,12 @@ export function Spend({ payload }: { payload: BoardPayload }) {
         // surface that is otherwise entirely en-US and UTC. Seen on the
         // running board, not reasoned about.
         <> plus {count(spend.unpriced_tokens)} tokens at an unknown rate.</>
+      )}
+      {review && review.demanded > 0 && (
+        // The review tier's day so far, only once it wants anything: served
+        // over unique demand, and how many the daily ceiling refused.
+        <> Review: <b>{count(review.served)}</b>/{count(review.demanded)} served
+        {review.capped > 0 && <>, {count(review.capped)} capped</>}.</>
       )}
     </p>
   )

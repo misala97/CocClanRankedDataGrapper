@@ -8,7 +8,7 @@ from auth import login_required
 
 from .. import board as board_mod
 from .. import detail as detail_mod
-from .. import detail_panel, phrasing, spend
+from .. import detail_panel, llm_sentiment, phrasing, spend
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
 from ..market_calendars import session_bounds, session_state
 from ._blueprint import radar_bp
@@ -319,6 +319,11 @@ def serialize(board):
         # Admin API key, and is documented as unavailable for individual
         # accounts. Counted here from the token usage the responses carry.
         'spend': spend.summary(),
+        # Judgment-pipeline health (spec §10.4): backlog size and p95 age,
+        # plus the review tier's unique-demand meters and the live
+        # over-ceiling gauge. Visibility, not control -- nothing here
+        # changes what the passes do.
+        'sentiment_ops': llm_sentiment.ops_summary(),
         'triplet_hours': list(board_mod.TRIPLET_HOURS),
         'series_hours': board_mod.SERIES_HOURS,
         'lead_count': board_mod.LEAD_COUNT,
