@@ -271,12 +271,13 @@ def tick(now_utc, fetchers):
                 'aggregate_status': {}, 'catchup_depth': {}}
 
     logger.info('radar cycle posts=%d new=%d mentions=%d buckets=%d sources=%s '
-                'aggregate=%s catchup_depth=%s',
+                'aggregate=%s catchup_depth=%s intake=%s',
                 summary['posts_seen'], summary['posts_new'],
                 summary['mentions'], summary['buckets_written'],
                 summary['per_source'],
                 _format_operational_map(summary['aggregate_status']),
-                _format_operational_map(summary['catchup_depth']))
+                _format_operational_map(summary['catchup_depth']),
+                summary.get('intake_reasons', {}))
     return summary
 
 

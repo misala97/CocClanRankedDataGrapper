@@ -319,6 +319,29 @@ BARE_TOKEN_CONFIDENCE = {
 def bare_token_confidence(source):
     return BARE_TOKEN_CONFIDENCE.get(source_root(source), 'low')
 
+
+# Extractor hygiene (extractor-feedback spec §5.2): posts authored by
+# Reddit's automation are not human chatter and are dropped BEFORE
+# extraction. Exact normalized comparison only -- '/u/AutoModeratorFan'
+# is a person. Reddit root only: an unrelated network's display name may
+# legitimately be anything. Hashed into source_config_version because
+# membership changes what gets counted.
+AUTOMATED_AUTHORS = frozenset({'automoderator'})
+
+
+def is_automated_author(source, author):
+    """True when this author is Reddit's automation, in any of the three
+    upstream spellings (AutoModerator, u/AutoModerator, /u/AutoModerator),
+    case-insensitively. Never substring matching."""
+    if source_root(source) != 'reddit' or not author:
+        return False
+    normalized = author.strip().lower()
+    for prefix in ('/u/', 'u/'):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+            break
+    return normalized in AUTOMATED_AUTHORS
+
 # Subreddits to read, from
 # docs/superpowers/specs/2026-08-24-radar-subreddit-source-list.md. Tier 1 and
 # Tier 2 together, on Michi's call 2026-08-24: measure everything for a few

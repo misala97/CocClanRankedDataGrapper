@@ -15,7 +15,7 @@ from models import RadarMention, RadarPost, RadarSourceCursor
 from . import buckets, extraction, fingerprint, sentiment, sentiment_input, universe
 from .config import (
     BUCKET_MINUTES, bare_token_confidence, bare_tokens_allowed,
-    coin_collision_dropped, looks_like_bot_feed,
+    coin_collision_dropped, is_automated_author, looks_like_bot_feed,
     single_letter_cashtags_allowed)
 
 logger = logging.getLogger('radar.ingest')
@@ -63,28 +63,45 @@ def _advance_cursor(source, newest_seen):
         row.cursor_utc = newest_seen
 
 
-def _extract_for(raw, lookup):
-    """Extract under the policy that applies to this post's source.
+def _extract_matches(raw, lookup):
+    """Provenance-bearing extraction under this source's policy.
 
     Four per-source judgements, all about population rather than code:
     whether a bare token can be read as a ticker at all, what an
-    uncorroborated one is WORTH, and whether a coin-shaped symbol means the
-    company or the coin.
+    uncorroborated one is WORTH, and whether a coin-shaped symbol means
+    the company or the coin. Plus two hygiene gates that run BEFORE
+    extraction (extractor-feedback spec §5): Reddit's automation is not a
+    person discussing anything, and neither is a bot feed -- both drop
+    the whole post.
     """
-    # An automated feed is one publisher however many tickers it names, and
-    # it is not a person discussing anything. Dropped before extraction so the
-    # whole post goes -- config.looks_like_bot_feed carries what counts and
-    # why it matches the format's vocabulary rather than the symbols.
-    if looks_like_bot_feed('%s %s' % (raw.title or '', raw.body or '')):
+    if is_automated_author(raw.source, raw.author):
+        return []
+    prepared = extraction.prepare_extraction_input(
+        raw.source, raw.title, raw.body, author=raw.author,
+        channel=raw.channel)
+    # The bot-feed gate reads what extraction reads: authored text plus
+    # thread context, never the discarded username.
+    if looks_like_bot_feed('%s %s' % (prepared.author_text,
+                                      prepared.thread_context)):
         return []
 
-    tickers = extraction.extract_tickers(
-        raw.title, raw.body, lookup,
+    matches = extraction.extract(
+        prepared, lookup,
         allow_bare=bare_tokens_allowed(raw.source),
         allow_single_letter=single_letter_cashtags_allowed(raw.source),
         bare_confidence=bare_token_confidence(raw.source))
-    return [(symbol, confidence) for symbol, confidence in tickers
-            if not coin_collision_dropped(raw.source, symbol)]
+    return [m for m in matches
+            if not coin_collision_dropped(raw.source, m.ticker)]
+
+
+def _extract_for(raw, lookup):
+    """[(ticker, confidence)] -- the PINNED public shape.
+
+    scripts/sample_discarded_mentions.py and this suite's own tests
+    destructure pairs; provenance travels through _extract_matches
+    instead of a changed return type (Codex plan-review finding 2).
+    """
+    return [(m.ticker, m.confidence) for m in _extract_matches(raw, lookup)]
 
 
 def _store_mentioning_posts(raw_posts, lookup, now):
@@ -101,7 +118,7 @@ def _store_mentioning_posts(raw_posts, lookup, now):
     history under a bucket that was already counted.
     """
     if not raw_posts:
-        return [], 0
+        return [], 0, {}
 
     # Whether to STORE a new post depends on extraction. Whether to REFRESH an
     # already-stored one does not: a post deleted upstream comes back with an
@@ -116,13 +133,20 @@ def _store_mentioning_posts(raw_posts, lookup, now):
 
     fresh, new_count = [], 0
     extracted = {}
+    intake = {}
     for raw in raw_posts:
         row = existing.get(raw.external_id)
         # An external identity can appear twice in a source batch. The second
         # loop below needs the same decision, so cache it explicitly: a
-        # setdefault default would call _extract_for eagerly for duplicates.
+        # setdefault default would call _extract_matches eagerly for
+        # duplicates -- and the intake counters must count each post once.
         if raw.external_id not in extracted:
-            extracted[raw.external_id] = _extract_for(raw, lookup)
+            matches = _extract_matches(raw, lookup)
+            extracted[raw.external_id] = [(m.ticker, m.confidence)
+                                          for m in matches]
+            counter = intake.setdefault(raw.source, {})
+            for m in matches:
+                counter[m.reason] = counter.get(m.reason, 0) + 1
         tickers = extracted[raw.external_id]
 
         if row is None:
@@ -205,7 +229,7 @@ def _store_mentioning_posts(raw_posts, lookup, now):
                 sentiment=local,
                 engagement=float(raw.score + raw.num_comments)))
 
-    return mention_rows, new_count
+    return mention_rows, new_count, intake
 
 
 def _touched_buckets(mention_rows, since, now):
@@ -237,6 +261,7 @@ def run_cycle(now, fetchers):
     all_mentions = []
     touched = set()
     posts_seen = posts_new = 0
+    intake_reasons = {}
 
     for source, fetcher in fetchers.items():
         since = _since_for(source)
@@ -297,9 +322,18 @@ def run_cycle(now, fetchers):
         effective_since = result.covered_since or since
         touched |= _touched_buckets([], effective_since, now)
 
-        mention_rows, new_count = _store_mentioning_posts(result.posts, lookup, now)
+        mention_rows, new_count, intake = _store_mentioning_posts(
+            result.posts, lookup, now)
         posts_new += new_count
         all_mentions.extend(mention_rows)
+        # Intake by extraction reason, per concrete source (extractor-
+        # feedback spec §10): the before/after evidence on deploy day, and
+        # the tripwire -- a drop in parent-context comment intake is the
+        # rollback condition.
+        for name, counter in intake.items():
+            merged = intake_reasons.setdefault(name, {})
+            for reason, count in counter.items():
+                merged[reason] = merged.get(reason, 0) + count
 
         if result.posts:
             _advance_cursor(source, max(p.created_utc for p in result.posts))
@@ -314,4 +348,4 @@ def run_cycle(now, fetchers):
     return {'posts_seen': posts_seen, 'posts_new': posts_new,
             'mentions': len(all_mentions), 'buckets_written': written,
             'per_source': statuses, 'aggregate_status': aggregate_statuses,
-            'catchup_depth': depths}
+            'catchup_depth': depths, 'intake_reasons': intake_reasons}

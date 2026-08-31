@@ -428,13 +428,15 @@ def test_a_duplicate_external_id_is_extracted_once_and_refreshes_engagement(
         seeded, monkeypatch):
     """One identity means one extraction decision, even when it appears twice."""
     calls = []
-    extract = ingest._extract_for
+    extract = ingest._extract_matches
 
     def counted(raw, lookup):
         calls.append(raw.external_id)
         return extract(raw, lookup)
 
-    monkeypatch.setattr(ingest, '_extract_for', counted)
+    # The extraction seam moved behind the pinned pair-shaped wrapper:
+    # the storing loop decides through _extract_matches now.
+    monkeypatch.setattr(ingest, '_extract_matches', counted)
     duplicate = [post(ident='dup-extract', score=5),
                  post(ident='dup-extract', score=900)]
 
@@ -655,3 +657,83 @@ def test_fresh_mentions_carry_the_local_model_version(seeded):
     with flask_app.app_context():
         mention = RadarMention.query.filter_by(ticker=TEST_TICKER).one()
         assert mention.local_sentiment_model_version == 'lexicon-v1'
+
+
+# --- Automated authors + intake provenance (extractor plan, Task 3) ---------
+
+def test_automoderator_is_dropped_in_every_spelling(seeded):
+    for spelling in ('AutoModerator', 'u/AutoModerator', '/u/automoderator'):
+        raw = post(ident='t3_am_%s' % spelling.replace('/', ''),
+                   body='$ZZG earnings megathread', author=spelling,
+                   source='reddit:zzgsub')
+        result = ingest.run_cycle(
+            NOW, fetcher_for(FetchResult(posts=[raw], status='ok'),
+                             source='reddit:zzgsub'))
+        assert result['mentions'] == 0, spelling
+
+
+def test_automoderator_teeth_the_gate_does_the_work(seeded, monkeypatch):
+    """TEETH: with the gate disabled the same fixture DOES produce a
+    mention -- the absence above comes from is_automated_author, not from
+    a fixture that could never match."""
+    monkeypatch.setattr(ingest, 'is_automated_author',
+                        lambda source, author: False)
+    raw = post(ident='t3_am_teeth', body='$ZZG earnings megathread',
+               author='AutoModerator', source='reddit:zzgsub')
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[raw], status='ok'),
+                         source='reddit:zzgsub'))
+    assert result['mentions'] == 1
+
+
+def test_automoderatorfan_is_a_person(seeded):
+    raw = post(ident='t3_am_fan', body='$ZZG earnings megathread',
+               author='/u/AutoModeratorFan', source='reddit:zzgsub')
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[raw], status='ok'),
+                         source='reddit:zzgsub'))
+    assert result['mentions'] == 1
+
+
+def test_the_rule_is_scoped_to_reddit_roots(seeded):
+    raw = post(ident='t3_am_bsky', body='$ZZG ripping',
+               author='AutoModerator', source='bluesky')
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[raw], status='ok')))
+    assert result['mentions'] == 1
+
+
+def test_a_parent_context_comment_keeps_its_ticker(seeded):
+    """Spec §12.2: the hygiene release must not cost parent-thread
+    comments. The commenter never repeats the ticker."""
+    raw = post(ident='t1_ctx', title='/u/someone on $ZZG daily thread',
+               body='how is it going now?', author='/u/someone',
+               source='reddit:zzgsub')
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[raw], status='ok'),
+                         source='reddit:zzgsub'))
+    assert result['mentions'] == 1
+    with flask_app.app_context():
+        mention = RadarMention.query.filter_by(ticker=TEST_TICKER).one()
+        assert mention.confidence == 'high'
+
+
+def test_a_username_only_ticker_produces_no_mention(seeded):
+    # Trailing boundary matters: 'fan_of_ZZG' ends the handle on the
+    # ticker (the CEO_of_SOXL shape from the probe's 133 real leaks);
+    # a mid-handle 'ZZG_fan' never matched even pre-fix because the
+    # underscore glues the token shut.
+    raw = post(ident='t1_uname', title='/u/fan_of_ZZG on daily discussion',
+               body='what movie tonight?', author='/u/fan_of_ZZG',
+               source='reddit:zzgsub')
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[raw], status='ok'),
+                         source='reddit:zzgsub'))
+    assert result['mentions'] == 0
+
+
+def test_the_cycle_reports_intake_by_reason(seeded):
+    raw = post(ident='t3_intake', body='loading $ZZG today')
+    result = ingest.run_cycle(
+        NOW, fetcher_for(FetchResult(posts=[raw], status='ok')))
+    assert result['intake_reasons']['bluesky']['explicit_cashtag'] == 1
