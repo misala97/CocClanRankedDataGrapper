@@ -101,6 +101,15 @@ def _load_active():
         if '.'.join(trained_sklearn.split('.')[:2]) != running:
             raise ValueError('artifact sklearn %s, running %s'
                              % (trained_sklearn, sklearn.__version__))
+        # Loadable is not usable: a joblib file missing a runtime key
+        # raised KeyError INSIDE ingest before this check existed (Codex
+        # final review, blocker 4).
+        missing = [key for key in ('version', 'word_vec', 'char_vec',
+                                   'clf', 'tau', 'classes')
+                   if key not in candidate]
+        if missing:
+            raise ValueError('artifact missing keys: %s'
+                             % ', '.join(missing))
         artifact = candidate
     except Exception as exc:
         if not _active_cache['warned']:
@@ -140,10 +149,14 @@ def _classifier_score(artifact, prepared):
 
 
 def active_version():
-    """Which local scorer is live: the artifact's version, or the lexicon."""
+    """Which local scorer is live: the artifact's version, or the lexicon.
+
+    Defensive .get on top of the load-time key validation -- this runs
+    inside ingest's write path and must never raise.
+    """
     artifact = _load_active()
     if artifact is not None:
-        return artifact['version']
+        return artifact.get('version') or LEXICON_VERSION
     return LEXICON_VERSION
 
 

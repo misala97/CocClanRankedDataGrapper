@@ -68,14 +68,24 @@ def capture(minutes):
         lookup = universe.load_lookup()
     client = reddit_source.RedditClient()
     deadline = time.time() + minutes * 60
-    since = dt.datetime.utcnow() - dt.timedelta(hours=2)
+    start = dt.datetime.utcnow() - dt.timedelta(hours=2)
+    # Per-sub cursors plus an id set: repeated polling must not append
+    # the same comments again (Codex final review, finding 11).
+    since_by_sub = {sub: start for sub in REDDIT_SUBS}
+    seen_ids = set()
     captured = 0
     with open(CAPTURE_PATH, 'a', encoding='utf-8') as out:
         while time.time() < deadline:
             for sub in REDDIT_SUBS:
                 posts, status, _rate = reddit_source.fetch_one(
-                    sub, since, client)
+                    sub, since_by_sub[sub], client)
+                if posts:
+                    since_by_sub[sub] = max(raw.created_utc
+                                            for raw in posts)
                 for raw in posts:
+                    if raw.external_id in seen_ids:
+                        continue
+                    seen_ids.add(raw.external_id)
                     unmatched, prepared = is_unmatched(raw, lookup)
                     if not unmatched:
                         continue
@@ -101,9 +111,12 @@ def summarize():
     if not os.path.exists(CAPTURE_PATH):
         print('nothing captured yet')
         return 1
-    rows = [json.loads(line)
-            for line in open(CAPTURE_PATH, encoding='utf-8')]
-    print('%d unmatched comments captured' % len(rows))
+    rows = {}
+    for line in open(CAPTURE_PATH, encoding='utf-8'):
+        row = json.loads(line)
+        rows[row['external_id']] = row      # cross-run dedupe by identity
+    rows = list(rows.values())
+    print('%d unique unmatched comments captured' % len(rows))
     for ticker, aliases in sorted(ALIAS_CANDIDATES.items()):
         for alias in aliases:
             pattern = re.compile(r'\b%s\b' % re.escape(alias), re.IGNORECASE)

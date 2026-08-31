@@ -47,10 +47,15 @@ from features.radar.config import (  # noqa: E402
     single_letter_cashtags_allowed, source_root)
 from models import RadarMention, RadarPost, RadarSentimentJudgment  # noqa: E402
 
-# Set to the actual deploy moment when the hygiene release ships. Until
-# then every judged row is legacy-policy and the actionable set is empty
-# -- which is exactly right before the policy exists in production.
-EXTRACTION_POLICY_ACTIVATED_AT = dt.datetime(2026, 9, 1)
+# The PRECISE UTC deployment instant of the hygiene release, settable at
+# rollout without a code edit (Codex final review, finding 12):
+#   RADAR_EXTRACTION_ACTIVATED_AT=2026-09-01T18:45:00
+# Until it is set to the real moment, the conservative default keeps
+# boundary admissions in the legacy cohort -- misclassified toward
+# non-actionable, never toward false rankings.
+import os
+EXTRACTION_POLICY_ACTIVATED_AT = dt.datetime.fromisoformat(
+    os.getenv('RADAR_EXTRACTION_ACTIVATED_AT', '2026-09-01T00:00:00'))
 
 MIN_CONSECUTIVE_DAYS = 7
 MIN_SLICE = 50
@@ -103,16 +108,23 @@ def readiness(judgment_dates, slice_n):
     return (not reasons), reasons
 
 
-def template_fingerprint(text):
+_TEMPLATE_BARE_RE = re.compile(r'(?<![$A-Za-z0-9])([A-Z]{2,5})')
+
+
+def template_fingerprint(text, symbols=frozenset()):
     """Deterministic fingerprint that survives per-post variation.
 
     Exact simhash equality only finds verbatim duplicates; an automated
-    template swaps its tickers and numbers per post (Codex plan-review
-    finding 8). Cashtags collapse to $T, numbers to #, whitespace to one
-    space -- so 'GME +4.2% Market Alert' and 'TSLA -1.7% Market Alert'
-    share one group.
+    template swaps its tickers and numbers per post. Cashtags AND
+    recognized bare ticker tokens collapse to $T (a bare-GME and a
+    bare-TSLA template are one template; Codex final review, finding 7),
+    numbers to #, whitespace to one space.
     """
     normalized = _TEMPLATE_CASHTAG_RE.sub('$T', text or '')
+    if symbols:
+        normalized = _TEMPLATE_BARE_RE.sub(
+            lambda match: '$T' if match.group(1) in symbols
+            else match.group(0), normalized)
     normalized = _TEMPLATE_NUMBER_RE.sub('#', normalized)
     normalized = _WS_RE.sub(' ', normalized).strip().lower()
     return hashlib.sha1(normalized.encode('utf-8')).hexdigest()[:12]
@@ -154,6 +166,7 @@ def label_rates(rows, field, keys):
 def build_population(combine_prompt_versions=False):
     """One dict per retained mention, split into policy cohorts."""
     lookup = universe.load_lookup()
+    symbol_set = frozenset(lookup)
     latest_primary = {}
     for row in (db.session.query(RadarSentimentJudgment)
                 .filter(RadarSentimentJudgment.stage == 'primary')
@@ -188,8 +201,10 @@ def build_population(combine_prompt_versions=False):
             'prompt_version': cohort_version,
             'primary_attitude': primary.attitude if primary else None,
             'author': post.author,
+            'post_id': post.id,
             'template': template_fingerprint(
-                '%s %s' % (post.title or '', post.body or '')),
+                '%s %s' % (post.title or '', post.body or ''),
+                symbols=symbol_set),
             'simhash': int(post.simhash or 0),
         }
         if post.first_seen >= EXTRACTION_POLICY_ACTIVATED_AT:
@@ -207,6 +222,33 @@ def cohorts_of(rows):
     return grouped
 
 
+def reconciled(name, mapping, total):
+    """Print one stratum table ONLY if it sums to the population --
+    every row appears in every table, TEXT_CHANGED rows included (the
+    old scope table silently dropped 1,953 of them while claiming
+    reconciliation; Codex final review, blocker 5)."""
+    if sum(mapping.values()) != total:
+        raise AssertionError('%s sums to %d, population is %d'
+                             % (name, sum(mapping.values()), total))
+    print('  by %s: %s' % (name, mapping))
+
+
+def scope_of(row):
+    if row['reason'] == TEXT_CHANGED:
+        return 'text_changed'
+    return (('author' if row['in_author_text'] else '')
+            + ('+context' if row['in_thread_context'] else '')) or 'none'
+
+
+def top_table(rows, field, keep=12):
+    counter = collections.Counter(row[field] for row in rows)
+    table = dict(counter.most_common(keep))
+    rest = sum(counter.values()) - sum(table.values())
+    if rest:
+        table['(other)'] = rest
+    return table
+
+
 def print_strata(rows, heading):
     print('\n== %s ==' % heading)
     total = len(rows)
@@ -214,31 +256,28 @@ def print_strata(rows, heading):
     print('population %d, judged %d (%.1f%% coverage)'
           % (total, judged, 100.0 * judged / (total or 1)))
     for stratum in ('source_root', 'source', 'reason', 'confidence'):
-        counter = collections.Counter(row[stratum] for row in rows)
-        print('  by %s: %s' % (stratum, dict(counter.most_common(12))))
-    scope = collections.Counter(
-        ('author' if row['in_author_text'] else '') +
-        ('+context' if row['in_thread_context'] else '')
-        for row in rows if row['reason'] != TEXT_CHANGED)
-    print('  by scope: %s' % dict(scope))
-    print('  relevance: %s' % label_rates(rows, 'relevance', RELEVANCE_KEYS))
-    print('  origin:    %s' % label_rates(rows, 'content_origin',
-                                          ORIGIN_KEYS))
-    print('  attitude:  %s' % label_rates(
-        rows, 'attitude', ('positive', 'negative', 'mixed', 'none')))
-    print('  judgment confidence: %s' % label_rates(
-        rows, 'judgment_confidence', ('high', 'medium', 'low')))
-    reviewed = [row for row in rows
-                if row['primary_attitude'] is not None and row['judged']]
-    flipped = sum(1 for row in reviewed
-                  if row['attitude'] != row['primary_attitude'])
-    print('  primary-vs-final attitude flips: %d of %d'
-          % (flipped, len(reviewed)))
-    # Reconciliation: every stratum table must sum back to the population.
-    for stratum in ('source_root', 'reason'):
-        assert sum(collections.Counter(
-            row[stratum] for row in rows).values()) == total, stratum
-    print('  reconciliation: all strata sum to %d OK' % total)
+        reconciled(stratum, top_table(rows, stratum), total)
+    reconciled('scope', dict(collections.Counter(
+        scope_of(row) for row in rows)), total)
+    reconciled('ticker', top_table(rows, 'ticker'), total)
+    reconciled('relevance',
+               label_rates(rows, 'relevance', RELEVANCE_KEYS), total)
+    reconciled('origin',
+               label_rates(rows, 'content_origin', ORIGIN_KEYS), total)
+    reconciled('attitude', label_rates(
+        rows, 'attitude', ('positive', 'negative', 'mixed', 'none')), total)
+    reconciled('judgment confidence', label_rates(
+        rows, 'judgment_confidence', ('high', 'medium', 'low')), total)
+
+    def review_state(row):
+        if not row['judged'] or row['primary_attitude'] is None:
+            return 'no_primary_history'
+        if row['attitude'] != row['primary_attitude']:
+            return 'review_flipped'
+        return 'primary_stands'
+    reconciled('primary-vs-final', dict(collections.Counter(
+        review_state(row) for row in rows)), total)
+    print('  reconciliation: every table above sums to %d OK' % total)
 
 
 def ranked_slices(rows, exclusion_field, exclusion_value):
@@ -247,7 +286,11 @@ def ranked_slices(rows, exclusion_field, exclusion_value):
     grouped = collections.defaultdict(list)
     for row in rows:
         if row['judged']:
-            grouped[(row['ticker'], row['source_root'],
+            # CONCRETE source, not the root: pooling every subreddit
+            # hides source-specific pollution and cannot support the
+            # specified ticker/source/form decision (Codex final review,
+            # finding 6).
+            grouped[(row['ticker'], row['source'],
                      row['reason'])].append(row)
     ranked, appendix = [], []
     for key, members in grouped.items():
@@ -269,11 +312,21 @@ def print_rankings(rows, actionable):
         print('\n-- ranked by Wilson-low %s%s --'
               % (label, '' if actionable else '  [NOT ACTIONABLE]'))
         for low, k, n, key in ranked[:15]:
-            print('  %-6s %-10s %-18s %3d/%3d  wilson_low=%.3f'
+            print('  %-6s %-22s %-18s %3d/%3d  wilson_low=%.3f'
                   % (key[0], key[1], key[2], k, n, low))
         if appendix:
             print('  appendix (n<%d, unranked): %d slices'
                   % (MIN_SLICE, len(appendix)))
+        roots = collections.defaultdict(lambda: [0, 0])
+        for row in rows:
+            if row['judged']:
+                entry = roots[row['source_root']]
+                entry[1] += 1
+                if row[field] == value:
+                    entry[0] += 1
+        print('  root rollup: %s'
+              % {root: '%d/%d' % (k, n)
+                 for root, (k, n) in sorted(roots.items())})
 
 
 def print_origin_feedback(rows, actionable):
@@ -291,10 +344,15 @@ def print_origin_feedback(rows, actionable):
             judged = [row for row in members if row['judged']]
             origin = collections.Counter(row['content_origin']
                                          for row in judged)
+            # Duplication is a fact about POSTS: multi-ticker posts carry
+            # several mention rows and inflated the old per-mention ratio
+            # (Codex final review, finding 7).
+            posts = {row['post_id'] for row in members}
             hashes = {row['simhash'] for row in members}
-            print('    %-24s mentions=%4d dup_ratio=%.2f origin=%s'
-                  % (str(key)[:24], len(members),
-                     1 - len(hashes) / (len(members) or 1),
+            print('    %-24s mentions=%4d posts=%4d dup_ratio=%.2f '
+                  'origin=%s'
+                  % (str(key)[:24], len(members), len(posts),
+                     1 - len(hashes) / (len(posts) or 1),
                      dict(origin)))
     print('  No automatic author block is proposed. Any future suppression '
           'rule needs its own approved design: source/form scoping, cashtag '

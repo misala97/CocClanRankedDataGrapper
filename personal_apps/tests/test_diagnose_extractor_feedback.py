@@ -81,7 +81,8 @@ def test_provenance_uses_the_production_extractor():
 
 def test_ranked_slices_respect_wilson_and_the_appendix_floor():
     def rows(ticker, n, bad):
-        return [{'ticker': ticker, 'source_root': 'bluesky',
+        return [{'ticker': ticker, 'source': 'bluesky',
+                 'source_root': 'bluesky',
                  'reason': 'bare_low', 'judged': True,
                  'relevance': 'irrelevant' if index < bad else 'relevant'}
                 for index in range(n)]
@@ -130,3 +131,43 @@ def test_no_model_call_is_possible(monkeypatch, capsys):
 def test_combine_flag_is_loud(capsys):
     assert diag.main(['--combine-prompt-versions']) == 0
     assert 'VERSIONS COMBINED' in capsys.readouterr().out
+
+
+def test_a_planted_mutation_dies_inside_the_real_transaction(monkeypatch):
+    """Full-path teeth (Codex final review, finding 9): a mutation smuggled
+    into the diagnostic's own run must be killed by the guard, in the
+    actual guarded transaction, not in a unit-test simulation."""
+    import sqlalchemy as sa
+    from extensions import db
+    real = diag.build_population
+
+    def sabotaged(combine_prompt_versions=False):
+        db.session.execute(sa.text(
+            "UPDATE radar_review_meter SET demanded = demanded WHERE 1=0"))
+        return real(combine_prompt_versions)
+
+    monkeypatch.setattr(diag, 'build_population', sabotaged)
+    with pytest.raises(Exception):
+        diag.main([])
+
+
+def test_the_session_stays_clean_after_a_full_run():
+    """Flask-SQLAlchemy scopes sessions per app context, so the
+    inspection must share the context the population build runs in."""
+    import sqlalchemy as sa
+    from app import app as flask_app
+    from extensions import db
+    with flask_app.app_context():
+        with db.session.no_autoflush:
+            db.session.execute(sa.text('SET TRANSACTION READ ONLY'))
+            diag.build_population()
+        assert not db.session.new
+        assert not db.session.dirty
+        assert not db.session.deleted
+        db.session.rollback()
+
+
+def test_broken_reconciliation_fails_loudly():
+    with pytest.raises(AssertionError):
+        diag.reconciled('scope', {'author': 1}, total=2)
+    diag.reconciled('scope', {'author': 2}, total=2)   # and a true one passes

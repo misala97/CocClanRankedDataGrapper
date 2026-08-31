@@ -283,33 +283,68 @@ def test_promote_command_gates_an_existing_artifact(artifact_dir, capsys):
         os_mod.path.join(artifact_dir, 'active.json'))
 
     # A failing reference verdict: still blocked.
+    sha = trainer.artifact_sha256(path)
     ledger = os_mod.path.join(artifact_dir, 'evaluations.jsonl')
     with open(ledger, 'w', encoding='utf-8') as handle:
         handle.write(json_mod.dumps({'candidate': 'clf-v2-cli',
+                                     'artifact_sha256': sha,
                                      'passes_10_3': False}) + '\n')
     assert trainer.cmd_promote(path) == 1
 
-    # A passing verdict for THIS version: promoted.
+    # A passing verdict for a DIFFERENT file claiming the same version:
+    # still blocked -- the gate binds to the artifact bytes (Codex final
+    # review, blocker 3).
     with open(ledger, 'a', encoding='utf-8') as handle:
         handle.write(json_mod.dumps({'candidate': 'clf-v2-cli',
+                                     'artifact_sha256': 'not-this-file',
+                                     'passes_10_3': True}) + '\n')
+    assert trainer.cmd_promote(path) == 1
+
+    # A passing verdict for THIS exact file: promoted.
+    with open(ledger, 'a', encoding='utf-8') as handle:
+        handle.write(json_mod.dumps({'candidate': 'clf-v2-cli',
+                                     'artifact_sha256': sha,
                                      'passes_10_3': True}) + '\n')
     assert trainer.cmd_promote(path) == 0
     assert sentiment.active_version() == 'clf-v2-cli'
 
 
-def test_a_loadable_but_corrupt_artifact_falls_back_at_scoring(
-        artifact_dir, caplog):
-    """Finding 8: a loadable artifact missing a key must not raise into
-    ingest -- scoring falls back to the lexicon and disables it."""
+def test_a_missing_key_artifact_is_refused_at_load(artifact_dir, caplog):
+    """A loadable file missing a runtime key never reaches scoring or
+    active_version -- the load validation refuses it and the lexicon
+    answers (Codex final review, blocker 4)."""
     import joblib
     result = trainer.train_candidate(_rows())
     path = trainer.write_artifact(result, 'clf-v2-corrupt')
     stored = joblib.load(path)
     del stored['tau']
+    del stored['version']
     joblib.dump(stored, path)
     trainer.promote('clf-v2-corrupt', path)
     sentiment._active_cache.update(pointer_mtime=None, artifact=None,
                                    warned=False)
+    prepared = sentiment_input.prepare_sentiment_input(
+        'bluesky', None, 'this is a scam, terrible', 'ZZT')
+    with caplog.at_level('WARNING', logger='radar.sentiment'):
+        assert sentiment.active_version() == 'lexicon-v1'
+        assert sentiment.score(prepared) == sentiment.lexicon_score(
+            prepared.author_text)
+    assert any('missing keys' in message for message in caplog.messages)
+
+
+def test_a_runtime_failing_artifact_falls_back_at_scoring(artifact_dir,
+                                                          caplog,
+                                                          monkeypatch):
+    """Second layer: keys present, transformer broken -- scoring catches,
+    warns, disables the artifact for the process."""
+    class Boom:
+        def transform(self, texts):
+            raise RuntimeError('vectorizer exploded')
+
+    broken = {'version': 'clf-v2-boom', 'word_vec': Boom(),
+              'char_vec': Boom(), 'clf': None, 'tau': 0.5, 'classes': []}
+    monkeypatch.setattr(sentiment, '_load_active', lambda: broken)
+    sentiment._active_cache.update(artifact=broken, warned=False)
     prepared = sentiment_input.prepare_sentiment_input(
         'bluesky', None, 'this is a scam, terrible', 'ZZT')
     from app import app as flask_app
@@ -318,3 +353,4 @@ def test_a_loadable_but_corrupt_artifact_falls_back_at_scoring(
             assert sentiment.score(prepared) == sentiment.lexicon_score(
                 prepared.author_text)
     assert any('failed at scoring' in message for message in caplog.messages)
+    assert sentiment._active_cache['artifact'] is None

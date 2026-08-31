@@ -525,6 +525,13 @@ def review_candidates(now, limit=PASS_LIMIT):
             .join(RadarPost, RadarPost.id == RadarMention.post_id)
             .filter(RadarMention.sentiment_judged_at.isnot(None),
                     RadarMention.sentiment_model == PRIMARY_MODEL,
+                    # The review budget serves the LIVE flow only: the
+                    # activation fence and the current prompt generation
+                    # both apply, so historical rows rejudged through the
+                    # bounded script cannot leak into ongoing Sonnet spend
+                    # (Codex final review, blocker 1).
+                    RadarMention.sentiment_prompt_version == PROMPT_VERSION,
+                    RadarPost.created_utc >= V2_ACTIVATION_CUTOFF,
                     ~reviewed.exists())
             .order_by(RadarPost.created_utc.desc())
             .limit(limit * 5).all())

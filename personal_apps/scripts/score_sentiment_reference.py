@@ -434,7 +434,10 @@ def main():
     if args.classifier:
         version, scores = classifier_predictions(args.classifier, blind)
         candidate = version
+        from scripts.train_radar_sentiment import artifact_sha256
+        bound_sha = artifact_sha256(args.classifier)
     else:
+        bound_sha = None
         scores = {n: sentiment.lexicon_score(blind[n]['author_text'])
                   for n in blind}
         candidate = 'lexicon-v1'
@@ -457,6 +460,7 @@ def main():
                       'lexicon_baseline': lexicon_metrics}, indent=2))
     print('§10.3: %s' % ('PASS' if ok else '; '.join(reasons)))
     ledger_append({'candidate': candidate, 'identity': identity,
+                   'artifact_sha256': bound_sha,
                    'kind': 'local', 'metrics': metrics, 'passes_10_3': ok})
     return 0
 

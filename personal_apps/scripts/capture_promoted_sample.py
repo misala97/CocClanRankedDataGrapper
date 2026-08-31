@@ -38,7 +38,9 @@ from features.radar.config import (  # noqa: E402
     REDDIT_INTERVAL_SECONDS, REDDIT_SUBS, bare_token_confidence,
     bare_tokens_allowed, single_letter_cashtags_allowed)
 from features.radar.sources import bluesky as bluesky_source  # noqa: E402
+from features.radar.sources import fourchan as fourchan_source  # noqa: E402
 from features.radar.sources import reddit as reddit_source  # noqa: E402
+import requests as _requests  # noqa: E402
 from models import RadarMentionEvent  # noqa: E402
 
 CAPTURE_DIR = os.path.join('scratchpad', 'promoted_sample')
@@ -81,12 +83,24 @@ def capture(minutes):
     captured = 0
     with open(CAPTURE_PATH, 'a', encoding='utf-8') as out:
         while time.time() < deadline:
+            # EVERY contributing source (Codex final review, finding
+            # 11): bluesky, all configured subreddits, and fourchan --
+            # the journal held 41 promoted fourchan events.
             result = bluesky_source.fetch(since, drain=False)
             for raw in result.posts:
                 for match, prepared in low_candidates(raw, lookup):
                     _record(out, raw, match, prepared)
                     captured += 1
-            for sub in REDDIT_SUBS[:2]:
+            try:
+                chan = fourchan_source.fetch(since,
+                                             _requests.Session())
+                for raw in chan.posts:
+                    for match, prepared in low_candidates(raw, lookup):
+                        _record(out, raw, match, prepared)
+                        captured += 1
+            except Exception as exc:
+                print('fourchan fetch failed this round: %s' % exc)
+            for sub in REDDIT_SUBS:
                 posts, _status, _rate = reddit_source.fetch_one(
                     sub, since, reddit_client)
                 for raw in posts:
@@ -111,12 +125,16 @@ def grade_sheet():
         rows[(row['source'], row['external_id'], row['ticker'])] = row
 
     with app.app_context():
-        clauses = [sa.and_(RadarMentionEvent.source == s,
-                           RadarMentionEvent.external_id == e,
-                           RadarMentionEvent.ticker == t)
-                   for s, e, t in list(rows)[:5000]]
+        # EVERY captured row, chunked -- silent truncation at 5,000 made
+        # the sample lie about its own coverage (finding 11).
+        identities = list(rows)
         promoted_ids = set()
-        if clauses:
+        for start in range(0, len(identities), 500):
+            chunk = identities[start:start + 500]
+            clauses = [sa.and_(RadarMentionEvent.source == s,
+                               RadarMentionEvent.external_id == e,
+                               RadarMentionEvent.ticker == t)
+                       for s, e, t in chunk]
             for event in RadarMentionEvent.query.filter(
                     sa.or_(*clauses),
                     RadarMentionEvent.promoted.is_(True)).all():
@@ -127,9 +145,13 @@ def grade_sheet():
     control_pool = [row for key, row in rows.items()
                     if key not in promoted_ids]
     if len(promoted) < MIN_PROMOTED:
+        # FAIL CLOSED: an undersized promoted sample must not become a
+        # grade sheet that looks like the audit happened (finding 11).
         print('only %d promoted captures (< %d) -- keep capturing while '
-              'promotion is warm; the 48h journal is the join window'
+              'promotion is warm; the 48h journal is the join window. '
+              'No grade sheet written.'
               % (len(promoted), MIN_PROMOTED))
+        return 1
     random.seed(11)
     control = random.sample(control_pool,
                             min(len(promoted) or 1, len(control_pool)))

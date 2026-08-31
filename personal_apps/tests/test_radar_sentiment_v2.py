@@ -472,11 +472,20 @@ def sentinel_client():
 
 @pytest.fixture()
 def clean_meter_all():
+    """Empty meter for exact-count assertions, WITHOUT destroying real
+    operational history on the shared dev database: existing rows are
+    snapshotted and restored (Codex final review, finding 10)."""
     with flask_app.app_context():
+        snapshot = [{'day': row.day, 'demanded': row.demanded,
+                     'attempted': row.attempted, 'served': row.served,
+                     'capped': row.capped}
+                    for row in RadarReviewMeter.query.all()]
         RadarReviewMeter.query.delete(synchronize_session=False)
         db.session.commit()
         yield
         RadarReviewMeter.query.delete(synchronize_session=False)
+        for row in snapshot:
+            db.session.add(RadarReviewMeter(**row))
         db.session.commit()
 
 
@@ -606,15 +615,23 @@ def test_sonnet_result_overwrites_and_carries_the_preamble(
         assert m.sentiment_model == llm_sentiment.REVIEW_MODEL
         assert m.llm_sentiment == 'bearish'
         prompt = client.messages.requests[0]['messages'][0]['content']
-        # INDEPENDENCE, proven by construction: the review prompt must be
-        # EXACTLY preamble + binding instructions + serialized items --
-        # nothing else can carry the primary's answer in (Codex review,
-        # finding 10 killed the previous vacuous `or True` assertion).
-        rows = [(mention, post) for mention, post
-                in rows_for([mention_id])]
-        expected = llm_sentiment._prompt_v2(
-            llm_sentiment.items_for(rows),
-            preamble=llm_sentiment.REVIEW_PREAMBLE)
+        # INDEPENDENCE, proven against HAND-BUILT bytes: preamble +
+        # binding instructions + one literally-spelled item, assembled
+        # here without calling the production serializer -- a regression
+        # in _prompt_v2 cannot rewrite both sides of this assertion
+        # (Codex final review, finding 8).
+        item_literal = (
+            '<item n="1">\n'
+            '<target_ticker>ZZA</target_ticker>\n'
+            '<source>bluesky</source>\n'
+            '<author>someone</author>\n'
+            '<channel>firehose</channel>\n'
+            '<content_type>submission</content_type>\n'
+            '<post>ZZA ripping</post>\n'
+            '</item>')
+        expected = (llm_sentiment.REVIEW_PREAMBLE
+                    + llm_sentiment._INSTRUCTIONS_V2
+                    + '\n\n' + item_literal)
         assert prompt == expected
         assert client.messages.requests[0]['model'] \
             == llm_sentiment.REVIEW_MODEL

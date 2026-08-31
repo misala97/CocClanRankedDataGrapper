@@ -77,19 +77,30 @@ def near_duplicate_groups(post_hashes):
         if root_a != root_b:
             parent[root_b] = root_a
 
-    bands = collections.defaultdict(list)
+    # EXACT duplicates first: every post sharing a hash unions with the
+    # hash's first carrier in linear time. This is what makes the pairwise
+    # banding below safe to run uncapped -- it only ever sees one
+    # representative per distinct hash, so an adversarial pile of
+    # identical posts cannot blow it up OR get truncated apart (the old
+    # 200-member cap split 201 identical hashes into two groups; Codex
+    # final review, blocker 2).
+    first_of_hash = {}
     for post_id, simhash in post_hashes:
+        if simhash in first_of_hash:
+            union(first_of_hash[simhash], post_id)
+        else:
+            first_of_hash[simhash] = post_id
+
+    bands = collections.defaultdict(list)
+    for simhash, post_id in first_of_hash.items():
         for band in range(4):
             key = (band, (simhash >> (band * 16)) & 0xFFFF)
             bands[key].append((post_id, simhash))
     for members in bands.values():
         # EVERY nominated pair, not members-vs-first-anchor: an unrelated
         # anchor sharing the band obscured genuine near-duplicates behind
-        # it (Codex review, blocker 6). Buckets are tiny in practice; a
-        # pathological bucket is capped rather than allowed to go
-        # quadratic on the whole corpus.
-        if len(members) > 200:
-            members = members[:200]
+        # it (Codex plan review, blocker 6). Distinct hashes only, so the
+        # quadratic stays bounded by real content diversity.
         for left in range(len(members)):
             left_id, left_hash = members[left]
             for right in range(left + 1, len(members)):
@@ -335,12 +346,19 @@ def train_candidate(rows):
     return result
 
 
-def reference_verdict(version):
-    """The frozen-reference gate for this candidate, or None if unscored.
+def artifact_sha256(path):
+    import hashlib
+    return hashlib.sha256(open(path, 'rb').read()).hexdigest()
 
-    score_sentiment_reference.py appends {'candidate', 'passes_10_3': bool}
-    entries to evaluations.jsonl; promotion requires a passing entry for
-    exactly this artifact version.
+
+def reference_verdict(version, sha256=None):
+    """The frozen-reference gate for this exact candidate, or None.
+
+    Bound to the ARTIFACT BYTES, not the version string: replacing a file
+    while keeping its version must not inherit an earlier artifact's
+    passing ledger entry (Codex final review, blocker 3). Entries written
+    before the binding existed carry no hash and never satisfy a
+    sha256-qualified lookup.
     """
     path = os.path.join(sentiment.ARTIFACT_DIR, 'evaluations.jsonl')
     if not os.path.exists(path):
@@ -349,8 +367,11 @@ def reference_verdict(version):
     with open(path, encoding='utf-8') as handle:
         for line in handle:
             entry = json.loads(line)
-            if entry.get('candidate') == version:
-                verdict = bool(entry.get('passes_10_3'))
+            if entry.get('candidate') != version:
+                continue
+            if sha256 is not None and entry.get('artifact_sha256') != sha256:
+                continue
+            verdict = bool(entry.get('passes_10_3'))
     return verdict
 
 
@@ -369,6 +390,7 @@ def write_artifact(result, version):
         'training_cutoff': result.get('training_cutoff'),
         'counts': result['counts'],
         'validation_metrics': result.get('validation_metrics'),
+        'validation_lexicon': result.get('lexicon_validation'),
         'locked_test_metrics': result.get('locked_test_metrics'),
         'lexicon_test': result.get('lexicon_test'),
         'sklearn_version': sklearn.__version__,
@@ -440,13 +462,27 @@ def cmd_promote(artifact_path):
     if stored.get('tau') is None:
         print('PROMOTION BLOCKED: artifact carries no passing tau')
         return 1
+    # Gate (a), re-established rather than trusted: the validation
+    # constraints must hold from the artifact's own stored evidence
+    # (Codex final review, blocker 3).
+    validation = stored.get('validation_metrics')
+    validation_lexicon = stored.get('validation_lexicon')
+    if not validation or not validation_lexicon:
+        print('PROMOTION BLOCKED: artifact carries no validation evidence')
+        return 1
+    validation_ok, validation_reasons = gates_pass(validation,
+                                                   validation_lexicon)
+    if not validation_ok:
+        print('PROMOTION BLOCKED by validation: %s'
+              % '; '.join(validation_reasons))
+        return 1
     test_ok, test_reasons = gates_pass(stored['locked_test_metrics'],
                                        stored['lexicon_test'])
     if not test_ok:
         print('PROMOTION BLOCKED by the locked test: %s'
               % '; '.join(test_reasons))
         return 1
-    ref = reference_verdict(version)
+    ref = reference_verdict(version, sha256=artifact_sha256(artifact_path))
     if ref is not True:
         print('PROMOTION BLOCKED: the frozen reference set has not passed '
               '%s (score it with score_sentiment_reference.py --classifier '
