@@ -668,3 +668,59 @@ def test_cost_projection_uses_measured_history_when_present(clean_posts):
         assert per is not None
         usd = rejudge.projected_cost_usd(1000, per)
         assert usd > 0.0
+
+
+# --- Locked reference tooling, pure pieces (Task 13) ------------------------
+
+from scripts import build_sentiment_reference as reference
+from scripts import score_sentiment_reference as scorer
+
+
+def test_sampling_floor_names_each_shortfall():
+    rows = [{'source_root': 'reddit'}] * 50 + [{'source_root': 'bluesky'}] * 40
+    ok, reasons = reference.sampling_ok(rows)
+    assert not ok
+    assert len(reasons) == 3          # total, reddit, bluesky
+    ok, reasons = reference.sampling_ok(
+        [{'source_root': 'reddit'}] * 150 + [{'source_root': 'bluesky'}] * 150)
+    assert ok and not reasons
+
+
+def test_macro_f1_and_removal_precision_arithmetic():
+    pairs = [({'relevance': 'irrelevant', 'content_origin': 'human_chatter'},
+              {'relevance': 'irrelevant', 'content_origin': 'human_chatter'}),
+             ({'relevance': 'irrelevant', 'content_origin': 'human_chatter'},
+              {'relevance': 'relevant', 'content_origin': 'human_chatter'}),
+             ({'relevance': 'relevant', 'content_origin': 'human_chatter'},
+              {'relevance': 'relevant', 'content_origin': 'human_chatter'})]
+    assert scorer.removal_precision(pairs) == pytest.approx(0.5)
+    f1 = scorer.macro_f1([(p['relevance'], t['relevance'])
+                          for p, t in pairs],
+                         ('relevant', 'irrelevant', 'uncertain'))
+    assert 0.0 < f1 < 1.0
+
+
+def test_llm_gates_flag_a_broken_source_even_when_the_aggregate_passes():
+    tables = {
+        'attitude_exact': 0.9, 'directional_agreement': 0.9,
+        'reversal_rate': 0.0, 'relevance_f1': 0.95, 'origin_f1': 0.95,
+        'removal_precision': 1.0,
+        'per_source_attitude': {'reddit': 0.9, 'bluesky': 0.5},
+    }
+    ok, reasons = scorer.llm_gates_pass(tables)
+    assert not ok
+    assert any('bluesky' in reason for reason in reasons)
+
+
+def test_the_frozen_manifest_is_enforced(tmp_path, monkeypatch):
+    monkeypatch.setattr(reference, 'REFERENCE_DIR', str(tmp_path))
+    blind = tmp_path / 'reference-blind.jsonl'
+    blind.write_text('{"n": 1}\n', encoding='utf-8')
+    manifest = {'files': {'reference-blind.jsonl':
+                          reference.sha256_of(str(blind))}}
+    (tmp_path / 'reference-manifest.json').write_text(
+        json.dumps(manifest), encoding='utf-8')
+    assert scorer.verify_manifest() == manifest
+    blind.write_text('{"n": 1, "tampered": true}\n', encoding='utf-8')
+    with pytest.raises(SystemExit):
+        scorer.verify_manifest()
