@@ -82,50 +82,60 @@ def prepare_extraction_input(source, title, body, author=None, channel=None):
                            channel=channel or '', is_comment=is_comment)
 
 
-def extract_tickers(title, body, lookup, allow_bare=True,
-                    allow_single_letter=True, bare_confidence='low'):
-    """Return sorted (symbol, confidence) pairs for one post.
+# Provenance reasons, strongest-first (extractor-feedback spec §6). One
+# per code path below: explicit notation, name-corroborated bare token, a
+# source whose population makes an uncorroborated bare token high
+# (reddit), and the stored-but-never-scored low tier.
+REASONS = ('explicit_cashtag', 'bare_named', 'bare_source_high', 'bare_low')
 
-    lookup is universe.load_lookup()'s shape: uppercase symbol -> {'name',
-    'exchange', 'distinctive'}. Candidates are uppercased before lookup because
-    the symbol column is utf8mb4_bin and will not fold case.
+_REASON_RANK = {reason: index for index, reason in enumerate(REASONS)}
 
-    Returns `high` and `low` only. `medium` is awarded at rollup and appears in
-    the ranking order here so the two stages compose.
 
-    `allow_single_letter` gates one-letter cashtags, which on a general network
-    are money shorthand -- $M, $B, $T -- rather than Macy's, Barnes and AT&T.
-    See config.SINGLE_LETTER_CASHTAGS for the measurement.
+@dataclasses.dataclass(frozen=True)
+class Match:
+    """One extracted ticker with its provenance.
+
+    `reason` follows the occurrence that carried the strongest
+    confidence; the scope flags OR together across occurrences, so a body
+    mention is not hidden merely because the parent also cashtags it.
     """
-    text = ' '.join(part for part in (title, body) if part)
-    if not text.strip():
-        return []
+    ticker: str
+    confidence: str
+    reason: str
+    in_author_text: bool
+    in_thread_context: bool
 
-    lowered_words = set(re.findall(r"[a-z']+", text.lower()))
+
+def _scan(text, lookup, allow_bare, allow_single_letter, bare_confidence,
+          lowered_words):
+    """(symbol -> (confidence, reason)) for ONE scope's text.
+
+    The rules are the pre-provenance extractor's, unchanged. See the long
+    history in the comments below -- the asymmetry between cashtags and
+    bare tokens is the whole design.
+    """
     found = {}
 
-    def record(symbol, confidence):
+    def record(symbol, confidence, reason):
         previous = found.get(symbol)
-        if previous is None or _CONFIDENCE_RANK[confidence] > _CONFIDENCE_RANK[previous]:
-            found[symbol] = confidence
+        if (previous is None
+                or _CONFIDENCE_RANK[confidence]
+                > _CONFIDENCE_RANK[previous[0]]):
+            found[symbol] = (confidence, reason)
 
     # Cashtags: explicit notation, accepted even for blacklisted symbols.
     for raw in _CASHTAG_RE.findall(text):
         if len(raw) == 1 and not allow_single_letter:
             continue
         if raw in lookup:
-            record(raw, 'high')
+            record(raw, 'high', 'explicit_cashtag')
 
     # Bare uppercase tokens, where the source's population makes them
-    # meaningful at all (config.bare_tokens_allowed). On a general network
-    # they are overwhelmingly ordinary words that happen to be listed.
-    #
-    # Measured against the real 12596-symbol universe,
-    # counting these on their own produced roughly 85% false positives, so a
-    # bare token stays `low` unless a distinctive word from its company name is
-    # in the same post. `low` is stored but never scored; promotion to `medium`
-    # happens at rollup, when a different author cashtags the same ticker in
-    # the same window.
+    # meaningful at all (config.bare_tokens_allowed). Measured against the
+    # real 12596-symbol universe, counting these on their own produced
+    # roughly 85% false positives, so a bare token stays `low` unless a
+    # distinctive word from its company name is in the same post. `low` is
+    # stored but never scored; promotion to `medium` happens at rollup.
     for raw in (_BARE_RE.findall(text) if allow_bare else ()):
         symbol = raw.upper()
         if symbol not in lookup:
@@ -133,29 +143,99 @@ def extract_tickers(title, body, lookup, allow_bare=True,
         distinctive = lookup[symbol].get('distinctive') or set()
         named = bool(distinctive & lowered_words)
 
-        # A stopword blocks the bare token -- UNLESS a distinctive word from
-        # that ticker's OWN name is in the same post. Added 2026-08-25 with
-        # the junk classes, and it is what makes those safe: MDT, DE, ICE, PR
-        # and OC spell a timezone, a country, an agency, a profession and a
-        # county, and blocking them outright would cost Medtronic, Deere,
-        # Intercontinental Exchange, Permian Resources and Owens Corning every
-        # mention that is genuinely about them.
-        #
-        # Safe because annotate_distinctive already excludes a symbol echoing
-        # itself, so `MDT` in the post cannot be its own reprieve -- only
-        # `Medtronic` can. The name is a far stronger signal than the stopword
-        # it overrides, and where they disagree the name is right.
+        # A stopword blocks the bare token -- UNLESS a distinctive word
+        # from that ticker's OWN name is present. MDT, DE, ICE, PR and OC
+        # spell a timezone, a country, an agency, a profession and a
+        # county; blocking them outright would cost Medtronic, Deere,
+        # Intercontinental Exchange, Permian Resources and Owens Corning
+        # every mention genuinely about them. annotate_distinctive already
+        # excludes a symbol echoing itself, so only `Medtronic` can be
+        # MDT's reprieve, never `MDT`.
         if symbol in STOPWORDS and not named:
             continue
-        # `bare_confidence` is what an UNCORROBORATED bare token is worth on
-        # this source, and it is per-source because the populations are not
-        # comparable. The 85%-false-positive figure this tier was built on was
-        # measured on a general network; sampled on r/wallstreetbets,
-        # r/stocks and r/pennystocks the same discard pile was 14 of 15 real
-        # tickers. Reddit comments do not write cashtags, so corroboration --
-        # a different author cashtagging the same ticker in the same 15
-        # minutes -- essentially never fires and the rule discarded the source
-        # whole. Defaults to `low`: a new source opts in deliberately.
-        record(symbol, 'high' if named else bare_confidence)
+        # `bare_confidence` is what an UNCORROBORATED bare token is worth
+        # on this source: 85% false positives on a general network, 14 of
+        # 15 real on finance-native Reddit. Defaults to `low`; a new
+        # source opts in deliberately.
+        if named:
+            record(symbol, 'high', 'bare_named')
+        else:
+            record(symbol, bare_confidence,
+                   'bare_source_high' if bare_confidence == 'high'
+                   else 'bare_low')
 
-    return sorted(found.items())
+    return found
+
+
+def extract(prepared, lookup, allow_bare=True, allow_single_letter=True,
+            bare_confidence='low'):
+    """Provenance-bearing extraction over a canonical ExtractionInput.
+
+    Scans author_text and thread_context SEPARATELY with the same rules,
+    then merges per ticker: strongest confidence wins, scope flags OR
+    together. Name corroboration reads BOTH scopes combined -- a parent
+    title naming the company legitimately vouches for a bare token in the
+    body; they are one conversation (plan-level decision, accepted in the
+    Codex plan review). The discarded username never reaches either
+    scope, which IS the §5.1 username exclusion.
+    """
+    combined = ' '.join(part for part in (prepared.author_text,
+                                          prepared.thread_context) if part)
+    if not combined.strip():
+        return []
+    lowered_words = set(re.findall(r"[a-z']+", combined.lower()))
+
+    merged = {}
+    scopes = (('in_author_text', prepared.author_text),
+              ('in_thread_context', prepared.thread_context))
+    for flag_name, text in scopes:
+        if not text:
+            continue
+        for symbol, (confidence, reason) in _scan(
+                text, lookup, allow_bare, allow_single_letter,
+                bare_confidence, lowered_words).items():
+            entry = merged.setdefault(symbol, {
+                'confidence': confidence, 'reason': reason,
+                'in_author_text': False, 'in_thread_context': False})
+            entry[flag_name] = True
+            better = (_CONFIDENCE_RANK[confidence]
+                      > _CONFIDENCE_RANK[entry['confidence']]
+                      or (_CONFIDENCE_RANK[confidence]
+                          == _CONFIDENCE_RANK[entry['confidence']]
+                          and _REASON_RANK[reason]
+                          < _REASON_RANK[entry['reason']]))
+            if better:
+                entry['confidence'] = confidence
+                entry['reason'] = reason
+
+    return [Match(ticker=symbol, confidence=entry['confidence'],
+                  reason=entry['reason'],
+                  in_author_text=entry['in_author_text'],
+                  in_thread_context=entry['in_thread_context'])
+            for symbol, entry in sorted(merged.items())]
+
+
+def extract_tickers(title, body, lookup, allow_bare=True,
+                    allow_single_letter=True, bare_confidence='low'):
+    """Return sorted (symbol, confidence) pairs for one post.
+
+    COMPATIBILITY WRAPPER over extract(): treats title+body as authored
+    text with no thread context and no username discard -- the pre-
+    canonical behavior, byte-for-byte, which is exactly what its callers
+    and the regression suite pin. The reddit comment path goes through
+    prepare_extraction_input + extract(); this shape exists for
+    measurement scripts and the tests that predate provenance.
+
+    lookup is universe.load_lookup()'s shape: uppercase symbol -> {'name',
+    'exchange', 'distinctive'}. Returns `high` and `low` only; `medium`
+    is awarded at rollup. `allow_single_letter` gates one-letter cashtags
+    (money shorthand on a general network -- $M, $B, $T).
+    """
+    prepared = ExtractionInput(
+        author_text=' '.join(part for part in (title, body) if part),
+        thread_context='', source='', author=None, channel='',
+        is_comment=False)
+    matches = extract(prepared, lookup, allow_bare=allow_bare,
+                      allow_single_letter=allow_single_letter,
+                      bare_confidence=bare_confidence)
+    return [(m.ticker, m.confidence) for m in matches]

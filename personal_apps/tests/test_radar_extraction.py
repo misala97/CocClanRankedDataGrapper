@@ -508,3 +508,119 @@ def test_adversarial_comment_shapes_split_correctly():
     p = prepare_extraction_input('reddit:a', '/u/x&nbsp;on&nbsp;parent', 'b')
     assert p.is_comment is True
     assert p.thread_context == 'parent'
+
+
+# --- Provenance-bearing extract() (extractor-feedback plan, Task 2) ---------
+
+from features.radar import extraction
+
+SCOPE_LOOKUP = annotate_distinctive({
+    'SOXL': {'name': 'Direxion Daily Semiconductor Bull 3X', 'exchange': 'AMEX'},
+    'SNDK': {'name': 'Sandisk Corp', 'exchange': 'NASDAQ'},
+    'NVDA': {'name': 'NVIDIA Corp', 'exchange': 'NASDAQ'},
+    'GME': {'name': 'GameStop Corp', 'exchange': 'NYSE'},
+    'MDT': {'name': 'Medtronic plc', 'exchange': 'NYSE'},
+})
+
+
+def test_a_ticker_only_in_the_username_is_not_extracted():
+    """TEETH: the pre-fix path scanned the synthetic title whole and minted
+    133 such mentions in the restore. The companion test below proves the
+    wrapper still sees it -- so THIS absence comes from the canonical
+    input, not from a weakened matcher."""
+    p = prepare_extraction_input('reddit:wallstreetbets',
+                                 '/u/CEO_of_SOXL on Daily Discussion Thread',
+                                 'What movie should I watch tonight?')
+    assert extraction.extract(p, SCOPE_LOOKUP, bare_confidence='high') == []
+
+
+def test_the_pre_fix_path_still_finds_the_username_ticker():
+    """The teeth for the test above: the legacy wrapper treats the raw
+    title as authored text (no username discard), so SOXL IS found there.
+    If this ever stops matching, the wrapper regressed and the exclusion
+    test above proves nothing."""
+    got = extract_tickers('/u/CEO_of_SOXL on Daily Discussion Thread',
+                          'What movie should I watch tonight?',
+                          SCOPE_LOOKUP, bare_confidence='high')
+    assert ('SOXL', 'high') in got
+
+
+def test_a_parent_title_ticker_still_counts_without_a_body_repeat():
+    p = prepare_extraction_input('reddit:wallstreetbets',
+                                 '/u/alice on Here goes everything $SNDK',
+                                 'How is it going now?')
+    matches = extraction.extract(p, SCOPE_LOOKUP)
+    assert [(m.ticker, m.confidence) for m in matches] == [('SNDK', 'high')]
+    assert matches[0].in_thread_context and not matches[0].in_author_text
+    assert matches[0].reason == 'explicit_cashtag'
+
+
+def test_a_bare_parent_title_ticker_is_supported():
+    p = prepare_extraction_input('reddit:wallstreetbets',
+                                 '/u/a on NVDA earnings thread', 'nice one')
+    matches = extraction.extract(p, SCOPE_LOOKUP, bare_confidence='high')
+    assert [(m.ticker, m.confidence) for m in matches] == [('NVDA', 'high')]
+    assert matches[0].reason == 'bare_source_high'
+    assert matches[0].in_thread_context
+
+
+def test_a_ticker_in_username_and_body_survives_from_the_body():
+    p = prepare_extraction_input('reddit:wallstreetbets',
+                                 '/u/GME_hodler on some thread',
+                                 'GME to the moon')
+    matches = extraction.extract(p, SCOPE_LOOKUP, bare_confidence='high')
+    assert [(m.ticker, m.confidence) for m in matches] == [('GME', 'high')]
+    assert matches[0].in_author_text and not matches[0].in_thread_context
+    assert matches[0].reason == 'bare_source_high'
+
+
+def test_an_empty_body_comment_still_inherits_thread_context():
+    p = prepare_extraction_input('reddit:options',
+                                 '/u/a on Here goes everything $SNDK', '   ')
+    matches = extraction.extract(p, SCOPE_LOOKUP)
+    assert [(m.ticker, m.confidence) for m in matches] == [('SNDK', 'high')]
+
+
+def test_reason_priority_and_scope_merge():
+    p = prepare_extraction_input('reddit:options',
+                                 '/u/a on buy $NVDA now', 'NVDA is great')
+    matches = extraction.extract(p, SCOPE_LOOKUP, bare_confidence='high')
+    assert len(matches) == 1
+    m = matches[0]
+    assert (m.ticker, m.confidence, m.reason) == ('NVDA', 'high',
+                                                  'explicit_cashtag')
+    assert m.in_author_text and m.in_thread_context
+
+
+def test_a_malformed_reddit_title_is_authored_text():
+    p = prepare_extraction_input('reddit:options',
+                                 '/u/broken without delimiter $GME', 'b')
+    assert p.is_comment is False
+    matches = extraction.extract(p, SCOPE_LOOKUP)
+    assert [(m.ticker, m.reason) for m in matches] == \
+        [('GME', 'explicit_cashtag')]
+    assert matches[0].in_author_text
+
+
+def test_cross_scope_name_corroboration():
+    """The accepted plan-level decision (Codex plan-review finding 7): a
+    parent title naming the company vouches for a stopworded bare token in
+    the body -- one conversation, one corroboration scope."""
+    p = prepare_extraction_input('reddit:stocks',
+                                 '/u/a on Medtronic quarterly thread',
+                                 'MDT looking strong')
+    matches = extraction.extract(p, SCOPE_LOOKUP, bare_confidence='low')
+    assert [(m.ticker, m.confidence, m.reason) for m in matches] == \
+        [('MDT', 'high', 'bare_named')]
+
+
+def test_bare_low_reason_on_a_general_source():
+    p = prepare_extraction_input('bluesky', None, 'watching SNDK today')
+    matches = extraction.extract(p, SCOPE_LOOKUP, bare_confidence='low')
+    assert [(m.ticker, m.confidence, m.reason) for m in matches] == \
+        [('SNDK', 'low', 'bare_low')]
+
+
+def test_the_wrapper_is_byte_compatible():
+    assert extract_tickers('title $GME', 'body', SCOPE_LOOKUP) == \
+        [('GME', 'high')]
