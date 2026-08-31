@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-31-radar-extractor-feedback-design.md` (reviewed against the repo 2026-08-31 — no contradictions found, no spec adjustments needed).
 
+**Revision 2 (2026-08-31):** Codex's plan review found 5 blockers + 4 should-fixes; all folded in below, marked "Codex plan-review finding N". The two decisive ones: extraction and sentiment must share ONE cleaner and ONE comment-shape predicate (finding 1), and `_extract_for`'s pair contract is pinned by `sample_discarded_mentions.py` and four ingest tests, so provenance flows through a new internal beside it, never through a changed return shape (finding 2 — verified worse than reported).
+
 ## Global Constraints
 
 - Branch `dev_personal`; commit per task; only `main` deploys; Michi runs the deploy.
@@ -100,7 +102,27 @@ summary['intake_reasons']  # {source: {reason: count}} for THIS cycle
 
 **Interfaces:** produces `ExtractionInput`, `prepare_extraction_input`, `EXTRACTION_INPUT_VERSION` per the reference block. Consumes `config.source_root`.
 
-Spec §4 rules verbatim. The comment-shape detector is the SAME predicate `sentiment_input` uses (title starts `/u/`, contains ` on `, reddit root only) — assert that equivalence in a test so the two modules cannot drift. Split ONCE at the FIRST ` on ` (usernames cannot contain spaces, so the first delimiter is always the structural one); the left side is discarded from extraction entirely, the right side becomes `thread_context`. No global `/u/...` stripping anywhere — an authored post MENTIONING a Reddit user keeps its text (spec §4 closing rule).
+Spec §4 rules verbatim. **One shared cleaner and one shared predicate (Codex plan-review finding 1):** `sentiment_input._clean` (HTML-unescape + whitespace-collapse + strip) is promoted to a public `sentiment_input.clean_text()`, and the comment-shape decision moves into a single public helper:
+
+```python
+# sentiment_input.py
+def clean_text(text):
+    """html.unescape + whitespace collapse + strip. THE cleaner: both
+    sentiment and extraction preparation call this one function, so a
+    title like '/u/x\\non\\tparent' or '/u/x&nbsp;on&nbsp;parent' is a
+    comment to BOTH or to NEITHER -- never a comment to one scope and
+    authored text to the other."""
+    return _WS_RE.sub(' ', html.unescape(text or '')).strip()
+
+
+def reddit_comment_split(source, cleaned_title):
+    """(is_comment, thread_context). The one structural fact about
+    Reddit's feed, decided once: title starts '/u/', contains ' on ',
+    reddit root. Splits ONCE at the first ' on ' (usernames cannot
+    contain spaces); returns ('', False) shape for everything else."""
+```
+
+`prepare_sentiment_input` is refactored to call these two (behavior byte-identical — its whole existing suite is the proof), and `prepare_extraction_input` consumes the same two. No global `/u/...` stripping anywhere — an authored post MENTIONING a Reddit user keeps its text (spec §4 closing rule). Parity tests include the adversarial forms: `\n`/`\t` around ` on `, `&nbsp;` entities, doubled spaces, and leading whitespace before `/u/`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -193,15 +215,14 @@ class ExtractionInput:
 
 
 def prepare_extraction_input(source, title, body, author=None, channel=None):
-    title_c = (title or '').strip()
-    body_c = (body or '').strip()
-    is_comment = (source_root(source or '') == 'reddit'
-                  and title_c.startswith('/u/') and ' on ' in title_c)
+    # THE shared cleaner and THE shared predicate (sentiment_input owns
+    # both): extraction and sentiment must agree on what a comment IS,
+    # or usernames and parent text leak into the wrong scope.
+    title_c = sentiment_input.clean_text(title)
+    body_c = sentiment_input.clean_text(body)
+    is_comment, thread_context = sentiment_input.reddit_comment_split(
+        source, title_c)
     if is_comment:
-        # Split ONCE at the first delimiter: usernames cannot contain
-        # spaces, so the first ' on ' is always the structural one and a
-        # parent title containing ' on ' survives intact.
-        _username, thread_context = title_c.split(' on ', 1)
         author_text = body_c
     else:
         thread_context = ''
@@ -210,6 +231,12 @@ def prepare_extraction_input(source, title, body, author=None, channel=None):
                            thread_context=thread_context,
                            source=source or '', author=author,
                            channel=channel or '', is_comment=is_comment)
+```
+
+(Import direction: `extraction` imports `sentiment_input`; `sentiment_input` imports only `config` — no cycle. The parity test additionally sweeps `('/u/x\non\tparent', 'b')`, `('/u/x&nbsp;on&nbsp;parent', 'b')`, `('  /u/x on parent', 'b')`, and `('/u/x  on  parent', 'b')` and asserts both modules agree on `is_comment` for every one.)
+
+```python
+# (end of Task 1 implementation)
 ```
 
 - [ ] **Step 4: Run to verify pass** — same command, all pass.
@@ -272,7 +299,27 @@ def test_reason_priority_and_scope_merge():
 
 def test_the_wrapper_is_byte_compatible():
     ...  # extract_tickers('t $GME', 'b', LOOKUP) == [('GME', 'high')]
+
+
+def test_a_bare_parent_title_ticker_is_supported():
+    ...  # '/u/a on NVDA earnings thread' + generic body, reddit
+        # bare_confidence='high' -> Match(NVDA, high, bare_source_high,
+        # in_thread_context=True)  [spec §11.1 bullet 3]
+
+
+def test_a_malformed_reddit_title_is_authored_text():
+    ...  # reddit title '/u/broken without delimiter' -> is_comment False,
+        # its tickers extract as authored text  [spec §11.1 bullet 7]
+
+
+def test_cross_scope_name_corroboration():
+    ...  # parent title 'Medtronic quarterly thread' + body bare 'MDT'
+        # (stopworded symbol): the parent's distinctive name vouches ->
+        # Match(MDT, high, bare_named). The accepted plan-level decision,
+        # pinned as its own regression  [Codex plan-review finding 7]
 ```
+
+Additionally in `tests/test_radar_sentiment_v2.py` (one assertion, no behavior change): a generic parent-context reply prepared for sentiment yields empty-ish author text and, run through the local scorer, a 0.0 — no parent-derived directional tone can leak into the commenter's vote (spec §11.1 last bullet).
 
 Commit: `git commit -m "feat(radar): extraction returns provenance and drops username-only tickers"`
 
@@ -310,10 +357,13 @@ def is_automated_author(source, author):
     return normalized in AUTOMATED_AUTHORS
 ```
 
-`ingest._extract_for` becomes:
+**`_extract_for` KEEPS its `[(ticker, confidence)]` contract** — it is pinned by `scripts/sample_discarded_mentions.py:125` and four assertions in `tests/test_radar_ingest.py` (Codex plan-review finding 2, verified). Provenance flows through a new internal beside it:
 
 ```python
-def _extract_for(raw, lookup):
+def _extract_matches(raw, lookup):
+    """The full provenance-bearing extraction for one post. Everything
+    _extract_for's docstring says still holds; this is the same decision
+    with its reasons attached."""
     if is_automated_author(raw.source, raw.author):
         return []
     prepared = extraction.prepare_extraction_input(
@@ -327,11 +377,18 @@ def _extract_for(raw, lookup):
         allow_bare=bare_tokens_allowed(raw.source),
         allow_single_letter=single_letter_cashtags_allowed(raw.source),
         bare_confidence=bare_token_confidence(raw.source))
-    return [(m.ticker, m.confidence, m.reason) for m in matches
+    return [m for m in matches
             if not coin_collision_dropped(raw.source, m.ticker)]
+
+
+def _extract_for(raw, lookup):
+    """[(ticker, confidence)] -- the PINNED public shape. Callers outside
+    the storing loop (sample_discarded_mentions, the ingest tests) keep
+    working unchanged."""
+    return [(m.ticker, m.confidence) for m in _extract_matches(raw, lookup)]
 ```
 
-Downstream `_store_mentioning_posts` unpacks the third element into per-cycle counters (`collections.Counter` per source) and otherwise passes `(symbol, confidence)` through unchanged — MentionRow, simhash inputs, and stored title/body are untouched (raw title incl. username still stored; hygiene changes what is COUNTED, never what is retained, spec §5.2). `run_cycle` returns `summary['intake_reasons']`; `tick()` logs it:
+`_store_mentioning_posts` caches `_extract_matches` per external_id (same dedup comment as today), derives `(ticker, confidence)` pairs for the existing flow, and folds `m.reason` into per-cycle `collections.Counter`s per source; nothing else about its behavior changes — MentionRow, simhash inputs, and stored title/body are untouched (raw title incl. username still stored; hygiene changes what is COUNTED, never what is retained, spec §5.2). `run_cycle` returns `summary['intake_reasons']`; `tick()` logs it:
 
 ```python
     logger.info('radar cycle posts=%d new=%d mentions=%d buckets=%d sources=%s '
@@ -388,13 +445,13 @@ Commit: `git commit -m "feat(radar): extraction policy generation rides the conf
 
 **Interfaces:** pure helpers importable for tests: `readiness(judgment_days, slice_n)`, `wilson_low(k, n)` (95% lower bound), `provenance_for(mention, post, lookup) -> (reason, scopes) | 'text_changed_or_absent'`, `strata(rows) -> tables`. CLI: `python -m scripts.diagnose_extractor_feedback [--combine-prompt-versions]`.
 
-Binding behaviors, spec §7:
+Binding behaviors, spec §7, sharpened per Codex plan-review findings 3–5:
 
-- Always prints population + coverage; recommendations are marked **NOT ACTIONABLE** until ≥7 consecutive live days of finalized judgments (distinct UTC days of `RadarSentimentJudgment.created_utc` with no gap > 1 day) AND the compared slice has ≥50 finalized judgments. With the current restore (zero v2 judgments) it must print a zero-coverage, zero-recommendation report and exit 0 — that exact run is acceptance §12.7.
-- Provenance via `prepare_extraction_input` + `extract` over the RETAINED text with the source's live policy args — the same pure functions, never a second regex (spec §11.3). A judged mention whose ticker no longer matches classifies as `text_changed_or_absent`.
-- Strata exactly per §7.2; rates NEVER merge `irrelevant` with relevance-`uncertain` or `broadcast_or_automated` with origin-`uncertain`; unjudged/missing rows are their own row. Prompt versions separate by default; `--combine-prompt-versions` merges with a loud label.
-- Primary-vs-reviewed split from `RadarSentimentJudgment` history (latest primary row vs materialized final).
-- Zero writes: the script never calls `commit`; the no-mutation test asserts `db.session.new/dirty/deleted` are all empty after a full run AND row counts of every radar table are unchanged. Teeth: temporarily add a mutation in the test's own patched copy and watch the guard fail.
+- **The population is defined, not implied (finding 3):** exactly one row per retained mention in the current-policy cohort (below), built as `RadarMention LEFT JOIN` its materialized final fields — a mention with `sentiment_judged_at IS NULL` is the report's `missing/unjudged` row, in every denominator it belongs to. History dedup: "primary result" = the row with `MAX(id)` per `(mention_id, stage='primary')`; "final result" = the materialized mention fields; the primary-vs-reviewed comparison joins those two per mention. Every stratum table ends with a reconciliation line, and a test asserts each table's rows sum back to the population count.
+- **Cohorts (findings 3+4):** rows partition by `(sentiment_model, sentiment_prompt_version)` AND by extraction policy: `RadarPost.first_seen >= EXTRACTION_POLICY_ACTIVATED_AT` (a module constant recorded at deploy, same pattern as `V2_ACTIVATION_CUTOFF`) is the **current-policy cohort**; older rows are the **legacy-policy cohort**, reported in their own clearly-labeled section and NEVER entering actionable rankings — a legacy username-only mention re-run through the new extractor is a policy difference, not `text_changed_or_absent`, and must not masquerade as one. `text_changed_or_absent` is reserved for current-cohort rows whose retained text no longer yields the ticker (upstream edit/deletion), per the spec's definition. Readiness (≥7 consecutive UTC days with no gap > 1 day, slice n ≥ 50) is evaluated **per prompt/model cohort**, not over pooled history; `--combine-prompt-versions` merges with a loud label and still respects the policy-cohort split.
+- Provenance via `prepare_extraction_input` + `extract` over the RETAINED text with the source's live policy args — the same pure functions, never a second regex (spec §11.3).
+- Strata exactly per §7.2; rates NEVER merge `irrelevant` with relevance-`uncertain` or `broadcast_or_automated` with origin-`uncertain`.
+- **Enforced read-only, not promised read-only (finding 5):** the run wraps in `SET TRANSACTION READ ONLY` (MySQL/MariaDB both enforce it server-side), autoflush is disabled for the session, and a `before_cursor_execute` listener installed for the run aborts on any statement not starting with `SELECT`/`SHOW`/`SET`. The tests assert the listener saw only reads, that `db.session.new/dirty/deleted` stay empty, AND that a deliberately-planted mutation in a patched copy trips both the listener and the server (teeth). The script never constructs an anthropic client; a test monkeypatches `llm_sentiment._get_client` to raise and runs the full diagnostic to prove no model call can occur (spec §11.3 "no model call"). Zero-coverage runs (the current restore) print population, zero coverage, and no recommendation, exit 0 — acceptance §12.7 — and never fall back to v1 labels (asserted: the report text contains no v1-derived rate).
 
 `wilson_low`:
 
@@ -411,7 +468,7 @@ def wilson_low(successes, n, z=1.96):
     return max(0.0, (center - margin) / denom)
 ```
 
-Tests: readiness gates (6 days → not actionable; 7 with a gap → not actionable; 7 consecutive + n=50 → actionable), Wilson reproducibility against hand-computed values, provenance on synthetic post/mention pairs incl. `text_changed_or_absent`, uncertainty-never-merged assertions on the strata output, and the no-mutation guard.
+Tests: readiness gates PER COHORT (6 days → not actionable; 7 with a gap → not actionable; 7 consecutive + n=50 → actionable; two prompt versions with 4 days each → neither actionable), reconciliation (every stratum table sums to the population; a deliberately dropped row makes it fail — teeth), Wilson reproducibility against hand-computed values, provenance on synthetic post/mention pairs incl. `text_changed_or_absent` and the legacy-cohort separation, uncertainty-never-merged assertions WITH their broken variant (merge uncertain into irrelevant in a patched copy → test fails — teeth), the no-model guard, the no-v1-fallback guard, and the enforced read-only guard.
 
 Commit: `git commit -m "feat(radar): read-only extractor diagnostic over finalized v2 judgments"`
 
@@ -426,7 +483,7 @@ Commit: `git commit -m "feat(radar): read-only extractor diagnostic over finaliz
 Per spec §7.3/§7.4:
 
 - Ticker/source/form slices ranked by Wilson-lower-bound of irrelevant share and (separately) broadcast share; every row prints `numerator/denominator` beside the interval. Minimum slice n=50 to appear in the RANKED list; smaller slices appear in an unranked appendix.
-- Bluesky origin table: authors and template fingerprints (exact simhash groups over retained posts) with post count, mention count, duplicate ratio, finalized origin distribution. No block proposals — the report body carries the spec's own sentence that any future suppression rule needs a new design.
+- Bluesky origin table: authors and TWO fingerprints per spec §7.4 (Codex plan-review finding 8 — exact simhash equality only finds verbatim duplicates, and a market-alert template varies its tickers and numbers): (a) exact-duplicate ratio from simhash groups, and (b) a deterministic template fingerprint — text normalized by digits→`#`, recognized ticker tokens→`$T`, whitespace collapsed, then hashed — so "GME +4.2% Market Alert" and "TSLA -1.7% Market Alert" land in one template group. Both shown with post count, mention count, and finalized origin distribution. No block proposals — the report body carries the spec's own sentence that any future suppression rule needs a new design.
 - Output ends with the §7.3 checklist of what a future demotion design must include, verbatim-condensed, so the report itself carries its non-authorization.
 
 Tests: ranking respects Wilson (a 1/1 ticker ranks below a 40/80 one), n<50 lands in the appendix, fingerprint grouping is exact-simhash.
@@ -441,19 +498,19 @@ Commit: `git commit -m "feat(radar): wilson-ranked ticker and origin feedback in
 
 Throwaway-spike style (house `measure_*` pattern, aggregate-conscious): polls the configured subreddits' comment feeds within the existing budget discipline (reuse `sources.reddit.fetch_one` with generous pauses), stores comments where `extract()` finds nothing — raw text, timestamp, subreddit — into `scratchpad/unmatched_reddit/capture.jsonl` for ≥1 day of operator-run capture. A `--summarize` mode reports candidate alias hits (`Tesla`, `Google`, case-insensitive scoped forms) with counts, WITHOUT grading — grading is the §8.2 blind protocol, done by a human on a frozen sample. Pure-piece test: the unmatched filter uses the production `extract()`.
 
-## Task 8 (optional): `capture_promoted_sample.py`
+## Task 8 (optional): promoted-sample capture, LIVE raw text
 
-Samples ≥100 `promoted=True` journal events across contributing sources (48h retention window — run it while promotion is warm), joins retained post text where the post survives, marks `text_unavailable` honestly where a low-only post was never stored (spec §8.3's own caveat), and writes a blind grading sheet (no promotion flag visible in the grading columns) plus a same-size unpromoted-low control sample. No thresholds change from this script — it produces the audit sheet only.
+Redesigned per Codex plan-review finding 9 — joining retained posts cannot satisfy §8.3's "capture the raw text at measurement time", because low-only posts are never stored and the retained table is structurally incomplete. Instead, the capture extends Task 7's live poller: while it runs, it records EVERY low-candidate mention it sees — raw text, identity, timestamp — at fetch time, before storage decides anything. A later `--grade-sheet` pass joins those captures against the journal's `promoted` flags by `(source, external_id, ticker)` and emits a blind grading sheet (promotion flag hidden from the grading columns) of ≥100 promoted events plus a same-size unpromoted-low control drawn from the same capture — both with full raw text, no `text_unavailable` holes, no pretense. No thresholds change from this script; it produces the audit sheet only. If Task 7 is skipped, this task is skipped with it.
 
 ---
 
 # Rollout checkpoints (spec §10 order)
 
 1. Tasks 1–4 deploy together (hygiene release): independently deployable before sentiment v2 produces judgments. On deploy day, compare `intake=` log lines before/after: an expected Reddit drop matching the username-only + AutoModerator rates (133 + 126 over ~9 days in the restore ≈ a few dozen/day); **any drop in parent-context comment intake is the rollback condition** (spec §10).
-2. The generation bump means Reddit baselines re-warm (14 provisional days) — expected, visible, not a regression.
+2. The generation bump re-warms baselines for **every source** — `source_config_version()` is one global stamp, so Bluesky and 4chan restart their 14 provisional days alongside Reddit even though only Reddit's counting changed (Codex plan-review finding 6). Expected, visible, not a regression — but plan for the whole board reading provisional, not one source.
 3. Task 5–6 (diagnostic) is safe any time; before v2 judgments exist it must print zero coverage and recommend nothing (acceptance §12.7 — run it once against the restore as part of the release).
 4. After sentiment v2 has ≥7 consecutive live days: run the diagnostic for the evidence-phase acceptance (§12 second block). Its output — not this plan — decides whether demotion/alias/promotion designs get written.
-5. Rollback: revert the hygiene commits AND bump `EXTRACTION_POLICY_GENERATION` to 2 in the same commit (never restore the old stamp); judgments and history stay untouched.
+5. Rollback is a FORWARD commit, never a `git revert` sweep (Codex plan-review finding 6 — reverting Task 4 would delete the very version machinery the rollback must bump): one new commit that restores the old extraction behavior (`prepare_extraction_input` treats every title as authored, `is_automated_author` returns False) while KEEPING `EXTRACTION_POLICY_GENERATION` and advancing it to 2. Judgments and history stay untouched; the post-rollback population warms its own fresh baseline instead of impersonating the pre-release one.
 
 # Acceptance mapping
 
@@ -469,6 +526,8 @@ Samples ≥100 `promoted=True` journal events across contributing sources (48h r
 | §11 teeth rule | Task 2/3/5 broken-variant steps |
 
 # Plan self-review notes
+
+**Revision 2:** all nine Codex plan-review findings folded (1: shared cleaner/predicate via `sentiment_input.clean_text` + `reddit_comment_split` with adversarial parity cases; 2: `_extract_for` pair contract preserved, provenance via `_extract_matches` — the pin is even stronger than reported, four ingest tests assert pairs; 3: population/dedup/reconciliation defined, readiness per prompt-model cohort; 4: `EXTRACTION_POLICY_ACTIVATED_AT` policy cohort on `RadarPost.first_seen`, legacy rows fenced out of actionable rankings; 5: server-enforced READ ONLY transaction + statement listener + no-model/no-v1 guards, each with teeth; 6: all-source warm-up stated, rollback is a forward commit; 7: missing §11.1 tests added incl. the cross-scope corroboration regression Codex accepted; 8: template-normalization fingerprint beside exact duplicates; 9: Task 8 rebuilt on live raw capture riding Task 7's poller).
 
 - Spec reviewed against the repo before planning: comment detector parity with `sentiment_input` (now pinned by a test), author storage form `/u/...` (covered by the three normalized spellings), reason enum ↔ code paths at extraction.py:65–117 one-to-one, `source_config_version` payload mechanics, `tick()` as the intake-log seam. No spec changes were needed.
 - Cross-scope name corroboration (parent title naming the company vouches for a body bare token) is a plan-level decision the spec leaves open; documented in Task 2 with rationale.
