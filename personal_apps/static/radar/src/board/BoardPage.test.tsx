@@ -311,15 +311,16 @@ describe('the controls', () => {
   })
 
   it('keeps All in the address bar rather than omitting it', async () => {
-    /* The server's default segment is Small, so a URL with no segment param
-       reloads as Small. Sharing the All view has to survive a reload, which
-       means the empty value is the state, not the absence of one. */
-    render(<BoardPage initial={payload({ segments: ['small'] })} />)
+    /* The server's default segment is Discover, so a URL with no segment
+       param reloads as Discover. Sharing the All view has to survive a
+       reload, which means the empty value is the state, not the absence of
+       one. */
+    render(<BoardPage initial={payload({ segments: ['discover'] })} />)
 
     await userEvent.click(screen.getByRole('button', { name: /^All/ }))
 
     await waitFor(() => expect(window.location.search).toContain('segment='))
-    expect(window.location.search).not.toContain('segment=small')
+    expect(window.location.search).not.toContain('segment=discover')
   })
 
   it('will not let the last source be turned off', async () => {
@@ -336,7 +337,7 @@ describe('the controls', () => {
       segment_counts: { all: 1, micro: 1 },
     })} />)
 
-    for (const label of ['Small', 'All', 'Large', 'Mid', 'Micro',
+    for (const label of ['Discover', 'All', 'Large', 'Mid', 'Micro',
                          'IPO', 'Unknown', 'Funds']) {
       expect(screen.getByRole('button', { name: new RegExp(`^${label}`) }))
         .toBeInTheDocument()

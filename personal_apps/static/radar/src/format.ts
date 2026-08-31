@@ -34,7 +34,7 @@ export function zscore(value: number | null): string {
 
 const SEGMENT_LABELS: Record<string, string> = {
   all: 'All',
-  small: 'Small',
+  discover: 'Discover',
   large: 'Large',
   mid: 'Mid',
   micro: 'Micro',
@@ -45,10 +45,12 @@ const SEGMENT_LABELS: Record<string, string> = {
   fund: 'Funds',
 }
 
-/** All first as the way out of any filter, then the sizes descending, then
- *  the three that are not sizes. Michi's order, 2026-08-30 -- it replaced a
- *  small-leads arrangement; descending cap is how he scans the strip. */
-export const SEGMENT_ORDER = ['all', 'large', 'mid', 'small', 'micro',
+/** All first as the way out of any filter, then Discover as the default
+ *  bundle, then the concrete sizes descending, then the three that are not
+ *  sizes. The descending-cap scan is Michi's order, 2026-08-30; Discover
+ *  moved out of the size run 2026-08-31 when Mid joined the bundle -- a
+ *  group spanning mid..unknown has no slot inside a descending list. */
+export const SEGMENT_ORDER = ['all', 'discover', 'large', 'mid', 'micro',
                               'recent_ipo', 'unknown', 'fund']
 
 export function segmentLabel(key: string): string {

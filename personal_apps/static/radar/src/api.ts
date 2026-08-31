@@ -44,7 +44,7 @@ export function queryFor(selection: Selection): string {
   params.set('sources', selection.sources.join(','))
   params.set('window', String(selection.window))
   // Always sent, empty for All. Omitting it would hand the server its own
-  // default, which is Small -- so the All chip would silently do nothing.
+  // default, which is Discover -- so the All chip would silently do nothing.
   // Comma-separated; empty is how the surface asks for All.
   params.set('segment', selection.segments.join(','))
   // Always explicit. An omitted market is US for old links, but a selected

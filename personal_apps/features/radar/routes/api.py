@@ -13,7 +13,10 @@ from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
 from ..market_calendars import session_bounds, session_state
 from ._blueprint import radar_bp
 
-SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund', 'small')
+# `small` is the discover group's pre-2026-08-31 name, accepted for
+# bookmarked URLs; config.SEGMENT_GROUPS resolves both to the same segments.
+SEGMENTS = ('large', 'mid', 'micro', 'unknown', 'recent_ipo', 'fund',
+            'discover', 'small')
 WINDOWS = (1, 4, 24)
 VENUE_FLOORS = (1, 2)
 MAX_LIMIT = 100

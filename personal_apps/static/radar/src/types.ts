@@ -25,17 +25,18 @@ export type Mark =
   'no-print' | 'provisional' | 'single-source' | 'partial' | 'warming-up'
 
 /** `fund` is a pooled vehicle -- an ETF, an ETN, an index product. It is
- *  deliberately outside the `small` group and therefore off the default
+ *  deliberately outside the `discover` group and therefore off the default
  *  board: a fund has no market cap to look up, so before it had a segment
  *  of its own it fell through to `unknown`, and SPY sat in the tab meant
- *  for penny stocks nobody has heard of. */
+ *  for the stuff nobody has heard of. */
 export type Segment = 'large' | 'mid' | 'micro' | 'unknown' | 'recent_ipo'
                     | 'fund'
 
 /** What the reader can filter BY, which is a wider vocabulary than what a row
- *  can BE. `small` is a group over the three segments below mid; no row ever
+ *  can BE. `discover` is a group over mid, micro and unknown (recent IPOs
+ *  stay out -- a fresh listing is not automatically obscure); no row ever
  *  reports it, so Row.segment stays the narrower type. */
-export type SegmentFilter = Segment | 'small'
+export type SegmentFilter = Segment | 'discover'
 
 /** One styled fragment of a phrase.
  *

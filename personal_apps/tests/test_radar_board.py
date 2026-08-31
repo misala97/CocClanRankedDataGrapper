@@ -56,11 +56,12 @@ def clean():
         wipe()
 
 
-def universe(ticker, cap='50000000000'):
+def universe(ticker, cap='50000000000', ipo=None):
     db.session.add(TickerUniverse(
         symbol=ticker, name=f'{ticker} Corp', exchange='NYSE',
         first_seen=dt.datetime(2020, 1, 1), daily_sigma=0.02,
-        market_cap=decimal.Decimal(cap) if cap else None))
+        market_cap=decimal.Decimal(cap) if cap else None,
+        ipo_date=ipo))
 
 
 def bucket(ticker, minutes_ago, source='bluesky', mentions=10, authors=6,
@@ -373,6 +374,8 @@ def test_segment_counts_are_taken_before_the_segment_filter(clean):
     assert built.segment_counts['large'] >= 1
     assert built.segment_counts['mid'] >= 1
     assert built.segment_counts['all'] >= 2
+    # The bundle chip's count, under its own key: mid is inside Discover.
+    assert built.segment_counts['discover'] >= 1
 
 
 # The lead cards' intraday quote series is gone. They now draw the same
@@ -591,30 +594,35 @@ def test_the_pre_split_reddit_history_still_counts_towards_tone(clean):
 
 # ---------------------------------------------------------------- segments ---
 
-def test_small_unions_the_three_segments_below_mid(clean):
-    """The tool is for penny stocks and unknowns. `Small` is what that means
-    in the segment vocabulary: anything not large and not mid."""
+def test_discover_unions_everything_below_large_except_fresh_ipos(clean):
+    """`Discover` is the everything-not-heard-of bundle: mid, micro and
+    unknown. Large is out because megacaps are the noise the tool filters,
+    and recent IPOs are out because a fresh listing is not automatically
+    obscure -- SPCX debuted at $1.9T (Michi, 2026-08-31)."""
     universe(f'{PREFIX}A', cap='50000000000')      # large
     universe(f'{PREFIX}B', cap='100000000')        # micro
     universe(f'{PREFIX}C', cap=None)               # unknown
-    for suffix in 'ABC':
+    universe(f'{PREFIX}D', cap='2000000000')       # mid
+    universe(f'{PREFIX}E', cap='100000000',        # recent_ipo
+             ipo=(NOW - dt.timedelta(days=30)).date())
+    for suffix in 'ABCDE':
         bucket(f'{PREFIX}{suffix}', minutes_ago=30)
     db.session.commit()
 
-    built = board.build(['bluesky'], NOW, segments=['small'])
+    built = board.build(['bluesky'], NOW, segments=['discover'])
     got = {entry.rank.ticker for entry in built.rows}
 
-    assert got == {f'{PREFIX}B', f'{PREFIX}C'}
+    assert got == {f'{PREFIX}B', f'{PREFIX}C', f'{PREFIX}D'}
 
 
-def test_a_row_in_small_still_reports_its_own_segment(clean):
-    """`Small` is a filter, not a sixth segment. A micro-cap is still micro,
-    or the segment counts would stop summing to the total."""
+def test_a_row_in_discover_still_reports_its_own_segment(clean):
+    """`Discover` is a filter, not a sixth segment. A micro-cap is still
+    micro, or the segment counts would stop summing to the total."""
     universe(f'{PREFIX}B', cap='100000000')
     bucket(f'{PREFIX}B', minutes_ago=30)
     db.session.commit()
 
-    built = board.build(['bluesky'], NOW, segments=['small'])
+    built = board.build(['bluesky'], NOW, segments=['discover'])
 
     assert built.rows[0].rank.segment == 'micro'
 

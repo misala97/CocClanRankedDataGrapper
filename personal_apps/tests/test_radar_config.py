@@ -286,24 +286,24 @@ def test_a_selection_of_several_segments_is_their_union():
 
 
 def test_a_group_expands_inside_a_multi_selection():
-    """`small` is a group of three. Picking it beside `large` has to expand
-    it, not filter on the literal string, or the group stops meaning
+    """`discover` is a group of three. Picking it beside `large` has to
+    expand it, not filter on the literal string, or the group stops meaning
     anything the moment a second chip is on."""
     from features.radar.config import segments_in
 
-    assert set(segments_in(['small', 'large'])) == {
-        'micro', 'unknown', 'recent_ipo', 'large'}
+    assert set(segments_in(['discover', 'large'])) == {
+        'mid', 'micro', 'unknown', 'large'}
 
 
 def test_overlapping_selections_do_not_double_up():
-    """`small` already contains `micro`. Selecting both is not an error and
-    must not produce a duplicate that a caller might count."""
+    """`discover` already contains `micro`. Selecting both is not an error
+    and must not produce a duplicate that a caller might count."""
     from features.radar.config import segments_in
 
-    got = segments_in(['small', 'micro'])
+    got = segments_in(['discover', 'micro'])
 
     assert sorted(got) == sorted(set(got))
-    assert set(got) == {'micro', 'unknown', 'recent_ipo'}
+    assert set(got) == {'mid', 'micro', 'unknown'}
 
 
 def test_an_empty_selection_still_means_everything():
@@ -316,12 +316,30 @@ def test_an_empty_selection_still_means_everything():
 
 
 def test_a_single_string_selection_still_works():
-    """Bookmarked URLs carry `?segment=small`, and the default is a bare
-    string. Widening the parameter must not break either."""
+    """The default is a bare string. Widening the parameter must not
+    break it."""
     from features.radar.config import segments_in
 
-    assert set(segments_in('small')) == {'micro', 'unknown', 'recent_ipo'}
+    assert set(segments_in('discover')) == {'mid', 'micro', 'unknown'}
     assert set(segments_in('large')) == {'large'}
+
+
+def test_small_stays_an_alias_for_the_discover_group():
+    """Bookmarked URLs carry `?segment=small` from before the rename
+    (2026-08-31). They must keep resolving to the group rather than to a
+    literal segment nobody has, which would be an empty board."""
+    from features.radar.config import segments_in
+
+    assert set(segments_in('small')) == {'mid', 'micro', 'unknown'}
+
+
+def test_recent_ipo_is_not_in_the_discover_group():
+    """A fresh listing is not automatically obscure -- SPCX debuted at $1.9T
+    and sat in the tab meant for penny stocks. IPOs get their own tab and
+    stay out of the bundle (Michi, 2026-08-31)."""
+    from features.radar.config import segments_in
+
+    assert 'recent_ipo' not in segments_in('discover')
 
 
 def test_stocktwits_is_retired():

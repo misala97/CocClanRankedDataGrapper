@@ -410,16 +410,22 @@ def test_the_payload_carries_the_venue_filter_and_its_counts(client):
     assert set(payload['venue_counts']) == {'any', 'multi'}
 
 
-def test_small_is_an_accepted_segment(client):
+def test_discover_is_an_accepted_segment(client):
+    assert client.get('/radar/api/board?segment=discover').status_code == 200
+
+
+def test_small_is_still_accepted_as_a_legacy_alias(client):
+    """Bookmarks from before the 2026-08-31 rename carry ?segment=small."""
     assert client.get('/radar/api/board?segment=small').status_code == 200
 
 
-def test_the_board_opens_on_the_small_stuff(client):
-    """It is a discovery radar for penny stocks. Opening on All means reading
-    megacaps and micro-caps in one list."""
+def test_the_board_opens_on_the_discover_bundle(client):
+    """It is a discovery radar. Opening on All means reading megacaps and
+    micro-caps in one list. Every member of the bundle is named beside it so
+    each contained tab reads pressed."""
     payload = json.loads(client.get('/radar/api/board').data)
 
-    assert payload['segments'] == ['small', 'micro']
+    assert payload['segments'] == ['discover', 'mid', 'micro', 'unknown']
 
 
 def test_the_payload_says_what_the_floor_left_out(client):
@@ -456,12 +462,13 @@ def _parse(**args):
 
 
 def test_several_segments_arrive_as_a_list():
-    assert _parse(segment='small,large').segments == ['small', 'large']
+    assert _parse(segment='discover,large').segments == ['discover', 'large']
 
 
 def test_a_single_segment_still_parses():
-    """Bookmarked URLs carry `?segment=small`. Widening the parameter must not
-    invalidate every link anyone saved."""
+    """Bookmarked URLs carry `?segment=small` from before the rename.
+    Widening the parameter must not invalidate every link anyone saved."""
+    assert _parse(segment='discover').segments == ['discover']
     assert _parse(segment='small').segments == ['small']
 
 
@@ -485,12 +492,13 @@ def test_one_unknown_name_rejects_the_whole_selection():
     import pytest as _pytest
 
     with _pytest.raises(BadQuery):
-        _parse(segment='small,nonsense')
+        _parse(segment='discover,nonsense')
 
 
 def test_whitespace_and_empty_entries_are_forgiven():
     """A person editing the address bar is not a bug."""
-    assert _parse(segment=' small , large ,').segments == ['small', 'large']
+    assert _parse(segment=' discover , large ,').segments == [
+        'discover', 'large']
 
 
 def _stub_detail(breakdown):

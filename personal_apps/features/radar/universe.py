@@ -271,10 +271,10 @@ def segment_for(market_cap, ipo_date, last_price, today, name=None,
     # Before everything else, including recency. A fund has no market cap to
     # look up anywhere -- Finnhub's /stock/profile2 returns an empty payload
     # for SPY and QQQ, verified against the live API 2026-08-24 -- so without
-    # this it falls through to Unknown, and Unknown sits inside the Small
-    # group. That put SPY in the tab meant for penny stocks nobody has heard
-    # of. Ahead of recent_ipo too: a fund launched last month is still a fund,
-    # and landing it in Recent IPO would put it back in Small.
+    # this it falls through to Unknown, and Unknown sits inside the Discover
+    # group. That put SPY in the tab meant for the stuff nobody has heard
+    # of. Ahead of recent_ipo too: a fund launched last month is still a
+    # fund, not a listing to track.
     if is_etf or (is_etf is None and is_pooled_vehicle(name)):
         return 'fund'
 

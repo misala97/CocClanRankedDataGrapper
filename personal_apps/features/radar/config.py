@@ -766,26 +766,35 @@ REVIEW_DAILY_SHARE = 0.10
 LOCAL_CONTRADICTION_FLOOR = 0.5
 
 
-# Segment groups. `Small` is what "penny stocks and unknown stuff" means in
-# the segment vocabulary -- anything that is not large or mid.
+# Segment groups. `Discover` is what "stuff nobody has heard of" means in
+# the segment vocabulary -- everything below the large-cap floor, plus the
+# rows no provider has profiled.
 #
-# A GROUP, not a sixth segment: universe.segment_for still returns exactly one
-# of the five and every row still reports its own, so the counts keep summing
-# to the total. `unknown` is folded in on an assumption worth naming -- it
-# means no market cap is known, not that the cap is small -- and it holds
-# because a ticker no provider has profiled is overwhelmingly a tiny one. If
-# `unknown` ever stops being dominated by small names, this is what to revisit.
+# A GROUP, not a seventh segment: universe.segment_for still returns exactly
+# one concrete segment and every row still reports its own, so the counts
+# keep summing to the total. `unknown` is folded in on an assumption worth
+# naming -- it means no market cap is known, not that the cap is small -- and
+# it holds because a ticker no provider has profiled is overwhelmingly a tiny
+# one. `recent_ipo` is deliberately NOT in the group: a fresh listing is not
+# automatically obscure -- SPCX debuted at $1.9T and sat in the tab meant for
+# penny stocks until Michi threw it out (2026-08-31). IPOs keep their own tab.
+#
+# `small` is the group's pre-2026-08-31 name, kept as an alias because
+# bookmarked URLs carry `?segment=small`; resolving it to a literal segment
+# nobody has would turn every saved link into an empty board.
+_DISCOVER = ('mid', 'micro', 'unknown')
 SEGMENT_GROUPS = {
-    'small': ('micro', 'unknown', 'recent_ipo'),
+    'discover': _DISCOVER,
+    'small': _DISCOVER,
 }
 
 # What the board opens on, as the raw query-string value the parser splits.
 # It is a discovery radar for the things nobody has heard of; opening on
-# everything buries them under megacap chatter. Micro is named beside Small
-# even though the Small GROUP already covers it: the selection drives which
-# tabs read pressed, and a pressed Small with an unpressed Micro would claim
-# micro rows are not being shown while they are.
-DEFAULT_SEGMENT = 'small,micro'
+# everything buries them under megacap chatter. Every member of the group is
+# named beside Discover even though the GROUP already covers them: the
+# selection drives which tabs read pressed, and a pressed Discover with an
+# unpressed Mid would claim mid rows are not being shown while they are.
+DEFAULT_SEGMENT = 'discover,mid,micro,unknown'
 
 
 def segments_in(selection):

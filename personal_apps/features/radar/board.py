@@ -403,8 +403,8 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     counts = collections.Counter(row.segment for row in ranked)
     segment_counts = dict(counts)
     segment_counts['all'] = len(ranked)
-    segment_counts['small'] = sum(
-        1 for row in ranked if row.segment in SEGMENT_GROUPS['small'])
+    segment_counts['discover'] = sum(
+        1 for row in ranked if row.segment in SEGMENT_GROUPS['discover'])
 
     # Both venue counts come from the same unfiltered pass, for the reason the
     # segment counts do: they label the control, and counting after the filter

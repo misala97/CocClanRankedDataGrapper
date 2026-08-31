@@ -135,7 +135,7 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
     without treating every row as if it shared the aggregate board session.
     """
     since = now - dt.timedelta(hours=window_hours)
-    # A selection may name groups ('small'), single segments, or several of
+    # A selection may name groups ('discover'), single segments, or several of
     # either. Resolved to a flat union.
     # once rather than per row; empty means everything.
     allowed = segments_in(segments)

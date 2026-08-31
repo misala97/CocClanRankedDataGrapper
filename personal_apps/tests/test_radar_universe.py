@@ -267,8 +267,8 @@ def test_a_file_without_the_column_does_not_erase_a_flag(clean_universe):
 def test_a_fund_is_its_own_segment_not_an_unknown_company():
     """A fund has no market cap to look up ANYWHERE. Finnhub returns an empty
     payload for SPY and QQQ, verified against the live API, so before this it
-    fell through to Unknown -- and Unknown is inside Small, which is the tab
-    for penny stocks nobody has heard of."""
+    fell through to Unknown -- and Unknown is inside the Discover group,
+    which is the tab for the stuff nobody has heard of."""
     assert universe.segment_for(None, None, None, dt.date(2026, 8, 24),
                                 'SPDR S&P 500 ETF Trust') == 'fund'
     # By the directory's own flag, because the NAME cannot reach this one:
@@ -302,9 +302,9 @@ def test_an_unread_row_still_falls_back_to_the_name():
 
 
 def test_a_fund_stays_a_fund_even_when_newly_listed():
-    """Ahead of recent_ipo on purpose: recent_ipo is inside the small group,
-    so a fund launched last month would land straight back on the default
-    board."""
+    """Ahead of recent_ipo on purpose: a fund launched last month is still a
+    fund, and Recent IPO -- its own tab since the 2026-08-31 regroup -- is
+    the wrong place for it."""
     assert universe.segment_for(None, dt.date(2026, 8, 1), None,
                                 dt.date(2026, 8, 24),
                                 'Some Brand New Bitcoin ETF') == 'fund'
