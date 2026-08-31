@@ -435,3 +435,76 @@ def test_the_bare_confidence_policy_is_hashed_into_the_config_version():
     before = config.source_config_version()
     with mock.patch.dict(config.BARE_TOKEN_CONFIDENCE, {'reddit': 'low'}):
         assert config.source_config_version() != before
+
+
+# --- Canonical extraction input (extractor-feedback plan, Task 1) -----------
+
+from features.radar.extraction import prepare_extraction_input
+
+
+def test_a_reddit_comment_splits_into_context_and_authored_text():
+    p = prepare_extraction_input(
+        'reddit:wallstreetbets', '/u/alice on Here goes everything $SNDK',
+        'How is it going now?')
+    assert p.is_comment is True
+    assert p.thread_context == 'Here goes everything $SNDK'
+    assert p.author_text == 'How is it going now?'
+    assert '/u/alice' not in p.thread_context
+
+
+def test_the_split_happens_once_so_on_inside_the_parent_survives():
+    p = prepare_extraction_input(
+        'reddit:options', '/u/bob on Thoughts on NVDA on Monday', 'sure')
+    assert p.thread_context == 'Thoughts on NVDA on Monday'
+
+
+def test_a_submission_title_is_authored_text_with_no_context():
+    p = prepare_extraction_input(
+        'reddit:options', 'NVDA to the moon', 'calls')
+    assert p.is_comment is False
+    assert p.thread_context == ''
+    assert 'NVDA to the moon' in p.author_text
+
+
+def test_a_non_reddit_u_slash_string_is_never_stripped():
+    p = prepare_extraction_input(
+        'fourchan', '/u/CEO_of_SOXL on life', 'body')
+    assert p.is_comment is False
+    assert '/u/CEO_of_SOXL on life' in p.author_text
+
+
+def test_nulls_become_empty_strings():
+    p = prepare_extraction_input('bluesky', None, None)
+    assert (p.author_text, p.thread_context) == ('', '')
+
+
+def test_the_comment_detector_matches_sentiment_inputs_detector():
+    """The two modules share one structural fact about Reddit's feed; if
+    either predicate drifts, extraction and sentiment disagree about what
+    a comment even is. Adversarial forms included: raw newlines, tabs,
+    HTML-entity spaces, doubled spaces, leading whitespace -- the exact
+    shapes the plain-.strip() draft would have misread (Codex plan-review
+    finding 1)."""
+    from features.radar import sentiment_input
+    cases = [('reddit:a', '/u/x on parent', 'b'),
+             ('reddit:a', 'plain title', 'b'),
+             ('bluesky', '/u/x on parent', 'b'),
+             ('reddit:a', '/u/x without delimiter', 'b'),
+             ('reddit:a', '/u/x\non\tparent', 'b'),
+             ('reddit:a', '/u/x&nbsp;on&nbsp;parent', 'b'),
+             ('reddit:a', '  /u/x on parent', 'b'),
+             ('reddit:a', '/u/x  on  parent', 'b')]
+    for source, title, body in cases:
+        ours = prepare_extraction_input(source, title, body).is_comment
+        theirs = sentiment_input.prepare_sentiment_input(
+            source, title, body, 'ZZX').is_comment
+        assert ours == theirs, (source, title)
+
+
+def test_adversarial_comment_shapes_split_correctly():
+    p = prepare_extraction_input('reddit:a', '/u/x\non\tparent $GME', 'b')
+    assert p.is_comment is True
+    assert p.thread_context == 'parent $GME'
+    p = prepare_extraction_input('reddit:a', '/u/x&nbsp;on&nbsp;parent', 'b')
+    assert p.is_comment is True
+    assert p.thread_context == 'parent'

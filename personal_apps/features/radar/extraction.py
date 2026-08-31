@@ -7,9 +7,15 @@ symbols; bare `DD` in a WSB post is almost always the phrase, not DuPont, and
 is rejected. Bare matching is uppercase-only for the same reason -- lowercase
 `it` is prose and would match on nearly every post ever written.
 """
+import dataclasses
 import re
 
 from .config import BARE_PATTERN, CASHTAG_PATTERN, STOPWORDS
+# One cleaner, one comment predicate -- sentiment_input owns both, and
+# extraction consuming them is what keeps the two preparations agreeing
+# about what a Reddit comment even is. sentiment_input imports only
+# config, so there is no cycle.
+from . import sentiment_input
 
 # Cashtags accept 1-5 UPPERCASE letters. Bare tokens require 2-5: single
 # uppercase letters are far more often sentence fragments, initials or
@@ -38,6 +44,42 @@ _CASHTAG_RE = re.compile(CASHTAG_PATTERN)
 _BARE_RE = re.compile(BARE_PATTERN)
 
 _CONFIDENCE_RANK = {'low': 0, 'medium': 1, 'high': 2}
+
+EXTRACTION_INPUT_VERSION = 1
+
+
+@dataclasses.dataclass(frozen=True)
+class ExtractionInput:
+    """What extraction is allowed to read, with the scopes kept apart.
+
+    thread_context can ASSOCIATE a comment with a ticker; author_text is
+    the only text that speaks for the author; the synthetic username is
+    neither and is discarded structurally here -- never by a global
+    regex, because an authored post mentioning a Reddit user is content
+    (extractor-feedback spec §4).
+    """
+    author_text: str
+    thread_context: str
+    source: str
+    author: str | None
+    channel: str
+    is_comment: bool
+
+
+def prepare_extraction_input(source, title, body, author=None, channel=None):
+    title_c = sentiment_input.clean_text(title)
+    body_c = sentiment_input.clean_text(body)
+    is_comment, thread_context = sentiment_input.reddit_comment_split(
+        source, title_c)
+    if is_comment:
+        author_text = body_c
+    else:
+        thread_context = ''
+        author_text = ' '.join(part for part in (title_c, body_c) if part)
+    return ExtractionInput(author_text=author_text,
+                           thread_context=thread_context,
+                           source=source or '', author=author,
+                           channel=channel or '', is_comment=is_comment)
 
 
 def extract_tickers(title, body, lookup, allow_bare=True,

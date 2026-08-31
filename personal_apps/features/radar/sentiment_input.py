@@ -40,15 +40,43 @@ class PreparedInput:
     is_comment: bool
 
 
-def _clean(text):
+def clean_text(text):
+    """html.unescape + whitespace collapse + strip. THE cleaner.
+
+    Both sentiment and extraction preparation call this one function, so
+    a title like '/u/x\\non\\tparent' or '/u/x&nbsp;on&nbsp;parent' is a
+    comment to BOTH or to NEITHER -- never a comment to one scope and
+    authored text to the other (extractor-feedback plan, Codex finding 1).
+    """
     return _WS_RE.sub(' ', html.unescape(text or '')).strip()
+
+
+_clean = clean_text
+
+
+def reddit_comment_split(source, cleaned_title):
+    """(is_comment, thread_context) for an already-CLEANED title.
+
+    The one structural fact about Reddit's Atom feed, decided in one
+    place: comment titles arrive as '/u/<name> on <parent title>'.
+    Splits ONCE at the first ' on ' -- usernames cannot contain spaces,
+    so the first delimiter is always the structural one and a parent
+    title containing ' on ' survives intact. Everything that is not a
+    reddit comment returns (False, '').
+    """
+    is_comment = (source_root(source or '') == 'reddit'
+                  and cleaned_title.startswith('/u/')
+                  and ' on ' in cleaned_title)
+    if not is_comment:
+        return False, ''
+    _username, thread_context = cleaned_title.split(' on ', 1)
+    return True, thread_context
 
 
 def prepare_sentiment_input(source, title, body, ticker,
                             author=None, channel=None):
-    title_c, body_c = _clean(title), _clean(body)
-    is_comment = (source_root(source or '') == 'reddit'
-                  and title_c.startswith('/u/') and ' on ' in title_c)
+    title_c, body_c = clean_text(title), clean_text(body)
+    is_comment, _context = reddit_comment_split(source, title_c)
     if is_comment:
         # ALWAYS body-only, even when the body is empty: the synthetic
         # title is the PARENT author's words.
