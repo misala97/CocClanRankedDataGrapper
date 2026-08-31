@@ -751,6 +751,15 @@ MIN_DISTINCT_AUTHORS = 3
 # already the rarer event.
 MIN_DISTINCT_CHANNELS = 2
 
+# Sentiment v2 review tier (spec 2026-08-31 §5.3). The share is of TODAY'S
+# primary judgments, recomputed at each review pass and consumed by
+# ATTEMPTED sends (a failed call still spent budget); hitting the ceiling
+# is metered, never silent. The contradiction floor is how strong a local
+# float must be before disagreeing with the model's attitude flags a
+# mention for review.
+REVIEW_DAILY_SHARE = 0.10
+LOCAL_CONTRADICTION_FLOOR = 0.5
+
 
 # Segment groups. `Small` is what "penny stocks and unknown stuff" means in
 # the segment vocabulary -- anything that is not large or mid.

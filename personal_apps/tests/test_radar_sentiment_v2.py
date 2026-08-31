@@ -367,3 +367,92 @@ def test_pending_v2_targets_unjudged_v2_not_legacy(clean_posts):
                    in llm_sentiment.pending(50)}
         assert legacy_only in waiting
         assert judged not in waiting
+
+
+# --- Review routing, priorities, ceiling meter (Task 7) ---------------------
+
+from models import RadarReviewMeter
+
+
+def _j(relevance='relevant', origin='human_chatter', attitude='positive',
+       move='up', confidence='high'):
+    return Judgment(relevance, origin, attitude, move, confidence)
+
+
+def test_the_five_triggers_and_only_those():
+    assert llm_sentiment.needs_review(_j(confidence='low'), 0.0)
+    assert llm_sentiment.needs_review(_j(relevance='uncertain'), 0.0)
+    assert llm_sentiment.needs_review(_j(origin='uncertain'), 0.0)
+    assert llm_sentiment.needs_review(_j(attitude='positive', move='down'), 0.0)
+    # polarity-only cases pin move='down' so the attitude/move rule stays out
+    assert llm_sentiment.needs_review(_j(attitude='negative', move='down'), 0.6)
+    assert not llm_sentiment.needs_review(_j(), 0.0)
+    assert not llm_sentiment.needs_review(_j(), 0.6)      # agreeing local
+    assert not llm_sentiment.needs_review(
+        _j(attitude='negative', move='down'), 0.3)        # weak local
+
+
+def test_priority_order_matches_the_spec():
+    uncertain = llm_sentiment.review_priority(_j(relevance='uncertain'), 0.0)
+    polarity = llm_sentiment.review_priority(
+        _j(attitude='negative', move='down'), 0.6)
+    low = llm_sentiment.review_priority(_j(confidence='low'), 0.0)
+    conflict = llm_sentiment.review_priority(
+        _j(attitude='positive', move='down'), 0.0)
+    assert uncertain < polarity < low < conflict
+
+
+@pytest.fixture()
+def clean_meter():
+    with flask_app.app_context():
+        RadarReviewMeter.query.filter(
+            RadarReviewMeter.day >= dt.date(2027, 1, 1)).delete(
+                synchronize_session=False)
+        db.session.commit()
+        yield
+        RadarReviewMeter.query.filter(
+            RadarReviewMeter.day >= dt.date(2027, 1, 1)).delete(
+                synchronize_session=False)
+        db.session.commit()
+
+
+def test_meter_upserts_per_day(clean_meter):
+    with flask_app.app_context():
+        llm_sentiment._meter_add(dt.date(2027, 1, 1), demanded=3)
+        llm_sentiment._meter_add(dt.date(2027, 1, 1), attempted=2, served=2,
+                                 capped=1)
+        row = db.session.get(RadarReviewMeter, dt.date(2027, 1, 1))
+        assert (row.demanded, row.attempted, row.served, row.capped) \
+            == (3, 2, 2, 1)
+
+
+def test_review_candidates_orders_by_priority_and_skips_reviewed(clean_posts):
+    with flask_app.app_context():
+        # Three judged mentions with different trigger shapes, one already
+        # reviewed at this prompt version.
+        low_conf = make_post('zztest-rc-low')
+        uncertain = make_post('zztest-rc-unc')
+        reviewed = make_post('zztest-rc-done')
+        untriggered = make_post('zztest-rc-none')
+        llm_sentiment.apply_judgments(
+            rows_for([low_conf]), {low_conf: ja(confidence='low')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        llm_sentiment.apply_judgments(
+            rows_for([uncertain]), {uncertain: ja(relevance='uncertain')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        llm_sentiment.apply_judgments(
+            rows_for([reviewed]), {reviewed: ja(confidence='low')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        llm_sentiment.apply_judgments(
+            rows_for([reviewed]), {reviewed: ja()},
+            stage='review', model=llm_sentiment.REVIEW_MODEL)
+        llm_sentiment.apply_judgments(
+            rows_for([untriggered]), {untriggered: ja()},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+
+        got = [mention.id for mention, _post
+               in llm_sentiment.review_candidates(NOW)]
+        ours = [i for i in got
+                if i in {low_conf, uncertain, reviewed, untriggered}]
+        assert ours == [uncertain, low_conf]

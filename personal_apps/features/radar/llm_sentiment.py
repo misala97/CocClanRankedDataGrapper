@@ -37,9 +37,10 @@ import anthropic
 import sqlalchemy as sa
 
 from extensions import db
-from models import RadarMention, RadarPost, RadarSentimentJudgment
+from models import (RadarMention, RadarPost, RadarReviewMeter,
+                    RadarSentimentJudgment)
 
-from . import sentiment_input, spend
+from . import config, sentiment_input, spend
 
 logger = logging.getLogger('radar.llm_sentiment')
 
@@ -424,6 +425,102 @@ def final_eligibility(mention):
             and mention.sentiment_content_origin == 'human_chatter'):
         return True
     return None
+
+
+# ---- selective review routing (spec §5.3) ----------------------------------
+
+def _polarity_conflict(judgment, local_score):
+    if abs(local_score or 0.0) < config.LOCAL_CONTRADICTION_FLOOR:
+        return False
+    if judgment.attitude == 'positive':
+        return (local_score or 0.0) < 0
+    if judgment.attitude == 'negative':
+        return (local_score or 0.0) > 0
+    return False
+
+
+def _attitude_move_conflict(judgment):
+    return ((judgment.attitude == 'positive'
+             and judgment.expected_move == 'down')
+            or (judgment.attitude == 'negative'
+                and judgment.expected_move == 'up'))
+
+
+def needs_review(judgment, local_score):
+    """The five enabled triggers, spec §5.3 verbatim. 'High impact' stays
+    unimplemented until a plan defines a stable, testable rule."""
+    return (judgment.confidence == 'low'
+            or judgment.relevance == 'uncertain'
+            or judgment.content_origin == 'uncertain'
+            or _attitude_move_conflict(judgment)
+            or _polarity_conflict(judgment, local_score))
+
+
+def review_priority(judgment, local_score):
+    """Spec §5.3 ceiling order: uncertain relevance/origin, polarity
+    conflict, low confidence, attitude/movement conflict."""
+    if (judgment.relevance == 'uncertain'
+            or judgment.content_origin == 'uncertain'):
+        return 0
+    if _polarity_conflict(judgment, local_score):
+        return 1
+    if judgment.confidence == 'low':
+        return 2
+    return 3
+
+
+def _judgment_of(mention):
+    return Judgment(relevance=mention.sentiment_relevance,
+                    content_origin=mention.sentiment_content_origin,
+                    attitude=mention.sentiment_attitude,
+                    expected_move=mention.sentiment_expected_move,
+                    confidence=mention.sentiment_confidence)
+
+
+def review_candidates(now, limit=PASS_LIMIT):
+    """Judged-by-primary mentions the triggers select, best-first.
+
+    Read-only: stamping and metering are run_review_pass's job, so shadow
+    mode measures the same demand the live mode would serve. Excludes
+    mentions already reviewed at this PROMPT_VERSION (NOT EXISTS over the
+    history). Priority is applied to the full trigger-selected set before
+    any ceiling slice; the recency pre-scan bound below exists only to
+    keep the query finite.
+    """
+    reviewed = (db.session.query(RadarSentimentJudgment.id)
+                .filter(RadarSentimentJudgment.mention_id == RadarMention.id,
+                        RadarSentimentJudgment.stage == 'review',
+                        RadarSentimentJudgment.prompt_version
+                        == PROMPT_VERSION))
+    rows = (db.session.query(RadarMention, RadarPost)
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarMention.sentiment_judged_at.isnot(None),
+                    RadarMention.sentiment_model == PRIMARY_MODEL,
+                    ~reviewed.exists())
+            .order_by(RadarPost.created_utc.desc())
+            .limit(limit * 5).all())
+    selected = []
+    for mention, post in rows:
+        judgment = _judgment_of(mention)
+        if needs_review(judgment, mention.lexicon_sentiment):
+            selected.append((review_priority(judgment,
+                                             mention.lexicon_sentiment),
+                             mention, post))
+    selected.sort(key=lambda entry: entry[0])
+    return [(mention, post) for _p, mention, post in selected[:limit]]
+
+
+def _meter_add(day, demanded=0, attempted=0, served=0, capped=0):
+    row = db.session.get(RadarReviewMeter, day)
+    if row is None:
+        row = RadarReviewMeter(day=day, demanded=0, attempted=0, served=0,
+                               capped=0)
+        db.session.add(row)
+    row.demanded += demanded
+    row.attempted += attempted
+    row.served += served
+    row.capped += capped
+    db.session.commit()
 
 
 def items_for(rows):
