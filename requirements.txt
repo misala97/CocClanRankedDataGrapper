@@ -13,5 +13,11 @@ pywebpush
 websockets
 Telethon
 
+# radar sentiment v2 local classifier. Pinned to the 1.4 line: joblib
+# artifacts are not portable across scikit-learn versions, and an unpinned
+# upgrade would strand the promoted model on disk.
+scikit-learn>=1.4,<1.5
+scipy
+
 # test
 pytest

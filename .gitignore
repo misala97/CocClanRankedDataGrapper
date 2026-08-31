@@ -23,3 +23,7 @@ personal_apps/static/radar/dist/
 # Telegram -> Settings -> Devices if one ever leaks.
 *.session
 *.session-journal
+
+# Radar sentiment classifier artifacts: weights are data, not code.
+personal_apps/artifacts/
+!personal_apps/artifacts/.gitkeep
