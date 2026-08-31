@@ -590,3 +590,81 @@ def test_sonnet_result_overwrites_and_carries_the_preamble(
         assert client.messages.requests[0]['output_config']['effort'] == 'low'
         row = RadarReviewMeter.query.one()
         assert row.served == 1
+
+
+# --- Rejudge backlog selection (Task 11) ------------------------------------
+
+from scripts import rejudge_radar_sentiment as rejudge
+
+
+def test_rejudge_selects_exactly_the_non_current_versions(clean_posts):
+    with flask_app.app_context():
+        legacy_v1 = make_post('zztest-rj-v1', llm='bullish')   # v1-era row
+        never = make_post('zztest-rj-never')
+        current = make_post('zztest-rj-cur')
+        llm_sentiment.apply_judgments(
+            rows_for([current]), {current: ja()}, stage='primary',
+            model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        # A row judged under an older prompt version.
+        stale = make_post('zztest-rj-stale')
+        llm_sentiment.apply_judgments(
+            rows_for([stale]), {stale: ja()}, stage='primary',
+            model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        m = db.session.get(RadarMention, stale)
+        m.sentiment_prompt_version = 'radar-sentiment-v1-retired'
+        db.session.commit()
+
+        got = {mention.id for mention, _post
+               in rejudge.rejudge_backlog(100000)}
+        ours = got & {legacy_v1, never, current, stale}
+        assert ours == {legacy_v1, never, stale}
+
+
+def test_rejudge_keeps_history_and_overwrites_the_projection(clean_posts):
+    with flask_app.app_context():
+        stale = make_post('zztest-rj-hist', llm='bearish')
+        m = db.session.get(RadarMention, stale)
+        m.sentiment_prompt_version = 'radar-sentiment-v1-retired'
+        m.sentiment_judged_at = NOW
+        m.sentiment_attitude = 'negative'
+        m.sentiment_relevance = 'relevant'
+        m.sentiment_content_origin = 'human_chatter'
+        db.session.add(RadarSentimentJudgment(
+            mention_id=stale, stage='primary', model='claude-haiku-4-5',
+            prompt_version='radar-sentiment-v1-retired',
+            relevance='relevant', content_origin='human_chatter',
+            attitude='negative', expected_move='down', confidence='high',
+            input_tokens=1, output_tokens=1, created_utc=NOW))
+        db.session.commit()
+
+        rows = rejudge.rejudge_backlog(100000)
+        ours = [(mention, post) for mention, post in rows
+                if mention.id == stale]
+        written = llm_sentiment.apply_judgments(
+            ours, {stale: ja(attitude='positive')}, stage='primary',
+            model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        assert written == 1
+        m = db.session.get(RadarMention, stale)
+        assert m.sentiment_attitude == 'positive'
+        assert m.llm_sentiment == 'bullish'
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=stale).order_by(RadarSentimentJudgment.id).all()
+        assert [h.prompt_version for h in history] == \
+            ['radar-sentiment-v1-retired', llm_sentiment.PROMPT_VERSION]
+
+
+def test_cost_projection_uses_measured_history_when_present(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-rj-cost')
+        llm_sentiment.apply_judgments(
+            rows_for([mention_id]),
+            {mention_id: ja(input_tokens=1000, output_tokens=100)},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        per = rejudge.measured_tokens_per_mention()
+        assert per is not None
+        usd = rejudge.projected_cost_usd(1000, per)
+        assert usd > 0.0
