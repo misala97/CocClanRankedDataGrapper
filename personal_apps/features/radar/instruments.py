@@ -400,51 +400,76 @@ def _snapshot_legacy_generation(tickers, now):
     return persist_generation(decisions, now, source='legacy')
 
 
-def _apply_decision(decision, generation_id, now):
-    """Upsert one ticker's German rows for an activation. Returns changes."""
-    changed = 0
-    RadarInstrument.query.filter_by(
-        ticker=decision.ticker, market='de').update(
-        {RadarInstrument.is_primary: False}, synchronize_session=False)
-    if decision.status != 'mapped':
-        # Refusals are recorded without inventing venue rows: only rows
-        # that already exist flip to unavailable.
-        RadarInstrument.query.filter_by(
-            ticker=decision.ticker, market='de').update(
-            {RadarInstrument.mapping_status: 'unavailable',
-             RadarInstrument.mapped_at: now,
-             RadarInstrument.mapping_generation_id: generation_id},
-            synchronize_session=False)
-        return 1
+def _upsert_generation_row(decision, generation_id, now, *, mic, symbol,
+                           isin, currency, is_primary):
     row = RadarInstrument.query.filter_by(
-        ticker=decision.ticker, market='de', mic=decision.mic).one_or_none()
+        ticker=decision.ticker, market='de', mic=mic).one_or_none()
     if row is None:
         row = RadarInstrument(
             ticker=decision.ticker, market='de',
-            venue=VENUE_BY_MIC[decision.mic], mic=decision.mic,
-            provider_symbol=decision.symbol, currency=decision.currency,
+            venue=VENUE_BY_MIC[mic], mic=mic,
+            provider_symbol=symbol, currency=currency,
             is_primary=False, mapping_status='mapped', mapped_at=now)
         db.session.add(row)
-    row.venue = VENUE_BY_MIC[decision.mic]
-    row.provider_symbol = decision.symbol
-    row.currency = decision.currency
-    row.isin = decision.isin
-    row.is_primary = True
+    row.venue = VENUE_BY_MIC[mic]
+    row.provider_symbol = symbol
+    row.currency = currency
+    row.isin = isin
+    row.is_primary = is_primary
     row.mapping_status = 'mapped'
     row.mapping_source = decision.mapping_source
     row.mapped_at = now
     row.mapping_generation_id = generation_id
-    return changed + 1
+
+
+def _apply_decision(decision, generation_id, now):
+    """Upsert one ticker's German rows for an activation. Returns changes."""
+    # Start from no authority for this ticker. The selected generation then
+    # re-authorizes its primary and, when present, its audited history proxy.
+    changed = RadarInstrument.query.filter_by(
+        ticker=decision.ticker, market='de').update(
+        {RadarInstrument.is_primary: False,
+         RadarInstrument.mapping_status: 'unavailable',
+         RadarInstrument.mapped_at: now,
+         RadarInstrument.mapping_generation_id: generation_id},
+        synchronize_session=False)
+    if decision.status != 'mapped':
+        # Refusals are recorded without inventing venue rows.
+        return changed
+
+    _upsert_generation_row(
+        decision, generation_id, now, mic=decision.mic,
+        symbol=decision.symbol, isin=decision.isin,
+        currency=decision.currency, is_primary=True)
+    changed += 1
+    if decision.history_proxy_mic is not None:
+        _upsert_generation_row(
+            decision, generation_id, now,
+            mic=decision.history_proxy_mic,
+            symbol=decision.history_proxy_symbol,
+            isin=decision.history_proxy_isin,
+            currency=decision.history_proxy_currency,
+            is_primary=False)
+        changed += 1
+    return changed
 
 
 def _apply_generation(generation, now):
     decisions = _generation_decisions(generation)
     mapped = [decision for decision in decisions
               if decision.status == 'mapped']
-    identities = {(decision.mic, decision.isin) for decision in mapped}
-    if len(identities) != len(mapped):
-        raise ValueError(
-            f'generation {generation.id}: duplicate venue identities')
+    owners = {}
+    for decision in mapped:
+        identities = [(decision.mic, decision.isin)]
+        if decision.history_proxy_mic is not None:
+            identities.append((decision.history_proxy_mic,
+                               decision.history_proxy_isin))
+        for identity in identities:
+            owner = owners.get(identity)
+            if owner is not None and owner != decision.ticker:
+                raise ValueError(
+                    f'generation {generation.id}: duplicate venue identities')
+            owners[identity] = decision.ticker
     changed = 0
     for decision in decisions:
         changed += _apply_decision(decision, generation.id, now)

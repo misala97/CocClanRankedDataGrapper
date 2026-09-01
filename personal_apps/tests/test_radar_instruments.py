@@ -310,7 +310,7 @@ def test_german_probe_reports_counts_without_provider_payload_or_key(
 # --- Market data v2: versioned generations (plan Task 6) ---------------------
 
 def _decision(ticker, status='mapped', mic='XGAT', symbol=None,
-              isin=None, reason=None, source='openfigi'):
+              isin=None, reason=None, source='openfigi', **proxy):
     from features.radar.instruments import MappingDecision
     return MappingDecision(
         ticker=ticker, status=status, reason=reason,
@@ -319,7 +319,7 @@ def _decision(ticker, status='mapped', mic='XGAT', symbol=None,
         isin=(isin or 'US00000%05d' % abs(hash(ticker)) % 100000)
         if status == 'mapped' else None,
         currency='EUR' if status == 'mapped' else None,
-        mapping_source=source)
+        mapping_source=source, **proxy)
 
 
 @pytest.fixture()
@@ -419,6 +419,54 @@ def test_activation_upserts_primaries_and_retires_the_previous_generation(
                for generation in legacy)
 
 
+def test_activation_persists_tradegate_primary_and_xetra_proxy(
+        generation_rows):
+    from features.radar import instruments as mod
+    from models import RadarInstrument
+    ticker = f'{PREFIX}PROXY'
+    generation = mod.persist_generation([_decision(
+        ticker, mic='XGAT', symbol='ZZTG', isin='US0000000017',
+        history_proxy_mic='XETR', history_proxy_symbol='ZZXE',
+        history_proxy_isin='US0000000017',
+        history_proxy_currency='EUR')], NOW)
+
+    mod.activate_generation(generation.id, NOW)
+
+    rows = {row.mic: row for row in RadarInstrument.query.filter_by(
+        ticker=ticker, market='de').all()}
+    assert (rows['XGAT'].is_primary, rows['XGAT'].mapping_status) == (
+        True, 'mapped')
+    assert (rows['XETR'].is_primary, rows['XETR'].mapping_status,
+            rows['XETR'].provider_symbol, rows['XETR'].isin) == (
+                False, 'mapped', 'ZZXE', 'US0000000017')
+    assert rows['XGAT'].mapping_generation_id == generation.id
+    assert rows['XETR'].mapping_generation_id == generation.id
+
+
+def test_later_generation_without_proxy_deactivates_the_old_proxy(
+        generation_rows):
+    from features.radar import instruments as mod
+    from models import RadarInstrument
+    ticker = f'{PREFIX}STALE'
+    first = mod.persist_generation([_decision(
+        ticker, mic='XGAT', symbol='ZZTG', isin='US0000000017',
+        history_proxy_mic='XETR', history_proxy_symbol='ZZXE',
+        history_proxy_isin='US0000000017',
+        history_proxy_currency='EUR')], NOW)
+    mod.activate_generation(first.id, NOW)
+    second = mod.persist_generation([
+        _decision(ticker, mic='XGAT', symbol='ZZTG2',
+                  isin='US0000000017')], NOW + dt.timedelta(days=7))
+
+    mod.activate_generation(second.id, NOW + dt.timedelta(days=7))
+
+    proxy = RadarInstrument.query.filter_by(
+        ticker=ticker, market='de', mic='XETR').one()
+    assert proxy.is_primary is False
+    assert proxy.mapping_status == 'unavailable'
+    assert proxy.mapping_generation_id == second.id
+
+
 def test_rollback_restores_the_previous_primary(generation_rows):
     from features.radar import instruments as mod
     from models import RadarInstrument
@@ -444,6 +492,59 @@ def test_rollback_restores_the_previous_primary(generation_rows):
         ticker=ticker, market='de')}
     assert rows['XETR'].is_primary is True
     assert rows['XGAT'].is_primary is False
+
+
+def test_rollback_removes_proxy_authority(generation_rows):
+    from features.radar import instruments as mod
+    from models import RadarInstrument, RadarMappingGeneration
+    ticker = f'{PREFIX}ROLLPX'
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+        provider_symbol='OLDXE', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapping_source='twelvedata+finnhub',
+        isin='US0000000017', mapped_at=NOW - dt.timedelta(days=30)))
+    db.session.commit()
+    generation = mod.persist_generation([_decision(
+        ticker, mic='XGAT', symbol='ZZTG', isin='US0000000017',
+        history_proxy_mic='XETR', history_proxy_symbol='ZZXE',
+        history_proxy_isin='US0000000017',
+        history_proxy_currency='EUR')], NOW)
+    mod.activate_generation(generation.id, NOW)
+    legacy = next(row for row in RadarMappingGeneration.query.filter_by(
+        source='legacy') if ticker in row.payload_json)
+
+    mod.rollback_generation(legacy.id, NOW + dt.timedelta(hours=1))
+
+    rows = {row.mic: row for row in RadarInstrument.query.filter_by(
+        ticker=ticker, market='de').all()}
+    assert (rows['XETR'].is_primary, rows['XETR'].mapping_status,
+            rows['XETR'].provider_symbol) == (True, 'mapped', 'OLDXE')
+    assert (rows['XGAT'].is_primary, rows['XGAT'].mapping_status) == (
+        False, 'unavailable')
+
+
+def test_duplicate_proxy_identity_refuses_before_mutation(generation_rows):
+    from features.radar import instruments as mod
+    from models import RadarInstrument
+    first = f'{PREFIX}DUPA'
+    second = f'{PREFIX}DUPB'
+    shared_proxy = dict(
+        history_proxy_mic='XETR', history_proxy_symbol='ZZXE',
+        history_proxy_isin='US0000000017',
+        history_proxy_currency='EUR')
+    generation = mod.persist_generation([
+        _decision(first, mic='XGAT', symbol='ZZTGA',
+                  isin='US0000000018', **shared_proxy),
+        _decision(second, mic='XGAT', symbol='ZZTGB',
+                  isin='US0000000019', **shared_proxy),
+    ], NOW)
+
+    with pytest.raises(ValueError, match='duplicate venue identities'):
+        mod.activate_generation(generation.id, NOW)
+
+    assert RadarInstrument.query.filter(
+        RadarInstrument.ticker.in_((first, second)),
+        RadarInstrument.market == 'de').count() == 0
 
 
 def test_a_failed_activation_leaves_the_previous_state_untouched(
