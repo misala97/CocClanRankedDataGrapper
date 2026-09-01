@@ -32,7 +32,12 @@ def _utc_aware(when: dt.datetime) -> dt.datetime:
 
 def _age_seconds(quote_ts: dt.datetime | None, fetched_at: dt.datetime | None,
                  now: dt.datetime) -> int | None:
-    observed_at = _utc_naive(quote_ts) or _utc_naive(fetched_at)
+    # Age is a fact about the PROVIDER EVENT TIME. A fetch receipt proves a
+    # request completed, not that the market said anything; it never makes
+    # old data fresh (spec §3 rule 5 / §9.3). fetched_at stays a parameter
+    # only so callers keep one signature while it remains diagnostic-only.
+    del fetched_at
+    observed_at = _utc_naive(quote_ts)
     if observed_at is None:
         return None
     return max(0, int((_utc_naive(now) - observed_at).total_seconds()))
@@ -40,7 +45,11 @@ def _age_seconds(quote_ts: dt.datetime | None, fetched_at: dt.datetime | None,
 
 def classify_quality(quote_ts: dt.datetime | None, fetched_at: dt.datetime | None,
                      provider_delay: str, now: dt.datetime) -> str:
-    """Return the user-facing quality state for a provider snapshot."""
+    """Return the user-facing quality state for a provider snapshot.
+
+    Missing provider time is ``unavailable`` -- never inferred from fetch
+    time.
+    """
     if provider_delay not in {'live', 'delayed', 'eod'}:
         raise ValueError(f'unknown provider delay: {provider_delay}')
     if provider_delay == 'eod':
@@ -82,6 +91,10 @@ class QuoteView:
     regular_move: decimal.Decimal | None
     extended_move: decimal.Decimal | None
     is_fallback: bool
+    source: str | None = None
+    price_basis: str | None = None
+    bid: decimal.Decimal | None = None
+    ask: decimal.Decimal | None = None
 
     @property
     def score_term(self) -> str:
@@ -110,8 +123,11 @@ class QuoteView:
         """
         if tape_status not in TAPE_STATUSES:
             raise ValueError(f'unknown tape status: {tape_status}')
-        observed_at = quote.quote_ts or quote.fetched_at or now
-        session = session_state(quote.market, _utc_aware(observed_at))
+        # Session may use the current clock for a row without provider time,
+        # but no price/move/eligibility can come from that missing time.
+        observed_at = quote.quote_ts or now
+        session = session_state(quote.market, _utc_aware(observed_at),
+                                mic=quote.mic)
         age_seconds = _age_seconds(quote.quote_ts, quote.fetched_at, now)
         quality = classify_quality(quote.quote_ts, quote.fetched_at,
                                    quote.provider_delay, now)
@@ -123,8 +139,13 @@ class QuoteView:
             quote_ts=quote.quote_ts, volume=quote.volume, session=session,
             quality=quality, age_seconds=age_seconds,
             tape_status=tape_status,
+            # Only a fresh executed trade on a moving, non-fallback tape may
+            # produce divergence: midpoints are visible-not-eligible, and a
+            # US fallback in Germany mode is never a German signal.
             score_eligible=(quality in {'live', 'delayed'} and
-                            tape_status == 'ok'),
+                            tape_status == 'ok' and
+                            quote.price_basis == 'trade' and
+                            not is_fallback),
             regular_move=_movement(quote.price, quote.previous_close),
             extended_move=(
                 _movement(quote.price, quote.previous_close)
@@ -132,6 +153,8 @@ class QuoteView:
                 _movement(quote.price, quote.regular_close)
                 if session == 'afterhours' else None),
             is_fallback=is_fallback,
+            source=quote.source, price_basis=quote.price_basis,
+            bid=quote.bid, ask=quote.ask,
         )
 
 
@@ -152,8 +175,10 @@ def _primary_quote(ticker: str, market: str,
               if quote.ticker == ticker and quote.market == market]
     expected_currency = {'us': 'USD', 'de': 'EUR'}[market]
     quotes = [quote for quote in quotes if quote.currency == expected_currency]
-    if market == 'de':
-        quotes = [quote for quote in quotes if quote.mic == 'XETR']
+    # No German MIC hard-code: the current primary instrument supplies the
+    # MIC, and the caller hands this function only that instrument's rows.
+    # Pinning between XGAT and XETR is a mapping-generation decision, never
+    # a per-poll race.
     if not quotes:
         return None
     return max(quotes, key=lambda quote: _utc_naive(quote.fetched_at) or
@@ -162,8 +187,15 @@ def _primary_quote(ticker: str, market: str,
 
 def select_quote(ticker: str, requested_market: Market,
                  snapshots: Mapping[str, object], now: dt.datetime,
-                 tape_status: TapeStatus = 'ok') -> QuoteView:
-    """Select the honest market quote, retaining stale snapshots before fallback."""
+                 tape_status: TapeStatus = 'ok',
+                 allow_us_fallback: bool = True) -> QuoteView:
+    """Select the honest market quote, retaining stale snapshots before fallback.
+
+    ``allow_us_fallback=False`` is how a caller says a verified German
+    primary mapping EXISTS but its feed is currently silent: the row shows
+    its retained stale quote or unavailable, never a US price dressed as
+    availability (spec §4.2).
+    """
     if requested_market not in {'us', 'de'}:
         raise ValueError(f'unknown market: {requested_market}')
 
@@ -173,7 +205,7 @@ def select_quote(ticker: str, requested_market: Market,
         if view.quality != 'unavailable':
             return view
 
-    if requested_market == 'de':
+    if requested_market == 'de' and allow_us_fallback:
         us = _primary_quote(ticker, 'us', snapshots)
         if us is not None:
             view = QuoteView.from_snapshot(

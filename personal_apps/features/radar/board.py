@@ -132,10 +132,10 @@ def _hour_floor(when):
     return when.replace(minute=0, second=0, microsecond=0)
 
 
-def _next_boundary(market, now, session):
+def _next_boundary(market, now, session, mic=None):
     """The selected market's next meaningful open/close in aware UTC."""
     aware_now = now.replace(tzinfo=dt.timezone.utc)
-    bounds = session_bounds(market, aware_now)
+    bounds = session_bounds(market, aware_now, mic=mic)
     if session == 'premarket':
         return 'opens', bounds.regular_opens_at
     if session == 'regular':
@@ -145,20 +145,21 @@ def _next_boundary(market, now, session):
 
     # Before the local premarket opens, the current calendar day is useful.
     if (bounds.opens_at > aware_now and
-            session_state(market, bounds.opens_at) == 'premarket'):
+            session_state(market, bounds.opens_at, mic=mic) == 'premarket'):
         return 'opens', bounds.opens_at
     # Xetra has a closed gap between its 08:55 extended session and the 09:00
     # regular session.  It is still today's trading day, so do not skip to the
     # next premarket opening.
     if (bounds.regular_opens_at > aware_now and
-            session_state(market, bounds.regular_opens_at) == 'regular'):
+            session_state(market, bounds.regular_opens_at,
+                          mic=mic) == 'regular'):
         return 'opens', bounds.regular_opens_at
     # Nights, weekends and closures need the next actual trading day rather
     # than a calendar date that happens to contain no session.
     for days in range(1, 8):
         candidate = aware_now + dt.timedelta(days=days)
-        future = session_bounds(market, candidate)
-        if session_state(market, future.opens_at) == 'premarket':
+        future = session_bounds(market, candidate, mic=mic)
+        if session_state(market, future.opens_at, mic=mic) == 'premarket':
             return 'opens', future.opens_at
     raise RuntimeError(f'no trading boundary found for {market}')
 
@@ -394,8 +395,14 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     label the filter's own buttons -- computing them after it would report the
     selected segment's size in every slot.
     """
-    session = session_state(market, now.replace(tzinfo=dt.timezone.utc))
-    boundary_label, boundary_at = _next_boundary(market, now, session)
+    # The board-wide Germany clock is Tradegate-first: XGAT is the
+    # preferred venue and carries the longer retail session. A row or
+    # fallback chart still uses its actual selected quote MIC.
+    board_mic = 'XGAT' if market == 'de' else None
+    session = session_state(market, now.replace(tzinfo=dt.timezone.utc),
+                            mic=board_mic)
+    boundary_label, boundary_at = _next_boundary(market, now, session,
+                                                 mic=board_mic)
     ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
                                      segments=(), limit=None, market=market)
     ranked = ranking.rows

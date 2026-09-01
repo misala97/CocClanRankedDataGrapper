@@ -257,8 +257,9 @@ def _daily_anchors(ticker, start, now, step_minutes, slots, *, market='us',
     day = start.date()
     while day <= now.date():
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
-        bounds = session_bounds(market, probe)
-        if session_state(market, bounds.regular_opens_at) != 'regular':
+        bounds = session_bounds(market, probe, mic=mic)
+        if session_state(market, bounds.regular_opens_at,
+                         mic=mic) != 'regular':
             day += dt.timedelta(days=1)
             continue
         opens = bounds.regular_opens_at.astimezone(

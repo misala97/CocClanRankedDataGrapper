@@ -110,7 +110,8 @@ class TwelveDataProvider:
             mic=mic_code or 'XNAS', provider_mic=mic_code,
             price=price, previous_close=previous_close,
             regular_close=regular_close, quote_ts=quote_ts,
-            currency=payload.get('currency') or '', provider_delay='delayed')
+            currency=payload.get('currency') or '', provider_delay='delayed',
+            source='twelvedata', price_basis='trade')
 
     def quotes(self, symbols):
         """Current snapshots keyed by provider symbol.

@@ -12,15 +12,19 @@ NOW = dt.datetime(2026, 8, 28, 12, 0)
 
 def snapshot(*, ticker='AAPL', market='us', venue='NASDAQ', mic='XNAS',
              currency='USD', price='100', previous_close='98',
-             regular_close='100', quote_ts=NOW, provider_delay='live'):
+             regular_close='100', quote_ts=NOW, provider_delay='live',
+             source='legacy', price_basis='trade', bid=None, ask=None):
     """A complete provider-neutral quote; literals make threshold bugs visible."""
     return Quote(
         ticker=ticker, market=market, venue=venue, mic=mic,
         provider_symbol=ticker, currency=currency,
-        price=decimal.Decimal(price),
+        price=decimal.Decimal(price) if price is not None else None,
         previous_close=decimal.Decimal(previous_close),
         regular_close=decimal.Decimal(regular_close), quote_ts=quote_ts,
         volume=100, provider_delay=provider_delay,
+        source=source, price_basis=price_basis,
+        bid=decimal.Decimal(bid) if bid is not None else None,
+        ask=decimal.Decimal(ask) if ask is not None else None,
     )
 
 
@@ -123,3 +127,94 @@ def test_currency_mismatched_snapshot_is_not_selected_for_live_divergence():
         'de': snapshot(market='de', venue='Xetra', mic='XETR', currency='USD'),
     }, NOW)
     assert selected.quality == 'unavailable'
+
+
+# --- Market data v2 (plan Task 3) --------------------------------------------
+
+def test_midpoint_is_visible_but_never_score_eligible():
+    from features.radar.markets import QuoteView
+    quote = snapshot(
+        market='de', mic='XGAT', venue='Tradegate BSX', currency='EUR',
+        source='deutsche_boerse_delayed', price_basis='midpoint',
+        price=None, bid='99.90', ask='100.10', provider_delay='delayed')
+    view = QuoteView.from_snapshot(quote, NOW)
+    assert view.price == decimal.Decimal('100.00')
+    assert view.price_basis == 'midpoint'
+    assert view.score_eligible is False
+
+
+def test_verified_german_mapping_does_not_fallback_during_feed_failure():
+    selected = select_quote('AAPL', 'de', {'us': snapshot()}, NOW,
+                            allow_us_fallback=False)
+    assert selected.quality == 'unavailable'
+    assert selected.is_fallback is False
+
+
+def test_us_fallback_in_germany_mode_is_never_score_eligible():
+    selected = select_quote('AAPL', 'de', {'us': snapshot()}, NOW)
+    assert selected.is_fallback is True
+    assert selected.score_eligible is False
+    assert selected.score_term == 'chatter'
+
+
+def test_quote_validation_rejects_dishonest_values():
+    with pytest.raises(ValueError):
+        snapshot(price='0')
+    with pytest.raises(ValueError):
+        snapshot(price='-1')
+    with pytest.raises(ValueError):
+        snapshot(price=None, price_basis='midpoint',
+                 bid='100.10', ask='99.90')  # crossed book
+    with pytest.raises(ValueError):
+        snapshot(price=None, price_basis='midpoint', bid='99.90')  # one-sided
+    with pytest.raises(ValueError):
+        snapshot(source='made_up_source')
+    with pytest.raises(ValueError):
+        snapshot(price_basis='made_up_basis')
+    with pytest.raises(ValueError):
+        snapshot(source='massive_grouped', price_basis='close')
+
+
+def test_trade_price_never_derives_from_its_book():
+    quote = snapshot(price='100.55', price_basis='trade',
+                     bid='99.00', ask='101.00')
+    assert quote.price == decimal.Decimal('100.55')
+
+
+def test_missing_provider_time_is_unavailable_not_fetch_time_fresh():
+    quote = snapshot(quote_ts=None)
+    from features.radar.markets import QuoteView
+    view = QuoteView.from_snapshot(
+        dataclasses_replace_fetched(quote, NOW), NOW)
+    assert view.quality == 'unavailable'
+    assert view.score_eligible is False
+
+
+def test_xgat_late_quote_without_regular_close_has_no_extended_move():
+    """Plan Task 3 Step 7: no official/last-trade 17:30 value means NO
+    extended move -- never a midpoint- or Xetra-derived number."""
+    from features.radar.markets import QuoteView
+    late = dt.datetime(2026, 8, 31, 18, 0)  # 20:00 Berlin, afterhours
+    quote = Quote(
+        ticker='AAPL', market='de', venue='Tradegate BSX', mic='XGAT',
+        provider_symbol='APC', currency='EUR',
+        price=decimal.Decimal('100'), previous_close=decimal.Decimal('98'),
+        regular_close=None, quote_ts=late, volume=None,
+        provider_delay='delayed', source='deutsche_boerse_delayed',
+        price_basis='trade')
+    view = QuoteView.from_snapshot(quote, late)
+    assert view.session == 'afterhours'
+    assert view.extended_move is None
+
+
+def dataclasses_replace_fetched(quote, fetched_at):
+    """A copy with fetched_at set; Quote is frozen with a custom __init__."""
+    return Quote(
+        ticker=quote.ticker, market=quote.market, venue=quote.venue,
+        mic=quote.mic, provider_symbol=quote.provider_symbol,
+        currency=quote.currency, price=quote.price,
+        previous_close=quote.previous_close,
+        regular_close=quote.regular_close, quote_ts=quote.quote_ts,
+        volume=quote.volume, provider_delay=quote.provider_delay,
+        fetched_at=fetched_at, source=quote.source,
+        price_basis=quote.price_basis, bid=quote.bid, ask=quote.ask)

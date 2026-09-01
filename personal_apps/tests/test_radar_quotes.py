@@ -147,8 +147,10 @@ def test_provider_regular_close_survives_storage_into_afterhours_view(
     engine.dispose()
 
 
-def test_persisted_timestamp_less_de_quote_allows_valid_us_fallback(monkeypatch):
-    """A recent poll time cannot turn a missing exchange print into a live one."""
+def test_mapped_de_primary_with_dead_feed_never_falls_back_to_us(monkeypatch):
+    """Spec §4.2: the US fallback covers a genuinely ABSENT German mapping,
+    never a transient German feed failure. A verified DE primary whose feed
+    stopped printing shows unavailable/stale, not a USD price."""
     engine = sa.create_engine('sqlite://')
     sa.event.listen(
         engine, 'connect',
@@ -188,7 +190,7 @@ def test_persisted_timestamp_less_de_quote_allows_valid_us_fallback(monkeypatch)
             selected = quotes_mod.quote_views_for(['QQA'], 'de', NOW)['QQA']
 
         assert (selected.market, selected.quality, selected.is_fallback) == (
-            'us', 'live', True)
+            'de', 'unavailable', False)
 
     engine.dispose()
 
@@ -416,3 +418,61 @@ def test_a_ticker_with_too_little_history_keeps_its_old_sigma():
         TickerUniverse.query.filter_by(symbol='QTHINZ').delete(
             synchronize_session=False)
         db.session.commit()
+
+
+# --- Market data v2 (plan Task 3): shadow exclusion and basis filtering ------
+
+def _add_v2(when, price, *, ticker='QQSH', market='de', mic='XGAT',
+            currency='EUR', price_basis='trade', is_shadow=False,
+            quote_ts=None):
+    db.session.add(RadarQuote(
+        ticker=ticker, market=market, mic=mic, currency=currency,
+        provider_symbol=ticker, fetched_at=when, quote_ts=quote_ts or when,
+        price=decimal.Decimal(str(price)),
+        prev_close=decimal.Decimal('100.000000'),
+        source='deutsche_boerse_delayed', price_basis=price_basis,
+        is_shadow=is_shadow))
+
+
+def _de_instrument(ticker='QQSH'):
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Tradegate BSX', mic='XGAT',
+        provider_symbol=ticker, currency='EUR', is_primary=True,
+        mapping_status='mapped', mapping_source='test',
+        mapped_at=dt.datetime(2026, 8, 20)))
+
+
+def test_a_newer_shadow_snapshot_never_reaches_the_live_view(ctx):
+    from features.radar import quotes
+    _de_instrument()
+    _add_v2(NOW - dt.timedelta(minutes=10), '100.00')
+    _add_v2(NOW - dt.timedelta(minutes=1), '999.00', is_shadow=True)
+    db.session.commit()
+
+    views = quotes.quote_views_for(['QQSH'], 'de', NOW)
+    view = views['QQSH']
+    assert view.price == decimal.Decimal('100.000000')
+
+
+def test_moves_use_only_trade_basis_snapshots(ctx):
+    from features.radar import quotes
+    _de_instrument()
+    _add_v2(NOW - dt.timedelta(minutes=30), '100.00', price_basis='trade')
+    _add_v2(NOW - dt.timedelta(minutes=20), '500.00', price_basis='midpoint')
+    _add_v2(NOW - dt.timedelta(minutes=10), '110.00', price_basis='trade')
+    db.session.commit()
+
+    move = quotes.move_since('QQSH', 1, NOW, market='de', mic='XGAT')
+    assert move == pytest.approx(decimal.Decimal('0.1'))
+
+    batch = quotes.moves_for([('QQSH', 'de', 'XGAT')], 1, NOW)
+    assert batch[('QQSH', 'de')] == pytest.approx(decimal.Decimal('0.1'))
+
+
+def test_legacy_null_basis_rows_still_count_as_trades(ctx):
+    from features.radar import quotes
+    add(NOW - dt.timedelta(minutes=30), 100.0, ticker='QQLEG')
+    add(NOW - dt.timedelta(minutes=10), 105.0, ticker='QQLEG')
+    db.session.commit()
+    move = quotes.move_since('QQLEG', 1, NOW, market='us', mic='XNAS')
+    assert move == pytest.approx(decimal.Decimal('0.05'))

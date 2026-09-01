@@ -57,7 +57,7 @@ def _iso_z(value):
     return value.isoformat() + 'Z'
 
 
-def _chart_sessions(chart, market, span):
+def _chart_sessions(chart, market, span, mic=None):
     """What kind of time each stretch of the chart is, in UTC intervals.
 
     A chart may represent a real German quote or an explicit US fallback.  Its
@@ -77,7 +77,7 @@ def _chart_sessions(chart, market, span):
         return []
 
     if chart.step_minutes >= 1440:
-        return _daily_closed_days(chart, market, slots, span)
+        return _daily_closed_days(chart, market, slots, span, mic=mic)
 
     if not isinstance(chart.start, dt.datetime):
         return []
@@ -88,7 +88,7 @@ def _chart_sessions(chart, market, span):
     # rhythm carries the orientation on its own.
     if chart.step_minutes >= 60:
         return _closed_day_intervals(chart.start, slots * chart.step_minutes,
-                                     market)
+                                     market, mic=mic)
 
     start = chart.start
     if start.tzinfo is None:
@@ -108,8 +108,9 @@ def _chart_sessions(chart, market, span):
         # Noon UTC unambiguously selects this local US or German calendar day;
         # the extra day at either side covers a session crossing a UTC date.
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
-        bounds = session_bounds(market, probe)
-        if session_state(market, bounds.regular_opens_at) == 'regular':
+        bounds = session_bounds(market, probe, mic=mic)
+        if session_state(market, bounds.regular_opens_at,
+                          mic=mic) == 'regular':
             windows.append((bounds.opens_at, bounds.closes_at))
             for kind, left, right in (
                 ('premarket', bounds.opens_at, bounds.premarket_closes_at),
@@ -139,7 +140,7 @@ def _chart_sessions(chart, market, span):
     return intervals
 
 
-def _closed_day_intervals(start, minutes, market):
+def _closed_day_intervals(start, minutes, market, mic=None):
     """Runs of non-trading local calendar days inside an intraday window,
     as UTC intervals clipped to it.
     """
@@ -153,9 +154,10 @@ def _closed_day_intervals(start, minutes, market):
     last_day = end.date() + dt.timedelta(days=1)
     while day <= last_day + dt.timedelta(days=1):
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
-        bounds = session_bounds(market, probe)
+        bounds = session_bounds(market, probe, mic=mic)
         trading = (day <= last_day
-                   and session_state(market, bounds.regular_opens_at) == 'regular')
+                   and session_state(market, bounds.regular_opens_at,
+                          mic=mic) == 'regular')
         if not trading and day <= last_day:
             if run_start is None:
                 run_start = day
@@ -172,7 +174,7 @@ def _closed_day_intervals(start, minutes, market):
     return intervals
 
 
-def _daily_closed_days(chart, market, slots, span):
+def _daily_closed_days(chart, market, slots, span, mic=None):
     """Runs of non-trading calendar days on the 1M chart, nothing elsewhere."""
     if span != '1M' or not isinstance(chart.start, dt.date):
         return []
@@ -182,9 +184,10 @@ def _daily_closed_days(chart, market, slots, span):
     for offset in range(slots + 1):
         day = chart.start + dt.timedelta(days=offset)
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
-        bounds = session_bounds(market, probe)
+        bounds = session_bounds(market, probe, mic=mic)
         trading = (offset < slots
-                   and session_state(market, bounds.regular_opens_at) == 'regular')
+                   and session_state(market, bounds.regular_opens_at,
+                          mic=mic) == 'regular')
         if not trading and offset < slots:
             if run_start is None:
                 run_start = day
@@ -457,7 +460,8 @@ def serialize_detail(d):
                 if isinstance(d.chart.watched_from, dt.datetime)
                 else (d.chart.watched_from.isoformat()
                       if d.chart.watched_from else None)),
-            'sessions': _chart_sessions(d.chart, d.quote.market, d.span),
+            'sessions': _chart_sessions(d.chart, d.quote.market, d.span,
+                                        mic=d.quote.mic),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,

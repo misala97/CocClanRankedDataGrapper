@@ -78,6 +78,23 @@ def test_a_quote_is_normalized():
         1786000000, dt.timezone.utc).replace(tzinfo=None, microsecond=0)
 
 
+def test_a_finnhub_quote_declares_live_trade_provenance():
+    """[A2] Finnhub is the permanent real-time US source; the legacy
+    constructor default 'delayed' must not leak through."""
+    http = FakeHttp({'/quote': {'c': 123.45, 'pc': 120.0, 'v': 900000,
+                                't': 1786000000}})
+    quote = finnhub.FinnhubProvider(http).quotes(['AAA'])['AAA']
+    assert (quote.source, quote.price_basis, quote.provider_delay) == (
+        'finnhub', 'trade', 'live')
+
+
+def test_a_massive_quote_cannot_exist():
+    """[A1] massive_grouped is a daily-close source, never an intraday quote."""
+    with pytest.raises(ValueError, match='quote source'):
+        Quote(ticker='AAA', price=decimal.Decimal('1'),
+              source='massive_grouped', price_basis='close')
+
+
 def test_prices_arrive_as_decimal_not_float():
     """Float here would quietly poison every forward return downstream."""
     http = FakeHttp({'/quote': {'c': 0.1, 'pc': 0.2, 'v': 1, 't': 1786000000}})

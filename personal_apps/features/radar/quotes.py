@@ -28,8 +28,12 @@ from .markets import QuoteView, select_quote
 from .prices import Quote
 
 
-def record_quotes(quotes, now):
-    """Store a snapshot per quote. Returns how many were written."""
+def record_quotes(quotes, now, *, is_shadow=False, commit=True):
+    """Store a snapshot per quote. Returns how many were written.
+
+    ``commit=False`` only stages rows, so the German collector can commit
+    quotes, cursor, trade events, and cycle metrics in one transaction.
+    """
     written = 0
     for quote in quotes.values():
         db.session.add(RadarQuote(
@@ -38,9 +42,12 @@ def record_quotes(quotes, now):
             regular_close=quote.regular_close,
             provider_delay=quote.provider_delay,
             volume=quote.volume, market=quote.market, mic=quote.mic,
-            currency=quote.currency, provider_symbol=quote.provider_symbol))
+            currency=quote.currency, provider_symbol=quote.provider_symbol,
+            source=quote.source, price_basis=quote.price_basis,
+            bid=quote.bid, ask=quote.ask, is_shadow=is_shadow))
         written += 1
-    db.session.commit()
+    if commit:
+        db.session.commit()
     return written
 
 
@@ -76,6 +83,10 @@ def _stored_quote(row, instrument, market):
         price=row.price, previous_close=row.prev_close,
         regular_close=getattr(row, 'regular_close', None), quote_ts=row.quote_ts,
         volume=row.volume, provider_delay=provider_delay,
+        # Migration-era NULLs read as the legacy trade contract.
+        source=getattr(row, 'source', None) or 'legacy',
+        price_basis=getattr(row, 'price_basis', None) or 'trade',
+        bid=getattr(row, 'bid', None), ask=getattr(row, 'ask', None),
         # A poll receipt proves only that the request completed.  Without the
         # exchange print timestamp it cannot certify quote freshness.
         fetched_at=row.fetched_at if row.quote_ts is not None else None)
@@ -130,15 +141,24 @@ def quote_views_for(tickers, requested_market, now):
                 row, primary.get((ticker, market)), market)
             tape_statuses[market] = status
 
-        provisional = select_quote(ticker, requested_market, snapshots, now)
+        # A verified German primary mapping makes the US fallback dishonest:
+        # a silent feed shows its retained stale quote or unavailable, never
+        # a USD price dressed as Germany (spec §4.2).
+        allow_us_fallback = (requested_market != 'de' or
+                             (ticker, 'de') not in primary)
+        provisional = select_quote(ticker, requested_market, snapshots, now,
+                                   allow_us_fallback=allow_us_fallback)
         tape_status = tape_statuses.get(provisional.market, 'unknown')
         views[ticker] = select_quote(
-            ticker, requested_market, snapshots, now, tape_status=tape_status)
+            ticker, requested_market, snapshots, now, tape_status=tape_status,
+            allow_us_fallback=allow_us_fallback)
     return views
 
 
 def _quote_matches(ticker, market, mic):
-    clauses = [RadarQuote.ticker == ticker]
+    # Shadow rows are measurement-only; no live read may see one.
+    clauses = [RadarQuote.ticker == ticker,
+               RadarQuote.is_shadow.is_(False)]
     # During the expand/write overlap, `(NULL, NULL)` is the legacy US
     # identity.  A requested primary MIC must include that pair; filtering
     # only `market IS NULL` and then requiring the MIC loses old snapshots.
@@ -266,6 +286,7 @@ def statuses_for(instruments, now, polls=STALE_QUOTE_POLLS, session=None):
             partition_by=(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic),
             order_by=RadarQuote.fetched_at.desc()).label('rn'),
     ).where(RadarQuote.ticker.in_(tickers), market_clause,
+            RadarQuote.is_shadow.is_(False),
             RadarQuote.fetched_at <= now).subquery()
 
     entity = sa.orm.aliased(RadarQuote, numbered)
@@ -320,11 +341,22 @@ def move_since(ticker, hours, now, market='us', mic=None):
     since = now - dt.timedelta(hours=hours)
     rows = (RadarQuote.query
             .filter(*_quote_matches(ticker, market, mic),
+                    _trade_basis_clause(),
                     RadarQuote.fetched_at >= since,
                     RadarQuote.fetched_at <= now)
             .order_by(RadarQuote.fetched_at.asc()).all())
 
     return _move_from([row.price for row in rows])
+
+
+def _trade_basis_clause():
+    """Divergence endpoints are executed trades only.
+
+    A midpoint may appear on a chart but cannot anchor a move; migration-era
+    NULL rows are the legacy trade contract (spec §4.3 / plan Task 3).
+    """
+    return sa.or_(RadarQuote.price_basis == 'trade',
+                  RadarQuote.price_basis.is_(None))
 
 
 def _move_from(prices):
@@ -361,6 +393,8 @@ def moves_for(instruments, hours, now):
                              RadarQuote.price)
             .filter(RadarQuote.ticker.in_(tickers),
                     market_clause,
+                    RadarQuote.is_shadow.is_(False),
+                    _trade_basis_clause(),
                     RadarQuote.fetched_at >= since,
                     RadarQuote.fetched_at <= now)
             .order_by(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic,

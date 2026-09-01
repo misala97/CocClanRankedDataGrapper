@@ -1,10 +1,11 @@
 # personal_apps/features/radar/prices/finnhub.py
 """The one module that knows Finnhub's JSON.
 
-Free tier: 60 calls/minute, quotes roughly 20 minutes delayed. The delay is
-survivable because divergence asks whether the price has moved at all, not
-what it is to the cent -- but it is the reason this provider is behind an
-adapter rather than called directly.
+Free tier: 60 calls/minute, and /quote is documented as REAL-TIME for US
+stocks (an earlier comment here claimed ~20 minutes of delay, which
+contradicted Finnhub's own documentation and understated the feed). Finnhub
+is the permanent US quote and profile source of market-data v2 [A2]; the
+adapter boundary stays because free market data terms change often.
 """
 import datetime as dt
 import decimal
@@ -97,6 +98,10 @@ class FinnhubProvider:
                     # Always None in practice: /quote returns no volume field.
                     volume=(int(payload['v'])
                             if payload.get('v') is not None else None),
+                    # Documented real-time; the legacy constructor default
+                    # 'delayed' would contradict the source decision [A2].
+                    source='finnhub', price_basis='trade',
+                    provider_delay='live',
                 )
             except (TypeError, ValueError, OSError, OverflowError,
                     decimal.InvalidOperation):
