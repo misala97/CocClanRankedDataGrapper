@@ -241,7 +241,7 @@ per-row sub-venue MIC are the only identity. See ruling R6.
 
 `personal_apps/tests/fixtures/radar_market_data/{xgat,xetr}_{pretrade,posttrade}.json`
 reproduce the exact observed keys and nesting with fake identifiers
-(`DE000ZZTEST01/02`), fake prices, and fixed UTC timestamps; the XETR
+(`DE000ZZTST01/02`), fake prices, and fixed UTC timestamps; the XETR
 post-trade fixture includes one `lastTradeIndicator: "C"` closing-auction row
 and the XETR pre-trade fixture includes one depth row and one top-of-book
 row. A parity test asserts every pointer this supplement names resolves in

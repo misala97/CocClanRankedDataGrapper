@@ -1,7 +1,7 @@
 [
   {
     "messageId": "zztest-batch-dgat-post-1",
-    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "instrumentIdentificationCode": "DE000ZZTST01",
     "transactionIdentificationCode": "zztrade-1",
     "mmtModificationInd": "-",
     "mmtAlgoInd": "H",
@@ -18,7 +18,7 @@
   },
   {
     "messageId": "zztest-batch-dgat-post-1",
-    "instrumentIdentificationCode": "DE000ZZTEST02",
+    "instrumentIdentificationCode": "DE000ZZTST02",
     "transactionIdentificationCode": "zztrade-2",
     "mmtModificationInd": "-",
     "mmtAlgoInd": "-",

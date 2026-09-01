@@ -1,7 +1,7 @@
 [
   {
     "messageId": "zztest-batch-detr-post-1",
-    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "instrumentIdentificationCode": "DE000ZZTST01",
     "transactionIdentificationCode": "zzxetra-trade-1",
     "mmtModificationInd": "-",
     "mmtAlgoInd": "H",
@@ -20,7 +20,7 @@
   },
   {
     "messageId": "zztest-batch-detr-post-1",
-    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "instrumentIdentificationCode": "DE000ZZTST01",
     "transactionIdentificationCode": "zzxetra-close-1",
     "mmtModificationInd": "-",
     "mmtAlgoInd": "-",

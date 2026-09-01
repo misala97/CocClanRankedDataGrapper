@@ -1,7 +1,7 @@
 [
   {
     "messageId": "zztest-batch-dgat-pre-1",
-    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "instrumentIdentificationCode": "DE000ZZTST01",
     "bid": 99.9,
     "bidQty": 500.0,
     "ask": 100.1,
@@ -16,7 +16,7 @@
   },
   {
     "messageId": "zztest-batch-dgat-pre-1",
-    "instrumentIdentificationCode": "US000ZZTEST08",
+    "instrumentIdentificationCode": "US000ZZTST08",
     "bid": 10.5,
     "bidQty": 100.0,
     "ask": 10.7,
