@@ -107,3 +107,24 @@ binding Codex amendment-review corrections).
 - Fresh verification: backend **1752 passed** (642.14s); focused market-data
   **223 passed**; report suite **14 passed**; frontend **578 passed**; TypeScript
   and both Vite builds pass; `git diff --check` passes.
+
+## Independent deploy review — 2026-09-01 (Claude, read-only)
+
+- Scope: review-fix commit `0d3ea22` at branch HEAD `ab111f1`, verified
+  against the binding spec/plan. Areas: Yahoo history identity, per-track
+  German/US gate independence, report+instrument-map audit hash binding,
+  active-coverage recompute, duplicate/adjustment-basis blockers,
+  shadow-safe migration downgrade, Massive backoff persistence.
+- Findings: **0 BLOCKER, 0 SHOULD-FIX.** All eight claimed corrections are
+  real, wired end to end, and pinned by non-vacuous tests (audit
+  wrong-hash fails the gate; downgrade shadow-quote deletion asserted by
+  row count; zero-active-denominator rejection persists typed state).
+- Watch item (non-blocking, activation-time only): the grouped gate
+  demands 95% current-active coverage on every trading day of the 2-year
+  window; several recently IPO'd tickers in the active set at once could
+  hold the gate at exit 2 on pre-IPO days until the chatter set rotates.
+  Visible in `active_coverage_gaps`; amend the gate then if it ever bites.
+- Verification at `ab111f1`: backend **1753 passed** (632.45s); frontend
+  suites all pass (exit 0; Radar project 175); both Vite builds pass.
+- Verdict: **clear to deploy in legacy/shadow mode.** Activation flags
+  stay legacy until the operator gates above are walked.
