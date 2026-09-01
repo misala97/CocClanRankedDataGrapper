@@ -22,7 +22,8 @@ describe('the spend mark in the masthead', () => {
     expect(mark).toHaveTextContent(/^\$0\.001 today/)
     // Not an aria-label: a bare span is naming-prohibited, so the month
     // travels as hidden text a screen reader actually reaches.
-    expect(mark.querySelector('.aural')).toHaveTextContent('$0.42 this month')
+    // Three places below a dollar, the meter's own convention (Spend.tsx).
+    expect(mark.querySelector('.aural')).toHaveTextContent('$0.420 this month')
     expect(mark).not.toHaveAttribute('aria-label')
   })
 
