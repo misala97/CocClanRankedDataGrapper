@@ -41,17 +41,19 @@ describe('quote facts carried by the whole board', () => {
        ticker carried a year-old print (Michi, 2026-09-02). The board-wide
        fact is the typical age; the outlier is that row's own deviation. */
     const rows = [
-      withQuote('A', { quality: 'stale', age_seconds: 3600 }),
-      withQuote('B', { quality: 'stale', age_seconds: 3900 }),
-      withQuote('C', { quality: 'stale', age_seconds: 3700 }),
+      withQuote('A', { quality: 'stale', age_seconds: 5400 }),
+      withQuote('B', { quality: 'stale', age_seconds: 5800 }),
+      withQuote('C', { quality: 'stale', age_seconds: 5600 }),
       withQuote('D', { quality: 'stale', age_seconds: 320 * 86400 }),
     ]
 
     const facts = universalQuoteFacts(rows)
 
+    // humanAge turns 90+ minutes into hours; the upper median of four sorted
+    // ages is the third, 5800s.
     expect(facts.tokens).toContain('quotes 1h old')
     expect(facts.tokens.join(' ')).not.toMatch(/320d/)
-    expect(facts.agedTypical).toBe(3900)
+    expect(facts.agedTypical).toBe(5800)
   })
 
   it('keep the outlier\'s own age on its row when the board lifted a younger one', () => {
