@@ -848,6 +848,42 @@ def test_shadow_mode_mapping_job_survives_a_provider_outage(monkeypatch):
     assert daemon._scheduled_mappings() is None
 
 
+def test_mapping_success_details_are_read_inside_the_session(monkeypatch):
+    """Production 2026-09-01: the success log read generation.id AFTER the
+    app context closed -- DetachedInstanceError out of a job whose build
+    had already committed. The fake here detaches exactly like the ORM:
+    attribute reads outside an app context raise."""
+    from flask import has_app_context
+    from features.radar import reference_universe
+
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
+    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
+                        lambda http, now: {})
+    monkeypatch.setattr(daemon.instruments, 'load_overrides',
+                        lambda now=None: {})
+
+    class DetachingGeneration:
+        @property
+        def id(self):
+            if not has_app_context():
+                raise RuntimeError('detached read')
+            return 7
+
+        @property
+        def payload_sha256(self):
+            if not has_app_context():
+                raise RuntimeError('detached read')
+            return 'f' * 64
+
+    monkeypatch.setattr(
+        daemon.instruments, 'build_generation',
+        lambda provider, references, overrides, now: DetachingGeneration())
+
+    result = daemon._scheduled_mappings()
+
+    assert isinstance(result, DetachingGeneration)
+
+
 def test_shadow_mode_mapping_job_never_lets_an_exception_escape(monkeypatch):
     """The scheduled job runs under APScheduler: an escaped exception would
     poison the job, so even an unforeseen error must degrade to None."""

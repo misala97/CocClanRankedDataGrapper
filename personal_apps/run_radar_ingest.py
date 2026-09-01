@@ -176,6 +176,11 @@ def _build_mapping_generation(now):
                 openfigi_provider.OpenFigiHttp())
             generation = instruments.build_generation(
                 provider, catalogs, overrides, naive)
+            # Read while the session is open: the ORM instance detaches
+            # when the app context closes, and a detached read here once
+            # crashed the job AFTER a successful, committed build.
+            generation_id = generation.id
+            generation_sha = generation.payload_sha256
     except instruments.IncompleteReference as exc:
         logger.error(
             'radar mapping generation refused, reference incomplete: %s '
@@ -190,7 +195,7 @@ def _build_mapping_generation(now):
         logger.exception('radar mapping generation failed')
         return None
     logger.info('radar mapping generation persisted id=%s sha=%s',
-                generation.id, generation.payload_sha256)
+                generation_id, generation_sha)
     return generation
 
 def interval_for(state):
