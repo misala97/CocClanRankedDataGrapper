@@ -557,7 +557,9 @@ body {
    underline -- so it reads as included without claiming to be pressed. */
 .members {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--s4);
-  margin-top: -3px; padding-bottom: 2px;
+  /* Below the views' underline, never tucked into it: a -3px margin here
+     ran "within Discover" through the pressed tab's violet rule. */
+  margin-top: 2px; padding-bottom: 2px;
   font-size: var(--t-xs); color: var(--muted);
 }
 .members .lbl { padding-bottom: 6px; }
