@@ -109,6 +109,19 @@ describe('the two tiers', () => {
     expect(seen.slice(2)).toEqual(['row:A', 'row:B'])
   })
 
+  it('sit under a column header that scrolls with them, so both share one width', () => {
+    /* Outside the scroller the header was laid out 560px wide while the
+       rows, inside the scrollbar, were 540px -- the fr column absorbed the
+       difference and Score and Lean drifted ~20px off the cells under them
+       (live mode, 2026-09-02: "most of the stuff does not line up with the
+       header"). Inside, it is one grid on one width, and sticky. */
+    const { container } = list({ rows: [row('A', 0.5), row('B', null)] })
+
+    const header = container.querySelector('#radar-rows > .cols')
+    expect(header).not.toBeNull()
+    expect(container.querySelector('#radar-rows')!.firstElementChild).toBe(header)
+  })
+
   it('name the term each tier is ordered by, so the rows need no prefix', () => {
     const { container } = list({ rows: [row('A', 0.5), row('B', null)] })
 

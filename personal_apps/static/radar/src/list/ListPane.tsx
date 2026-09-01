@@ -362,21 +362,26 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
       <Controls payload={payload} selection={selection} busy={busy}
                 onChange={onChange} />
 
-      {/* Column names only. The terms the scores carry -- DIV, Z -- belong
-          to the tier captions, where the ordering actually changes. Hidden
-          from assistive tech: every cell already names itself. */}
-      <div className="cols" aria-hidden="true">
-        <span>Ticker</span>
-        <span>Talk · price</span>
-        <span className="r">Score</span>
-        <span>Ratio · price · move</span>
-        <span className="r">Lean</span>
-      </div>
-
       {/* The busy signal sits here rather than on the controls: the chips are
           not stale, this list is. */}
       <div className="rows" id="radar-rows" tabIndex={-1}
            aria-busy={busy || undefined} onKeyDown={walkRows}>
+        {/* Column names only. The terms the scores carry -- DIV, Z -- belong
+            to the tier captions, where the ordering actually changes. Hidden
+            from assistive tech: every cell already names itself.
+
+            INSIDE the scroller, sticky, not above it: outside, it was laid
+            out to the pane's full width while the rows sat inside the
+            scrollbar 17px narrower, and the fr column absorbed the difference
+            -- Score and Lean drifted ~20px off the cells under them. One grid
+            on one width, and it stays put on a long board. */}
+        <div className="cols" aria-hidden="true">
+          <span>Ticker</span>
+          <span>Talk · price</span>
+          <span className="r">Score</span>
+          <span>Ratio · price · move</span>
+          <span className="r">Lean</span>
+        </div>
         {captions && (
           <TierCaption tier="scored" windowHours={payload.window_hours}
                        count={scored.rows.length}

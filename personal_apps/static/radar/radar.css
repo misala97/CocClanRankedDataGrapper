@@ -612,6 +612,11 @@ body {
   :root { --ledger: 72px 84px 54px minmax(0, 1fr) 50px; --ledger-gap: var(--s3); }
 }
 .cols {
+  /* Inside the rows scroller, sticky: laid out on the rows' own width (the
+     scrollbar is inside it too), so the columns line up by construction --
+     outside, the header was 17px wider and Score/Lean drifted. */
+  position: sticky; top: 0; z-index: var(--z-sticky); flex: none;
+  background: var(--surface);
   display: grid; grid-template-columns: var(--ledger);
   column-gap: var(--ledger-gap);
   padding: 7px var(--s6) 5px;
