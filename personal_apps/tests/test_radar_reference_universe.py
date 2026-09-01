@@ -123,9 +123,21 @@ def test_tradegate_index_parse_follows_the_captured_link_grammar():
     ]
 
 
-def test_tradegate_index_without_the_listing_body_yields_nothing():
+def test_tradegate_index_without_the_listing_body_is_structural_failure():
+    """No list body = the page shape changed = None, never a silent []."""
     assert ru.parse_tradegate_index('<html><body>maintenance</body></html>') \
-        == []
+        is None
+
+
+def test_tradegate_index_with_an_empty_body_is_a_valid_observation():
+    """The live 0-9 page serves an empty kursliste_abc; sidebar links
+    outside the body must not be counted as instruments."""
+    page = ('<html><body>'
+            '<a class="TdT_link" href="orderbuch.php?lang=en&amp;'
+            'isin=DE000ZZTST01">ZZ Sidebar AG</a>'
+            '<table><tbody id="kursliste_abc">\n</tbody></table>'
+            '</body></html>')
+    assert ru.parse_tradegate_index(page) == []
 
 
 def test_xgat_catalog_joins_symbols_by_isin_and_excludes_unresolvable():
@@ -172,13 +184,25 @@ def test_xgat_catalog_requires_every_letter_page():
     assert catalog.complete is False
 
 
-def test_xgat_catalog_requires_rows_on_every_page():
+def test_xgat_catalog_refuses_a_structurally_unparseable_page():
     universe = {letter: [('DE000ZZTST01', 'ZZ Test AG')]
                 for letter in ru.TRADEGATE_LETTERS}
-    universe['Q'] = []
+    universe['Q'] = None  # parse_tradegate_index found no list body
     enrichment = ru.parse_instruments_file(XETR_TEXT, 'XETR', NOW)
     catalog = ru.build_xgat_catalog(universe, enrichment, min_isins=1)
     assert catalog.complete is False
+
+
+def test_xgat_catalog_accepts_a_legitimately_empty_page():
+    """The live 0-9 page has zero list instruments; that must not block
+    the catalog as long as the resolved total clears the floor."""
+    universe = {letter: [('DE000ZZTST01', 'ZZ Test AG')]
+                for letter in ru.TRADEGATE_LETTERS}
+    universe['0-9'] = []
+    enrichment = ru.parse_instruments_file(XETR_TEXT, 'XETR', NOW)
+    catalog = ru.build_xgat_catalog(universe, enrichment, min_isins=1)
+    assert catalog.complete is True
+    assert {row.isin for row in catalog.rows} == {'DE000ZZTST01'}
 
 
 def test_xgat_default_floor_is_pinned():

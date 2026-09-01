@@ -218,9 +218,20 @@ price list ("indizes.php"), crawled as 27 pages:
   anchor per instrument:
   `<a id="name_N" href="orderbuch.php?lang=en&amp;isin={ISIN}" class="hyphens">{Name}</a>`.
   The ISIN in the `href` is the instrument identity; the anchor text is the
-  display name.
-- Captured universe: **6,485 unique ISINs** across all 27 pages (page counts
-  7–682, no empty page); concatenated raw pages SHA-256
+  display name. Pages also carry `orderbuch.php` links OUTSIDE that body
+  (a "Today's Leader" sidebar, ~7 per page, duplicated ISINs) — those are
+  navigation, not universe rows, and the parser MUST scope to the body.
+- The `0-9` page serves the list body EMPTY (`<tbody id="kursliste_abc">
+  </tbody>`, verified live from two networks 2026-09-01): an empty body
+  is a valid observation, not a failure. Structural absence of the body
+  is the failure mode.
+- Captured universe: **6,485 unique ISINs**; body-scoped page counts
+  0 (`0-9`) and 29–675 (`A`–`Z`). (An earlier revision of this section
+  quoted sidebar-inflated per-page counts of 7–682 and claimed "no empty
+  page" — corrected 2026-09-01 after the production parser, which scopes
+  to the body, exposed both; the unique-ISIN total was unaffected because
+  every sidebar ISIN also appears in a lettered list.) Concatenated raw
+  pages SHA-256
   `d3cfa341399a1b90f728b3c60a2d82866fc3a089c857a1f6242c824355ac121e`,
   parsed `(ISIN, name)` list SHA-256
   `594879b1141333d794dec9fbf834d7f31b8b560a13cad12235aefd04773e7c09`.
@@ -366,10 +377,12 @@ precondition is now satisfied by §3.5/§3.6 and rulings R12–R15.
   captured baseline (floors: 2,500 XETR catalog rows of 5,100 observed;
   25,000 XFRA enrichment rows of 56,275 observed — pinned as constants
   in code). The Tradegate
-  crawl is complete iff all 27 pages fetch with at least one parsed row on
-  every lettered page and the RESOLVED post-join row total (after R13's
-  exclusions, of 6,419 observed) is at least 3,000 — deliberately stricter
-  than a raw-ISIN floor: an enrichment collapse also refuses.
+  crawl is complete iff all 27 pages fetch AND each page's list body
+  parses structurally (an empty body is a valid observation — the live
+  `0-9` page has one; a MISSING body is the failure) and the RESOLVED
+  post-join row total (after R13's exclusions, of 6,419 observed) is at
+  least 3,000 — deliberately stricter than a raw-ISIN floor: an
+  enrichment collapse, or a site-wide empty response, also refuses.
   Anything less makes the affected `ReferenceCatalog.complete = False`,
   which `decide_mapping` turns into `IncompleteReference` — the build
   writes nothing rather than marking tickers unavailable (spec §5.4).

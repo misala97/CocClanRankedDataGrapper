@@ -194,10 +194,17 @@ def _drop_symbol_collisions(rows, mic):
 
 
 def parse_tradegate_index(page_html):
-    """§3.6 grammar: (ISIN, display name) pairs from the price-list body."""
+    """§3.6 grammar: (ISIN, display name) pairs from the price-list body.
+
+    Returns ``None`` when the ``kursliste_abc`` list body is absent — a
+    structural failure — and ``[]`` when the body exists but holds no
+    instruments, which is a VALID observation: the live ``0-9`` page
+    serves an empty list (the site's sidebar links sit outside the body
+    and are deliberately not counted).
+    """
     body = _TRADEGATE_BODY_RE.search(page_html)
     if body is None:
-        return []
+        return None
     rows = []
     seen = set()
     for isin, name in _TRADEGATE_LINK_RE.findall(body.group(1)):
@@ -239,14 +246,17 @@ def build_xetr_catalog(text, now, min_rows=None):
 def build_xgat_catalog(universe_by_letter, enrichment_rows, min_isins=None):
     """R13: XGAT rows exist only for uniquely enriched Tradegate ISINs.
 
-    ``universe_by_letter`` must cover every §3.6 letter page with at least
-    one parsed row each — a missing or empty page means the crawl cannot
-    prove the universe and the catalog is incomplete.
+    ``universe_by_letter`` must cover every §3.6 letter page with a
+    STRUCTURALLY parsed value: a missing page or one whose list body was
+    absent (``None``) means the crawl cannot prove the universe and the
+    catalog is incomplete. An empty list is a valid observation — the
+    live ``0-9`` page serves one — and the resolved-total floor still
+    guards against a site-wide empty response.
     """
     floor = TRADEGATE_MIN_ISINS if min_isins is None else min_isins
     for letter in TRADEGATE_LETTERS:
-        if not universe_by_letter.get(letter):
-            logger.error('tradegate page %r missing or empty', letter)
+        if universe_by_letter.get(letter) is None:
+            logger.error('tradegate page %r missing or unparseable', letter)
             return _incomplete('XGAT')
 
     enrichment = {}
