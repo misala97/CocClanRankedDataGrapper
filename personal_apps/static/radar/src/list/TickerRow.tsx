@@ -76,11 +76,15 @@ export function TickerRow(props: {
   /** Quote facts the whole board carries -- 'fallback', 'aged' -- lifted to
    *  the header the same way. See universalQuoteFacts in ListPane. */
   quoteSuppress?: readonly string[]
+  /** The age the head lifted, in seconds, when it lifted one. A row whose
+   *  quote is far older than that still says so: the lift is the typical
+   *  age, not a promise about every row. */
+  liftedAge?: number | null
   /** The link is used outside this client too, so it carries the whole view. */
   selection?: Selection
   onSelect: (ticker: string) => void
 }) {
-  const { row, selected, suppress = [], quoteSuppress = [],
+  const { row, selected, suppress = [], quoteSuppress = [], liftedAge = null,
           selection, onSelect } = props
   const ranked = rankedBy(row)
 
@@ -116,7 +120,7 @@ export function TickerRow(props: {
     (c: Clause) => c.kind.startsWith('price-'))
 
   const marks = row.marks.filter((mark) => !suppress.includes(mark))
-  const quoteFacts = deviantQuoteFacts(row, quoteSuppress)
+  const quoteFacts = deviantQuoteFacts(row, quoteSuppress, liftedAge)
 
   return (
     <a className={`row${selected ? ' on' : ''}`}
@@ -246,8 +250,13 @@ function Lean({ tone }: { tone: Row['tone'] }) {
  *  What the whole board shares, the header states once; what remains here is
  *  only the deviation worth noticing.
  */
-function deviantQuoteFacts(row: Row,
-                           quoteSuppress: readonly string[]): string[] {
+/** How much older than the lifted age a quote has to be before the row says
+ *  its own. Three times: an hour lifted, a two-hour quote is the same fact;
+ *  a year-old one is not. */
+const AGE_DEVIATION = 3
+
+function deviantQuoteFacts(row: Row, quoteSuppress: readonly string[],
+                           liftedAge: number | null): string[] {
   const facts: string[] = []
   const quote = row.quote
   if (quote.is_fallback && !quoteSuppress.includes('fallback')) {
@@ -259,6 +268,11 @@ function deviantQuoteFacts(row: Row,
     } else if (quote.quality === 'eod') {
       facts.push('EOD quote')
     }
+  } else if ((quote.quality === 'stale' || quote.quality === 'eod')
+             && liftedAge !== null && quote.age_seconds !== null
+             && quote.age_seconds > AGE_DEVIATION * liftedAge) {
+    // The head lifted the typical age; this quote is nothing like it.
+    facts.push(`quote ${humanAge(quote.age_seconds)} old`)
   }
   // Outside the age suppression: the board lifting "quotes 1h old" says
   // nothing about a row that has no quote at all.

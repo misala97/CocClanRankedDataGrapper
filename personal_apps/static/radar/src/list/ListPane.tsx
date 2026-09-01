@@ -104,10 +104,15 @@ export function universalMarks(rows: Row[]): Mark[] {
 export function universalQuoteFacts(rows: Row[]): {
   keys: string[]
   tokens: string[]
+  /** The lifted age in seconds when `aged` is among the keys -- the age
+   *  most rows share, which a row compares its own against to decide
+   *  whether it still has something to say (TickerRow.deviantQuoteFacts). */
+  agedTypical: number | null
 } {
-  if (rows.length < 2) return { keys: [], tokens: [] }
+  if (rows.length < 2) return { keys: [], tokens: [], agedTypical: null }
   const keys: string[] = []
   const tokens: string[] = []
+  let agedTypical: number | null = null
 
   if (rows.every((row) => row.quote.is_fallback)) {
     keys.push('fallback')
@@ -123,13 +128,18 @@ export function universalQuoteFacts(rows: Row[]): {
     row.quote.quality === 'stale' || row.quote.quality === 'eod')
   if (aged) {
     keys.push('aged')
-    const oldest = quoted.reduce<number | null>(
-      (best, row) => (row.quote.age_seconds !== null
-        && (best === null || row.quote.age_seconds > best)
-        ? row.quote.age_seconds : best), null)
-    tokens.push(oldest !== null ? `quotes ${humanAge(oldest)} old` : 'EOD quotes')
+    // The age most rows share -- the upper median -- not the oldest. The
+    // status line said "quotes 320d old" over a board of hour-old quotes
+    // because one delisted ticker carried a year-old print; that row keeps
+    // its own age as a deviation (TickerRow), the board states the typical.
+    const ages = quoted.map((row) => row.quote.age_seconds)
+      .filter((age): age is number => age !== null)
+      .sort((a, b) => a - b)
+    agedTypical = ages[Math.floor(ages.length / 2)] ?? null
+    tokens.push(agedTypical !== null
+      ? `quotes ${humanAge(agedTypical)} old` : 'EOD quotes')
   }
-  return { keys, tokens }
+  return { keys, tokens, agedTypical }
 }
 
 /** The thin-baseline caution the whole board carries, if any.
@@ -339,6 +349,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   const renderRow = (row: Row) => (
     <TickerRow key={row.ticker} row={row} onSelect={onSelect}
                suppress={shared} quoteSuppress={quoteShared.keys}
+               liftedAge={quoteShared.agedTypical}
                session={payload.session} selection={selection}
                selected={row.ticker === selected} />
   )

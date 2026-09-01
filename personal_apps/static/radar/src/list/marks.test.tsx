@@ -35,6 +35,40 @@ describe('quote facts carried by the whole board', () => {
     expect(universalQuoteFacts(rows).keys).not.toContain('aged')
   })
 
+  it('lift the age most rows share, not the one ancient outlier', () => {
+    /* The status line said "quotes 320d old" over a board whose quotes were
+       an hour old, because the lift took the OLDEST age and one delisted
+       ticker carried a year-old print (Michi, 2026-09-02). The board-wide
+       fact is the typical age; the outlier is that row's own deviation. */
+    const rows = [
+      withQuote('A', { quality: 'stale', age_seconds: 3600 }),
+      withQuote('B', { quality: 'stale', age_seconds: 3900 }),
+      withQuote('C', { quality: 'stale', age_seconds: 3700 }),
+      withQuote('D', { quality: 'stale', age_seconds: 320 * 86400 }),
+    ]
+
+    const facts = universalQuoteFacts(rows)
+
+    expect(facts.tokens).toContain('quotes 1h old')
+    expect(facts.tokens.join(' ')).not.toMatch(/320d/)
+    expect(facts.agedTypical).toBe(3900)
+  })
+
+  it('keep the outlier\'s own age on its row when the board lifted a younger one', () => {
+    const { container, rerender } = render(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 quoteSuppress={['aged']} liftedAge={3600}
+                 row={withQuote('D', { quality: 'stale', age_seconds: 320 * 86400 })} />)
+    expect(container.querySelector('.flags')!.textContent).toContain('quote 320d old')
+
+    // Two hours against a lifted hour is not a deviation worth a line.
+    rerender(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 quoteSuppress={['aged']} liftedAge={3600}
+                 row={withQuote('A', { quality: 'stale', age_seconds: 7200 })} />)
+    expect(container.querySelector('.flags')).toBeNull()
+  })
+
   it('leave "no live quote" on the row even when the age was lifted', () => {
     const { container } = render(
       <TickerRow session="regular" selected={false} onSelect={() => {}}
