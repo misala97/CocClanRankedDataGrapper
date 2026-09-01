@@ -79,6 +79,113 @@ def prune_market_data(now, chunk_size=5000):
         deleted += len(batch)
         if len(batch) < chunk_size:
             break
+
+    deleted += _prune_daily_closes(now, chunk_size)
+    deleted += _prune_massive_shadow(now, chunk_size)
+    return deleted
+
+
+def _close_horizon_days():
+    # CALENDAR days at least as deep as the widest chart span, plus buffer.
+    # HISTORY_DAYS counts TRADING days and must never be a calendar horizon:
+    # using it would repeatedly delete the deepest ~nine months of every 3Y
+    # chart [A1].
+    from .detail import SPAN_DAYS
+    return max(SPAN_DAYS.values()) + 90
+
+
+def _prune_daily_closes(now, chunk_size):
+    """[A1] Universe-wide grouped ingestion is bounded only if pruned.
+
+    Native ``deutsche_boerse_delayed`` closes are excepted: they are
+    observed, not refetchable, and their universe is small enough to keep.
+    """
+    from models import RadarDailyClose
+
+    horizon = (now.date() if isinstance(now, dt.datetime) else now) \
+        - dt.timedelta(days=_close_horizon_days())
+    deleted = 0
+    while True:
+        batch = [row_id for (row_id,) in
+                 db.session.query(RadarDailyClose.id)
+                 .filter(RadarDailyClose.close_date < horizon,
+                         sa.or_(RadarDailyClose.source.is_(None),
+                                RadarDailyClose.source !=
+                                'deutsche_boerse_delayed'))
+                 .limit(chunk_size).all()]
+        if not batch:
+            break
+        RadarDailyClose.query.filter(
+            RadarDailyClose.id.in_(batch)).delete(synchronize_session=False)
+        db.session.commit()
+        deleted += len(batch)
+        if len(batch) < chunk_size:
+            break
+    return deleted
+
+
+def _massive_cleanup_evidence(now):
+    """The three validated settings that arm shadow cleanup, or None.
+
+    Enforceable configuration, not a log-reading convention: absent or
+    malformed evidence DISABLES cleanup (spec §9.2). All three must
+    validate -- a UTC activation instant at least seven days old and two
+    exact lowercase SHA-256 digests.
+    """
+    import os
+    import re
+    activated_raw = os.getenv('RADAR_US_CLOSE_ACTIVATED_AT')
+    report_sha = os.getenv('RADAR_US_CLOSE_GATE_REPORT_SHA256')
+    audit_sha = os.getenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256')
+    if not (activated_raw and report_sha and audit_sha):
+        return None
+    sha_re = re.compile(r'^[0-9a-f]{64}$')
+    if not sha_re.match(report_sha) or not sha_re.match(audit_sha):
+        return None
+    try:
+        activated = dt.datetime.fromisoformat(
+            activated_raw.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if activated.tzinfo is not None:
+        activated = activated.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    reference = now if isinstance(now, dt.datetime) else dt.datetime.combine(
+        now, dt.time())
+    if reference - activated < dt.timedelta(days=7):
+        return None
+    return activated
+
+
+def _prune_massive_shadow(now, chunk_size):
+    """[A1] Bounded shadow cleanup, armed only by recorded gate evidence.
+
+    Retains the complete shadow lane through the gate and seven days past
+    activation; then prunes only ``massive_grouped`` SHADOW closes older
+    than 30 calendar days. Live rows and native German closes are never
+    touched here.
+    """
+    from models import RadarDailyClose
+
+    if _massive_cleanup_evidence(now) is None:
+        return 0
+    horizon = (now.date() if isinstance(now, dt.datetime) else now) \
+        - dt.timedelta(days=30)
+    deleted = 0
+    while True:
+        batch = [row_id for (row_id,) in
+                 db.session.query(RadarDailyClose.id)
+                 .filter(RadarDailyClose.is_shadow.is_(True),
+                         RadarDailyClose.source == 'massive_grouped',
+                         RadarDailyClose.close_date < horizon)
+                 .limit(chunk_size).all()]
+        if not batch:
+            break
+        RadarDailyClose.query.filter(
+            RadarDailyClose.id.in_(batch)).delete(synchronize_session=False)
+        db.session.commit()
+        deleted += len(batch)
+        if len(batch) < chunk_size:
+            break
     return deleted
 
 

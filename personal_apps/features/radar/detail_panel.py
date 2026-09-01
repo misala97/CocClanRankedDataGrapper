@@ -325,13 +325,21 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN,
         days = chart_mod.SPAN_DAYS[span]
         start = now.date() - dt.timedelta(days=days - 1)
         from_dt = dt.datetime.combine(start, dt.time.min)
-        stored = dict(history.closes_for([ticker], days=days,
-                                          today=now.date(), market=quote.market,
-                                          mic=quote.mic).get(ticker, []))
+        # series_for owns the one Xetra->Tradegate seam; only the close
+        # pairs enter the existing calendar alignment, the metadata rides
+        # beside them (spec §8.2).
+        series = history.series_for(ticker, quote.market, quote.mic, days,
+                                    now.date())
         chart = chart_mod.chart_for(
-            ticker, start, days, stored,
+            ticker, start, days, dict(series.closes),
             chart_mod.daily_counts([ticker], sources, from_dt, now),
             chart_mod.first_watched_day(sources, from_dt, now))
+        chart.history_proxy = series.history_proxy
+        chart.proxy_mic = series.proxy_mic
+        chart.proxy_venue = series.proxy_venue
+        chart.native_mic = series.native_mic
+        chart.native_venue = series.native_venue
+        chart.native_from = series.native_from
 
     breakdown = breakdown_for(ticker, sources, since, now)
     breakdown.first_seen = first_mention_day(ticker)

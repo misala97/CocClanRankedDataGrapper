@@ -462,6 +462,15 @@ def serialize_detail(d):
                       if d.chart.watched_from else None)),
             'sessions': _chart_sessions(d.chart, d.quote.market, d.span,
                                         mic=d.quote.mic),
+            # Xetra->Tradegate seam provenance: visible near the chart,
+            # never silently native (spec §8.2/§10).
+            'history_proxy': d.chart.history_proxy,
+            'proxy_mic': d.chart.proxy_mic,
+            'proxy_venue': d.chart.proxy_venue,
+            'native_mic': d.chart.native_mic,
+            'native_venue': d.chart.native_venue,
+            'native_from': (d.chart.native_from.isoformat()
+                            if d.chart.native_from else None),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,

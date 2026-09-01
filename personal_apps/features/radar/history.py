@@ -12,12 +12,24 @@ is not how to fetch but WHOM to ask about. A ticker with no history at all is
 the one the board cannot describe, so it goes first.
 """
 import collections
+import dataclasses
 import datetime as dt
 
 import sqlalchemy as sa
 
 from extensions import db
 from models import RadarDailyClose
+
+# Higher priority wins a live row; equal priority permits provider
+# restatement. massive_grouped outranks the unofficial and incumbent US
+# writers; native Deutsche Börse closes outrank everything [A1].
+CLOSE_SOURCE_PRIORITY = {
+    'legacy': 0,
+    'twelvedata': 10,
+    'yahoo_chart': 10,
+    'massive_grouped': 12,
+    'deutsche_boerse_delayed': 20,
+}
 
 # Three years of trading days. Was 260 -- a single year -- until 2026-08-23,
 # when the detail panel gained a 3Y span.
@@ -70,35 +82,60 @@ def _market_filter(market, mic):
     return sa.and_(market_filter, RadarDailyClose.mic == mic)
 
 
-def record_closes(ticker, closes, now, *, market='us', mic=None, currency='USD'):
+def record_closes(ticker, closes, now, *, market='us', mic=None,
+                  currency='USD', source='legacy', price_basis='close',
+                  adjustment_basis=None, is_shadow=False, commit=True):
     """Upsert (date, close) pairs for one ticker. Returns rows written.
 
-    Upsert rather than append: providers restate recent bars, and a second
-    write for the same day must replace it or every overlapping point would be
-    drawn twice.
+    Upsert rather than append: providers restate recent bars. Overwrites
+    obey CLOSE_SOURCE_PRIORITY -- an existing row survives a lower-priority
+    write, equal priority is provider restatement, and a migration-era NULL
+    source reads as ``legacy``. The upsert identity includes ``is_shadow``:
+    the shadow lane can never overwrite or block the live row for one date.
     """
+    from .prices import validate_close_source
+    validate_close_source(source, price_basis, adjustment_basis)
+    if source in ('massive_grouped',) and adjustment_basis != 'split':
+        # Every selected v2 provider writes split-only provenance; a
+        # source/basis conflict is refused rather than overwritten.
+        raise ValueError(f'{source} closes must declare adjustment split')
     if not closes:
         return 0
 
+    incoming_priority = CLOSE_SOURCE_PRIORITY[source]
     existing = {row.close_date: row for row in RadarDailyClose.query.filter(
         *_market_filters(ticker, market, mic),
+        RadarDailyClose.is_shadow.is_(bool(is_shadow)),
         RadarDailyClose.close_date.in_([day for day, _ in closes])).all()}
 
+    written = 0
     for day, close in closes:
         row = existing.get(day)
         if row is None:
             db.session.add(RadarDailyClose(
                 ticker=ticker, market=market, mic=mic, currency=currency,
-                close_date=day, close=close, fetched_at=now))
-        else:
-            row.close = close
-            row.fetched_at = now
-            row.market = market
-            row.mic = mic
-            row.currency = currency
+                close_date=day, close=close, fetched_at=now,
+                source=source, price_basis=price_basis,
+                adjustment_basis=adjustment_basis, is_shadow=is_shadow))
+            written += 1
+            continue
+        stored_priority = CLOSE_SOURCE_PRIORITY.get(
+            row.source or 'legacy', 0)
+        if incoming_priority < stored_priority:
+            continue
+        row.close = close
+        row.fetched_at = now
+        row.market = market
+        row.mic = mic
+        row.currency = currency
+        row.source = source
+        row.price_basis = price_basis
+        row.adjustment_basis = adjustment_basis
+        written += 1
 
-    db.session.commit()
-    return len(closes)
+    if commit:
+        db.session.commit()
+    return written
 
 
 def closes_for(tickers, days=HISTORY_DAYS, today=None, *, market='us', mic=None):
@@ -120,6 +157,7 @@ def closes_for(tickers, days=HISTORY_DAYS, today=None, *, market='us', mic=None)
                              RadarDailyClose.close)
             .filter(RadarDailyClose.ticker.in_(list(tickers)),
                     _market_filter(market, mic),
+                    RadarDailyClose.is_shadow.is_(False),
                     RadarDailyClose.close_date >= since,
                     RadarDailyClose.close_date <= today)
             .order_by(RadarDailyClose.close_date.asc()).all())
@@ -128,6 +166,66 @@ def closes_for(tickers, days=HISTORY_DAYS, today=None, *, market='us', mic=None)
     for ticker, day, close in rows:
         series[ticker].append((day, close))
     return dict(series)
+
+
+@dataclasses.dataclass(frozen=True)
+class HistorySeries:
+    """One identity's composed daily series plus its provenance seam."""
+    closes: tuple
+    history_proxy: bool
+    proxy_mic: str | None
+    proxy_venue: str | None
+    native_mic: str | None
+    native_venue: str | None
+    native_from: dt.date | None
+
+
+def series_for(ticker, market, mic, days, today):
+    """The chartable series for one exact identity, with one honest seam.
+
+    For a Tradegate-primary instrument, verified Xetra closes may fill the
+    OLDER portion only -- exact same ISIN, EUR, and strictly before the
+    first native Tradegate date. From that date on, missing Tradegate days
+    stay missing rather than being silently patched (spec §8.2). Every
+    other identity returns its native rows with no proxy.
+    """
+    native = tuple(closes_for([ticker], days=days, today=today,
+                              market=market, mic=mic).get(ticker, []))
+    if market != 'de' or mic != 'XGAT':
+        return HistorySeries(closes=native, history_proxy=False,
+                             proxy_mic=None, proxy_venue=None,
+                             native_mic=mic, native_venue=None,
+                             native_from=None)
+
+    from models import RadarInstrument
+    rows = {row.mic: row for row in RadarInstrument.query.filter_by(
+        ticker=ticker, market='de').all()}
+    xgat = rows.get('XGAT')
+    xetr = rows.get('XETR')
+    proxy_allowed = (
+        xgat is not None and xetr is not None and
+        xgat.isin is not None and xgat.isin == xetr.isin and
+        xgat.currency == 'EUR' and xetr.currency == 'EUR')
+    if not proxy_allowed:
+        return HistorySeries(closes=native, history_proxy=False,
+                             proxy_mic=None, proxy_venue=None,
+                             native_mic='XGAT', native_venue='Tradegate BSX',
+                             native_from=None)
+
+    xetra = closes_for([ticker], days=days, today=today,
+                       market='de', mic='XETR').get(ticker, [])
+    native_by_day = dict(native)
+    native_from = min(native_by_day) if native_by_day else None
+    proxy = {day: close for day, close in xetra
+             if native_from is None or day < native_from}
+    combined = {**proxy, **native_by_day}
+    return HistorySeries(
+        closes=tuple(sorted(combined.items())),
+        history_proxy=bool(proxy),
+        proxy_mic='XETR' if proxy else None,
+        proxy_venue='Xetra' if proxy else None,
+        native_mic='XGAT', native_venue='Tradegate BSX',
+        native_from=native_from)
 
 
 def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS,
@@ -187,6 +285,11 @@ def fetch_into_store(provider, tickers, now, *, market='us', mic=None,
         if not closes:
             continue
         record_closes(ticker, closes, now, market=market, mic=mic,
-                      currency=currency)
+                      currency=currency,
+                      source=getattr(provider, 'source', 'legacy'),
+                      adjustment_basis=(
+                          'split' if getattr(provider, 'source', None)
+                          in ('yahoo_chart', 'massive_grouped',
+                              'twelvedata') else None))
         stored += 1
     return stored

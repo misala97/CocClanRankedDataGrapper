@@ -239,3 +239,161 @@ def test_german_history_uses_the_verified_mic_and_keeps_old_rows_on_error(clean)
     assert history.closes_for(
         [f'{PREFIX}ERR'], today=TODAY, market='de', mic='XETR')[
             f'{PREFIX}ERR'] == [(TODAY, decimal.Decimal('194.0000'))]
+
+
+# --- Market data v2 (plan Task 8): priority, shadow, proxy seam --------------
+
+DAY = TODAY
+
+
+def add_close(ticker, day, price, *, market='de', mic='XETR', currency='EUR',
+              source=None, price_basis=None, adjustment_basis=None,
+              is_shadow=False):
+    db.session.add(RadarDailyClose(
+        ticker=ticker, market=market, mic=mic, currency=currency,
+        close_date=day, close=decimal.Decimal(price), fetched_at=NOW,
+        source=source, price_basis=price_basis,
+        adjustment_basis=adjustment_basis, is_shadow=is_shadow))
+
+
+def test_native_close_cannot_be_overwritten_by_yahoo(clean):
+    ticker = f'{PREFIX}NAT'
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('100.00'))], NOW, market='de',
+        mic='XETR', currency='EUR', source='deutsche_boerse_delayed',
+        adjustment_basis='split')
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('99.00'))],
+        NOW + dt.timedelta(hours=1), market='de', mic='XETR',
+        currency='EUR', source='yahoo_chart', adjustment_basis='split')
+    row = RadarDailyClose.query.filter_by(
+        ticker=ticker, market='de', mic='XETR', close_date=DAY).one()
+    assert (row.close, row.source) == (
+        decimal.Decimal('100.0000'), 'deutsche_boerse_delayed')
+
+
+def test_equal_priority_permits_provider_restatement(clean):
+    ticker = f'{PREFIX}RST'
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('100.00'))], NOW, market='us',
+        mic='XNAS', currency='USD', source='yahoo_chart',
+        adjustment_basis='split')
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('101.00'))],
+        NOW + dt.timedelta(hours=1), market='us', mic='XNAS',
+        currency='USD', source='yahoo_chart', adjustment_basis='split')
+    row = RadarDailyClose.query.filter_by(ticker=ticker, close_date=DAY).one()
+    assert row.close == decimal.Decimal('101.0000')
+
+
+def test_massive_overwrites_the_incumbent_twelvedata_row(clean):
+    ticker = f'{PREFIX}MSV'
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('100.00'))], NOW, market='us',
+        mic='XNAS', currency='USD', source='twelvedata',
+        adjustment_basis='split')
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('100.10'))],
+        NOW + dt.timedelta(hours=1), market='us', mic='XNAS',
+        currency='USD', source='massive_grouped', adjustment_basis='split')
+    row = RadarDailyClose.query.filter_by(ticker=ticker, close_date=DAY).one()
+    assert (row.close, row.source) == (
+        decimal.Decimal('100.1000'), 'massive_grouped')
+
+
+def test_live_history_reader_excludes_newer_shadow_close(clean):
+    ticker = f'{PREFIX}SHD'
+    add_close(ticker, DAY, '100', is_shadow=False)
+    add_close(ticker, DAY + dt.timedelta(days=1), '101', is_shadow=True)
+    db.session.commit()
+    stored = history.closes_for([ticker], today=DAY + dt.timedelta(days=2),
+                                market='de', mic='XETR')
+    assert stored[ticker] == [(DAY, decimal.Decimal('100.0000'))]
+
+
+def test_shadow_and_live_write_lanes_do_not_collide(clean):
+    ticker = f'{PREFIX}LNE'
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('55.00'))], NOW, market='us',
+        mic='XNAS', currency='USD', source='twelvedata',
+        adjustment_basis='split')
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('55.10'))], NOW, market='us',
+        mic='XNAS', currency='USD', source='massive_grouped',
+        adjustment_basis='split', is_shadow=True)
+    rows = RadarDailyClose.query.filter_by(
+        ticker=ticker, close_date=DAY).all()
+    lanes = {row.is_shadow: row.close for row in rows}
+    assert lanes == {False: decimal.Decimal('55.0000'),
+                     True: decimal.Decimal('55.1000')}
+
+
+def test_series_for_composes_one_xetra_proxy_seam(clean):
+    from models import RadarInstrument
+    ticker = f'{PREFIX}SEAM'
+    RadarInstrument.query.filter_by(ticker=ticker).delete(
+        synchronize_session=False)
+    db.session.add_all([
+        RadarInstrument(ticker=ticker, market='de', venue='Tradegate BSX',
+                        mic='XGAT', provider_symbol=ticker + 'G',
+                        currency='EUR', isin='DE000ZZTST05',
+                        is_primary=True, mapping_status='mapped',
+                        mapped_at=NOW),
+        RadarInstrument(ticker=ticker, market='de', venue='Xetra',
+                        mic='XETR', provider_symbol=ticker + 'X',
+                        currency='EUR', isin='DE000ZZTST05',
+                        is_primary=False, mapping_status='mapped',
+                        mapped_at=NOW),
+    ])
+    for offset in (5, 4, 3, 2, 1):
+        add_close(ticker, DAY - dt.timedelta(days=offset), '10.00',
+                  mic='XETR', source='yahoo_chart', price_basis='close')
+    for offset in (2, 1, 0):
+        add_close(ticker, DAY - dt.timedelta(days=offset), '11.00',
+                  mic='XGAT', source='deutsche_boerse_delayed',
+                  price_basis='close')
+    db.session.commit()
+
+    series = history.series_for(ticker, 'de', 'XGAT', 30, DAY)
+    by_day = dict(series.closes)
+    # Proxy strictly before the first native date; native from there on.
+    assert by_day[DAY - dt.timedelta(days=3)] == decimal.Decimal('10.0000')
+    assert by_day[DAY - dt.timedelta(days=2)] == decimal.Decimal('11.0000')
+    assert series.history_proxy is True
+    assert (series.proxy_mic, series.native_mic) == ('XETR', 'XGAT')
+    assert series.native_from == DAY - dt.timedelta(days=2)
+
+    # A missing native date after the seam stays missing, never patched.
+    RadarDailyClose.query.filter_by(
+        ticker=ticker, mic='XGAT',
+        close_date=DAY - dt.timedelta(days=1)).delete(
+        synchronize_session=False)
+    db.session.commit()
+    series = history.series_for(ticker, 'de', 'XGAT', 30, DAY)
+    days = {day for day, _ in series.closes}
+    assert DAY - dt.timedelta(days=1) not in days
+
+    # ISIN mismatch removes the proxy entirely.
+    RadarInstrument.query.filter_by(ticker=ticker, mic='XETR').update(
+        {RadarInstrument.isin: 'DE000ZZTST06'}, synchronize_session=False)
+    db.session.commit()
+    series = history.series_for(ticker, 'de', 'XGAT', 30, DAY)
+    assert series.history_proxy is False
+    assert all(close == decimal.Decimal('11.0000')
+               for _, close in series.closes)
+    RadarInstrument.query.filter_by(ticker=ticker).delete(
+        synchronize_session=False)
+    db.session.commit()
+
+
+def test_a_source_basis_conflict_is_refused_not_overwritten(clean):
+    ticker = f'{PREFIX}CNF'
+    history.record_closes(
+        ticker, [(DAY, decimal.Decimal('100.00'))], NOW, market='us',
+        mic='XNAS', currency='USD', source='massive_grouped',
+        adjustment_basis='split')
+    with pytest.raises(ValueError):
+        history.record_closes(
+            ticker, [(DAY, decimal.Decimal('100.00'))], NOW, market='us',
+            mic='XNAS', currency='USD', source='massive_grouped',
+            adjustment_basis=None)

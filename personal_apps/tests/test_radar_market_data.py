@@ -277,7 +277,331 @@ def test_shadow_mode_never_writes_live_rows(ctx):
         ticker=ticker, is_shadow=False).count() == 0
 
 
+# --- backfill CLI ------------------------------------------------------------
+
+def test_us_universe_backfill_refuses_under_legacy(ctx, monkeypatch, capsys):
+    from scripts import backfill_radar_market_history as cli
+    monkeypatch.delenv('RADAR_US_CLOSE_SOURCE', raising=False)
+    code = cli.main(['--market', 'us-universe', '--apply'])
+    assert code == 2
+    assert 'RADAR_US_CLOSE_SOURCE' in capsys.readouterr().err
+
+
+def test_us_universe_dry_run_counts_unaccepted_trading_days(
+        ctx, monkeypatch, capsys):
+    from scripts import backfill_radar_market_history as cli
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    code = cli.main(['--market', 'us-universe', '--limit', '7'])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert 'would attempt 7 trading days' in out
+    assert 'next resume key:' in out
+
+
+def test_instrument_dry_run_reports_the_resume_key(ctx, monkeypatch, capsys):
+    from scripts import backfill_radar_market_history as cli
+    from features.radar import market_data as md
+    monkeypatch.setattr(md, 'active_price_tickers', lambda now: [])
+    assert cli.main(['--market', 'us']) == 0
+    assert 'would attempt 0 instruments' in capsys.readouterr().out
+
+
+# --- native close materialization (spec §8.3) --------------------------------
+
+def _journal_event(event_id, event_ts, price, official=False):
+    db.session.add(RadarMarketTradeEvent(
+        mic='XGAT', isin='DE000ZZTST01', event_id=f'{PREFIX}{event_id}',
+        action='new', event_ts=event_ts,
+        price=decimal.Decimal(price), volume=1,
+        is_official_close=official, source_remote_id='zz',
+        received_at=event_ts))
+
+
+def test_native_close_prefers_the_official_marker(ctx):
+    from models import RadarDailyClose
+    RadarDailyClose.query.filter(
+        RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
+        synchronize_session=False)
+    generation = _seed_generation_and_universe(f'{PREFIX}AA')
+    # 2027-01-04 is a Monday; session closes 22:00 Berlin = 21:00 UTC.
+    _journal_event('c1', dt.datetime(2027, 1, 4, 15, 0), '100.00')
+    _journal_event('c2', dt.datetime(2027, 1, 4, 16, 34), '101.00',
+                   official=True)
+    _journal_event('c3', dt.datetime(2027, 1, 4, 20, 0), '102.00')
+    db.session.commit()
+
+    after_close = dt.datetime(2027, 1, 4, 21, 30)
+    written = market_data.materialize_native_closes(
+        generation.id, after_close, mode='shadow')
+    assert written == 1
+    row = RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}AA', market='de', mic='XGAT',
+        close_date=dt.date(2027, 1, 4)).one()
+    # The official close wins over the later ordinary trade.
+    assert (row.close, row.is_shadow) == (decimal.Decimal('101.0000'), True)
+
+    # Idempotent re-run restates rather than duplicates.
+    market_data.materialize_native_closes(
+        generation.id, after_close, mode='shadow')
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}AA', market='de', mic='XGAT',
+        close_date=dt.date(2027, 1, 4)).count() == 1
+    RadarDailyClose.query.filter(
+        RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
+        synchronize_session=False)
+    db.session.commit()
+
+
+def test_native_close_falls_back_to_the_final_session_trade(ctx):
+    from models import RadarDailyClose
+    RadarDailyClose.query.filter(
+        RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
+        synchronize_session=False)
+    generation = _seed_generation_and_universe(f'{PREFIX}AA')
+    _journal_event('f1', dt.datetime(2027, 1, 4, 15, 0), '100.00')
+    _journal_event('f2', dt.datetime(2027, 1, 4, 20, 59), '103.00')
+    db.session.commit()
+
+    market_data.materialize_native_closes(
+        generation.id, dt.datetime(2027, 1, 4, 21, 30), mode='shadow')
+    row = RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}AA', market='de', mic='XGAT',
+        close_date=dt.date(2027, 1, 4)).one()
+    assert row.close == decimal.Decimal('103.0000')
+    RadarDailyClose.query.filter(
+        RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
+        synchronize_session=False)
+    db.session.commit()
+
+
+def test_an_incomplete_session_is_not_materialized(ctx):
+    from models import RadarDailyClose
+    generation = _seed_generation_and_universe(f'{PREFIX}AA')
+    _journal_event('m1', dt.datetime(2027, 1, 4, 15, 0), '100.00')
+    db.session.commit()
+
+    mid_session = dt.datetime(2027, 1, 4, 16, 0)
+    assert market_data.materialize_native_closes(
+        generation.id, mid_session, mode='shadow') == 0
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}AA', market='de').count() == 0
+
+
 # --- retention ---------------------------------------------------------------
+
+def test_active_price_tickers_is_the_union_of_the_three_windows(
+        ctx, monkeypatch):
+    from features.radar import leaderboard
+    calls = []
+
+    def fake_candidates(sources, now, hours):
+        calls.append(hours)
+        return {1: ['ZZONE'], 4: ['ZZONE', 'ZZFOUR'],
+                24: ['ZZDAY']}[hours]
+
+    monkeypatch.setattr(leaderboard, 'chatter_candidates', fake_candidates)
+    assert market_data.active_price_tickers(NOW) == [
+        'ZZDAY', 'ZZFOUR', 'ZZONE']
+    assert sorted(calls) == [1, 4, 24]
+
+
+def test_chatter_candidates_matches_build_rows_survivors(ctx, monkeypatch):
+    """One judgement, one owner: the scheduler union must be exactly the
+    leaderboard's own pass-one survivors."""
+    from features.radar import leaderboard
+    survivors = {'ZZAA': (1, 1.0, 1.0, 2, 1.0)}
+    monkeypatch.setattr(
+        leaderboard, '_chatter_survivors',
+        lambda sources, now, hours: (survivors, {}, {}, {}))
+    assert leaderboard.chatter_candidates(['reddit'], NOW, 4) == ['ZZAA']
+
+
+# --- [A1] grouped instrument map and ingestion -------------------------------
+
+def _us_instrument(ticker, provider_symbol=None, mic='XNAS'):
+    from models import TickerUniverse
+    if TickerUniverse.query.filter_by(symbol=ticker).one_or_none() is None:
+        db.session.add(TickerUniverse(symbol=ticker, name=ticker,
+                                      first_seen=NOW))
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='us', venue='NASDAQ', mic=mic,
+        provider_symbol=provider_symbol or ticker, currency='USD',
+        is_primary=True, mapping_status='mapped', mapped_at=NOW))
+
+
+@pytest.fixture()
+def grouped_ctx(ctx):
+    from models import RadarDailyClose, RadarGroupedCloseDay, TickerUniverse
+    def clean():
+        RadarDailyClose.query.filter(
+            RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
+            synchronize_session=False)
+        RadarGroupedCloseDay.query.delete(synchronize_session=False)
+        TickerUniverse.query.filter(
+            TickerUniverse.symbol.like(f'{PREFIX}%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+    clean()
+    yield
+    clean()
+
+
+def test_grouped_instrument_map_keys_exact_symbols_and_refuses_ambiguity(
+        grouped_ctx):
+    _us_instrument(f'{PREFIX}GA', provider_symbol=f'{PREFIX}GA')
+    _us_instrument(f'{PREFIX}GB', provider_symbol=f'{PREFIX}SHARED')
+    _us_instrument(f'{PREFIX}GC', provider_symbol=f'{PREFIX}SHARED',
+                   mic='XNYS')
+    db.session.commit()
+    found, ambiguous = market_data.grouped_instrument_map()
+    assert found[f'{PREFIX}GA'].ticker == f'{PREFIX}GA'
+    assert found[f'{PREFIX}GA'].mic == 'XNAS'
+    assert f'{PREFIX}SHARED' not in found
+    assert ambiguous == [f'{PREFIX}SHARED']
+
+
+class OneDayProvider:
+    source = 'massive_grouped'
+
+    def __init__(self, fetch):
+        self.fetch = fetch
+        self.calls = 0
+
+    def grouped_closes(self, day):
+        self.calls += 1
+        return self.fetch
+
+
+def _accepted_fetch(closes, provider_rows=6000):
+    from features.radar.prices import massive
+    return massive.GroupedFetch(
+        status='accepted',
+        day=massive.ProviderGroupedDay(
+            closes=closes, payload_sha256='e' * 64,
+            provider_rows=provider_rows, malformed_rows=0,
+            duplicate_conflicts=0))
+
+
+def test_grouped_ingest_refuses_to_run_under_legacy(grouped_ctx, monkeypatch):
+    monkeypatch.delenv('RADAR_US_CLOSE_SOURCE', raising=False)
+    provider = OneDayProvider(_accepted_fetch({}))
+    with pytest.raises(RuntimeError, match='RADAR_US_CLOSE_SOURCE'):
+        market_data.ingest_grouped_day(provider, NOW.date(), NOW)
+    assert provider.calls == 0
+
+
+def test_grouped_ingest_writes_shadow_rows_and_accepted_state(
+        grouped_ctx, monkeypatch):
+    import decimal as _decimal
+    from models import RadarDailyClose, RadarGroupedCloseDay
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    monkeypatch.setattr(market_data, 'active_price_tickers',
+                        lambda now: [f'{PREFIX}GA'])
+    _us_instrument(f'{PREFIX}GA')
+    db.session.commit()
+
+    result = market_data.ingest_grouped_day(
+        OneDayProvider(_accepted_fetch(
+            {f'{PREFIX}GA': _decimal.Decimal('55.25')})),
+        NOW.date(), NOW)
+    assert result.status == 'accepted'
+    assert result.written == 1
+
+    row = RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}GA', close_date=NOW.date()).one()
+    assert (row.is_shadow, row.source, row.adjustment_basis) == (
+        True, 'massive_grouped', 'split')
+    state = RadarGroupedCloseDay.query.filter_by(
+        source='massive_grouped', close_date=NOW.date(),
+        is_shadow=True).one()
+    assert state.status == 'accepted'
+    assert state.active_matched == state.active_expected == 1
+
+
+def test_grouped_ingest_below_floor_rejects_and_stays_retryable(
+        grouped_ctx, monkeypatch):
+    import decimal as _decimal
+    from models import RadarDailyClose, RadarGroupedCloseDay
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    monkeypatch.setattr(market_data, 'active_price_tickers',
+                        lambda now: [f'{PREFIX}GA'])
+    _us_instrument(f'{PREFIX}GA')
+    db.session.commit()
+
+    thin = market_data.ingest_grouped_day(
+        OneDayProvider(_accepted_fetch(
+            {f'{PREFIX}GA': _decimal.Decimal('55.25')}, provider_rows=12)),
+        NOW.date(), NOW)
+    assert thin.status == 'rejected'
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}GA', close_date=NOW.date()).count() == 0
+    state = RadarGroupedCloseDay.query.filter_by(
+        close_date=NOW.date(), is_shadow=True).one()
+    assert state.status == 'rejected'
+    assert state.error_code == 'below_acceptance_floor'
+
+
+def test_grouped_ingest_never_touches_a_german_row(grouped_ctx, monkeypatch):
+    import decimal as _decimal
+    from models import RadarDailyClose
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'massive')
+    monkeypatch.setattr(market_data, 'active_price_tickers',
+                        lambda now: [f'{PREFIX}GA'])
+    _us_instrument(f'{PREFIX}GA')
+    db.session.add(RadarDailyClose(
+        ticker=f'{PREFIX}GA', market='de', mic='XGAT', currency='EUR',
+        close_date=NOW.date(), close=decimal.Decimal('11.00'),
+        fetched_at=NOW, source='deutsche_boerse_delayed',
+        price_basis='close', adjustment_basis='split'))
+    db.session.commit()
+
+    market_data.ingest_grouped_day(
+        OneDayProvider(_accepted_fetch(
+            {f'{PREFIX}GA': _decimal.Decimal('55.25')})),
+        NOW.date(), NOW)
+    german = RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}GA', market='de', mic='XGAT',
+        close_date=NOW.date()).one()
+    assert german.close == decimal.Decimal('11.0000')
+    us = RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}GA', market='us', close_date=NOW.date()).one()
+    assert us.source == 'massive_grouped'
+
+
+def test_a_failed_grouped_write_rolls_back_closes_and_state(
+        grouped_ctx, monkeypatch):
+    import decimal as _decimal
+    from features.radar import history
+    from models import RadarDailyClose, RadarGroupedCloseDay
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    monkeypatch.setattr(market_data, 'active_price_tickers',
+                        lambda now: [f'{PREFIX}GA'])
+    _us_instrument(f'{PREFIX}GA')
+    _us_instrument(f'{PREFIX}GB')
+    db.session.commit()
+
+    original = history.record_closes
+    calls = {'n': 0}
+
+    def exploding(*args, **kwargs):
+        calls['n'] += 1
+        if calls['n'] == 2:
+            raise RuntimeError('forced close failure')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(history, 'record_closes', exploding)
+    with pytest.raises(RuntimeError):
+        market_data.ingest_grouped_day(
+            OneDayProvider(_accepted_fetch({
+                f'{PREFIX}GA': _decimal.Decimal('1.50'),
+                f'{PREFIX}GB': _decimal.Decimal('2.50')})),
+            NOW.date(), NOW)
+    assert RadarDailyClose.query.filter(
+        RadarDailyClose.ticker.like(f'{PREFIX}%'),
+        RadarDailyClose.market == 'us').count() == 0
+    assert RadarGroupedCloseDay.query.filter_by(
+        close_date=NOW.date(), status='accepted').count() == 0
+
 
 def test_prune_market_data_bounds_events_and_cycles(ctx):
     from features.radar import retention

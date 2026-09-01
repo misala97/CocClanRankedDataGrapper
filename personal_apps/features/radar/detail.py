@@ -82,6 +82,14 @@ class Chart:
     # dashed line the row charts already carry, so "above its normal" reads
     # the same at every zoom.
     normal_per_slot: object = None
+    # Xetra->Tradegate history-seam provenance (spec §8.2). Defaults keep
+    # every non-proxy chart, including all intraday spans, byte-compatible.
+    history_proxy: bool = False
+    proxy_mic: str | None = None
+    proxy_venue: str | None = None
+    native_mic: str | None = None
+    native_venue: str | None = None
+    native_from: dt.date | None = None
 
 
 def daily_counts(tickers, sources, start, now):
@@ -164,18 +172,31 @@ def intraday_prices(ticker, start, now, step_minutes, slots, *, market='us',
     config.QUOTE_RETENTION_DAYS. A ticker that has never ranked has no
     intraday price at all, which is a real absence and drawn as one.
     """
-    rows = (db.session.query(RadarQuote.fetched_at, RadarQuote.price)
+    # [A3] Slots are placed by PROVIDER EVENT TIME, never by fetch receipt.
+    # A days-old print re-fetched every five minutes used to draw as a fresh
+    # flat line -- the "stale-repeat disease" the 1W span's _daily_anchors
+    # fixed earlier; this closes it for 1D. Rows without provider time carry
+    # no market statement and are excluded outright. Deduplication is by the
+    # exact (quote_ts, price) observation: equal prices at DIFFERENT event
+    # times are genuine separate prints.
+    rows = (db.session.query(RadarQuote.quote_ts, RadarQuote.price)
             .filter(*quotes_mod._quote_matches(ticker, market, mic),
-                    RadarQuote.fetched_at >= start,
-                    RadarQuote.fetched_at < now)
-            .order_by(RadarQuote.fetched_at).all())
+                    RadarQuote.quote_ts.isnot(None),
+                    RadarQuote.quote_ts >= start,
+                    RadarQuote.quote_ts < now)
+            .order_by(RadarQuote.quote_ts, RadarQuote.fetched_at).all())
 
     prices = [None] * slots
-    for fetched_at, price in rows:
-        index = _slot_index(fetched_at, start, step_minutes, slots)
+    seen = set()
+    for quote_ts, price in rows:
+        observation = (quote_ts, price)
+        if observation in seen:
+            continue
+        seen.add(observation)
+        index = _slot_index(quote_ts, start, step_minutes, slots)
         if index is not None:
-            # Ordered ascending, so the last write per slot is the slot's
-            # closing price -- the same convention a daily close follows.
+            # Ordered ascending by event time, so the last write per slot is
+            # the slot's closing price -- the daily-close convention.
             prices[index] = float(price)
     return prices
 

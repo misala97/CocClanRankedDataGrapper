@@ -173,3 +173,106 @@ def test_retention_keeps_the_required_snapshots_for_each_market(ctx):
         ticker=f'{PREFIX}DUAL', market='us', mic='XNAS').count() == STALE_QUOTE_POLLS
     assert RadarQuote.query.filter_by(
         ticker=f'{PREFIX}DUAL', market='de', mic='XETR').count() == STALE_QUOTE_POLLS
+
+
+# --- [A1] daily-close horizon and guarded massive shadow cleanup -------------
+
+def _close(ticker, days_back, *, source=None, is_shadow=False):
+    import decimal
+    from models import RadarDailyClose
+    db.session.add(RadarDailyClose(
+        ticker=ticker, market='us', mic='XNAS', currency='USD',
+        close_date=NOW.date() - dt.timedelta(days=days_back),
+        close=decimal.Decimal('10.00'), fetched_at=NOW, source=source,
+        price_basis='close' if source else None,
+        adjustment_basis='split' if source else None, is_shadow=is_shadow))
+
+
+@pytest.fixture()
+def close_rows():
+    from models import RadarDailyClose
+
+    def wipe():
+        RadarDailyClose.query.filter(
+            RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    with flask_app.app_context():
+        wipe()
+        yield
+        wipe()
+
+
+def test_close_horizon_is_calendar_days_beyond_the_widest_span(
+        close_rows, monkeypatch):
+    from features.radar.detail import SPAN_DAYS
+    from models import RadarDailyClose
+    monkeypatch.delenv('RADAR_US_CLOSE_ACTIVATED_AT', raising=False)
+    horizon = max(SPAN_DAYS.values()) + 90
+    _close(f'{PREFIX}KEEP', max(SPAN_DAYS.values()) - 1,
+           source='massive_grouped')       # still displayable on 3Y
+    _close(f'{PREFIX}DROP', horizon + 1, source='yahoo_chart')
+    _close(f'{PREFIX}NATV', horizon + 1,
+           source='deutsche_boerse_delayed')  # observed, never refetchable
+    db.session.commit()
+
+    retention.prune_market_data(NOW)
+
+    remaining = {row.ticker for row in RadarDailyClose.query.filter(
+        RadarDailyClose.ticker.like(f'{PREFIX}%'))}
+    assert remaining == {f'{PREFIX}KEEP', f'{PREFIX}NATV'}
+
+
+def test_massive_shadow_cleanup_requires_all_three_evidence_settings(
+        close_rows, monkeypatch):
+    from models import RadarDailyClose
+    _close(f'{PREFIX}SHDW', 40, source='massive_grouped', is_shadow=True)
+    db.session.commit()
+
+    # Broken variant first: with the guard MISSING, a cleanup would delete
+    # rollback evidence prematurely -- proven by arming only two of three.
+    monkeypatch.setenv('RADAR_US_CLOSE_ACTIVATED_AT',
+                       '2026-08-10T00:00:00Z')
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_REPORT_SHA256', 'a' * 64)
+    monkeypatch.delenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', raising=False)
+    retention.prune_market_data(NOW)
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}SHDW').count() == 1
+
+    # Malformed digest also disables cleanup.
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'NOT-A-DIGEST')
+    retention.prune_market_data(NOW)
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}SHDW').count() == 1
+
+    # All three valid and activation at least seven days old: armed.
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'b' * 64)
+    retention.prune_market_data(NOW)
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}SHDW').count() == 0
+
+
+def test_massive_shadow_cleanup_waits_seven_days_after_activation(
+        close_rows, monkeypatch):
+    from models import RadarDailyClose
+    _close(f'{PREFIX}SHDW', 40, source='massive_grouped', is_shadow=True)
+    _close(f'{PREFIX}LIVE', 40, source='massive_grouped', is_shadow=False)
+    db.session.commit()
+
+    monkeypatch.setenv('RADAR_US_CLOSE_ACTIVATED_AT',
+                       (NOW - dt.timedelta(days=3)).isoformat() + 'Z')
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_REPORT_SHA256', 'a' * 64)
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'b' * 64)
+    retention.prune_market_data(NOW)
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}SHDW').count() == 1
+
+    monkeypatch.setenv('RADAR_US_CLOSE_ACTIVATED_AT',
+                       (NOW - dt.timedelta(days=8)).isoformat() + 'Z')
+    retention.prune_market_data(NOW)
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}SHDW').count() == 0
+    # The live lane is never cleanup's business.
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}LIVE').count() == 1

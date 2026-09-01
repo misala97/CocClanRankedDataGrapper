@@ -109,6 +109,15 @@ def _quote_sigmas(quote_views, today):
 
     sigmas = {}
     for (market, mic), tickers in by_identity.items():
+        if market == 'de' and mic == 'XGAT':
+            # A Tradegate identity may seed its volatility from the
+            # exact-ISIN Xetra proxy until native history accumulates
+            # (spec §8.2); series_for owns that one seam.
+            for ticker in tickers:
+                series = history.series_for(
+                    ticker, market, mic, history.HISTORY_DAYS, today)
+                sigmas[ticker] = quotes_mod.daily_sigma(list(series.closes))
+            continue
         closes = history.closes_for(tickers, days=history.HISTORY_DAYS,
                                     today=today, market=market, mic=mic)
         for ticker in tickers:
@@ -116,29 +125,15 @@ def _quote_sigmas(quote_views, today):
     return sigmas
 
 
-def build_rows(sources, now, window_hours=4, segments=(), limit=50,
-               min_venues=1, market='us'):
-    """Ranked leaderboard rows for the selected sources.
+def _chatter_survivors(sources, now, window_hours):
+    """PASS ONE of build_rows, extracted whole: the chatter-only judgement.
 
-    `sources` is the viewer's SELECTION, root-level or concrete, not an
-    expanded list. The bucket query below is a SCORED read, so it expands
-    strictly: the pre-split root `reddit` rows carry a different
-    source_config_version and their z belongs to a different baseline
-    population (see config.expand_sources). The voice counts are raw and
-    expand for history.
-
-    The source list is a read-time filter: it re-pools components that were
-    stored per source, and never touches how anything was scored (spec 8.6).
-
-    Quote selection supplies its own market/session/tape state per row.  A
-    Germany board can therefore rank a marked US fallback on its US session
-    without treating every row as if it shared the aggregate board session.
+    Returns (survivors, excluded, grouped, channel_counts). No market,
+    quote, history, profile, or segment lookup happens here -- the grouped
+    active-coverage denominator and the scheduler union consume EXACTLY
+    this judgement, so one implementation owns it (plan Task 8 Step 7b).
     """
     since = now - dt.timedelta(hours=window_hours)
-    # A selection may name groups ('discover'), single segments, or several of
-    # either. Resolved to a flat union.
-    # once rather than per row; empty means everything.
-    allowed = segments_in(segments)
     # Aggregated in SQL rather than in Python, and this is the difference
     # between a page and a wait. Every figure the loop below needs is a SUM, a
     # MAX or a MIN over a ticker's buckets, and fetching the buckets themselves
@@ -245,6 +240,42 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
             continue
 
         survivors[ticker] = (mentions, expected, variance, authors, text_ratio)
+
+    return survivors, excluded, grouped, channel_counts
+
+
+def chatter_candidates(sources, now, window_hours):
+    """Sorted tickers whose chatter clears the floor in one window."""
+    survivors, _, _, _ = _chatter_survivors(sources, now, window_hours)
+    return sorted(survivors)
+
+
+def build_rows(sources, now, window_hours=4, segments=(), limit=50,
+               min_venues=1, market='us'):
+    """Ranked leaderboard rows for the selected sources.
+
+    `sources` is the viewer's SELECTION, root-level or concrete, not an
+    expanded list. The bucket query below is a SCORED read, so it expands
+    strictly: the pre-split root `reddit` rows carry a different
+    source_config_version and their z belongs to a different baseline
+    population (see config.expand_sources). The voice counts are raw and
+    expand for history.
+
+    The source list is a read-time filter: it re-pools components that were
+    stored per source, and never touches how anything was scored (spec 8.6).
+
+    Quote selection supplies its own market/session/tape state per row.  A
+    Germany board can therefore rank a marked US fallback on its US session
+    without treating every row as if it shared the aggregate board session.
+    """
+    survivors, excluded, grouped, channel_counts = _chatter_survivors(
+        sources, now, window_hours)
+    # A selection may name groups ('discover'), single segments, or several
+    # of either, resolved once rather than per row; empty means everything.
+    allowed = segments_in(segments)
+    # One venue per ROOT: picking `reddit` is picking one venue, however
+    # many subreddits it expands to.
+    selected_venues = len({source_root(name) for name in sources})
 
     # PASS TWO: everything that costs a lookup, for the rows that survived.
     profiles = _universe_rows(survivors.keys())

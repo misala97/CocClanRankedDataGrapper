@@ -365,6 +365,283 @@ def _record_cycle_row(mic, channel, scheduled_at, mode, outcome):
     db.session.commit()
 
 
+def materialize_native_closes(generation_id, now, *, mode='shadow'):
+    """Daily closes from the retained trade journal (spec §8.3).
+
+    Per mapped (MIC, ISIN) and completed Berlin trading day inside the
+    48-hour journal: prefer the newest valid event MARKED official close;
+    otherwise the final non-revoked executed trade at or before the venue
+    close. Never a midpoint. Idempotent; re-running a day restates it and
+    may replace Yahoo at higher source priority.
+    """
+    import zoneinfo
+    from . import history
+    from .market_calendars import session_bounds
+
+    berlin = zoneinfo.ZoneInfo('Europe/Berlin')
+    by_identity = _mapped_decisions(
+        generation_id,
+        [decision.ticker for decision in _all_decisions(generation_id)])
+    is_shadow = mode == 'shadow'
+    written = 0
+    for (mic, isin), decision in by_identity.items():
+        events = (RadarMarketTradeEvent.query
+                  .filter(RadarMarketTradeEvent.mic == mic,
+                          RadarMarketTradeEvent.isin == isin,
+                          RadarMarketTradeEvent.action == 'new',
+                          RadarMarketTradeEvent.price.isnot(None))
+                  .order_by(RadarMarketTradeEvent.event_ts).all())
+        by_day = {}
+        for event in events:
+            local_day = event.event_ts.replace(
+                tzinfo=dt.timezone.utc).astimezone(berlin).date()
+            by_day.setdefault(local_day, []).append(event)
+        for local_day, day_events in by_day.items():
+            probe = dt.datetime.combine(
+                local_day, dt.time(12), tzinfo=berlin)
+            bounds = session_bounds('de', probe.astimezone(dt.timezone.utc),
+                                    mic=mic)
+            closes_at = bounds.closes_at.astimezone(
+                dt.timezone.utc).replace(tzinfo=None)
+            if now < closes_at:
+                continue  # the session has not completed yet
+            official = [event for event in day_events
+                        if event.is_official_close]
+            if official:
+                chosen = max(official, key=lambda event: event.event_ts)
+            else:
+                in_session = [event for event in day_events
+                              if event.event_ts <= closes_at]
+                if not in_session:
+                    continue
+                chosen = max(in_session, key=lambda event: event.event_ts)
+            written += history.record_closes(
+                decision.ticker, [(local_day, chosen.price)], now,
+                market='de', mic=mic, currency=decision.currency,
+                source='deutsche_boerse_delayed', adjustment_basis='split',
+                is_shadow=is_shadow)
+    return written
+
+
+def _all_decisions(generation_id):
+    from models import RadarMappingGeneration
+    generation = RadarMappingGeneration.query.get(generation_id)
+    if generation is None:
+        raise ValueError(f'no mapping generation {generation_id}')
+    return [MappingDecision(**item)
+            for item in json.loads(generation.payload_json)['decisions']]
+
+
+def active_price_tickers(now):
+    """The union of tickers any current board window can display.
+
+    Exactly the 1h/4h/24h chatter judgements the leaderboard itself makes
+    (Task 8 Step 7b) -- a cap here must not permanently starve a ticker the
+    board can show.
+    """
+    from .config import SOURCES
+    from . import leaderboard
+    union = set()
+    for hours in (1, 4, 24):
+        union.update(leaderboard.chatter_candidates(list(SOURCES), now,
+                                                    hours))
+    return sorted(union)
+
+
+@dataclasses.dataclass(frozen=True)
+class GroupedInstrument:
+    ticker: str
+    mic: str
+    currency: str
+
+
+def grouped_instrument_map():
+    """{exact provider symbol: GroupedInstrument} for grouped-close writes.
+
+    Identity comes ONLY from mapped primary US ``RadarInstrument`` rows of
+    non-delisted universe tickers. A provider symbol claimed by two
+    identities is omitted and reported as ambiguous;
+    ``universe.load_lookup()`` text is never an instrument identity.
+    """
+    from models import RadarInstrument, TickerUniverse
+    rows = (RadarInstrument.query
+            .join(TickerUniverse,
+                  TickerUniverse.symbol == RadarInstrument.ticker)
+            .filter(RadarInstrument.market == 'us',
+                    RadarInstrument.is_primary.is_(True),
+                    RadarInstrument.mapping_status == 'mapped',
+                    TickerUniverse.delisted_at.is_(None))
+            .order_by(RadarInstrument.ticker, RadarInstrument.mic).all())
+    found = {}
+    ambiguous = set()
+    for row in rows:
+        symbol = (row.provider_symbol or '').strip().upper()
+        if not symbol:
+            continue
+        existing = found.get(symbol)
+        candidate = GroupedInstrument(ticker=row.ticker, mic=row.mic,
+                                      currency=row.currency)
+        if existing is not None and existing != candidate:
+            ambiguous.add(symbol)
+            continue
+        found[symbol] = candidate
+    for symbol in ambiguous:
+        found.pop(symbol, None)
+    return found, sorted(ambiguous)
+
+
+@dataclasses.dataclass(frozen=True)
+class GroupedDayResult:
+    day: dt.date
+    status: str
+    written: int
+    mapped: int
+    unmatched_provider: int
+    unmatched_universe: int
+    active_expected: int
+    active_matched: int
+
+
+# Non-vacuous acceptance floors (spec §7): fewer provider rows than a real
+# US trading day produces, or thin coverage of the board-active union, is
+# incomplete evidence and never accepted progress.
+GROUPED_MIN_PROVIDER_ROWS = 5000
+GROUPED_MIN_ACTIVE_COVERAGE = 0.95
+
+
+def _close_source_shadow_state():
+    import os
+    mode = os.getenv('RADAR_US_CLOSE_SOURCE', 'legacy')
+    if mode == 'shadow':
+        return True
+    if mode == 'massive':
+        return False
+    raise RuntimeError(
+        'grouped ingestion requires RADAR_US_CLOSE_SOURCE=shadow or '
+        'massive; an ungated run under legacy would overwrite the '
+        'incumbent live closes and make the agreement gate compare '
+        'massive against itself')
+
+
+def ingest_grouped_day(provider, day, now):
+    """One Massive trading date, transactionally, into the correct lane.
+
+    The shadow/live state is NEVER a caller choice: it derives from
+    ``RADAR_US_CLOSE_SOURCE``. Accepted closes and the day's
+    ``RadarGroupedCloseDay`` row commit together; every non-accepted
+    attempt persists its typed status and stays retryable. Massive never
+    touches the MIC-keyed German cursor.
+    """
+    from models import RadarGroupedCloseDay
+    from . import history
+
+    is_shadow = _close_source_shadow_state()
+    fetch = provider.grouped_closes(day)
+
+    instrument_map, ambiguous = grouped_instrument_map()
+    active = set(active_price_tickers(now))
+    active_symbols = {symbol for symbol, identity in instrument_map.items()
+                      if identity.ticker in active}
+
+    def persist_state(status, *, written=0, mapped=0, unmatched_provider=0,
+                      unmatched_universe=0, active_matched=0,
+                      payload_sha256=None, provider_rows=0, malformed=0,
+                      conflicts=0, error_code=None, http_status=None,
+                      backoff_until=None, commit=True):
+        state = RadarGroupedCloseDay.query.filter_by(
+            source='massive_grouped', close_date=day,
+            is_shadow=is_shadow).one_or_none()
+        if state is None:
+            state = RadarGroupedCloseDay(
+                source='massive_grouped', close_date=day,
+                is_shadow=is_shadow, status=status, fetched_at=now)
+            db.session.add(state)
+        state.status = status
+        state.fetched_at = now
+        state.completed_at = dt.datetime.now(
+            dt.timezone.utc).replace(tzinfo=None)
+        state.payload_sha256 = payload_sha256
+        state.provider_rows = provider_rows
+        state.mapped_rows = mapped
+        state.written_rows = written
+        state.unmatched_provider = unmatched_provider
+        state.unmatched_universe = unmatched_universe
+        state.active_expected = len(active_symbols)
+        state.active_matched = active_matched
+        state.malformed_rows = malformed
+        state.duplicate_conflicts = conflicts
+        state.error_code = error_code
+        state.http_status = http_status
+        state.backoff_until = backoff_until
+        if commit:
+            db.session.commit()
+        return state
+
+    if fetch.status != 'accepted':
+        persist_state(fetch.status, error_code=fetch.error_code,
+                      http_status=fetch.http_status,
+                      backoff_until=fetch.backoff_until)
+        return GroupedDayResult(
+            day=day, status=fetch.status, written=0, mapped=0,
+            unmatched_provider=0, unmatched_universe=0,
+            active_expected=len(active_symbols), active_matched=0)
+
+    grouped = fetch.day
+    matched = {symbol: price for symbol, price in grouped.closes.items()
+               if symbol in instrument_map}
+    unmatched_provider = len(grouped.closes) - len(matched)
+    unmatched_universe = len(set(instrument_map) - set(grouped.closes))
+    active_matched = len(active_symbols & set(matched))
+
+    coverage = (active_matched / len(active_symbols)
+                if active_symbols else 1.0)
+    if grouped.provider_rows < GROUPED_MIN_PROVIDER_ROWS or \
+            coverage < GROUPED_MIN_ACTIVE_COVERAGE:
+        persist_state('rejected', mapped=len(matched),
+                      unmatched_provider=unmatched_provider,
+                      unmatched_universe=unmatched_universe,
+                      active_matched=active_matched,
+                      payload_sha256=grouped.payload_sha256,
+                      provider_rows=grouped.provider_rows,
+                      malformed=grouped.malformed_rows,
+                      conflicts=grouped.duplicate_conflicts,
+                      error_code='below_acceptance_floor')
+        return GroupedDayResult(
+            day=day, status='rejected', written=0, mapped=len(matched),
+            unmatched_provider=unmatched_provider,
+            unmatched_universe=unmatched_universe,
+            active_expected=len(active_symbols),
+            active_matched=active_matched)
+
+    try:
+        written = 0
+        for symbol, price in matched.items():
+            identity = instrument_map[symbol]
+            written += history.record_closes(
+                identity.ticker, [(day, price)], now, market='us',
+                mic=identity.mic, currency=identity.currency,
+                source='massive_grouped', adjustment_basis='split',
+                is_shadow=is_shadow, commit=False)
+        persist_state('accepted', written=written, mapped=len(matched),
+                      unmatched_provider=unmatched_provider,
+                      unmatched_universe=unmatched_universe,
+                      active_matched=active_matched,
+                      payload_sha256=grouped.payload_sha256,
+                      provider_rows=grouped.provider_rows,
+                      malformed=grouped.malformed_rows,
+                      conflicts=grouped.duplicate_conflicts, commit=False)
+        # Closes and accepted progress stand or fall together.
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return GroupedDayResult(
+        day=day, status='accepted', written=written, mapped=len(matched),
+        unmatched_provider=unmatched_provider,
+        unmatched_universe=unmatched_universe,
+        active_expected=len(active_symbols), active_matched=active_matched)
+
+
 def _quote_for(decision, picked, now):
     kwargs = dict(
         ticker=decision.ticker, market='de',

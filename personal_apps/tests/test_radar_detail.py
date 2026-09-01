@@ -861,3 +861,77 @@ def test_the_breakdown_tone_precedence_is_attitude_legacy_local():
     # NULL both falls back to the local float
     assert detail_panel._tone_of(0.8, None, None) == 'bullish'
     assert detail_panel._tone_of(None, None, None) is None
+
+
+# --- [A3] 1D chart slots by provider event time (plan Task 8 Step 8c) --------
+
+def _stale_repeat(ticker, event_age_hours, poll_minutes):
+    """One old print re-stored by several later polls with fresh fetch times."""
+    from models import RadarQuote
+    event_ts = NOW - dt.timedelta(hours=event_age_hours)
+    for minutes_ago in poll_minutes:
+        db.session.add(RadarQuote(
+            ticker=ticker, fetched_at=NOW - dt.timedelta(minutes=minutes_ago),
+            quote_ts=event_ts, price=decimal.Decimal('7.77')))
+
+
+def test_an_out_of_span_print_refetched_all_day_draws_zero_slots(
+        clean_intraday):
+    """The stale-repeat disease: a 46-hour-old print re-fetched every five
+    minutes used to draw as a fresh flat line, because slots were keyed by
+    fetch receipt. Slotting by event time makes the truth visible: the
+    event predates the 1D span, so nothing is drawn."""
+    with flask_app.app_context():
+        _stale_repeat(f'{PREFIX}STL', event_age_hours=46,
+                      poll_minutes=(50, 40, 30, 20, 10))
+        db.session.commit()
+        chart = detail.intraday_chart_for(f'{PREFIX}STL', ['bluesky'], NOW,
+                                          '1D')
+        assert all(c is None for c in chart.closes)
+
+
+def test_an_in_span_print_refetched_occupies_exactly_one_slot(clean_intraday):
+    with flask_app.app_context():
+        _stale_repeat(f'{PREFIX}ONE', event_age_hours=2,
+                      poll_minutes=(50, 40, 30))
+        db.session.commit()
+        chart = detail.intraday_chart_for(f'{PREFIX}ONE', ['bluesky'], NOW,
+                                          '1D')
+        populated = [index for index, c in enumerate(chart.closes)
+                     if c is not None]
+        assert len(populated) == 1
+        slots, step = detail.INTRADAY_SPANS['1D']
+        # Window is [now-24h, now); an event 2h before now sits at
+        # (22h * 60) / step from the window start.
+        expected_index = (22 * 60) // step
+        assert populated == [expected_index]
+
+
+def test_equal_prices_at_distinct_event_times_remain_distinct(clean_intraday):
+    from models import RadarQuote
+    with flask_app.app_context():
+        for hours_ago in (3, 1):
+            db.session.add(RadarQuote(
+                ticker=f'{PREFIX}EQ',
+                fetched_at=NOW - dt.timedelta(minutes=5),
+                quote_ts=NOW - dt.timedelta(hours=hours_ago),
+                price=decimal.Decimal('5.55')))
+        db.session.commit()
+        chart = detail.intraday_chart_for(f'{PREFIX}EQ', ['bluesky'], NOW,
+                                          '1D')
+        populated = [c for c in chart.closes if c is not None]
+        assert len(populated) == 2
+
+
+def test_a_quote_without_provider_time_never_reaches_the_1d_chart(
+        clean_intraday):
+    from models import RadarQuote
+    with flask_app.app_context():
+        db.session.add(RadarQuote(
+            ticker=f'{PREFIX}NOTS',
+            fetched_at=NOW - dt.timedelta(minutes=5),
+            quote_ts=None, price=decimal.Decimal('9.99')))
+        db.session.commit()
+        chart = detail.intraday_chart_for(f'{PREFIX}NOTS', ['bluesky'], NOW,
+                                          '1D')
+        assert all(c is None for c in chart.closes)
