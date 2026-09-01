@@ -757,6 +757,40 @@ def test_a_week_pools_several_buckets_into_one_slot(clean_intraday):
         assert chart.chatter[-1] == 12
 
 
+def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_proxy(
+        clean_intraday):
+    """The week chart must consume the same exact-ISIN history seam as the
+    month chart when native Tradegate closes have not materialized yet."""
+    ticker = f'{PREFIX}WPROXY'
+    close_day = NOW.date() - dt.timedelta(days=1)
+    with flask_app.app_context():
+        db.session.add_all([
+            RadarInstrument(
+                ticker=ticker, market='de', venue='Tradegate BSX',
+                mic='XGAT', provider_symbol='ZZTG', currency='EUR',
+                isin='DE000ZZTST05', is_primary=True,
+                mapping_status='mapped', mapped_at=NOW),
+            RadarInstrument(
+                ticker=ticker, market='de', venue='Xetra', mic='XETR',
+                provider_symbol='ZZXE', currency='EUR',
+                isin='DE000ZZTST05', is_primary=False,
+                mapping_status='mapped', mapped_at=NOW),
+            RadarDailyClose(
+                ticker=ticker, market='de', mic='XETR', currency='EUR',
+                close_date=close_day, close=decimal.Decimal('42.50'),
+                fetched_at=NOW, source='yahoo_chart',
+                adjustment_basis='split', is_shadow=False),
+        ])
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(
+            ticker, ['bluesky'], NOW, '1W', market='de', mic='XGAT')
+
+        assert [price for price in chart.closes if price is not None] == [42.5]
+        assert chart.history_proxy is True
+        assert (chart.proxy_mic, chart.native_mic) == ('XETR', 'XGAT')
+
+
 def test_a_slot_before_observation_began_is_unknown_not_zero(clean_intraday):
     """The rule the daily chart already follows, and the reason chatter is
     nullable at all: a slot nobody was watching is not a slot with no

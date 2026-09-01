@@ -256,8 +256,8 @@ def watched_slots(sources, start, now, step_minutes, slots):
     return covered
 
 
-def _daily_anchors(ticker, start, now, step_minutes, slots, *, market='us',
-                   mic=None):
+def _daily_anchors(ticker, start, now, step_minutes, slots, stored, *,
+                   market='us', mic=None):
     """Up to three REAL prints per trading day, else that day's close.
 
     The week line wants more shape than one close per day, and the quote
@@ -270,12 +270,7 @@ def _daily_anchors(ticker, start, now, step_minutes, slots, *, market='us',
     stored daily close at the closing slot, which is the month chart's
     grain and shape.
     """
-    from . import history
     from .market_calendars import session_bounds, session_state
-
-    days = int(slots * step_minutes / 1440) + 2
-    stored = dict(history.closes_for([ticker], days=days, today=now.date(),
-                                     market=market, mic=mic).get(ticker, []))
 
     prints = (db.session.query(RadarQuote.quote_ts, RadarQuote.price)
               .filter(*quotes_mod._quote_matches(ticker, market, mic),
@@ -332,12 +327,18 @@ def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
     # price for days and then a cliff, and the week view drew exactly that --
     # a morse-code crawl (seen live 2026-08-30, twice). Five clean anchors
     # beat a hundred and sixty stale fragments.
+    price_series = None
     if span == '1D':
         closes = intraday_prices(ticker, start, now, step_minutes, slots,
                                  market=market, mic=mic)
     else:
-        closes = _daily_anchors(ticker, start, now, step_minutes, slots,
-                                market=market, mic=mic)
+        from . import history
+        days = int(slots * step_minutes / 1440) + 2
+        price_series = history.series_for(
+            ticker, market, mic, days, now.date())
+        closes = _daily_anchors(
+            ticker, start, now, step_minutes, slots,
+            dict(price_series.closes), market=market, mic=mic)
     counts, _seen = intraday_counts(ticker, sources, start, now,
                                     step_minutes, slots)
     covered = watched_slots(sources, start, now, step_minutes, slots)
@@ -348,8 +349,20 @@ def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
 
     first_watched = min(covered) if covered else None
 
-    return Chart(start=start, closes=closes, chatter=chatter,
-                 watched_from=(start + dt.timedelta(
-                     minutes=first_watched * step_minutes)
-                               if first_watched is not None else None),
-                 step_minutes=step_minutes)
+    return Chart(
+        start=start, closes=closes, chatter=chatter,
+        watched_from=(start + dt.timedelta(
+            minutes=first_watched * step_minutes)
+                      if first_watched is not None else None),
+        step_minutes=step_minutes,
+        history_proxy=(price_series.history_proxy
+                       if price_series is not None else False),
+        proxy_mic=(price_series.proxy_mic if price_series is not None else None),
+        proxy_venue=(price_series.proxy_venue
+                     if price_series is not None else None),
+        native_mic=(price_series.native_mic
+                    if price_series is not None else None),
+        native_venue=(price_series.native_venue
+                      if price_series is not None else None),
+        native_from=(price_series.native_from
+                     if price_series is not None else None))
