@@ -15,6 +15,13 @@
 source; Yahoo US = fallback), and `[A3]` (1D event-time slotting, session-
 gated US polling) tag every amended passage in this plan; Task 4b is new.
 
+**Codex amendment-review corrections (2026-09-01, binding):** implement the
+three accepted provider amendments with the tightened contracts in the spec:
+exact mapped-provider-symbol identity, dedicated grouped-day and post-close
+session state, one split-only history basis, non-vacuous/full-backfill gating,
+live Finnhub provenance, and exact event-identity deduplication. Later task
+text cannot weaken these constraints.
+
 ## Global Constraints
 
 - Branch is `dev_personal`; commit after every accepted task. Only `main` deploys, and Michi controls deployment.
@@ -23,8 +30,9 @@ gated US polling) tag every amended passage in this plan; Task 4b is new.
 - Preserve the user's unrelated tracked changes in `personal_apps/scripts/discover_telegram_sources.py` and `personal_apps/telegram_candidates.json`, plus all unrelated untracked scratch work.
 - Recurring market-data provider cost is exactly EUR 0.
 - Germany uses delayed Deutsche Börse data: prefer `XGAT`, otherwise `XETR`. One ticker is pinned to one verified German venue between mapping generations.
-- `[A2]` US quotes stay on Finnhub (`RADAR_US_PRICE_PROVIDER` default `finnhub`; the `yahoo` value is a fallback, not a planned activation) on the established five-minute cadence, session-gated plus one post-close cycle. Yahoo access uses the per-symbol chart endpoint only; never depend on Yahoo's `/v7/finance/quote` batch endpoint.
-- `[A1]` US daily closes come from Massive's free grouped-daily endpoint (`source='massive_grouped'`, whole-universe, one call per trading day) behind `RADAR_US_CLOSE_SOURCE=legacy|shadow|massive` (default `legacy`; `shadow` ingests grouped days as shadow rows for the agreement gate while Twelve Data keeps writing live rows). Operator provisions the free key as `RADAR_MASSIVE_API_KEY`; base URL is config (`RADAR_MASSIVE_BASE_URL`, default `https://api.massive.com`; `https://api.polygon.io` is the legacy value, announced for phase-out during 2026).
+- `[A2]` US quotes stay on Finnhub (`RADAR_US_PRICE_PROVIDER` default `finnhub`; the `yahoo` value is a fallback, not a planned activation) on the established five-minute cadence, session-gated plus one durably claimed post-close cycle. Finnhub writes `source='finnhub'`, `price_basis='trade'`, `provider_delay='live'`. Yahoo access uses the per-symbol chart endpoint only; never depend on Yahoo's `/v7/finance/quote` batch endpoint.
+- `[A1]` US daily closes come from Massive's free grouped-daily endpoint (`source='massive_grouped'`, `adjustment_basis='split'`, whole-universe, one call per trading day) behind `RADAR_US_CLOSE_SOURCE=legacy|shadow|massive` (default `legacy`; `shadow` ingests grouped days as shadow rows for the agreement gate while Twelve Data keeps writing live rows). Exact mapped primary US `RadarInstrument.provider_symbol` drives identity; `universe.load_lookup()` must never drive grouped writes. Operator provisions the free key as `RADAR_MASSIVE_API_KEY`; base URL is config (`RADAR_MASSIVE_BASE_URL`, default `https://api.massive.com`; `https://api.polygon.io` is the legacy value, announced for phase-out during 2026).
+- `[A1]` Shadow cleanup additionally requires valid `RADAR_US_CLOSE_ACTIVATED_AT`, `RADAR_US_CLOSE_GATE_REPORT_SHA256`, and `RADAR_US_CLOSE_GATE_AUDIT_SHA256`; absent/malformed evidence disables cleanup.
 - `[A3]` Intraday chart spans slot prints by provider event time (quote_ts), never by fetch time. `[A1]` Daily closes older than the widest chart span (calendar days, not `HISTORY_DAYS` trading days) plus a buffer are pruned — native `deutsche_boerse_delayed` rows excepted — so universe-wide ingestion stays bounded.
 - Never synthesize a German price with FX, fuzzy-map a company name, relabel Xetra history as Tradegate, or let a transient feed failure switch venue.
 - UTC remains storage/wire time. German calendar/display time is `Europe/Berlin`.
@@ -53,14 +61,14 @@ gated US polling) tag every amended passage in this plan; Task 4b is new.
 | `docs/superpowers/specs/2026-08-31-radar-deutsche-boerse-feed-contract.md` | Literal, reviewed upstream paths/event semantics captured in Task 1; required input to Task 5 |
 | `personal_apps/tests/fixtures/radar_market_data/*.json` | Tiny hand-authored payloads using observed keys and fake identifiers/prices |
 | `personal_apps/features/radar/prices/yahoo.py` | Yahoo chart HTTP, identity validation, current quote and daily-close normalization |
-| `personal_apps/features/radar/prices/massive.py` | `[A1]` Massive grouped-daily HTTP, per-row validation, universe join, ingested-date cursor helpers |
-| `personal_apps/tests/test_radar_massive.py` | `[A1]` Grouped payload validation, per-row containment, cursor, pacing, and quota/backoff tests |
+| `personal_apps/features/radar/prices/massive.py` | `[A1]` Massive grouped-daily HTTP and provider-symbol-keyed payload validation; no database identity join or cursor ownership |
+| `personal_apps/tests/test_radar_massive.py` | `[A1]` Grouped payload/date/duplicate validation, per-row containment, pacing, and quota/backoff tests |
 | `personal_apps/features/radar/prices/openfigi.py` | OpenFIGI batching and exact share-class-to-MIC candidate lookup |
 | `personal_apps/features/radar/prices/deutsche_boerse.py` | Terms-cookie transport, file listing/download limits, observed JSON parsing, corrections, reference rows, and venue quote selection |
 | `personal_apps/features/radar/market_calendars/tradegate.py` | `XGAT` 07:30–22:00 Berlin session boundaries |
-| `personal_apps/features/radar/market_data.py` | Active-candidate selection, cursor/cycle transactions, German collection, native close materialization, and provider-independent orchestration |
+| `personal_apps/features/radar/market_data.py` | Active-candidate selection, cursor/cycle transactions, German collection, native close materialization, exact grouped-instrument join/state, post-close claims, and provider-independent orchestration |
 | `personal_apps/features/radar/data/german_instrument_overrides.json` | Small audited ADR/issuer exception set; exact identifiers and evidence only |
-| `personal_apps/migrations/versions/6a21d4e8c9f0_add_radar_market_data_v2.py` | Expand-only provenance, shadow, cursor, cycle, trade-event, and mapping-generation schema |
+| `personal_apps/migrations/versions/6a21d4e8c9f0_add_radar_market_data_v2.py` | Expand-only provenance, adjustment, shadow, cursor, cycle, trade-event, grouped-day, provider-session, and mapping-generation schema |
 | `personal_apps/scripts/backfill_radar_market_history.py` | Resumable Yahoo US/Xetra history backfill with dry-run/apply modes |
 | `personal_apps/scripts/report_radar_market_data_shadow.py` | READ ONLY activation-gate report and 50-instrument identity-audit export |
 | `personal_apps/tests/test_radar_yahoo.py` | Yahoo identity, backoff, quote, and history tests |
@@ -75,7 +83,7 @@ gated US polling) tag every amended passage in this plan; Task 4b is new.
 
 | File | Change |
 |---|---|
-| `personal_apps/models.py` | Add provenance/shadow fields and four operational models |
+| `personal_apps/models.py` | Add provenance/shadow/adjustment fields and six operational models |
 | `personal_apps/features/radar/prices/__init__.py` | Extend provider-neutral `Quote`; centralize positive-price/book/source/basis validation |
 | `personal_apps/features/radar/instruments.py` | Replace Twelve/Finnhub catalog mapping with complete-generation build/activate/rollback logic |
 | `personal_apps/features/radar/markets.py` | Remove Xetra hard-code; carry basis/source/book; forbid midpoint/fallback scoring |
@@ -278,8 +286,8 @@ fixtures, and PASS/STOP ruling. A STOP ends this plan. A PASS unlocks Task 2.
 
 **Interfaces:**
 - Produces nullable legacy-compatible quote fields: `source`, `price_basis`, `bid`, `ask`; plus non-null `is_shadow=False`.
-- Produces nullable legacy-compatible daily-close fields: `source`, `price_basis`; plus non-null `is_shadow=False`.
-- Produces `RadarMappingGeneration`, `RadarMarketDataCursor`, `RadarMarketDataCycle`, and `RadarMarketTradeEvent`.
+- Produces nullable legacy-compatible daily-close fields: `source`, `price_basis`, `adjustment_basis`; plus non-null `is_shadow=False`.
+- Produces `RadarMappingGeneration`, `RadarMarketDataCursor`, `RadarMarketDataCycle`, `RadarMarketTradeEvent`, `RadarGroupedCloseDay`, and `RadarProviderSessionState`.
 - Produces nullable `RadarInstrument.mapping_generation_id` for current German rows.
 - Replaces daily-close uniqueness with `(ticker, market, mic, close_date, is_shadow)` so a measured shadow close cannot overwrite or block the live/backfill row for the same day.
 
@@ -303,7 +311,9 @@ def test_market_data_v2_model_shapes():
 
 Also assert the trade-event unique key is `(mic, event_id)`, cursor primary key
 is `(source, mic, channel)`, and cycle unique key is
-`(source, mic, channel, scheduled_at)`.
+`(source, mic, channel, scheduled_at)`. Assert grouped-day uniqueness is
+`(source, close_date, is_shadow)` and provider-session-state uniqueness is
+`(source, market)`.
 
 - [ ] **Step 2: Run focused tests and verify they fail**
 
@@ -348,19 +358,33 @@ uncompressed bytes, parse milliseconds, provider/fetch lag, and a bounded
 event ID, action `new|correct|cancel`, event time, nullable positive price,
 nullable volume, official-close boolean, source remote ID, and received time.
 
+`RadarGroupedCloseDay` has an autoincrement key plus a unique
+`(source, close_date, is_shadow)` tuple. It stores status
+`accepted|no_data|rejected|transport_error`, nullable payload SHA-256, fetched/completed
+times, provider/mapped/written/unmatched-provider/unmatched-universe/
+active-expected/active-matched/malformed/duplicate-conflict counts, bounded `error_code`, nullable HTTP
+status, and nullable `backoff_until`. This is the only resumable progress
+ledger for Massive grouped days; do not fabricate a MIC/channel cursor.
+
+`RadarProviderSessionState` has primary key `(source, market)` and stores
+nullable `last_post_close_session_date` plus `claimed_at`. Task 9 updates it
+under a row lock and commits before calling the quote provider.
+
 - [ ] **Step 4: Write the expand-only migration from `f4b2d81c37a9`**
 
 The migration must:
 
-1. create the four operational tables and indexes;
+1. create the six operational tables and indexes;
 2. add nullable `mapping_generation_id` with a named foreign key to
    `radar_instruments`;
-3. add nullable provenance/book columns to quotes/closes;
+3. add nullable provenance/book columns to quotes and nullable source,
+   price-basis, and adjustment-basis provenance to closes;
 4. add `is_shadow BOOLEAN NOT NULL DEFAULT 0` to quotes/closes;
 5. replace `uq_radar_daily_close_market` with a named unique constraint that
    includes `is_shadow`;
-6. add CHECKs for quote basis, daily-close basis, generation status, cycle
-   mode/status, channel, and trade action;
+6. add CHECKs for quote basis, daily-close price and adjustment bases,
+   generation status, cycle mode/status, grouped-day status, channel, and
+   trade action;
 7. leave every old writer valid.
 
 Downgrade drops only the new tables/columns/constraints and preserves all
@@ -379,6 +403,10 @@ remain. Before downgrading, insert live and shadow daily closes for the same
 four-column unique constraint rejects that pair in the isolated broken variant.
 Add a second broken-variant assertion by temporarily omitting the server
 default in the isolated schema and proving the old insert fails.
+Also insert and round-trip grouped-day/session-state rows, prove their unique
+keys reject duplicates, and prove invalid grouped status and non-`split`
+modern adjustment basis fail their named CHECKs. Migration-era NULL remains
+accepted by the expand migration.
 
 - [ ] **Step 6: Run model/migration tests and inspect the head**
 
@@ -473,13 +501,16 @@ PRICE_BASES = frozenset({'trade', 'midpoint', 'close'})
 QUOTE_SOURCES = frozenset({
     'legacy', 'finnhub', 'twelvedata',
     'deutsche_boerse_delayed', 'yahoo_chart',
-    'massive_grouped',  # [A1] daily closes only, never an intraday quote
 })
+CLOSE_SOURCES = QUOTE_SOURCES | frozenset({'massive_grouped'})  # [A1]
 ```
 
-`[A1]` Central validation additionally rejects `source='massive_grouped'`
-with any `price_basis` other than `close`, pinning the spec §7 rule that a
-grouped close can never masquerade as an intraday quote.
+`[A1]` Quote validation rejects `source='massive_grouped'` even when
+`price_basis='close'`; Massive is a daily-close source, never a `Quote` source.
+Daily-close validation accepts it only with `price_basis='close'` and
+`adjustment_basis='split'`. Keep quote-source and close-source validation as
+separate functions/sets so a future call site cannot accidentally broaden
+the intraday contract.
 
 `Quote.__init__` rejects price `<= 0`; midpoint requires positive `bid <= ask`
 and sets price to the exact decimal midpoint; trade/close may carry a valid
@@ -511,13 +542,17 @@ its retained stale quote, never US.
 `move_since` and `moves_for` include only `price_basis='trade'` rows plus
 migration-era NULL basis as legacy trades. A midpoint may appear on the chart,
 but cannot become either endpoint of the divergence move. Update Finnhub to
-declare `source='finnhub'` and emit quote basis `trade`; while in that file,
+declare `source='finnhub'`, emit quote basis `trade`, and override the legacy
+constructor default with `provider_delay='live'`; while in that file,
 correct the module comment claiming ~20-minute delayed free quotes — Finnhub's
 current documentation states real-time US quotes on the free tier `[A2]`.
 Update Twelve Data to
 declare `source='twelvedata'` and emit quote basis `trade`. Task 8's generic
-history writer reads `provider.source` and persists daily basis `close`, so the
+history writer reads `provider.source` and persists daily price basis `close`
+plus adjustment basis `split`, so the
 tuple-returning `daily_closes` interface does not grow a second result shape.
+Pin both negative contracts in tests: constructing a Massive `Quote` raises,
+and a normalized Finnhub quote carries exactly `('finnhub', 'trade', 'live')`.
 
 - [ ] **Step 5: Add the Tradegate calendar and MIC routing tests**
 
@@ -670,14 +705,18 @@ valid. `previous_close` comes from positive `chartPreviousClose`, falling back
 only to positive `previousClose`. `regular_close`
 uses positive `regularMarketPrice` only when `regularMarketTime` identifies the
 same market day; otherwise it remains absent. Volume comes from the selected
-parallel index. For daily history, pair date and the split-adjusted close
-(the `adjclose` series) at the same
-index, deduplicate by date, sort oldest-first, and bound to the requested
-calendar window. `[A1]` Split-adjusted is the repository's actual existing
-history semantics: the incumbent Twelve Data fetch relies on that provider's
-default split adjustment, and the Massive grouped feed is pinned to
-`adjusted=true` to match — a dividend-and-split-adjusted or fully raw series
-would silently disagree with both.
+parallel index. For daily history, pair date with the `quote.close` value at
+the same index, deduplicate by date, sort oldest-first, and bound to the
+requested calendar window. Do **not** read Yahoo `adjclose`: Yahoo's adjusted
+close includes dividends as well as splits, while Massive `adjusted=true` and
+the incumbent Twelve Data default are split-only. Every Yahoo history write
+therefore records `adjustment_basis='split'` `[A1]`.
+
+Add a binding fixture in which `quote.close` and `adjclose` differ because of
+a dividend and another in which the provider series reflects a split. Assert
+the adapter selects `quote.close`, persists the split basis through Task 8,
+and a broken implementation selecting `adjclose` fails. This prevents a
+manufactured dividend seam between the Yahoo deep tail and Massive history.
 
 - [ ] **Step 5: Prove per-instrument containment and concurrency bounds**
 
@@ -711,9 +750,16 @@ git commit -m "feat(radar): add Yahoo chart price adapter"
 
 **Interfaces:**
 - Produces `MassiveHttp.get_grouped_daily(day) -> dict` using `GET {base}/v2/aggs/grouped/locale/us/market/stocks/{YYYY-MM-DD}?adjusted=true&apiKey=...`.
-- Produces `MassiveProvider.grouped_closes(day, known_symbols) -> GroupedDay(closes, matched, unmatched_provider, unmatched_universe)` where `closes` is `dict[str, Decimal]` keyed by universe ticker.
+- Produces `MassiveProvider.grouped_closes(day) -> GroupedFetch`; an accepted
+  `GroupedFetch` owns a `ProviderGroupedDay` whose `closes` are
+  `dict[str, Decimal]` keyed by exact uppercase provider symbol, plus payload
+  checksum and provider/malformed/duplicate-conflict counts. It does not
+  import models or map symbols to Radar identities.
 - Produces class attribute `source = 'massive_grouped'` consumed by Task 8's generic close writer.
-- Never raises a provider/network/shape error out of `grouped_closes`; a failed day returns `None` so the caller does not advance its ingested-date cursor.
+- Never raises a provider/network/shape error out of `grouped_closes`.
+  `GroupedFetch.status` is `accepted|no_data|rejected|transport_error` and
+  carries bounded `error_code`, HTTP status, and optional `backoff_until` so
+  Task 8 can persist every attempt without confusing failure with progress.
 
 - [ ] **Step 1: Write failing grouped-payload tests**
 
@@ -726,42 +772,55 @@ def grouped_payload(rows=None):
             'adjusted': True,
             'results': rows if rows is not None else [
                 {'T': 'ZZAA', 'c': 100.5, 'o': 99.0, 'h': 101.0,
-                 'l': 98.5, 'v': 1000, 't': 1788206400000},
+                 'l': 98.5, 'v': 1000, 't': event_ms(DAY)},
                 {'T': 'ZZBB', 'c': 55.25, 'o': 54.0, 'h': 56.0,
-                 'l': 53.5, 'v': 2000, 't': 1788206400000},
+                 'l': 53.5, 'v': 2000, 't': event_ms(DAY)},
                 {'T': 'ZZUNKNOWN', 'c': 1.0, 'o': 1.0, 'h': 1.0,
-                 'l': 1.0, 'v': 5, 't': 1788206400000},
+                 'l': 1.0, 'v': 5, 't': event_ms(DAY)},
             ]}
 
 
-def test_grouped_closes_joins_known_symbols_and_counts_the_rest():
+def test_grouped_closes_returns_exact_provider_symbols():
     provider = MassiveProvider(FakeHttp(grouped_payload()))
-    day = provider.grouped_closes(dt.date(2026, 8, 28), {'ZZAA', 'ZZBB', 'ZZCC'})
-    assert day.closes == {'ZZAA': decimal.Decimal('100.5'),
-                          'ZZBB': decimal.Decimal('55.25')}
-    assert (day.matched, day.unmatched_provider, day.unmatched_universe) == (
-        2, 1, 1)
+    fetch = provider.grouped_closes(DAY)
+    assert fetch.status == 'accepted'
+    assert fetch.day.closes == {
+        'ZZAA': decimal.Decimal('100.5'),
+        'ZZBB': decimal.Decimal('55.25'),
+        'ZZUNKNOWN': decimal.Decimal('1.0'),
+    }
 
 
 def test_one_malformed_row_does_not_discard_the_day():
     rows = grouped_payload()['results']
     rows[0]['c'] = 0  # zero close is rejected per spec truth rule 7
     provider = MassiveProvider(FakeHttp(grouped_payload(rows)))
-    day = provider.grouped_closes(dt.date(2026, 8, 28), {'ZZAA', 'ZZBB'})
-    assert 'ZZAA' not in day.closes and day.closes['ZZBB'] == decimal.Decimal('55.25')
+    fetch = provider.grouped_closes(DAY)
+    assert 'ZZAA' not in fetch.day.closes
+    assert fetch.day.closes['ZZBB'] == decimal.Decimal('55.25')
+    assert fetch.day.malformed_rows == 1
 
 
-def test_transport_or_envelope_failure_returns_none():
-    for http in (RaisingHttp(requests.Timeout), FakeHttp({'status': 'ERROR'}),
-                 FakeHttp({'status': 'OK'}), FakeHttp(None, status_code=429)):
-        assert MassiveProvider(http).grouped_closes(
-            dt.date(2026, 8, 28), {'ZZAA'}) is None
+def test_transport_or_envelope_failure_is_typed():
+    assert MassiveProvider(RaisingHttp(requests.Timeout)).grouped_closes(
+        DAY).status == 'transport_error'
+    assert MassiveProvider(FakeHttp({'status': 'ERROR'})).grouped_closes(
+        DAY).status == 'rejected'
+    assert MassiveProvider(FakeHttp({'status': 'OK'})).grouped_closes(
+        DAY).status == 'rejected'
+    assert MassiveProvider(FakeHttp(None, status_code=429)).grouped_closes(
+        DAY).status == 'transport_error'
 ```
 
 Add cases for: missing `results` key, non-list `results`, a row missing `T`
-or `c` or `t`, negative close, a row whose `t` date differs from the requested
-day by more than one calendar day (reject that row), HTTP 401/403 (fail the
-day, log once), and a duplicate `T` in one payload (last row wins, counted).
+or `c` or `t`, negative close, a row whose `t` does not resolve to the exact
+requested US exchange-local date (reject that row), HTTP 401/403 (fail the
+day, log once), and duplicates. Identical duplicate `(T, c, event date)` rows
+deduplicate and count once; conflicting duplicates omit that symbol and
+increment `duplicate_conflicts` — last-row-wins is forbidden. An empty
+`results` list on an expected trading day returns `no_data`, never
+`accepted`. `event_ms(DAY)` derives the fixture timestamp from `DAY`; no
+hard-coded timestamp may silently describe a different date.
 
 - [ ] **Step 2: Run the Massive tests and verify they fail**
 
@@ -788,19 +847,19 @@ Twelve Data's documented default is split adjustment. Pinning the opposite
 basis would rewrite every post-split history the moment the higher-priority
 grouped backfill runs. Add a split-ticker fixture: a grouped row whose
 adjusted close is far from a seeded unadjusted value proves the parameter is
-actually sent.
+actually sent. The normalized day exposes `adjustment_basis='split'`.
 
-- [ ] **Step 4: Implement per-row validation and the universe join**
+- [ ] **Step 4: Implement per-row validation without database identity**
 
 Validate the envelope (`status == 'OK'`, list `results`), then per row:
 uppercase `T`, positive finite `c` parsed via `str()` into `Decimal`, `t`
-within one calendar day of the requested date. Reject rows individually;
-count `matched`, `unmatched_provider` (provider rows absent from
-`known_symbols`), and `unmatched_universe` (known symbols with no row —
-holidays and delistings make this normal, so it is a count, not an error).
-No normalization map exists yet: per the spec, mappings for punctuation
-variants (class shares are the known risk) are added only from observed
-mismatch logs during shadow days, never guessed here.
+resolving to the exact requested date in the US exchange timezone. Reject
+rows individually and return only exact provider-symbol keys. Compute the
+payload SHA-256 from a deterministic canonical representation. Identity join,
+active coverage, unmatched-universe counts, storage, and progress belong to
+Task 8, where `RadarInstrument` is available. No normalization map exists
+yet: punctuation variants are added only from observed mismatch logs during
+shadow days, never guessed here.
 
 - [ ] **Step 5: Run focused provider tests**
 
@@ -1347,9 +1406,15 @@ git commit -m "feat(radar): collect German market data in shadow"
 **Interfaces:**
 - Produces `HistorySeries(closes, history_proxy, proxy_mic, proxy_venue, native_mic, native_venue, native_from)`.
 - Produces `history.series_for(ticker, market, mic, days, today) -> HistorySeries`.
-- Extends `record_closes(ticker, closes, now, *, market='us', mic=None, currency='USD', source='legacy', price_basis='close', is_shadow=False)` with source-priority overwrite rules.
+- Extends `record_closes(ticker, closes, now, *, market='us', mic=None, currency='USD', source='legacy', price_basis='close', adjustment_basis=None, is_shadow=False)` with source-priority overwrite rules. Every selected v2 provider passes `adjustment_basis='split'`; only migration-era compatibility may leave it NULL.
 - Produces `materialize_native_closes(now, *, mode) -> int` from valid executed events only.
-- Produces `market_data.ingest_grouped_day(provider, day, now, *, is_shadow) -> GroupedDayResult` `[A1]`, the shared writer both the daily job (Task 9) and the universe backfill mode use.
+- Produces `GroupedInstrument(ticker, mic, currency)` and
+  `market_data.grouped_instrument_map() -> dict[str, GroupedInstrument]`, keyed
+  by exact provider symbol from one unambiguous primary US mapping.
+- Produces `market_data.ingest_grouped_day(provider, day, now) -> GroupedDayResult` `[A1]`, the shared transactional writer both the daily job (Task 9) and the universe backfill mode use; shadow/live state comes only from validated config.
+- Produces `leaderboard.chatter_candidates(...)` and
+  `market_data.active_price_tickers(now)` here as prerequisites for grouped
+  active-union coverage; Task 9 reuses rather than reimplements them.
 - Produces a resumable CLI with `--market us|de|us-universe|all` `[A1]`, `--limit`, `--resume-after`, `--dry-run`, and explicit `--apply`.
 
 - [ ] **Step 1: Write failing source-priority and shadow tests**
@@ -1402,7 +1467,11 @@ always add `is_shadow IS FALSE`. Existing NULL source rows normalize to
 `legacy`; no old data disappears during overlap. Upsert lookup includes the
 incoming `is_shadow` value, matching Task 2's five-column unique identity.
 `fetch_into_store` passes the adapter's exact `provider.source`; an adapter
-without that attribute is `legacy` during compatibility.
+without that attribute is `legacy` during compatibility. Selected v2 writes
+from Twelve Data, Yahoo, Massive, and Deutsche Börse store
+`adjustment_basis='split'`; migration-era NULL is interpreted as split only
+for known incumbent Twelve Data rows. A source/basis conflict is refused
+rather than overwritten.
 
 - [ ] **Step 5: Implement one-seam history composition**
 
@@ -1435,8 +1504,9 @@ quote snapshots.
 For each mapped MIC/ISIN and Berlin trading day, prefer the newest valid event
 marked official close. If none exists, choose the final non-revoked executed
 trade at or before venue close. Never use a book/midpoint. Write
-`source='deutsche_boerse_delayed'`, `price_basis='close'`, and shadow state
-matching collection mode. Re-running the same day is idempotent and may
+Write `source='deutsche_boerse_delayed'`, `price_basis='close'`,
+`adjustment_basis='split'`, and shadow state matching collection mode.
+Re-running the same day is idempotent and may
 replace Yahoo at higher source priority.
 
 Also derive XGAT `regular_close` at 17:30 from an official close or the final
@@ -1447,6 +1517,17 @@ trading day's `HistorySeries`. An XGAT quote may therefore use its exact-ISIN
 Xetra proxy before native history accumulates; an absent/mismatched proxy
 leaves the baseline NULL. This baseline may calculate displayed regular move
 and sigma, but it never substitutes the current venue quote.
+
+- [ ] **Step 7b: Extract the exact chatter-active union used by grouped validation**
+
+Move the existing pass-one SQL aggregation, voice/channel counts, and
+`scoring.is_eligible` decision from `leaderboard.build_rows` into
+`_chatter_survivors(sources, now, window_hours)`. Preserve its stored tuple
+shape so pass two remains equivalent. `chatter_candidates` returns its sorted
+keys without market, quote, history, profile, or segment reads;
+`active_price_tickers` is the union over 1h/4h/24h. Before/after leaderboard
+tests must preserve every row, exclusion count, and query bound. Task 9 uses
+these functions unchanged for polling.
 
 - [ ] **Step 8: Write the resumable Yahoo backfill CLI**
 
@@ -1466,25 +1547,42 @@ no duplicate dates.
 
 The Yahoo US arm of the backfill covers only the active board union — its
 role after this amendment is the deep tail beyond Massive's two-year window,
-preserving the shipped 3Y span for tickers the board shows `[A1]`.
+preserving the shipped 3Y span for tickers the board shows `[A1]`. In addition
+to this explicit bootstrap, persist enough completion state for Task 9 to
+admit at most two newly active, 3Y-incomplete tickers per 15-minute history
+cycle and remove them once complete.
 
 - [ ] **Step 8b: Add the grouped universe backfill mode `[A1]`**
 
 `--market us-universe` iterates US trading days newest-first from yesterday
 back to the free tier's two-year depth, calling
-`market_data.ingest_grouped_day(provider, day, now, is_shadow=...)` per
-day. The shadow state is never a caller choice: `ingest_grouped_day` derives
+`market_data.ingest_grouped_day(provider, day, now)` per day. The shadow state
+is never a caller choice: `ingest_grouped_day` derives
 it from `RADAR_US_CLOSE_SOURCE` (`shadow` → `is_shadow=True`; `massive` →
 `is_shadow=False`), and the `us-universe` mode REFUSES to run under `legacy`
 with a message naming the flag — an ungated run would overwrite the
 incumbent live US closes at higher priority and turn the Task 11 agreement
 gate into massive-vs-massive self-agreement.
-`ingest_grouped_day` loads the universe symbol set once
-(`set(universe.load_lookup().keys())`), calls
-`MassiveProvider.grouped_closes`, writes via `record_closes` with
-`source='massive_grouped'`, and returns per-day counts; a `None` provider
-result records the day as failed and does NOT mark it ingested, so a rerun
-retries it. `--resume-after 2026-06-30` resumes strictly before that date
+
+`grouped_instrument_map` queries `RadarInstrument.market == 'us'` and
+`is_primary IS TRUE`, joined by ticker to `TickerUniverse.delisted_at IS
+NULL`. It keys the result by exact uppercase `provider_symbol` and preserves
+the row-owned ticker, MIC, and currency. If one provider symbol maps to more
+than one identity, omit it and report an ambiguity. Never use
+`universe.load_lookup()` or ticker/name text as grouped storage identity.
+
+`ingest_grouped_day` calls `MassiveProvider.grouped_closes`, joins its exact
+provider-symbol keys through that map, and computes provider, mapped, written,
+unmatched-provider, unmatched-universe, malformed, duplicate-conflict, and
+current board-active coverage counts. It accepts a day only when the envelope
+and exact exchange-local date are valid, provider rows are at least 5,000,
+and at least 95% of the current board-active mapped US union is present.
+An accepted attempt writes closes with `source='massive_grouped'`,
+`price_basis='close'`, and `adjustment_basis='split'` and its
+`RadarGroupedCloseDay` row in one transaction. A non-accepted attempt writes
+no grouped closes, persists `no_data|rejected|transport_error` plus bounded
+error/backoff evidence, and remains retryable. No path uses or advances a
+`RadarMarketDataCursor`. `--resume-after 2026-06-30` resumes strictly before that date
 (the date is the cursor in this mode); `--limit` bounds attempted days. At 5
 calls/minute the full two-year backfill is ~500 requests ≈ 100 minutes,
 stated in `--dry-run` output.
@@ -1496,7 +1594,10 @@ a live grouped close overwrites a `twelvedata` or `yahoo_chart` row for the
 same US identity/date (priority 12 > 10); and identity isolation — a
 grouped write addresses only US-market identities and can never match a
 German-market row, proven by seeding a same-ticker `de`/`XGAT` close and
-asserting it is untouched.
+asserting it is untouched. Also prove exact provider-symbol identity preserves
+MIC/currency, duplicate mappings are refused, empty and below-threshold days
+do not advance, a failed write rolls back both closes and accepted state, and
+the `universe.load_lookup()` symbol/name path is unreachable.
 
 - [ ] **Step 8c: Slot the 1D chart by provider event time `[A3]`**
 
@@ -1505,9 +1606,11 @@ In `detail.py`, `intraday_prices` currently keys each 15-minute slot by
 and drops NULLs — it is the reference behavior and needs no change. Scope
 this step to `intraday_prices` (the 1D span) only: place each print by
 `quote_ts`, drop rows with
-`quote_ts IS NULL`, and collapse consecutive identical prints: a print
-re-fetched across many polls occupies the single slot of its event time and
-the line honestly ends at the last real print.
+`quote_ts IS NULL`, order by `(quote_ts, fetched_at)`, and deduplicate only the
+exact `(quote_ts, price)` observation: a print re-fetched across many polls
+occupies the single slot of its event time and the line honestly ends at the
+last real print. Equal prices at distinct event times remain separate prints;
+price equality alone is never a dedupe key.
 
 Teeth first, two fixtures. (1) Out-of-span: seed one quote row whose
 `quote_ts` is 46 hours old and five
@@ -1518,7 +1621,8 @@ fix lands — the fixed chart draws zero populated slots because the event
 time predates the span. (2) In-span: seed one print whose `quote_ts` lies
 inside the 1D window, re-stored by three later polls with fresh
 `fetched_at`; the fixed chart populates exactly one slot, at the event
-time. Keep the
+time. Add a third fixture with equal prices at two distinct `quote_ts` values
+and assert both survive. Keep the
 existing no-carry-forward rule: absent slots stay `None`.
 
 - [ ] **Step 8d: Bound daily-close retention `[A1]`**
@@ -1536,6 +1640,15 @@ still displayable on the widest (3Y) chart span survives the prune; a
 non-native row just outside the horizon is deleted; a native
 `deutsche_boerse_delayed` row outside the horizon survives; the prune leaves
 quote snapshots and cursors alone.
+
+Massive shadow cleanup is narrower and separately guarded: retain the complete
+shadow lane through the gate and for seven complete days after activation.
+Only after the report- and instrument-map-bound gate/audit hashes are
+recorded in the three validated cleanup settings may retention prune
+`massive_grouped` shadow rows older than 30 calendar days. It never prunes
+live rows or native Deutsche Börse rows. Tests
+prove the seven-day and recorded-hash guards independently and first prove a
+broken missing guard would delete rollback evidence prematurely.
 
 - [ ] **Step 9: Run history, ranking, detail, API, and script tests**
 
@@ -1586,14 +1699,18 @@ git commit -m "feat(radar): backfill venue-aware price history"
 - Modify: `personal_apps/tests/test_radar_market_data.py`
 
 **Interfaces:**
-- Produces `leaderboard.chatter_candidates(sources, now, window_hours) -> list[str]` using the exact existing eligibility pass without quote/history reads.
-- Produces `market_data.active_price_tickers(now) -> list[str]`, the union of 1h/4h/24h candidates.
+- Reuses Task 8's `leaderboard.chatter_candidates(sources, now, window_hours) -> list[str]` and `market_data.active_price_tickers(now) -> list[str]` without a second eligibility implementation.
 - Produces `scheduling.due_symbols_from(source, symbols, now, limit) -> list[str]` and fixed-interval rescheduling (five-minute Finnhub default, 15-minute Yahoo fallback `[A2]`) without deleting rolling-window state.
+- Produces `market_data.claim_post_close(source, market, now) -> date | None`, backed by `RadarProviderSessionState` and committed before any remote quote call.
 - Produces config `RADAR_US_PRICE_PROVIDER=finnhub|yahoo` (default `finnhub`), `RADAR_DE_PRICE_MODE=legacy|shadow|active` (default `legacy`), and `RADAR_US_CLOSE_SOURCE=legacy|shadow|massive` (default `legacy`) `[A1]`.
+- Validates optional cleanup evidence `RADAR_US_CLOSE_ACTIVATED_AT`,
+  `RADAR_US_CLOSE_GATE_REPORT_SHA256`, and
+  `RADAR_US_CLOSE_GATE_AUDIT_SHA256`; all three or none, with none meaning
+  cleanup disabled.
 - Produces independent scheduler jobs `radar_us_quotes`, `radar_de_market_data`, `radar_market_history`, `radar_us_grouped_closes` `[A1]`, and weekly `radar_mappings`.
 - Produces `market_data.ops_summary(now) -> dict`, a 60-second memoized database-only health summary with no provider calls.
 
-- [ ] **Step 1: Write failing chatter-candidate parity tests**
+- [ ] **Step 1: Re-run and extend the Task 8 chatter-candidate parity tests**
 
 Seed eligible/ineligible tickers across the 1h, 4h, and 24h windows, including
 a ticker whose older low-text-ratio evidence excludes it at 24h but whose new
@@ -1608,19 +1725,15 @@ assert set(market_data.active_price_tickers(NOW)) == expected
 
 For each window, compare `chatter_candidates` to the survivor keys produced by
 the extracted pass-one helper used inside `build_rows`; one judgement must not
-be copied into two implementations.
+be copied into two implementations. These tests are already green from Task
+8; add only scheduling assertions here and do not re-extract the helper.
 
-- [ ] **Step 2: Extract the existing chatter-only eligibility pass**
+- [ ] **Step 2: Verify the scheduler consumes the shared eligibility pass**
 
-Move the SQL aggregation, voice/channel counts, and `scoring.is_eligible`
-decision from `leaderboard.build_rows` into
-`_chatter_survivors(sources, now, window_hours) -> (dict, Counter)`. Keep its
-stored tuple values unchanged so pass two remains byte-for-byte equivalent.
-`chatter_candidates` returns the sorted survivor keys. No market, quote,
-history, profile, or segment lookup is allowed in that function.
-
-Run `tests/test_radar_leaderboard.py` before and after; every existing row,
-exclusion count, and query-bound assertion remains green.
+Import Task 8's public functions directly. A monkeypatched
+`leaderboard.chatter_candidates` must change both the active grouped-coverage
+denominator and scheduler union, proving there is one owner. No market,
+quote, history, profile, or segment lookup may be introduced into that helper.
 
 - [ ] **Step 3: Add a rolling-set due query**
 
@@ -1666,7 +1779,8 @@ def test_yahoo_failure_does_not_skip_german_cycle(monkeypatch):
 
 Add the reverse failure test, missing Deutsche Börse cookie in shadow/active,
 invalid flag value startup refusal, and no provider factory construction for a
-disabled path.
+disabled path. Add all-or-none cleanup-evidence validation, exact lowercase
+SHA-256, UTC activation timestamp, and absent-evidence-means-no-cleanup tests.
 
 - [ ] **Step 5: Implement exact flags and factories**
 
@@ -1703,8 +1817,17 @@ or fails; provider backoff prevents an outage from retrying immediately.
 `[A3]` Either US quote wrapper first consults the US market calendar: while
 the calendar answers closed (weekend, holiday, overnight outside the
 recognized pre/post phases) it performs no provider request, except one
-post-close cycle per trading day to capture the closing print. The skip is
-logged as a structured no-op, not an error.
+post-close cycle per trading day to capture the closing print. That exception
+is eligible only in the 60 minutes after the calendar's extended-session
+close. `claim_post_close` locks `(source, 'us')`, verifies the resolved session
+date is newer than `last_post_close_session_date`, writes the date and
+`claimed_at`, and commits before the provider request. Once claimed, failure
+does not reopen the date. The ordinary open-session path does not claim it.
+Create the key with an idempotent insert before `SELECT ... FOR UPDATE` so two
+first-ever callers cannot both win; a duplicate-key race retries the locked
+read. Resolve the active candidate set before claiming, and do not claim an
+empty cycle.
+The skip is logged as a structured no-op, not an error.
 
 - [ ] **Step 7: Register independent jobs without double polling**
 
@@ -1730,8 +1853,9 @@ every unfetched US
 trading day among the most recent seven via
 `market_data.ingest_grouped_day` (bounded catch-up after daemon downtime;
 five calls fit inside one pacer minute) with the mode's shadow state,
-records the last ingested date, and
-logs matched/unmatched counts.
+selecting missing/non-accepted dates from `RadarGroupedCloseDay` and logging
+its stored matched/unmatched/error counts. Accepted state, not a maximum date,
+is progress, so a failed middle day remains retryable.
 
 The German wrapper downloads every five minutes while either venue is open
 and through the 30-minute source-delay buffer after close. Its immediate
@@ -1750,10 +1874,13 @@ activation; it never changes a live primary automatically. A failed
 generation preserves the current active one.
 
 `_scheduled_history` handles US closes by `RADAR_US_CLOSE_SOURCE` `[A1]`:
-`legacy` retains the current Twelve Data history writer; `massive` performs
-no recurring per-symbol US history calls at all — the grouped job owns US
-closes, and the deep-tail Yahoo fetch stays a bounded explicit backfill
-command, not a scheduled call. The
+`legacy` and `shadow` retain the current Twelve Data live writer so shadow has
+an independent incumbent; `massive` stops that writer and lets the grouped
+live lane own recent US closes. Under `shadow` or `massive`, the 15-minute history cycle
+may select at most two newly board-active tickers whose stored live history
+does not yet reach the 3Y floor, using poll source `history:yahoo-tail` for
+fair deterministic retries. Once a ticker is complete it is not called again.
+This is the only recurring per-symbol Yahoo history path. The
 German active path materializes native closes from Deutsche Börse and never
 makes recurring Yahoo `.DE` calls; German Yahoo use remains the explicit
 backfill command from Task 8.
@@ -1764,8 +1891,10 @@ none may terminate the daemon.
 
 `ops_summary` reads the latest cycle per MIC/channel, current mapping
 generation counts/refusals, quote-basis/quality counts, cursor lag, Yahoo
-backoff/status, the Massive grouped-close job state (last ingested trading
-date, matched/unmatched counts, quota/backoff state) `[A1]`, and
+backoff/status, Massive grouped-day state (latest accepted date; retryable
+gaps; provider/matched/written/unmatched/malformed/conflict counts; HTTP,
+error, and backoff state), the last claimed US post-close session date
+`[A1]``[A3]`, and
 native/proxy history counts. Cache for 60 seconds in
 process and expose a `clear_ops_memo()` test seam. It must not import or call a
 provider module.
@@ -1781,13 +1910,17 @@ legacy provider constructors to raise and prove no call reaches them; under
 never constructed and the grouped job runs; under `legacy`, prove the grouped
 job returns its no-op result without constructing the Massive provider `[A1]`.
 Assert a closed-calendar US cycle performs no provider call and the single
-post-close cycle does `[A3]`. Under
+post-close cycle does `[A3]`. Restart, concurrent-claim, DST, early-close,
+weekend, overnight-before-open, outside-the-60-minute-window, and provider-
+failure tests must not duplicate or misassign the claimed session date. Under
 default flags, prove the current provider paths still run. Call `ops_summary`
 twice inside 60 seconds and assert the SQL counter does not increase on the
 second call; monkeypatch every provider constructor to raise and prove the
 summary still succeeds from stored state; assert the summary carries the
-Massive grouped-close fields (last ingested date, matched/unmatched, backoff
-state) `[A1]`.
+Massive grouped-close fields (accepted date, gaps, all counts, error/backoff)
+and the post-close claim `[A1]``[A3]`. Prove the future deep-tail queue tries
+at most two incomplete newly active tickers per history cycle, advances failed
+attempts fairly, and never calls an already-complete ticker.
 Assert startup performs one retained-gap check, a closed/no-gap interval makes
 no HTTP call, the 22:00–22:30 Berlin buffer still collects, and the first
 post-06:30 history run repeats native-close reconciliation exactly once per
@@ -2016,8 +2149,8 @@ git commit -m "feat(radar): show market data provenance"
 - Modify during execution: `HANDOFF.md`
 
 **Interfaces:**
-- Produces `build_report(session, start, end, identity_audit=None) -> ShadowReport` without remote calls or writes.
-- CLI: `python -m scripts.report_radar_market_data_shadow --from ISO --to ISO [--gate german|us-closes] [--identity-audit FILE] [--json]` `[A1]` (default `--gate german`).
+- Produces `build_report(session, start, end, identity_audit=None, us_close_audit=None) -> ShadowReport` without remote calls or writes.
+- CLI: `python -m scripts.report_radar_market_data_shadow --from ISO --to ISO [--gate german|us-closes] [--identity-audit FILE] [--us-close-audit FILE] [--json]` `[A1]` (default `--gate german`).
 - Exit 0 only when every automatic gate GOVERNING THE SELECTED SWITCH passes — for `german`, the German gates plus a supplied/passing 50-row identity audit, with the grouped agreement gate reported informationally; for `us-closes`, the grouped agreement gate alone `[A1]`. Exit 2 for incomplete evidence; exit 1 for a failed truth/identity gate.
 - Activation remains an operator action; the script reports readiness and never changes flags/mappings/rows.
 
@@ -2068,7 +2201,10 @@ MIN_DISPLAY_COVERAGE = 0.95
 MAX_P95_EVENT_AGE_SECONDS = 1800
 MIN_TRANSPORT_SUCCESS = 0.99
 MIN_HISTORY_COVERAGE = 0.95
-MIN_GROUPED_AGREEMENT_DAYS = 3      # [A1]
+MIN_GROUPED_AGREEMENT_DAYS = 3             # [A1]
+MIN_GROUPED_PROVIDER_ROWS = 5000           # [A1]
+MIN_GROUPED_ACTIVE_COVERAGE = Decimal('0.95')  # [A1]
+MIN_GROUPED_OVERLAP_ROWS = 100             # [A1]
 MAX_GROUPED_CLOSE_DELTA = Decimal('0.005')  # [A1] 0.5% vs incumbent close
 ```
 
@@ -2076,19 +2212,29 @@ MAX_GROUPED_CLOSE_DELTA = Decimal('0.005')  # [A1] 0.5% vs incumbent close
 and refusal/absence buckets for every gate. It also reports p50/p95 age,
 trade/midpoint/stale/unavailable shares, file bytes, decompression ratio,
 parse p50/p95, memory high-water input if recorded, source/channel gaps,
-mapping-generation hash, and Yahoo status separately.
+German mapping-generation hash, grouped-instrument-map hash, and Yahoo status
+separately.
 
 `[A1]` The report additionally computes the **US grouped-close agreement
-gate**, independent of the German gates: over the report window, count
-consecutive US trading days on which shadow `massive_grouped` rows exist and,
-for every (ticker, date) also carrying an incumbent live US close, the
-relative delta is within `MAX_GROUPED_CLOSE_DELTA` — excluding
-(ticker, date) pairs the report flags as split candidates (a delta above 25%
-with a near-integer ratio), which are listed separately for review rather
-than failing the gate; at least
-`MIN_GROUPED_AGREEMENT_DAYS` such days pass, and each day's
-unmatched-symbol counts plus the measured `radar_daily_closes` row count and
-per-day growth are listed for review. This gate governs only the
+gate**, independent of the German gates. It loads the expected US trading
+dates from the calendar for the complete provider two-year entitlement and
+requires an accepted `RadarGroupedCloseDay` shadow state for every date; each
+accepted state must record at least `MIN_GROUPED_PROVIDER_ROWS` structurally
+valid rows. The report recomputes `MIN_GROUPED_ACTIVE_COVERAGE` for every day
+from the current board-active mapped US union, the exact current grouped map,
+and persisted shadow closes; it does not trust a stale ingestion-time ratio.
+Among the most recent expected dates, at least
+`MIN_GROUPED_AGREEMENT_DAYS` are consecutive and each has at least
+`MIN_GROUPED_OVERLAP_ROWS` ticker/date overlaps with incumbent live US
+closes. Every overlap's relative delta must be at most
+`MAX_GROUPED_CLOSE_DELTA`.
+
+Split-like near-integer deltas, any other adjustment-basis mismatch, and
+conflicting duplicate symbols are blockers, not observations to exclude from
+the denominator. The report lists unmatched symbols, measured table rows/
+daily growth, and projected steady-state storage. Zero overlap, zero active
+denominator, too few rows, missing expected dates, missing state, or a missing
+operator audit is `incomplete` and can never pass vacuously. This gate governs only the
 `RADAR_US_CLOSE_SOURCE=massive` switch and is enforced only under
 `--gate us-closes`; under `--gate german` it is informational. German
 activation neither requires nor waits for it.
@@ -2121,19 +2267,47 @@ Validation requires exact generation hash, at least 50 unique tickers, all
 required strata represented, and every `correct` true. The script cannot set
 or infer `correct`.
 
+For `--gate us-closes`, the script first emits deterministic close-gate JSON
+and its SHA-256. The separate operator audit schema is:
+
+```json
+{
+  "report_sha256": "64 lowercase hex characters",
+  "instrument_map_sha256": "64 lowercase hex characters",
+  "reviewed_at": "2026-09-04T20:00:00Z",
+  "reviewer": "Michi",
+  "accept_unmatched_symbols": true,
+  "accept_storage_projection": true
+}
+```
+
+`instrument_map_sha256` hashes sorted
+`provider_symbol|ticker|mic|currency` rows from the exact unambiguous grouped
+instrument map; it is the US mapping generation identity even though the
+legacy US mappings do not use `RadarMappingGeneration`. Validation requires
+exact current report and instrument-map hashes and
+both explicit acceptances. The tool never fills them itself. Changing the
+report, instrument map, mismatch list, or storage numbers invalidates the
+audit. Keep the German identity audit and US-close audit independent.
+
 - [ ] **Step 5: Run report tests and broken-variant checks**
 
 Run: `cd personal_apps && python -m pytest tests/test_radar_market_data_report.py tests/test_radar_market_data.py -q`
 
 Then temporarily invert each gate comparator in the test-local function and
-prove its dedicated test fails. Restore the implementation and rerun green.
+prove its dedicated test fails. Also run broken variants that remove the
+provider-row, active-coverage, overlap, complete-backfill, split-conflict, and
+operator-audit requirements; each must make a red fixture falsely green and
+therefore fail its teeth assertion. Restore the implementation and rerun
+green.
 
 - [ ] **Step 6: Create the execution ledger and refresh handoff evidence**
 
 The ledger records for every task: commit, files, focused tests, independent
 review verdict, open findings, and whether it is safe to continue. It also
 records Task 1 contract hash, migration heads, mapping generation hash,
-backfill cursor/counts, shadow interval, and activation report output.
+grouped-instrument-map hash, backfill state/counts, shadow interval, activation
+report/audit hashes, activation timestamp, and report output.
 
 Update `HANDOFF.md` with exact branch/worktree/HEAD, dirty-file ownership,
 completed/open task, next action, test results, environment-only failures,
@@ -2175,13 +2349,20 @@ tracks; neither waits for the other `[A1]`:
    and wait for the first accepted active German cycle;
 4. verify Germany board/detail on XGAT, XETR fallback, midpoint, unavailable,
    and US fallback examples;
-5. `[A1]` set `RADAR_US_CLOSE_SOURCE=shadow`, let at least three consecutive
-   US trading days accumulate, run the report with `--gate us-closes`, and
-   have Michi review the agreement deltas, unmatched-symbol counts, and
-   measured daily-close table growth;
-6. `[A1]` on a green us-closes gate set `RADAR_US_CLOSE_SOURCE=massive`, then
-   run the universe backfill (`--market us-universe --apply`) — it refuses to
-   run in any earlier mode (Task 8 Step 8b).
+5. `[A1]` set `RADAR_US_CLOSE_SOURCE=shadow`, run the complete two-year
+   universe backfill (`--market us-universe --apply`) in resumable bounded
+   batches, and let at least three consecutive expected US trading days be
+   accepted. Run `--gate us-closes` once without an audit, have Michi review
+   agreement deltas, every unmatched symbol, and measured/projected storage,
+   create the report- and instrument-map-bound audit, then rerun against that exact audit.
+   Missing/failed expected dates must be retried before this can go green;
+6. `[A1]` only on a green us-closes gate set
+   `RADAR_US_CLOSE_SOURCE=massive` together with
+   `RADAR_US_CLOSE_ACTIVATED_AT` and the exact report/audit SHA-256 settings,
+   then rerun the complete universe backfill
+   in the live lane. Preserve the shadow lane for the seven-day rollback
+   window; afterward Task 8's guarded retention may prune shadow rows older
+   than 30 days once both evidence hashes are recorded.
 
 `[A2]` There is no Yahoo US activation step: `RADAR_US_PRICE_PROVIDER`
 stays `finnhub`; the `yahoo` value exists for emergencies only.
@@ -2215,7 +2396,7 @@ Tasks 1–11 does not authorize it automatically.
 
 **Interfaces:**
 - Makes quote `market`, `mic`, `currency`, `provider_symbol`, `source`, and `price_basis` non-null.
-- Makes daily-close `market`, `mic`, `currency`, `source`, and `price_basis` non-null.
+- Makes daily-close `market`, `mic`, `currency`, `source`, `price_basis`, and `adjustment_basis` non-null after the explicit migration-era classification.
 - Removes the `(market IS NULL, mic IS NULL)` legacy-US compatibility branches only after migration proof.
 - Downgrade restores nullability but does not erase normalized values.
 
@@ -2231,9 +2412,9 @@ quote = connection.execute(sa.text(
 assert tuple(quote) == ('us', 'XNAS', 'USD', 'AAPL', 'legacy', 'trade')
 
 close = connection.execute(sa.text(
-    "SELECT market, mic, currency, source, price_basis "
+    "SELECT market, mic, currency, source, price_basis, adjustment_basis "
     "FROM radar_daily_closes WHERE id=1")).one()
-assert tuple(close) == ('us', 'XNAS', 'USD', 'legacy', 'close')
+assert tuple(close) == ('us', 'XNAS', 'USD', 'legacy', 'close', 'split')
 ```
 
 Assert every target column is non-nullable and an old-column-list insert now
@@ -2244,7 +2425,10 @@ fails. Downgrade restores nullable columns and preserves row values.
 Backfill legacy quote identity from the ticker's current primary US
 `RadarInstrument`; use `XNAS` only for a legacy row whose instrument is absent,
 matching the current compatibility fallback. Backfill sources/bases exactly as
-in Step 1. Abort with a raised SQL error if any target NULL remains before
+in Step 1. Classify adjustment basis as `split` only for rows whose source is
+known to be the incumbent Twelve Data/legacy split-adjusted writer or whose
+v2 writer already supplied it; abort rather than guessing for any unexplained
+row. Abort with a raised SQL error if any target NULL remains before
 the NOT NULL `ALTER COLUMN` operations.
 
 Use `batch_alter_table` and name every CHECK/index explicitly. `down_revision`
@@ -2298,12 +2482,14 @@ npm run build
 $shadowStart = Read-Host 'Shadow start UTC recorded in the execution ledger'
 $shadowEnd = Read-Host 'Shadow end UTC recorded in the execution ledger'
 $identityAudit = Read-Host 'Absolute path to the reviewed identity-audit JSON'
-python -m scripts.report_radar_market_data_shadow --from $shadowStart --to $shadowEnd --identity-audit $identityAudit --json
+$usCloseAudit = Read-Host 'Absolute path to the reviewed US-close audit JSON'
+python -m scripts.report_radar_market_data_shadow --from $shadowStart --to $shadowEnd --gate german --identity-audit $identityAudit --json
+python -m scripts.report_radar_market_data_shadow --from $shadowStart --to $shadowEnd --gate us-closes --us-close-audit $usCloseAudit --json
 ```
 
 The final report command uses the exact recorded values from the execution
 ledger. Expected: all Python tests pass; all Vitest suites pass; TypeScript and
-both Vite builds pass; report exits 0 with every gate true.
+both Vite builds pass; both reports exit 0 with every governing gate true.
 
 - [ ] **Step 7: Perform visual and operational verification**
 
@@ -2321,6 +2507,12 @@ single post-close cycle `[A3]`, no legacy German calls in
 active mode, no Twelve Data US history calls under
 `RADAR_US_CLOSE_SOURCE=massive` `[A1]`, and no Finnhub quote calls under
 Yahoo mode.
+
+After seven complete active Massive days, verify the exact gate-report and
+operator-audit hashes are stored before enabling the bounded shadow cleanup.
+Run retention once and prove only `massive_grouped` shadow rows older than 30
+calendar days were removed; live Massive history, native Deutsche Börse
+history, grouped-day progress, and the hashed evidence remain.
 
 - [ ] **Step 8: Final independent review and handoff**
 
@@ -2361,7 +2553,8 @@ it remains the live US quote and profile source.
 - Spec §6: Task 1 is the binding provider-contract gate; Task 5 is forbidden
   from inventing upstream fields.
 - Spec §7: Tasks 2, 3, 5, and 7 implement normalized provenance, shadow rows,
-  correction journal, per-file atomicity, and cursor safety.
+  split-adjustment provenance, quote/close source separation, correction
+  journal, per-file atomicity, grouped-day state, and cursor safety.
 - Spec §8: Task 8 implements the backfill (Massive grouped universe depth,
   Yahoo deep tail and `.DE` proxy `[A1]`), exact-ISIN Xetra proxy, one seam,
   native closes, priority, and sigma use without US contamination.
@@ -2369,7 +2562,8 @@ it remains the live US quote and profile source.
   coverage, five-minute German and five-minute session-gated Finnhub US
   cadence (15-minute under the Yahoo fallback flag), and the daily
   grouped-close job; bounded daily-close retention is implemented in Task 8
-  Step 8d and scheduled through Task 9 `[A1]``[A2]``[A3]`.
+  Step 8d and scheduled through Task 9; the post-close exception is durably
+  claimed and the future deep-tail queue is bounded `[A1]``[A2]``[A3]`.
 - Spec §10: Task 10 implements all API/interface provenance and compatibility.
 - Spec §11: Tasks 2, 7, 9, and 11 implement bounded resource use, cached DB
   diagnostics, separate workers, and no secret logging.
@@ -2385,8 +2579,8 @@ it remains the live US quote and profile source.
   sentiment changes.
 - Type/signature pass: `Quote` fields introduced in Task 3 match storage,
   collector, API, and TypeScript names; `HistorySeries` fields introduced in
-  Task 8 match Task 10; generation/cursor/cycle model names match Tasks 6, 7,
-  and 11.
+  Task 8 match Task 10; generation/cursor/cycle/grouped-day/session-state
+  model names match Tasks 6, 7, 8, 9, and 11.
 - Empirical-field ruling: the only values not knowable while writing this plan
   are upstream paths legally hidden behind the terms gate. They are not left
   as implementation guesses: Task 1 creates an exact reviewed supplement and
@@ -2396,7 +2590,10 @@ it remains the live US quote and profile source.
   1D event-time slotting with a teeth test, and bounded daily-close
   retention; Task 9 gains the third close-source flag, the daily grouped
   job, five-minute session-gated Finnhub cadence, and matching scheduler
-  assertions; Task 11 gains the grouped agreement gate; Task 3 pins
-  `massive_grouped` to basis `close` and corrects the Finnhub delay comment.
+  assertions; Task 11 gains the non-vacuous full-backfill grouped agreement
+  gate; Task 3 forbids `massive_grouped` from quotes and corrects Finnhub to
+  live provenance. Yahoo history selects split-only `quote.close`, Task 8
+  joins grouped rows through exact mapped provider identity, and the 1D chart
+  deduplicates exact event observations rather than equal prices.
   Grouped symbol-mismatch normalization follows the capture-gate philosophy:
   added only from observed shadow-day logs, never guessed.

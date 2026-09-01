@@ -45,6 +45,16 @@ option and produced three US-arm amendments, folded in below and marked
   weekend (measured: weekend p50 print age ~55 hours across 10k stored
   rows).
 
+**Codex review corrections (2026-09-01, binding):** the provider choices above
+stand, but their implementation contracts are tightened below. Massive rows
+join through exact mapped US provider symbols while preserving ticker/MIC/
+currency; grouped-day progress has dedicated market-level persistence rather
+than a fabricated MIC; every selected history source uses a split-only basis;
+the US-close gate requires non-vacuous coverage and the complete shadow
+backfill; Finnhub declares live provenance; event-time deduplication keys on
+event identity rather than price equality; and the one post-close cycle is
+durably claimed per US session date.
+
 ## 1. Outcome
 
 Radar replaces its unreliable and incomplete price-provider path with a
@@ -219,7 +229,9 @@ Polling covers the active board union on the established five-minute cadence
 while the US session (including pre/post phases the calendar recognizes) is
 open, plus one post-close cycle to capture the closing print; outside those
 windows the poller stores nothing rather than re-storing an unchanged print
-`[A3]`.
+`[A3]`. Finnhub observations carry `source='finnhub'`,
+`price_basis='trade'`, and `provider_delay='live'`; retaining the legacy
+constructor default `delayed` would contradict this source decision.
 
 **Daily closes — Massive grouped-daily (primary).** One
 `grouped-daily` request per US trading day returns every US stock's OHLCV.
@@ -228,11 +240,21 @@ the free tier's 5-calls/minute limit) with `source='massive_grouped'` and
 `adjusted=true` — split-adjusted, matching the series the store actually
 holds (the incumbent provider's documented default is split adjustment).
 Universe-wide coverage is deliberate: a ticker gets its chart
-before it first becomes loud. Rows are joined to universe tickers by exact
-symbol; unmatched symbols on either side are counted and logged, and any
-normalization mapping is added only from observed mismatches, never guessed.
+before it first becomes loud. Rows are joined by exact provider symbol to the
+single mapped, primary, active US `RadarInstrument`; that join preserves the
+instrument-owned ticker, MIC, and currency. `TickerUniverse` text metadata is
+not an instrument identity and cannot drive the write. A duplicate provider
+symbol mapping is refused as ambiguous. Unmatched symbols on either side are
+counted and logged, and any normalization mapping is added only from observed
+mismatches, never guessed.
 The free key is operator-provisioned; the base URL is configuration because
 of the Polygon→Massive rebrand.
+
+A structurally valid but empty grouped result for an expected US trading day
+is incomplete and never advances progress. Provider timestamps must resolve
+to the requested exchange-local date. Identical duplicate rows deduplicate;
+conflicting duplicates refuse that symbol and increment a conflict count
+rather than choosing whichever row happened to arrive last.
 
 **Fallback and backfill — Yahoo chart endpoint.** Yahoo's per-symbol chart
 endpoint backs three bounded roles: the German Xetra history backfill of §8,
@@ -243,6 +265,13 @@ and a flag-gated US quote/history fallback that is not a planned activation
 batch quote endpoint. Requests use bounded concurrency, a cache, explicit
 timeouts, exponential backoff, and a conservative application-side rate
 limit.
+
+Yahoo deep-tail rows use the split-only close series, not `adjclose`:
+Yahoo defines adjusted close as both split- and dividend-adjusted, while
+Massive `adjusted=true` and the incumbent Twelve Data default are split-only.
+Mixing those bases would manufacture a seam at dividends. The adapter pins
+the selected series with split/dividend fixtures and the stored close carries
+explicit `adjustment_basis='split'` provenance.
 
 Every Yahoo result is checked against the requested provider symbol, expected
 currency, exchange metadata where present, and provider timestamp. HTTP 401,
@@ -363,11 +392,13 @@ Binding normalized additions are:
 
 | Field | Values / meaning |
 |---|---|
-| `source` | `deutsche_boerse_delayed`, `yahoo_chart`, `massive_grouped` (daily closes only, never an intraday quote) `[A1]`, `finnhub` (the permanent US quote source `[A2]`), or an explicit migration-era value (`legacy`, `twelvedata`) |
+| quote `source` | `deutsche_boerse_delayed`, `yahoo_chart`, `finnhub` (the permanent US quote source `[A2]`), or an explicit migration-era value (`legacy`, `twelvedata`); `massive_grouped` is forbidden in `RadarQuote` |
+| daily-close `source` | the quote-source values plus `massive_grouped` `[A1]` |
 | `price_basis` | `trade`, `midpoint`, or `close` |
 | `bid`, `ask` | nullable original EUR book values; both required to derive midpoint |
 | `quote_ts` | provider event time in UTC; never replaced by `fetched_at` |
-| `provider_delay` | `delayed` for these sources; `stale` remains age-derived |
+| `provider_delay` | `live` for Finnhub, `delayed` for Deutsche Börse/Yahoo; `stale` remains age-derived |
+| daily-close `adjustment_basis` | `split` for every selected v2 history row; migration-era NULL is treated as split only for the known incumbent Twelve Data rows |
 
 `RadarQuote` persists those fields alongside the existing market, MIC,
 currency, symbol, price, close, volume, and timestamps. One poll may store one
@@ -376,13 +407,32 @@ timestamp remain valid snapshots because frozen-tape detection depends on
 that evidence; processing the same file twice within one poll does not create
 duplicates.
 
-`RadarDailyClose` gains source provenance. A daily-close write is uniquely
+`RadarDailyClose` gains source and adjustment provenance. A daily-close write is uniquely
 identified by ticker, market, MIC, date, and shadow state `[A1]` — shadow
 rows are a parallel measurement lane, invisible to every live read, that
 lets a shadow close and the incumbent live close coexist for the same
 identity and date during an agreement gate. For the same identity/date,
 verified Deutsche Börse data wins over Yahoo backfill; a lower-priority source
 cannot overwrite it.
+
+`RadarGroupedCloseDay` is the durable market-level state for one Massive
+trading date and shadow/live lane. Its key is `(source, close_date,
+is_shadow)`; it stores status, payload checksum, fetch/completion times,
+provider-row count, mapped/write counts, unmatched-provider,
+unmatched-universe, board-active expected/matched counts, malformed-row and
+duplicate-conflict counts, and a
+bounded error code, HTTP status, and `backoff_until`. Status is one of
+`accepted|no_data|rejected|transport_error`. Missing/failed dates remain
+retryable; accepted dates are the resumable progress ledger. A date is
+accepted only after structural validation, at least 5,000 valid provider
+rows, and at least 95% coverage of the current board-active mapped US union;
+otherwise no grouped closes for that attempt are committed. Massive never
+uses the MIC-keyed Deutsche Börse cursor.
+
+`RadarProviderSessionState`, keyed by `(source, market)`, stores the last US
+post-close session date claimed. The claim commits under row lock before the
+provider cycle begins, so a daemon restart cannot repeat the weekend/overnight
+request loop.
 
 Invalid observations fail per instrument. The rest of a valid venue file is
 committed, while transport/archive/parser-level corruption rejects the entire
@@ -403,11 +453,14 @@ After mappings are frozen, bounded, resumable jobs fetch at least the last
 
 - `[A1]` The whole US universe is backfilled from Massive's grouped-daily
   endpoint, one request per trading day, to the free tier's two-year depth.
-  Rows are stored under each ticker's US MIC/currency with
-  `source='massive_grouped'`.
+  Rows are stored under the exact mapped primary US ticker/MIC/currency with
+  `source='massive_grouped'` and `adjustment_basis='split'`.
 - Active-union US instruments additionally use their verified Yahoo US symbol
   for the deeper tail beyond Massive's two-year window, so the shipped 3Y
-  chart span does not regress for the tickers the board actually shows.
+  chart span does not regress for the tickers the board actually shows. A
+  bounded due queue admits at most two newly active, deep-tail-incomplete
+  tickers per 15-minute history cycle; once a ticker reaches the 3Y floor it
+  leaves this queue and Massive alone maintains its recent closes.
 - German instruments use the verified Xetra mnemonic plus Yahoo's `.DE`
   convention only when Yahoo response metadata confirms the expected EUR
   Xetra identity.
@@ -415,8 +468,8 @@ After mappings are frozen, bounded, resumable jobs fetch at least the last
   job does not fall back to search-result name guessing.
 
 Backfill is idempotent and independently restartable. It records source and
-fetch time, rejects future/duplicate/impossible prices, and never overwrites a
-higher-priority native close.
+fetch time, adjustment basis, rejects future/duplicate/impossible prices, and
+never overwrites a higher-priority native close.
 
 ### 8.2 Xetra history as a Tradegate proxy
 
@@ -471,7 +524,11 @@ the board can display.
 
 `[A2]` Finnhub quote polling runs independently on the established
 five-minute cadence for the same board-eligible union, gated to the US
-session plus one post-close cycle `[A3]`. Under the Yahoo fallback flag the
+session plus one post-close cycle `[A3]`. The post-close cycle is eligible
+only during the 60 minutes after the calendar's most recently ended extended
+session and only when `RadarProviderSessionState` has not already claimed that
+US session date. The durable claim happens before remote requests; an error
+does not reopen the date. Under the Yahoo fallback flag the
 cadence widens to 15 minutes with a fair due queue, bounded concurrency,
 cache, and backoff. Repeated provider failure may leave US stale without
 slowing the German cycle.
@@ -484,6 +541,16 @@ on the existing retention schedule — native Deutsche Börse closes excepted,
 because they are observed, not refetchable — so universe-wide ingestion
 cannot grow unboundedly; measured table growth is listed for review at the
 US-close activation gate of §12.
+
+While the close source is `shadow`, all grouped shadow rows remain available
+for the gate. After seven complete days in `massive` mode and after the gate
+report/audit hashes are recorded, retention may remove Massive shadow rows
+older than 30 calendar days. It never removes live rows or native Deutsche
+Börse closes. This is enforceable configuration, not a log-reading
+convention: `RADAR_US_CLOSE_ACTIVATED_AT`,
+`RADAR_US_CLOSE_GATE_REPORT_SHA256`, and
+`RADAR_US_CLOSE_GATE_AUDIT_SHA256` must all validate before cleanup; absent or
+malformed values disable cleanup.
 
 ### 9.3 Quality and eligibility
 
@@ -503,7 +570,9 @@ in diagnostics and never makes old market data fresh.
 print by its provider event time, so an unchanged print re-fetched across
 many polls occupies one slot and the line honestly ends, instead of drawing a
 fresh flat crawl from fetch receipts. This closes the "stale-repeat disease"
-the repository previously fixed only for the 1W span.
+the repository previously fixed only for the 1W span. Deduplication is by the
+repeated `(quote_ts, price)` observation, ordered by `(quote_ts, fetched_at)`;
+equal prices at different event times remain genuine separate prints.
 
 ## 10. API and interface contract
 
@@ -555,8 +624,11 @@ every board request:
 - mapped/unverified/unavailable counts and mapping refusal reasons;
 - current trade/midpoint/stale/unavailable proportions;
 - Yahoo success, latency, 401/403/429, identity mismatch, and backoff state;
-- `[A1]` Massive grouped-close job state: last ingested trading date, rows
-  matched/unmatched against the universe, quota/backoff state;
+- `[A1]` Massive grouped-close job state: latest accepted trading date and
+  retryable gaps, rows
+  returned/matched/written/unmatched against the universe, malformed and
+  duplicate-conflict counts, quota/backoff state;
+- `[A3]` last claimed US post-close session date;
 - history coverage and native/proxy seam counts.
 
 Safety limits reject unexpectedly large downloads, excessive decompression
@@ -591,7 +663,7 @@ Deployment is staged and independently reversible:
    of shadow ingestion whose overlapping dates agree with the incumbent
    source within a small tolerance and whose unmatched-symbol counts and
    measured table growth are
-   reviewed. The two-year universe backfill runs in shadow state before the
+   reviewed. The complete two-year universe backfill runs in shadow state before the
    gate and in live state only after it. US quotes remain Finnhub `[A2]`;
    the Yahoo US flag stays a
    fallback and its activation is not planned. None of this is a
@@ -626,6 +698,28 @@ Failure of any identity or truth gate blocks activation. Other failed gates
 require either a fix and repeat shadow or an explicit spec revision; they are
 not waived inside the implementation plan.
 
+US-close activation is governed separately and requires all of:
+
+- at least three consecutive expected US trading days accepted in shadow;
+- at least 5,000 structurally valid provider rows on each accepted day;
+- at least 95% coverage of the current board-active mapped US union on each
+  day, recomputed by the report from the current exact instrument map and
+  shadow rows rather than trusting a stale ingestion-time ratio;
+- at least 100 incumbent-vs-shadow overlapping rows on each day, with every
+  non-refused relative close delta at most 0.5%;
+- zero split-basis candidates or other adjustment-basis conflicts; these are
+  blockers, not excluded observations;
+- the complete two-year shadow backfill accepted with no missing expected
+  dates left unclassified; and
+- an operator audit bound to both the report SHA-256 and the deterministic
+  SHA-256 of sorted `provider_symbol|ticker|mic|currency` grouped-instrument
+  rows, explicitly accepting the listed unmatched symbols and measured/
+  projected storage growth.
+
+Zero overlap, empty results, insufficient denominators, an incomplete
+backfill, or a missing operator audit is incomplete evidence and cannot
+produce a green exit status.
+
 Rollback disables the new reader/writer independently per market and restores
 the previous compatible read path. It does not delete captured quotes,
 history, mappings, or cursors. A mapping rollback restores the previous atomic
@@ -634,6 +728,11 @@ release as rollback code, receiving no routine calls after German activation
 and the Massive close switch, and is removed only in a later cleanup. The
 Finnhub adapter is NOT rollback code: it keeps serving US quotes and company
 profiles indefinitely.
+
+After the seven-day US-close rollback window, the hashed report and operator
+audit—not millions of duplicate shadow rows—are the durable evidence. The
+bounded shadow cleanup above is therefore part of normal retention, not an
+activation prerequisite or a deletion of live history.
 
 ## 13. Required verification
 
@@ -674,11 +773,20 @@ profiles indefinitely.
 - native close selection never uses a midpoint and reconciles idempotently;
 - `[A1]` Massive grouped payloads are validated per row (symbol, positive
   close, event date); one malformed row does not discard the day's other
-  rows; a malformed day does not advance the ingested-date cursor; unmatched
+  rows; a malformed day does not create accepted grouped-day progress; unmatched
   symbols are counted, never guessed into the universe; a grouped write
   addresses only US-market identities and can never match a German-market
   row (identity isolation, proven with a seeded same-ticker German close
-  left untouched); and a Massive close never appears as an intraday quote.
+  left untouched); an empty expected trading day and a conflicting duplicate
+  do not advance accepted progress; the exact provider-symbol join preserves
+  MIC/currency; split-only basis is consistent across Massive/Twelve/Yahoo;
+  and a Massive close never appears as an intraday quote.
+- `[A1]` the full two-year shadow backfill precedes the US-close gate; the gate
+  cannot pass with empty/insufficient overlap, insufficient active coverage,
+  an unreviewed mismatch/storage report, or any split-basis conflict;
+- `[A1]` a ticker entering the active union after activation is eventually
+  given its bounded Yahoo deep tail without restarting recurring per-symbol
+  refresh for already-complete tickers;
 
 ### 13.4 Board and compatibility
 
@@ -687,9 +795,13 @@ profiles indefinitely.
 - `[A3]` the 1D span slots prints by provider event time: a test first makes
   the stale-repeat visible (an old print re-fetched across several polls
   drawn as multiple fresh slots) and shows the assertion fail, then proves
-  the fixed chart collapses it to one slot with an honestly ending line;
+  the fixed chart collapses repeated receipts of the same event to one slot
+  with an honestly ending line, while equal prices at distinct event times
+  remain distinct;
 - `[A3]` the US quote poller performs no request while the US calendar says
-  closed, except the single post-close cycle;
+  closed, except the single durably claimed post-close cycle; restart, DST,
+  early-close, weekend, and overnight-before-open tests cannot duplicate or
+  misassign that cycle;
 - a transient `XGAT` outage ages the pinned quote and never switches to Xetra
   or US;
 - an unmapped German instrument may use only the explicitly marked,
