@@ -1,5 +1,6 @@
 import { count, formatMarketDate, money } from '../format'
 import type { DetailChart, PanelSpan } from '../types'
+import { ChartHover } from './ChartHover'
 import { SessionBands, sessionNames } from './SessionBands'
 
 const W = 912
@@ -18,10 +19,10 @@ const TICK = PLOT_R + 6
  *  through the lower band, the price line rides the upper band of the SAME
  *  canvas, and the two overlap in the middle exactly where a spike meets a
  *  move -- which is the product's whole question, at every zoom. */
-const TOP = 8
-const FLOOR = 272
+export const TOP = 8
+export const FLOOR = 272
 /** Share of the plot the chatter body may fill, from the floor up. */
-const CHAT_BAND = 0.52
+export const CHAT_BAND = 0.52
 /** Share of the plot the price line is mapped into, from the top down.
  *  The two bands deliberately sum under 1: with them touching, the price
  *  low label and the chatter peak label landed on the same gutter pixel
@@ -203,6 +204,9 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
             wipe hands it over last -- the sweep ends on the newest price. */}
         {priced && <circle cx={lastX} cy={lastY} r="3.2" fill={tone} />}
       </g>
+      {/* The chart answering the cursor: a hairline on the nearest slot and its
+          three facts in words. Last, so it sits over everything it reads. */}
+      <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} />
     </svg>
   </>)
 }
@@ -241,7 +245,7 @@ export function isIntraday(chart: DetailChart): boolean {
 
 /** Where a chatter value sits: zero-anchored at the floor, filling `band`
  *  of the plot upward -- the rows' scale, at panel size. */
-function chatterY(value: number, peak: number, band: number): number {
+export function chatterY(value: number, peak: number, band: number): number {
   return FLOOR - (value / peak) * (FLOOR - TOP) * band
 }
 
@@ -291,7 +295,7 @@ function slotAt(chart: DetailChart, index: number): Date {
 }
 
 /** `14:45` on an intraday slot, a date on a calendar one. */
-function slotLabel(chart: DetailChart, index: number, withDate = false): string {
+export function slotLabel(chart: DetailChart, index: number, withDate = false): string {
   const at = slotAt(chart, index)
   if (isIntraday(chart)) {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -319,7 +323,7 @@ function startLabel(chart: DetailChart): string {
 }
 
 /** The chatter gutter's unit, which is the slot -- not always a day. */
-function perSlot(chart: DetailChart): string {
+export function perSlot(chart: DetailChart): string {
   if (!isIntraday(chart)) return '/d'
   return chart.step_minutes >= 60 ? '/h' : '/15m'
 }
@@ -414,7 +418,7 @@ function pricePaths(chart: DetailChart, priced: boolean) {
 /** High maps to the top pad, low to the bottom of the price band -- the top
  *  `PRICE_BAND` share of the plot, riding above the chatter body with the
  *  overlap in the middle where a spike actually meets a move. */
-function priceY(value: number, low: number, high: number): number {
+export function priceY(value: number, low: number, high: number): number {
   const span = high - low || 1
   const height = (FLOOR - TOP) * PRICE_BAND
   return TOP + (1 - (value - low) / span) * height

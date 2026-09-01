@@ -1075,6 +1075,26 @@ body {
   clip-path: inset(0);
   animation: wipe-x var(--draw) var(--ease-sweep) backwards;
 }
+
+/* The chart answering the cursor (live mode, 2026-09-02): a hairline on the
+   nearest slot, a dot on each line, three lines of words beside it. Ink for
+   the fact, violet only for the count -- the readout follows the chart's own
+   colour rule. No motion: it tracks the pointer, and a readout that eases
+   after the cursor is a readout that is always somewhere else. */
+.pxchart .hover-hit { cursor: crosshair; }
+.pxchart .hover-line {
+  stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.8;
+}
+.pxchart .hover-dot { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.pxchart .hover-dot.px { fill: var(--bg); stroke: var(--ink); }
+.pxchart .hover-dot.talk { fill: var(--mark); stroke: var(--bg); }
+.pxchart .hover-card {
+  fill: var(--raise); stroke: var(--rule); stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.pxchart .hover-text { fill: var(--ink-2); }
+.pxchart .hover-text.l0 { fill: var(--ink); font-weight: 600; }
+.pxchart .hover-text.l2 { fill: var(--mark); font-weight: 600; }
 /* Shown only where the chart actually pans -- see the narrow-viewport block. */
 .panhint {
   display: none; margin: 8px 0 0;
