@@ -31,18 +31,18 @@ binding Codex amendment-review corrections).
 | Task | State | Commit(s) | Focused tests | Independent review | Findings / notes |
 |---|---|---|---|---|---|
 | 1 | **COMPLETE** | 60c1f71 + review-fix commit | 17 passed (`tests/test_capture_deutsche_boerse_contract.py`) | CHECKPOINT: FINDINGS → all 4 SHOULD-FIX folded in (R6 precondition, fixture/table parity both directions, R2 bucket pinning, auditable aggregates), 4 MINOR: #7 fixed (splitlines), #8 accepted cosmetic, #5 folded into R5 text, #6 noted below | PASS ruling stands; reviewer confirmed no licensed-value leaks |
-| 2 | READY | — | — | — | — |
-| 3 | blocked | — | — | — | — |
-| 4 | blocked | — | — | — | — |
-| 4b | blocked | — | — | — | — |
-| 5 | blocked (needs PASS supplement) | — | — | — | — |
-| 6 | blocked | — | — | — | — |
-| 7 | blocked | — | — | — | — |
-| 8 | blocked | — | — | — | — |
-| 9 | blocked | — | — | — | — |
-| 10 | blocked | — | — | — | — |
-| 11 | blocked | — | — | — | — |
-| 12 | deliberately delayed (post-rollback-window; Michi authorizes) | — | — | — | — |
+| 2 | **COMPLETE** | 6fc010b | 41 passed (models+migration) + 49 writer smoke | inline (post-hoc review batched with Task 3) | dev DB migrated to 6a21d4e8c9f0; old-writer compat + teeth variants proven |
+| 3 | **COMPLETE** | 27746ec | 233 focused (prices/markets/quotes/batch/calendar/api/board/detail) | inline; batched into next review round | pre-v2 fallback test rewritten to spec §4.2 rule (mapped DE primary + dead feed → no US fallback) |
+| 4 | **COMPLETE** | 6b54a9d | 41 (yahoo+prices) incl. dividend/split basis fixtures + semaphore teeth | inline; batched | split-only quote.close pinned |
+| 4b | **COMPLETE** | 2845d53 | 38 (massive+prices) | inline; batched | typed GroupedFetch; no DB identity in adapter |
+| 5 | **COMPLETE** | f249c54 | 52 (dbag+capture) | inline; batched | R1–R10 enforced; fixture ISINs now valid-length fakes |
+| 6 | **COMPLETE** | c9be683 | 76 (openfigi+instruments+daemon) | inline; batched | interface deviation recorded: us_share_classes returns candidate TUPLES (none-vs-ambiguous distinguishable); R6 reference capture still owed before production reference fetch |
+| 7 | **COMPLETE** | 0102f7d | 47 (market_data+quotes+retention) | inline; final review pending | one-commit-per-channel-pass; forced-failure atomicity proven |
+| 8 | **COMPLETE** | 94c3632 | 197 focused | inline; final review pending | 1D teeth demonstrated (4 tests failed pre-fix); grouped floors + shadow-lane guards |
+| 9 | **COMPLETE** | fc5d174 | 165 focused (99 pre-existing untouched) | inline; final review pending | R6: shadow/active mapping build REFUSES until reference capture (operator+worker step owed before German shadow) |
+| 10 | **COMPLETE** | e3cbec2 | 175 frontend + 124 backend; builds typecheck | inline; final review pending | two legacy contract pins updated per spec §10 |
+| 11 | **COMPLETE** (Steps 1–7; Steps 8–9 are operator gates) | (commit follows) | 7 report tests | inline; final review pending | enforced READ ONLY; per-switch --gate exit codes; grouped gate non-vacuous |
+| 12 | deliberately delayed (post-rollback-window; Michi authorizes) | — | — | — | contraction migration b742e9d13c60 NOT written yet by design |
 
 ## Evidence log
 

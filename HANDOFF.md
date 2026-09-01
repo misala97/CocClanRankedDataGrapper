@@ -23,25 +23,34 @@ prose.
 
 ## Completed / open
 
-- Completed: Task 1 in full (INLINE — Michi rejected subagent-driven
-  implementation). Michi accepted the DBAG terms in his browser and directed
-  the worker to download; live capture ran 2026-09-01 during the open
-  session. Supplement
-  `docs/superpowers/specs/2026-08-31-radar-deutsche-boerse-feed-contract.md`
-  rules **PASS** with rulings R1–R11 (NDJSON, one-redirect signed-GCS
-  transport, no cookie, no observed corrections, XETR `lastTradeIndicator='C'`
-  = closing auction, no reference channel, XETR-pre 200 MB/min ruling,
-  empty-gzip market-closed). 15 capture/parity tests green.
-- Open: independent read-only review of the supplement/fixtures (the Task 1
-  hard checkpoint), then Tasks 2–11 sequentially inline.
+- Completed: Tasks 1–11 in full, INLINE, one commit per task (see the
+  ledger's task table for commits and focused-test evidence). Task 1's
+  capture supplement rules PASS (R1–R11); its independent review returned
+  22 findings, all folded in (7ba4cd2). Dev DB is migrated to
+  `6a21d4e8c9f0`.
+- Open: Task 12 is DELIBERATELY DELAYED (post-rollback-window; Michi must
+  authorize; the contraction migration is not written yet by design).
+  Remaining operator gates are listed below.
+
+## Operator gates before German shadow can even start
+
+1. **R6 reference capture**: the Xetra "Tradable Instruments" file and a
+   Tradegate BSX instrument list must pass their own capture-and-freeze
+   (appended to the contract supplement as §3.5/§3.6, reviewed) BEFORE the
+   weekly mapping job may build OpenFIGI generations. The job currently
+   refuses with a loud log under shadow/active — by design.
+2. Deploy with `RADAR_DE_PRICE_MODE=shadow` (+ `RADAR_MASSIVE_API_KEY` if
+   also starting the close shadow), run one complete Tradegate session,
+   then the report script with `--gate german`.
+3. US closes: `RADAR_US_CLOSE_SOURCE=shadow`, full 2-year universe
+   backfill (`--market us-universe --apply`), ≥3 accepted days,
+   `--gate us-closes` + operator audit, then `massive` + evidence settings.
 
 ## Immediate next action
 
-1. Independent read-only review of the Task 1 supplement + fixtures +
-   PASS ruling (subagent reviewer is acceptable; implementation stays inline).
-2. On review-clean: Task 2 (schema expansion migration `6a21d4e8c9f0`).
-3. Rulings R1–R11 adapt Tasks 5/6/7 (transport, corrections, references,
-   XETR-pre fetch-on-demand); consult the supplement before those tasks.
+Final whole-branch verification (full backend suite + frontend + builds)
+and one independent read-only review of Tasks 2–11; fold findings; then
+report to Michi with the commit range and the operator-gate list.
 
 ## Tests
 
