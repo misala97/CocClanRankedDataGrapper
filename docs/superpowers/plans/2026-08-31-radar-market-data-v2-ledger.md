@@ -166,3 +166,54 @@ binding Codex amendment-review corrections).
   guards the post-exclusion catalog, with teeth). Real captured
   universe: XETR catalog 5,100 rows, XGAT 6,419 — zero collision drops
   today. Focused suites 119 passed after the final fold.
+
+## Xetra history-proxy mapping fix — 2026-09-01
+
+- Production symptom (operator-observed): generation 1 was active OpenFIGI
+  (`7434cf387044…`) with 2,517 mapped German primaries, but the German history
+  backfill discovered only 13 legacy/pre-existing XETR rows. It stored all 13
+  (`last_key=VSEC:XETR`), leaving most XGAT-primary charts without 1W/1M/1Y
+  history. Generation 2 was a shadow legacy rollback (`2d9e60341d5f…`).
+- Root cause: a generation retained only the selected primary venue. XGAT won
+  venue priority, so an independently verified same-ISIN XETR listing was
+  discarded before persistence; the existing backfill correctly queried
+  mapped XETR rows and therefore had almost nothing to process.
+- Design `1d099e0`; implementation plan `6ef9d34`; mapping decision/hash fix
+  `3bcd648`; atomic activation/rollback fix `04e6176`; end-to-end regression
+  proof `47eae41`.
+- New generations retain an optional exact-ISIN XETR history proxy for an XGAT
+  primary. Proxy fields are hashed when present and omitted when absent, so old
+  generation payload hashes still verify. Activation/rollback govern primary
+  and proxy rows in one transaction; stale proxy authority is removed and
+  duplicate venue identities refuse before writes.
+- The history reader remains unchanged in behavior: it composes XETR only for
+  exact-ISIN EUR rows and only before the first native XGAT close. There is no
+  schema migration and no dependency change.
+- Regression proof: with the proxy upsert temporarily removed, the new
+  backfill-discovery test failed at `next(...)` with `StopIteration`; restoring
+  it passed. Backfill/history/detail integration: **98 passed**.
+- Fresh focused gate:
+
+  ```text
+  python -m pytest tests/test_radar_openfigi.py tests/test_radar_instruments.py tests/test_radar_reference_universe.py tests/test_radar_market_data.py tests/test_radar_market_data_report.py tests/test_radar_history.py tests/test_radar_detail.py tests/test_radar_api.py tests/test_radar_daemon.py -q
+  298 passed, 126 warnings in 141.03s
+  ```
+
+- Fresh adjacent gate:
+
+  ```text
+  python -m pytest tests/test_radar_quotes.py tests/test_radar_board.py tests/test_radar_leaderboard.py tests/test_radar_migration.py -q
+  108 passed, 35 warnings in 12.72s
+  ```
+
+- Final whole-repository gate: backend **1,813 passed** in 1,385.46s;
+  frontend **403 general + 175 Radar = 578 passed**; TypeScript and both
+  production Vite builds passed.
+
+- Status: implemented and locally verified, **not deployed**. The current
+  production generation predates proxy fields and is not changed by deploying
+  code alone. Operator sequence: deploy; explicitly build a new shadow mapping
+  generation; review its exact ID/hash/counts; activate that reviewed ID;
+  verify XGAT/XETR rows share generation and ISIN; then run bounded German
+  backfill batches and verify representative 1W/1M/1Y charts. No production
+  mutation was performed by this fix branch.

@@ -1,76 +1,102 @@
-# HANDOFF — Radar Market Data v2
+# HANDOFF — Radar Xetra history-proxy rollout
 
-Read this + the execution ledger
-(`docs/superpowers/plans/2026-08-31-radar-market-data-v2-ledger.md`) completely
-before touching code. Verify against `git log`/`git status` — evidence beats
-prose.
+Read this and
+`docs/superpowers/plans/2026-08-31-radar-market-data-v2-ledger.md`
+before changing code. Verify prose against Git and fresh tests; evidence wins.
 
 ## Exact workspace
 
-- Worktree: `C:\Users\michi\Desktop\CodingStuff-worktrees\radar-market-data-v2`
-- Branch: `radar-market-data-v2`, created from `dev_personal` @ `9dadd9c`
-- Implementation HEAD verified in this handoff: `0d3ea22` (the handoff-only
-  bookkeeping commit follows it)
-- Spec/plan commit: `9dadd9c` (binding, includes Codex amendment-review
-  corrections)
+- Worktree: `C:\Users\michi\Desktop\CodingStuff-worktrees\radar-xetra-history-proxy-fix`
+- Branch: `codex/radar-xetra-history-proxy-fix`
+- Implementation HEAD: `47eae41` (the documentation-only handoff commit follows it)
+- Design: `1d099e0`; plan: `6ef9d34`
+- Implementation: `3bcd648`, `04e6176`, `47eae41`
 
 ## Dirty files and ownership
 
-- This worktree: clean before this handoff/ledger refresh.
-- Main checkout `C:\Users\michi\Desktop\CodingStuff` (dev_personal): Michi's
-  Telegram WIP (`personal_apps/scripts/discover_telegram_sources.py`,
-  `personal_apps/telegram_candidates.json`) + untracked scratchpad/measure
-  scripts — PROTECTED, never commit, never touch, never clean.
+- This worktree was clean before this handoff update.
+- Main checkout `C:\Users\michi\Desktop\CodingStuff` contains Michi-owned
+  Telegram/candidate, `.agents`/`.codex`, scratchpad/probe, measurement, and
+  measurement-test WIP. It is protected: do not edit, stage, clean, or commit it.
 
-## Completed / open
+## Outcome
 
-- Completed: Tasks 1–11 in full, INLINE, one commit per task (see the
-  ledger's task table for commits and focused-test evidence). Task 1's
-  capture supplement rules PASS (R1–R11); its independent review returned
-  22 findings, all folded in (7ba4cd2). Dev DB is migrated to
-  `6a21d4e8c9f0`. Final Codex review findings were corrected in `0d3ea22`:
-  Yahoo history identity, per-track activation truth, non-vacuous grouped
-  coverage, report+map-bound audit, duplicate/basis/storage evidence,
-  persisted Massive backoff, shadow-safe downgrade, and calendar compatibility.
-- Open: Task 12 is DELIBERATELY DELAYED (post-rollback-window; Michi must
-  authorize; the contraction migration is not written yet by design).
-  Remaining operator gates are listed below.
+The fix is implemented and verified locally, but is **not deployed**.
 
-## Operator gates before German activation
+- An XGAT primary may now carry one separately audited XETR history proxy only
+  when both official reference rows are complete, supported, EUR, and have the
+  exact same ISIN.
+- Optional proxy fields participate in new generation hashes; payloads without
+  them retain their old canonical JSON and SHA-256 behavior.
+- Activation and rollback atomically govern both rows. Stale proxies become
+  unavailable, and duplicate venue identities are rejected before mutation.
+- The unchanged German history backfill discovers the mapped non-primary XETR
+  row. Chart composition remains exact-ISIN and uses the proxy only before the
+  first native XGAT close.
+- No schema migration or dependency change is required.
 
-1. ~~R6 reference capture~~ **DONE 2026-09-01** (supplement §3.5/§3.6 +
-   R12–R16; `features/radar/reference_universe.py`; the weekly mapping job
-   now builds generations under shadow/active). See the ledger's
-   "R6 reference capture" section.
-2. Deploy with `RADAR_DE_PRICE_MODE=shadow` (+ `RADAR_MASSIVE_API_KEY` if
-   also starting the close shadow), run one complete Tradegate session,
-   then the report script with `--gate german`.
-3. US closes: `RADAR_US_CLOSE_SOURCE=shadow`, full 2-year universe
-   backfill (`--market us-universe --apply`), ≥3 accepted days,
-   `--gate us-closes` + operator audit, then `massive` + evidence settings.
+## Production state (operator-observed, not locally verified)
 
-## Immediate next action
+At 2026-09-01 before this fix:
 
-Merge the R6 reference work to `dev_personal`/`main` after its read-only
-review, Michi deploys, then Michi sets `RADAR_DE_PRICE_MODE=shadow` and one
-full Tradegate session runs before the `--gate german` report. Task 12
-remains delayed.
+- generation 1: `active`, `openfigi`, hash prefix `7434cf387044`;
+- generation 2: `shadow`, `legacy`, hash prefix `2d9e60341d5f`;
+- 2,517 mapped German primaries;
+- German live collection: `mode=active status=accepted`;
+- German backfill found only 13 pre-existing XETR rows and stored all 13,
+  ending at `VSEC:XETR`.
 
-## Tests
+Generation 1 predates proxy-aware payloads. Deploying this branch does not
+retrofit it; a fresh generation must be built and activated.
 
-- Full backend: `python -m pytest tests/ -q` — **1752 passed** in 642.14s.
-- Focused market-data regression suite — **223 passed**; fresh report suite
-  after its final teeth edit — **14 passed**.
-- Frontend: `npm test` — **403 general + 175 Radar = 578 passed**.
-- Production builds: `npm run build` — TypeScript and both Vite builds pass.
-- `git diff --check` passes (only Windows LF→CRLF notices).
+## Immediate operator rollout
 
-## Rules that bind every later agent
+1. Integrate this branch, push, and deploy through the normal release path.
+2. From the deployed `personal_apps` directory, explicitly build a fresh
+   shadow generation:
 
-- One implementation worker at a time; independent read-only review per task.
-- Never re-dispatch a task the ledger marks complete.
-- Operator gates (terms acceptance, downloads, audits, flag changes, deploys)
-  belong to Michi exclusively.
-- Provider flags stay at legacy defaults; no activation in this plan without
-  Michi's explicit approval.
-- Do not commit raw DBAG payloads, cookies, or API keys.
+   ```bash
+   /root/coc-stats/venv/bin/python run_radar_ingest.py --refresh-mappings
+   ```
+
+3. Inspect the new generation ID, source, full hash, decision counts, and proxy
+   count. Do not activate an ID selected only by “latest” without reviewing it.
+4. Activate that reviewed generation with `instruments.activate_generation(...)`.
+   Confirm mapped XGAT primaries and mapped non-primary XETR proxies share the
+   new `mapping_generation_id` and exact ISIN.
+5. Dry-run, then backfill in bounded batches:
+
+   ```bash
+   /root/coc-stats/venv/bin/python -m scripts.backfill_radar_market_history --market de --dry-run
+   /root/coc-stats/venv/bin/python -m scripts.backfill_radar_market_history --market de --apply --limit 25
+   ```
+
+   Continue with `--resume-after TICKER:XETR` from each batch's final key until
+   the dry-run reports zero remaining targets.
+6. Verify representative XGAT-primary tickers in 1W/1M/1Y views and confirm
+   logs keep reporting accepted German active cycles.
+
+Stop and retain the current active generation if the new build is incomplete,
+the audited counts/hash are unexpected, activation refuses, or the proxy ISIN
+does not exactly equal the primary ISIN.
+
+## Verification
+
+- Baseline before edits: 89 focused tests passed; `npm run build` passed.
+- Task 1 mapping/hash suite: 45 passed.
+- Task 2 activation/rollback suite: 22 passed.
+- Backfill/history/detail integration: 98 passed.
+- Focused mapping/market-data gate: **298 passed** in 141.03s.
+- Adjacent quotes/board/leaderboard/migration gate: **108 passed** in 12.72s.
+- Full backend gate: **1,813 passed** in 1,385.46s.
+- Frontend gates: **403 general + 175 Radar = 578 passed**; TypeScript and
+  both production Vite builds passed.
+- The new backfill regression was proven non-vacuous: temporarily removing the
+  proxy upsert made it fail with `StopIteration`; restoring it returned green.
+- Only existing SQLAlchemy/datetime deprecation warnings remain.
+
+## Scope boundary
+
+Do not push, deploy, refresh production mappings, activate a production
+generation, or run production backfill without Michi's operator action. Radar
+market-data v2 Task 12 remains deliberately delayed for the rollback window.

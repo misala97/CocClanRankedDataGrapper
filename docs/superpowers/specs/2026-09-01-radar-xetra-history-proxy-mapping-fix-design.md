@@ -1,7 +1,7 @@
 # Radar Xetra History-Proxy Mapping Fix
 
-**Date:** 2026-09-01  
-**Status:** Approved in chat; awaiting repository review  
+**Date:** 2026-09-01
+**Status:** Approved in chat; awaiting repository review
 **Scope:** German market-data mapping generation, activation, and historical
 backfill eligibility
 
