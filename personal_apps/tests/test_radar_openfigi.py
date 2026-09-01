@@ -285,6 +285,57 @@ def test_malformed_response_is_price_unavailable():
             [instrument('AAPL')])
 
 
+class _CountingProvider:
+    def __init__(self, inner):
+        self._inner = inner
+        self.share_calls = []
+        self.venue_calls = []
+
+    def us_share_classes(self, instruments):
+        instruments = list(instruments)
+        self.share_calls.append(len(instruments))
+        return self._inner.us_share_classes(instruments)
+
+    def venue_candidates(self, share_classes, mic):
+        self.venue_calls.append((mic, sorted(share_classes)))
+        return self._inner.venue_candidates(share_classes, mic)
+
+
+MIXED_ANSWERS = {
+    ('TICKER', 'ZZAA', 'US'): [us_result('ZZAA', 'BBG001S5N8V8')],
+    ('SHARE', 'BBG001S5N8V8', 'XGAT'): [de_result('APC', 'XGAT')],
+    ('TICKER', 'ZZAM', 'US'): [us_result('ZZAM', 'BBG101'),
+                               us_result('ZZAM', 'BBG102')],
+    ('TICKER', 'ZZWT', 'US'): [
+        us_result('ZZWT', 'BBG201', security_type='Warrant')],
+    # ZZNO: no share class at all.
+}
+
+
+def test_prefetched_provider_batches_instead_of_per_ticker():
+    """The 12.6k-universe regression: one HTTP pass per stage, never one
+    per ticker. Only the tickers that can reach the venue step are asked
+    about venues."""
+    counting = _CountingProvider(FakeOpenFigi(MIXED_ANSWERS))
+    rows = [instrument(t) for t in ('ZZAA', 'ZZAM', 'ZZWT', 'ZZNO')]
+
+    prefetched = instruments_mod._PrefetchedOpenFigi(counting, rows)
+
+    assert counting.share_calls == [4]          # one pass, all tickers
+    assert [call[0] for call in counting.venue_calls] == ['XGAT', 'XETR']
+    assert all(call[1] == ['ZZAA'] for call in counting.venue_calls)
+
+    for row in rows:
+        direct = decide_mapping(row, FakeOpenFigi(MIXED_ANSWERS),
+                                BOTH_REFERENCES, {})
+        via_prefetch = decide_mapping(row, prefetched, BOTH_REFERENCES, {})
+        assert (via_prefetch.status, via_prefetch.reason,
+                via_prefetch.mic, via_prefetch.symbol) == \
+            (direct.status, direct.reason, direct.mic, direct.symbol)
+    assert counting.share_calls == [4]          # decisions hit memory only
+    assert len(counting.venue_calls) == 2
+
+
 class _FakeResponse:
     def __init__(self, status_code, payload=None, headers=None):
         self.status_code = status_code

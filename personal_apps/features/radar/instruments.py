@@ -467,15 +467,52 @@ def rollback_generation(generation_id, now):
     return changed
 
 
+class _PrefetchedOpenFigi:
+    """Batch every OpenFIGI lookup up front, answer per-ticker after.
+
+    ``decide_mapping`` asks one ticker at a time; feeding it the raw
+    provider makes one HTTP request PER TICKER and turns a 12.6k-ticker
+    universe into a day of paced calls (observed in production
+    2026-09-01). This wrapper runs the provider's real batching — one
+    ``us_share_classes`` pass over all instruments, one
+    ``venue_candidates`` pass per MIC over the tickers that can reach
+    the venue step — and then serves ``decide_mapping`` from memory.
+
+    The eligibility filter MUST mirror ``decide_mapping``'s gate exactly
+    (exactly one share class of a supported type): those are the only
+    tickers whose venue lookup is ever consulted.
+    """
+
+    def __init__(self, provider, instruments):
+        self._share = provider.us_share_classes(instruments)
+        eligible = {
+            ticker: candidates[0]
+            for ticker, candidates in self._share.items()
+            if len(candidates) == 1 and
+            is_supported_type(candidates[0].security_type)}
+        self._venues = {mic: provider.venue_candidates(eligible, mic)
+                        for mic in ('XGAT', 'XETR')}
+
+    def us_share_classes(self, instruments):
+        return {row.ticker: self._share.get(row.ticker, ())
+                for row in instruments}
+
+    def venue_candidates(self, share_classes, mic):
+        return {ticker: self._venues[mic].get(ticker, ())
+                for ticker in share_classes}
+
+
 def build_generation(openfigi_provider, references_by_mic, overrides, now):
     """Decide every active US ticker and persist one shadow generation.
 
     A transport failure inside the provider raises PriceUnavailable and
     nothing is written; an incomplete reference raises IncompleteReference.
     """
+    rows = _active_us_instruments()
+    prefetched = _PrefetchedOpenFigi(openfigi_provider, rows)
     decisions = [
-        decide_mapping(row, openfigi_provider, references_by_mic, overrides)
-        for row in _active_us_instruments()]
+        decide_mapping(row, prefetched, references_by_mic, overrides)
+        for row in rows]
     return persist_generation(decisions, now)
 
 
