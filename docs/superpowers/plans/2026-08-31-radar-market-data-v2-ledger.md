@@ -30,8 +30,8 @@ binding Codex amendment-review corrections).
 
 | Task | State | Commit(s) | Focused tests | Independent review | Findings / notes |
 |---|---|---|---|---|---|
-| 1 | IN PROGRESS (steps 0–4 workable; step 5 waits on operator) | — | — | — | Hard PASS/STOP gate |
-| 2 | blocked on Task 1 checkpoint | — | — | — | — |
+| 1 | **COMPLETE** | 60c1f71 + review-fix commit | 17 passed (`tests/test_capture_deutsche_boerse_contract.py`) | CHECKPOINT: FINDINGS → all 4 SHOULD-FIX folded in (R6 precondition, fixture/table parity both directions, R2 bucket pinning, auditable aggregates), 4 MINOR: #7 fixed (splitlines), #8 accepted cosmetic, #5 folded into R5 text, #6 noted below | PASS ruling stands; reviewer confirmed no licensed-value leaks |
+| 2 | READY | — | — | — | — |
 | 3 | blocked | — | — | — | — |
 | 4 | blocked | — | — | — | — |
 | 4b | blocked | — | — | — | — |
@@ -78,7 +78,13 @@ binding Codex amendment-review corrections).
 
 ## Baseline
 
-- Backend `python -m pytest tests/ -q`: RUNNING — error band visible mid-run,
-  under investigation once complete (suspected worktree environment, not code;
-  main-checkout suite was green at the sentiment-v2 tip).
-- Frontend `npm test`: queued behind backend in same background task.
+- Backend `python -m pytest tests/ -q`: **1557 passed** (507s). First run's
+  error band was worktree environment only: the fresh worktree lacked the
+  repo-root `.env` (dev MySQL password → "Access denied ... using password:
+  NO") and the untracked `static/radar/dist` Vite build. Fixed by copying
+  `.env` from the main checkout (git-ignored) and running `npm run build`.
+  Any future fresh worktree needs both steps.
+- Frontend `npm test`: **167 passed** (11 files).
+- Task 1 review MINOR #6 watch item: XETR-pre caps (30 MiB/300 MiB) hold only
+  ~1.5× headroom over the single observed minute file; the shadow report
+  re-measures.

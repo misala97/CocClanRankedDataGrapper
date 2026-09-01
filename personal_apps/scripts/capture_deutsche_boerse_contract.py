@@ -39,6 +39,33 @@ class PathShape:
 
 
 @dataclasses.dataclass(frozen=True)
+class ValueCardinality:
+    path: str
+    distinct: int
+    total: int
+
+
+@dataclasses.dataclass(frozen=True)
+class OrderCheck:
+    path: str
+    violations: int
+
+
+@dataclasses.dataclass(frozen=True)
+class EnumValueProfile:
+    value: str
+    count: int
+    first_hhmm: str
+    last_hhmm: str
+
+
+@dataclasses.dataclass(frozen=True)
+class EnumTimeProfile:
+    path: str
+    values: tuple[EnumValueProfile, ...]
+
+
+@dataclasses.dataclass(frozen=True)
 class ArchiveReport:
     filename: str
     sha256: str
@@ -48,6 +75,28 @@ class ArchiveReport:
     paths: tuple[PathShape, ...]
     timestamp_paths: tuple[str, ...]
     identifier_paths: tuple[str, ...]
+    # Aggregate, value-free statistics so the supplement's quantitative
+    # claims (duplicate counts, ordering, enum clustering) are re-derivable
+    # from the committed tool instead of a discarded local analysis.
+    # enum_time_profiles is the ONE place literal payload strings appear,
+    # and only for paths with at most _ENUM_MAX_DISTINCT distinct values --
+    # schema vocabulary (flags, MICs, currencies), never market data.
+    value_cardinality: tuple[ValueCardinality, ...] = ()
+    order_violations: tuple[OrderCheck, ...] = ()
+    enum_time_profiles: tuple[EnumTimeProfile, ...] = ()
+
+
+# A string path qualifies as enum vocabulary only while its distinct-value
+# count stays at or below this. Prices, ISINs, and ids blow past it within a
+# handful of rows and are therefore never surfaced.
+_ENUM_MAX_DISTINCT = 12
+
+# Only values of this shape may ever be surfaced in an enum profile: short
+# uppercase flag/venue/currency vocabulary. ISINs (12 chars), transaction
+# ids, and anything lowercase or long can never appear regardless of
+# cardinality -- a second guard on top of _ENUM_MAX_DISTINCT, because a
+# SMALL file could otherwise sneak identifiers under the distinct cap.
+_ENUM_VALUE_RE = re.compile(r'^[A-Z0-9-]{1,6}$')
 
 
 # Chunked reads so a hostile archive cannot balloon memory before the
@@ -133,8 +182,12 @@ def inspect_archive(path, *, max_compressed=52_428_800,
         payload = json.loads(text)
     except json.JSONDecodeError:
         rows = []
-        for number, line in enumerate(text.splitlines(), start=1):
-            if not line.strip():
+        # split('\n') rather than splitlines(): the latter also splits on
+        # exotic Unicode terminators that could legally appear INSIDE a
+        # string field and would misfire the parser.
+        for number, line in enumerate(text.split('\n'), start=1):
+            line = line.strip('\r').strip()
+            if not line:
                 continue
             try:
                 rows.append(json.loads(line))
@@ -175,6 +228,64 @@ def inspect_archive(path, *, max_compressed=52_428_800,
         for child in payload:
             visit(child, '/*')
 
+    # Aggregate statistics run over NDJSON rows (the only shape the real
+    # feed uses); a single JSON document has no row sequence to profile.
+    cardinality = {}
+    order_checks = {}
+    profiles = {}
+    if ndjson:
+        counters = {}
+        for row in payload:
+            if not isinstance(row, dict):
+                continue
+            row_ts = max((value for value in row.values()
+                          if isinstance(value, str)
+                          and _TIMESTAMP_RE.match(value.strip())),
+                         default=None)
+            hhmm = row_ts[11:16] if row_ts and len(row_ts) >= 16 else None
+            for key, value in row.items():
+                if not isinstance(value, str):
+                    continue
+                pointer = '/*/%s' % key
+                entry = counters.setdefault(
+                    pointer, {'distinct': set(), 'total': 0,
+                              'profile': {}, 'overflow': False})
+                # Exact distinct counts: "0 duplicate transaction ids in
+                # 376k rows" is only auditable with the real number. Memory
+                # is bounded by the decompression caps upstream.
+                entry['total'] += 1
+                entry['distinct'].add(value)
+                if _TIMESTAMP_RE.match(value.strip()):
+                    check = order_checks.setdefault(
+                        pointer, {'previous': None, 'violations': 0})
+                    if check['previous'] is not None and value < check['previous']:
+                        check['violations'] += 1
+                    check['previous'] = value
+                    continue
+                if not entry['overflow'] and _ENUM_VALUE_RE.match(value) \
+                        and not _ISIN_RE.match(value):
+                    stats = entry['profile'].setdefault(
+                        value, {'count': 0, 'first': None, 'last': None})
+                    stats['count'] += 1
+                    if hhmm is not None:
+                        stats['first'] = min(stats['first'] or hhmm, hhmm)
+                        stats['last'] = max(stats['last'] or hhmm, hhmm)
+                    if len(entry['profile']) > _ENUM_MAX_DISTINCT:
+                        entry['overflow'] = True
+                        entry['profile'] = {}
+        for pointer, entry in counters.items():
+            cardinality[pointer] = ValueCardinality(
+                path=pointer, distinct=len(entry['distinct']),
+                total=entry['total'])
+            if entry['profile'] and not entry['overflow']:
+                profiles[pointer] = EnumTimeProfile(
+                    path=pointer,
+                    values=tuple(
+                        EnumValueProfile(value=value, count=stats['count'],
+                                         first_hhmm=stats['first'] or '',
+                                         last_hhmm=stats['last'] or '')
+                        for value, stats in sorted(entry['profile'].items())))
+
     paths = tuple(
         PathShape(path=pointer, types=tuple(sorted(entry['types'])),
                   occurrences=entry['count'])
@@ -186,7 +297,14 @@ def inspect_archive(path, *, max_compressed=52_428_800,
         top_level_type='ndjson' if ndjson else _JSON_TYPES[type(payload)],
         paths=paths,
         timestamp_paths=tuple(sorted(timestamp_paths)),
-        identifier_paths=tuple(sorted(identifier_paths)))
+        identifier_paths=tuple(sorted(identifier_paths)),
+        value_cardinality=tuple(
+            cardinality[key] for key in sorted(cardinality)),
+        order_violations=tuple(
+            OrderCheck(path=key, violations=check['violations'])
+            for key, check in sorted(order_checks.items())),
+        enum_time_profiles=tuple(
+            profiles[key] for key in sorted(profiles)))
 
 
 def main(argv=None):

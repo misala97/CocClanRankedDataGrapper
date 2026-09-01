@@ -8,9 +8,14 @@ accepted the service's disclaimer in his own browser before any download.
 **Method:** four current minute-files (one per MIC/channel, 08:34 UTC slice)
 were downloaded and inspected with
 `personal_apps/scripts/capture_deutsche_boerse_contract.py` (redacted
-structural report; SHA-256s below). Value-level enumeration of enum-shaped
-fields, timestamp formats, ordering, and ID cardinality ran locally and was
-discarded; no licensed payload, price, ISIN, or ID enters Git. Supporting
+structural report; SHA-256s below). The tool itself emits the aggregate,
+value-free statistics behind this document's quantitative claims —
+per-path value cardinality (duplicates = total − distinct), timestamp
+ordering-violation counts, and short-enum time profiles (flag vocabularies
+with ≤12 distinct short uppercase values, each with count and first/last
+HH:MM) — so every such claim is re-derivable by re-running the tool on a
+fresh download; nothing rests on a discarded local analysis. No licensed
+payload, price, ISIN, or ID enters Git or the report. Supporting
 observations used the two daily consolidated post-trade files and two
 market-closed minute files.
 
@@ -90,11 +95,13 @@ Captured file SHA-256s (files themselves NOT committed):
 | volume | `/*/quantity` | number | |
 | official-close marker | — | — | **absent** on XGAT (ruling R5) |
 | batch ID | `/*/messageId` | string | one per file |
+| trading system | `/*/tradingSystem` | string | `7` observed on every XGAT row |
 | other observed | `/*/mmtAlgoInd` (`H`/`-`), `/*/mmtTradingMode` (`U`), `/*/priceNotation` (1, rarely 2), `/*/venueOfPublication` (`XCEF`), `/*/notionalAmount` (rare, number) | | recorded, unused |
 
 ### 3.2 XETR post-trade (`DETR-posttrade`)
 
-Same pointers as 3.1, plus:
+Same pointers as 3.1 (except `/*/notionalAmount`, not observed on XETR),
+plus:
 
 | Semantic field | Pointer | Observed type | Notes |
 |---|---|---|---|
@@ -118,6 +125,9 @@ Flat top-of-book rows (~119,738/minute observed):
 | publication time | `/*/publicationDateAndTime` | string | |
 | event ID | — | — | **absent** for book rows; book identity = `(ISIN, updateDateAndTime)` |
 | phase | `/*/tradingSystemPhase` | string/number | numeric codes observed (`203` dominant); semantics not guessed |
+| trading system | `/*/tradingSystem` | string | `7` on every row |
+| price notation | `/*/priceNotation` | number | `1` observed |
+| batch ID | `/*/messageId` | string | one per file |
 
 ### 3.4 XETR pre-trade (`DETR-pretrade`)
 
@@ -162,9 +172,12 @@ per-row sub-venue MIC are the only identity. See ruling R6.
   objects; the capture tool already gained this branch with a pinned test.
 - **R2 — Redirect transport:** `api/download` 301s to a ~2-second signed
   `storage.googleapis.com` URL. Task 5's "reject redirects to another origin"
-  rule is amended to: follow EXACTLY ONE redirect, only to
-  `https://storage.googleapis.com/`, and only when issued by
-  `mfs.deutsche-boerse.com`; any second redirect or other host is rejected.
+  rule is amended to: follow EXACTLY ONE redirect, only when issued by
+  `mfs.deutsche-boerse.com`, only to
+  `https://storage.googleapis.com/mv-cef-prod-europe-west3-private-min-by-min-files/`
+  (the exact bucket observed for BOTH minute files and, under its `daily/`
+  subpath, the daily consolidated files); any second redirect, other host, or
+  other bucket prefix is rejected.
 - **R3 — No cookie:** access is public; terms acceptance is a client-side
   dialog the operator accepted. `RADAR_DBAG_DELAYED_COOKIE` is dropped;
   the configured switch for German collection remains the mode flag alone.
@@ -182,13 +195,24 @@ per-row sub-venue MIC are the only identity. See ruling R6.
   closing-auction marker (observational evidence above); use it for
   `is_official_close`. XGAT: no marker exists; the native close is the final
   valid executed trade of the session (the spec's designed fallback).
+  Evidence base is one trading day; the German shadow phase (Tasks 7/11)
+  must reconfirm the `C` clustering across its full-session days before
+  activation makes this fully load-bearing, and the enum-time-profile
+  statistics the capture tool now emits make that reconfirmation a rerun,
+  not a new analysis.
 - **R6 — Reference data absent:** mnemonic/type/completeness cannot come from
   the delayed files. `FeedBatch.reference_complete` is always `False` for this
-  source, and the mapping's official reference universes (Task 6) must come
-  from the separate official instrument files (Xetra "Tradable Instruments"
-  download; Tradegate BSX instrument list), which are fetched and hashed as
-  their own `ReferenceCatalog` inputs. Absence of references in the delayed
-  feed can never mark a mapping unavailable.
+  source, and absence of references in the delayed feed can never mark a
+  mapping unavailable. The mapping's official reference universes (Task 6)
+  must come from separate official instrument sources (candidates: the Xetra
+  "Tradable Instruments" download; a Tradegate BSX instrument list) — but
+  NEITHER candidate was captured by this gate: URL, shape, terms, and
+  completeness semantics are all unobserved. **Binding precondition:** before
+  Task 6 consumes any `ReferenceCatalog`, each reference source passes its own
+  capture-and-freeze (same discipline as this supplement: exact URL, field
+  pointers, completeness proof, sanitized fixture) appended here as §3.5/§3.6
+  and reviewed. Until then, reference-source names in the plan are candidates,
+  not contracts.
 - **R7 — Sub-venue MICs:** rows carry execution MICs finer than the channel
   (`XGRM` under DGAT; `XETA/XETB/XEMA/XETS/XEMI/XEMB/XETU` under DETR). The
   channel's file determines the Radar market identity (`XGAT`/`XETR`); the

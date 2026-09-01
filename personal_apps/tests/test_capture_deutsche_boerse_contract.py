@@ -170,6 +170,48 @@ def test_cli_end_to_end_writes_redacted_report_for_all_four_inputs(tmp_path):
         assert '2026-08-31T12:00:00Z' not in text
 
 
+def test_aggregate_statistics_are_auditable_without_leaking_values(tmp_path):
+    # The supplement's quantitative claims (duplicate counts, ordering,
+    # enum time-clustering) must be re-derivable from the committed tool,
+    # not rest on a discarded local analysis (review finding 4).
+    archive = tmp_path / 'stats.json.gz'
+    rows = [
+        {'txid': 'zz-1', 'flag': 'R', 'price': 10.0,
+         'publicationDateAndTime': '2026-08-31T09:00:00.000Z'},
+        {'txid': 'zz-2', 'flag': 'R', 'price': 11.0,
+         'publicationDateAndTime': '2026-08-31T09:01:00.000Z'},
+        {'txid': 'zz-2', 'flag': 'C', 'price': 12.0,
+         'publicationDateAndTime': '2026-08-31T15:35:00.000Z'},
+        {'txid': 'zz-3', 'flag': 'C', 'price': 13.0,
+         'publicationDateAndTime': '2026-08-31T15:39:00.000Z'},
+        {'txid': 'zz-4', 'flag': 'R', 'price': 14.0,
+         'publicationDateAndTime': '2026-08-31T15:20:00.000Z'},
+    ]
+    with gzip.open(archive, 'wt', encoding='utf-8') as handle:
+        handle.write('\n'.join(json.dumps(row) for row in rows) + '\n')
+    report = inspect_archive(archive)
+
+    cardinality = {c.path: c for c in report.value_cardinality}
+    # txid: 4 distinct across 5 rows -> exactly one duplicate is derivable.
+    assert (cardinality['/*/txid'].distinct, cardinality['/*/txid'].total) == (4, 5)
+    assert (cardinality['/*/flag'].distinct, cardinality['/*/flag'].total) == (2, 5)
+
+    order = {o.path: o.violations for o in report.order_violations}
+    # 15:35 -> 15:20 is the single descending step.
+    assert order['/*/publicationDateAndTime'] == 1
+
+    profiles = {p.path: p for p in report.enum_time_profiles}
+    flag = {v.value: v for v in profiles['/*/flag'].values}
+    assert flag['C'].count == 2
+    assert (flag['C'].first_hhmm, flag['C'].last_hhmm) == ('15:35', '15:39')
+    assert flag['R'].count == 3
+    # High-cardinality paths must never surface values.
+    assert '/*/txid' not in profiles
+    encoded = json.dumps(dataclasses.asdict(report))
+    assert 'zz-1' not in encoded
+    assert '10.0' not in encoded
+
+
 _SUPPLEMENT = (pathlib.Path(__file__).parent.parent.parent / 'docs'
                / 'superpowers' / 'specs'
                / '2026-08-31-radar-deutsche-boerse-feed-contract.md')
@@ -195,6 +237,18 @@ def _pointers_by_fixture():
     for index, (start, fixture) in enumerate(marks):
         stop = marks[index + 1][0] if index + 1 < len(marks) else end_of_tables
         found[fixture] = re.findall(r'`(/\*/[^`]+)`', text[start:stop])
+    # Section 3.2 inherits 3.1's pointers, minus the exceptions its
+    # inheritance sentence names in backticks.
+    inheritance = re.search(
+        r'Same pointers as 3\.1(?: \(except ([^)]*)\))?', text)
+    assert inheritance is not None
+    excepted = set(re.findall(r'`(/\*/[^`]+)`', inheritance.group(1) or ''))
+    found['xetr_posttrade.json'] += found['xgat_posttrade.json']
+    # The exception sentence itself is inside section 3.2, so its backticked
+    # pointer is scraped like any other -- drop the excepted set entirely.
+    found['xetr_posttrade.json'] = [
+        pointer for pointer in found['xetr_posttrade.json']
+        if pointer not in excepted]
     return found
 
 
@@ -221,6 +275,30 @@ def test_every_supplement_pointer_resolves_in_its_fixture():
         rows = json.loads((_FIXTURES / fixture).read_text(encoding='utf-8'))
         missing = [p for p in set(pointers) if not _resolves(rows, p)]
         assert not missing, f'{fixture}: unresolved pointers {sorted(missing)}'
+
+
+def _fixture_pointers(node, prefix=''):
+    if isinstance(node, list):
+        for child in node:
+            yield from _fixture_pointers(child, prefix + '/*')
+    elif isinstance(node, dict):
+        for key, child in node.items():
+            yield from _fixture_pointers(child, '%s/%s' % (prefix, key))
+    else:
+        yield prefix
+
+
+def test_every_fixture_key_is_named_by_the_supplement():
+    # The reverse direction: a fixture must not carry a field the contract
+    # tables never documented (review finding 2 — two fixtures did).
+    by_fixture = _pointers_by_fixture()
+    for fixture, pointers in by_fixture.items():
+        rows = json.loads((_FIXTURES / fixture).read_text(encoding='utf-8'))
+        documented = set(pointers)
+        undocumented = {
+            pointer for pointer in _fixture_pointers(rows)
+            if pointer not in documented}
+        assert not undocumented, f'{fixture}: {sorted(undocumented)}'
 
 
 def test_the_parity_check_has_teeth():
