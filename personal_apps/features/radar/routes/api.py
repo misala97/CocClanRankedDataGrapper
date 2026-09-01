@@ -1,6 +1,7 @@
 """JSON for the leaderboard surface."""
 import dataclasses
 import datetime as dt
+import threading
 
 from flask import jsonify, request
 
@@ -404,6 +405,44 @@ def _row(entry):
     }
 
 
+# The board build, memoised per selection for a minute.
+#
+# Viewer-invariant, which is coverage.py's rule and the coc_stats bulk-standing
+# cache's: every account sees identical rows, so what does not depend on who
+# is asking can be shared. Measured 2026-09-01, after the N+1s of 2026-08-24
+# were gone and the query count was flat at 24: the build is ~0.6s and it is
+# the whole of the page's server time. Ingest advances the buckets every 15
+# minutes, so a 60-second memo is fresh in the sense that matters, and the
+# cached board keeps its own generated_at -- the head's stamp says when the
+# board was BUILT, which stays true.
+BOARD_TTL = dt.timedelta(seconds=60)
+board_cache: dict = {}
+_board_lock = threading.Lock()
+
+
+def _build_board(query, now):
+    key = (tuple(query.sources), tuple(query.segments), query.window,
+           query.limit, query.min_venues, query.market)
+    with _board_lock:
+        hit = board_cache.get(key)
+        if hit is not None and hit[0] > now:
+            return hit[1]
+    board = board_mod.build(query.sources, now,
+                            window_hours=query.window,
+                            segments=query.segments, limit=query.limit,
+                            min_venues=query.min_venues, market=query.market)
+    with _board_lock:
+        board_cache[key] = (now + BOARD_TTL, board)
+        # A handful of distinct selections per minute; past that it is old
+        # keys aging out, and the dict must not grow with every filter ever
+        # tried.
+        if len(board_cache) > 64:
+            for stale in [k for k, (expires, _) in board_cache.items()
+                          if expires <= now]:
+                del board_cache[stale]
+    return board
+
+
 def build_payload(args, now=None):
     """Validated query -> serialized board. Shared by the page and the API."""
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
@@ -414,10 +453,7 @@ def build_payload(args, now=None):
     # expand_sources_for_history). Expanding once here would take that choice
     # away from them -- and expanding for history afterwards is impossible,
     # since the root is no longer in the list to recognise.
-    board = board_mod.build(query.sources, now,
-                            window_hours=query.window,
-                            segments=query.segments, limit=query.limit,
-                            min_venues=query.min_venues, market=query.market)
+    board = _build_board(query, now)
     # ROOTED, because the payload's `sources` is what lights the chips and
     # there is one chip per root. `?sources=reddit:wallstreetbets` filtered
     # the board to that subreddit above and still lights the Reddit chip

@@ -35,6 +35,17 @@ def anon_client():
         yield test_client
 
 
+@pytest.fixture(autouse=True)
+def fresh_radar_board_memo():
+    """The board build is memoised per selection for a minute (routes/api.py).
+    A test that seeds buckets and then reads the board must see its own
+    seed, not the board a previous test built ten seconds earlier."""
+    from features.radar.routes import api as radar_api
+    radar_api.board_cache.clear()
+    yield
+    radar_api.board_cache.clear()
+
+
 def embedded_payload(html):
     """The JSON the live-workout shell embeds for its React island.
 

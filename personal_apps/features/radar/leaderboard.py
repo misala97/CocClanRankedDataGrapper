@@ -67,33 +67,20 @@ class Row:
     marks: list
 
 
-def _distinct_authors(tickers, sources, since, now):
-    """True distinct authors per ticker across the whole window.
-
-    Read from the mention journal rather than from radar_mentions. That table
-    never holds `medium` -- promotion is decided at rollup over the whole
-    bucket and written back onto the journal -- and a post whose tickers were
-    all `low` is never stored there at all, so the count it gave was smaller
-    than the mention count the floor was gating.
-
-    Falls back to nothing: a ticker whose events have aged out of the journal
-    is absent from the result and the caller uses the bucket maximum, which
-    undercounts in the safe direction.
-    """
-    return journal.distinct_voices(tickers, sources, since, now, 'author')
-
-
-def _distinct_channels(tickers, sources, since, now):
-    """The broadcast analogue. See _distinct_authors."""
-    return journal.distinct_voices(tickers, sources, since, now, 'channel')
-
-
 def _universe_rows(tickers):
     if not tickers:
         return {}
     rows = TickerUniverse.query.filter(
         TickerUniverse.symbol.in_(list(tickers))).all()
     return {row.symbol: row for row in rows}
+
+
+# Daily sigma per (ticker, market, mic), for one calendar day. The closes it
+# is computed from arrive once a day, and every build was re-reading
+# HISTORY_DAYS of them per survivor -- 31k rows and 600ms on the 24h board
+# (measured 2026-09-01) for a number that had not changed since the last
+# build. Cleared when the day turns; a process sees a few hundred tickers.
+sigma_cache: dict = {}
 
 
 def _quote_sigmas(quote_views, today):
@@ -103,11 +90,18 @@ def _quote_sigmas(quote_views, today):
     Grouping preserves the batched read for normal US boards while allowing a
     Germany board's genuine and fallback rows to use their actual markets.
     """
-    by_identity = collections.defaultdict(list)
-    for ticker, quote in quote_views.items():
-        by_identity[(quote.market, quote.mic)].append(ticker)
+    if any(key[3] != today for key in list(sigma_cache)):
+        sigma_cache.clear()
 
     sigmas = {}
+    by_identity = collections.defaultdict(list)
+    for ticker, quote in quote_views.items():
+        key = (ticker, quote.market, quote.mic, today)
+        if key in sigma_cache:
+            sigmas[ticker] = sigma_cache[key]
+        else:
+            by_identity[(quote.market, quote.mic)].append(ticker)
+
     for (market, mic), tickers in by_identity.items():
         if market == 'de' and mic == 'XGAT':
             # A Tradegate identity may seed its volatility from the
@@ -117,11 +111,13 @@ def _quote_sigmas(quote_views, today):
                 series = history.series_for(
                     ticker, market, mic, history.HISTORY_DAYS, today)
                 sigmas[ticker] = quotes_mod.daily_sigma(list(series.closes))
+                sigma_cache[(ticker, market, mic, today)] = sigmas[ticker]
             continue
         closes = history.closes_for(tickers, days=history.HISTORY_DAYS,
                                     today=today, market=market, mic=mic)
         for ticker in tickers:
             sigmas[ticker] = quotes_mod.daily_sigma(closes.get(ticker, []))
+            sigma_cache[(ticker, market, mic, today)] = sigmas[ticker]
     return sigmas
 
 
@@ -178,10 +174,19 @@ def _chatter_survivors(sources, now, window_hours):
     for row in per_source:
         grouped[row.ticker].append(row)
 
-    # Eligibility needs these two and nothing else, so they are the only
-    # lookups that have to cover every ticker with a scored bucket.
-    author_counts = _distinct_authors(grouped.keys(), sources, since, now)
-    channel_counts = _distinct_channels(grouped.keys(), sources, since, now)
+    # Eligibility needs these two and nothing else -- and only for tickers
+    # that can still be eligible. Under MIN_MENTIONS no voice count changes
+    # the verdict, and on the 24h board that is most of the ~4,000 tickers
+    # with a scored bucket: asking for all of them, in two queries, was 3.3s
+    # of an 8s build (measured 2026-09-01). The rest keep the bucket-maximum
+    # fallback below, which is the same answer they would have got from an
+    # aged-out journal.
+    worth_asking = [
+        ticker for ticker, parts in grouped.items()
+        if sum(int(part.mentions) for part in parts) >= scoring.MIN_MENTIONS]
+    voices = journal.distinct_voice_counts(worth_asking, sources, since, now)
+    author_counts = {ticker: counts[0] for ticker, counts in voices.items()}
+    channel_counts = {ticker: counts[1] for ticker, counts in voices.items()}
 
     # PASS ONE: fold the aggregates and apply the floor.
     #

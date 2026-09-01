@@ -622,3 +622,51 @@ def test_a_promoted_mention_counts_towards_the_author_floor(clean_buckets,
     # u2's bare mention was vouched for by u1's cashtag, so it is scored --
     # and its author is one of the ticker's independent voices.
     assert voices['ZZA'] == 2
+
+
+def test_voices_are_counted_only_for_tickers_that_clear_the_mention_floor(board, monkeypatch):
+    """Pass one asked the journal for distinct authors AND channels of every
+    ticker with a scored bucket -- thousands on the 24h board, two queries,
+    3.3s measured 2026-09-01 -- when a ticker under MIN_MENTIONS can never
+    be eligible whatever its voices say. One query, for the ones it can
+    matter to."""
+    universe_row('LBQ')
+    scored('LBQ', mentions=10)
+    scored('LBQT', mentions=2)
+    quoted('LBQ', '100.00', '100.00')
+    db.session.commit()
+
+    asked = []
+    real = leaderboard.journal.distinct_voice_counts
+
+    def spy(tickers, sources, since, now):
+        asked.append(sorted(tickers))
+        return real(tickers, sources, since, now)
+    monkeypatch.setattr(leaderboard.journal, 'distinct_voice_counts', spy)
+
+    ranking = leaderboard.build_rows(['bluesky'], NOW)
+
+    assert len(asked) == 1
+    assert 'LBQ' in asked[0]
+    assert 'LBQT' not in asked[0]
+    # Still accounted for, on the gate it actually failed.
+    assert ranking.excluded.get('too_few_mentions') == 1
+
+
+def test_sigma_history_is_read_once_per_day(monkeypatch):
+    """_quote_sigmas fetched 780 closes per survivor on every build -- 31k
+    rows and 600ms on the 24h board -- for a figure that changes once a day
+    when a close arrives."""
+    import types
+    calls = []
+    monkeypatch.setattr(leaderboard.history, 'closes_for',
+                        lambda tickers, **kw: (calls.append(list(tickers)), {})[1])
+    views = {'LBS': types.SimpleNamespace(market='us', mic='XNAS')}
+    leaderboard.sigma_cache.clear()
+
+    leaderboard._quote_sigmas(views, dt.date(2026, 1, 15))
+    leaderboard._quote_sigmas(views, dt.date(2026, 1, 15))
+    assert len(calls) == 1
+
+    leaderboard._quote_sigmas(views, dt.date(2026, 1, 16))
+    assert len(calls) == 2

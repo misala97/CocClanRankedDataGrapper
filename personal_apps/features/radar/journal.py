@@ -282,6 +282,19 @@ def distinct_voices(tickers, sources, since, now, field):
     Measured on live data, NVDA showed 26 real authors against a bucket
     maximum of 2.
     """
+    index = {'author': 0, 'channel': 1}[field]
+    return {ticker: counts[index] for ticker, counts
+            in distinct_voice_counts(tickers, sources, since, now).items()}
+
+
+def distinct_voice_counts(tickers, sources, since, now):
+    """{ticker: (distinct authors, distinct channels)} over the scored
+    mentions -- distinct_voices for both fields in one pass.
+
+    One query rather than one per field: the leaderboard needs both for
+    every ticker it gates, and the second scan re-read exactly the rows the
+    first had just read (measured 2026-09-01: 1.9s + 1.3s on the 24h board).
+    """
     if not tickers:
         return {}
 
@@ -290,10 +303,10 @@ def distinct_voices(tickers, sources, since, now, field):
     # readers on the same platform, and dropping them would undercount
     # breadth for every ticker discussed before the split.
     sources = expand_sources_for_history(sources)
-    column = {'author': RadarMentionEvent.author,
-              'channel': RadarMentionEvent.channel}[field]
-    rows = (db.session.query(RadarMentionEvent.ticker,
-                             sa.func.count(sa.distinct(column)))
+    rows = (db.session.query(
+                RadarMentionEvent.ticker,
+                sa.func.count(sa.distinct(RadarMentionEvent.author)),
+                sa.func.count(sa.distinct(RadarMentionEvent.channel)))
             .filter(RadarMentionEvent.ticker.in_(list(tickers)),
                     RadarMentionEvent.source.in_(list(sources)),
                     RadarMentionEvent.created_utc >= since,
@@ -305,4 +318,5 @@ def distinct_voices(tickers, sources, since, now, field):
                     RadarMentionEvent.counts_as_human_chatter.isnot(False))
             .group_by(RadarMentionEvent.ticker).all())
     # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
-    return {ticker: int(count) for ticker, count in rows}
+    return {ticker: (int(authors), int(channels))
+            for ticker, authors, channels in rows}

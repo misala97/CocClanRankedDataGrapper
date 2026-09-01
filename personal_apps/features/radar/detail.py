@@ -127,11 +127,21 @@ def daily_counts(tickers, sources, start, now):
 
 def first_watched_day(sources, start, now):
     """Earliest calendar day any bucket exists for. Before it, chatter is
-    unknown rather than zero."""
+    unknown rather than zero.
+
+    ORDER BY + LIMIT 1 rather than MIN(), on purpose. Same answer, but MySQL
+    ran the MIN with an IN on `source` as a skip scan over the coverage
+    index -- 376k rows, 1.27s of a 1.3s panel response, measured 2026-09-01
+    -- while this walks the (bucket_start, source) index from `start` and
+    stops at the first hit, in 1ms. The question has no ticker in it, so it
+    was the same 1.27s on every panel for every reader.
+    """
     sources = expand_sources_for_history(sources)
-    earliest = (db.session.query(sa.func.min(RadarBucketSource.bucket_start))
+    earliest = (db.session.query(RadarBucketSource.bucket_start)
                 .filter(RadarBucketSource.source.in_(list(sources)),
-                        RadarBucketSource.bucket_start >= start).scalar())
+                        RadarBucketSource.bucket_start >= start)
+                .order_by(RadarBucketSource.bucket_start)
+                .limit(1).scalar())
     return earliest.date() if earliest else None
 
 
