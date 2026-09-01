@@ -9,13 +9,14 @@ prose.
 
 - Worktree: `C:\Users\michi\Desktop\CodingStuff-worktrees\radar-market-data-v2`
 - Branch: `radar-market-data-v2`, created from `dev_personal` @ `9dadd9c`
-- HEAD at last handoff update: `9dadd9c` (no implementation commits yet)
+- Implementation HEAD verified in this handoff: `0d3ea22` (the handoff-only
+  bookkeeping commit follows it)
 - Spec/plan commit: `9dadd9c` (binding, includes Codex amendment-review
   corrections)
 
 ## Dirty files and ownership
 
-- This worktree: clean apart from ledger/HANDOFF until the first task commit.
+- This worktree: clean before this handoff/ledger refresh.
 - Main checkout `C:\Users\michi\Desktop\CodingStuff` (dev_personal): Michi's
   Telegram WIP (`personal_apps/scripts/discover_telegram_sources.py`,
   `personal_apps/telegram_candidates.json`) + untracked scratchpad/measure
@@ -27,7 +28,10 @@ prose.
   ledger's task table for commits and focused-test evidence). Task 1's
   capture supplement rules PASS (R1–R11); its independent review returned
   22 findings, all folded in (7ba4cd2). Dev DB is migrated to
-  `6a21d4e8c9f0`.
+  `6a21d4e8c9f0`. Final Codex review findings were corrected in `0d3ea22`:
+  Yahoo history identity, per-track activation truth, non-vacuous grouped
+  coverage, report+map-bound audit, duplicate/basis/storage evidence,
+  persisted Massive backoff, shadow-safe downgrade, and calendar compatibility.
 - Open: Task 12 is DELIBERATELY DELAYED (post-rollback-window; Michi must
   authorize; the contraction migration is not written yet by design).
   Remaining operator gates are listed below.
@@ -48,16 +52,18 @@ prose.
 
 ## Immediate next action
 
-Final whole-branch verification (full backend suite + frontend + builds)
-and one independent read-only review of Tasks 2–11; fold findings; then
-report to Michi with the commit range and the operator-gate list.
+No further implementation task is open. Michi may integrate/deploy the code
+with provider flags still at legacy defaults, then perform the operator-owned
+R6/reference and shadow gates below. Task 12 remains delayed.
 
 ## Tests
 
-- Baseline full backend (`python -m pytest tests/ -q` in
-  `personal_apps/`) + frontend (`npm test`): running in background at handoff
-  write time; results go in the ledger. Known environmental quirks: none
-  recorded yet.
+- Full backend: `python -m pytest tests/ -q` — **1752 passed** in 642.14s.
+- Focused market-data regression suite — **223 passed**; fresh report suite
+  after its final teeth edit — **14 passed**.
+- Frontend: `npm test` — **403 general + 175 Radar = 578 passed**.
+- Production builds: `npm run build` — TypeScript and both Vite builds pass.
+- `git diff --check` passes (only Windows LF→CRLF notices).
 
 ## Rules that bind every later agent
 

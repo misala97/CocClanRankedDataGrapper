@@ -41,7 +41,7 @@ binding Codex amendment-review corrections).
 | 8 | **COMPLETE** | 94c3632 | 197 focused | inline; final review pending | 1D teeth demonstrated (4 tests failed pre-fix); grouped floors + shadow-lane guards |
 | 9 | **COMPLETE** | fc5d174 | 165 focused (99 pre-existing untouched) | inline; final review pending | R6: shadow/active mapping build REFUSES until reference capture (operator+worker step owed before German shadow) |
 | 10 | **COMPLETE** | e3cbec2 | 175 frontend + 124 backend; builds typecheck | inline; final review pending | two legacy contract pins updated per spec §10 |
-| 11 | **COMPLETE** (Steps 1–7; Steps 8–9 are operator gates) | (commit follows) | 7 report tests | inline; final review pending | enforced READ ONLY; per-switch --gate exit codes; grouped gate non-vacuous |
+| 11 | **COMPLETE** (Steps 1–7; Steps 8–9 are operator gates) | 4fe2eb6 + review fixes 0d3ea22 | 14 report tests; 223 focused; 1752 full backend | Codex whole-branch review: findings fixed and reverified | enforced READ ONLY; independently scoped switches; grouped gate recomputes active coverage and binds audits to report+map hashes |
 | 12 | deliberately delayed (post-rollback-window; Michi authorizes) | — | — | — | contraction migration b742e9d13c60 NOT written yet by design |
 
 ## Evidence log
@@ -88,3 +88,22 @@ binding Codex amendment-review corrections).
 - Task 1 review MINOR #6 watch item: XETR-pre caps (30 MiB/300 MiB) hold only
   ~1.5× headroom over the single observed minute file; the shadow report
   re-measures.
+
+## Final verification and review fixes — 2026-09-01
+
+- Review-fix commit: `0d3ea22` (`fix(radar): harden market data activation gates`).
+- Corrected Yahoo daily-history metadata validation and made every production
+  Yahoo history caller supply the mapped MIC; unmapped deep-tail rows refuse.
+- Grouped activation now rejects zero active denominators, recomputes every
+  expected day's current-active coverage from exact mapped identities and
+  shadow rows, blocks duplicate/adjustment-basis conflicts, reports unmatched
+  current-universe symbols plus measured/projected row storage, and binds the
+  operator audit to both report and instrument-map hashes.
+- German and US-close truth/incomplete evidence is carried and evaluated per
+  activation track; one track cannot block the other.
+- Massive 429 deadlines now survive transport normalization into durable state;
+  migration downgrade deletes both shadow close and shadow quote lanes before
+  removing discriminators; the legacy unknown-market message is preserved.
+- Fresh verification: backend **1752 passed** (642.14s); focused market-data
+  **223 passed**; report suite **14 passed**; frontend **578 passed**; TypeScript
+  and both Vite builds pass; `git diff --check` passes.
