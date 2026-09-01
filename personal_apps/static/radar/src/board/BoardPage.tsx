@@ -16,6 +16,10 @@ import type { BoardPayload, Selection } from '../types'
  *  the previous surface unreadable -- every fact the tool knew had to fit
  *  there, because there was nowhere to hand anything off to.
  */
+/** How long a burst of control changes has to go quiet before one request
+ *  goes out for all of them. */
+const SETTLE_MS = 250
+
 export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [payload, setPayload] = useState(initial)
   const [selection, setSelection] = useState<Selection>({
@@ -66,11 +70,24 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   }, [])
 
   const previousMarket = useRef(initial.market)
+  // Remembered across a burst: a market flip followed within the debounce by
+  // a source toggle must still preserve the ticker the way a market flip does.
+  const marketPending = useRef(false)
   useEffect(() => {
     if (first.current) { first.current = false; return }
-    const marketChanged = previousMarket.current !== selection.market
+    if (previousMarket.current !== selection.market) marketPending.current = true
     previousMarket.current = selection.market
-    void load(selection, selected, marketChanged)
+    // Coalesced. Every toggle used to fire its own request and abort the
+    // last; five quick clicks queued five board builds on the server and the
+    // fifth waited past the 8s timeout -- "The board did not answer in time"
+    // during ordinary toggling (critique, 2026-09-01). Short enough that a
+    // single click still feels immediate.
+    const timer = setTimeout(() => {
+      const marketChanged = marketPending.current
+      marketPending.current = false
+      void load(selection, selected, marketChanged)
+    }, SETTLE_MS)
+    return () => clearTimeout(timer)
     // Deliberately not keyed on `selected`: picking a ticker is a client-side
     // change that must not refetch the board.
   }, [selection, load])

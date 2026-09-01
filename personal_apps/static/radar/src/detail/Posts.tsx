@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { count, postStamp, sourceLabel } from '../format'
+import { count, decodeEntities, postStamp, sourceLabel } from '../format'
 import type { Post } from '../types'
 
 /** Past this, one post has stopped being a quote and become the page.
@@ -14,7 +14,10 @@ const CLAMP_LINES = 7
 
 function Body({ post }: { post: Post }) {
   const [open, setOpen] = useState(false)
-  const text = `${post.title ? `${post.title} — ` : ''}${post.body ?? ''}`
+  // Decoded as text: `AT&amp;T` arrived escaped from Reddit and was printed
+  // that way. React renders the result as text, never as markup.
+  const text = decodeEntities(
+    `${post.title ? `${post.title} — ` : ''}${post.body ?? ''}`)
   // The cheapest honest signal that there is more: the clamp itself cannot be
   // measured without a layout pass, and one long post is common enough that a
   // per-post measurement is not worth a resize observer. Characters over-
@@ -87,7 +90,7 @@ export function Posts({ posts, total, retentionNote }: {
                   {postStamp(post.created)}
                 </time>
                 {post.url && (
-                  <a className="out" href={post.url} target="_blank"
+                  <a className="out" href={decodeEntities(post.url)} target="_blank"
                      rel="noopener noreferrer">open ↗</a>
                 )}
               </div>

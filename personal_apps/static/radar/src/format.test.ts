@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { UNKNOWN, count, dayStamp, divergence, exchangeLabel, formatPrice,
-         formatQuoteAge, money, move, postStamp, rowPrice, segmentLabel,
-         signed, sourceLabel, stampTime, zscore } from './format'
+import { UNKNOWN, count, dayStamp, decodeEntities, divergence, exchangeLabel,
+         formatMarketDate, formatPrice, formatQuoteAge, money, move, postStamp,
+         rowPrice, segmentLabel, signed, sourceLabel, stampTime, zscore }
+  from './format'
 
 describe('an unknown never renders as a zero', () => {
   // The single rule PRODUCT.md is most insistent about. A row with no quote,
@@ -25,9 +26,13 @@ describe('an unknown never renders as a zero', () => {
 })
 
 describe('signed numbers', () => {
-  it('marks a rise and leaves a fall with its own sign', () => {
+  it('marks a rise and sets a fall with a real minus', () => {
+    // U+2212, not the hyphen: the row's move already used it and the
+    // divergence column did not, so `-0.68` and `−4.5%` sat one column
+    // apart in two dialects (critique, 2026-09-01).
     expect(signed(1.5, 2)).toBe('+1.50')
-    expect(signed(-1.5, 2)).toBe('-1.50')
+    expect(signed(-1.5, 2)).toBe('−1.50')
+    expect(move(-0.004)).toBe('−0.40%')
   })
 
   it('never prints a negative zero', () => {
@@ -86,7 +91,27 @@ describe('the stamp', () => {
     // yesterday from last week, and it silently relies on the reader knowing
     // that every clock on this surface is UTC.
     expect(postStamp('2026-08-22T19:04:11Z'))
-      .toBe('22. Aug. 2026 · 21:04 CEST')
+      .toBe('22 Aug 2026 · 21:04 CEST')
+  })
+
+  it('dates in English, in Berlin time', () => {
+    // The surface is English (PRODUCT.md). `22. Aug. 2026` was the one
+    // German-formatted date on it, next to en-US counts that had been
+    // de-localised on purpose.
+    expect(formatMarketDate('2026-08-22T19:04:11Z')).toBe('22 Aug 2026')
+    expect(formatMarketDate('2026-12-31T23:30:00Z')).toBe('1 Jan 2027')
+  })
+})
+
+describe('what the source escaped', () => {
+  it('is decoded as text, once', () => {
+    // Reddit hands out `&amp;` inside URLs and bodies. Once, deliberately:
+    // `&amp;amp;` is a source that double-escaped, and turning it into `&`
+    // would be inventing a character the post never had.
+    expect(decodeEntities('AT&amp;T &lt;3 &quot;x&quot; &#39;y&#39;'))
+      .toBe('AT&T <3 "x" \'y\'')
+    expect(decodeEntities('&amp;amp;')).toBe('&amp;')
+    expect(decodeEntities('plain')).toBe('plain')
   })
 })
 
@@ -154,8 +179,11 @@ describe('money', () => {
       .toBe('220,50\u00a0$ · USD')
   })
 
-  it('labels delayed quote age and preserves an unknown age', () => {
+  it('labels delayed quote age in a human unit and preserves an unknown age', () => {
     expect(formatQuoteAge(720)).toBe('12 min delayed')
+    // "2740 min stale" asked the reader to finish a subtraction; the row
+    // stopped doing that on 2026-08-30 and the panel had not caught up.
+    expect(formatQuoteAge(164600)).toBe('45h delayed')
     expect(formatQuoteAge(null)).toBe(UNKNOWN)
   })
 

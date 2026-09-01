@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 
 import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
@@ -112,11 +112,17 @@ export function universalQuoteFacts(rows: Row[]): {
     keys.push('fallback')
     tokens.push('US prices')
   }
-  const aged = rows.every((row) =>
+  // Over the rows that HAVE a quote. One row with no quote at all (QQQ, live
+  // 2026-09-01) used to block the lift, so six stale rows each said "quote
+  // 1h old" and every row grew a flags line -- the wallpaper the lift exists
+  // to prevent. An unquoted row has no age to lift; it says "no live quote"
+  // itself, and that survives the suppression (deviantQuoteFacts).
+  const quoted = rows.filter((row) => row.quote.quality !== 'unavailable')
+  const aged = quoted.length > 0 && quoted.every((row) =>
     row.quote.quality === 'stale' || row.quote.quality === 'eod')
   if (aged) {
     keys.push('aged')
-    const oldest = rows.reduce<number | null>(
+    const oldest = quoted.reduce<number | null>(
       (best, row) => (row.quote.age_seconds !== null
         && (best === null || row.quote.age_seconds > best)
         ? row.quote.age_seconds : best), null)
@@ -370,7 +376,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
       {/* The busy signal sits here rather than on the controls: the chips are
           not stale, this list is. */}
       <div className="rows" id="radar-rows" tabIndex={-1}
-           aria-busy={busy || undefined}>
+           aria-busy={busy || undefined} onKeyDown={walkRows}>
         {captions && (
           <TierCaption tier="scored" windowHours={payload.window_hours}
                        count={scored.rows.length}
@@ -402,6 +408,26 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
       </div>
     </aside>
   )
+}
+
+/** The arrow keys walk the rows; Home and End jump to either end.
+ *
+ *  Focus only. Selecting on every keystroke would fetch a panel per press;
+ *  Enter selects, as on any link. Tab used to be the only way down the list
+ *  -- eleven stops to reach the last row (critique, 2026-09-01). */
+function walkRows(event: KeyboardEvent<HTMLDivElement>) {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+  const current = (event.target as HTMLElement).closest<HTMLElement>('.row')
+  if (!current) return
+  const rows = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>('.row'))
+  const index = rows.indexOf(current)
+  const next = event.key === 'ArrowDown' ? Math.min(index + 1, rows.length - 1)
+    : event.key === 'ArrowUp' ? Math.max(index - 1, 0)
+    : event.key === 'Home' ? 0
+    : rows.length - 1
+  event.preventDefault()
+  rows[next]?.focus()
 }
 
 /** Header boundaries are local Berlin clock times; the zone is fixed elsewhere

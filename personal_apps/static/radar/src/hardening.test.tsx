@@ -169,10 +169,24 @@ describe('quote movement in the identity', () => {
 
     expect(screen.getByText((content, node) =>
       node?.classList.contains('quote-move') === true
-        && node.textContent === '+1,20 % regular')).toBeVisible()
+        && node.textContent === '+1.20% regular')).toBeVisible()
+    /* One percent dialect on the surface: the row said `−4.5%` while this
+       said `−4,81 %` one pane apart (critique, 2026-09-01). format.ts's
+       `move` is the formatter; this was a one-off de-DE Intl call. */
     expect(screen.getByText((content, node) =>
       node?.classList.contains('quote-move') === true
-        && node.textContent === '−0,40 % after hours')).toBeVisible()
+        && node.textContent === '−0.40% after hours')).toBeVisible()
+  })
+
+  it('says a stale quote\'s age in a human unit, like the row does', () => {
+    const item = detail().identity
+    render(<Identity identity={{
+      ...item,
+      quote: quote({ quality: 'stale', age_seconds: 164600 }),
+    }} />)
+
+    expect(screen.getByText('45h stale')).toBeVisible()
+    expect(screen.queryByText(/min stale/)).toBeNull()
   })
 
   it('names a frozen tape even when its provider quote is live', () => {
@@ -203,7 +217,7 @@ describe('quote movement in the identity', () => {
       quote: quote({ quality: 'eod', quoted_at: '2026-08-28T22:30:00Z' }),
     }} />)
 
-    expect(screen.getByText(/EOD · 29\. Aug\. 2026/)).toBeVisible()
+    expect(screen.getByText(/EOD · 29 Aug 2026/)).toBeVisible()
   })
 })
 
@@ -452,8 +466,10 @@ describe('an empty board', () => {
     const ways = screen.getAllByText(/Try a longer/)
     expect(ways).toHaveLength(1)
     for (const way of ways) {
+      // Names the controls as they are labelled NOW: the strip says 4h,
+      // not "Score", and All is a view.
       expect(way.textContent)
-        .toContain('Try a longer Score window, or the All segment')
+        .toContain('Try a longer window, or the All view')
     }
   })
 })
@@ -523,10 +539,26 @@ describe('a post nobody sized', () => {
     expect(screen.queryByRole('button', { name: /whole post/ })).toBeNull()
   })
 
-  it('shows the post date in Radar\'s Berlin timezone', () => {
+  it('shows the post date in Radar\'s Berlin timezone, in English', () => {
+    /* The surface is English (PRODUCT.md); `22. Aug. 2026` was the one
+       German-formatted date on it. Berlin time stays. */
     render(<Posts posts={[post()]} total={1} />)
 
-    expect(screen.getByText('22. Aug. 2026 · 21:00 CEST')).toBeInTheDocument()
+    expect(screen.getByText('22 Aug 2026 · 21:00 CEST')).toBeInTheDocument()
+  })
+
+  it('renders what the source escaped, not the escaping', () => {
+    /* Reddit hands out `&amp;` inside URLs and bodies; it was printed
+       verbatim on the live panel. Decoded as text -- React renders text,
+       never markup, so nothing here can become an element. */
+    render(<Posts posts={[post({
+      body: 'AT&amp;T &lt;3 &quot;bagholders&quot;',
+      url: 'https://reddit.com/r/x?a=1&amp;b=2',
+    })]} total={1} />)
+
+    expect(screen.getByText('AT&T <3 "bagholders"')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /open/ }))
+      .toHaveAttribute('href', 'https://reddit.com/r/x?a=1&b=2')
   })
 })
 

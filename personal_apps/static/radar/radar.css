@@ -537,6 +537,19 @@ body {
    4.5:1, because a control's label stays readable even when it is quiet. */
 .t.nil, .t.nil .n { color: var(--dim); }
 .t:disabled { cursor: default; }
+/* The last source on: still in the tab order, still pressed, but inert --
+   and the reason is written beside it (`.note`) rather than in a title. */
+.t[aria-disabled="true"], .t[aria-disabled="true"]:hover {
+  color: var(--ink); cursor: default;
+}
+.grp .note {
+  font-size: var(--t-ax); color: var(--warn); font-weight: 600;
+  padding-bottom: 8px;
+}
+.grp .lbl {
+  font-size: var(--t-ax); color: var(--muted); letter-spacing: 0.06em;
+  text-transform: uppercase; padding-bottom: 8px;
+}
 
 /* The members of Discover, under the views only while the bundle or one of
    its members is in force. Smaller than the views: they narrow a view, they
@@ -902,7 +915,10 @@ body {
    the line it replaced, so a fast answer still goes straight from one panel
    to the next; the shimmer is the one motion on the surface that conveys
    "in progress" rather than a state change, and reduced-motion stills it. */
-.sr {
+/* Spoken, not shown. Also what QuoteBadges' `aural` span has been asking
+   for since market-data v2 -- the rule was never written, so "midpoint of
+   the delayed book (bid … / ask …)" printed inline after `indicative`. */
+.aural {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;
 }

@@ -1,5 +1,5 @@
-import { Fragment, useState } from 'react'
-import type { ReactNode } from 'react'
+import { Fragment, useRef, useState } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 
 import { segmentLabel, sourceLabel } from '../format'
 
@@ -68,6 +68,17 @@ export function Controls({ payload, selection, busy, onChange }: {
   // Folded by default and not persisted: a reader who changes a filter every
   // visit can leave it open for the visit.
   const [open, setOpen] = useState(false)
+  const opener = useRef<HTMLButtonElement>(null)
+  // Escape folds the filters from anywhere in the strip and hands focus back
+  // to the control that opened them -- the one Escape that does anything on
+  // this surface, and the one a reader who just unfolded them will try.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape' || !open) return
+    event.preventDefault()
+    setOpen(false)
+    opener.current?.focus()
+  }
+  const lastSource = selection.sources.length === 1
 
   const discoverInForce = selection.segments.includes('discover')
   const memberInForce = selection.segments.some(
@@ -95,7 +106,7 @@ export function Controls({ payload, selection, busy, onChange }: {
   }
 
   return (
-    <div className="controls" aria-busy={busy}>
+    <div className="controls" aria-busy={busy} onKeyDown={onKeyDown}>
       <div className="tabs views" role="group" aria-label="View">
         {VIEWS.map((key) => {
           const value = key === 'all' ? null : key
@@ -153,7 +164,7 @@ export function Controls({ payload, selection, busy, onChange }: {
           like the whole one. */}
       <p className="summary">
         <Summary payload={payload} selection={selection} />
-        <button type="button" aria-expanded={open}
+        <button type="button" aria-expanded={open} ref={opener}
                 aria-controls="radar-filters"
                 aria-label={`${open ? 'Fold' : 'Change'} window, sources and venues`}
                 onClick={() => setOpen(!open)}>
@@ -175,21 +186,35 @@ export function Controls({ payload, selection, busy, onChange }: {
           <div className="grp" role="group" aria-label="Sources">
             {payload.all_sources.map((name) => {
               const on = selection.sources.includes(name)
-              const last = on && selection.sources.length === 1
+              const last = on && lastSource
               const label = sourceLabel(name)
               const short = shortSource(name)
+              // aria-disabled, not disabled: a disabled button leaves the
+              // tab order, and the reason used to live in a title -- so a
+              // keyboard or screen-reader user got neither the control nor
+              // the explanation. The click is a no-op (toggleSource) and
+              // the reason is written beside it.
               return (
                 <button key={name} type="button" className="t" aria-pressed={on}
-                        disabled={last}
-                        title={last ? 'At least one source has to stay on'
-                                    : short === label ? undefined : label}
+                        aria-disabled={last || undefined}
+                        aria-describedby={last ? 'radar-source-lock' : undefined}
+                        title={short === label ? undefined : label}
                         onClick={() => toggleSource(name)}>
                   {short}
                 </button>
               )
             })}
+            {lastSource && (
+              <span className="note" id="radar-source-lock">
+                one source has to stay on
+              </span>
+            )}
           </div>
           <div className="grp end" role="group" aria-label="Venues">
+            {/* `any 37 / 2+ 35` beside three source names read as more
+                sources; the floor is the one group whose tabs do not say
+                what they are. */}
+            <span className="lbl">venues</span>
             <button type="button" className="t"
                     aria-pressed={selection.minVenues === 1}
                     onClick={() => onChange({ ...selection, minVenues: 1 })}>

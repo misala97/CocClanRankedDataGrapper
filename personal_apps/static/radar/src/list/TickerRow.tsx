@@ -258,10 +258,11 @@ function deviantQuoteFacts(row: Row,
       facts.push(`quote ${humanAge(quote.age_seconds)} old`)
     } else if (quote.quality === 'eod') {
       facts.push('EOD quote')
-    } else if (quote.quality === 'unavailable') {
-      facts.push('no live quote')
     }
   }
+  // Outside the age suppression: the board lifting "quotes 1h old" says
+  // nothing about a row that has no quote at all.
+  if (quote.quality === 'unavailable') facts.push('no live quote')
   return facts
 }
 

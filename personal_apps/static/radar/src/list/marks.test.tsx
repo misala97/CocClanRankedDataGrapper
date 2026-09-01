@@ -1,8 +1,49 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { universalMarks } from './ListPane'
+import { universalMarks, universalQuoteFacts } from './ListPane'
 import { TickerRow } from './TickerRow'
-import type { Mark, Row } from '../types'
+import type { Mark, MarketQuote, Row } from '../types'
+
+const withQuote = (ticker: string, over: Partial<MarketQuote>): Row => {
+  const base = row(ticker, [])
+  return { ...base, quote: { ...base.quote, ...over } }
+}
+
+describe('quote facts carried by the whole board', () => {
+  it('lift the age when every QUOTED row is stale, whatever the unquoted ones say', () => {
+    /* Seen live 2026-09-01: six stale rows and one `unavailable` (QQQ has
+       no quote at all). The lift needed every row stale, so one unquoted
+       row kept "quote 1h old" on the other six -- and a flags line on every
+       row, which is exactly the wallpaper the lift exists to prevent. A row
+       with no quote has no age to lift; it says "no live quote" itself. */
+    const rows = [
+      withQuote('A', { quality: 'stale', age_seconds: 3600 }),
+      withQuote('B', { quality: 'stale', age_seconds: 7200 }),
+      withQuote('C', { quality: 'unavailable', age_seconds: null }),
+    ]
+
+    expect(universalQuoteFacts(rows).keys).toContain('aged')
+    expect(universalQuoteFacts(rows).tokens).toContain('quotes 2h old')
+  })
+
+  it('lift nothing when no row has a quote to be old', () => {
+    const rows = [
+      withQuote('A', { quality: 'unavailable', age_seconds: null }),
+      withQuote('B', { quality: 'unavailable', age_seconds: null }),
+    ]
+
+    expect(universalQuoteFacts(rows).keys).not.toContain('aged')
+  })
+
+  it('leave "no live quote" on the row even when the age was lifted', () => {
+    const { container } = render(
+      <TickerRow session="regular" selected={false} onSelect={() => {}}
+                 quoteSuppress={['aged']}
+                 row={withQuote('C', { quality: 'unavailable', age_seconds: null })} />)
+
+    expect(container.querySelector('.flags')!.textContent).toContain('no live quote')
+  })
+})
 
 const row = (ticker: string, marks: Mark[]): Row => ({
   ticker, name: ticker, segment: 'micro', divergence: 1, mention_z: 2,

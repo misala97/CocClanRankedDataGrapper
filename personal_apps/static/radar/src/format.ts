@@ -20,11 +20,19 @@ export function move(fraction: number | null): string {
   return fraction === null ? UNKNOWN : `${signed(fraction * 100, 2)}%`
 }
 
+/** The minus sign, U+2212. A hyphen is what a keyboard has; on a column of
+ *  numbers it is a third the width of the plus beside it. One constant so
+ *  every negative on the surface -- divergence, moves, z -- is the same glyph. */
+export const MINUS = '−'
+
 export function signed(value: number, digits: number): string {
   // toFixed rounds -0.001 to "-0.00", which reads as a downward move that did
-  // not happen. Normalising through +0 removes the sign from a rounded zero.
+  // not happen. Comparing the ROUNDED figure removes the sign from it.
   const fixed = (value + 0).toFixed(digits)
-  return Number(fixed) > 0 ? `+${fixed}` : fixed.replace('-0.00', '0.00')
+  const rounded = Number(fixed)
+  if (rounded > 0) return `+${fixed}`
+  if (rounded < 0) return `${MINUS}${fixed.slice(1)}`
+  return fixed.replace('-', '')
 }
 
 /** A z-score for the triplet chips: one decimal, signed only when negative. */
@@ -158,13 +166,22 @@ export function postStamp(iso: string): string {
   return `${formatMarketDate(iso)} · ${formatMarketTime(iso)}`
 }
 
-/** A stored UTC instant's calendar date in Radar's fixed display timezone. */
+/** A stored UTC instant's calendar date in Radar's fixed display timezone.
+ *
+ *  Berlin decides WHICH day; English decides how it is written. `22. Aug.
+ *  2026` was the one German-formatted figure on an English surface, beside
+ *  counts that had been de-localised on purpose (Spend.tsx). Assembled from
+ *  parts rather than an `en-GB` formatter, whose short September is "Sept"
+ *  in newer ICU and would sit beside the "Sep" dayStamp already prints. */
 export function formatMarketDate(iso: string): string {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return UNKNOWN
-  return new Intl.DateTimeFormat('de-DE', {
-    timeZone: BERLIN, day: '2-digit', month: 'short', year: 'numeric',
-  }).format(at)
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BERLIN, day: 'numeric', month: 'numeric', year: 'numeric',
+  }).formatToParts(at)
+  const part = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value)
+  return `${part('day')} ${MONTHS[part('month') - 1]} ${part('year')}`
 }
 
 export function plural(count: number, one: string, many: string): string {
@@ -272,11 +289,27 @@ export function formatPrice(value: number, currency: string,
   return explicitCode ? `${formatted} · ${currency}` : formatted
 }
 
-/** The exact delayed age, or the normal unknown marker where a provider did
- * not supply a timestamp. */
+/** The delayed age in a human unit, or the normal unknown marker where a
+ *  provider did not supply a timestamp. */
 export function formatQuoteAge(ageSeconds: number | null): string {
   if (ageSeconds === null) return UNKNOWN
-  return `${Math.floor(ageSeconds / 60)} min delayed`
+  return `${humanAge(ageSeconds)} delayed`
+}
+
+const ENTITIES: Record<string, string> = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+  '&#39;': "'", '&#x27;': "'", '&nbsp;': ' ',
+}
+
+/** What a source HTML-escaped, decoded once, as text.
+ *
+ *  Reddit hands out `&amp;` inside URLs and bodies, and the panel printed it
+ *  verbatim. Once, deliberately: `&amp;amp;` is a source that double-escaped,
+ *  and turning it into `&` would be inventing a character the post never
+ *  had. Text only -- React renders the result as text, never as markup. */
+export function decodeEntities(text: string): string {
+  return text.replace(/&(?:amp|lt|gt|quot|#39|#x27|nbsp);/g,
+                      (entity) => ENTITIES[entity] ?? entity)
 }
 
 /** An age in the unit a person would pick: 45 min, 46h, 3d.

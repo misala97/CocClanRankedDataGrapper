@@ -8,10 +8,12 @@
  *  different suggestions rather than one.
  *
  *  The wording names the controls as they are LABELLED, because the reader
- *  has to find them: the strip says Score and it says All.
+ *  has to find them: the summary line says 4h and the views row says All.
+ *  (It said "Score window" until 2026-09-01; no control had carried that
+ *  word since the 2026-08-30 strip.)
  */
 export function Widen({ tail = '.' }: { tail?: string }) {
   return (
-    <>Try a longer <b>Score</b> window, or the <b>All</b> segment{tail}</>
+    <>Try a longer <b>window</b>, or the <b>All</b> view{tail}</>
   )
 }

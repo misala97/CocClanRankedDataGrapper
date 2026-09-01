@@ -336,7 +336,26 @@ describe('the controls', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /change/i }))
 
-    expect(screen.getByRole('button', { name: /Bluesky/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Bluesky/ }))
+      .toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('coalesces a burst of control changes into one request', async () => {
+    /* Every toggle used to fire its own fetch, aborting the previous one.
+       Five quick clicks queued five board builds on the server and the last
+       waited past the 8s timeout -- "The board did not answer in time"
+       during ordinary toggling (critique, 2026-09-01). */
+    render(<BoardPage initial={payload()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
+    await userEvent.click(screen.getByRole('button', { name: /4chan/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Reddit/ }))
+
+    await waitFor(() => expect(boardCalls()).toHaveLength(1))
+    expect(boardCalls()[0]).toContain('sources=bluesky&')
+    // And nothing else arrives later.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(boardCalls()).toHaveLength(1)
   })
 
   it('renders every view whatever the data says', () => {

@@ -1,4 +1,4 @@
-import { formatMarketDate, formatQuoteAge } from './format'
+import { formatMarketDate, formatQuoteAge, humanAge, move } from './format'
 import type { MarketQuote } from './types'
 
 /**
@@ -75,8 +75,10 @@ function TapeBadge({ quote }: { quote: MarketQuote }) {
 function qualityText(quote: MarketQuote): string | null {
   if (quote.quality === 'delayed') return formatQuoteAge(quote.age_seconds)
   if (quote.quality === 'stale') {
+    // The row said "quote 22h old" while this said "1359 min stale" of the
+    // same snapshot (critique, 2026-09-01). One unit, humanAge's.
     return quote.age_seconds === null ? 'stale quote'
-      : `${Math.floor(quote.age_seconds / 60)} min stale`
+      : `${humanAge(quote.age_seconds)} stale`
   }
   if (quote.quality === 'eod') {
     return quote.quoted_at ? `EOD · ${formatMarketDate(quote.quoted_at)}` : 'EOD'
@@ -99,13 +101,14 @@ function QuoteMoves({ quote }: { quote: MarketQuote }) {
   )
 }
 
+/** The percent through format.ts's own formatter -- this was a one-off
+ *  de-DE Intl call, so the panel said `−4,81 %` while the row said `−4.5%`
+ *  of the same stock. One dialect for one number. */
 function Move({ value, label }: { value: number; label: string }) {
-  const formatted = new Intl.NumberFormat('de-DE', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always',
-  }).format(value * 100).replace('-', '−')
+  const formatted = move(value)
   return (
     <span className={`quote-move ${value >= 0 ? 'up' : 'down'}`}>
-      {`${formatted}\u00a0% ${label}`}
+      {`${formatted} ${label}`}
     </span>
   )
 }

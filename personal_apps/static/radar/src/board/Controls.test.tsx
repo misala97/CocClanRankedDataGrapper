@@ -134,10 +134,28 @@ describe('the summary line', () => {
   })
 
   it('will still not let the last source be turned off once unfolded', async () => {
-    controls(selection({ sources: ['bluesky'] }))
+    /* Not `disabled`: that drops the button out of the tab order and its
+       `title` is mouse-only, so a keyboard or screen-reader user got neither
+       the control nor the reason (critique, 2026-09-01). The reason is
+       written next to it instead. */
+    const onChange = controls(selection({ sources: ['bluesky'] }))
 
     await userEvent.click(screen.getByRole('button', { name: /change/i }))
 
-    expect(tab(/Bluesky/)).toBeDisabled()
+    expect(tab(/Bluesky/)).toHaveAttribute('aria-disabled', 'true')
+    expect(tab(/Bluesky/)).not.toBeDisabled()
+    expect(tab(/Bluesky/)).toHaveAccessibleDescription(/one source has to stay on/i)
+    expect(screen.getByText(/one source has to stay on/i)).toBeVisible()
+    await userEvent.click(tab(/Bluesky/)!)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('names the venue floor, which its two tabs do not', async () => {
+    /* `any 37 / 2+ 35` next to three source names read as more sources. */
+    controls()
+
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
+
+    expect(screen.getByRole('group', { name: 'Venues' })).toHaveTextContent(/^venues/)
   })
 })

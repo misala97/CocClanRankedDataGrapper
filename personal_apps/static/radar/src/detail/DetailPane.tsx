@@ -232,7 +232,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     // cannot see it, which is why the words stay, visually hidden.
     return (
       <main className="detail loading" aria-busy="true">
-        <p role="status" className="sr">Loading {ticker}…</p>
+        <p role="status" className="aural">Loading {ticker}…</p>
         <div className="sk sk-ticker" />
         <div className="sk sk-name" />
         <div className="sk sk-line" />
