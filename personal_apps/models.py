@@ -576,6 +576,13 @@ class RadarInstrument(db.Model):
     mapping_status  = db.Column(db.String(12), nullable=False)
     mapping_source  = db.Column(db.String(24), nullable=True)
     mapped_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    # Which atomic mapping generation last wrote this German row; NULL for
+    # legacy rows and for US rows, which the generation machinery never owns.
+    mapping_generation_id = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        db.ForeignKey('radar_mapping_generations.id',
+                      name='fk_radar_instrument_generation'),
+        nullable=True)
 
 
 class RadarPost(db.Model):
@@ -862,6 +869,17 @@ class RadarQuote(db.Model):
                             name='uq_radar_quote_market'),
         db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
                            name='ck_radar_quotes_market'),
+        # massive_grouped is deliberately NOT a quote source: Massive is a
+        # daily-close feed and must never masquerade as an intraday print
+        # (spec 2026-08-31 §7).
+        db.CheckConstraint(
+            "source IS NULL OR source IN ('legacy', 'finnhub', 'twelvedata',"
+            " 'deutsche_boerse_delayed', 'yahoo_chart')",
+            name='ck_radar_quote_source'),
+        db.CheckConstraint(
+            "price_basis IS NULL OR price_basis IN"
+            " ('trade', 'midpoint', 'close')",
+            name='ck_radar_quote_price_basis'),
         db.Index('ix_radar_quotes_ticker_market_mic_fetched',
                  'ticker', 'market', 'mic', 'fetched_at'),
         {'mysql_charset': 'utf8mb4'},
@@ -890,6 +908,18 @@ class RadarQuote(db.Model):
     # Nullable for snapshots written before this field was deployed.
     provider_delay = db.Column(db.String(8), nullable=True)
     volume      = db.Column(db.BigInteger, nullable=True)
+    # Market-data v2 provenance (expand stage: nullable, legacy writers keep
+    # working). ``source`` names the feed, ``price_basis`` separates an
+    # executed trade from an indicative midpoint, and the book columns hold
+    # the original bid/ask a midpoint was derived from.
+    source      = db.Column(db.String(32), nullable=True)
+    price_basis = db.Column(db.String(8), nullable=True)
+    bid         = db.Column(db.Numeric(18, 6), nullable=True)
+    ask         = db.Column(db.Numeric(18, 6), nullable=True)
+    # Shadow rows are the measurement lane of the staged rollout: persisted
+    # for the activation gates, invisible to every live read.
+    is_shadow   = db.Column(db.Boolean, nullable=False, default=False,
+                            server_default=sa.false())
 
 
 class RadarDailyClose(db.Model):
@@ -905,10 +935,25 @@ class RadarDailyClose(db.Model):
     """
     __tablename__ = 'radar_daily_closes'
     __table_args__ = (
+        # is_shadow joins the identity so a shadow measurement row and the
+        # incumbent live row can coexist for the same date during an
+        # activation gate (spec 2026-08-31 §7 [A1]).
         db.UniqueConstraint('ticker', 'market', 'mic', 'close_date',
-                            name='uq_radar_daily_close_market'),
+                            'is_shadow', name='uq_radar_daily_close_market'),
         db.CheckConstraint("market IS NULL OR market IN ('us', 'de')",
                            name='ck_radar_daily_closes_market'),
+        db.CheckConstraint(
+            "source IS NULL OR source IN ('legacy', 'finnhub', 'twelvedata',"
+            " 'deutsche_boerse_delayed', 'yahoo_chart', 'massive_grouped')",
+            name='ck_radar_daily_closes_source'),
+        db.CheckConstraint(
+            "price_basis IS NULL OR price_basis = 'close'",
+            name='ck_radar_daily_closes_price_basis'),
+        # Every selected v2 history source is split-only; NULL is the
+        # migration-era value the contraction later classifies.
+        db.CheckConstraint(
+            "adjustment_basis IS NULL OR adjustment_basis = 'split'",
+            name='ck_radar_daily_closes_adjustment'),
         {'mysql_charset': 'utf8mb4'},
     )
 
@@ -924,6 +969,207 @@ class RadarDailyClose(db.Model):
     close_date = db.Column(db.Date, nullable=False)
     close      = db.Column(db.Numeric(18, 4), nullable=False)
     fetched_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    # Market-data v2 provenance (expand stage, nullable for legacy rows).
+    source           = db.Column(db.String(32), nullable=True)
+    price_basis      = db.Column(db.String(8), nullable=True)
+    adjustment_basis = db.Column(db.String(8), nullable=True)
+    is_shadow        = db.Column(db.Boolean, nullable=False, default=False,
+                                 server_default=sa.false())
+
+
+class RadarMappingGeneration(db.Model):
+    """One complete, hashed German-mapping decision set (spec §5.4).
+
+    Mappings change only by activating a whole generation atomically, so a
+    partial refresh can never leave the venue table half-updated. The exact
+    canonical payload is retained: rollback is re-applying a prior
+    generation, not reconstructing it from memory.
+    """
+    __tablename__ = 'radar_mapping_generations'
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('shadow', 'active', 'retired', 'failed')",
+            name='ck_radar_mapping_generation_status'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id             = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    market         = db.Column(db.String(2), nullable=False)
+    status         = db.Column(db.String(12), nullable=False)
+    source         = db.Column(db.String(32), nullable=False)
+    payload_sha256 = db.Column(db.String(64), nullable=False, unique=True)
+    payload_json   = db.Column(db.Text().with_variant(MEDIUMTEXT, 'mysql'),
+                               nullable=False)
+    summary_json   = db.Column(db.Text, nullable=False)
+    created_at     = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    activated_at   = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+
+
+class RadarMarketDataCursor(db.Model):
+    """Durable per-(source, MIC, channel) file cursor for the German feed.
+
+    The delayed service retains roughly a day of minute files; the cursor is
+    what lets a restarted daemon consume the still-retained backlog in order
+    instead of re-reading or skipping. Never pruned.
+    """
+    __tablename__ = 'radar_market_data_cursors'
+    __table_args__ = (
+        db.CheckConstraint("channel IN ('pretrade', 'posttrade')",
+                           name='ck_radar_market_cursor_channel'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    source     = db.Column(db.String(32), primary_key=True)
+    mic        = db.Column(db.String(4), primary_key=True)
+    channel    = db.Column(db.String(12), primary_key=True)
+    remote_id  = db.Column(db.String(160), nullable=False)
+    source_ts  = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    checksum   = db.Column(db.String(64), nullable=False)
+    fetched_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
+class RadarMarketDataCycle(db.Model):
+    """One scheduled German collection attempt and what became of it.
+
+    The ops summary and the activation gates read these instead of scraping
+    logs; transport success is a durable fact, not a grep.
+    """
+    __tablename__ = 'radar_market_data_cycles'
+    __table_args__ = (
+        db.UniqueConstraint('source', 'mic', 'channel', 'scheduled_at',
+                            name='uq_radar_market_cycle'),
+        db.CheckConstraint("mode IN ('shadow', 'active')",
+                           name='ck_radar_market_cycle_mode'),
+        db.CheckConstraint(
+            "status IN ('accepted', 'duplicate', 'no_newer', 'rejected',"
+            " 'transport_error')",
+            name='ck_radar_market_cycle_status'),
+        db.CheckConstraint("channel IN ('pretrade', 'posttrade')",
+                           name='ck_radar_market_cycle_channel'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id                 = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    source             = db.Column(db.String(32), nullable=False)
+    mic                = db.Column(db.String(4), nullable=False)
+    channel            = db.Column(db.String(12), nullable=False)
+    scheduled_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    completed_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    mode               = db.Column(db.String(8), nullable=False)
+    status             = db.Column(db.String(16), nullable=False)
+    newest_remote_id   = db.Column(db.String(160), nullable=True)
+    newest_source_ts   = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    files_seen         = db.Column(db.Integer, nullable=False, default=0)
+    files_accepted     = db.Column(db.Integer, nullable=False, default=0)
+    record_count       = db.Column(db.Integer, nullable=False, default=0)
+    selected_count     = db.Column(db.Integer, nullable=False, default=0)
+    rejected_records   = db.Column(db.Integer, nullable=False, default=0)
+    compressed_bytes   = db.Column(db.BigInteger, nullable=False, default=0)
+    uncompressed_bytes = db.Column(db.BigInteger, nullable=False, default=0)
+    parse_ms           = db.Column(db.Integer, nullable=False, default=0)
+    provider_lag_s     = db.Column(db.Integer, nullable=True)
+    fetch_lag_s        = db.Column(db.Integer, nullable=True)
+    error_code         = db.Column(db.String(48), nullable=True)
+
+
+class RadarMarketTradeEvent(db.Model):
+    """One normalized post-trade event inside the 48-hour journal.
+
+    Kept so the native-close materialization can re-derive the last valid
+    trade of a session the next morning. The captured feed showed no
+    correction/cancellation semantics (contract ruling R4); ``action``
+    therefore stores 'new' today, and the enum keeps the reviewed slots so
+    an observed correction one day becomes a schema fact, not a surprise.
+    """
+    __tablename__ = 'radar_market_trade_events'
+    __table_args__ = (
+        db.UniqueConstraint('mic', 'event_id',
+                            name='uq_radar_market_trade_event'),
+        db.CheckConstraint("action IN ('new', 'correct', 'cancel')",
+                           name='ck_radar_trade_event_action'),
+        db.Index('ix_radar_trade_events_mic_isin_ts',
+                 'mic', 'isin', 'event_ts'),
+        db.Index('ix_radar_trade_events_received', 'received_at'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id                = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    mic               = db.Column(db.String(4), nullable=False)
+    isin              = db.Column(db.String(12), nullable=False)
+    event_id          = db.Column(db.String(64), nullable=False)
+    original_event_id = db.Column(db.String(64), nullable=True)
+    action            = db.Column(db.String(8), nullable=False)
+    event_ts          = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    price             = db.Column(db.Numeric(18, 6), nullable=True)
+    volume            = db.Column(db.BigInteger, nullable=True)
+    is_official_close = db.Column(db.Boolean, nullable=False, default=False)
+    source_remote_id  = db.Column(db.String(160), nullable=False)
+    received_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
+class RadarGroupedCloseDay(db.Model):
+    """Durable state for one Massive grouped trading date and lane.
+
+    THE resumable progress ledger for grouped closes: accepted rows are
+    progress, everything else stays retryable. Massive never touches the
+    MIC-keyed German cursor (spec §7, Codex correction).
+    """
+    __tablename__ = 'radar_grouped_close_days'
+    __table_args__ = (
+        db.UniqueConstraint('source', 'close_date', 'is_shadow',
+                            name='uq_radar_grouped_close_day'),
+        db.CheckConstraint(
+            "status IN ('accepted', 'no_data', 'rejected',"
+            " 'transport_error')",
+            name='ck_radar_grouped_day_status'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id                  = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    source              = db.Column(db.String(32), nullable=False)
+    close_date          = db.Column(db.Date, nullable=False)
+    is_shadow           = db.Column(db.Boolean, nullable=False, default=False,
+                                    server_default=sa.false())
+    status              = db.Column(db.String(16), nullable=False)
+    payload_sha256      = db.Column(db.String(64), nullable=True)
+    fetched_at          = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    completed_at        = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    provider_rows       = db.Column(db.Integer, nullable=False, default=0)
+    mapped_rows         = db.Column(db.Integer, nullable=False, default=0)
+    written_rows        = db.Column(db.Integer, nullable=False, default=0)
+    unmatched_provider  = db.Column(db.Integer, nullable=False, default=0)
+    unmatched_universe  = db.Column(db.Integer, nullable=False, default=0)
+    active_expected     = db.Column(db.Integer, nullable=False, default=0)
+    active_matched      = db.Column(db.Integer, nullable=False, default=0)
+    malformed_rows      = db.Column(db.Integer, nullable=False, default=0)
+    duplicate_conflicts = db.Column(db.Integer, nullable=False, default=0)
+    error_code          = db.Column(db.String(48), nullable=True)
+    http_status         = db.Column(db.Integer, nullable=True)
+    backoff_until       = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+
+
+class RadarProviderSessionState(db.Model):
+    """The durably claimed post-close cycle per provider and market.
+
+    The claim commits under a row lock BEFORE the provider request, so a
+    daemon restart cannot repeat the weekend request loop (spec §9.2 [A3]).
+    """
+    __tablename__ = 'radar_provider_session_states'
+    __table_args__ = ({'mysql_charset': 'utf8mb4'},)
+
+    source                       = db.Column(db.String(32), primary_key=True)
+    market                       = db.Column(db.String(2), primary_key=True)
+    last_post_close_session_date = db.Column(db.Date, nullable=True)
+    claimed_at                   = db.Column(MYSQL_DATETIME(fsp=6),
+                                             nullable=True)
 
 
 class RadarLlmSpend(db.Model):

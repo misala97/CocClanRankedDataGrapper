@@ -229,8 +229,10 @@ def test_market_models_partition_price_keys_after_writer_upgrade():
     close_unique = next(
         constraint for constraint in models.RadarDailyClose.__table__.constraints
         if isinstance(constraint, sa.UniqueConstraint))
+    # is_shadow joined the identity in market-data v2 so a shadow measurement
+    # row can coexist with the live row for the same date.
     assert tuple(column.name for column in close_unique.columns) == (
-        'ticker', 'market', 'mic', 'close_date')
+        'ticker', 'market', 'mic', 'close_date', 'is_shadow')
     assert tuple(column.name for column in
                  models.RadarDailyClose.__table__.primary_key.columns) == ('id',)
 
@@ -311,6 +313,9 @@ def test_model_schema_rejects_unknown_market_and_allows_null_price_context():
             'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
     metadata = sa.MetaData()
     for table in (
+            # The generation table rides along because radar_instruments now
+            # carries a foreign key to it.
+            models.RadarMappingGeneration.__table__,
             models.RadarInstrument.__table__, models.RadarQuote.__table__,
             models.RadarDailyClose.__table__):
         table.to_metadata(metadata)
@@ -392,3 +397,91 @@ def test_judgment_history_carries_all_five_enum_checks():
 def test_journal_chatter_flag_is_nullable_boolean():
     c = models.RadarMentionEvent.__table__.c.counts_as_human_chatter
     assert c.nullable
+
+
+# --- Market data v2 (spec 2026-08-31, plan Task 2) ---------------------------
+
+def test_market_data_v2_model_shapes():
+    import decimal
+    from models import RadarQuote, RadarMarketDataCursor
+    now = dt.datetime(2027, 1, 4, 12, 0, 0)
+    quote = RadarQuote(
+        ticker='MDV2ZZ', market='de', mic='XGAT', currency='EUR',
+        provider_symbol='ZZ1', fetched_at=now, quote_ts=now, price=100,
+        source='deutsche_boerse_delayed', price_basis='trade',
+        bid=decimal.Decimal('99.90'), ask=decimal.Decimal('100.10'),
+        is_shadow=True)
+    assert (quote.source, quote.price_basis, quote.is_shadow) == (
+        'deutsche_boerse_delayed', 'trade', True)
+    assert {'source', 'mic', 'channel'} <= {
+        column.name for column in RadarMarketDataCursor.__table__.columns}
+    checks = {constraint.name for constraint in RadarQuote.__table__.constraints
+              if isinstance(constraint, sa.CheckConstraint)}
+    assert 'ck_radar_quote_price_basis' in checks
+    assert 'ck_radar_quote_source' in checks
+
+
+def test_daily_close_gains_provenance_and_shadow_identity():
+    from models import RadarDailyClose
+    c = RadarDailyClose.__table__.c
+    for name in ('source', 'price_basis', 'adjustment_basis'):
+        assert c[name].nullable, name
+    assert not c.is_shadow.nullable
+    unique = next(k for k in RadarDailyClose.__table__.constraints
+                  if isinstance(k, sa.UniqueConstraint))
+    assert [col.name for col in unique.columns] == [
+        'ticker', 'market', 'mic', 'close_date', 'is_shadow']
+    checks = {k.name for k in RadarDailyClose.__table__.constraints
+              if isinstance(k, sa.CheckConstraint)}
+    assert 'ck_radar_daily_closes_price_basis' in checks
+    assert 'ck_radar_daily_closes_adjustment' in checks
+    assert 'ck_radar_daily_closes_source' in checks
+
+
+def test_trade_event_and_cursor_and_cycle_keys():
+    from models import (RadarMarketDataCursor, RadarMarketDataCycle,
+                        RadarMarketTradeEvent)
+    event_unique = next(
+        k for k in RadarMarketTradeEvent.__table__.constraints
+        if isinstance(k, sa.UniqueConstraint))
+    assert [col.name for col in event_unique.columns] == ['mic', 'event_id']
+    cursor_pk = [col.name for col in
+                 RadarMarketDataCursor.__table__.primary_key.columns]
+    assert cursor_pk == ['source', 'mic', 'channel']
+    cycle_unique = next(
+        k for k in RadarMarketDataCycle.__table__.constraints
+        if isinstance(k, sa.UniqueConstraint))
+    assert [col.name for col in cycle_unique.columns] == [
+        'source', 'mic', 'channel', 'scheduled_at']
+
+
+def test_grouped_day_and_session_state_keys():
+    from models import RadarGroupedCloseDay, RadarProviderSessionState
+    grouped_unique = next(
+        k for k in RadarGroupedCloseDay.__table__.constraints
+        if isinstance(k, sa.UniqueConstraint))
+    assert [col.name for col in grouped_unique.columns] == [
+        'source', 'close_date', 'is_shadow']
+    checks = {k.name for k in RadarGroupedCloseDay.__table__.constraints
+              if isinstance(k, sa.CheckConstraint)}
+    assert 'ck_radar_grouped_day_status' in checks
+    session_pk = [col.name for col in
+                  RadarProviderSessionState.__table__.primary_key.columns]
+    assert session_pk == ['source', 'market']
+
+
+def test_mapping_generation_shape():
+    from models import RadarMappingGeneration
+    c = RadarMappingGeneration.__table__.c
+    assert c.payload_sha256.unique
+    assert not c.payload_json.nullable
+    checks = {k.name for k in RadarMappingGeneration.__table__.constraints
+              if isinstance(k, sa.CheckConstraint)}
+    assert 'ck_radar_mapping_generation_status' in checks
+
+
+def test_instrument_gains_nullable_generation_link():
+    from models import RadarInstrument
+    column = RadarInstrument.__table__.c.mapping_generation_id
+    assert column.nullable
+    assert list(column.foreign_keys)

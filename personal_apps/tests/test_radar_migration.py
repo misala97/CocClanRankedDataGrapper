@@ -512,3 +512,244 @@ def test_market_migration_downgrade_preserves_legacy_price_rows(
         "SELECT COUNT(*) FROM radar_quotes WHERE ticker='AAPL'")) .scalar_one() == 1
     assert connection.execute(sa.text(
         "SELECT COUNT(*) FROM radar_daily_closes WHERE ticker='AAPL'")) .scalar_one() == 1
+
+
+# --- Market data v2 expand migration (plan Task 2) ---------------------------
+
+def _load_market_data_v2_migration():
+    path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
+            '6a21d4e8c9f0_add_radar_market_data_v2.py')
+    assert path.exists(), 'market-data v2 migration is missing'
+    spec = importlib.util.spec_from_file_location('radar_market_data_v2', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _pre_v2_schema(connection, *, with_close_server_default=True):
+    """The exact pre-6a21d4e8c9f0 shapes of the three touched tables.
+
+    ``with_close_server_default`` exists for the broken-variant proof: the
+    real migration must give is_shadow a server default so old-column-list
+    inserts keep working.
+    """
+    metadata = sa.MetaData()
+    sa.Table(
+        'radar_quotes', metadata,
+        sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
+        sa.Column('ticker', sa.String(12), nullable=False),
+        sa.Column('market', sa.String(2)),
+        sa.Column('mic', sa.String(4)),
+        sa.Column('currency', sa.String(3)),
+        sa.Column('provider_symbol', sa.String(32)),
+        sa.Column('fetched_at', sa.DateTime, nullable=False),
+        sa.Column('quote_ts', sa.DateTime),
+        sa.Column('price', sa.Numeric(18, 6), nullable=False),
+        sa.Column('prev_close', sa.Numeric(18, 6)),
+        sa.Column('regular_close', sa.Numeric(18, 6)),
+        sa.Column('provider_delay', sa.String(8)),
+        sa.Column('volume', sa.BigInteger),
+        sa.UniqueConstraint('ticker', 'market', 'mic', 'fetched_at',
+                            name='uq_radar_quote_market'),
+    )
+    sa.Table(
+        'radar_daily_closes', metadata,
+        sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
+        sa.Column('ticker', sa.String(12), nullable=False),
+        sa.Column('market', sa.String(2)),
+        sa.Column('mic', sa.String(4)),
+        sa.Column('currency', sa.String(3)),
+        sa.Column('close_date', sa.Date, nullable=False),
+        sa.Column('close', sa.Numeric(18, 4), nullable=False),
+        sa.Column('fetched_at', sa.DateTime, nullable=False),
+        sa.UniqueConstraint('ticker', 'market', 'mic', 'close_date',
+                            name='uq_radar_daily_close_market'),
+    )
+    sa.Table(
+        'radar_instruments', metadata,
+        sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
+        sa.Column('ticker', sa.String(12), nullable=False),
+        sa.Column('market', sa.String(2), nullable=False),
+        sa.Column('venue', sa.String(48), nullable=False),
+        sa.Column('mic', sa.String(4), nullable=False),
+        sa.Column('provider_symbol', sa.String(32), nullable=False),
+        sa.Column('currency', sa.String(3), nullable=False),
+        sa.Column('isin', sa.String(12)),
+        sa.Column('is_primary', sa.Boolean, nullable=False),
+        sa.Column('mapping_status', sa.String(12), nullable=False),
+        sa.Column('mapping_source', sa.String(24)),
+        sa.Column('mapped_at', sa.DateTime, nullable=False),
+    )
+    metadata.create_all(connection)
+    connection.execute(sa.text(
+        "INSERT INTO radar_quotes (id, ticker, market, mic, currency,"
+        " provider_symbol, fetched_at, price) VALUES"
+        " (1, 'AAPL', 'us', 'XNAS', 'USD', 'AAPL',"
+        " '2026-08-28 12:00:00', 100.0)"))
+    connection.execute(sa.text(
+        "INSERT INTO radar_daily_closes (id, ticker, market, mic, currency,"
+        " close_date, close, fetched_at) VALUES"
+        " (1, 'AAPL', 'us', 'XNAS', 'USD', '2026-08-27', 99.0,"
+        " '2026-08-28 12:00:00')"))
+    return metadata
+
+
+@pytest.fixture()
+def v2_migration_db():
+    engine = sa.create_engine('sqlite://')
+    connection = engine.connect()
+    try:
+        yield connection
+    finally:
+        connection.close()
+        engine.dispose()
+
+
+def test_v2_upgrade_keeps_old_writers_valid_and_downgrade_preserves_rows(
+        v2_migration_db):
+    connection = v2_migration_db
+    _pre_v2_schema(connection)
+    migration = _load_market_data_v2_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+
+    # An old writer's column list still inserts, and the new fields default.
+    connection.execute(sa.text(
+        "INSERT INTO radar_quotes (id, ticker, market, mic, currency,"
+        " provider_symbol, fetched_at, price) VALUES"
+        " (2, 'AAPL', 'us', 'XNAS', 'USD', 'AAPL',"
+        " '2026-08-28 12:05:00', 101.0)"))
+    connection.execute(sa.text(
+        "INSERT INTO radar_daily_closes (id, ticker, market, mic, currency,"
+        " close_date, close, fetched_at) VALUES"
+        " (2, 'AAPL', 'us', 'XNAS', 'USD', '2026-08-28', 100.5,"
+        " '2026-08-29 12:00:00')"))
+    rows = connection.execute(sa.text(
+        "SELECT is_shadow, source, price_basis FROM radar_quotes"
+        " ORDER BY id")).all()
+    assert [tuple(row) for row in rows] == [(0, None, None), (0, None, None)]
+
+    # Live and shadow closes coexist for the same identity/date...
+    connection.execute(sa.text(
+        "INSERT INTO radar_daily_closes (id, ticker, market, mic, currency,"
+        " close_date, close, fetched_at, source, price_basis,"
+        " adjustment_basis, is_shadow) VALUES"
+        " (3, 'AAPL', 'us', 'XNAS', 'USD', '2026-08-28', 100.6,"
+        " '2026-08-29 12:00:00', 'massive_grouped', 'close', 'split', 1)"))
+    # ...but a second live row for that identity/date still collides.
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_daily_closes (id, ticker, market, mic,"
+            " currency, close_date, close, fetched_at) VALUES"
+            " (4, 'AAPL', 'us', 'XNAS', 'USD', '2026-08-28', 100.7,"
+            " '2026-08-29 12:01:00')"))
+
+    migration.downgrade()
+    close_columns = {column['name'] for column in
+                     sa.inspect(connection).get_columns('radar_daily_closes')}
+    assert 'is_shadow' not in close_columns
+    assert 'adjustment_basis' not in close_columns
+    # Both legacy rows survive; only the shadow row was removed.
+    assert connection.execute(sa.text(
+        "SELECT COUNT(*) FROM radar_daily_closes")).scalar_one() == 2
+    assert connection.execute(sa.text(
+        "SELECT COUNT(*) FROM radar_quotes")).scalar_one() == 2
+    tables = set(sa.inspect(connection).get_table_names())
+    assert 'radar_mapping_generations' not in tables
+    assert 'radar_grouped_close_days' not in tables
+
+
+def test_v2_broken_variant_four_column_close_key_rejects_shadow_pair(
+        v2_migration_db):
+    """Teeth: under the ORIGINAL four-column unique key the live+shadow pair
+    the migration enables would collide -- proving the five-column key is
+    what carries the behavior."""
+    connection = v2_migration_db
+    _pre_v2_schema(connection)
+    connection.execute(sa.text(
+        "ALTER TABLE radar_daily_closes ADD COLUMN is_shadow BOOLEAN"
+        " NOT NULL DEFAULT 0"))
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_daily_closes (id, ticker, market, mic,"
+            " currency, close_date, close, fetched_at, is_shadow) VALUES"
+            " (5, 'AAPL', 'us', 'XNAS', 'USD', '2026-08-27', 99.5,"
+            " '2026-08-28 13:00:00', 1)"))
+
+
+def test_v2_broken_variant_missing_server_default_breaks_old_writers(
+        v2_migration_db):
+    """Teeth: without the server default an old-column-list insert dies,
+    which is exactly what the expand contract forbids."""
+    connection = v2_migration_db
+    metadata = sa.MetaData()
+    sa.Table(
+        'radar_quotes', metadata,
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('ticker', sa.String(12), nullable=False),
+        sa.Column('fetched_at', sa.DateTime, nullable=False),
+        sa.Column('price', sa.Numeric(18, 6), nullable=False),
+        # The deliberately broken shape: NOT NULL without a server default.
+        sa.Column('is_shadow', sa.Boolean, nullable=False),
+    )
+    metadata.create_all(connection)
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_quotes (id, ticker, fetched_at, price)"
+            " VALUES (9, 'AAPL', '2026-08-28 12:06:00', 102.0)"))
+
+
+def test_v2_operational_tables_round_trip_and_enforce_keys(v2_migration_db):
+    connection = v2_migration_db
+    _pre_v2_schema(connection)
+    migration = _load_market_data_v2_migration()
+    migration.op = Operations(MigrationContext.configure(connection))
+    migration.upgrade()
+
+    connection.execute(sa.text(
+        "INSERT INTO radar_grouped_close_days (source, close_date,"
+        " is_shadow, status, fetched_at) VALUES"
+        " ('massive_grouped', '2026-08-28', 1, 'accepted',"
+        " '2026-08-29 00:00:00')"))
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_grouped_close_days (source, close_date,"
+            " is_shadow, status, fetched_at) VALUES"
+            " ('massive_grouped', '2026-08-28', 1, 'accepted',"
+            " '2026-08-29 01:00:00')"))
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_grouped_close_days (source, close_date,"
+            " is_shadow, status, fetched_at) VALUES"
+            " ('massive_grouped', '2026-08-29', 1, 'made_up_status',"
+            " '2026-08-30 00:00:00')"))
+
+    connection.execute(sa.text(
+        "INSERT INTO radar_provider_session_states (source, market,"
+        " last_post_close_session_date, claimed_at) VALUES"
+        " ('finnhub', 'us', '2026-08-28', '2026-08-28 21:05:00')"))
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_provider_session_states (source, market)"
+            " VALUES ('finnhub', 'us')"))
+
+    # Modern adjustment provenance is split-only; migration-era NULL passes.
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_daily_closes (id, ticker, market, mic,"
+            " currency, close_date, close, fetched_at, source, price_basis,"
+            " adjustment_basis) VALUES"
+            " (6, 'MSFT', 'us', 'XNAS', 'USD', '2026-08-28', 55.0,"
+            " '2026-08-29 12:00:00', 'yahoo_chart', 'close', 'dividend')"))
+    connection.execute(sa.text(
+        "INSERT INTO radar_daily_closes (id, ticker, market, mic, currency,"
+        " close_date, close, fetched_at) VALUES"
+        " (7, 'MSFT', 'us', 'XNAS', 'USD', '2026-08-27', 54.0,"
+        " '2026-08-28 12:00:00')"))
+    # massive_grouped can never be a QUOTE source.
+    with pytest.raises(sa.exc.IntegrityError):
+        connection.execute(sa.text(
+            "INSERT INTO radar_quotes (id, ticker, market, mic, currency,"
+            " provider_symbol, fetched_at, price, source, price_basis)"
+            " VALUES (8, 'MSFT', 'us', 'XNAS', 'USD', 'MSFT',"
+            " '2026-08-28 12:07:00', 54.5, 'massive_grouped', 'close')"))
