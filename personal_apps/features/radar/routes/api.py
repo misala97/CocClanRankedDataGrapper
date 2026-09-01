@@ -8,7 +8,7 @@ from auth import login_required
 
 from .. import board as board_mod
 from .. import detail as detail_mod
-from .. import detail_panel, llm_sentiment, phrasing, spend
+from .. import detail_panel, llm_sentiment, market_data, phrasing, spend
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
 from ..market_calendars import session_bounds, session_state
 from ._blueprint import radar_bp
@@ -223,6 +223,12 @@ def _quote(view):
         'score_eligible': view.score_eligible,
         'score_term': view.score_term,
         'is_fallback': view.is_fallback,
+        # Market-data v2 provenance: decided in QuoteView, never re-derived
+        # here (spec 10).
+        'source': view.source,
+        'price_basis': view.price_basis,
+        'bid': _decimal_or_none(view.bid),
+        'ask': _decimal_or_none(view.ask),
     }
 
 
@@ -330,6 +336,9 @@ def serialize(board):
         # over-ceiling gauge. Visibility, not control -- nothing here
         # changes what the passes do.
         'sentiment_ops': llm_sentiment.ops_summary(),
+        # Market-data v2 health: the cached database-only summary; the
+        # detail endpoint deliberately does not repeat it (spec §11).
+        'market_data_ops': market_data.ops_summary(board.generated_at),
         'triplet_hours': list(board_mod.TRIPLET_HOURS),
         'series_hours': board_mod.SERIES_HOURS,
         'lead_count': board_mod.LEAD_COUNT,

@@ -12,6 +12,10 @@ function quote(): MarketQuote {
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     tape_status: 'ok', score_eligible: true, score_term: 'divergence',
     is_fallback: false,
+    source: 'legacy',
+    price_basis: 'trade',
+    bid: null,
+    ask: null,
   }
 }
 
@@ -70,6 +74,8 @@ function detail(ticker = 'AAA', market: Detail['market'] = 'us'): Detail {
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
       sessions: [],
+      history_proxy: false, proxy_mic: null, proxy_venue: null,
+      native_mic: null, native_venue: null, native_from: null,
       normal_per_slot: null,
       watched_from: '2026-08-18',
     },

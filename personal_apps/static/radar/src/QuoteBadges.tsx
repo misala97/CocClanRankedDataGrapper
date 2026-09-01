@@ -20,6 +20,7 @@ export function QuoteBadges({ quote, moves = false }: {
           : `${quote.venue ?? 'Venue unavailable'} · ${currencyLabel(quote.currency)}`}
       </span>
       <SessionBadge session={quote.session} />
+      <BasisBadge quote={quote} />
       <TapeBadge quote={quote} />
       <QualityBadge quote={quote} />
       {moves && <QuoteMoves quote={quote} />}
@@ -42,6 +43,22 @@ function SessionBadge({ session }: Pick<MarketQuote, 'session'>) {
     return <span className="quote-session closed">Market closed</span>
   }
   return <span className="quote-session regular">Regular session</span>
+}
+
+function BasisBadge({ quote }: { quote: MarketQuote }) {
+  /* A midpoint is visible because it beats an empty cell, but it must never
+   * wear trade-like copy: the word is `indicative`, styled neutral, and the
+   * detail surface carries the book it was derived from (spec 4.3/10). */
+  if (quote.price_basis !== 'midpoint') return null
+  const spread = quote.bid != null && quote.ask != null
+    ? ` (bid ${quote.bid} / ask ${quote.ask})`
+    : ''
+  return (
+    <span className="quote-basis indicative">
+      indicative
+      <span className="aural">{` midpoint of the delayed book${spread}`}</span>
+    </span>
+  )
 }
 
 function QualityBadge({ quote }: { quote: MarketQuote }) {

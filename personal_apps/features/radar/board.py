@@ -470,7 +470,8 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
 
     return Board(generated_at=now, sources=list(sources), market=market,
                  display_timezone='Europe/Berlin',
-                 market_venue='Xetra' if market == 'de' else 'US markets',
+                 market_venue=('Tradegate-first Germany' if market == 'de'
+                               else 'US markets'),
                  next_boundary_label=boundary_label, next_boundary_at=boundary_at,
                   segments=list(segments),
                  window_hours=window_hours, segment_counts=segment_counts,

@@ -29,6 +29,10 @@ function quote(over: Partial<MarketQuote> = {}): MarketQuote {
     tape_status: over.tape_status ?? 'ok',
     score_eligible: over.score_eligible ?? true,
     score_term: over.score_term ?? 'divergence',
+    source: over.source ?? 'legacy',
+    price_basis: over.price_basis ?? 'trade',
+    bid: over.bid ?? null,
+    ask: over.ask ?? null,
   }
 }
 
@@ -82,6 +86,8 @@ function detail(ticker = 'AAA'): Detail {
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
       sessions: [],
+      history_proxy: false, proxy_mic: null, proxy_venue: null,
+      native_mic: null, native_venue: null, native_from: null,
       normal_per_slot: null,
       watched_from: '2026-08-18',
     },

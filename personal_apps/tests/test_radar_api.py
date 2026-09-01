@@ -81,7 +81,7 @@ def test_board_echoes_market_and_berlin_display_timezone(client):
     assert payload['market'] == 'de'
     assert payload['display_timezone'] == 'Europe/Berlin'
     assert payload['generated_at'].endswith('Z')
-    assert payload['market_venue'] == 'Xetra'
+    assert payload['market_venue'] == 'Tradegate-first Germany'
     assert payload['next_boundary_label'] in {'opens', 'closes'}
     assert payload['next_boundary_at'].endswith('Z')
 
@@ -112,6 +112,8 @@ def test_quote_serializer_keeps_the_market_quote_contract_and_utc_wire_time():
         'age_seconds': 0, 'quoted_at': '2026-08-28T11:18:00Z',
         'tape_status': 'ok', 'score_eligible': True, 'score_term': 'divergence',
         'is_fallback': False,
+        'source': 'legacy', 'price_basis': 'trade',
+        'bid': None, 'ask': None,
     }
 
 

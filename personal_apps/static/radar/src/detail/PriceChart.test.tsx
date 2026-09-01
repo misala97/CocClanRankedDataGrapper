@@ -10,6 +10,8 @@ const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
   closes: Array.from({ length: 365 }, (_, i) => 1 + i / 100),
   chatter: Array.from({ length: 365 }, (_, i) => (i < 362 ? null : i)),
   sessions: [],
+  history_proxy: false, proxy_mic: null, proxy_venue: null,
+  native_mic: null, native_venue: null, native_from: null,
   normal_per_slot: null,
   watched_from: '2026-08-21',
   ...over,
@@ -136,6 +138,8 @@ describe('the axis on an intraday span', () => {
     closes: Array.from({ length: 96 }, (_, i) => 10 + i * 0.01),
     chatter: Array.from({ length: 96 }, () => 1),
     sessions: [],
+    history_proxy: false, proxy_mic: null, proxy_venue: null,
+    native_mic: null, native_venue: null, native_from: null,
     normal_per_slot: null,
     watched_from: null,
   })
@@ -171,6 +175,8 @@ describe('the axis on an intraday span', () => {
       from: '2026-01-01T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, () => 5),
       chatter: Array.from({ length: 365 }, () => 1), sessions: [],
+      history_proxy: false, proxy_mic: null, proxy_venue: null,
+      native_mic: null, native_venue: null, native_from: null,
       normal_per_slot: null, watched_from: null,
     }
 
@@ -239,5 +245,34 @@ describe('the axis on an intraday span', () => {
     const band = container.querySelector('[data-session="afterhours"]')!
     expect(band.querySelector('rect')).toHaveAttribute('clip-path', reference)
     expect(band.querySelector('text')).toHaveAttribute('clip-path', reference)
+  })
+})
+
+
+describe('the Xetra->Tradegate history seam label', () => {
+  it('states the proxy venue, the seam date, and the native venue', () => {
+    render(<PriceChart chart={chart({
+      history_proxy: true, proxy_mic: 'XETR', proxy_venue: 'Xetra',
+      native_mic: 'XGAT', native_venue: 'Tradegate BSX',
+      native_from: '2026-08-31',
+    })} />)
+    expect(
+      screen.getByText(/Xetra history through .* · Tradegate BSX now/),
+    ).toBeInTheDocument()
+  })
+
+  it('an all-proxy chart before native accumulation drops the through-date', () => {
+    render(<PriceChart chart={chart({
+      history_proxy: true, proxy_mic: 'XETR', proxy_venue: 'Xetra',
+      native_mic: 'XGAT', native_venue: 'Tradegate BSX', native_from: null,
+    })} />)
+    expect(
+      screen.getByText(/Xetra history · Tradegate BSX now/),
+    ).toBeInTheDocument()
+  })
+
+  it('renders no note at all without a proxy', () => {
+    const { container } = render(<PriceChart chart={chart()} />)
+    expect(container.querySelector('.history-proxy-note')).toBeNull()
   })
 })

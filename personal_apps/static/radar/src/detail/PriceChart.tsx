@@ -1,4 +1,4 @@
-import { count, money } from '../format'
+import { count, formatMarketDate, money } from '../format'
 import type { DetailChart, PanelSpan } from '../types'
 import { SessionBands, sessionNames } from './SessionBands'
 
@@ -79,7 +79,17 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
   // anything -- rules, dates, the gutter numbers -- and it fades in as one
   // piece. `.plot` is what was measured, and it wipes in along x, which is
   // time. One clip on one group keeps that affordable at the long spans.
-  return (
+  /* The Xetra->Tradegate seam is stated in text NEXT TO the chart, never a
+   * tooltip: proxy history must not read as native (spec 8.2/10). */
+  const proxyNote = chart.history_proxy && chart.proxy_venue &&
+      chart.native_venue
+    ? `${chart.proxy_venue} history${chart.native_from
+        ? ` through ${formatMarketDate(chart.native_from)}`
+        : ''} · ${chart.native_venue} now`
+    : null
+
+  return (<>
+    {proxyNote ? <p className="history-proxy-note">{proxyNote}</p> : null}
     <svg className="pxchart" viewBox={`0 0 ${W} ${H}`} role="img"
          aria-label={`price over ${chart.span} with chatter beneath${
            sessionContext ? `; extended sessions: ${sessionContext}` : ''}`}>
@@ -194,7 +204,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
         {priced && <circle cx={lastX} cy={lastY} r="3.2" fill={tone} />}
       </g>
     </svg>
-  )
+  </>)
 }
 
 /** An axis label out in the gutter, tied to its own height by a tick. Without

@@ -1238,3 +1238,18 @@ body {
   .list, .detail, .rows { overflow: visible; }
   .row, .post { break-inside: avoid; }
 }
+
+/* Market-data v2 provenance (spec 10): neutral, never direction colors. */
+.quote-basis.indicative {
+  color: var(--warn, #b58900);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.history-proxy-note {
+  color: var(--muted, #888);
+  font-size: 0.8rem;
+  margin: 0 0 2px;
+}

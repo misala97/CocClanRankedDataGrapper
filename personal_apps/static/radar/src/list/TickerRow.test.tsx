@@ -15,6 +15,10 @@ function quote(over: Partial<MarketQuote> = {}): MarketQuote {
     tape_status: over.tape_status ?? 'ok',
     score_eligible: over.score_eligible ?? true,
     score_term: over.score_term ?? 'divergence',
+    source: over.source ?? 'legacy',
+    price_basis: over.price_basis ?? 'trade',
+    bid: over.bid ?? null,
+    ask: over.ask ?? null,
   }
 }
 

@@ -89,7 +89,18 @@ export interface MarketQuote {
   score_eligible: boolean
   score_term: QuoteScoreTerm
   is_fallback: boolean
+  /** Market-data v2 provenance. Null on legacy rows; never controls
+   *  client-side eligibility. */
+  source: QuoteSource | null
+  price_basis: PriceBasis | null
+  bid: number | null
+  ask: number | null
 }
+
+export type PriceBasis = 'trade' | 'midpoint' | 'close'
+export type QuoteSource =
+  | 'legacy' | 'finnhub' | 'twelvedata'
+  | 'deutsche_boerse_delayed' | 'yahoo_chart'
 
 /** Price and chatter over the same calendar days, sharing `from`.
  *
@@ -116,6 +127,16 @@ export interface DetailChart {
   /** The day observation began. Before it the chatter lane is unobserved
    *  rather than silent, and the panel draws that boundary. */
   watched_from: string | null
+  /** Xetra->Tradegate history-seam provenance (spec 8.2): older Xetra
+   *  closes may seed a Tradegate chart for the same ISIN, labelled, with
+   *  one seam at `native_from`. All false/null on every other identity
+   *  and on the intraday spans. */
+  history_proxy: boolean
+  proxy_mic: string | null
+  proxy_venue: string | null
+  native_mic: string | null
+  native_venue: string | null
+  native_from: string | null
 }
 
 export interface Post {
