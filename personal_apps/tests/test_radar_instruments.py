@@ -1,4 +1,5 @@
 """Verified Xetra mapping uses provider catalog identifiers, never names."""
+import dataclasses
 import datetime as dt
 
 import pytest
@@ -349,6 +350,38 @@ def test_identical_payload_returns_the_existing_generation(generation_rows):
     second = mod.persist_generation(decisions, now + dt.timedelta(hours=1))
     assert first.id == second.id
     assert first.status == 'shadow'
+
+
+def test_absent_proxy_fields_preserve_the_old_generation_hash(
+        generation_rows):
+    import hashlib
+    import json
+    from features.radar import instruments as mod
+    ticker = f'{PREFIX}OLD'
+    old_payload = json.dumps({'decisions': [{
+        'currency': 'EUR', 'isin': 'US0000000017',
+        'mapping_source': 'openfigi', 'mic': 'XGAT', 'reason': None,
+        'status': 'mapped', 'symbol': 'ZZOLD', 'ticker': ticker,
+    }]}, sort_keys=True, separators=(',', ':'))
+
+    decisions = [mod.MappingDecision(**item)
+                 for item in json.loads(old_payload)['decisions']]
+
+    assert mod._canonical_payload(decisions) == old_payload
+    assert hashlib.sha256(
+        mod._canonical_payload(decisions).encode()).hexdigest() == \
+        hashlib.sha256(old_payload.encode()).hexdigest()
+
+
+def test_proxy_identity_participates_in_the_generation_hash(generation_rows):
+    from features.radar import instruments as mod
+    ticker = f'{PREFIX}HASH'
+    plain = _decision(ticker, symbol='ZZHASH', isin='US0000000017')
+    proxied = dataclasses.replace(
+        plain, history_proxy_mic='XETR', history_proxy_symbol='ZZHASHX',
+        history_proxy_isin='US0000000017', history_proxy_currency='EUR')
+
+    assert mod._canonical_payload([plain]) != mod._canonical_payload([proxied])
 
 
 def test_activation_upserts_primaries_and_retires_the_previous_generation(

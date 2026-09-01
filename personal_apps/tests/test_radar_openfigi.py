@@ -101,6 +101,65 @@ def test_share_class_maps_to_xgat_before_xetr():
     assert decision.currency == 'EUR'
 
 
+def test_tradegate_primary_keeps_same_isin_xetra_history_proxy():
+    provider = FakeOpenFigi({
+        ('TICKER', 'AAPL', 'US'): [us_result('AAPL', 'BBG001S5N8V8')],
+        ('SHARE', 'BBG001S5N8V8', 'XGAT'): [de_result('APC', 'XGAT')],
+        ('SHARE', 'BBG001S5N8V8', 'XETR'): [de_result('APC', 'XETR')],
+    })
+
+    decision = decide_mapping(instrument('AAPL'), provider,
+                              BOTH_REFERENCES, {})
+
+    assert (decision.mic, decision.symbol, decision.isin) == (
+        'XGAT', 'APC', 'US0378331005')
+    assert (decision.history_proxy_mic, decision.history_proxy_symbol,
+            decision.history_proxy_isin,
+            decision.history_proxy_currency) == (
+                'XETR', 'APC', 'US0378331005', 'EUR')
+
+
+@pytest.mark.parametrize('xetra_rows,xetra_references', [
+    ([], [reference('APC', 'XETR', 'US0378331005')]),
+    ([de_result('APC', 'XETR'), de_result('APC2', 'XETR')],
+     [reference('APC', 'XETR', 'US0378331005'),
+      reference('APC2', 'XETR', 'US0378331005')]),
+    ([de_result('APC', 'XETR')],
+     [reference('APC', 'XETR', 'DE0007164600')]),
+    ([de_result('APC', 'XETR')],
+     [reference('APC', 'XETR', 'US0378331005', currency='USD')]),
+])
+def test_invalid_xetra_history_candidate_does_not_invalidate_tradegate(
+        xetra_rows, xetra_references):
+    references = {
+        'XGAT': BOTH_REFERENCES['XGAT'],
+        'XETR': reference_catalog('XETR', xetra_references),
+    }
+    provider = FakeOpenFigi({
+        ('TICKER', 'AAPL', 'US'): [us_result('AAPL', 'BBG001S5N8V8')],
+        ('SHARE', 'BBG001S5N8V8', 'XGAT'): [de_result('APC', 'XGAT')],
+        ('SHARE', 'BBG001S5N8V8', 'XETR'): xetra_rows,
+    })
+
+    decision = decide_mapping(instrument('AAPL'), provider, references, {})
+
+    assert (decision.status, decision.mic) == ('mapped', 'XGAT')
+    assert decision.history_proxy_mic is None
+
+
+def test_xetra_primary_does_not_duplicate_itself_as_a_proxy():
+    provider = FakeOpenFigi({
+        ('TICKER', 'AAPL', 'US'): [us_result('AAPL', 'BBG001S5N8V8')],
+        ('SHARE', 'BBG001S5N8V8', 'XETR'): [de_result('APC', 'XETR')],
+    })
+
+    decision = decide_mapping(instrument('AAPL'), provider,
+                              BOTH_REFERENCES, {})
+
+    assert decision.mic == 'XETR'
+    assert decision.history_proxy_mic is None
+
+
 def test_xgat_absence_falls_back_to_xetr():
     provider = FakeOpenFigi({
         ('TICKER', 'AAPL', 'US'): [us_result('AAPL', 'BBG001S5N8V8')],

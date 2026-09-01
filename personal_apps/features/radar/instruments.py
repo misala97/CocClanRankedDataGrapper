@@ -100,6 +100,10 @@ class MappingDecision:
     isin: str | None
     currency: str | None
     mapping_source: str
+    history_proxy_mic: str | None = None
+    history_proxy_symbol: str | None = None
+    history_proxy_isin: str | None = None
+    history_proxy_currency: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -257,6 +261,7 @@ def decide_mapping(instrument, provider, references_by_mic, overrides):
     if reason is None:
         share_class = share_classes[0]
         venue_reason = 'no_german_candidate'
+        verified_by_mic = {}
         for mic in ('XGAT', 'XETR'):
             candidates = provider.venue_candidates(
                 {ticker: share_class}, mic).get(ticker, ())
@@ -279,10 +284,22 @@ def decide_mapping(instrument, provider, references_by_mic, overrides):
             if not _reference_supported(row):
                 venue_reason = 'security_type_mismatch'
                 continue
+            verified_by_mic[mic] = row
+        primary = (verified_by_mic.get('XGAT') or
+                   verified_by_mic.get('XETR'))
+        if primary is not None:
+            proxy = verified_by_mic.get('XETR')
+            if primary.mic != 'XGAT' or proxy is None or \
+                    proxy.isin != primary.isin:
+                proxy = None
             return MappingDecision(
-                ticker=ticker, status='mapped', reason=None, mic=mic,
-                symbol=candidate.symbol, isin=row.isin, currency='EUR',
-                mapping_source='openfigi')
+                ticker=ticker, status='mapped', reason=None,
+                mic=primary.mic, symbol=primary.symbol, isin=primary.isin,
+                currency='EUR', mapping_source='openfigi',
+                history_proxy_mic=proxy.mic if proxy else None,
+                history_proxy_symbol=proxy.symbol if proxy else None,
+                history_proxy_isin=proxy.isin if proxy else None,
+                history_proxy_currency=proxy.currency if proxy else None)
         reason = venue_reason
 
     override = overrides.get(ticker)
@@ -304,8 +321,22 @@ def decide_mapping(instrument, provider, references_by_mic, overrides):
         symbol=None, isin=None, currency=None, mapping_source='openfigi')
 
 
+_HISTORY_PROXY_FIELDS = (
+    'history_proxy_mic', 'history_proxy_symbol',
+    'history_proxy_isin', 'history_proxy_currency',
+)
+
+
+def _decision_payload(decision):
+    item = dataclasses.asdict(decision)
+    for field in _HISTORY_PROXY_FIELDS:
+        if item[field] is None:
+            item.pop(field)
+    return item
+
+
 def _canonical_payload(decisions):
-    ordered = sorted((dataclasses.asdict(decision)
+    ordered = sorted((_decision_payload(decision)
                       for decision in decisions),
                      key=lambda item: item['ticker'])
     return json.dumps({'decisions': ordered}, sort_keys=True,
