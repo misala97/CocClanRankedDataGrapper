@@ -95,6 +95,16 @@ def test_transport_or_envelope_failure_is_typed():
         DAY).status == 'transport_error'
 
 
+def test_transport_failure_preserves_the_persistable_backoff_deadline():
+    deadline = dt.datetime(2026, 8, 28, 21, 1)
+    error = massive.MassiveTransportError(
+        'rate limited', http_status=429, backoff_until=deadline)
+    fetch = massive.MassiveProvider(FakeHttp(error)).grouped_closes(DAY)
+    assert fetch.status == 'transport_error'
+    assert fetch.http_status == 429
+    assert fetch.backoff_until == deadline
+
+
 @pytest.mark.parametrize('mutate', [
     lambda payload: payload.pop('results'),
     lambda payload: payload.update(results='not a list'),
@@ -204,10 +214,12 @@ def test_a_429_sets_backoff_that_blocks_without_network(monkeypatch):
 
     session = Fake429Session()
     http._session = session
-    with pytest.raises(massive.MassiveTransportError):
+    with pytest.raises(massive.MassiveTransportError) as first:
         http.get_grouped_daily(DAY)
-    with pytest.raises(massive.MassiveTransportError, match='backoff'):
+    assert first.value.backoff_until is not None
+    with pytest.raises(massive.MassiveTransportError, match='backoff') as held:
         http.get_grouped_daily(DAY)
+    assert held.value.backoff_until == first.value.backoff_until
     assert session.calls == 1
     clock['now'] += 61
     with pytest.raises(massive.MassiveTransportError):

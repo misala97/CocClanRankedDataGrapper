@@ -153,6 +153,16 @@ def test_daily_closes_deduplicate_by_date_and_sort_oldest_first():
     assert len(dates) == len(set(dates)) == 2
 
 
+@pytest.mark.parametrize('payload', [
+    chart_payload(symbol='MSFT'),
+    chart_payload(currency='EUR'),
+    chart_payload(exchange='GER'),
+])
+def test_daily_closes_reject_mismatched_instrument_metadata(payload):
+    provider = yahoo.YahooProvider(FakeHttp(payload))
+    assert provider.daily_closes('AAPL', 5, mic_code='XNAS') == []
+
+
 def test_backoff_stops_requests_after_auth_failures(monkeypatch):
     clock = {'now': 1000.0}
     monkeypatch.setattr(yahoo.time, 'monotonic', lambda: clock['now'])

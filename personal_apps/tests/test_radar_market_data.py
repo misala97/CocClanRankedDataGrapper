@@ -541,6 +541,27 @@ def test_grouped_ingest_below_floor_rejects_and_stays_retryable(
     assert state.error_code == 'below_acceptance_floor'
 
 
+def test_grouped_ingest_rejects_a_zero_active_denominator(
+        grouped_ctx, monkeypatch):
+    from models import RadarDailyClose, RadarGroupedCloseDay
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    monkeypatch.setattr(market_data, 'active_price_tickers', lambda now: [])
+    _us_instrument(f'{PREFIX}GA')
+    db.session.commit()
+
+    result = market_data.ingest_grouped_day(
+        OneDayProvider(_accepted_fetch(
+            {f'{PREFIX}GA': decimal.Decimal('55.25')})),
+        NOW.date(), NOW)
+
+    assert result.status == 'rejected'
+    assert RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}GA', close_date=NOW.date()).count() == 0
+    state = RadarGroupedCloseDay.query.filter_by(
+        close_date=NOW.date(), is_shadow=True).one()
+    assert state.error_code == 'empty_active_denominator'
+
+
 def test_grouped_ingest_never_touches_a_german_row(grouped_ctx, monkeypatch):
     import decimal as _decimal
     from models import RadarDailyClose

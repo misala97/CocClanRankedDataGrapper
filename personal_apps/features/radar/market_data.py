@@ -593,8 +593,23 @@ def ingest_grouped_day(provider, day, now):
     unmatched_universe = len(set(instrument_map) - set(grouped.closes))
     active_matched = len(active_symbols & set(matched))
 
-    coverage = (active_matched / len(active_symbols)
-                if active_symbols else 1.0)
+    if not active_symbols:
+        persist_state('rejected', mapped=len(matched),
+                      unmatched_provider=unmatched_provider,
+                      unmatched_universe=unmatched_universe,
+                      active_matched=0,
+                      payload_sha256=grouped.payload_sha256,
+                      provider_rows=grouped.provider_rows,
+                      malformed=grouped.malformed_rows,
+                      conflicts=grouped.duplicate_conflicts,
+                      error_code='empty_active_denominator')
+        return GroupedDayResult(
+            day=day, status='rejected', written=0, mapped=len(matched),
+            unmatched_provider=unmatched_provider,
+            unmatched_universe=unmatched_universe,
+            active_expected=0, active_matched=0)
+
+    coverage = active_matched / len(active_symbols)
     if grouped.provider_rows < GROUPED_MIN_PROVIDER_ROWS or \
             coverage < GROUPED_MIN_ACTIVE_COVERAGE:
         persist_state('rejected', mapped=len(matched),

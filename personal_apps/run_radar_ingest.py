@@ -886,12 +886,18 @@ def _yahoo_deep_tail(now_aware, limit=2):
     stored = 0
     for ticker in due:
         instrument = rows.get(ticker)
-        symbol = instrument.provider_symbol if instrument else ticker
-        closes = provider.daily_closes(symbol, history.HISTORY_DAYS)
+        if instrument is None:
+            # History without a mapped MIC cannot be identity-validated.
+            scheduling.record_fixed_poll('history:yahoo-tail', ticker, now,
+                                         dt.timedelta(hours=6))
+            continue
+        symbol = instrument.provider_symbol
+        closes = provider.daily_closes(
+            symbol, history.HISTORY_DAYS, mic_code=instrument.mic)
         if closes:
             history.record_closes(
                 ticker, closes, now, market='us',
-                mic=instrument.mic if instrument else None,
+                mic=instrument.mic,
                 currency='USD', source='yahoo_chart',
                 adjustment_basis='split')
             stored += 1

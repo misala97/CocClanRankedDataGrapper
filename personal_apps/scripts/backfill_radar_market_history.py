@@ -85,7 +85,11 @@ def _run_instruments(args, now):
         symbol = row.provider_symbol
         if args.market == 'de':
             symbol = symbol if symbol.endswith('.DE') else f'{symbol}.DE'
-        closes = provider.daily_closes(symbol, history.HISTORY_DAYS)
+        # Yahoo history is accepted only after exact returned metadata agrees
+        # with this mapped identity.
+        history_mic = 'XETR' if args.market == 'de' else row.mic
+        closes = provider.daily_closes(
+            symbol, history.HISTORY_DAYS, mic_code=history_mic)
         if not closes:
             continue
         currency = 'EUR' if args.market == 'de' else row.currency

@@ -238,10 +238,12 @@ def upgrade():
 
 
 def downgrade():
-    # Shadow close rows would collide under the restored four-column key;
-    # live rows are never deleted.
+    # Shadow observations would either collide or become indistinguishable
+    # from live rows after their discriminator columns disappear. Live rows
+    # are never deleted.
     op.execute(sa.text(
         'DELETE FROM radar_daily_closes WHERE is_shadow = 1'))
+    op.execute(sa.text('DELETE FROM radar_quotes WHERE is_shadow = 1'))
 
     with op.batch_alter_table('radar_daily_closes') as batch:
         batch.drop_constraint('ck_radar_daily_closes_adjustment',

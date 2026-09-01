@@ -629,6 +629,15 @@ def test_v2_upgrade_keeps_old_writers_valid_and_downgrade_preserves_rows(
         " ORDER BY id")).all()
     assert [tuple(row) for row in rows] == [(0, None, None), (0, None, None)]
 
+    # A measured shadow quote must not become a legacy-visible quote when the
+    # discriminator column is removed by rollback.
+    connection.execute(sa.text(
+        "INSERT INTO radar_quotes (id, ticker, market, mic, currency,"
+        " provider_symbol, fetched_at, price, source, price_basis, is_shadow)"
+        " VALUES (3, 'AAPL', 'de', 'XGAT', 'EUR', 'APC',"
+        " '2026-08-28 12:10:00', 88.0, 'deutsche_boerse_delayed',"
+        " 'trade', 1)"))
+
     # Live and shadow closes coexist for the same identity/date...
     connection.execute(sa.text(
         "INSERT INTO radar_daily_closes (id, ticker, market, mic, currency,"

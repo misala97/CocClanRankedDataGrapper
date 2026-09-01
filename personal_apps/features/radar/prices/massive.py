@@ -85,6 +85,7 @@ class MassiveHttp:
         self._recent_calls = []
         self._backoff_index = -1
         self._backoff_until = 0.0
+        self._backoff_until_utc = None
         self._warned_missing_key = False
 
     def get_grouped_daily(self, day):
@@ -103,7 +104,8 @@ class MassiveHttp:
                 raise MassiveTransportError(
                     'massive backoff active for %d more seconds'
                     % int(self._backoff_until - now),
-                    http_status=429)
+                    http_status=429,
+                    backoff_until=self._backoff_until_utc)
             self._recent_calls = [
                 stamp for stamp in self._recent_calls if now - stamp < 60]
             if len(self._recent_calls) >= CALLS_PER_MINUTE:
@@ -127,10 +129,14 @@ class MassiveHttp:
                 with self._lock:
                     self._backoff_index = min(self._backoff_index + 1,
                                               len(_BACKOFF_STEPS) - 1)
-                    self._backoff_until = self._clock() + _BACKOFF_STEPS[
-                        self._backoff_index]
+                    seconds = _BACKOFF_STEPS[self._backoff_index]
+                    self._backoff_until = self._clock() + seconds
+                    self._backoff_until_utc = (
+                        dt.datetime.now(dt.timezone.utc) +
+                        dt.timedelta(seconds=seconds)).replace(tzinfo=None)
             raise MassiveTransportError(
-                'grouped %s: %s' % (day, exc), http_status=status) from exc
+                'grouped %s: %s' % (day, exc), http_status=status,
+                backoff_until=self._backoff_until_utc) from exc
         except (requests.RequestException, ValueError) as exc:
             raise MassiveTransportError(
                 'grouped %s: %s' % (day, exc)) from exc
@@ -138,6 +144,7 @@ class MassiveHttp:
         with self._lock:
             self._backoff_index = -1
             self._backoff_until = 0.0
+            self._backoff_until_utc = None
         return payload
 
 
@@ -177,7 +184,8 @@ class MassiveProvider:
         except MassiveTransportError as exc:
             return GroupedFetch(
                 status='transport_error',
-                error_code=str(exc)[:48], http_status=exc.http_status)
+                error_code=str(exc)[:48], http_status=exc.http_status,
+                backoff_until=exc.backoff_until)
         except Exception as exc:  # a hostile payload must not kill the job
             return GroupedFetch(status='transport_error',
                                 error_code=str(exc)[:48])

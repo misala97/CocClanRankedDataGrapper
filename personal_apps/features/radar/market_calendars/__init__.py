@@ -29,6 +29,9 @@ def _calendar(market: str, mic: str | None = None):
         return tradegate
     if market == 'de' and mic in (None, 'XETR'):
         return de
+    if mic is None:
+        # Preserve the registry's pre-MIC public error contract.
+        raise ValueError(f'unknown market: {market}')
     raise ValueError(f'unknown market/MIC: {market}/{mic}')
 
 

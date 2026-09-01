@@ -268,7 +268,6 @@ class YahooProvider:
         split-only. Mixing the bases would manufacture a seam at every
         dividend.
         """
-        del mic_code  # symbol convention already encodes the venue
         now = int(time.time())
         try:
             payload = self._fetch(
@@ -279,6 +278,16 @@ class YahooProvider:
             return []
         result = _result(payload)
         if result is None:
+            return []
+        meta = result.get('meta')
+        if mic_code is not None:
+            currency = 'EUR' if mic_code == 'XETR' else 'USD'
+            if not _identity_ok(meta, symbol, currency, mic_code):
+                return []
+        elif not isinstance(meta, dict) or meta.get('symbol') != symbol:
+            # Compatibility callers may omit the MIC, but an exact symbol
+            # match is still mandatory. Production v2 callers supply MIC and
+            # therefore receive the full symbol/currency/exchange check.
             return []
         bars = _bars(result)
         if bars is None:
