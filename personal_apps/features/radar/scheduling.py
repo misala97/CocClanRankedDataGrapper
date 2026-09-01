@@ -107,6 +107,43 @@ def due_symbols(source, now, limit):
     return [row.symbol for row in rows]
 
 
+def due_symbols_from(source, symbols, now, limit):
+    """Due symbols restricted to a caller-supplied rolling set.
+
+    Price candidates are a rolling union (market-data v2): symbols outside
+    it are simply not asked about this cycle, but their state is KEPT --
+    ``retire_untracked`` must not run here, or every re-arrival would
+    monopolize the cycle as brand-new (plan Task 9).
+    """
+    symbols = list(dict.fromkeys(symbols))
+    if not symbols:
+        return []
+    rows = (RadarPollState.query
+            .filter(RadarPollState.source == source,
+                    RadarPollState.symbol.in_(symbols),
+                    RadarPollState.next_due_at <= now)
+            .order_by(RadarPollState.next_due_at.asc(),
+                      RadarPollState.symbol.asc())
+            .limit(limit).all())
+    return [row.symbol for row in rows]
+
+
+def record_fixed_poll(source, symbol, now, interval):
+    """Stamp an ATTEMPT and its exact fixed next-due time.
+
+    Success and failure stamp alike: fairness is about who was asked, and a
+    failing symbol retrying instantly would starve the rest.
+    """
+    row = RadarPollState.query.filter_by(
+        source=source, symbol=symbol).one_or_none()
+    if row is None:
+        row = RadarPollState(source=source, symbol=symbol)
+        db.session.add(row)
+    row.last_polled_at = now
+    row.next_due_at = now + interval
+    db.session.commit()
+
+
 def record_poll(source, symbol, now, rate, floor=None, ceiling=None,
                 page_size=None):
     """Stamp a completed poll and schedule the next one from the new rate."""

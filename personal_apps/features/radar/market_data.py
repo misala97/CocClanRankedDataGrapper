@@ -642,6 +642,133 @@ def ingest_grouped_day(provider, day, now):
         active_expected=len(active_symbols), active_matched=active_matched)
 
 
+def claim_post_close(source, market, now, session_date):
+    """Durably claim ONE post-close cycle for one session date [A3].
+
+    The claim commits BEFORE any provider request, under a row lock created
+    with an idempotent insert so two first-ever callers cannot both win;
+    a duplicate-key race retries the locked read. Once claimed, a failed
+    cycle does not reopen the date -- the closing print gets one shot per
+    session, which is what keeps a restarting daemon from repeating the
+    weekend request loop.
+    """
+    import sqlalchemy as sa
+    from models import RadarProviderSessionState
+
+    insert = sa.text(
+        'INSERT IGNORE INTO radar_provider_session_states '
+        '(source, market) VALUES (:source, :market)')
+    try:
+        db.session.execute(insert, {'source': source, 'market': market})
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    row = (RadarProviderSessionState.query
+           .filter_by(source=source, market=market)
+           .with_for_update().one())
+    if row.last_post_close_session_date is not None and \
+            row.last_post_close_session_date >= session_date:
+        db.session.commit()
+        return None
+    row.last_post_close_session_date = session_date
+    row.claimed_at = now
+    db.session.commit()
+    return session_date
+
+
+_OPS_MEMO = {'at': None, 'value': None}
+
+
+def clear_ops_memo():
+    _OPS_MEMO.update(at=None, value=None)
+
+
+def ops_summary(now):
+    """A cached, database-only operational summary (spec §11).
+
+    Never imports or calls a provider module; 60-second memo so the board
+    serializer cannot turn health into a per-request query storm.
+    """
+    import sqlalchemy as sa
+    from models import (RadarGroupedCloseDay, RadarMappingGeneration,
+                        RadarProviderSessionState, RadarQuote)
+
+    if _OPS_MEMO['at'] is not None and \
+            (now - _OPS_MEMO['at']).total_seconds() < 60 and \
+            _OPS_MEMO['value'] is not None:
+        return _OPS_MEMO['value']
+
+    cycles = {}
+    rows = (RadarMarketDataCycle.query
+            .order_by(RadarMarketDataCycle.mic, RadarMarketDataCycle.channel,
+                      RadarMarketDataCycle.scheduled_at.desc()).all())
+    for row in rows:
+        key = f'{row.mic}:{row.channel}'
+        if key in cycles:
+            continue
+        cycles[key] = {
+            'status': row.status, 'scheduled_at': row.scheduled_at.isoformat(),
+            'files_seen': row.files_seen, 'files_accepted': row.files_accepted,
+            'selected': row.selected_count, 'rejected': row.rejected_records,
+            'parse_ms': row.parse_ms, 'error_code': row.error_code,
+        }
+
+    generations = dict(
+        db.session.query(RadarMappingGeneration.status,
+                         sa.func.count()).group_by(
+            RadarMappingGeneration.status).all())
+
+    basis_counts = dict(
+        db.session.query(RadarQuote.price_basis, sa.func.count())
+        .filter(RadarQuote.fetched_at >= now - dt.timedelta(hours=24))
+        .group_by(RadarQuote.price_basis).all())
+
+    grouped_states = (RadarGroupedCloseDay.query
+                      .filter_by(source='massive_grouped')
+                      .order_by(RadarGroupedCloseDay.close_date.desc())
+                      .limit(14).all())
+    accepted_dates = [state.close_date.isoformat() for state in grouped_states
+                      if state.status == 'accepted']
+    grouped = {
+        'latest_accepted_date': accepted_dates[0] if accepted_dates else None,
+        'retryable_gaps': [state.close_date.isoformat()
+                           for state in grouped_states
+                           if state.status != 'accepted'],
+        'counts': ({
+            'provider_rows': grouped_states[0].provider_rows,
+            'mapped': grouped_states[0].mapped_rows,
+            'written': grouped_states[0].written_rows,
+            'unmatched_provider': grouped_states[0].unmatched_provider,
+            'unmatched_universe': grouped_states[0].unmatched_universe,
+            'malformed': grouped_states[0].malformed_rows,
+            'duplicate_conflicts': grouped_states[0].duplicate_conflicts,
+        } if grouped_states else None),
+        'error_code': grouped_states[0].error_code if grouped_states else None,
+        'http_status': grouped_states[0].http_status if grouped_states else None,
+        'backoff_until': (grouped_states[0].backoff_until.isoformat()
+                          if grouped_states and grouped_states[0].backoff_until
+                          else None),
+    }
+
+    claims = {
+        f'{row.source}:{row.market}': (
+            row.last_post_close_session_date.isoformat()
+            if row.last_post_close_session_date else None)
+        for row in RadarProviderSessionState.query.all()}
+
+    value = {
+        'cycles': cycles,
+        'mapping_generations': generations,
+        'quote_basis_24h': {key or 'legacy': count
+                            for key, count in basis_counts.items()},
+        'grouped_closes': grouped,
+        'post_close_claims': claims,
+    }
+    _OPS_MEMO.update(at=now, value=value)
+    return value
+
+
 def _quote_for(decision, picked, now):
     kwargs = dict(
         ticker=decision.ticker, market='de',

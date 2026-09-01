@@ -825,3 +825,177 @@ def test_a_broken_review_pass_does_not_take_the_daemon_down(monkeypatch):
     monkeypatch.setattr(daemon.llm_sentiment, 'run_review_pass', explode)
 
     daemon._scheduled_sentiment()   # must not raise
+
+
+# --- Market data v2 orchestration (plan Task 9) ------------------------------
+
+class CapturingScheduler:
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.jobs = []
+        CapturingScheduler.instances.append(self)
+
+    def add_job(self, func, trigger, **kwargs):
+        self.jobs.append((func, trigger, kwargs))
+
+    def start(self):
+        pass
+
+    def shutdown(self):
+        pass
+
+
+def _captured_jobs(monkeypatch):
+    CapturingScheduler.instances = []
+    monkeypatch.setattr(daemon, 'BackgroundScheduler', CapturingScheduler)
+    monkeypatch.setattr(daemon, '_prepare_rollup_generation',
+                        lambda now: (0, 0))
+    monkeypatch.setattr(daemon, 'build_fetchers', lambda: {})
+    monkeypatch.setattr(
+        daemon.time, 'sleep',
+        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt))
+    daemon.main([])
+    return {job[2]['id']: job for job in
+            CapturingScheduler.instances[0].jobs}
+
+
+def test_the_five_market_data_jobs_register_once_and_radar_quotes_is_gone(
+        monkeypatch):
+    monkeypatch.delenv('RADAR_US_PRICE_PROVIDER', raising=False)
+    jobs = _captured_jobs(monkeypatch)
+    assert 'radar_quotes' not in jobs
+    assert jobs['radar_us_quotes'][2]['minutes'] == 5      # finnhub default
+    assert jobs['radar_de_market_data'][2]['minutes'] == 5
+    assert jobs['radar_market_history' if 'radar_market_history' in jobs
+                else 'radar_history'][1] == 'interval'
+    grouped = jobs['radar_us_grouped_closes']
+    assert grouped[1] == 'cron'
+    assert (grouped[2]['hour'], grouped[2]['minute']) == (23, 30)
+    assert jobs['radar_mappings'][2]['weeks'] == 1
+
+
+def test_the_yahoo_fallback_flag_widens_the_us_cadence(monkeypatch):
+    monkeypatch.setenv('RADAR_US_PRICE_PROVIDER', 'yahoo')
+    jobs = _captured_jobs(monkeypatch)
+    assert jobs['radar_us_quotes'][2]['minutes'] == 15
+
+
+def test_invalid_flags_refuse_startup(monkeypatch):
+    from features.radar.config import price_provider_config
+    monkeypatch.setenv('RADAR_US_PRICE_PROVIDER', 'bloomberg')
+    with pytest.raises(RuntimeError, match='RADAR_US_PRICE_PROVIDER'):
+        price_provider_config()
+    monkeypatch.setenv('RADAR_US_PRICE_PROVIDER', 'finnhub')
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    monkeypatch.delenv('RADAR_MASSIVE_API_KEY', raising=False)
+    with pytest.raises(RuntimeError, match='RADAR_MASSIVE_API_KEY'):
+        price_provider_config()
+
+
+def test_cleanup_evidence_is_all_or_none(monkeypatch):
+    from features.radar.config import price_provider_config
+    monkeypatch.setenv('RADAR_US_CLOSE_ACTIVATED_AT', '2026-09-01T00:00:00Z')
+    monkeypatch.delenv('RADAR_US_CLOSE_GATE_REPORT_SHA256', raising=False)
+    monkeypatch.delenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', raising=False)
+    with pytest.raises(RuntimeError, match='all three'):
+        price_provider_config()
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_REPORT_SHA256', 'a' * 64)
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'B' * 64)
+    with pytest.raises(RuntimeError, match='SHA-256'):
+        price_provider_config()
+    monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'b' * 64)
+    assert price_provider_config()[0] == 'finnhub'
+
+
+def test_a_closed_us_calendar_makes_no_provider_call(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        daemon.finnhub_provider, 'FinnhubProvider',
+        lambda http: calls.append('constructed'))
+    closed = dt.datetime(2026, 8, 30, 9, 0, tzinfo=dt.timezone.utc)  # Sunday
+    with daemon.app.app_context():
+        result = daemon._run_us_price_cycle('finnhub', closed)
+    assert result['skipped'] == 'market_closed'
+    assert calls == []
+
+
+def test_the_post_close_cycle_is_claimed_exactly_once(monkeypatch):
+    from features.radar import market_data
+    from models import RadarProviderSessionState
+    with daemon.app.app_context():
+        RadarProviderSessionState.query.filter_by(
+            source='zz:test', market='us').delete(synchronize_session=False)
+        daemon.db.session.commit()
+        session_date = dt.date(2026, 8, 28)
+        now = dt.datetime(2026, 8, 28, 21, 10)
+        first = market_data.claim_post_close('zz:test', 'us', now,
+                                             session_date)
+        second = market_data.claim_post_close('zz:test', 'us', now,
+                                              session_date)
+        assert first == session_date
+        assert second is None
+        # An OLDER session date can never re-claim after a restart.
+        assert market_data.claim_post_close(
+            'zz:test', 'us', now, session_date - dt.timedelta(days=1)) is None
+        # The next session date claims normally.
+        assert market_data.claim_post_close(
+            'zz:test', 'us', now, session_date + dt.timedelta(days=3)) == \
+            session_date + dt.timedelta(days=3)
+        RadarProviderSessionState.query.filter_by(
+            source='zz:test', market='us').delete(synchronize_session=False)
+        daemon.db.session.commit()
+
+
+def test_the_post_close_window_is_sixty_minutes(monkeypatch):
+    # Friday 2026-08-28: US extended session closes 20:00 ET = 00:00 UTC Sat.
+    from features.radar.market_calendars import session_bounds
+    friday = dt.datetime(2026, 8, 28, 16, 0, tzinfo=dt.timezone.utc)
+    closes_at = session_bounds('us', friday).closes_at
+    inside = closes_at + dt.timedelta(minutes=30)
+    outside = closes_at + dt.timedelta(minutes=61)
+    gate_inside, date_inside = daemon._us_session_gate(inside)
+    gate_outside, _ = daemon._us_session_gate(outside)
+    assert gate_inside == 'post_close'
+    assert date_inside == closes_at.date()
+    assert gate_outside == 'closed'
+
+
+def test_grouped_job_is_a_no_op_under_legacy(monkeypatch):
+    calls = []
+    monkeypatch.delenv('RADAR_US_CLOSE_SOURCE', raising=False)
+    monkeypatch.setattr(
+        daemon.market_data if hasattr(daemon, 'market_data') else daemon,
+        '_never', None, raising=False)
+    from features.radar.prices import massive as massive_mod
+
+    class Exploding:
+        def __init__(self, *args, **kwargs):
+            calls.append('constructed')
+
+    monkeypatch.setattr(massive_mod, 'MassiveProvider', Exploding)
+    result = daemon._scheduled_us_grouped_closes()
+    assert result == {'skipped': 'legacy'}
+    assert calls == []
+
+
+def test_ops_summary_is_memoized_and_provider_free(monkeypatch):
+    from features.radar import market_data
+    with daemon.app.app_context():
+        market_data.clear_ops_memo()
+        now = dt.datetime(2027, 1, 4, 12, 0)
+        first = market_data.ops_summary(now)
+        counter = {'n': 0}
+        original_query = daemon.db.session.query
+
+        def counting_query(*args, **kwargs):
+            counter['n'] += 1
+            return original_query(*args, **kwargs)
+
+        monkeypatch.setattr(daemon.db.session, 'query', counting_query)
+        second = market_data.ops_summary(now + dt.timedelta(seconds=30))
+        assert second is first
+        assert counter['n'] == 0
+        assert 'grouped_closes' in first
+        assert 'post_close_claims' in first
+        market_data.clear_ops_memo()

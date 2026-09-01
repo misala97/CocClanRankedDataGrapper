@@ -135,8 +135,25 @@ def _mapping_provider():
 
 
 def _scheduled_mappings():
-    """Refresh verified Xetra mappings while containing provider failures."""
+    """Weekly mapping refresh; mode-aware under market-data v2.
+
+    ``legacy`` keeps the established Twelve/Finnhub catalog refresh.
+    ``shadow``/``active`` will build OpenFIGI generations -- but ONLY once
+    the reference universes (Xetra Tradable Instruments, Tradegate list)
+    have passed their own capture-and-freeze (contract ruling R6). Until
+    that supplement section exists, building against unverified reference
+    shapes is refused, loudly.
+    """
+    from features.radar.config import price_provider_config
+    _, de_mode, _ = price_provider_config()
     now = dt.datetime.now(dt.timezone.utc)
+    if de_mode != 'legacy':
+        logger.warning(
+            'radar mapping generation build is pending the R6 '
+            'reference-source capture (contract supplement §3.5/§3.6); '
+            'run the capture and operator review before shadow mappings '
+            'can build')
+        return None
     try:
         with app.app_context():
             result = instruments.refresh_mappings(_mapping_provider(), now)
@@ -438,6 +455,242 @@ def _scheduled_quotes():
                 result['de_stored'], result['de_requested'], result['de_error'])
 
 
+# --- market-data v2 orchestration (plan Task 9) -----------------------------
+
+# How many due symbols one US quote cycle may attempt. Finnhub's 60/min
+# budget leaves room beside the other jobs at 55 per five-minute cycle;
+# the Yahoo fallback asks at most 100 per 15-minute cycle.
+US_QUOTE_CAP = {'finnhub': 55, 'yahoo': 100}
+US_QUOTE_MINUTES = {'finnhub': 5, 'yahoo': 15}  # [A2]
+
+# The single post-close cycle is eligible only inside this window after the
+# calendar's extended-session close [A3].
+POST_CLOSE_WINDOW = dt.timedelta(minutes=60)
+
+
+def _us_session_gate(now_aware):
+    """'open', ('post_close', session_date), or 'closed'."""
+    from features.radar.market_calendars import session_bounds, session_state
+    if session_state('us', now_aware) != 'closed':
+        return 'open', None
+    for probe in (now_aware, now_aware - dt.timedelta(days=1)):
+        try:
+            bounds = session_bounds('us', probe)
+        except Exception:
+            continue
+        if bounds.closes_at <= now_aware < bounds.closes_at + \
+                POST_CLOSE_WINDOW:
+            return 'post_close', bounds.closes_at.date()
+    return 'closed', None
+
+
+def _run_us_price_cycle(provider_name, now_aware):
+    from features.radar import market_data, scheduling
+    from features.radar.prices import yahoo as yahoo_provider
+
+    now = now_aware.replace(tzinfo=None)
+    gate, session_date = _us_session_gate(now_aware)
+    if gate == 'closed':
+        # A structured no-op, not an error: nights and weekends are most of
+        # the clock [A3].
+        return {'skipped': 'market_closed', 'stored': 0, 'error': False}
+    poll_source = f'price:{provider_name}'
+    if gate == 'post_close':
+        # Resolve candidates BEFORE claiming; an empty cycle must not burn
+        # the one durable post-close slot.
+        candidates = market_data.active_price_tickers(now)
+        if not candidates:
+            return {'skipped': 'no_candidates', 'stored': 0, 'error': False}
+        claimed = market_data.claim_post_close(
+            poll_source, 'us', now, session_date)
+        if claimed is None:
+            return {'skipped': 'post_close_claimed', 'stored': 0,
+                    'error': False}
+    else:
+        candidates = market_data.active_price_tickers(now)
+        if not candidates:
+            return {'skipped': 'no_candidates', 'stored': 0, 'error': False}
+
+    scheduling.ensure_tracked(poll_source, candidates, now)
+    cap = US_QUOTE_CAP[provider_name]
+    due = scheduling.due_symbols_from(poll_source, candidates, now, cap)
+    if not due:
+        return {'skipped': 'nothing_due', 'stored': 0, 'error': False}
+
+    if provider_name == 'finnhub':
+        provider = finnhub_provider.FinnhubProvider(
+            finnhub_provider.FinnhubHttp())
+    else:
+        provider = yahoo_provider.YahooProvider(yahoo_provider.YahooHttp())
+
+    instruments_rows = _market_instruments(due, 'us')
+    try:
+        if instruments_rows:
+            stored = _poll_instruments(provider, instruments_rows, now_aware)
+        else:
+            found = provider.quotes(due) if hasattr(provider, 'quotes') \
+                else provider.quotes_for_instruments([])
+            stored = quotes.record_quotes(found, now)
+        error = False
+    except Exception:
+        logger.exception('radar US quote cycle failed')
+        stored = 0
+        error = True
+    interval = dt.timedelta(minutes=US_QUOTE_MINUTES[provider_name])
+    for symbol in due:
+        scheduling.record_fixed_poll(poll_source, symbol, now, interval)
+    return {'skipped': None, 'stored': stored, 'error': error,
+            'attempted': len(due)}
+
+
+def _scheduled_us_quotes():
+    from features.radar.config import price_provider_config
+    provider_name, _, _ = price_provider_config()
+    now_aware = dt.datetime.now(dt.timezone.utc)
+    with app.app_context():
+        result = _run_us_price_cycle(provider_name, now_aware)
+    logger.info('radar us quotes provider=%s stored=%s skipped=%s error=%s',
+                provider_name, result.get('stored'), result.get('skipped'),
+                result.get('error'))
+    return result
+
+
+def _current_de_generation_id():
+    from models import RadarMappingGeneration
+    active = (RadarMappingGeneration.query
+              .filter_by(market='de', status='active')
+              .order_by(RadarMappingGeneration.id.desc()).first())
+    if active is not None:
+        return active.id
+    shadow = (RadarMappingGeneration.query
+              .filter_by(market='de', status='shadow')
+              .order_by(RadarMappingGeneration.id.desc()).first())
+    return shadow.id if shadow else None
+
+
+def _legacy_de_poll(now_aware):
+    """The pre-v2 Twelve Data German poll, unchanged under the legacy flag."""
+    de_provider = twelvedata_provider.TwelveDataProvider(
+        twelvedata_provider.TwelveDataHttp())
+    symbols = _loud_tickers(now_aware, QUOTE_LIMIT)
+    if not symbols:
+        return 0
+    de_instruments = _market_instruments(symbols, 'de')[:DE_QUOTE_LIMIT]
+    try:
+        return _poll_instruments(de_provider, de_instruments, now_aware)
+    except Exception:
+        logger.exception('radar German quote poll failed')
+        return 0
+
+
+def _de_should_collect(now_aware):
+    """Open, in the 30-minute post-close buffer, or holding a cursor gap."""
+    from features.radar.market_calendars import session_bounds, session_state
+    from models import RadarMarketDataCursor
+    if session_state('de', now_aware, mic='XGAT') != 'closed':
+        return True
+    try:
+        bounds = session_bounds('de', now_aware, mic='XGAT')
+        if bounds.closes_at <= now_aware < bounds.closes_at + \
+                dt.timedelta(minutes=30):
+            return True
+    except Exception:
+        pass
+    # A restart while closed still consumes the retained backlog once: run
+    # while any cursor is older than the most recent session close.
+    newest = (db.session.query(
+        sa.func.max(RadarMarketDataCursor.source_ts))
+        .filter_by(source='deutsche_boerse_delayed').scalar())
+    if newest is None:
+        return True  # first-ever cycle claims the retained backlog
+    for days_back in range(0, 4):
+        probe = now_aware - dt.timedelta(days=days_back)
+        bounds = session_bounds('de', probe, mic='XGAT')
+        if bounds.closes_at <= now_aware:
+            last_close = bounds.closes_at.astimezone(
+                dt.timezone.utc).replace(tzinfo=None)
+            return newest < last_close
+    return False
+
+
+def _scheduled_de_market_data():
+    from features.radar import market_data
+    from features.radar.config import price_provider_config
+    from features.radar.prices import deutsche_boerse as dbag
+    _, de_mode, _ = price_provider_config()
+    now_aware = dt.datetime.now(dt.timezone.utc)
+    now = now_aware.replace(tzinfo=None)
+    with app.app_context():
+        if de_mode == 'legacy':
+            stored = _legacy_de_poll(now_aware)
+            logger.info('radar de quotes legacy stored=%d', stored)
+            return {'mode': 'legacy', 'stored': stored}
+        if not _de_should_collect(now_aware):
+            return {'mode': de_mode, 'skipped': 'closed_no_gap'}
+        generation_id = _current_de_generation_id()
+        if generation_id is None:
+            logger.warning('radar de collection has no mapping generation')
+            return {'mode': de_mode, 'skipped': 'no_generation'}
+        provider = dbag.DeutscheBoerseProvider(dbag.DeutscheBoerseHttp())
+        try:
+            summary = market_data.collect_german_cycle(
+                provider, generation_id, market_data.active_price_tickers(now),
+                now, mode='shadow' if de_mode == 'shadow' else 'active')
+        except Exception:
+            logger.exception('radar German collection failed')
+            return {'mode': de_mode, 'error': True}
+    logger.info('radar de collection mode=%s status=%s files=%d/%d '
+                'selected=%d', de_mode, summary.status,
+                summary.files_accepted, summary.files_seen,
+                summary.selected_quotes)
+    return {'mode': de_mode, 'status': summary.status}
+
+
+def _scheduled_us_grouped_closes():
+    """[A1] The daily grouped-close ingestion; a no-op under legacy."""
+    from features.radar import market_data
+    from features.radar.config import price_provider_config
+    from features.radar.market_calendars import session_state
+    from features.radar.prices import massive as massive_provider
+    _, _, close_source = price_provider_config()
+    if close_source == 'legacy':
+        return {'skipped': 'legacy'}
+    now_aware = dt.datetime.now(dt.timezone.utc)
+    now = now_aware.replace(tzinfo=None)
+    with app.app_context():
+        from models import RadarGroupedCloseDay
+        is_shadow = close_source == 'shadow'
+        accepted = {
+            state.close_date for state in RadarGroupedCloseDay.query
+            .filter_by(source='massive_grouped', is_shadow=is_shadow,
+                       status='accepted')}
+        days = []
+        probe = now_aware.date() - dt.timedelta(days=1)
+        while len(days) < 7 and probe > now_aware.date() - dt.timedelta(
+                days=14):
+            stamp = dt.datetime.combine(probe, dt.time(16),
+                                        tzinfo=dt.timezone.utc)
+            if session_state('us', stamp) != 'closed' and \
+                    probe not in accepted:
+                days.append(probe)
+            probe -= dt.timedelta(days=1)
+        provider = massive_provider.MassiveProvider(
+            massive_provider.MassiveHttp())
+        results = []
+        for day in sorted(days):
+            try:
+                result = market_data.ingest_grouped_day(provider, day, now)
+            except Exception:
+                logger.exception('radar grouped ingest failed for %s', day)
+                continue
+            results.append((day, result.status))
+            logger.info('radar grouped closes %s status=%s written=%d '
+                        'unmatched_provider=%d unmatched_universe=%d',
+                        day, result.status, result.written,
+                        result.unmatched_provider, result.unmatched_universe)
+    return {'attempted': len(results), 'results': results}
+
+
 def refresh_volatility(now_utc, limit=SIGMA_LIMIT):
     """Recompute daily sigma for the tickers on the board.
 
@@ -604,14 +857,83 @@ def refresh_de_history(now_utc, provider, limit=DE_HISTORY_LIMIT):
         return 0
 
 
+def _yahoo_deep_tail(now_aware, limit=2):
+    """[A1] At most two newly active, 3Y-incomplete tickers per cycle.
+
+    Fair deterministic retries via poll source ``history:yahoo-tail``; a
+    ticker that reaches the floor leaves the queue and is not called again.
+    """
+    from features.radar import market_data, scheduling
+    from features.radar.prices import yahoo as yahoo_provider
+
+    now = now_aware.replace(tzinfo=None)
+    active = market_data.active_price_tickers(now)
+    if not active:
+        return 0
+    floor = int(history.HISTORY_DAYS * history.MIN_STORED_RATIO)
+    stored_depth = history.closes_for(active, today=now_aware.date())
+    incomplete = [ticker for ticker in active
+                  if len(stored_depth.get(ticker, [])) < floor]
+    if not incomplete:
+        return 0
+    scheduling.ensure_tracked('history:yahoo-tail', incomplete, now)
+    due = scheduling.due_symbols_from('history:yahoo-tail', incomplete, now,
+                                      limit)
+    if not due:
+        return 0
+    provider = yahoo_provider.YahooProvider(yahoo_provider.YahooHttp())
+    rows = {row.ticker: row for row in _market_instruments(due, 'us')}
+    stored = 0
+    for ticker in due:
+        instrument = rows.get(ticker)
+        symbol = instrument.provider_symbol if instrument else ticker
+        closes = provider.daily_closes(symbol, history.HISTORY_DAYS)
+        if closes:
+            history.record_closes(
+                ticker, closes, now, market='us',
+                mic=instrument.mic if instrument else None,
+                currency='USD', source='yahoo_chart',
+                adjustment_basis='split')
+            stored += 1
+        # A day's failed retry re-queues fairly rather than immediately.
+        scheduling.record_fixed_poll('history:yahoo-tail', ticker, now,
+                                     dt.timedelta(hours=6))
+    return stored
+
+
 def _scheduled_history():
+    from features.radar import market_data
+    from features.radar.config import price_provider_config
+    _, de_mode, close_source = price_provider_config()
     now = dt.datetime.now(dt.timezone.utc)
-    provider = twelvedata_provider.TwelveDataProvider(
-        twelvedata_provider.TwelveDataHttp())
     with app.app_context():
-        stored = refresh_history(now, provider)
-        de_stored = refresh_de_history(now, provider)
-    logger.info('radar history us=%d de=%d', stored, de_stored)
+        stored = 0
+        if close_source in ('legacy', 'shadow'):
+            # The incumbent live writer keeps running through shadow so the
+            # agreement gate has an independent series to compare against.
+            provider = twelvedata_provider.TwelveDataProvider(
+                twelvedata_provider.TwelveDataHttp())
+            stored = refresh_history(now, provider)
+        tail = 0
+        if close_source in ('shadow', 'massive'):
+            tail = _yahoo_deep_tail(now)
+        de_stored = 0
+        if de_mode == 'legacy':
+            provider = twelvedata_provider.TwelveDataProvider(
+                twelvedata_provider.TwelveDataHttp())
+            de_stored = refresh_de_history(now, provider)
+        else:
+            generation_id = _current_de_generation_id()
+            if generation_id is not None:
+                try:
+                    de_stored = market_data.materialize_native_closes(
+                        generation_id, now.replace(tzinfo=None),
+                        mode='shadow' if de_mode == 'shadow' else 'active')
+                except Exception:
+                    logger.exception('radar native close materialization '
+                                     'failed')
+    logger.info('radar history us=%d yahoo_tail=%d de=%d', stored, tail,
+                de_stored)
 
 
 def _scheduled_volatility():
@@ -665,6 +987,10 @@ def _scheduled_prune():
         events = retention.prune_mention_events(now)
         if events:
             logger.info('radar retention pruned %d mention events', events)
+        market_rows = retention.prune_market_data(now)
+        if market_rows:
+            logger.info('radar retention pruned %d market-data rows',
+                        market_rows)
 
 
 def _scheduled_sentiment():
@@ -815,8 +1141,20 @@ def main(argv=None):
                       id='radar_scoring', max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc)
                       + dt.timedelta(minutes=2))
-    scheduler.add_job(_scheduled_quotes, 'interval',
-                      minutes=QUOTE_INTERVAL_MINUTES, id='radar_quotes',
+    # Market-data v2 [A1][A2][A3]: independent per-provider jobs behind
+    # startup-validated flags. The old combined `radar_quotes` job is gone.
+    from features.radar.config import price_provider_config
+    us_provider, _, _ = price_provider_config()
+    scheduler.add_job(_scheduled_us_quotes, 'interval',
+                      minutes=US_QUOTE_MINUTES[us_provider],
+                      id='radar_us_quotes', max_instances=1, coalesce=True)
+    scheduler.add_job(_scheduled_de_market_data, 'interval', minutes=5,
+                      id='radar_de_market_data', max_instances=1,
+                      coalesce=True,
+                      next_run_time=dt.datetime.now(dt.timezone.utc))
+    # 23:30 UTC is after the US close in both DST states [A1].
+    scheduler.add_job(_scheduled_us_grouped_closes, 'cron', hour=23,
+                      minute=30, id='radar_us_grouped_closes',
                       max_instances=1, coalesce=True)
     scheduler.add_job(_scheduled_mappings, 'interval', weeks=1,
                       id='radar_mappings', max_instances=1, coalesce=True)

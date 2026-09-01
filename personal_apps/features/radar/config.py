@@ -10,6 +10,7 @@ straight through the discontinuity (spec 6.6).
 import datetime as dt
 import hashlib
 import json
+import os
 import re
 
 # Active sources. Adding one is a module in sources/ plus an entry here --
@@ -680,6 +681,71 @@ EXTRACTION_POLICY_GENERATION = 1
 # configured roots and subreddit membership stay unchanged across that split,
 # so neither existing hash input can express this population discontinuity.
 SOURCE_NAME_GENERATION = 2
+
+
+def price_provider_config():
+    """The three validated market-data v2 flags, read at startup.
+
+    ``(us_quote_provider, de_price_mode, us_close_source)``. Defaults keep
+    the live behavior exactly; an invalid value refuses startup rather than
+    running a half-configured provider, and a close-source of shadow/massive
+    without RADAR_MASSIVE_API_KEY refuses too -- a silently dormant close
+    source must not look activated [A1][A2].
+    """
+    us_provider = os.getenv('RADAR_US_PRICE_PROVIDER', 'finnhub')
+    de_mode = os.getenv('RADAR_DE_PRICE_MODE', 'legacy')
+    close_source = os.getenv('RADAR_US_CLOSE_SOURCE', 'legacy')
+    if us_provider not in ('finnhub', 'yahoo'):
+        raise RuntimeError(
+            f'RADAR_US_PRICE_PROVIDER must be finnhub|yahoo, '
+            f'not {us_provider!r}')
+    if de_mode not in ('legacy', 'shadow', 'active'):
+        raise RuntimeError(
+            f'RADAR_DE_PRICE_MODE must be legacy|shadow|active, '
+            f'not {de_mode!r}')
+    if close_source not in ('legacy', 'shadow', 'massive'):
+        raise RuntimeError(
+            f'RADAR_US_CLOSE_SOURCE must be legacy|shadow|massive, '
+            f'not {close_source!r}')
+    if close_source in ('shadow', 'massive') and \
+            not os.getenv('RADAR_MASSIVE_API_KEY'):
+        raise RuntimeError(
+            'RADAR_US_CLOSE_SOURCE=%s requires RADAR_MASSIVE_API_KEY'
+            % close_source)
+    _validate_close_cleanup_evidence()
+    return us_provider, de_mode, close_source
+
+
+def _validate_close_cleanup_evidence():
+    """All three cleanup-evidence settings or none (spec §9.2 [A1]).
+
+    None means cleanup disabled, which is fine; a PARTIAL or malformed set
+    refuses startup, because it means the operator believes evidence is
+    recorded when retention will treat it as absent.
+    """
+    import re
+    names = ('RADAR_US_CLOSE_ACTIVATED_AT',
+             'RADAR_US_CLOSE_GATE_REPORT_SHA256',
+             'RADAR_US_CLOSE_GATE_AUDIT_SHA256')
+    values = [os.getenv(name) for name in names]
+    present = [value for value in values if value]
+    if not present:
+        return
+    if len(present) != len(names):
+        raise RuntimeError(
+            'US-close cleanup evidence must be all three settings or none: '
+            + ', '.join(names))
+    activated, report_sha, audit_sha = values
+    sha_re = re.compile(r'^[0-9a-f]{64}$')
+    if not sha_re.match(report_sha) or not sha_re.match(audit_sha):
+        raise RuntimeError('cleanup gate digests must be exact lowercase '
+                           'SHA-256 hex')
+    try:
+        dt.datetime.fromisoformat(activated.replace('Z', '+00:00'))
+    except ValueError:
+        raise RuntimeError(
+            f'RADAR_US_CLOSE_ACTIVATED_AT is not an ISO UTC instant: '
+            f'{activated!r}') from None
 
 
 def source_config_version():
