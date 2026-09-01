@@ -428,6 +428,15 @@ body {
   font-variant-numeric: tabular-nums;
   animation: settle 300ms var(--ease) backwards;
 }
+/* Today's tone spend, one token before the stamp. Muted like the stamp; the
+   figure itself in ink-2 so it reads as a number, not a caution -- amber is
+   for a number that cannot be trusted, and this one can. */
+.brand .spend {
+  margin-left: auto; font-size: var(--t-xs); color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.brand .spend b { color: var(--ink-2); font-weight: 600; }
+.brand .spend + .age { margin-left: var(--s4); }
 .brand .age b { color: var(--warn); font-weight: 600; }
 .brand .age button {
   font: inherit; font-size: var(--t-xs);

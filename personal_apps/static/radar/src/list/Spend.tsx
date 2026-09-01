@@ -12,6 +12,38 @@ function usd(amount: number): string {
   return `$${amount.toFixed(3)}`
 }
 
+/** Whether there is anything to report at all. Rendering "$0.000" before any
+ *  call has happened would look like a working meter reading zero, which is
+ *  a different claim from having nothing to report yet. */
+function booked(spend: BoardPayload['spend']): spend is NonNullable<BoardPayload['spend']> {
+  return Boolean(spend
+    && (spend.today_usd || spend.month_usd || spend.unpriced_tokens))
+}
+
+/** Today's spend as one token in the masthead, beside the freshness stamp.
+ *
+ *  The full sentence (below) sits at the foot of the list, after the
+ *  excluded account and the marks legend -- 2,660px down a 24h board, and
+ *  off the pane's bottom edge even on an empty one, so the meter was never
+ *  where a reader looked (Michi, 2026-09-02). The one figure that moves
+ *  during a day goes where the eye already goes for "how fresh is this";
+ *  the month rides in the accessible name and the title. */
+export function SpendMark({ payload }: { payload: BoardPayload }) {
+  const spend = payload.spend
+  if (!booked(spend)) return null
+  const whole = `${usd(spend.today_usd)} spent reading tone today, `
+    + `${usd(spend.month_usd)} this month`
+  // Not aria-label: a bare span is role `generic`, which ARIA forbids naming,
+  // so a label there is silently ignored. Hidden text is read; the title is
+  // the same sentence for a mouse.
+  return (
+    <span className="spend" title={whole}>
+      <b>{usd(spend.today_usd)}</b> today
+      <span className="aural">, {usd(spend.month_usd)} this month, reading tone</span>
+    </span>
+  )
+}
+
 /** What the model re-read of tone has cost.
  *
  *  Counted from the token usage every API response carries, not asked for:
@@ -26,10 +58,7 @@ function usd(amount: number): string {
  */
 export function Spend({ payload }: { payload: BoardPayload }) {
   const spend = payload.spend
-  // Absent until the first pass books something. Rendering "$0.00" before any
-  // call has happened would look like a working meter reading zero, which is
-  // a different claim from having nothing to report yet.
-  if (!spend || (!spend.today_usd && !spend.month_usd && !spend.unpriced_tokens)) return null
+  if (!booked(spend)) return null
 
   const review = payload.sentiment_ops?.review
   return (

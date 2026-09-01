@@ -5,6 +5,7 @@ import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
 import { formatMarketTime, humanAge, plural, stampTime } from '../format'
 import { Widen } from '../Widen'
+import { SpendMark } from './Spend'
 import { TickerRow, scoredAgainstPrice } from './TickerRow'
 import type { BoardPayload, Mark, Row, Selection } from '../types'
 
@@ -353,6 +354,9 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         <div className="brand">
           <h1>Radar</h1>
           <MarketSwitch selection={selection} onChange={onChange} />
+          {/* Ops at a glance, in the corner the eye already checks for
+              freshness: today's tone spend, then the stamp. */}
+          <SpendMark payload={payload} />
           <Age iso={payload.generated_at} />
         </div>
         <Status payload={payload} shared={shared}
