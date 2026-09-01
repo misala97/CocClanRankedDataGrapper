@@ -283,3 +283,80 @@ def test_malformed_response_is_price_unavailable():
     with pytest.raises(PriceUnavailable):
         openfigi.OpenFigiProvider(MalformedHttp()).us_share_classes(
             [instrument('AAPL')])
+
+
+class _FakeResponse:
+    def __init__(self, status_code, payload=None, headers=None):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else []
+        self.headers = headers or {}
+
+    def raise_for_status(self):
+        import requests
+        if self.status_code >= 400:
+            raise requests.HTTPError(f'{self.status_code} error')
+
+    def json(self):
+        return self._payload
+
+
+class _ScriptedSession:
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.posts = 0
+
+    def post(self, url, json=None, headers=None, timeout=None):
+        self.posts += 1
+        return self._responses.pop(0)
+
+
+def _paced_http(responses):
+    clock = {'now': 1000.0}
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        clock['now'] += seconds
+
+    http = openfigi.OpenFigiHttp(clock=lambda: clock['now'], sleep=sleep)
+    http._session = _ScriptedSession(responses)
+    return http, sleeps
+
+
+def test_requests_are_spaced_never_burst(monkeypatch):
+    """Production observed 429s from a front-loaded burst that was still
+    inside the documented 25/minute; the pacer must enforce spacing."""
+    monkeypatch.delenv('OPENFIGI_API_KEY', raising=False)
+    http, sleeps = _paced_http([_FakeResponse(200) for _ in range(3)])
+    for _ in range(3):
+        http.mapping([{'idType': 'TICKER', 'idValue': 'ZZ1'}])
+    assert sleeps == [pytest.approx(2.4), pytest.approx(2.4)]
+
+
+def test_keyed_requests_space_at_the_keyed_rate(monkeypatch):
+    monkeypatch.setenv('OPENFIGI_API_KEY', 'zz-test-key')
+    http, sleeps = _paced_http([_FakeResponse(200) for _ in range(2)])
+    for _ in range(2):
+        http.mapping([{'idType': 'TICKER', 'idValue': 'ZZ1'}])
+    assert sleeps == [pytest.approx(6.0 / 25.0)]
+
+
+def test_a_429_is_retried_with_the_servers_retry_after(monkeypatch):
+    monkeypatch.delenv('OPENFIGI_API_KEY', raising=False)
+    ok = _FakeResponse(200, payload=[{'data': []}])
+    http, sleeps = _paced_http([
+        _FakeResponse(429, headers={'Retry-After': '7'}), ok])
+    assert http.mapping([{'idType': 'TICKER', 'idValue': 'ZZ1'}]) == \
+        [{'data': []}]
+    assert 7.0 in sleeps
+    assert http._session.posts == 2
+
+
+def test_a_persistent_429_still_aborts_after_bounded_retries(monkeypatch):
+    monkeypatch.delenv('OPENFIGI_API_KEY', raising=False)
+    responses = [_FakeResponse(429)
+                 for _ in range(openfigi.MAX_429_RETRIES + 1)]
+    http, _ = _paced_http(responses)
+    with pytest.raises(PriceUnavailable):
+        http.mapping([{'idType': 'TICKER', 'idValue': 'ZZ1'}])
+    assert http._session.posts == openfigi.MAX_429_RETRIES + 1

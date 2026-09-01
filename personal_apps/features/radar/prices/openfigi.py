@@ -55,8 +55,20 @@ def is_supported_type(security_type):
     return (security_type or '').strip().casefold() in SUPPORTED_TYPES
 
 
+# A single 429 must not kill a weekly build whose next scheduled run is
+# seven days away; a persistent one still aborts (spec: outage never marks
+# tickers unavailable, the previous generation stays).
+MAX_429_RETRIES = 3
+
+
 class OpenFigiHttp:
-    """POST /v3/mapping with pacing; the key is optional and never logged."""
+    """POST /v3/mapping with pacing; the key is optional and never logged.
+
+    Requests are SPACED rather than window-counted: the live unkeyed
+    endpoint returned 429s to a front-loaded burst that was still inside
+    the documented 25/minute (observed in production 2026-09-01), so one
+    request per 2.4s unkeyed (6/25 s keyed) is the enforced shape.
+    """
 
     def __init__(self, timeout=(3.05, 20), clock=time.monotonic,
                  sleep=time.sleep):
@@ -65,31 +77,45 @@ class OpenFigiHttp:
         self._clock = clock
         self._sleep = sleep
         self._lock = threading.Lock()
-        self._recent = []
+        self._next_slot = None
 
-    def mapping(self, jobs):
+    def _min_interval(self):
+        if os.getenv('OPENFIGI_API_KEY'):
+            return 6.0 / 25.0
+        return 60.0 / REQUESTS_PER_MINUTE
+
+    def _pace(self):
         with self._lock:
             now = self._clock()
-            self._recent = [stamp for stamp in self._recent
-                            if now - stamp < 60]
-            if len(self._recent) >= REQUESTS_PER_MINUTE:
-                wait = 60 - (now - self._recent[0])
-                if wait > 0:
-                    self._sleep(wait)
-            self._recent.append(self._clock())
+            if self._next_slot is not None and now < self._next_slot:
+                self._sleep(self._next_slot - now)
+                now = self._next_slot
+            self._next_slot = now + self._min_interval()
 
+    def mapping(self, jobs):
         headers = {'Content-Type': 'application/json'}
         key = os.getenv('OPENFIGI_API_KEY')
         if key:
             headers['X-OPENFIGI-APIKEY'] = key
-        try:
-            response = self._session.post(
-                API_URL, json=jobs, headers=headers, timeout=self._timeout)
-            response.raise_for_status()
-            payload = response.json()
-        except (requests.RequestException, ValueError) as exc:
-            raise PriceUnavailable(f'openfigi mapping: {exc}') from exc
-        return payload
+        for attempt in range(MAX_429_RETRIES + 1):
+            self._pace()
+            try:
+                response = self._session.post(
+                    API_URL, json=jobs, headers=headers,
+                    timeout=self._timeout)
+                if response.status_code == 429 and attempt < MAX_429_RETRIES:
+                    retry_after = response.headers.get('Retry-After')
+                    try:
+                        delay = max(1.0, float(retry_after))
+                    except (TypeError, ValueError):
+                        delay = 30.0 * (attempt + 1)
+                    self._sleep(delay)
+                    continue
+                response.raise_for_status()
+                payload = response.json()
+            except (requests.RequestException, ValueError) as exc:
+                raise PriceUnavailable(f'openfigi mapping: {exc}') from exc
+            return payload
 
 
 class OpenFigiProvider:
