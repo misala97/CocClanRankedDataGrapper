@@ -250,6 +250,94 @@ def test_rerunning_the_same_files_writes_nothing_new(ctx):
     assert RadarQuote.query.filter_by(ticker=ticker).count() == 1
 
 
+class _ExpiringProvider(ScriptedProvider):
+    """Downloads of named files fail, like the provider's ~1-day expiry."""
+
+    def __init__(self, files_by_channel, bodies, dead):
+        super().__init__(files_by_channel, bodies)
+        self.dead = dead
+
+    def download(self, file, **limits):
+        if file.remote_id in self.dead:
+            raise dbag.PriceUnavailable(f'HTTP 404 ({file.remote_id})')
+        return super().download(file, **limits)
+
+
+def test_an_expired_backlog_file_is_skipped_not_wedged(ctx):
+    """Production 2026-09-01: a deleted upstream file made every cycle
+    fail at the same download forever. Old-and-gone files are skipped;
+    fresh files behind them still collect in the SAME pass."""
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    dead = dbag.FeedFile(
+        mic='XGAT', channel='posttrade',
+        remote_id='DGAT-posttrade-2027-01-03T06_00.json.gz',
+        source_ts=dt.datetime(2027, 1, 3, 6, 0),
+        url='https://mfs.deutsche-boerse.com/api/download/x')
+    fresh = _feed_file('DGAT-posttrade-2027-01-04T12_41.json.gz', 41)
+    provider = _ExpiringProvider(
+        {'posttrade': (dead, fresh), 'pretrade': ()},
+        {fresh.remote_id: _ndjson_gz([_post_row('t2', 41, 5, 101.0)])},
+        dead={dead.remote_id})
+
+    summary = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW, mode='shadow')
+
+    assert summary.status == 'accepted'
+    cursor = RadarMarketDataCursor.query.filter_by(
+        source='deutsche_boerse_delayed', mic='XGAT',
+        channel='posttrade').one()
+    assert cursor.remote_id == fresh.remote_id
+    assert RadarQuote.query.filter_by(ticker=ticker).count() == 1
+
+
+def test_a_pass_of_only_expired_files_advances_past_them(ctx):
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    dead = dbag.FeedFile(
+        mic='XGAT', channel='posttrade',
+        remote_id='DGAT-posttrade-2027-01-03T06_00.json.gz',
+        source_ts=dt.datetime(2027, 1, 3, 6, 0),
+        url='https://mfs.deutsche-boerse.com/api/download/x')
+    provider = _ExpiringProvider(
+        {'posttrade': (dead,), 'pretrade': ()}, {}, dead={dead.remote_id})
+
+    summary = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW, mode='shadow')
+
+    assert summary.status == 'no_newer'
+    assert 'expired files skipped' in (summary.error_code or '')
+    cursor = RadarMarketDataCursor.query.filter_by(
+        source='deutsche_boerse_delayed', mic='XGAT',
+        channel='posttrade').one()
+    assert cursor.remote_id == dead.remote_id
+    # The next cycle no longer sees the dead file at all.
+    again = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW + dt.timedelta(minutes=5),
+        mode='shadow')
+    assert again.status == 'no_newer'
+    assert again.error_code is None
+
+
+def test_a_fresh_download_failure_still_aborts_without_advancing(ctx):
+    """Only EXPIRED files may be skipped: a failing fresh file means the
+    data still exists upstream and must be retried, never jumped."""
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    fresh = _feed_file('DGAT-posttrade-2027-01-04T12_41.json.gz', 41)
+    provider = _ExpiringProvider(
+        {'posttrade': (fresh,), 'pretrade': ()}, {},
+        dead={fresh.remote_id})
+
+    summary = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW, mode='shadow')
+
+    assert summary.status == 'transport_error'
+    assert RadarMarketDataCursor.query.filter_by(
+        source='deutsche_boerse_delayed', mic='XGAT',
+        channel='posttrade').count() == 0
+
+
 def test_a_structurally_corrupt_file_rejects_and_does_not_advance(ctx):
     ticker = f'{PREFIX}AA'
     generation = _seed_generation_and_universe(ticker)

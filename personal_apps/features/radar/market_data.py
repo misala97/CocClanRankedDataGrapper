@@ -17,6 +17,7 @@ import dataclasses
 import datetime as dt
 import hashlib
 import json
+import logging
 import time
 
 from extensions import db
@@ -27,6 +28,15 @@ from . import quotes as quotes_mod
 from .instruments import MappingDecision, VENUE_BY_MIC
 from .prices import Quote
 from .prices.deutsche_boerse import FeedRejected
+
+logger = logging.getLogger(__name__)
+
+# The provider deletes files roughly a day after publication ("available
+# until midnight of the following business day"). A download failure on a
+# file older than this is expiry, not an outage: the file is skipped and
+# the cursor advances, because retrying a deleted file wedges the channel
+# forever (observed in production 2026-09-01).
+STALE_SKIP_AGE = dt.timedelta(hours=26)
 
 # A trade or book older than this cannot be the current price (spec §4.3).
 SELECTION_HORIZON_SECONDS = 1800
@@ -202,6 +212,9 @@ def collect_german_cycle(provider, generation_id, active_tickers, now,
             elif outcome['status'] in ('rejected', 'transport_error'):
                 overall_status = outcome['status']
                 overall_error = outcome['error_code']
+            elif outcome['error_code'] and overall_error is None:
+                # Informational (e.g. expired-file skips) without failure.
+                overall_error = outcome['error_code']
 
     return CycleSummary(
         mode=mode, status=overall_status, files_seen=total_seen,
@@ -236,6 +249,8 @@ def _collect_channel(provider, mic, channel, by_identity, isins,
     newest_accepted = None
     newest_checksum = None
     duplicate_only = None
+    stale_skipped = None
+    stale_skips = 0
     failed = False
     for file in files:
         outcome['seen'] += 1
@@ -243,6 +258,22 @@ def _collect_channel(provider, mic, channel, by_identity, isins,
                   if (mic, channel) == ('XETR', 'pretrade') else {})
         try:
             compressed = provider.download(file, **limits)
+        except Exception as exc:
+            if now - file.source_ts > STALE_SKIP_AGE:
+                # Expired upstream; skip past it instead of wedging here.
+                stale_skipped = file
+                stale_skips += 1
+                logger.warning('radar de %s/%s: skipping expired file '
+                               '%s (%s)', mic, channel, file.remote_id, exc)
+                continue
+            db.session.rollback()
+            outcome['status'] = 'transport_error'
+            outcome['error_code'] = str(exc)[:48]
+            outcome['accepted'] = 0
+            outcome['selected'] = 0
+            failed = True
+            break
+        try:
             checksum = hashlib.sha256(compressed).hexdigest()
             reference = (newest_checksum or
                          (cursor.checksum if cursor is not None else None))
@@ -306,8 +337,11 @@ def _collect_channel(provider, mic, channel, by_identity, isins,
         outcome['accepted'] += 1
         outcome['status'] = 'accepted'
 
+    if not failed and stale_skips and outcome['status'] == 'no_newer':
+        outcome['error_code'] = f'{stale_skips} expired files skipped'[:48]
     if not failed and (newest_accepted is not None or
-                       duplicate_only is not None):
+                       duplicate_only is not None or
+                       stale_skipped is not None):
         try:
             if channel == 'posttrade' and newest_accepted is not None:
                 selected_quotes = {}
@@ -337,6 +371,13 @@ def _collect_channel(provider, mic, channel, by_identity, isins,
             elif duplicate_only is not None:
                 _advance_cursor(mic, channel, duplicate_only[0],
                                 duplicate_only[1], now)
+            elif stale_skipped is not None:
+                # Files come oldest-first, so anything accepted above is
+                # newer than every skipped file; this branch only fires
+                # when the pass yielded nothing but expiries. The cursor
+                # checksum column is NOT NULL; an unobtainable payload
+                # gets an all-zero sentinel no real sha256 can equal.
+                _advance_cursor(mic, channel, stale_skipped, '0' * 64, now)
             # THE commit: cursor + journal + quotes stand together.
             db.session.commit()
         except Exception:
