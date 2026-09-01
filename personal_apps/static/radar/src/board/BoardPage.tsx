@@ -111,7 +111,15 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     // nothing on screen until the fetch resolved. Only on an explicit row
     // selection: a filter change that moves the selection must leave the
     // reader at the controls they are using.
-    page.current?.querySelector('.detail')?.scrollIntoView({ block: 'start' })
+    //
+    // It travels rather than cuts, so the reader sees where the panel is in
+    // relation to the list. scroll-behavior is outside the stylesheet's
+    // reduced-motion rule, so the preference is consulted here.
+    const reduce = typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    page.current?.querySelector('.detail')?.scrollIntoView({
+      block: 'start', behavior: reduce ? 'auto' : 'smooth',
+    })
   }, [tap, narrow])
 
   // Where the panel sends a reader whose ticker has no panel to show.

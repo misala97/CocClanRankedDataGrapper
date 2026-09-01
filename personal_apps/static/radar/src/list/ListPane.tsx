@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 
 import { Controls } from '../board/Controls'
@@ -340,6 +340,15 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   const shared = universalMarks(payload.rows)
   const quoteShared = universalQuoteFacts(payload.rows)
   const [scored, chatter] = splitTiers(payload.rows)
+  // The board loads into a task and performs no entrance. A board that
+  // REPLACES the one on screen may settle -- as one block, no stagger -- so
+  // the swap reads as arrival rather than a hard cut. `generated_at` is the
+  // build stamp: it changes on every refetch and never on a selection, so
+  // "not the embedded board any more" is exactly this comparison. The class
+  // only arms the CSS; the browser animates whatever is inserted while it is
+  // on, which is the rows and captions the new board brought.
+  const embeddedStamp = useRef(payload.generated_at)
+  const settled = payload.generated_at !== embeddedStamp.current
   // With the exchange shut every row is chatter-ranked and the status line
   // already says RANKED BY CHATTER; one caption over one tier would be a
   // heading with nothing to distinguish from.
@@ -379,8 +388,8 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
 
       {/* The busy signal sits here rather than on the controls: the chips are
           not stale, this list is. */}
-      <div className="rows" id="radar-rows" tabIndex={-1}
-           aria-busy={busy || undefined} onKeyDown={walkRows}>
+      <div className={settled ? 'rows settled' : 'rows'} id="radar-rows"
+           tabIndex={-1} aria-busy={busy || undefined} onKeyDown={walkRows}>
         {/* Column names only. The terms the scores carry -- DIV, Z -- belong
             to the tier captions, where the ordering actually changes. Hidden
             from assistive tech: every cell already names itself.

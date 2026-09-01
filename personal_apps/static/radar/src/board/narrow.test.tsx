@@ -101,9 +101,10 @@ function stubFetch(release?: { resolve: () => void }) {
 }
 
 /** jsdom has no layout, so the stacked layout is declared, not measured. */
-function viewport(narrow: boolean) {
+function viewport(narrow: boolean, reducedMotion = false) {
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-    matches: narrow && query.includes('max-width'),
+    matches: (narrow && query.includes('max-width'))
+      || (reducedMotion && query.includes('prefers-reduced-motion')),
     media: query, onchange: null,
     addEventListener: () => {}, removeEventListener: () => {},
     addListener: () => {}, removeListener: () => {},
@@ -148,12 +149,27 @@ describe('the stacked layout', () => {
 
     await userEvent.click(screen.getByRole('link', { name: /BBB/ }))
 
-    // Before the detail answers: the scroll is the tap's own feedback.
-    expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled()
+    // Before the detail answers: the scroll is the tap's own feedback -- and
+    // it travels, so the reader sees where the panel is in relation to the
+    // list rather than being cut to it.
+    expect(HTMLElement.prototype.scrollIntoView)
+      .toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' })
     expect(vi.mocked(HTMLElement.prototype.scrollIntoView).mock.instances[0])
       .toBe(container.querySelector('.detail'))
     release.resolve()
     await screen.findByText(/BBB is being discussed/)
+  })
+
+  it('jumps rather than travels when the reader asked for less motion', async () => {
+    /* scroll-behavior is not covered by the stylesheet's reduced-motion
+       rule; a smooth scroll has to consult the preference itself. */
+    viewport(true, true)
+    render(<BoardPage initial={payload()} />)
+
+    await userEvent.click(screen.getByRole('link', { name: /BBB/ }))
+
+    expect(HTMLElement.prototype.scrollIntoView)
+      .toHaveBeenCalledWith({ block: 'start', behavior: 'auto' })
   })
 
   it('does not scroll on a desk, where the panel is already beside the list', async () => {

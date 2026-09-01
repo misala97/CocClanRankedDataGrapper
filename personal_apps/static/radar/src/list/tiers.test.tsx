@@ -122,6 +122,25 @@ describe('the two tiers', () => {
     expect(container.querySelector('#radar-rows')!.firstElementChild).toBe(header)
   })
 
+  it('settle in only after a refetch, never on first paint', () => {
+    /* The board loads into a task and must not perform an entrance; a board
+       that REPLACES the one on screen may settle, as one block, so the swap
+       reads as arrival rather than a hard cut. The class arms the CSS; the
+       browser animates whatever is inserted while it is on. */
+    const { container, rerender } = render(
+      <ListPane payload={payload({ rows: [row('A', 0.5)] })} selection={selection}
+                selected={null} busy={false} onSelect={() => {}} onChange={() => {}} />)
+    expect(container.querySelector('#radar-rows')!.className).not.toContain('settled')
+
+    rerender(
+      <ListPane payload={payload({ rows: [row('A', 0.5), row('B', null)],
+                                   generated_at: '2026-08-22T19:05:00Z' })}
+                selection={selection} selected={null} busy={false}
+                onSelect={() => {}} onChange={() => {}} />)
+
+    expect(container.querySelector('#radar-rows')!.className).toContain('settled')
+  })
+
   it('name the term each tier is ordered by, so the rows need no prefix', () => {
     const { container } = list({ rows: [row('A', 0.5), row('B', null)] })
 

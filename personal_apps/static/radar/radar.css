@@ -594,6 +594,10 @@ body {
 .summary button:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
 .summary button[aria-expanded="true"] { border-bottom-color: var(--mark); }
 .tabs.filters { border-top: 1px solid var(--rule-soft); padding-top: 8px; }
+/* What the reader asked to see arrives; what they folded goes at once
+   (exits faster than entrances, and React unmounts it anyway). Same
+   settle as every arrival here, shorter: these are one line, not a panel. */
+.tabs.filters, .members { animation: settle 160ms var(--ease) backwards; }
 
 /* ------------------------------------------------------------- the rows --
    A column rather than a plain scroller, so `.below` can fall to the bottom
@@ -673,6 +677,17 @@ body {
 .rows[aria-busy="true"] .chart svg { opacity: 0.3; }
 .chart svg { transition: opacity var(--base) var(--ease); }
 
+/* A board that REPLACES the one on screen settles in -- rows and captions
+   as one block, no stagger, the same 6px the panel uses. `.settled` is set
+   by ListPane once the payload is no longer the embedded one, so the first
+   paint performs no entrance (the board loads into a task); after that the
+   browser animates whatever the new board inserts. The rows the reader
+   was already looking at stay put: only inserted elements start an
+   animation. */
+.rows.settled .row, .rows.settled .tier {
+  animation: settle 200ms var(--ease) backwards;
+}
+
 /* --------------------------------------------------------- the chart-row --
    A chart with a caption, not a paragraph with a sparkline (2026-08-30).
    Grid: identity cap | the drawing | the figures. The violet body is 24h of
@@ -722,6 +737,9 @@ body {
 @media (max-width: 900px) {
   .row.on::after { content: none; }
 }
+/* Selection moving down the list is a colour handed from one row to the
+   next; it travels rather than flips, on the same clock as the row ground. */
+.row .tk, .row .score b { transition: color var(--fast) var(--ease); }
 .row.on .tk { color: var(--mark); }
 
 .row .cap { min-width: 0; }
