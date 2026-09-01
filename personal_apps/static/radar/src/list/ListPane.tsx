@@ -3,13 +3,9 @@ import type { ReactNode } from 'react'
 
 import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
-import { magnitudes } from '../board/geometry'
 import { formatMarketTime, humanAge, plural, stampTime } from '../format'
 import { Widen } from '../Widen'
-import { Excluded } from './Excluded'
-import { Marks } from './Marks'
-import { Spend } from './Spend'
-import { TickerRow } from './TickerRow'
+import { TickerRow, scoredAgainstPrice } from './TickerRow'
 import type { BoardPayload, Mark, Row, Selection } from '../types'
 
 /** When the always-visible UTC stamp becomes a stale-board warning.
@@ -129,6 +125,16 @@ export function universalQuoteFacts(rows: Row[]): {
   return { keys, tokens }
 }
 
+/** The thin-baseline caution the whole board carries, if any.
+ *
+ *  The two never both apply to one row -- leaderboard.py picks exactly one
+ *  per row, by age -- so at most one is ever universal at a time. */
+function thinBaselineOf(shared: readonly Mark[]): Mark | null {
+  return shared.includes('provisional') ? 'provisional'
+    : shared.includes('warming-up') ? 'warming-up'
+    : null
+}
+
 /** The session enum as a status word beside the venue: "US markets open".
  *  sessionLabel() says "Market open", which next to `market_venue` would
  *  read "US markets Market open". */
@@ -160,13 +166,9 @@ function Status({ payload, shared, quoteTokens }: {
   quoteTokens: string[]
 }) {
   const count = payload.rows.length
-  // The two never both apply to one row -- leaderboard.py picks exactly one
-  // per row, by age -- so at most one is ever universal at a time. Either
-  // way the line must not say "30d baselines" while every row disagrees;
-  // that was the bug the shared-marks logic exists to fix.
-  const thinBaseline = shared.includes('provisional') ? 'provisional'
-    : shared.includes('warming-up') ? 'warming-up'
-    : null
+  // Either way the line must not say "30d baselines" while every row
+  // disagrees; that was the bug the shared-marks logic exists to fix.
+  const thinBaseline = thinBaselineOf(shared)
   const rest = shared.filter(
     (mark) => mark !== 'provisional' && mark !== 'warming-up')
   const closed = payload.session === 'closed'
@@ -242,29 +244,97 @@ function Status({ payload, shared, quoteTokens }: {
   )
 }
 
-/** The list: what the board found, and an account of what it did not show.
+export interface Tier {
+  key: 'scored' | 'chatter'
+  rows: Row[]
+}
+
+/** The list in its two tiers: rows scored against the price move, then
+ *  rows ranked on chatter alone.
  *
- *  Replaces the two-tier arrangement of three lead cards over scan rows. That
- *  split bought visual variety at the cost of making identical data look like
- *  two different kinds of thing, and it forced every fact about a ticker into
- *  a 300px card because there was nowhere else to put it.
+ *  A presentation of the server's order, never a reordering of it:
+ *  leaderboard.py sorts scored rows first and everything else after, by
+ *  chatter. The boundary was invisible on the surface -- `DIV +0.10`,
+ *  `Z 4.9` and `DIV not scored` read as one ordering down one column
+ *  (critique, 2026-09-01) when loud-and-unmoved and quiet-but-quoted-less
+ *  are ranked on different quantities. */
+export function splitTiers(rows: Row[]): [Tier, Tier] {
+  return [
+    { key: 'scored', rows: rows.filter(scoredAgainstPrice) },
+    { key: 'chatter', rows: rows.filter((row) => !scoredAgainstPrice(row)) },
+  ]
+}
+
+/** A tier's caption: the term the rows under it are ordered by, said once
+ *  where the ordering changes rather than as a 10.5px prefix on every score.
  *
- *  The magnitude scale is computed here rather than per row, because the point
- *  of it is that the rows share one -- a bar scaled inside its own row would
- *  make every row look equally loud.
+ *  Not a control. It does not fold or filter; it is the rule between two
+ *  quantities. */
+function TierCaption({ tier, windowHours, count, reason }: {
+  tier: Tier['key']
+  windowHours: number
+  count: number
+  /** Why an open market has nothing scored, when the board as a whole knows
+   *  -- "baselines starting over". Rendered only at zero, where an absent
+   *  caption would read as "there is no such thing". */
+  reason: string | null
+}) {
+  const scored = tier === 'scored'
+  return (
+    // Real spaces between the spans: a screen reader runs "DIV2" together
+    // without them, and the flex gap is invisible to it.
+    <p className={`tier ${tier}`}>
+      <b>{scored ? 'Scored against price' : 'Chatter only'}</b>
+      <span className="dot"> ·</span>{' '}
+      <span className="what">
+        {scored
+          ? `chatter vs the ${windowHours}h price move`
+          : 'unusual talk, no usable price move to compare'}
+      </span>
+      <span className="dot"> ·</span>{' '}
+      <span className="term">{scored ? 'DIV' : 'Z'}</span>
+      {count === 0 && reason && <span className="why"> — {reason}</span>}
+      {' '}
+      <span className="n">{count}</span>
+    </p>
+  )
+}
+
+/** The list: what the board found, in two tiers, over an account of what it
+ *  did not show.
+ *
+ *  A ledger since the 2026-09-01 layout round: one line per row under a
+ *  column header, so that the 10-15 rows PRODUCT.md calls the majority state
+ *  fit a 1440×900 desk without scrolling. The account (excluded, marks,
+ *  spend) arrives as a slot rather than being rendered here, because below
+ *  900px the page places it after the panel instead -- see BoardPage.
  */
 export function ListPane({ payload, selection, selected, busy, onSelect,
-                          onChange }: {
+                          onChange, account }: {
   payload: BoardPayload
   selection: Selection
   selected: string | null
   busy: boolean
   onSelect: (ticker: string) => void
   onChange: (next: Selection) => void
+  /** The footer matter, when this pane is where it belongs. */
+  account?: ReactNode
 }) {
-  const mags = magnitudes(payload.rows)
   const shared = universalMarks(payload.rows)
   const quoteShared = universalQuoteFacts(payload.rows)
+  const [scored, chatter] = splitTiers(payload.rows)
+  // With the exchange shut every row is chatter-ranked and the status line
+  // already says RANKED BY CHATTER; one caption over one tier would be a
+  // heading with nothing to distinguish from.
+  const captions = payload.session !== 'closed' && payload.rows.length > 0
+  const thin = thinBaselineOf(shared)
+
+  const renderRow = (row: Row) => (
+    <TickerRow key={row.ticker} row={row} onSelect={onSelect}
+               suppress={shared} quoteSuppress={quoteShared.keys}
+               session={payload.session} selection={selection}
+               selected={row.ticker === selected} />
+  )
 
   return (
     <aside className="list" aria-label="Board">
@@ -286,17 +356,32 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
       <Controls payload={payload} selection={selection} busy={busy}
                 onChange={onChange} />
 
+      {/* Column names only. The terms the scores carry -- DIV, Z -- belong
+          to the tier captions, where the ordering actually changes. Hidden
+          from assistive tech: every cell already names itself. */}
+      <div className="cols" aria-hidden="true">
+        <span>Ticker</span>
+        <span>Talk · price</span>
+        <span className="r">Score</span>
+        <span>Ratio · price · move</span>
+        <span className="r">Lean</span>
+      </div>
+
       {/* The busy signal sits here rather than on the controls: the chips are
           not stale, this list is. */}
       <div className="rows" id="radar-rows" tabIndex={-1}
            aria-busy={busy || undefined}>
-        {payload.rows.map((row) => (
-          <TickerRow key={row.ticker} row={row} onSelect={onSelect}
-                     magnitude={mags[row.ticker]} suppress={shared}
-                     quoteSuppress={quoteShared.keys}
-                     session={payload.session} selection={selection}
-                     selected={row.ticker === selected} />
-        ))}
+        {captions && (
+          <TierCaption tier="scored" windowHours={payload.window_hours}
+                       count={scored.rows.length}
+                       reason={thin ? UNIVERSAL[thin] : null} />
+        )}
+        {scored.rows.map(renderRow)}
+        {captions && chatter.rows.length > 0 && (
+          <TierCaption tier="chatter" windowHours={payload.window_hours}
+                       count={chatter.rows.length} reason={null} />
+        )}
+        {chatter.rows.map(renderRow)}
         {payload.rows.length === 0 && (
           // Where the first row would have been, not as a footnote under an
           // empty frame: on this board it is the entire answer.
@@ -313,10 +398,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
             )}
           </p>
         )}
-        <Excluded payload={payload} />
-        <Marks rows={payload.rows} suppress={shared}
-               session={payload.session} />
-        <Spend payload={payload} />
+        {account}
       </div>
     </aside>
   )

@@ -5,6 +5,8 @@ identical rows (spec 8.5).
 """
 import json
 
+import pytest
+
 
 def test_the_board_requires_login(anon_client):
     response = anon_client.get('/radar/api/board')
@@ -48,22 +50,42 @@ def test_an_unknown_source_is_rejected(client):
     assert client.get('/radar/api/board?sources=nonsense').status_code == 400
 
 
-def test_market_defaults_to_de_and_unknown_market_is_rejected(client):
-    """The board opens on the German view (Michi, 2026-08-30) -- an old URL
-    without ?market now means DE too. A misspelled API market stays 400."""
+def test_unknown_market_is_rejected(client):
+    """A misspelled API market stays 400."""
     from features.radar.routes.api import BadQuery, parse_query
     import pytest
 
-    assert parse_query({}).market == 'de'
     with pytest.raises(BadQuery, match='unknown market'):
         parse_query({'market': 'moon'})
     assert client.get('/radar/api/board?market=moon').status_code == 400
 
 
+# Tuesday 2026-09-01: Berlin is UTC+2, New York UTC-4. Xetra regular is
+# 09:00-17:30 Berlin, NYSE regular 09:30-16:00 New York.
+@pytest.mark.parametrize('utc_hour, expected, why', [
+    (10, 'de', 'DE regular, US pre-market: the German session is the live one'),
+    (14, 'de', 'both regular: the home market wins the overlap'),
+    (16, 'us', 'US regular, DE after hours: the US session is the only live one'),
+    (2, 'de', 'both closed: nothing is live, DE is the venue the reader trades'),
+])
+def test_the_board_opens_on_the_live_session(utc_hour, expected, why):
+    """Michi, 2026-09-01, reversing the 2026-08-30 DE default: open on the
+    market whose session is live. `?market=` stays honoured as before."""
+    import datetime as dt
+    from features.radar.routes.api import default_market, parse_query
+
+    now = dt.datetime(2026, 9, 1, utc_hour, 0, tzinfo=dt.timezone.utc)
+
+    assert default_market(now) == expected, why
+    assert parse_query({}, now=now).market == expected, why
+    assert parse_query({'market': 'us'}, now=now).market == 'us'
+    assert parse_query({'market': 'de'}, now=now).market == 'de'
+
+
 def test_human_page_bad_market_falls_back_to_the_default_payload(client):
     """Address-bar recovery stays friendly while the JSON API remains strict."""
-    import json
     import re
+    from features.radar.routes.api import parse_query
 
     response = client.get('/radar/?market=moon')
     payload = json.loads(re.search(
@@ -71,7 +93,10 @@ def test_human_page_bad_market_falls_back_to_the_default_payload(client):
         response.get_data(as_text=True), re.S).group(1))
 
     assert response.status_code == 200
-    assert payload['market'] == 'de'
+    # The default depends on the clock (see the live-session test); whatever
+    # it is right now, the recovered page must carry it rather than a third
+    # value.
+    assert payload['market'] == parse_query({}).market
 
 
 def test_board_echoes_market_and_berlin_display_timezone(client):

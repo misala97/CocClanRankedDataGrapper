@@ -9,41 +9,54 @@ import type { Clause, Row, Selection, Session } from '../types'
  *  (`preserveAspectRatio="none"`), so these are proportions, not pixels. */
 const BOX = { width: 300, height: 44, pad: 2 }
 
-/** What this row is ranked ON, which is not the same quantity in both
- *  sessions -- see leaderboard.py and the `Status` line in ListPane.
+/** Whether this row is ranked on divergence -- chatter measured against the
+ *  price move over the window -- rather than on chatter alone.
  *
- *  Open: divergence, chatter measured against the price move over the same
- *  window. Shut: there is no price move to measure, so the board ranks on the
- *  chatter z-score alone and the label has to say so.
- */
+ *  Eligibility is the server's safety verdict and it is checked first: a
+ *  cached, mixed-version payload can carry an older `divergence` term (or a
+ *  stale value) on a quote the server explicitly says cannot score, and that
+ *  row must stay on chatter. The same predicate decides the tier the row sits
+ *  in (ListPane.splitTiers) and the number its score cell prints, so the two
+ *  cannot disagree. */
+export function scoredAgainstPrice(row: Row): boolean {
+  return row.quote.score_eligible
+    && row.quote.score_term === 'divergence'
+    && row.divergence !== null
+}
+
+/** What this row is ranked ON, which is not the same quantity in both
+ *  sessions -- see leaderboard.py and the tier captions in ListPane.
+ *
+ *  Open and scored: divergence. Otherwise the chatter z-score -- with the
+ *  market shut there is no price move to measure, and a row the server
+ *  could not score (frozen tape, flat move, no quote) sits in the chatter
+ *  tier and shows the quantity that tier is ordered by, not "not scored".
+ *  WHY it was not scored is already on the row: the warn clause, the price
+ *  figure, the flags. */
 function rankedBy(row: Row) {
-  // Eligibility is the server's safety verdict.  Preserve it even if a
-  // cached, mixed-version payload carries an older conflicting display term.
-  const scoreTerm = row.quote.score_eligible ? row.quote.score_term : 'chatter'
-  const term = rankTermFor(scoreTerm)
+  const scored = scoredAgainstPrice(row)
+  const term = rankTermFor(scored ? 'divergence' : 'chatter')
   return {
     ...term,
-    value: scoreTerm === 'divergence'
-      ? divergence(row.divergence) : zscore(row.mention_z),
+    value: scored ? divergence(row.divergence) : zscore(row.mention_z),
   }
 }
 
-/** One row of the list: a chart with a caption, not a paragraph with a
- *  sparkline.
+/** One row of the ledger: identity, the drawing, the score, the figures,
+ *  the lean -- one line, five columns, under a column header.
  *
- *  This replaced the three-line text row 2026-08-30. The product's one hard
- *  requirement -- chatter and price legible TOGETHER (PRODUCT.md) -- was
- *  only ever satisfied by the detail panel; the row said "7.4x its normal"
- *  in words and "+3%" in different words and left the comparison to the
- *  reader. Now every row draws both on one 24h axis: the violet body is the
- *  talk, the dashed line is this ticker's own normal, and the price line
- *  rides above -- talk swelling while the line stays flat IS the board's
- *  question, visible per row.
+ *  The chart-row of 2026-08-30 survives intact in the second column: the
+ *  violet body is the talk, the dashed line is this ticker's own normal,
+ *  and the price line rides above -- talk swelling while the line stays
+ *  flat IS the board's question, visible per row. What changed in the
+ *  2026-09-01 layout round is the arrangement around it: the facts that
+ *  used to stack four lines high beside the drawing now run in columns, so
+ *  a row is ~46px rather than ~100px and the 10-15 rows PRODUCT.md calls
+ *  the majority state fit a desk without scrolling.
  *
- *  The right cap carries the numbers the drawing summarises: the ranking
- *  score, the ratio and price, and the breadth or its warning. Wording
- *  still arrives as typed clauses (phrasing.py) -- the cap styles by kind
- *  and never re-derives a judgement; full sentences live in the panel.
+ *  Wording still arrives as typed clauses (phrasing.py) -- the cells style
+ *  by kind and never re-derive a judgement; full sentences live in the
+ *  panel.
  *
  *  A link, not a button, because a ticker has a URL. Middle-click and
  *  copy-link work, and the click handler only exists to avoid a full page
@@ -156,11 +169,15 @@ export function TickerRow(props: {
         </svg>
       </span>
 
+      {/* The number the tier is ordered by. No visible prefix: the tier
+          caption and the column header name the quantity, and the 10.5px
+          `DIV`/`Z` this used to carry was the smallest text on the board.
+          The label survives for assistive tech, which reads no captions. */}
+      <span className="score" title={ranked.why} aria-label={ranked.why}>
+        <b>{ranked.value}</b>
+      </span>
+
       <span className="facts">
-        <span className="score" title={ranked.why} aria-label={ranked.why}>
-          <span className="k">{ranked.label}</span>
-          <b>{ranked.value}</b>
-        </span>
         <span className="fig">
           {ratioShort(row.ratio) ?? <span className="warn">new here</span>}
           {' · '}
@@ -178,8 +195,9 @@ export function TickerRow(props: {
         {warn
           ? <span className="sub warn">{warn.text}</span>
           : breadth && <span className="sub">{breadth}</span>}
-        <Lean tone={row.tone} />
       </span>
+
+      <Lean tone={row.tone} />
 
       {/* Full-width, because marks are load-bearing (PRODUCT.md): crammed
           into the facts column they truncated -- "single-source · war…" on

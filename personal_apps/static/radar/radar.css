@@ -332,12 +332,18 @@ body {
    the 420px column, breaking the two-pane layout in the one state where the
    reader most needs to keep reading the board that is still on screen.
    Verified against a served 500. Row 1 is zero-height when no banner exists. */
+/* 560px since the 2026-09-01 ledger round: one line per row wants the width,
+   and the panel's chart pans below its comfortable width anyway. Between 900
+   and 1279 the list gives back 100px and the rows narrow with it. */
 .page {
   display: grid;
-  grid-template-columns: 420px minmax(0, 1fr);
+  grid-template-columns: 560px minmax(0, 1fr);
   grid-template-rows: min-content minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
+}
+@media (max-width: 1279px) {
+  .page { grid-template-columns: 460px minmax(0, 1fr); }
 }
 .page > .list   { grid-row: 2; grid-column: 1; }
 .page > .detail { grid-row: 2; grid-column: 2; }
@@ -532,6 +538,43 @@ body {
 .t.nil, .t.nil .n { color: var(--dim); }
 .t:disabled { cursor: default; }
 
+/* The members of Discover, under the views only while the bundle or one of
+   its members is in force. Smaller than the views: they narrow a view, they
+   are not one. `covered` is in force through the bundle -- ink, no
+   underline -- so it reads as included without claiming to be pressed. */
+.members {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--s4);
+  margin-top: -3px; padding-bottom: 2px;
+  font-size: var(--t-xs); color: var(--muted);
+}
+.members .lbl { padding-bottom: 6px; }
+.members .t { font-size: var(--t-xs); padding-bottom: 6px; }
+.members .t.covered { color: var(--ink-2); }
+
+/* Window, sources and venue floor as one line. The sentence carries the
+   state; the control unfolds the tabs beneath it. */
+.summary {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--s2);
+  margin: 0; padding: 7px 0 8px;
+  border-top: 1px solid var(--rule-soft);
+  font-size: var(--t-xs); line-height: 1.5; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.summary b { color: var(--ink); font-weight: 600; }
+.summary .tok { white-space: nowrap; }
+.summary .dot { color: var(--dim); }
+.summary button {
+  font: inherit; font-size: var(--t-xs); line-height: 1.5;
+  margin-left: auto; padding: 0 1px;
+  border: 0; border-bottom: 2px solid transparent; background: none;
+  color: var(--mark); font-weight: 600; cursor: pointer;
+  transition: color var(--fast) var(--ease);
+}
+.summary button:hover { color: var(--mark-hi); }
+.summary button:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+.summary button[aria-expanded="true"] { border-bottom-color: var(--mark); }
+.tabs.filters { border-top: 1px solid var(--rule-soft); padding-top: 8px; }
+
 /* ------------------------------------------------------------- the rows --
    A column rather than a plain scroller, so `.below` can fall to the bottom
    of the pane. On a two-row board that is the difference between a footer
@@ -543,6 +586,50 @@ body {
   overflow-y: auto; flex: 1; min-height: 0;
   display: flex; flex-direction: column;
 }
+
+/* The ledger's column header. Column names only, in the breakdown table's
+   own header register; the terms the scores carry live on the tier
+   captions. Outside the scroller so it stays put. One grid with the rows,
+   declared once as --ledger and used by both. */
+:root {
+  --ledger: 80px 108px 60px minmax(0, 1fr) 54px;
+  --ledger-gap: var(--s4);
+}
+@media (max-width: 1279px) {
+  :root { --ledger: 72px 84px 54px minmax(0, 1fr) 50px; --ledger-gap: var(--s3); }
+}
+.cols {
+  display: grid; grid-template-columns: var(--ledger);
+  column-gap: var(--ledger-gap);
+  padding: 7px var(--s6) 5px;
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--t-ax); font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap;
+}
+.cols span { overflow: hidden; text-overflow: ellipsis; }
+.cols .r { text-align: right; }
+
+/* A tier caption: the rule between two quantities, not a section heading.
+   Quiet -- the term is the one loud word, because it is the thing that
+   changes -- and a count at the right where the column of scores ends. */
+.tier {
+  flex: none;
+  display: flex; align-items: baseline; gap: 0 var(--s2);
+  margin: 0; padding: 8px var(--s6) 5px;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: var(--t-xs); line-height: 1.4; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.row + .tier { margin-top: var(--s3); border-top: 1px solid var(--rule); }
+.tier b { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.tier .dot { color: var(--dim); }
+.tier .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tier .term {
+  font-size: var(--t-ax); font-weight: 600; letter-spacing: 0.06em;
+  color: var(--ink-2); white-space: nowrap;
+}
+.tier .why { color: var(--warn); font-weight: 600; white-space: nowrap; }
+.tier .n { margin-left: auto; padding-left: var(--s3); color: var(--ink-2); }
 
 /* The board being replaced goes quiet while the new one is fetched -- and it
    does so WITHOUT dimming any text.
@@ -573,16 +660,25 @@ body {
 
 .row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 118px;
-  column-gap: var(--s4);
+  grid-template-columns: var(--ledger);
+  grid-template-areas:
+    "cap chart score facts lean"
+    "flags flags flags flags flags";
+  column-gap: var(--ledger-gap);
   align-items: center;
   position: relative;
   flex: none;
-  padding: 8px var(--s6);
+  padding: 5px var(--s6);
   border-bottom: 1px solid var(--rule-soft);
   text-decoration: none; color: inherit;
   transition: background var(--fast) var(--ease);
 }
+.row .cap { grid-area: cap; }
+.row .chart { grid-area: chart; }
+.row .score { grid-area: score; }
+.row .facts { grid-area: facts; }
+.row .sub.lean { grid-area: lean; }
+.row .flags { grid-area: flags; }
 
 .row:hover { background: var(--mark-wash); }
 .row:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
@@ -605,7 +701,7 @@ body {
 
 .row .cap { min-width: 0; }
 .row .tk {
-  display: block; font-size: var(--t-lg); font-weight: 700;
+  display: block; font-size: var(--t-base); font-weight: 700;
   letter-spacing: -0.01em; line-height: 1.2;
 }
 .row .nm {
@@ -613,33 +709,35 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.row .chart { position: relative; height: 44px; }
+/* 26px, from 44: the drawing is a glance, not a chart, and the row's whole
+   height is now the two lines of the cap. Non-scaling strokes keep the
+   lines the same weight at either height. */
+.row .chart { position: relative; height: 26px; }
 .row .chart svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-/* The figures the drawing summarises. Tabular and right-aligned so the
-   score, ratio and price each form a column the eye can run down. */
-.row .facts {
-  text-align: right; font-variant-numeric: tabular-nums; line-height: 1.35;
-  min-width: 0;
-}
-/* The number the board is ORDERED by.
+/* The number the tier is ORDERED by, right-aligned in its own column so the
+   eye can run down it.
    Uncoloured, deliberately. It is not a price, and green or red on it would
    read as a verdict on the ticker -- which is the one thing PRODUCT.md's
    scope boundary forbids the surface implying. It is not violet either:
    violet is chatter and selection, and this quantity is the RELATION between
    chatter and price rather than either one. */
 .row .score {
-  display: block;
-  font-size: var(--t-md);
-}
-.row .score .k {
-  font-size: var(--t-ax); letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--muted); margin-right: 4px;
+  display: block; text-align: right;
+  font-size: var(--t-md); font-variant-numeric: tabular-nums;
 }
 .row .score b { font-weight: 650; color: var(--ink); }
 .row.on .score b { color: var(--mark); }
 
-.row .fig { display: block; font-size: var(--t-xs); color: var(--ink-2); }
+/* The figures the drawing summarises: ratio, price and move on one line,
+   breadth or the caution under it. */
+.row .facts {
+  min-width: 0; font-variant-numeric: tabular-nums; line-height: 1.3;
+}
+.row .fig {
+  display: block; font-size: var(--t-xs); color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .row .fig .up { color: var(--up); font-weight: 600; }
 .row .fig .down { color: var(--down); font-weight: 600; }
 .row .fig .warn { color: var(--warn); font-weight: 600; }
@@ -659,21 +757,50 @@ body {
    with the counts still carrying the fact and the dominant side the weight. */
 .row .sub.lean {
   color: var(--muted);
-  display: inline-block; padding: 0 6px 1px; border-radius: var(--r-pill);
+  display: inline-block; justify-self: end;
+  padding: 0 6px 1px; border-radius: var(--r-pill);
   background: var(--rule-soft);
 }
 .row .sub.lean.bull { background: var(--up-soft); }
 .row .sub.lean.bear { background: var(--down-soft); }
 .row .sub.lean b { color: var(--ink); font-weight: 650; }
 
-/* Marks and deviant quote facts, full width under the drawing: crammed into
+/* Marks and deviant quote facts, full width under the line: crammed into
    the facts column they truncated, and a caution the reader cannot finish
-   reading is not a caution. Present only when there is something to say. */
+   reading is not a caution. Present only when there is something to say.
+   11.5px, up from 10.5: load-bearing amber was the smallest text on the
+   board (critique, 2026-09-01). */
 .row .flags {
-  grid-column: 1 / -1;
-  margin-top: 2px;
-  font-size: var(--t-ax); color: var(--warn); font-weight: 600;
+  margin-top: 1px;
+  font-size: var(--t-xs); color: var(--warn); font-weight: 600;
   text-align: right;
+}
+
+/* Stacked: the cap, the drawing, the score and the lean share the line and
+   the figures run under it in prose -- there is no column to head at this
+   width, so the header goes and the tier captions carry the terms. The
+   account (excluded, marks, spend) is rendered by the page under the panel
+   here; see BoardPage. */
+@media (max-width: 900px) {
+  .cols { display: none; }
+  /* The caption keeps its term and count; the description ellipsized to
+     "c…" at 390px, which is worse than absent. The legend defines the
+     terms in full. */
+  .tier .what, .tier b + .dot { display: none; }
+  .row {
+    grid-template-columns: 72px minmax(0, 1fr) 56px 52px;
+    grid-template-areas:
+      "cap chart score lean"
+      "facts facts facts facts"
+      "flags flags flags flags";
+    column-gap: var(--s3); padding: 7px var(--s5);
+  }
+  .row .fig, .row .facts .sub { display: inline; white-space: normal; }
+  .row .facts .sub::before { content: " · "; color: var(--dim); font-weight: 400; }
+  .row .flags { text-align: left; }
+  .account { border-top: 1px solid var(--rule); background: var(--surface); }
+  .account .below { margin-top: 0; }
+  .account .below:first-child { border-top: 0; }
 }
 
 /* The source, session and freshness of a quote are a single semantic unit.
@@ -769,6 +896,35 @@ body {
    the common case now goes straight from one panel to the next, and the line
    appears only when there is genuinely something to wait for. */
 .detail[aria-busy="true"] p { animation: fade 160ms var(--ease) 260ms backwards; }
+
+/* The loading skeleton, in the panel's own proportions: ticker, name, the
+   read's two lines, the chart's box, the breakdown's head. Same delay as
+   the line it replaced, so a fast answer still goes straight from one panel
+   to the next; the shimmer is the one motion on the surface that conveys
+   "in progress" rather than a state change, and reduced-motion stills it. */
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+.sk {
+  border-radius: 4px;
+  background: var(--rule-soft)
+    linear-gradient(90deg, transparent 0 35%, var(--rule) 50%, transparent 65% 100%)
+    0 0 / 250% 100%;
+  animation: fade 160ms var(--ease) 260ms backwards,
+             shimmer 1.6s linear 260ms infinite;
+}
+.sk-ticker { width: 132px; height: 30px; margin-bottom: 10px; }
+.sk-name { width: 44%; max-width: 360px; height: 14px; margin-bottom: 30px; }
+.sk-line { width: 92%; max-width: 640px; height: 13px; margin-bottom: 10px; }
+.sk-line.short { width: 58%; max-width: 420px; margin-bottom: 38px; }
+.sk-chart { width: 100%; max-width: 960px; height: 300px; margin-bottom: 44px; }
+.sk-table { width: 56%; max-width: 420px; height: 88px; }
+/* FROM only, like every keyframe here: the rest state is the declared
+   background-position, so a stilled animation is a finished surface. */
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+}
 .detail.empty { display: grid; place-items: center; color: var(--muted); }
 .detail.empty p { max-width: 34ch; text-align: center; text-wrap: pretty; }
 

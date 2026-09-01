@@ -79,8 +79,13 @@ not the tier terms — the terms belong to the captions.
 
 The rows the server ranks by divergence sit above a rule with a caption; the
 rows it ranks by chatter sit under a second caption. Tier membership is
-`row.divergence !== null`. This matches the server's sort exactly, so the tiers
-are a presentation of the existing order and never reorder it.
+`quote.score_eligible && quote.score_term === 'divergence' && divergence !==
+null` — the server's safety verdict first, then the value, the same predicate
+the score cell prints by (`TickerRow.scoredAgainstPrice`). On real payloads
+this is exactly `divergence !== null`; the stricter form keeps a cached
+mixed-version row from reviving divergence the server refused. It matches the
+server's sort, so the tiers are a presentation of the existing order and never
+reorder it.
 
 | Tier | Caption | Rows |
 |---|---|---|
@@ -201,7 +206,12 @@ stale-while-revalidate state for same-ticker span/source changes is unchanged.
 
 - Playwright screenshots at 1440×900, 1200×800, 768×1024, 390×844, from the
   dev server with the prod-copy database (11 rows today).
-- At 1440×900 with ≥11 rows: `.rows` scrollHeight ≤ clientHeight, measured.
+- At 1440×900: the last row's bottom sits inside the rows scroller's
+  viewport. (Not `scrollHeight ≤ clientHeight`: the excluded account and the
+  marks legend scroll with the rows on a desk, by design, and count toward
+  scrollHeight.) Measured 2026-09-01 22:02: 7 rows at 62px each — every row
+  carried a flags line because one row lacked the otherwise-universal mark —
+  all visible with the account under them.
 - At 390×844: after a row tap, the panel's top is within the viewport before
   the detail response arrives (throttle the request in the test).
 - Tier split: a payload with two divergence-scored rows and three chatter rows

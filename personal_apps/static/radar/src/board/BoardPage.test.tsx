@@ -306,6 +306,8 @@ describe('the controls', () => {
   it('refetches and rewrites the address bar when a source is dropped', async () => {
     render(<BoardPage initial={payload()} />)
 
+    // The sources fold under the summary line since 2026-09-01.
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
     await userEvent.click(screen.getByRole('button', { name: /4chan/ }))
 
     await waitFor(() => expect(boardCalls()).toHaveLength(1))
@@ -332,15 +334,19 @@ describe('the controls', () => {
   it('will not let the last source be turned off', async () => {
     render(<BoardPage initial={payload({ sources: ['bluesky'] })} />)
 
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
+
     expect(screen.getByRole('button', { name: /Bluesky/ })).toBeDisabled()
   })
 
-  it('renders every segment chip whatever the data says', () => {
+  it('renders every view whatever the data says', () => {
     /* Michi, 2026-08-23: "the settings are bad and switch around". They did --
        chips were filtered by count, so a segment with no rows vanished and
-       came back as data changed, moving everything else under the cursor. */
+       came back as data changed, moving everything else under the cursor.
+       Since 2026-09-01 the strip is five views; Discover's members appear
+       under it only while Discover is in force (Controls.test.tsx). */
     render(<BoardPage initial={payload({
-      segment_counts: { all: 1, micro: 1 },
+      segment_counts: { all: 1, micro: 1 }, segments: ['discover'],
     })} />)
 
     for (const label of ['Discover', 'All', 'Large', 'Mid', 'Micro',
@@ -367,6 +373,7 @@ describe('when the board changes under the selection', () => {
     await screen.findByText(/AAA is being discussed/)
 
     stubFetch(payload({ rows: [row({ ticker: 'ZZZ' })] }))
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
     await userEvent.click(screen.getByRole('button', { name: /2\+/ }))
 
     await waitFor(() =>
@@ -389,6 +396,7 @@ describe('when the board cannot be reached', () => {
     render(<BoardPage initial={payload()} />)
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('nope') }))
 
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
     await userEvent.click(screen.getByRole('button', { name: /4chan/ }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Could not reach/)

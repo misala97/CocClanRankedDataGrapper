@@ -1,6 +1,7 @@
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
+import type { ReactNode } from 'react'
 
-import { SEGMENT_ORDER, segmentLabel, sourceLabel } from '../format'
+import { segmentLabel, sourceLabel } from '../format'
 
 import type { BoardPayload, SegmentFilter, Selection } from '../types'
 
@@ -20,25 +21,33 @@ export function toggleSegment(current: SegmentFilter[],
 
 const WINDOWS = [1, 4, 12, 24]
 
-/** Where the segment strip breaks. The five size tiers on one line, the
- *  three that are not sizes on the next: 2026-08-30 the eight tabs with
- *  counts measured 432px of text against a 380px line, so they wrap --
- *  and an uncontrolled wrap orphaned `Funds` alone under seven peers.
- *  A deliberate break beats a coincidental one, and it keeps every tab
- *  in a fixed place between loads. */
-const SEGMENT_BREAK_AFTER = 'micro'
+/** The views: what a reader actually switches between. All first as the way
+ *  out of any filter, Discover as the default bundle, then the three that
+ *  stand on their own. `recent_ipo` is a view rather than a member of
+ *  Discover because a fresh listing is not obscure (types.ts), which is
+ *  exactly why it needs a slot of its own. */
+const VIEWS: (SegmentFilter | 'all')[] = ['all', 'discover', 'large', 'recent_ipo', 'fund']
 
-/** The instrument strip: every scope choice as a flat text tab.
+/** What Discover is a union of, in descending-cap order. Shown only while
+ *  Discover or one of them is in force. */
+const MEMBERS: SegmentFilter[] = ['mid', 'micro', 'unknown']
+
+/** The instrument strip: a row of views, the members of Discover while it
+ *  is in force, and one line summarising everything else.
  *
- *  This replaced a labelled settings form (five uppercase gutter labels over
- *  pill chips) 2026-08-30. The labels said what the tabs already say, and the
- *  pill treatment made twelve rarely-touched controls the loudest thing on
- *  the pane. A pressed tab is ink with a violet underline; an unpressed one
- *  is dim text. Nothing else.
+ *  This replaced two strips of eight and nine flat text tabs 2026-09-01.
+ *  The old segment strip rendered `All` and `Discover` -- aggregates -- as
+ *  peers of the five raw sizes, so pressing Discover lit four tabs at once
+ *  and `Unknown 0` could render pressed-and-dimmed; and seventeen underlined
+ *  words in three rows made links, pressed tabs and unpressed tabs one
+ *  visual species (critique, 2026-09-01). The window, the sources and the
+ *  venue floor are "a question the reader asks, not a setting they
+ *  maintain", so they fold into a sentence that unfolds on request.
  *
- *  Fixed slots throughout, as before: a segment whose count is zero dims
- *  rather than disappearing, so the strip never changes shape between loads
- *  and nothing moves under the cursor.
+ *  Fixed slots where it matters: the five views never move or vanish, a
+ *  zero-count view dims rather than disappearing, and the members line is
+ *  the one thing that changes shape -- on a click the reader made, never
+ *  between loads.
  *
  *  Sources are peers. There is no primary and no default-off: the strip
  *  starts with every configured source on, and turning one off is a question
@@ -56,6 +65,21 @@ export function Controls({ payload, selection, busy, onChange }: {
   onChange: (next: Selection) => void
 }) {
   const counts = payload.segment_counts
+  // Folded by default and not persisted: a reader who changes a filter every
+  // visit can leave it open for the visit.
+  const [open, setOpen] = useState(false)
+
+  const discoverInForce = selection.segments.includes('discover')
+  const memberInForce = selection.segments.some(
+    (name) => (MEMBERS as string[]).includes(name))
+
+  const pressMember = (member: SegmentFilter) => onChange({
+    ...selection,
+    // From the bundle, narrow to the one member. From a member, the usual
+    // union toggle -- two members is a legitimate ask ("mid and micro").
+    segments: discoverInForce ? [member]
+      : toggleSegment(selection.segments, member),
+  })
 
   const toggleSource = (name: string) => {
     const on = selection.sources.includes(name)
@@ -72,9 +96,9 @@ export function Controls({ payload, selection, busy, onChange }: {
 
   return (
     <div className="controls" aria-busy={busy}>
-      <div className="tabs" role="group" aria-label="Segment">
-        {SEGMENT_ORDER.map((key) => {
-          const value = key === 'all' ? null : (key as SegmentFilter)
+      <div className="tabs views" role="group" aria-label="View">
+        {VIEWS.map((key) => {
+          const value = key === 'all' ? null : key
           // `all` is not a segment, it is the absence of a filter -- so it
           // reads as pressed exactly when nothing else is, and clicking it
           // clears rather than adding a seventh selection.
@@ -83,75 +107,141 @@ export function Controls({ payload, selection, busy, onChange }: {
             : selection.segments.includes(value)
           const count = counts[key] ?? 0
           return (
-            <Fragment key={key}>
-              <button type="button" aria-pressed={active}
-                      className={count ? 't' : 't nil'}
-                      onClick={() => onChange({
-                        ...selection,
-                        segments: toggleSegment(selection.segments, value),
-                      })}>
-                {segmentLabel(key)}
-                <span className="n">{count}</span>
-              </button>
-              {key === SEGMENT_BREAK_AFTER && <span className="brk" />}
-            </Fragment>
+            <button key={key} type="button" aria-pressed={active}
+                    className={count ? 't' : 't nil'}
+                    onClick={() => onChange({
+                      ...selection,
+                      segments: toggleSegment(selection.segments, value),
+                    })}>
+              {segmentLabel(key)}
+              <span className="n">{count}</span>
+            </button>
           )
         })}
       </div>
 
-      {/* Window, sources and breadth share the second line: three decisions
-          of one or two tabs each, separated by hairlines rather than named.
-          The window changes what the score means, sources change what was
-          counted, venues change which rows exist -- all three refetch. */}
-      <div className="tabs">
-        <div className="grp" role="group" aria-label="Window">
-          {WINDOWS.map((hours) => (
-            <button key={hours} type="button" className="t"
-                    aria-pressed={selection.window === hours}
-                    onClick={() => onChange({ ...selection, window: hours })}>
-              {hours}h
-            </button>
-          ))}
-        </div>
-        <div className="grp" role="group" aria-label="Sources">
-          {payload.all_sources.map((name) => {
-            const on = selection.sources.includes(name)
-            const last = on && selection.sources.length === 1
-            // The tab takes the label's first word -- "4chan", not
-            // "4chan /biz/". The full name made the strip wider than the
-            // pane and orphaned the venues group on a line of its own;
-            // WHICH board it is stays on the tooltip and in the rows.
-            const label = sourceLabel(name)
-            const short = label.split(' ')[0]
+      {(discoverInForce || memberInForce) && (
+        <div className="members" role="group" aria-label="Within Discover">
+          <span className="lbl">within Discover:</span>
+          {MEMBERS.map((member) => {
+            // Covered: in force through the bundle rather than pressed
+            // itself. A third state, but a mild one -- ink without the
+            // underline -- so it does not have to be learned. The bundle
+            // wins whatever else the list says: the server echoes the
+            // group EXPANDED (`discover, mid, micro, unknown`), which is
+            // what lit four tabs at once on the old strip.
+            const pressed = !discoverInForce
+              && selection.segments.includes(member)
+            const count = counts[member] ?? 0
+            const cls = ['t', count ? '' : 'nil',
+                         discoverInForce ? 'covered' : '']
+              .filter(Boolean).join(' ')
             return (
-              <button key={name} type="button" className="t" aria-pressed={on}
-                      disabled={last}
-                      title={last ? 'At least one source has to stay on'
-                                  : short === label ? undefined : label}
-                      onClick={() => toggleSource(name)}>
-                {short}
+              <button key={member} type="button" aria-pressed={pressed}
+                      className={cls} onClick={() => pressMember(member)}>
+                {segmentLabel(member)}
+                <span className="n">{count}</span>
               </button>
             )
           })}
         </div>
-        <div className="grp end" role="group" aria-label="Venues">
-          <button type="button" className="t"
-                  aria-pressed={selection.minVenues === 1}
-                  onClick={() => onChange({ ...selection, minVenues: 1 })}>
-            any <span className="n">{payload.venue_counts.any ?? 0}</span>
-          </button>
-          <button type="button" className="t"
-                  aria-pressed={selection.minVenues === 2}
-                  onClick={() => onChange({ ...selection, minVenues: 2 })}>
-            2+ <span className="n">{payload.venue_counts.multi ?? 0}</span>
-          </button>
-        </div>
-      </div>
+      )}
 
-      {/* The chart span used to sit here. It belongs to the panel now: it
-          changes one ticker's chart, not which rows the board lists, and
-          having it here made a control that decides nothing about the list
-          look like one that does. */}
+      {/* Window, sources and breadth as one sentence. Deviations from the
+          defaults are said in place of the default word, and the sources
+          are named whenever one is off, so a narrowed board never looks
+          like the whole one. */}
+      <p className="summary">
+        <Summary payload={payload} selection={selection} />
+        <button type="button" aria-expanded={open}
+                aria-controls="radar-filters"
+                aria-label={`${open ? 'Fold' : 'Change'} window, sources and venues`}
+                onClick={() => setOpen(!open)}>
+          {open ? 'done' : 'change'}
+        </button>
+      </p>
+
+      {open && (
+        <div className="tabs filters" id="radar-filters">
+          <div className="grp" role="group" aria-label="Window">
+            {WINDOWS.map((hours) => (
+              <button key={hours} type="button" className="t"
+                      aria-pressed={selection.window === hours}
+                      onClick={() => onChange({ ...selection, window: hours })}>
+                {hours}h
+              </button>
+            ))}
+          </div>
+          <div className="grp" role="group" aria-label="Sources">
+            {payload.all_sources.map((name) => {
+              const on = selection.sources.includes(name)
+              const last = on && selection.sources.length === 1
+              const label = sourceLabel(name)
+              const short = shortSource(name)
+              return (
+                <button key={name} type="button" className="t" aria-pressed={on}
+                        disabled={last}
+                        title={last ? 'At least one source has to stay on'
+                                    : short === label ? undefined : label}
+                        onClick={() => toggleSource(name)}>
+                  {short}
+                </button>
+              )
+            })}
+          </div>
+          <div className="grp end" role="group" aria-label="Venues">
+            <button type="button" className="t"
+                    aria-pressed={selection.minVenues === 1}
+                    onClick={() => onChange({ ...selection, minVenues: 1 })}>
+              any <span className="n">{payload.venue_counts.any ?? 0}</span>
+            </button>
+            <button type="button" className="t"
+                    aria-pressed={selection.minVenues === 2}
+                    onClick={() => onChange({ ...selection, minVenues: 2 })}>
+              2+ <span className="n">{payload.venue_counts.multi ?? 0}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+/** The tab takes the label's first word -- "4chan", not "4chan /biz/". The
+ *  full name made the strip wider than the pane; WHICH board it is stays on
+ *  the tooltip and in the rows. */
+function shortSource(name: string): string {
+  return sourceLabel(name).split(' ')[0]!
+}
+
+/** `4h · 3 sources · any venue`, or what differs from that. */
+function Summary({ payload, selection }: {
+  payload: BoardPayload
+  selection: Selection
+}) {
+  const allOn = payload.all_sources.every((s) => selection.sources.includes(s))
+  const sources = allOn
+    ? `${payload.all_sources.length} sources`
+    : payload.all_sources.filter((s) => selection.sources.includes(s))
+        .map(shortSource).join(', ')
+  const tokens: ReactNode[] = [
+    <b key="window">{selection.window}h</b>,
+    <Fragment key="sources">{sources}</Fragment>,
+    <Fragment key="venues">
+      {selection.minVenues > 1 ? `${selection.minVenues}+ venues` : 'any venue'}
+    </Fragment>,
+  ]
+  return (
+    <>
+      {tokens.map((token, index) => (
+        <Fragment key={index}>
+          <span className="tok">
+            {token}
+            {index < tokens.length - 1 && <span className="dot"> ·</span>}
+          </span>
+          {index < tokens.length - 1 && ' '}
+        </Fragment>
+      ))}
+    </>
   )
 }

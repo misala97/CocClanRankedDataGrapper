@@ -3,7 +3,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BoardUnavailable, fetchBoard, queryFor } from '../api'
 import { Boundary } from '../Broken'
 import { DetailPane } from '../detail/DetailPane'
-import { ListPane } from '../list/ListPane'
+import { Account } from '../list/Account'
+import { ListPane, universalMarks } from '../list/ListPane'
+import { useNarrow } from './narrow'
 import type { BoardPayload, Selection } from '../types'
 
 /** The board: a list of what deserves attention beside one ticker in depth.
@@ -73,10 +75,27 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     // change that must not refetch the board.
   }, [selection, load])
 
+  // A tap counter rather than a flag on `selected`: tapping the row that is
+  // already selected must scroll too.
+  const [tap, setTap] = useState(0)
   const select = useCallback((ticker: string) => {
     setSelected(ticker)
+    setTap((n) => n + 1)
     writeUrl(selection, ticker)
   }, [selection])
+
+  const narrow = useNarrow()
+  const page = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!tap || !narrow) return
+    // The tap's own feedback, before the detail request has answered. On a
+    // desk the panel is already beside the list and this does nothing;
+    // stacked, the panel sits under the whole list and a tap used to change
+    // nothing on screen until the fetch resolved. Only on an explicit row
+    // selection: a filter change that moves the selection must leave the
+    // reader at the controls they are using.
+    page.current?.querySelector('.detail')?.scrollIntoView({ block: 'start' })
+  }, [tap, narrow])
 
   // Where the panel sends a reader whose ticker has no panel to show.
   //
@@ -92,11 +111,18 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const elsewhere = payload.rows.find(
     (candidate) => candidate.ticker !== selected)?.ticker ?? null
 
+  // Rendered once, in the slot the width calls for: at the foot of the rows
+  // on a desk, under the panel once the page stacks. Below 900px the panel
+  // used to sit under all of this, ~1900px down (critique, 2026-09-01).
+  const account = (
+    <Account payload={payload} shared={universalMarks(payload.rows)} />
+  )
+
   return (
-    <div className="page">
+    <div className="page" ref={page}>
       {/* Placed in the grid explicitly rather than left to auto-flow. As a
           plain third child spanning both columns it took a row of its own,
-          which pushed the panel BELOW the list and into the 420px column --
+          which pushed the panel BELOW the list and into the list column --
           the two-pane layout came apart in the one state where the reader
           most needs to keep reading the board that is still on screen. */}
       {error && (
@@ -108,7 +134,8 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       )}
       <Boundary label="The list">
         <ListPane payload={payload} selection={selection} selected={selected}
-                  busy={busy} onSelect={select} onChange={setSelection} />
+                  busy={busy} onSelect={select} onChange={setSelection}
+                  account={narrow ? null : account} />
       </Boundary>
       {/* Its own boundary, and this is the one that earns them: the panel
           renders arbitrary post text and charts built from series with holes
@@ -125,6 +152,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                       ? { ticker: elsewhere, go: () => select(elsewhere) }
                       : undefined} />
       </Boundary>
+      {narrow && <div className="account">{account}</div>}
     </div>
   )
 }

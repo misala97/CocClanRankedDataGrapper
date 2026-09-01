@@ -225,9 +225,20 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   if (!detail || detail.identity.ticker !== ticker) {
     // The ticker check keeps the previous ticker's panel from being read as
     // this one's while its request is still in flight.
+    //
+    // A skeleton in the panel's own shape -- identity, the read, the chart,
+    // the breakdown's head -- rather than one line of grey text, so the
+    // wait looks like the thing that is coming. Decoration to a reader who
+    // cannot see it, which is why the words stay, visually hidden.
     return (
-      <main className="detail" aria-busy="true">
-        <p role="status">Loading {ticker}…</p>
+      <main className="detail loading" aria-busy="true">
+        <p role="status" className="sr">Loading {ticker}…</p>
+        <div className="sk sk-ticker" />
+        <div className="sk sk-name" />
+        <div className="sk sk-line" />
+        <div className="sk sk-line short" />
+        <div className="sk sk-chart" />
+        <div className="sk sk-table" />
       </main>
     )
   }

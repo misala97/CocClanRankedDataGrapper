@@ -39,9 +39,10 @@ class Query:
     window: int
     limit: int
     min_venues: int
-    # Omission is the legacy US board.  The API remains strict for any value
-    # that is supplied, so a typo cannot silently return a different market.
-    market: str = 'us'
+    # Omission means the live session -- see default_market. The API remains
+    # strict for any value that is supplied, so a typo cannot silently return
+    # a different market.
+    market: str = 'de'
 
 
 def _decimal_or_none(value):
@@ -236,17 +237,32 @@ class BadQuery(ValueError):
     """A query parameter the caller sent that cannot be honoured."""
 
 
-def parse_query(args):
+def default_market(now=None):
+    """The market an unqualified request opens on: whichever session is live.
+
+    Michi, 2026-09-01, reversing the DE-always default of 2026-08-30. US only
+    when the US session is regular AND the German one is not; DE otherwise.
+    The home market wins the 15:30-17:30 overlap, and with nothing live there
+    is no price move to diverge from on either venue, so the board opens on
+    the one the reader trades.
+    """
+    now = now or dt.datetime.now(dt.timezone.utc)
+    # Callers pass the codebase's naive-UTC `now`; the calendars want it aware.
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=dt.timezone.utc)
+    us_live = session_state('us', now) == 'regular'
+    de_live = session_state('de', now) == 'regular'
+    return 'us' if us_live and not de_live else 'de'
+
+
+def parse_query(args, now=None):
     """(sources, segment, window, limit) or raise BadQuery.
 
     Every parameter is validated rather than coerced. Silently ignoring an
     unknown source would return the default board under a selection the viewer
     never made, which is worse than an error.
     """
-    # DE by decision (Michi, 2026-08-30): the reader trades Xetra hours, so
-    # the board opens on the German view -- marked US/USD fallback quotes and
-    # all -- and an old URL without ?market now means that too.
-    market = args.get('market', 'de')
+    market = args.get('market') or default_market(now)
     if market not in {'us', 'de'}:
         raise BadQuery('unknown market')
 
@@ -390,8 +406,8 @@ def _row(entry):
 
 def build_payload(args, now=None):
     """Validated query -> serialized board. Shared by the page and the API."""
-    query = parse_query(args)
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    query = parse_query(args, now=now)
     # The SELECTION, unexpanded. board.build hands it to each query, and the
     # queries expand differently: a scored read may not see the pre-split root
     # `reddit` rows and a raw-count read must (config.expand_sources vs
