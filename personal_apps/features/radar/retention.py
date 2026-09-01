@@ -20,6 +20,68 @@ from .config import (MENTION_EVENT_RETENTION_HOURS, POST_RETENTION_DAYS,
 _CHUNK_PAUSE_SECONDS = 0.05
 
 
+def prune_market_data(now, chunk_size=5000):
+    """Bound the v2 operational tables: events 48h, cycles 14 days.
+
+    Cursor and mapping-generation tables are deliberately excluded -- they
+    are the restart and rollback state. An event still referenced by a
+    correction inside the window survives: revocation evidence cannot
+    outlive its target.
+    """
+    from models import RadarMarketDataCycle, RadarMarketTradeEvent
+
+    event_horizon = now - dt.timedelta(hours=48)
+    cycle_horizon = now - dt.timedelta(days=14)
+    deleted = 0
+    while True:
+        batch = [row_id for (row_id,) in
+                 db.session.query(RadarMarketTradeEvent.id)
+                 .filter(RadarMarketTradeEvent.received_at < event_horizon)
+                 .limit(chunk_size).all()]
+        if not batch:
+            break
+        referenced = {original for (original,) in
+                      db.session.query(
+                          RadarMarketTradeEvent.original_event_id)
+                      .filter(
+                          RadarMarketTradeEvent.original_event_id.isnot(None),
+                          RadarMarketTradeEvent.received_at >= event_horizon)
+                      .all()}
+        doomed = batch
+        if referenced:
+            keep = {row_id for (row_id,) in
+                    db.session.query(RadarMarketTradeEvent.id)
+                    .filter(RadarMarketTradeEvent.id.in_(batch),
+                            RadarMarketTradeEvent.event_id.in_(referenced))
+                    .all()}
+            doomed = [row_id for row_id in batch if row_id not in keep]
+        if not doomed:
+            break
+        RadarMarketTradeEvent.query.filter(
+            RadarMarketTradeEvent.id.in_(doomed)).delete(
+            synchronize_session=False)
+        db.session.commit()
+        deleted += len(doomed)
+        if len(batch) < chunk_size:
+            break
+
+    while True:
+        batch = [row_id for (row_id,) in
+                 db.session.query(RadarMarketDataCycle.id)
+                 .filter(RadarMarketDataCycle.scheduled_at < cycle_horizon)
+                 .limit(chunk_size).all()]
+        if not batch:
+            break
+        RadarMarketDataCycle.query.filter(
+            RadarMarketDataCycle.id.in_(batch)).delete(
+            synchronize_session=False)
+        db.session.commit()
+        deleted += len(batch)
+        if len(batch) < chunk_size:
+            break
+    return deleted
+
+
 def prune_posts(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
     """Delete posts older than the retention window, in chunks.
 
