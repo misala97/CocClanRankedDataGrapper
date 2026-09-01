@@ -506,9 +506,6 @@ body {
   display: flex; align-items: baseline; flex-wrap: wrap;
   gap: 0 var(--s4); padding-top: 9px;
 }
-.tabs + .tabs { border-top: 1px solid var(--rule-soft); }
-/* The deliberate line break in the segment strip -- see Controls.tsx. */
-.tabs .brk { flex-basis: 100%; height: 0; }
 
 .grp {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--s4);
@@ -545,7 +542,6 @@ body {
 /* A tab whose count is zero: dimmed, never removed. --dim still clears
    4.5:1, because a control's label stays readable even when it is quiet. */
 .t.nil, .t.nil .n { color: var(--dim); }
-.t:disabled { cursor: default; }
 /* The last source on: still in the tab order, still pressed, but inert --
    and the reason is written beside it (`.note`) rather than in a title. */
 .t[aria-disabled="true"], .t[aria-disabled="true"]:hover {
@@ -1387,13 +1383,16 @@ body {
    96%, not 92%: these are 20px pill chips and a deeper press reads as the
    control shrinking away from the cursor. The release is slower than the
    press, which is the shape of a real button coming back up. */
-.t, .spans button, .oops button, .post .more,
+.t, .spans button, .oops button, .post .more, .summary button,
 .brand .age button, .detail .failed .acts button, .broken button {
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
               border-color var(--fast) var(--ease),
               transform var(--fast) var(--ease);
 }
-.t:not(:disabled):active, .spans button:active,
+/* The inert source tab (aria-disabled, still in the tab order) does not
+   press: a control that answers the press and then does nothing is worse
+   than one that visibly declines. */
+.t:not([aria-disabled="true"]):active, .spans button:active, .summary button:active,
 .oops button:active, .post .more:active, .brand .age button:active,
 .detail .failed .acts button:active, .broken button:active {
   transform: scale(0.96);
@@ -1419,6 +1418,7 @@ body {
   /* The flat tabs keep their baseline geometry; the hit area grows above
      the text and below the underline instead. */
   .t { padding-block: 8px; }
+  .summary button { padding-block: 6px; }
   .market-switch span { padding-block: 8px; }
   .spans button { padding-block: 7px; }
   .tabs, .grp, .spans { column-gap: var(--s3); }

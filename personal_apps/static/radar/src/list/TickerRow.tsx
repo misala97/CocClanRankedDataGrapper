@@ -65,9 +65,6 @@ function rankedBy(row: Row) {
 export function TickerRow(props: {
   row: Row
   selected: boolean
-  /** Kept for the shared-scale contract with ListPane; the chart-row scales
-   *  within itself, so this no longer draws anything. */
-  magnitude?: number
   /** Retained for one rendering phase; each quote now owns this decision. */
   session?: Session
   /** Marks the whole board carries, which the page states once in its header
