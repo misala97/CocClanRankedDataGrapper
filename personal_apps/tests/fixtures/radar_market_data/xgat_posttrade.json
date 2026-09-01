@@ -1,0 +1,37 @@
+[
+  {
+    "messageId": "zztest-batch-dgat-post-1",
+    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "transactionIdentificationCode": "zztrade-1",
+    "mmtModificationInd": "-",
+    "mmtAlgoInd": "H",
+    "mmtTradingMode": "U",
+    "price": 100.0,
+    "priceCurrency": "EUR",
+    "priceNotation": 1,
+    "quantity": 20,
+    "tradingDateAndTime": "2026-08-31T12:42:00.000000000Z",
+    "publicationDateAndTime": "2026-08-31T12:42:00.100000000Z",
+    "tradingSystem": "7",
+    "venueOfExecution": "XGAT",
+    "venueOfPublication": "XCEF"
+  },
+  {
+    "messageId": "zztest-batch-dgat-post-1",
+    "instrumentIdentificationCode": "DE000ZZTEST02",
+    "transactionIdentificationCode": "zztrade-2",
+    "mmtModificationInd": "-",
+    "mmtAlgoInd": "-",
+    "mmtTradingMode": "U",
+    "price": 55.25,
+    "priceCurrency": "EUR",
+    "priceNotation": 1,
+    "quantity": 7,
+    "notionalAmount": 386.75,
+    "tradingDateAndTime": "2026-08-31T12:43:00.000000000Z",
+    "publicationDateAndTime": "2026-08-31T12:43:00.100000000Z",
+    "tradingSystem": "7",
+    "venueOfExecution": "XGRM",
+    "venueOfPublication": "XCEF"
+  }
+]

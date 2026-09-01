@@ -1,0 +1,32 @@
+[
+  {
+    "messageId": "zztest-batch-dgat-pre-1",
+    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "bid": 99.9,
+    "bidQty": 500.0,
+    "ask": 100.1,
+    "askQty": 400.0,
+    "priceCurrency": "EUR",
+    "priceNotation": 1,
+    "tradingSystem": "7",
+    "tradingSystemPhase": "203",
+    "updateDateAndTime": "2026-08-31T12:42:59.000000000Z",
+    "publicationDateAndTime": "2026-08-31T12:43:00.000000000Z",
+    "venueOfExecution": "XGAT"
+  },
+  {
+    "messageId": "zztest-batch-dgat-pre-1",
+    "instrumentIdentificationCode": "US000ZZTEST08",
+    "bid": 10.5,
+    "bidQty": 100.0,
+    "ask": 10.7,
+    "askQty": 100.0,
+    "priceCurrency": "USD",
+    "priceNotation": 1,
+    "tradingSystem": "7",
+    "tradingSystemPhase": "203",
+    "updateDateAndTime": "2026-08-31T12:42:58.000000000Z",
+    "publicationDateAndTime": "2026-08-31T12:43:00.000000000Z",
+    "venueOfExecution": "XGAT"
+  }
+]

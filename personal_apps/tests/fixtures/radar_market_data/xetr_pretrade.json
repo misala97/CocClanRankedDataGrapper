@@ -1,0 +1,40 @@
+[
+  {
+    "messageId": "zztest-batch-detr-pre-1",
+    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "priceCurrency": "EUR",
+    "mdupdateDateAndTime": "2026-08-31T12:42:59.500000000Z",
+    "retailFlag": true,
+    "mdBidMktDepthGroup1": [
+      {"price": 99.9, "quantity": 300.0},
+      {"price": 99.8, "quantity": 200.0}
+    ],
+    "mdAskMktDepthGroup1": [
+      {"price": 100.1, "quantity": 250.0},
+      {"price": 100.2, "quantity": 150.0}
+    ],
+    "aggregatedNumberOfOrdersAndQuotesBid": [
+      {"noOfOrders": 3},
+      {"noOfOrders": 2}
+    ],
+    "aggregatedNumberOfOrdersAndQuotesAsk": [
+      {"noOfOrders": 4},
+      {"noOfOrders": 1}
+    ]
+  },
+  {
+    "messageId": "zztest-batch-detr-pre-1",
+    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "priceCurrency": "EUR",
+    "bestBid": 99.9,
+    "bestBidQty": 300.0,
+    "bestAsk": 100.1,
+    "bestAskQty": 250.0,
+    "updateDateAndTime": "2026-08-31T12:42:59.600000000Z",
+    "publicationDateAndTime": "2026-08-31T12:43:00.000000000Z",
+    "tradingSystem": "1",
+    "tradingSystemPhase": 203,
+    "priceNotation": 1,
+    "venueOfExecution": "XETA"
+  }
+]

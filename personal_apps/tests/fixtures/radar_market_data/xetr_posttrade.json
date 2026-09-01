@@ -1,0 +1,41 @@
+[
+  {
+    "messageId": "zztest-batch-detr-post-1",
+    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "transactionIdentificationCode": "zzxetra-trade-1",
+    "mmtModificationInd": "-",
+    "mmtAlgoInd": "H",
+    "mmtTradingMode": "2",
+    "mmtBenchmarkRefprcInd": "-",
+    "mmtPubModeDefReason": "-",
+    "price": 100.1,
+    "priceCurrency": "EUR",
+    "priceNotation": 1,
+    "quantity": 15,
+    "tradingDateAndTime": "2026-08-31T12:43:00.000000000Z",
+    "publicationDateAndTime": "2026-08-31T12:43:00.050000000Z",
+    "tradingSystem": "1",
+    "venueOfExecution": "XETA",
+    "venueOfPublication": "XCEF"
+  },
+  {
+    "messageId": "zztest-batch-detr-post-1",
+    "instrumentIdentificationCode": "DE000ZZTEST01",
+    "transactionIdentificationCode": "zzxetra-close-1",
+    "mmtModificationInd": "-",
+    "mmtAlgoInd": "-",
+    "mmtTradingMode": "2",
+    "mmtBenchmarkRefprcInd": "S",
+    "mmtPubModeDefReason": "-",
+    "lastTradeIndicator": "C",
+    "price": 100.2,
+    "priceCurrency": "EUR",
+    "priceNotation": 1,
+    "quantity": 40,
+    "tradingDateAndTime": "2026-08-31T15:35:10.000000000Z",
+    "publicationDateAndTime": "2026-08-31T15:35:10.200000000Z",
+    "tradingSystem": "3",
+    "venueOfExecution": "XETB",
+    "venueOfPublication": "XCEF"
+  }
+]
