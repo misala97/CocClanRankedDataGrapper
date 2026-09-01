@@ -128,3 +128,32 @@ binding Codex amendment-review corrections).
   suites all pass (exit 0; Radar project 175); both Vite builds pass.
 - Verdict: **clear to deploy in legacy/shadow mode.** Activation flags
   stay legacy until the operator gates above are walked.
+- 2026-09-01 (post-review): branch merged fast-forward into `dev_personal`
+  and `main` at `c3a0837`, both pushed; Michi deployed via `update_coc.sh`
+  (script runs `flask db upgrade` + `npm ci`/build; no new pip deps).
+
+## R6 reference capture — 2026-09-01 (operator gate 1 CLOSED)
+
+- Michi directed the German rollout to proceed; downloads authorized in
+  session ("Yes go").
+- Captured and frozen as contract supplement **§3.5/§3.6 + rulings
+  R12–R16**: DBAG Xetra file (5,106 rows, SHA
+  `969b4b93…`), DBAG Börse Frankfurt "BF" file (56,275 rows incl. 4,077
+  US-ISIN CS, SHA `63472e31…`) — both public, no terms wall — and the
+  Tradegate BSX A–Z crawl (27 pages, 6,485 unique ISINs, raw SHA
+  `d3cfa341…`, parsed SHA `594879b1…`; site authority = Tradegate
+  Exchange GmbH per imprint). Join evidence: 6,419/6,485 resolve uniquely
+  (zero conflicts, equities-only, 66 unmappable ≈ 1%).
+- Key deviations ruled: R12 Frankfurt file REQUIRED (Xetra alone lacks US
+  mnemonics); R13 XGAT symbol/type derived by ISIN join, unresolvable →
+  excluded → refusal-only; R14 Tradegate list is equities-only (no ETFs);
+  R15 XGAT currency EUR; R16 completeness floors (2,500/25,000/3,000 +
+  7-day staleness + every crawl page non-empty).
+- Implementation: `features/radar/reference_universe.py` (parsers,
+  completeness gates, catalog builder), daemon `_scheduled_mappings`
+  shadow/active branch now BUILDS OpenFIGI generations from these
+  catalogs (R6 refusal replaced; incomplete reference / provider outage
+  writes nothing and logs loudly). Sanitized fixtures with the real
+  153-column header.
+- Tests: 23 new reference-universe + 3 new daemon tests; focused set
+  128 passed; full radar set **1103 passed** (483s).

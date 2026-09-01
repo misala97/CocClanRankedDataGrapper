@@ -149,11 +149,96 @@ compressed, **200.6 MB uncompressed** — see R8):
 - Radar's midpoint selection needs only `bestBid`/`bestAsk` (+Qty) or the
   XGAT-style flat book; depth arrays are ignored.
 
+### 3.5 Official DBAG venue instrument files (reference capture, 2026-09-01)
+
+**Captured:** 2026-09-01 ~14:05 UTC, by the R6 reference gate. Both files are
+public downloads with no auth, no cookie, and no click-through terms; the
+Xetra downloads page carries only DBAG's standard accuracy/liability
+disclaimer.
+
+| Source | Exact URL | Rows | SHA-256 at capture |
+|---|---|---|---|
+| Xetra (XETR) all tradable instruments | `https://www.cashmarket.deutsche-boerse.com/resource/blob/1528/025198b8d1f317b79e6724dd6b5f87b6/data/t7-xetr-allTradableInstruments.csv` | 5,106 | `969b4b931a35004d603cd489a9998f3c0d4eb9672b4b2c0e55cdb1d5049639e1` |
+| Börse Frankfurt (XFRA "BF") all tradable instruments | `https://www.cashmarket.deutsche-boerse.com/resource/blob/2289108/926cf6a36dbbd65465d592c48ef30d19/data/t7-xfra-BF-allTradableInstruments.csv` | 56,275 | `63472e318e9ecd3e725b976ce05c6cf91fdc43d550077573d5f095132c07f36b` |
+
+**File grammar (identical in both files, verified byte-equal headers):**
+
+- Line 1: `Market:;XETR` (resp. `XFRA`) — MUST match the expected venue.
+- Line 2: `Date Last Update:;DD.MM.YYYY` — file generation date (both files
+  dated 01.09.2026 at capture; the download pages state daily updates).
+- Line 3: semicolon-separated header, **153 columns**. Columns are addressed
+  BY NAME (never by index) — the consumed set:
+
+| Semantic field | Column name | Observed values / notes |
+|---|---|---|
+| instrument name | `Instrument` | free text |
+| ISIN | `ISIN` | 12-char ISIN, never empty (0 empties in both files) |
+| local mnemonic | `Mnemonic` | unique among CS+ETF rows within each file (0 duplicates); 1 empty row (an XETR `SR`) |
+| venue MIC | `MIC Code` | constant `XETR` / `XFRA` per file |
+| security type | `Instrument Type` | XETR: `CS` 1420, `ETF` 3093, `ETN` 387, `ETC` 205, `SR` 1. XFRA: `BOND` 35879, `CS` 14605, `ETF` 2921, `FUN` 2270, `ETN` 364, `ETC` 200, `WAR` 31, `OTHER` 4, `SR` 1 |
+| trading currency | `Currency` | ALL `CS` rows are `EUR` in both files; ETFs also trade USD/GBP/CHF/JPY/SEK/AUD lines |
+| product status | `Product Status` | `Active` only observed |
+| instrument status | `Instrument Status` | XETR: `Active` 5100, `Inactive` 5, `PendingDeletion` 1 |
+
+- Type normalization to the OpenFIGI vocabulary (`is_supported_type`):
+  `CS` → `common stock`, `ETF` → `etf`; every other value is carried
+  lowercased verbatim and is therefore unsupported — by design.
+- US coverage evidence: XFRA-BF carries **4,077 US-ISIN `CS` rows** (e.g.
+  `US0378331005` → `APC`, `US69608A1088` → `PTX`, `US88160R1014` → `TL0`);
+  XETR alone carries almost none of the smaller US names, which is why the
+  Frankfurt file is REQUIRED (ruling R12).
+- Cross-file consistency: 4,290 shared CS/ETF ISINs; the only (mnemonic,
+  type) disagreements are 118 ETF ISINs with **multiple Xetra trading
+  lines** (multi-currency lines of one share class; XFRA has zero
+  multi-row ISINs). Ruling R13 excludes ISIN-ambiguous rows from the
+  ISIN-keyed enrichment join; the per-venue symbol-keyed catalogs are
+  unaffected (mnemonics stay unique).
+
+### 3.6 Tradegate BSX instrument universe (reference capture, 2026-09-01)
+
+**Source authority:** `www.tradegatebsx.com` is the official site of the
+Tradegate Berlin Stock Exchange ("Tradegate BSX"), an institution of public
+law operated by Tradegate Exchange GmbH, Kronprinzendamm 21, 10711 Berlin,
+supervised by the Berlin Senate exchange oversight (site imprint, read
+2026-09-01). This is the venue the delayed feed labels `DGAT`/`XGAT`.
+
+**No bulk instrument file exists.** The official universe is the site's A–Z
+price list ("indizes.php"), crawled as 27 pages:
+
+- URL grammar: `https://www.tradegatebsx.com/indizes.php?lang=en&buchstabe={L}`
+  with `L ∈ {0-9, A..Z}` (27 pages).
+- Row grammar (exact, observed): inside `<tbody id="kursliste_abc">`, one
+  anchor per instrument:
+  `<a id="name_N" href="orderbuch.php?lang=en&amp;isin={ISIN}" class="hyphens">{Name}</a>`.
+  The ISIN in the `href` is the instrument identity; the anchor text is the
+  display name.
+- Captured universe: **6,485 unique ISINs** across all 27 pages (page counts
+  7–682, no empty page); concatenated raw pages SHA-256
+  `d3cfa341399a1b90f728b3c60a2d82866fc3a089c857a1f6242c824355ac121e`,
+  parsed `(ISIN, name)` list SHA-256
+  `594879b1141333d794dec9fbf834d7f31b8b560a13cad12235aefd04773e7c09`.
+- The index pages publish **no mnemonic, no security type, no currency** per
+  row. Per-instrument detail pages (`orderbuch.php?isin=…`) do show a
+  mnemonic (verified: `US0378331005` → `APC`, currency EUR), but crawling
+  6.5k detail pages per refresh is not acceptable; ruling R13 derives those
+  fields via the §3.5 files instead.
+- Asset-class observation: joining all 6,485 ISINs against §3.5 resolves
+  6,419 (**6,418 `CS` + 1 `SR`, zero ETFs, zero conflicts**) — the A–Z list
+  is an **equities universe** (ruling R14). 66 ISINs (~1%) resolve to no
+  §3.5 row (foreign small-caps and a few ex-Frankfurt listings, e.g.
+  `BMG667211046` Norwegian Cruise Line) and are conservatively unmappable
+  (ruling R13).
+- Currency: the site states "Prices in Euro; foreign currency bonds in the
+  respective currency"; the equity detail page observed shows EUR. XGAT
+  catalog rows therefore carry `EUR` (ruling R15), which the R10 EUR filter
+  and the mapping's `currency_mismatch` refusal both re-check downstream.
+
 ## 4. Reference universe
 
 The delayed service carries **no reference/instrument-master channel**: no
 mnemonic, security name, or type anywhere in any inspected file. ISIN and
-per-row sub-venue MIC are the only identity. See ruling R6.
+per-row sub-venue MIC are the only identity. See ruling R6. The R6
+precondition is now satisfied by §3.5/§3.6 and rulings R12–R15.
 
 ## 5. Sizes and parse cost (measured)
 
@@ -236,6 +321,41 @@ per-row sub-venue MIC are the only identity. See ruling R6.
   files exist for the prior trading day and are the natural input for the
   post-close native-close reconciliation (§8.3 of the design) and for
   catch-up after daemon downtime within retention.
+- **R12 — Frankfurt file joins the reference set:** the plan named only the
+  Xetra Tradable Instruments file, but Xetra lists just 1,420 common stocks
+  and misses most US names the board tracks. The Börse Frankfurt "BF" file
+  (same grammar, §3.5) carries 14,605 CS rows incl. 4,077 US ISINs and is
+  the mnemonic authority for non-Xetra names. Both §3.5 files together form
+  the German symbol→ISIN reference; German mnemonics ("Börsenkürzel") are
+  market-wide, not per-venue, so a Frankfurt mnemonic is valid for the same
+  ISIN on Tradegate — this market convention is the join's premise and its
+  correctness is re-verified empirically by the shadow report's mapping
+  and identity gates before anything activates.
+- **R13 — XGAT rows are derived, conservatively:** Tradegate publishes no
+  bulk mnemonic/type/currency. An XGAT `VenueReferenceRow` exists ONLY for
+  a crawled Tradegate ISIN that resolves via §3.5 to exactly one
+  (mnemonic, normalized type) pair; ISINs resolving to zero rows or to
+  conflicting pairs are EXCLUDED, so the mapping can only refuse them
+  (`official_reference_missing`), never mis-map them. At capture this
+  excludes 66 of 6,485 (~1%).
+- **R14 — Tradegate A–Z is equities-only:** zero ETFs resolved. ETF tickers
+  therefore can never map to XGAT under this reference; they fall through
+  to XETR (whose catalog does carry ETFs) or refuse. Consistent with EU
+  retail reality (US ETFs are not PRIIPs-tradable) and accepted.
+- **R15 — XGAT currency:** `EUR`, from the venue's own pricing statement
+  plus the observed detail page; double-checked downstream by the R10 EUR
+  row filter and the mapping's `currency_mismatch` refusal.
+- **R16 — Reference completeness semantics:** a DBAG file is complete iff
+  its `Market:` line matches the expected venue, its `Date Last Update:`
+  parses and is at most 7 days old, every consumed column resolves by
+  name, and the row count is at least roughly half the captured baseline
+  (floors: 2,500 XETR rows of 5,106 observed; 25,000 XFRA rows of 56,275
+  observed — pinned as constants in code). The Tradegate
+  crawl is complete iff all 27 pages fetch with at least one parsed row on
+  every lettered page and the unique-ISIN total is at least 3,000.
+  Anything less makes the affected `ReferenceCatalog.complete = False`,
+  which `decide_mapping` turns into `IncompleteReference` — the build
+  writes nothing rather than marking tickers unavailable (spec §5.4).
 
 ## 7. Sanitized fixtures
 

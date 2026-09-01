@@ -36,13 +36,12 @@ prose.
   authorize; the contraction migration is not written yet by design).
   Remaining operator gates are listed below.
 
-## Operator gates before German shadow can even start
+## Operator gates before German activation
 
-1. **R6 reference capture**: the Xetra "Tradable Instruments" file and a
-   Tradegate BSX instrument list must pass their own capture-and-freeze
-   (appended to the contract supplement as §3.5/§3.6, reviewed) BEFORE the
-   weekly mapping job may build OpenFIGI generations. The job currently
-   refuses with a loud log under shadow/active — by design.
+1. ~~R6 reference capture~~ **DONE 2026-09-01** (supplement §3.5/§3.6 +
+   R12–R16; `features/radar/reference_universe.py`; the weekly mapping job
+   now builds generations under shadow/active). See the ledger's
+   "R6 reference capture" section.
 2. Deploy with `RADAR_DE_PRICE_MODE=shadow` (+ `RADAR_MASSIVE_API_KEY` if
    also starting the close shadow), run one complete Tradegate session,
    then the report script with `--gate german`.
@@ -52,9 +51,10 @@ prose.
 
 ## Immediate next action
 
-No further implementation task is open. Michi may integrate/deploy the code
-with provider flags still at legacy defaults, then perform the operator-owned
-R6/reference and shadow gates below. Task 12 remains delayed.
+Merge the R6 reference work to `dev_personal`/`main` after its read-only
+review, Michi deploys, then Michi sets `RADAR_DE_PRICE_MODE=shadow` and one
+full Tradegate session runs before the `--gate german` report. Task 12
+remains delayed.
 
 ## Tests
 

@@ -138,22 +138,16 @@ def _scheduled_mappings():
     """Weekly mapping refresh; mode-aware under market-data v2.
 
     ``legacy`` keeps the established Twelve/Finnhub catalog refresh.
-    ``shadow``/``active`` will build OpenFIGI generations -- but ONLY once
-    the reference universes (Xetra Tradable Instruments, Tradegate list)
-    have passed their own capture-and-freeze (contract ruling R6). Until
-    that supplement section exists, building against unverified reference
-    shapes is refused, loudly.
+    ``shadow``/``active`` build an OpenFIGI shadow generation against the
+    R6-captured reference universes (contract supplement §3.5/§3.6,
+    rulings R12–R16). An incomplete reference or a provider outage writes
+    NOTHING (spec §5.4) and logs loudly; the previous generation stays.
     """
     from features.radar.config import price_provider_config
     _, de_mode, _ = price_provider_config()
     now = dt.datetime.now(dt.timezone.utc)
     if de_mode != 'legacy':
-        logger.warning(
-            'radar mapping generation build is pending the R6 '
-            'reference-source capture (contract supplement §3.5/§3.6); '
-            'run the capture and operator review before shadow mappings '
-            'can build')
-        return None
+        return _build_mapping_generation(now)
     try:
         with app.app_context():
             result = instruments.refresh_mappings(_mapping_provider(), now)
@@ -164,6 +158,40 @@ def _scheduled_mappings():
                 result.catalog_reachable, result.mapped_active_tickers,
                 result.unavailable_active_tickers)
     return result
+
+
+def _build_mapping_generation(now):
+    """One shadow generation from live references; failures write nothing."""
+    from features.radar import reference_universe
+    from features.radar.prices import PriceUnavailable
+    from features.radar.prices import openfigi as openfigi_provider
+
+    naive = now.replace(tzinfo=None)
+    try:
+        with app.app_context():
+            catalogs = reference_universe.build_reference_catalogs(
+                reference_universe.ReferenceHttp(), naive)
+            overrides = instruments.load_overrides(now=naive)
+            provider = openfigi_provider.OpenFigiProvider(
+                openfigi_provider.OpenFigiHttp())
+            generation = instruments.build_generation(
+                provider, catalogs, overrides, naive)
+    except instruments.IncompleteReference as exc:
+        logger.error(
+            'radar mapping generation refused, reference incomplete: %s '
+            '(previous generation stays authoritative)', exc)
+        return None
+    except PriceUnavailable as exc:
+        logger.error(
+            'radar mapping generation refused, provider unavailable: %s '
+            '(previous generation stays authoritative)', exc)
+        return None
+    except Exception:
+        logger.exception('radar mapping generation failed')
+        return None
+    logger.info('radar mapping generation persisted id=%s sha=%s',
+                generation.id, generation.payload_sha256)
+    return generation
 
 def interval_for(state):
     return INTERVALS.get(state, FALLBACK_INTERVAL)

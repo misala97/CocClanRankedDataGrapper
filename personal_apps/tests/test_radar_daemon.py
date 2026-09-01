@@ -779,6 +779,75 @@ def test_manual_mapping_refresh_uses_the_catalog_provider(monkeypatch):
     assert seen['now'].tzinfo is dt.timezone.utc
 
 
+def test_shadow_mode_mapping_job_builds_a_generation(monkeypatch):
+    """R6 satisfied (§3.5/§3.6): shadow/active builds an OpenFIGI
+    generation from the live reference catalogs instead of refusing."""
+    from features.radar import reference_universe
+
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
+    catalogs = {'XETR': object(), 'XGAT': object()}
+    seen = {}
+    generation = type('G', (), {'id': 7, 'payload_sha256': 'f' * 64})()
+
+    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
+                        lambda http, now: seen.update(now=now) or catalogs)
+    monkeypatch.setattr(daemon.instruments, 'load_overrides',
+                        lambda now=None: {})
+    monkeypatch.setattr(
+        daemon.instruments, 'build_generation',
+        lambda provider, references, overrides, now:
+        seen.update(references=references) or generation)
+    monkeypatch.setattr(
+        daemon.instruments, 'refresh_mappings',
+        lambda provider, now: pytest.fail(
+            'shadow mode must not run the legacy catalog refresh'))
+
+    result = daemon._scheduled_mappings()
+
+    assert result is generation
+    assert seen['references'] is catalogs
+    assert seen['now'].tzinfo is None
+
+
+def test_shadow_mode_mapping_job_writes_nothing_on_incomplete_reference(
+        monkeypatch, caplog):
+    from features.radar import reference_universe
+    from features.radar.instruments import IncompleteReference
+
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
+    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
+                        lambda http, now: {})
+    monkeypatch.setattr(daemon.instruments, 'load_overrides',
+                        lambda now=None: {})
+
+    def refuse(provider, references, overrides, now):
+        raise IncompleteReference('XGAT: official reference universe is '
+                                  'not complete')
+    monkeypatch.setattr(daemon.instruments, 'build_generation', refuse)
+
+    with caplog.at_level('ERROR'):
+        assert daemon._scheduled_mappings() is None
+    assert any('reference incomplete' in record.message
+               for record in caplog.records)
+
+
+def test_shadow_mode_mapping_job_survives_a_provider_outage(monkeypatch):
+    from features.radar import reference_universe
+    from features.radar.prices import PriceUnavailable
+
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
+    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
+                        lambda http, now: {})
+    monkeypatch.setattr(daemon.instruments, 'load_overrides',
+                        lambda now=None: {})
+
+    def outage(provider, references, overrides, now):
+        raise PriceUnavailable('openfigi 429')
+    monkeypatch.setattr(daemon.instruments, 'build_generation', outage)
+
+    assert daemon._scheduled_mappings() is None
+
+
 def test_daemon_schedules_weekly_mapping_refresh(monkeypatch):
     """Mappings otherwise stay frozen after the deploy-time probe succeeds."""
     created = []
