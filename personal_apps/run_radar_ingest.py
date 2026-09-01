@@ -1178,7 +1178,7 @@ def main(argv=None):
     # Market-data v2 [A1][A2][A3]: independent per-provider jobs behind
     # startup-validated flags. The old combined `radar_quotes` job is gone.
     from features.radar.config import price_provider_config
-    us_provider, _, _ = price_provider_config()
+    us_provider, de_mode, _ = price_provider_config()
     scheduler.add_job(_scheduled_us_quotes, 'interval',
                       minutes=US_QUOTE_MINUTES[us_provider],
                       id='radar_us_quotes', max_instances=1, coalesce=True)
@@ -1190,8 +1190,18 @@ def main(argv=None):
     scheduler.add_job(_scheduled_us_grouped_closes, 'cron', hour=23,
                       minute=30, id='radar_us_grouped_closes',
                       max_instances=1, coalesce=True)
+    # Legacy keeps the pre-v2 cadence: weekly only, nothing at startup.
+    # Shadow/active additionally build a generation shortly after every
+    # restart -- the German collector maps nothing without one, and waiting
+    # a week for the first interval fire would waste the whole first
+    # shadow session.
+    mapping_kwargs = dict(id='radar_mappings', max_instances=1,
+                          coalesce=True)
+    if de_mode != 'legacy':
+        mapping_kwargs['next_run_time'] = (
+            dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=2))
     scheduler.add_job(_scheduled_mappings, 'interval', weeks=1,
-                      id='radar_mappings', max_instances=1, coalesce=True)
+                      **mapping_kwargs)
     scheduler.add_job(_scheduled_volatility, 'interval',
                       hours=SIGMA_INTERVAL_HOURS, id='radar_volatility',
                       max_instances=1, coalesce=True,

@@ -896,6 +896,42 @@ def test_daemon_schedules_weekly_mapping_refresh(monkeypatch):
     assert mapping[2]['weeks'] == 1
     assert mapping[2]['max_instances'] == 1
     assert mapping[2]['coalesce'] is True
+    # Pre-v2 legacy cadence: weekly only, no startup fire.
+    assert 'next_run_time' not in mapping[2]
+
+
+def test_shadow_mode_builds_a_mapping_generation_shortly_after_restart(
+        monkeypatch):
+    """The German collector maps nothing without a generation; a restart
+    under shadow must not wait a week for the first interval fire."""
+    created = []
+
+    class CapturingScheduler:
+        def __init__(self, **kwargs):
+            self.jobs = []
+            created.append(self)
+
+        def add_job(self, func, trigger, **kwargs):
+            self.jobs.append((func, trigger, kwargs))
+
+        def start(self):
+            pass
+
+        def shutdown(self):
+            pass
+
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
+    monkeypatch.setattr(daemon, 'BackgroundScheduler', CapturingScheduler)
+    monkeypatch.setattr(daemon, '_prepare_rollup_generation', lambda now: (0, 0))
+    monkeypatch.setattr(daemon, 'build_fetchers', lambda: {})
+    monkeypatch.setattr(daemon.time, 'sleep',
+                        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt))
+
+    daemon.main([])
+
+    mapping = {job[2]['id']: job for job in created[0].jobs}['radar_mappings']
+    assert mapping[2]['weeks'] == 1
+    assert mapping[2]['next_run_time'] is not None
 
 
 def test_a_broken_review_pass_does_not_take_the_daemon_down(monkeypatch):
