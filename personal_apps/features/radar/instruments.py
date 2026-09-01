@@ -3,20 +3,103 @@
 The social ticker is not a security identifier.  This module deliberately
 joins listings only through ISIN and treats absent or ambiguous identifiers as
 unavailable; it never falls back to symbols or company names.
+
+Market-data v2 adds the VERSIONED generation machinery (spec §5): every
+mapping change is a complete, hashed decision set persisted as a
+``RadarMappingGeneration``, activated or rolled back atomically. The legacy
+Twelve/Finnhub catalog path below it keeps running until the German
+activation gate passes.
 """
 import dataclasses
 import datetime as dt
+import hashlib
+import json
+import pathlib
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 
 from extensions import db
-from models import RadarInstrument, TickerUniverse
+from models import RadarInstrument, RadarMappingGeneration, TickerUniverse
 
 from .prices import PriceUnavailable
+from .prices.openfigi import is_supported_type
 
 
 XETRA_MIC = 'XETR'
 XETRA_VENUE = 'Xetra'
+
+VENUE_BY_MIC = {'XGAT': 'Tradegate BSX', 'XETR': 'Xetra'}
+
+REFUSAL_REASONS = frozenset({
+    'no_us_share_class', 'ambiguous_us_share_class',
+    'no_german_candidate', 'ambiguous_german_candidate',
+    'official_reference_missing', 'currency_mismatch',
+    'security_type_mismatch', 'override_invalid',
+})
+
+_OVERRIDES_PATH = (pathlib.Path(__file__).parent / 'data'
+                   / 'german_instrument_overrides.json')
+_OVERRIDE_KEYS = frozenset({
+    'social_ticker', 'us_instrument_identifier', 'german_mic',
+    'local_mnemonic', 'german_isin', 'currency', 'evidence_url',
+    'reference_date', 'reviewer', 'reviewed_at',
+})
+_ISIN_RE = re.compile(r'^[A-Z]{2}[A-Z0-9]{9}\d$')
+
+
+class IncompleteReference(Exception):
+    """A reference universe could not be fetched completely.
+
+    Deliberately NOT ``unavailable``: spec §5.4 forbids marking a mapping
+    unavailable before both reference universes were fetched completely, so
+    the generation build raises and writes nothing.
+    """
+
+
+@dataclasses.dataclass(frozen=True)
+class VenueReferenceRow:
+    """One row of an official venue reference universe (mini-capture R6)."""
+    mic: str
+    isin: str
+    symbol: str
+    name: str | None
+    currency: str
+    security_type: str
+
+
+@dataclasses.dataclass(frozen=True)
+class ReferenceCatalog:
+    mic: str
+    rows: tuple
+    complete: bool
+    content_sha256: str
+
+
+@dataclasses.dataclass(frozen=True)
+class Override:
+    social_ticker: str
+    us_instrument_identifier: str
+    german_mic: str
+    local_mnemonic: str
+    german_isin: str
+    currency: str
+    evidence_url: str
+    reference_date: str
+    reviewer: str
+    reviewed_at: str
+
+
+@dataclasses.dataclass(frozen=True)
+class MappingDecision:
+    ticker: str
+    status: str  # mapped | unavailable
+    reason: str | None
+    mic: str | None
+    symbol: str | None
+    isin: str | None
+    currency: str | None
+    mapping_source: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,6 +182,301 @@ class CatalogFallbackProvider:
         # Xetra/ISIN checks below.
         merged.extend(row for row in fallback_rows if self._key(row) not in seen)
         return merged
+
+
+def parse_overrides(payload, now=None):
+    """Strictly validated overrides keyed by social ticker.
+
+    Overrides are exact data, not aliases: every key present, valid ISIN,
+    known MIC, EUR, unique ticker, and a review no older than 366 days.
+    """
+    if not isinstance(payload, dict) or payload.get('version') != 1 or \
+            not isinstance(payload.get('overrides'), list):
+        raise ValueError('override file root must be '
+                         '{"version": 1, "overrides": [...]}')
+    now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    found = {}
+    for entry in payload['overrides']:
+        if not isinstance(entry, dict) or set(entry) != _OVERRIDE_KEYS:
+            raise ValueError(f'override keys must be exactly '
+                             f'{sorted(_OVERRIDE_KEYS)}')
+        if entry['german_mic'] not in VENUE_BY_MIC:
+            raise ValueError(f'unknown override MIC {entry["german_mic"]}')
+        if not _ISIN_RE.match(entry['german_isin']):
+            raise ValueError(f'invalid override ISIN {entry["german_isin"]}')
+        if entry['currency'] != 'EUR':
+            raise ValueError('override currency must be EUR')
+        reviewed = dt.datetime.fromisoformat(
+            entry['reviewed_at'].replace('Z', '+00:00')).replace(tzinfo=None)
+        if now - reviewed > dt.timedelta(days=366):
+            raise ValueError(
+                f'override for {entry["social_ticker"]} was reviewed more '
+                f'than 366 days ago')
+        if entry['social_ticker'] in found:
+            raise ValueError(
+                f'duplicate override for {entry["social_ticker"]}')
+        found[entry['social_ticker']] = Override(**entry)
+    return found
+
+
+def load_overrides(now=None):
+    with open(_OVERRIDES_PATH, encoding='utf-8') as handle:
+        return parse_overrides(json.load(handle), now=now)
+
+
+def _reference_by_symbol(catalog):
+    return {row.symbol: row for row in catalog.rows}
+
+
+def _reference_supported(row):
+    return is_supported_type(row.security_type)
+
+
+def decide_mapping(instrument, provider, references_by_mic, overrides):
+    """One deterministic decision: XGAT, then XETR, then an exact override.
+
+    ``unavailable`` is allowed only when both official references say
+    ``complete=True``; otherwise the whole generation build raises.
+    """
+    for mic in ('XGAT', 'XETR'):
+        catalog = references_by_mic.get(mic)
+        if catalog is None or not catalog.complete:
+            raise IncompleteReference(
+                f'{mic}: official reference universe is not complete')
+
+    ticker = instrument.ticker
+    share_classes = provider.us_share_classes([instrument]).get(ticker, ())
+    reason = None
+    if not share_classes:
+        reason = 'no_us_share_class'
+    elif len(share_classes) > 1:
+        reason = 'ambiguous_us_share_class'
+    elif not is_supported_type(share_classes[0].security_type):
+        reason = 'security_type_mismatch'
+
+    if reason is None:
+        share_class = share_classes[0]
+        venue_reason = 'no_german_candidate'
+        for mic in ('XGAT', 'XETR'):
+            candidates = provider.venue_candidates(
+                {ticker: share_class}, mic).get(ticker, ())
+            supported = [candidate for candidate in candidates
+                         if is_supported_type(candidate.security_type)]
+            if not supported:
+                continue
+            if len(supported) > 1:
+                venue_reason = 'ambiguous_german_candidate'
+                continue
+            candidate = supported[0]
+            row = _reference_by_symbol(
+                references_by_mic[mic]).get(candidate.symbol)
+            if row is None:
+                venue_reason = 'official_reference_missing'
+                continue
+            if row.currency != 'EUR':
+                venue_reason = 'currency_mismatch'
+                continue
+            if not _reference_supported(row):
+                venue_reason = 'security_type_mismatch'
+                continue
+            return MappingDecision(
+                ticker=ticker, status='mapped', reason=None, mic=mic,
+                symbol=candidate.symbol, isin=row.isin, currency='EUR',
+                mapping_source='openfigi')
+        reason = venue_reason
+
+    override = overrides.get(ticker)
+    if override is not None:
+        row = _reference_by_symbol(
+            references_by_mic[override.german_mic]).get(
+                override.local_mnemonic)
+        if (row is not None and row.isin == override.german_isin and
+                row.currency == override.currency):
+            return MappingDecision(
+                ticker=ticker, status='mapped', reason=None,
+                mic=override.german_mic, symbol=override.local_mnemonic,
+                isin=override.german_isin, currency=override.currency,
+                mapping_source='override')
+        reason = 'override_invalid'
+
+    return MappingDecision(
+        ticker=ticker, status='unavailable', reason=reason, mic=None,
+        symbol=None, isin=None, currency=None, mapping_source='openfigi')
+
+
+def _canonical_payload(decisions):
+    ordered = sorted((dataclasses.asdict(decision)
+                      for decision in decisions),
+                     key=lambda item: item['ticker'])
+    return json.dumps({'decisions': ordered}, sort_keys=True,
+                      separators=(',', ':'))
+
+
+def persist_generation(decisions, now, *, market='de', source='openfigi'):
+    """One shadow generation for a complete decision set; hash-deduplicated."""
+    payload = _canonical_payload(decisions)
+    sha = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+    existing = RadarMappingGeneration.query.filter_by(
+        payload_sha256=sha).one_or_none()
+    if existing is not None:
+        return existing
+    mapped = sum(1 for decision in decisions if decision.status == 'mapped')
+    generation = RadarMappingGeneration(
+        market=market, status='shadow', source=source, payload_sha256=sha,
+        payload_json=payload,
+        summary_json=json.dumps({
+            'decisions': len(decisions), 'mapped': mapped,
+            'unavailable': len(decisions) - mapped}, sort_keys=True),
+        created_at=now)
+    db.session.add(generation)
+    db.session.commit()
+    return generation
+
+
+def _generation_decisions(generation):
+    payload = json.loads(generation.payload_json)
+    sha = hashlib.sha256(
+        _canonical_payload([MappingDecision(**item)
+                            for item in payload['decisions']])
+        .encode('utf-8')).hexdigest()
+    if sha != generation.payload_sha256:
+        raise ValueError(
+            f'generation {generation.id}: payload hash does not verify')
+    return [MappingDecision(**item) for item in payload['decisions']]
+
+
+def _snapshot_legacy_generation(tickers, now):
+    """The pre-activation German rows as a real rollback target."""
+    rows = (RadarInstrument.query
+            .filter(RadarInstrument.ticker.in_(tickers),
+                    RadarInstrument.market == 'de')
+            .order_by(RadarInstrument.ticker, RadarInstrument.mic).all())
+    decisions = []
+    for ticker in sorted(tickers):
+        primary = next((row for row in rows
+                        if row.ticker == ticker and row.is_primary), None)
+        if primary is not None and primary.mapping_status == 'mapped':
+            decisions.append(MappingDecision(
+                ticker=ticker, status='mapped', reason=None,
+                mic=primary.mic, symbol=primary.provider_symbol,
+                isin=primary.isin, currency=primary.currency,
+                mapping_source=primary.mapping_source or 'legacy'))
+        else:
+            decisions.append(MappingDecision(
+                ticker=ticker, status='unavailable', reason=None, mic=None,
+                symbol=None, isin=None, currency=None,
+                mapping_source='legacy'))
+    return persist_generation(decisions, now, source='legacy')
+
+
+def _apply_decision(decision, generation_id, now):
+    """Upsert one ticker's German rows for an activation. Returns changes."""
+    changed = 0
+    RadarInstrument.query.filter_by(
+        ticker=decision.ticker, market='de').update(
+        {RadarInstrument.is_primary: False}, synchronize_session=False)
+    if decision.status != 'mapped':
+        # Refusals are recorded without inventing venue rows: only rows
+        # that already exist flip to unavailable.
+        RadarInstrument.query.filter_by(
+            ticker=decision.ticker, market='de').update(
+            {RadarInstrument.mapping_status: 'unavailable',
+             RadarInstrument.mapped_at: now,
+             RadarInstrument.mapping_generation_id: generation_id},
+            synchronize_session=False)
+        return 1
+    row = RadarInstrument.query.filter_by(
+        ticker=decision.ticker, market='de', mic=decision.mic).one_or_none()
+    if row is None:
+        row = RadarInstrument(
+            ticker=decision.ticker, market='de',
+            venue=VENUE_BY_MIC[decision.mic], mic=decision.mic,
+            provider_symbol=decision.symbol, currency=decision.currency,
+            is_primary=False, mapping_status='mapped', mapped_at=now)
+        db.session.add(row)
+    row.venue = VENUE_BY_MIC[decision.mic]
+    row.provider_symbol = decision.symbol
+    row.currency = decision.currency
+    row.isin = decision.isin
+    row.is_primary = True
+    row.mapping_status = 'mapped'
+    row.mapping_source = decision.mapping_source
+    row.mapped_at = now
+    row.mapping_generation_id = generation_id
+    return changed + 1
+
+
+def _apply_generation(generation, now):
+    decisions = _generation_decisions(generation)
+    mapped = [decision for decision in decisions
+              if decision.status == 'mapped']
+    identities = {(decision.mic, decision.isin) for decision in mapped}
+    if len(identities) != len(mapped):
+        raise ValueError(
+            f'generation {generation.id}: duplicate venue identities')
+    changed = 0
+    for decision in decisions:
+        changed += _apply_decision(decision, generation.id, now)
+    return changed
+
+
+def activate_generation(generation_id, now):
+    """Make one shadow generation the active mapping, atomically."""
+    generation = RadarMappingGeneration.query.get(generation_id)
+    if generation is None:
+        raise ValueError(f'no generation {generation_id}')
+    tickers = [decision.ticker
+               for decision in _generation_decisions(generation)]
+    try:
+        _snapshot_legacy_generation(tickers, now)
+        RadarMappingGeneration.query.filter(
+            RadarMappingGeneration.market == generation.market,
+            RadarMappingGeneration.status == 'active',
+            RadarMappingGeneration.id != generation.id).update(
+            {RadarMappingGeneration.status: 'retired'},
+            synchronize_session=False)
+        changed = _apply_generation(generation, now)
+        generation.status = 'active'
+        generation.activated_at = now
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return changed
+
+
+def rollback_generation(generation_id, now):
+    """Re-apply a previously persisted generation, atomically."""
+    generation = RadarMappingGeneration.query.get(generation_id)
+    if generation is None:
+        raise ValueError(f'no generation {generation_id}')
+    try:
+        RadarMappingGeneration.query.filter(
+            RadarMappingGeneration.market == generation.market,
+            RadarMappingGeneration.status == 'active',
+            RadarMappingGeneration.id != generation.id).update(
+            {RadarMappingGeneration.status: 'retired'},
+            synchronize_session=False)
+        changed = _apply_generation(generation, now)
+        generation.status = 'active'
+        generation.activated_at = now
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return changed
+
+
+def build_generation(openfigi_provider, references_by_mic, overrides, now):
+    """Decide every active US ticker and persist one shadow generation.
+
+    A transport failure inside the provider raises PriceUnavailable and
+    nothing is written; an incomplete reference raises IncompleteReference.
+    """
+    decisions = [
+        decide_mapping(row, openfigi_provider, references_by_mic, overrides)
+        for row in _active_us_instruments()]
+    return persist_generation(decisions, now)
 
 
 def _is_stable_isin(value: str | None) -> bool:

@@ -304,3 +304,182 @@ def test_german_probe_reports_counts_without_provider_payload_or_key(
     assert 'xetra_rows=42' in output
     assert 'quote_sample_age_seconds=120' in output
     assert 'private-key-must-not-print' not in output
+
+
+# --- Market data v2: versioned generations (plan Task 6) ---------------------
+
+def _decision(ticker, status='mapped', mic='XGAT', symbol=None,
+              isin=None, reason=None, source='openfigi'):
+    from features.radar.instruments import MappingDecision
+    return MappingDecision(
+        ticker=ticker, status=status, reason=reason,
+        mic=mic if status == 'mapped' else None,
+        symbol=(symbol or ticker + 'D') if status == 'mapped' else None,
+        isin=(isin or 'US00000%05d' % abs(hash(ticker)) % 100000)
+        if status == 'mapped' else None,
+        currency='EUR' if status == 'mapped' else None,
+        mapping_source=source)
+
+
+@pytest.fixture()
+def generation_rows(mapping_rows):
+    from models import RadarMappingGeneration
+    from models import RadarInstrument
+
+    def clean():
+        RadarInstrument.query.filter(
+            RadarInstrument.ticker.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
+        generations = RadarMappingGeneration.query.all()
+        for generation in generations:
+            if f'{PREFIX}' in generation.payload_json:
+                db.session.delete(generation)
+        db.session.commit()
+
+    clean()
+    yield
+    clean()
+
+
+def test_identical_payload_returns_the_existing_generation(generation_rows):
+    from features.radar import instruments as mod
+    now = dt.datetime(2027, 1, 4, 12, 0)
+    decisions = [_decision(f'{PREFIX}AA', isin='US0000000017')]
+    first = mod.persist_generation(decisions, now)
+    second = mod.persist_generation(decisions, now + dt.timedelta(hours=1))
+    assert first.id == second.id
+    assert first.status == 'shadow'
+
+
+def test_activation_upserts_primaries_and_retires_the_previous_generation(
+        generation_rows):
+    from features.radar import instruments as mod
+    from models import RadarInstrument, RadarMappingGeneration
+    now = dt.datetime(2027, 1, 4, 12, 0)
+    ticker = f'{PREFIX}AA'
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+        provider_symbol='OLD', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapping_source='twelvedata+finnhub',
+        mapped_at=now - dt.timedelta(days=30)))
+    db.session.commit()
+
+    generation = mod.persist_generation(
+        [_decision(ticker, mic='XGAT', symbol='ZZAPC',
+                   isin='US0000000017')], now)
+    changed = mod.activate_generation(generation.id, now)
+    assert changed >= 1
+
+    rows = {row.mic: row for row in RadarInstrument.query.filter_by(
+        ticker=ticker, market='de')}
+    assert rows['XGAT'].is_primary is True
+    assert rows['XGAT'].provider_symbol == 'ZZAPC'
+    assert rows['XGAT'].venue == 'Tradegate BSX'
+    assert rows['XGAT'].mapping_generation_id == generation.id
+    assert rows['XETR'].is_primary is False
+    active = RadarMappingGeneration.query.get(generation.id)
+    assert active.status == 'active'
+    assert active.activated_at is not None
+    # The pre-activation state was snapshotted for rollback.
+    legacy = RadarMappingGeneration.query.filter_by(source='legacy').all()
+    assert any(ticker in generation.payload_json
+               for generation in legacy)
+
+
+def test_rollback_restores_the_previous_primary(generation_rows):
+    from features.radar import instruments as mod
+    from models import RadarInstrument
+    now = dt.datetime(2027, 1, 4, 12, 0)
+    ticker = f'{PREFIX}AB'
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+        provider_symbol='OLDSYM', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapping_source='twelvedata+finnhub',
+        isin='DE000ZZTST09', mapped_at=now - dt.timedelta(days=30)))
+    db.session.commit()
+
+    generation = mod.persist_generation(
+        [_decision(ticker, mic='XGAT', symbol='ZZAPB',
+                   isin='DE000ZZTST09')], now)
+    mod.activate_generation(generation.id, now)
+    from models import RadarMappingGeneration
+    legacy = next(g for g in RadarMappingGeneration.query.filter_by(
+        source='legacy') if ticker in g.payload_json)
+
+    mod.rollback_generation(legacy.id, now + dt.timedelta(hours=1))
+    rows = {row.mic: row for row in RadarInstrument.query.filter_by(
+        ticker=ticker, market='de')}
+    assert rows['XETR'].is_primary is True
+    assert rows['XGAT'].is_primary is False
+
+
+def test_a_failed_activation_leaves_the_previous_state_untouched(
+        generation_rows, monkeypatch):
+    from features.radar import instruments as mod
+    from models import RadarInstrument, RadarMappingGeneration
+    now = dt.datetime(2027, 1, 4, 12, 0)
+    ticker = f'{PREFIX}AC'
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+        provider_symbol='KEEP', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapping_source='twelvedata+finnhub',
+        mapped_at=now - dt.timedelta(days=30)))
+    db.session.commit()
+
+    generation = mod.persist_generation(
+        [_decision(ticker, mic='XGAT', symbol='ZZAPX',
+                   isin='US0000000018'),
+         _decision(f'{PREFIX}AD', mic='XGAT', symbol='ZZAPY',
+                   isin='US0000000019')], now)
+
+    original = mod._apply_decision
+    calls = {'n': 0}
+
+    def exploding(*args, **kwargs):
+        calls['n'] += 1
+        if calls['n'] == 2:
+            raise RuntimeError('forced mid-transaction failure')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(mod, '_apply_decision', exploding)
+    with pytest.raises(RuntimeError):
+        mod.activate_generation(generation.id, now)
+
+    row = RadarInstrument.query.filter_by(
+        ticker=ticker, market='de', mic='XETR').one()
+    assert row.is_primary is True
+    assert row.provider_symbol == 'KEEP'
+    assert RadarMappingGeneration.query.get(generation.id).status == 'shadow'
+
+
+def test_override_file_loads_strictly():
+    from features.radar import instruments as mod
+    overrides = mod.load_overrides()
+    assert overrides == {}
+
+    with pytest.raises(ValueError):
+        mod.parse_overrides({'version': 1, 'overrides': [
+            {'social_ticker': 'SAP'}]})  # missing required keys
+    with pytest.raises(ValueError):
+        mod.parse_overrides({'version': 1, 'overrides': [
+            _override_entry(), _override_entry()]})  # duplicate ticker
+    with pytest.raises(ValueError):
+        stale = _override_entry()
+        stale['reviewed_at'] = '2020-01-01T00:00:00Z'
+        mod.parse_overrides({'version': 1, 'overrides': [stale]},
+                            now=dt.datetime(2027, 1, 4))
+
+
+def _override_entry():
+    return {
+        'social_ticker': 'SAP',
+        'us_instrument_identifier': 'SAP:XNYS',
+        'german_mic': 'XGAT',
+        'local_mnemonic': 'SAP',
+        'german_isin': 'DE0007164600',
+        'currency': 'EUR',
+        'evidence_url': 'https://example.invalid/evidence',
+        'reference_date': '2026-08-31',
+        'reviewer': 'Michi',
+        'reviewed_at': '2026-08-31T20:00:00Z',
+    }
