@@ -51,7 +51,8 @@ _MAX_DOWNLOAD_BYTES = 128 * 1024 * 1024
 
 # The §3.5 grammar: consumed columns are addressed BY NAME, never index.
 _CONSUMED_COLUMNS = ('Instrument', 'ISIN', 'Mnemonic', 'Instrument Type',
-                     'Currency')
+                     'Currency', 'MIC Code', 'Product Status',
+                     'Instrument Status')
 _TYPE_NORMALIZATION = {'CS': 'common stock', 'ETF': 'etf'}
 _ISIN_RE = re.compile(r'^[A-Z]{2}[A-Z0-9]{9}\d$')
 # The §3.6 anchor grammar, exactly as captured.
@@ -116,7 +117,13 @@ class ReferenceHttp:
 
 
 def _normalize_type(raw):
-    return _TYPE_NORMALIZATION.get(raw, (raw or '').strip().lower())
+    """CS/ETF map into the OpenFIGI vocabulary; everything else gets a
+    namespace prefix so a future DBAG type can never collide with a
+    supported OpenFIGI value by accident."""
+    normalized = _TYPE_NORMALIZATION.get(raw)
+    if normalized is not None:
+        return normalized
+    return f'dbag:{(raw or "").strip().lower()}'
 
 
 def parse_instruments_file(text, expected_market, now):
@@ -156,6 +163,11 @@ def parse_instruments_file(text, expected_market, now):
         isin = cells[index['ISIN']].strip()
         if not _ISIN_RE.match(isin):
             continue
+        if cells[index['MIC Code']].strip() != expected_market:
+            continue  # never let a foreign venue's row into this catalog
+        if cells[index['Product Status']].strip() != 'Active' or \
+                cells[index['Instrument Status']].strip() != 'Active':
+            continue  # a dying trading line must not validate a mapping
         rows.append(FileRow(
             isin=isin,
             mnemonic=cells[index['Mnemonic']].strip(),
@@ -164,6 +176,21 @@ def parse_instruments_file(text, expected_market, now):
                 cells[index['Instrument Type']].strip()),
             currency=cells[index['Currency']].strip()))
     return rows
+
+
+def _drop_symbol_collisions(rows, mic):
+    """Spec §5.2 step 5: a symbol held by two rows is an ambiguity and the
+    mapping must refuse it, never pick one. ``_reference_by_symbol`` keys
+    the catalog by symbol, so EVERY row of a colliding symbol is dropped."""
+    counts = {}
+    for row in rows:
+        counts[row.symbol] = counts.get(row.symbol, 0) + 1
+    kept = tuple(row for row in rows if counts[row.symbol] == 1)
+    dropped = len(rows) - len(kept)
+    if dropped:
+        logger.warning('%s reference: %d rows dropped for symbol '
+                       'collisions', mic, dropped)
+    return kept
 
 
 def parse_tradegate_index(page_html):
@@ -197,11 +224,11 @@ def build_xetr_catalog(text, now, min_rows=None):
         logger.error('XETR reference has %d rows, floor is %d',
                      len(rows), floor)
         return _incomplete('XETR')
-    catalog_rows = tuple(
+    catalog_rows = _drop_symbol_collisions(tuple(
         VenueReferenceRow(mic='XETR', isin=row.isin, symbol=row.mnemonic,
                           name=row.name, currency=row.currency,
                           security_type=row.security_type)
-        for row in rows if row.mnemonic)
+        for row in rows if row.mnemonic), 'XETR')
     return ReferenceCatalog(
         mic='XETR', rows=catalog_rows, complete=True,
         content_sha256=hashlib.sha256(text.encode('utf-8')).hexdigest())
@@ -243,6 +270,7 @@ def build_xgat_catalog(universe_by_letter, enrichment_rows, min_isins=None):
                 mic='XGAT', isin=isin, symbol=mnemonic, name=name,
                 currency='EUR',  # R15: venue-wide statement
                 security_type=security_type))
+    rows = list(_drop_symbol_collisions(tuple(rows), 'XGAT'))
     if len(rows) < floor:
         logger.error('XGAT reference resolved %d rows (excluded %d), '
                      'floor is %d', len(rows), excluded, floor)

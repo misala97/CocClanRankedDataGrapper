@@ -37,9 +37,20 @@ def test_parse_instruments_file_reads_the_consumed_columns_by_name():
 
 
 def test_parse_normalizes_only_cs_and_etf_types():
+    """Unknown DBAG types get a namespace prefix: a future DBAG value can
+    never collide with a supported OpenFIGI type by accident."""
+    from features.radar.prices.openfigi import is_supported_type
     rows = ru.parse_instruments_file(XETR_TEXT, 'XETR', NOW)
     assert [r.security_type for r in rows] == [
-        'common stock', 'etf', 'etn', 'sr']
+        'common stock', 'etf', 'dbag:etn', 'dbag:sr']
+    assert not is_supported_type(ru._normalize_type('ETP'))
+
+
+def test_parse_excludes_inactive_and_foreign_mic_rows():
+    rows = ru.parse_instruments_file(XETR_TEXT, 'XETR', NOW)
+    isins = {r.isin for r in rows}
+    assert 'DE000ZZTST05' not in isins  # Instrument Status: Inactive
+    assert 'DE000ZZTST06' not in isins  # MIC Code: XFRA inside XETR file
 
 
 @pytest.mark.parametrize('mutate, match', [
@@ -47,6 +58,7 @@ def test_parse_normalizes_only_cs_and_etf_types():
     (lambda t: t.replace('Date Last Update:;01.09.2026',
                          'Date Last Update:;garbage'), 'date'),
     (lambda t: t.replace(';Mnemonic;', ';Renamed;'), 'column'),
+    (lambda t: t.replace(';Instrument Status;', ';Renamed;'), 'column'),
     (lambda t: '\n'.join(t.split('\n')[:2]), 'header'),
 ])
 def test_structural_violations_raise(mutate, match):
@@ -164,6 +176,79 @@ def test_xgat_catalog_requires_rows_on_every_page():
 def test_xgat_default_floor_is_pinned():
     assert ru.TRADEGATE_MIN_ISINS == 3000
     assert ru.XFRA_MIN_ROWS == 25000
+
+
+# --------------------------------------------------- symbol collisions
+
+def test_xetr_catalog_drops_every_row_of_a_colliding_mnemonic():
+    """Spec §5.2 step 5: _reference_by_symbol keys the catalog by symbol,
+    so a duplicated symbol would silently last-win into a wrong ISIN.
+    Both rows must go."""
+    duplicated = XETR_TEXT.replace(
+        ';ZZE2;', ';ZZ1;')  # the ETF row now claims the CS row's mnemonic
+    catalog = ru.build_xetr_catalog(duplicated, NOW, min_rows=1)
+    assert catalog.complete is True
+    assert {row.symbol for row in catalog.rows} == {'ZZN3'}
+
+
+def test_xgat_catalog_drops_cross_isin_symbol_collisions():
+    """Two different Tradegate ISINs enriched to the SAME mnemonic (one
+    via XETR, one via XFRA) must both be excluded, never last-win."""
+    enrichment = [
+        ru.FileRow(isin='DE000ZZTST01', mnemonic='ZZ1', name='ZZ TEST AG',
+                   security_type='common stock', currency='EUR'),
+        ru.FileRow(isin='US000ZZTST08', mnemonic='ZZ1', name='ZZ US CORP',
+                   security_type='common stock', currency='EUR'),
+        ru.FileRow(isin='BM000ZZTST10', mnemonic='ZZX9', name='ZZ OFFSHORE',
+                   security_type='common stock', currency='EUR'),
+    ]
+    universe = {letter: [('DE000ZZTST01', 'ZZ Test AG')]
+                for letter in ru.TRADEGATE_LETTERS}
+    universe['U'] = [('US000ZZTST08', 'ZZ US Corp & Co.')]
+    universe['B'] = [('BM000ZZTST10', 'ZZ Offshore Ltd.'),
+                     ('DE000ZZTST01', 'ZZ Test AG')]
+    catalog = ru.build_xgat_catalog(universe, enrichment, min_isins=1)
+    assert {row.isin for row in catalog.rows} == {'BM000ZZTST10'}
+
+
+# ------------------------------------------------------- transport layer
+
+def test_reference_http_wraps_transport_failures(monkeypatch):
+    import requests as requests_module
+
+    http = ru.ReferenceHttp(sleep=lambda seconds: None)
+
+    class BoomSession:
+        headers = {}
+
+        def get(self, url, timeout=None):
+            raise requests_module.ConnectionError('refused')
+
+    http._session = BoomSession()
+    with pytest.raises(ru.ReferenceFetchError):
+        http.instruments_file(ru.XETR_INSTRUMENTS_URL)
+    with pytest.raises(ru.ReferenceFetchError):
+        http.tradegate_page('A')
+
+
+def test_reference_http_rejects_oversized_files(monkeypatch):
+    http = ru.ReferenceHttp(sleep=lambda seconds: None)
+
+    class HugeResponse:
+        content = b'x' * (ru._MAX_DOWNLOAD_BYTES + 1)
+
+        def raise_for_status(self):
+            return None
+
+    class HugeSession:
+        headers = {}
+
+        def get(self, url, timeout=None):
+            return HugeResponse()
+
+    http._session = HugeSession()
+    with pytest.raises(ru.ReferenceFetchError, match='size cap'):
+        http.instruments_file(ru.XETR_INSTRUMENTS_URL)
 
 
 # ------------------------------------------------- end-to-end catalog build

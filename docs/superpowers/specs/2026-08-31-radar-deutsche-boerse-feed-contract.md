@@ -167,7 +167,11 @@ disclaimer.
 - Line 2: `Date Last Update:;DD.MM.YYYY` — file generation date (both files
   dated 01.09.2026 at capture; the download pages state daily updates).
 - Line 3: semicolon-separated header, **153 columns**. Columns are addressed
-  BY NAME (never by index) — the consumed set:
+  BY NAME (never by index) — the consumed set is exactly the eight columns
+  below; a rename of ANY of them is a structural violation. Rows are
+  filtered on read: a row whose `MIC Code` differs from the file's venue,
+  or whose `Product Status`/`Instrument Status` is not `Active`, never
+  enters a catalog (a dying trading line must not validate a mapping).
 
 | Semantic field | Column name | Observed values / notes |
 |---|---|---|
@@ -181,8 +185,11 @@ disclaimer.
 | instrument status | `Instrument Status` | XETR: `Active` 5100, `Inactive` 5, `PendingDeletion` 1 |
 
 - Type normalization to the OpenFIGI vocabulary (`is_supported_type`):
-  `CS` → `common stock`, `ETF` → `etf`; every other value is carried
-  lowercased verbatim and is therefore unsupported — by design.
+  `CS` → `common stock`, `ETF` → `etf`; every other value is carried as
+  `dbag:<lowercased value>` — the namespace prefix guarantees BY
+  CONSTRUCTION that no future DBAG type value (e.g. a hypothetical `ETP`)
+  can collide with a supported OpenFIGI type and silently widen the
+  mapping.
 - US coverage evidence: XFRA-BF carries **4,077 US-ISIN `CS` rows** (e.g.
   `US0378331005` → `APC`, `US69608A1088` → `PTX`, `US88160R1014` → `TL0`);
   XETR alone carries almost none of the smaller US names, which is why the
@@ -337,14 +344,20 @@ precondition is now satisfied by §3.5/§3.6 and rulings R12–R15.
   (mnemonic, normalized type) pair; ISINs resolving to zero rows or to
   conflicting pairs are EXCLUDED, so the mapping can only refuse them
   (`official_reference_missing`), never mis-map them. At capture this
-  excludes 66 of 6,485 (~1%).
+  excludes 66 of 6,485 (~1%). The same refusal-over-guessing rule governs
+  SYMBOL collisions in every built catalog (spec §5.2 step 5): the
+  mapping's reference lookup is keyed by symbol, so when two rows hold
+  the same symbol — e.g. two different Tradegate ISINs enriched to one
+  mnemonic across the two §3.5 files — ALL rows of that symbol are
+  dropped and those instruments can only refuse.
 - **R14 — Tradegate A–Z is equities-only:** zero ETFs resolved. ETF tickers
   therefore can never map to XGAT under this reference; they fall through
   to XETR (whose catalog does carry ETFs) or refuse. Consistent with EU
   retail reality (US ETFs are not PRIIPs-tradable) and accepted.
 - **R15 — XGAT currency:** `EUR`, from the venue's own pricing statement
-  plus the observed detail page; double-checked downstream by the R10 EUR
-  row filter and the mapping's `currency_mismatch` refusal.
+  plus the observed detail page. The real downstream re-check is the R10
+  EUR row filter on feed data (the mapping's `currency_mismatch` refusal
+  compares this constant to itself for XGAT and only bites for XETR).
 - **R16 — Reference completeness semantics:** a DBAG file is complete iff
   its `Market:` line matches the expected venue, its `Date Last Update:`
   parses and is at most 7 days old, every consumed column resolves by
@@ -352,7 +365,9 @@ precondition is now satisfied by §3.5/§3.6 and rulings R12–R15.
   (floors: 2,500 XETR rows of 5,106 observed; 25,000 XFRA rows of 56,275
   observed — pinned as constants in code). The Tradegate
   crawl is complete iff all 27 pages fetch with at least one parsed row on
-  every lettered page and the unique-ISIN total is at least 3,000.
+  every lettered page and the RESOLVED post-join row total (after R13's
+  exclusions, of 6,419 observed) is at least 3,000 — deliberately stricter
+  than a raw-ISIN floor: an enrichment collapse also refuses.
   Anything less makes the affected `ReferenceCatalog.complete = False`,
   which `decide_mapping` turns into `IncompleteReference` — the build
   writes nothing rather than marking tickers unavailable (spec §5.4).

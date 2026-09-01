@@ -848,6 +848,21 @@ def test_shadow_mode_mapping_job_survives_a_provider_outage(monkeypatch):
     assert daemon._scheduled_mappings() is None
 
 
+def test_shadow_mode_mapping_job_never_lets_an_exception_escape(monkeypatch):
+    """The scheduled job runs under APScheduler: an escaped exception would
+    poison the job, so even an unforeseen error must degrade to None."""
+    from features.radar import reference_universe
+
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
+
+    def explode(http, now):
+        raise RuntimeError('unforeseen')
+    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
+                        explode)
+
+    assert daemon._scheduled_mappings() is None
+
+
 def test_daemon_schedules_weekly_mapping_refresh(monkeypatch):
     """Mappings otherwise stay frozen after the deploy-time probe succeeds."""
     created = []
