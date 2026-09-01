@@ -104,6 +104,14 @@ def test_xetr_catalog_default_floor_is_the_captured_baseline_half():
     assert ru.build_xetr_catalog(XETR_TEXT, NOW).complete is False
 
 
+def test_xetr_floor_applies_after_collision_and_mnemonic_exclusions():
+    """A mass-corrupted mnemonic column must refuse even when the raw row
+    count clears the floor: the floor guards the usable catalog."""
+    duplicated = XETR_TEXT.replace(';ZZE2;', ';ZZ1;')  # 4 parsed, 1 usable
+    assert ru.build_xetr_catalog(duplicated, NOW, min_rows=2).complete \
+        is False
+
+
 # -------------------------------------------------------- Tradegate crawl
 
 def test_tradegate_index_parse_follows_the_captured_link_grammar():

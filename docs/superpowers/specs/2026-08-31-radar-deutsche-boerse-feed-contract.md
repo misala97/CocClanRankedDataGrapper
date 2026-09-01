@@ -361,9 +361,11 @@ precondition is now satisfied by §3.5/§3.6 and rulings R12–R15.
 - **R16 — Reference completeness semantics:** a DBAG file is complete iff
   its `Market:` line matches the expected venue, its `Date Last Update:`
   parses and is at most 7 days old, every consumed column resolves by
-  name, and the row count is at least roughly half the captured baseline
-  (floors: 2,500 XETR rows of 5,106 observed; 25,000 XFRA rows of 56,275
-  observed — pinned as constants in code). The Tradegate
+  name, and the USABLE catalog row count — after status/MIC filtering,
+  empty-mnemonic and collision exclusions — is at least roughly half the
+  captured baseline (floors: 2,500 XETR catalog rows of 5,100 observed;
+  25,000 XFRA enrichment rows of 56,275 observed — pinned as constants
+  in code). The Tradegate
   crawl is complete iff all 27 pages fetch with at least one parsed row on
   every lettered page and the RESOLVED post-join row total (after R13's
   exclusions, of 6,419 observed) is at least 3,000 — deliberately stricter

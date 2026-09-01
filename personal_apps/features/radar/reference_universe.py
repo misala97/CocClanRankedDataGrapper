@@ -220,15 +220,17 @@ def build_xetr_catalog(text, now, min_rows=None):
     except ReferenceDataError as exc:
         logger.error('XETR reference refused: %s', exc)
         return _incomplete('XETR')
-    if len(rows) < floor:
-        logger.error('XETR reference has %d rows, floor is %d',
-                     len(rows), floor)
-        return _incomplete('XETR')
     catalog_rows = _drop_symbol_collisions(tuple(
         VenueReferenceRow(mic='XETR', isin=row.isin, symbol=row.mnemonic,
                           name=row.name, currency=row.currency,
                           security_type=row.security_type)
         for row in rows if row.mnemonic), 'XETR')
+    # The floor guards the CATALOG, post-exclusion: a file whose mnemonic
+    # column is mass-corrupted must refuse, not ship a gutted catalog.
+    if len(catalog_rows) < floor:
+        logger.error('XETR reference kept %d catalog rows, floor is %d',
+                     len(catalog_rows), floor)
+        return _incomplete('XETR')
     return ReferenceCatalog(
         mic='XETR', rows=catalog_rows, complete=True,
         content_sha256=hashlib.sha256(text.encode('utf-8')).hexdigest())

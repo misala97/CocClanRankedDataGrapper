@@ -157,3 +157,12 @@ binding Codex amendment-review corrections).
   153-column header.
 - Tests: 23 new reference-universe + 3 new daemon tests; focused set
   128 passed; full radar set **1103 passed** (483s).
+- Independent review (e38e8d7): FIXES-FIRST, 2 SHOULD-FIX + 4 MINOR —
+  all six folded in `d134025` (symbol-collision refusal in both
+  catalogs, status/MIC filtering with the consumed-set doc realigned,
+  `dbag:` type namespace, R15/R16 wording, transport/size-cap/generic-
+  exception tests). Re-review: **APPROVED**, one residual non-gating
+  SHOULD-FIX (XETR floor ordering) folded immediately after (floor now
+  guards the post-exclusion catalog, with teeth). Real captured
+  universe: XETR catalog 5,100 rows, XGAT 6,419 — zero collision drops
+  today. Focused suites 119 passed after the final fold.
