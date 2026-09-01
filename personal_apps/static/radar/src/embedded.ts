@@ -35,3 +35,30 @@ export function parsePayload(text: string | null | undefined): BoardPayload | nu
     return null
   }
 }
+
+/** The board the page opens on.
+ *
+ *  Embedded when Flask rendered the document (production: the payload IS the
+ *  page, and a spinner on arrival for data the server had in hand is a
+ *  self-inflicted wait). Fetched when nothing is embedded -- the Vite dev
+ *  harness at static/radar/dev.html has no Jinja to embed it -- for the
+ *  page's own query, so `?market=de&window=12` opens the same board it would
+ *  under Flask. Null on any failure; the entry renders words, not a throw.
+ *
+ *  A redirected response is a failure: @login_required redirects rather than
+ *  401s and fetch follows it transparently, so a signed-out harness would
+ *  otherwise hand the parser a login page with a 200.
+ */
+export async function loadPayload(): Promise<BoardPayload | null> {
+  const embedded = document.getElementById('radar-data')
+  if (embedded) return parsePayload(embedded.textContent)
+  try {
+    const response = await fetch(`/radar/api/board${window.location.search}`, {
+      headers: { Accept: 'application/json' }, credentials: 'same-origin',
+    })
+    if (!response.ok || response.redirected) return null
+    return parsePayload(await response.text())
+  } catch {
+    return null
+  }
+}

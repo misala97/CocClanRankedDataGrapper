@@ -1,0 +1,28 @@
+<!doctype html>
+<!--
+  The radar board under the Vite dev server, for hot reload and impeccable
+  live mode. Development only: production serves templates/radar/board.html
+  from Flask with the first board embedded; this shell has no Jinja, so the
+  island fetches its opening board from /radar/api/board (see embedded.ts),
+  proxied to Flask on :5001 by vite.radar.dev.config.ts. Sign in there first.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radar (dev)</title>
+  <meta name="theme-color" content="#FBFBFC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111017" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/svg+xml" href="/static/radar/favicon.svg">
+  <link rel="preload" href="/static/radar/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/radar/inter.css">
+  <link rel="stylesheet" href="/static/radar/radar.css">
+</head>
+<body>
+<a class="skip-link" href="#radar-rows">Skip to the tickers</a>
+<div id="radar-main" tabindex="-1">
+  <div id="radar-root"></div>
+</div>
+<script type="module" src="/static/radar/src/entries/board.tsx"></script>
+</body>
+</html>

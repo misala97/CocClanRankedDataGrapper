@@ -15,6 +15,13 @@
       "cwd": "personal_apps",
       "port": 5001,
       "autoPort": true
+    },
+    {
+      "name": "radar_vite",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "-c", "vite.radar.dev.config.ts"],
+      "cwd": "personal_apps",
+      "port": 5174
     }
   ]
 }
