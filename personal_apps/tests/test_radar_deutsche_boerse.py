@@ -246,7 +246,7 @@ def test_files_after_lists_ordered_unseen_minute_files():
     assert all(not f.is_daily for f in files)
 
 
-def test_files_after_without_cursor_returns_everything_in_order():
+def test_files_after_without_cursor_returns_recent_files_in_order():
     class FakeHttp:
         def list_index(self, mic, channel):
             return {'CurrentFiles': [
@@ -258,6 +258,34 @@ def test_files_after_without_cursor_returns_everything_in_order():
         'XGAT', 'posttrade', None)
     assert [f.source_ts for f in files] == [
         dt.datetime(2026, 9, 1, 8, 33), dt.datetime(2026, 9, 1, 8, 34)]
+
+
+def test_a_cold_start_skips_the_listed_backlog():
+    """Production 2026-09-01: the index listed almost two days of files,
+    the oldest already deleted upstream, and a first-ever cursor started
+    at the very back. A cold start must begin near the head of the feed."""
+    class FakeHttp:
+        def list_index(self, mic, channel):
+            return {'CurrentFiles': [
+                'DGAT-posttrade-2026-08-30T23_00.json.gz',
+                'DGAT-posttrade-2026-09-01T08_10.json.gz',
+                'DGAT-posttrade-2026-09-01T08_25.json.gz',
+                'DGAT-posttrade-2026-09-01T08_34.json.gz',
+            ]}
+
+    provider = dbag.DeutscheBoerseProvider(http=FakeHttp())
+    files = provider.files_after('XGAT', 'posttrade', None)
+    assert [f.remote_id for f in files] == [
+        'DGAT-posttrade-2026-09-01T08_25.json.gz',
+        'DGAT-posttrade-2026-09-01T08_34.json.gz',
+    ]
+
+    # An existing cursor is downtime recovery: the window must NOT apply.
+    cursor = type('Cursor', (), {
+        'remote_id': 'DGAT-posttrade-2026-08-30T22_59.json.gz',
+        'source_ts': dt.datetime(2026, 8, 30, 22, 59)})()
+    recovered = provider.files_after('XGAT', 'posttrade', cursor)
+    assert len(recovered) == 4
 
 
 def test_download_follows_exactly_one_redirect_to_the_observed_bucket(

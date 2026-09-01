@@ -44,6 +44,9 @@ ALLOWED_REDIRECT_PREFIX = (
 # MIC <-> file-service source prefix, from the captured index pages.
 SOURCE_BY_MIC = {'XGAT': 'DGAT', 'XETR': 'DETR'}
 
+# First-ever cursor: only this much of the listed backlog is consumed.
+COLD_START_WINDOW = dt.timedelta(minutes=15)
+
 # Sub-venue execution MICs observed per channel MIC (R7).
 OBSERVED_VENUE_MICS = {
     'XGAT': frozenset({'XGAT', 'XGRM'}),
@@ -186,36 +189,38 @@ class DeutscheBoerseHttp:
         immediately -- but manually: exactly one hop, only from the index
         host, only to the observed bucket prefix (R2).
         """
+        # The reason leads every message: the cycle row truncates to 48
+        # characters, and a filename-first message once left nothing but
+        # 'download <name>:' in the stored diagnostics.
         try:
             first = self._session.get(file.url, timeout=self._timeout,
                                       allow_redirects=False)
         except requests.RequestException as exc:
-            raise PriceUnavailable(f'download {file.remote_id}: {exc}') from exc
+            raise PriceUnavailable(f'{exc} ({file.remote_id})') from exc
 
         if first.status_code in (301, 302, 303, 307, 308):
             location = first.headers.get('Location', '')
             if not location.startswith(ALLOWED_REDIRECT_PREFIX):
                 raise PriceUnavailable(
-                    f'download {file.remote_id}: redirect outside the '
-                    f'observed bucket')
+                    f'redirect outside the observed bucket '
+                    f'({file.remote_id})')
             try:
                 final = self._session.get(location, timeout=self._timeout,
                                           allow_redirects=False)
                 final.raise_for_status()
             except requests.RequestException as exc:
-                raise PriceUnavailable(
-                    f'download {file.remote_id}: {exc}') from exc
+                raise PriceUnavailable(f'{exc} ({file.remote_id})') from exc
         elif first.status_code == 200:
             final = first
         else:
             raise PriceUnavailable(
-                f'download {file.remote_id}: HTTP {first.status_code}')
+                f'HTTP {first.status_code} ({file.remote_id})')
 
         body = final.content
         if len(body) > max_compressed:
             raise PriceUnavailable(
-                f'download {file.remote_id}: compressed size {len(body)} '
-                f'exceeds {max_compressed}')
+                f'compressed size {len(body)} exceeds {max_compressed} '
+                f'({file.remote_id})')
         return body
 
 
@@ -347,7 +352,16 @@ class DeutscheBoerseProvider:
                 mic=mic, channel=channel, remote_id=name, source_ts=stamp,
                 url=f'{INDEX_BASE}/api/download/{name}', is_daily=False))
         # Filename source time is the order; HTML/JSON listing order is not.
-        return sorted(files, key=lambda file: file.source_ts)
+        files.sort(key=lambda file: file.source_ts)
+        if cursor is None and files:
+            # Cold start: the index lists roughly a day of files, and the
+            # oldest ones are already deleted upstream. A first-ever cursor
+            # begins near the head of the feed; catch-up from the cursor is
+            # for daemon downtime, and day-scale history has its own path
+            # (the R11 daily files).
+            cutoff = files[-1].source_ts - COLD_START_WINDOW
+            files = [file for file in files if file.source_ts >= cutoff]
+        return files
 
     def download(self, file, **limits):
         return self._http.download(file, **limits)
