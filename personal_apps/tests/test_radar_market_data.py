@@ -367,6 +367,27 @@ def test_shadow_mode_never_writes_live_rows(ctx):
 
 # --- backfill CLI ------------------------------------------------------------
 
+def test_de_backfill_discovers_an_activated_xetra_proxy(ctx):
+    from features.radar import instruments
+    from scripts import backfill_radar_market_history as cli
+    ticker = f'{PREFIX}PX'
+    decision = instruments.MappingDecision(
+        ticker=ticker, status='mapped', reason=None, mic='XGAT',
+        symbol='ZZTG', isin='DE000ZZTST01', currency='EUR',
+        mapping_source='openfigi', history_proxy_mic='XETR',
+        history_proxy_symbol='ZZXE',
+        history_proxy_isin='DE000ZZTST01',
+        history_proxy_currency='EUR')
+    generation = instruments.persist_generation([decision], NOW)
+    instruments.activate_generation(generation.id, NOW)
+
+    targets = cli._instrument_targets('de', NOW)
+
+    target = next(row for row in targets if row.ticker == ticker)
+    assert (target.mic, target.provider_symbol, target.is_primary,
+            target.isin) == ('XETR', 'ZZXE', False, 'DE000ZZTST01')
+
+
 def test_us_universe_backfill_refuses_under_legacy(ctx, monkeypatch, capsys):
     from scripts import backfill_radar_market_history as cli
     monkeypatch.delenv('RADAR_US_CLOSE_SOURCE', raising=False)

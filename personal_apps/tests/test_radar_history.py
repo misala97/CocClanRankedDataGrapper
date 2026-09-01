@@ -7,6 +7,7 @@ weekend never gets to the ticker that appeared an hour ago.
 """
 import datetime as dt
 import decimal
+import hashlib
 
 import pytest
 
@@ -23,9 +24,14 @@ PREFIX = 'HS'
 @pytest.fixture()
 def clean():
     def wipe():
+        from models import RadarInstrument, RadarMappingGeneration
         RadarDailyClose.query.filter(
             RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
                 synchronize_session=False)
+        RadarInstrument.query.filter_by(ticker=f'{PREFIX}SEAM').delete(
+            synchronize_session=False)
+        RadarMappingGeneration.query.filter_by(
+            source='test-history-proxy').delete(synchronize_session=False)
         db.session.commit()
 
     with flask_app.app_context():
@@ -329,22 +335,29 @@ def test_shadow_and_live_write_lanes_do_not_collide(clean):
 
 
 def test_series_for_composes_one_xetra_proxy_seam(clean):
-    from models import RadarInstrument
+    from models import RadarInstrument, RadarMappingGeneration
     ticker = f'{PREFIX}SEAM'
-    RadarInstrument.query.filter_by(ticker=ticker).delete(
-        synchronize_session=False)
+    payload = '{"decisions":[]}'
+    generation = RadarMappingGeneration(
+        market='de', status='shadow', source='test-history-proxy',
+        payload_sha256=hashlib.sha256(payload.encode()).hexdigest(),
+        payload_json=payload, summary_json='{}', created_at=NOW)
+    db.session.add(generation)
+    db.session.flush()
     db.session.add_all([
         RadarInstrument(ticker=ticker, market='de', venue='Tradegate BSX',
                         mic='XGAT', provider_symbol=ticker + 'G',
                         currency='EUR', isin='DE000ZZTST05',
                         is_primary=True, mapping_status='mapped',
-                        mapped_at=NOW),
+                        mapping_generation_id=generation.id, mapped_at=NOW),
         RadarInstrument(ticker=ticker, market='de', venue='Xetra',
                         mic='XETR', provider_symbol=ticker + 'X',
                         currency='EUR', isin='DE000ZZTST05',
                         is_primary=False, mapping_status='mapped',
-                        mapped_at=NOW),
+                        mapping_generation_id=generation.id, mapped_at=NOW),
     ])
+    rows = RadarInstrument.query.filter_by(ticker=ticker, market='de').all()
+    assert {row.mapping_generation_id for row in rows} == {generation.id}
     for offset in (5, 4, 3, 2, 1):
         add_close(ticker, DAY - dt.timedelta(days=offset), '10.00',
                   mic='XETR', source='yahoo_chart', price_basis='close')
