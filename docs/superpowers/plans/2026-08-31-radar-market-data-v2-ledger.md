@@ -210,10 +210,23 @@ binding Codex amendment-review corrections).
   frontend **403 general + 175 Radar = 578 passed**; TypeScript and both
   production Vite builds passed.
 
-- Status: implemented and locally verified, **not deployed**. The current
-  production generation predates proxy fields and is not changed by deploying
-  code alone. Operator sequence: deploy; explicitly build a new shadow mapping
-  generation; review its exact ID/hash/counts; activate that reviewed ID;
-  verify XGAT/XETR rows share generation and ISIN; then run bounded German
-  backfill batches and verify representative 1W/1M/1Y charts. No production
-  mutation was performed by this fix branch.
+- Status: **deployed and active**. `dev_personal` and `main` were pushed at
+  `c8a24c1`; `/root/update_coc.sh` completed migrations, dependency checks,
+  frontend builds, and service restarts successfully.
+- Fresh production generation 3 was hash-verified and audited before
+  activation: full SHA
+  `9dc5b062938f07a7fd609a83e2e3385e5db5ce4db39c6bdb363922f7d018f7d9`;
+  12,599 decisions; 2,517 mapped; 2,504 XGAT primaries; 13 XETR primaries;
+  712 XETR proxies; zero invalid proxies and duplicate identities. Activation
+  committed 5,746 changes. Generation 4 (`legacy`, `8b879217f856…`) is the
+  exact pre-activation rollback snapshot; generation 1 is retired.
+- Post-activation persistence audit: 2,517 mapped primaries, 712 mapped
+  non-primary XETR proxies, zero mapped XETR rows on another generation, and
+  zero primary/proxy ISIN mismatches. Live collection remained accepted
+  (latest observed 10/10 files, 121 selected).
+- Full German backfill: `attempted=725 stored=724 last_key=ZTS:XETR`.
+  The only missing target is `HIG` / official Xetra mnemonic `HFF`; Yahoo
+  returns HTTP 404 for `HFF.DE`, so the exact-identity adapter correctly
+  refuses it. Production now holds 150,633 XETR Yahoo rows across 724 tickers
+  (2024-07-10 through 2026-09-01). AAPL, NVDA, and TSLA each compose 544
+  points with the XETR history proxy enabled.

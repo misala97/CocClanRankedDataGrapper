@@ -21,7 +21,7 @@ before changing code. Verify prose against Git and fresh tests; evidence wins.
 
 ## Outcome
 
-The fix is implemented and verified locally, but is **not deployed**.
+The fix is implemented, verified, deployed, activated, and backfilled.
 
 - An XGAT primary may now carry one separately audited XETR history proxy only
   when both official reference rows are complete, supported, EUR, and have the
@@ -35,50 +35,37 @@ The fix is implemented and verified locally, but is **not deployed**.
   first native XGAT close.
 - No schema migration or dependency change is required.
 
-## Production state (operator-observed, not locally verified)
+## Production state — verified 2026-09-01
 
-At 2026-09-01 before this fix:
+- `main` deployed at `c8a24c1` through `/root/update_coc.sh`; migrations,
+  dependencies, frontend builds, and service restarts succeeded.
+- Generation 3 is active OpenFIGI with full hash
+  `9dc5b062938f07a7fd609a83e2e3385e5db5ce4db39c6bdb363922f7d018f7d9`.
+- Generation audit: 12,599 decisions; 2,517 mapped; 10,082 unavailable;
+  2,504 XGAT primaries; 13 XETR primaries; 712 XETR proxies; zero invalid
+  proxies and zero duplicate identities.
+- Persisted authority: 2,517 mapped primaries and 712 mapped non-primary XETR
+  proxies on generation 3; zero mapped XETR rows on another generation and
+  zero primary/proxy ISIN mismatches.
+- Generation 1 is retired. Generation 4 (`legacy`, hash prefix `8b879217f856`)
+  is the exact pre-activation rollback snapshot; generation 2 remains an older
+  legacy shadow.
+- German backfill attempted 725 mapped XETR targets and stored 724. The sole
+  refusal is `HIG` / `HFF.DE`: Yahoo returns HTTP 404, so exact-identity policy
+  correctly leaves it absent instead of substituting an alias.
+- Stored XETR history: 724 tickers, 150,633 rows, earliest 2024-07-10, latest
+  2026-09-01. AAPL, NVDA, and TSLA each compose 544 points with
+  `history_proxy=True`.
+- `personal_apps_web` and `radar_ingest` are active. Post-activation German
+  cycles continue `mode=active status=accepted` (latest observed 10/10 files,
+  121 selected).
 
-- generation 1: `active`, `openfigi`, hash prefix `7434cf387044`;
-- generation 2: `shadow`, `legacy`, hash prefix `2d9e60341d5f`;
-- 2,517 mapped German primaries;
-- German live collection: `mode=active status=accepted`;
-- German backfill found only 13 pre-existing XETR rows and stored all 13,
-  ending at `VSEC:XETR`.
+## Immediate next action
 
-Generation 1 predates proxy-aware payloads. Deploying this branch does not
-retrofit it; a fresh generation must be built and activated.
-
-## Immediate operator rollout
-
-1. Integrate this branch, push, and deploy through the normal release path.
-2. From the deployed `personal_apps` directory, explicitly build a fresh
-   shadow generation:
-
-   ```bash
-   /root/coc-stats/venv/bin/python run_radar_ingest.py --refresh-mappings
-   ```
-
-3. Inspect the new generation ID, source, full hash, decision counts, and proxy
-   count. Do not activate an ID selected only by “latest” without reviewing it.
-4. Activate that reviewed generation with `instruments.activate_generation(...)`.
-   Confirm mapped XGAT primaries and mapped non-primary XETR proxies share the
-   new `mapping_generation_id` and exact ISIN.
-5. Dry-run, then backfill in bounded batches:
-
-   ```bash
-   /root/coc-stats/venv/bin/python -m scripts.backfill_radar_market_history --market de --dry-run
-   /root/coc-stats/venv/bin/python -m scripts.backfill_radar_market_history --market de --apply --limit 25
-   ```
-
-   Continue with `--resume-after TICKER:XETR` from each batch's final key until
-   the dry-run reports zero remaining targets.
-6. Verify representative XGAT-primary tickers in 1W/1M/1Y views and confirm
-   logs keep reporting accepted German active cycles.
-
-Stop and retain the current active generation if the new build is incomplete,
-the audited counts/hash are unexpected, activation refuses, or the proxy ISIN
-does not exactly equal the primary ISIN.
+No rollout action remains. Visually confirm representative 1W/1M/1Y charts in
+the UI and monitor ordinary accepted-cycle logs. Treat the `HIG` gap as an
+explicit provider absence unless a future exact-identity Xetra history source
+is added.
 
 ## Verification
 
@@ -97,6 +84,5 @@ does not exactly equal the primary ISIN.
 
 ## Scope boundary
 
-Do not push, deploy, refresh production mappings, activate a production
-generation, or run production backfill without Michi's operator action. Radar
-market-data v2 Task 12 remains deliberately delayed for the rollback window.
+Radar market-data v2 Task 12 remains deliberately delayed for the rollback
+window. Do not contract the schema or delete rollback generations yet.
