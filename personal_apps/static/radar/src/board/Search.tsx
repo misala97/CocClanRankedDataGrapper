@@ -28,6 +28,7 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const input = useRef<HTMLInputElement>(null)
+  const root = useRef<HTMLDivElement>(null)
   // The request that may still publish. A slow answer to an old query must
   // not replace the list the reader is looking at.
   const latest = useRef(0)
@@ -82,7 +83,7 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
     if (event.key === 'ArrowDown' && open) {
       event.preventDefault(); setActive((i) => Math.min(i + 1, matches.length - 1))
     } else if (event.key === 'ArrowUp' && open) {
-      event.preventDefault(); setActive((i) => Math.max(i - 1, 0))
+      event.preventDefault(); setActive((i) => matches.length ? Math.max(i - 1, 0) : -1)
     } else if (event.key === 'Enter' && open && active >= 0 && matches[active]) {
       event.preventDefault(); pick(matches[active]!.ticker)
     } else if (event.key === 'Escape') {
@@ -98,9 +99,16 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
   const optionId = (ticker: string) => `radar-search-${ticker}`
 
   return (
-    <div className="search">
+    <div className="search" ref={root}
+         onBlur={(event) => {
+           // Focus moving within the search (input <-> a match's buttons) keeps
+           // the list; focus leaving it -- a row, the market switch, Tab out --
+           // closes it. The buttons' mousedown is prevented, so a click never
+           // blurs the input in the first place.
+           if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false)
+         }}>
       <input ref={input} type="search" role="combobox" aria-label="Find a stock"
-             aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
+             aria-expanded={open} aria-controls={open ? listId : undefined} aria-autocomplete="list"
              aria-activedescendant={open && active >= 0 && matches[active]
                ? optionId(matches[active]!.ticker) : undefined}
              placeholder="Find a stock" value={q} spellCheck={false}
@@ -109,10 +117,15 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
              onFocus={() => { if (matches.length || q.trim()) setOpen(Boolean(q.trim())) }} />
       {open && (
         <ul id={listId} role="listbox" className="matches">
-          {matches.map((match, index) => (
+          {matches.map((match, index) => {
+            const isWatching = watching.includes(match.ticker)
+            const label = [match.ticker, match.name,
+              [exchangeLabel(match.exchange), segmentLabel(match.segment)].filter(Boolean).join(' · '),
+              status(match)].filter(Boolean).join(', ')
+            return (
             <li key={match.ticker} id={optionId(match.ticker)} role="option"
                 aria-selected={index === active}
-                aria-label={`${match.ticker} ${match.name ?? ''}`}
+                aria-label={label}
                 className={index === active ? 'active' : undefined}
                 onMouseEnter={() => setActive(index)}>
               {/* mousedown is prevented so the input keeps focus and the
@@ -130,16 +143,17 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
               </button>
               {onToggleWatch && (
                 <button type="button"
-                        className={`star${watching.includes(match.ticker) ? ' on' : ''}`}
-                        aria-pressed={watching.includes(match.ticker)}
-                        aria-label={`${watching.includes(match.ticker) ? 'Stop watching' : 'Watch'} ${match.ticker}`}
+                        className={`star${isWatching ? ' on' : ''}`}
+                        aria-pressed={isWatching}
+                        aria-label={`${isWatching ? 'Stop watching' : 'Watch'} ${match.ticker}`}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => onToggleWatch(match.ticker)}>
-                  {watching.includes(match.ticker) ? '★' : '☆'}
+                  {isWatching ? '★' : '☆'}
                 </button>
               )}
             </li>
-          ))}
+            )
+          })}
           {matches.length === 0 && (
             <li className="none" role="option" aria-selected="false">Nothing matches</li>
           )}

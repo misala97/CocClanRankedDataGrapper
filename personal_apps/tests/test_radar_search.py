@@ -15,6 +15,7 @@ TODAY = dt.date(2026, 9, 2)
 SEEDED = [
     ('ZQA',   'Zqa Widgets Inc',        'Q', '50000000000', None),
     ('ZQAB',  'Zqab Holdings',          'N', '900000000', None),
+    ('ZQAA',  'Zqaa Tiny Co',           'Q', '1000000', None),
     ('ZQC',   'Other Name Corp',        'S', '4000000', None),
     ('ZQGONE','Zqa Delisted Co',        'Q', '1000000', dt.datetime(2026, 1, 1)),
     ('ZQZ',   'Something With zqa in',  'P', None, None),
@@ -45,9 +46,19 @@ def seeded():
 def test_symbol_exact_then_prefix_then_name(seeded):
     with flask_app.app_context():
         found = [m.ticker for m in search.search_universe('zqa', TODAY)]
-    # ZQA exact, ZQAB prefix, then the two whose NAME contains "zqa";
-    # ZQGONE is delisted and never appears.
-    assert found == ['ZQA', 'ZQAB', 'ZQZ']
+    # ZQA exact; then the prefix group by cap: ZQAB (900M) before ZQAA (1M);
+    # then the name group. ZQGONE is delisted and never appears.
+    assert found == ['ZQA', 'ZQAB', 'ZQAA', 'ZQZ']
+
+
+def test_inside_a_group_the_bigger_company_comes_first(seeded):
+    """Typing `nv` must surface NVDA, not the eight alphabetically-first
+    NV* symbols: inside each group, market cap decides, then the symbol."""
+    with flask_app.app_context():
+        found = [m.ticker for m in search.search_universe('zqa', TODAY)]
+    # ZQA exact; then the prefix group by cap: ZQAB (900M) before ZQAA (1M);
+    # then the name group.
+    assert found == ['ZQA', 'ZQAB', 'ZQAA', 'ZQZ']
 
 
 def test_name_search_is_case_insensitive_and_carries_identity(seeded):

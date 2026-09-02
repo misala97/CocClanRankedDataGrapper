@@ -26,7 +26,8 @@ class Match:
 
 def search_universe(q, today, limit=LIMIT):
     """Matches for `q`: exact symbol, then symbols starting with it, then
-    names containing it -- each group alphabetical, `limit` in all.
+    names containing it -- each group largest company first (unknown caps
+    last), then symbol, `limit` in all.
 
     Symbols are utf8mb4_bin, so the symbol side compares the uppercased
     query; names compare case-insensitively. Delisted symbols never match:
@@ -45,7 +46,10 @@ def search_universe(q, today, limit=LIMIT):
             .filter(TickerUniverse.delisted_at.is_(None))
             .filter(sa.or_(TickerUniverse.symbol.like(f'{upper}%'),
                            TickerUniverse.name.ilike(contains)))
-            .order_by(rank, TickerUniverse.symbol)
+            .order_by(rank,
+                      sa.case((TickerUniverse.market_cap.is_(None), 1), else_=0),
+                      TickerUniverse.market_cap.desc(),
+                      TickerUniverse.symbol)
             .limit(limit).all())
     return [Match(
         ticker=row.symbol,

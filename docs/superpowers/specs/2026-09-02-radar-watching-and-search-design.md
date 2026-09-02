@@ -52,7 +52,9 @@ both markets.
 
 - `q` trimmed; empty → `{"matches": []}`; capped at 40 characters.
 - Ranking: symbol equal to `q` first, then symbol starting with `q`, then
-  company name containing `q` (case-insensitive), each group alphabetical.
+  company name containing `q` (case-insensitive), each group largest company
+  first (unknown caps last), then symbol -- decided from the live result on
+  2026-09-02, when `nv` showed eight NV* symbols and no NVDA.
 - At most **8** matches.
 - Each match: `ticker`, `name`, `exchange` (the letter code; the client
   labels it as the panel does), `segment` (from `universe.segment_for`,

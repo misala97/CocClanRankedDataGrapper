@@ -54,6 +54,23 @@ describe('finding a stock', () => {
 
     expect(screen.getByRole('option', { name: /NVDA/ })).toHaveTextContent('on the board · +0.50')
     expect(screen.getByRole('option', { name: /NVAX/ })).toHaveTextContent('watching')
+    expect(screen.getByRole('option', {
+      name: 'NVDA, NVIDIA Corp, Nasdaq Global Select · Large, on the board · +0.50',
+    })).toBeInTheDocument()
+  })
+
+  it('closes when focus leaves the search, and stays open while it moves inside', async () => {
+    stubSearch()
+    const { input } = search()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+    await user.type(input, 'nv')
+    await screen.findByRole('listbox')
+    screen.getByRole('button', { name: 'Watch NVDA' }).focus()
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+    fireEvent.blur(input, { relatedTarget: document.body })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
   })
 
   it('walks the list with the arrows and opens the panel with Enter', async () => {
