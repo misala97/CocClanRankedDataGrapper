@@ -437,6 +437,52 @@ body {
 }
 .brand .spend b { color: var(--ink-2); font-weight: 600; }
 .brand .spend + .age { margin-left: var(--s4); }
+
+/* Find a stock. The box sits in the masthead beside the market; the list
+   drops over the controls and arrives like the folded filters do. */
+.brand .search { position: relative; margin-left: var(--s5); }
+.brand .search input {
+  font: inherit; font-size: var(--t-xs); width: 190px;
+  padding: 3px 10px; border: 1px solid var(--rule); border-radius: var(--r-pill);
+  background: var(--raise); color: var(--ink);
+  transition: border-color var(--fast) var(--ease);
+}
+.brand .search input::placeholder { color: var(--muted); }
+.brand .search input:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+.brand .search input::-webkit-search-cancel-button { display: none; }
+.search .matches {
+  position: absolute; top: calc(100% + 6px); left: 0; width: 380px; max-width: calc(100vw - 2 * var(--s6));
+  z-index: 100; margin: 0; padding: 4px 0; list-style: none;
+  background: var(--raise); border: 1px solid var(--rule); border-radius: var(--r);
+  animation: settle 160ms var(--ease) backwards;
+}
+.search .matches li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.search .matches li.active { background: var(--mark-wash); }
+.search .matches .pick {
+  font: inherit; font-size: var(--t-xs); text-align: left;
+  display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; column-gap: var(--s3);
+  align-items: baseline; width: 100%; padding: 6px 10px; border: 0; background: none;
+  color: var(--ink-2); cursor: pointer;
+}
+.search .matches .pick b { color: var(--ink); font-weight: 700; }
+.search .matches .pick .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search .matches .pick .meta { grid-column: 2; font-size: var(--t-ax); color: var(--muted); }
+.search .matches .pick .st { grid-column: 3; grid-row: 1 / 3; font-size: var(--t-ax); color: var(--muted); white-space: nowrap; }
+.search .matches .star {
+  font: inherit; font-size: 13px; line-height: 1; padding: 6px 12px; border: 0; background: none;
+  color: var(--dim); cursor: pointer; transition: color var(--fast) var(--ease);
+}
+.search .matches .star:hover, .search .matches .star.on { color: var(--ink); }
+.search .matches .star:focus-visible { outline: 2px solid var(--mark); outline-offset: -2px; }
+.search .matches .none { padding: 8px 10px; font-size: var(--t-xs); color: var(--muted); }
+@media (max-width: 900px) {
+  /* Its own line under the wordmark; the masthead has no width to spare. */
+  .brand { flex-wrap: wrap; }
+  .brand .search { flex-basis: 100%; order: 9; margin: var(--s2) 0 0; }
+  .brand .search input { width: 100%; }
+  .search .matches { width: 100%; }
+}
+
 .brand .age b { color: var(--warn); font-weight: 600; }
 .brand .age button {
   font: inherit; font-size: var(--t-xs);
@@ -1433,7 +1479,7 @@ body {
    press, which is the shape of a real button coming back up. */
 .t, .spans button, .oops button, .post .more, .summary button,
 .brand .age button, .detail .failed .acts button, .broken button, .line .star,
-.ident .watch {
+.ident .watch, .search .matches .star, .search .matches .pick {
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
               border-color var(--fast) var(--ease),
               transform var(--fast) var(--ease);
@@ -1444,7 +1490,7 @@ body {
 .t:not([aria-disabled="true"]):active, .spans button:active, .summary button:active,
 .oops button:active, .post .more:active, .brand .age button:active,
 .detail .failed .acts button:active, .broken button:active, .line .star:active,
-.ident .watch:active {
+.ident .watch:active, .search .matches .star:active, .search .matches .pick:active {
   transform: scale(0.96);
   transition-duration: var(--tap);
 }

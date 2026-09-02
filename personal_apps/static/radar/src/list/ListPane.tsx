@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from 'react'
 
 import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
+import { Search } from '../board/Search'
 import { formatMarketTime, humanAge, plural, stampTime } from '../format'
 import { Widen } from '../Widen'
 import { SpendMark } from './Spend'
@@ -391,6 +392,8 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         <div className="brand">
           <h1>Radar</h1>
           <MarketSwitch selection={selection} onChange={onChange} />
+          <Search rows={payload.rows} watching={watching}
+                  onPick={onSelect} onToggleWatch={onToggleWatch} />
           {/* Ops at a glance, in the corner the eye already checks for
               freshness: today's tone spend, then the stamp. */}
           <SpendMark payload={payload} />
