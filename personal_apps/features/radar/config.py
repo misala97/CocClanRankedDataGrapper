@@ -864,6 +864,21 @@ def prefer_ipv4_if_configured():
 MIN_MENTIONS = 5
 MIN_DISTINCT_AUTHORS = 3
 
+# ---- the judge gate ---------------------------------------------------------
+# What the model pass reads. Sized on the VPS on 2026-09-02: 1715 tickers were
+# judged that day, 96 ever cleared the floor in a 24h window; large + fund
+# took 61.5% of the spend, tickers that never reach the board 31.3%, both
+# gates together 80.9%. A watched ticker is always read (the reader's mark
+# says so); everything else must be outside the skipped segments AND able
+# to reach the board -- MIN_MENTIONS mentions from MIN_DISTINCT_AUTHORS
+# voices inside JUDGE_FLOOR_HOURS. The text-ratio gate is left out so the
+# gate over-admits, never under-admits. 24h because the board's widest
+# window is 24h. Not part of source_config_version: the gate changes what is
+# judged, not what a mention means.
+JUDGE_GATE_ENABLED = True            # False = judge everything, as before
+JUDGE_SKIP_SEGMENTS = ('large', 'fund')
+JUDGE_FLOOR_HOURS = 24
+
 # Distinct CHANNELS a broadcast source needs, against MIN_DISTINCT_AUTHORS for
 # a forum. Two rather than three because there are orders of magnitude fewer
 # channels than authors, and a symbol reaching two independent channels is
