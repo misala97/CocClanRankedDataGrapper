@@ -648,6 +648,43 @@ def test_price_series_shares_the_chatter_grid_and_keeps_gaps():
     assert all(slot is None for slot in series[3:])
 
 
+def test_row_prices_sit_in_the_hour_they_printed_not_the_hour_fetched(clean):
+    """The stale-repeat disease, on the rows: a 05:00 print re-fetched every
+    five minutes for eight hours must not flat-line through those hours.
+    Slots follow the provider's print time (quote_ts), the way the panel's
+    chart already does; equal (print, price) observations are one print;
+    a print fetched a few minutes into the next hour still belongs to its
+    own hour. Seen on the live board 2026-09-02: every row's price line
+    was steps and flats."""
+    import types
+    ticker = f'{PREFIX}Q'
+    close = NOW - dt.timedelta(hours=10)                          # 05:00 print
+    for minutes in range(0, 8 * 60, 5):                           # re-fetched until 13:25
+        db.session.add(RadarQuote(ticker=ticker, quote_ts=close,
+                                  fetched_at=close + dt.timedelta(minutes=30 + minutes),
+                                  price=decimal.Decimal('2.27'),
+                                  prev_close=decimal.Decimal('2.27'), volume=1000))
+    fresh = NOW - dt.timedelta(hours=1, minutes=1)                # 13:59 print
+    db.session.add(RadarQuote(ticker=ticker, quote_ts=fresh,
+                              fetched_at=fresh + dt.timedelta(minutes=5),   # fetched 14:04
+                              price=decimal.Decimal('2.19'),
+                              prev_close=decimal.Decimal('2.27'), volume=1000))
+    db.session.commit()
+    row = types.SimpleNamespace(ticker=ticker,
+                                quote=types.SimpleNamespace(market='us', mic=None))
+    since = NOW - dt.timedelta(hours=board.SERIES_HOURS)
+    try:
+        prices = board._hourly_prices([row], since, NOW)
+
+        assert prices == {(ticker, board._hour_floor(close)): 2.27,
+                          (ticker, board._hour_floor(fresh)): 2.19}
+        series = board._price_series_for(ticker, prices, since, NOW)
+        assert sum(1 for slot in series if slot is not None) == 2
+    finally:
+        RadarQuote.query.filter_by(ticker=ticker).delete()
+        db.session.commit()
+
+
 def test_normal_line_obeys_the_ratio_guard(clean):
     """The dashed own-normal line and the "n x normal" wording must come to
     the same conclusion about whether a baseline is thick enough to draw --

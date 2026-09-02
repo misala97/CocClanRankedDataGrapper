@@ -231,6 +231,13 @@ def _hourly_prices(ranked, since, now):
 
     No carry-forward, same as the detail chart: an hour nobody priced is
     None, and the line breaks rather than flat-lining through it.
+
+    Slots follow the provider's PRINT time (quote_ts), never the fetch
+    receipt -- the panel chart's [A3] rule, ported here on 2026-09-02 after
+    every row's price line on the live board was steps and flats: a 20:00
+    close re-fetched every five minutes until 06:00 drew as ten hours of
+    flat line. Equal (print, price) observations are one print; rows with
+    no provider time carry no market statement and are left out.
     """
     if not ranked:
         return {}
@@ -239,18 +246,25 @@ def _hourly_prices(ranked, since, now):
         sa.and_(*_quote_matches(row.ticker, row.quote.market or 'us',
                                 row.quote.mic))
         for row in ranked])
-    rows = (db.session.query(RadarQuote.ticker, RadarQuote.fetched_at,
+    rows = (db.session.query(RadarQuote.ticker, RadarQuote.quote_ts,
                              RadarQuote.price)
             .filter(identity,
-                    RadarQuote.fetched_at >= since,
-                    RadarQuote.fetched_at < now)
-            .order_by(RadarQuote.fetched_at)
+                    RadarQuote.quote_ts.isnot(None),
+                    RadarQuote.quote_ts >= since,
+                    RadarQuote.quote_ts < now)
+            .order_by(RadarQuote.quote_ts, RadarQuote.fetched_at)
             .all())
 
     prices = {}
-    for ticker, fetched_at, price in rows:
-        # Ascending order, so the last write per hour is that hour's close.
-        prices[(ticker, _hour_floor(fetched_at))] = float(price)
+    seen = set()
+    for ticker, quote_ts, price in rows:
+        observation = (ticker, quote_ts, price)
+        if observation in seen:
+            continue
+        seen.add(observation)
+        # Ascending by print time, so the last print per hour is that
+        # hour's close.
+        prices[(ticker, _hour_floor(quote_ts))] = float(price)
     return prices
 
 
