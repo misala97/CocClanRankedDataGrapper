@@ -5,11 +5,12 @@ import threading
 
 from flask import jsonify, request
 
-from auth import login_required
+from auth import current_user, login_required
 
 from .. import board as board_mod
 from .. import detail as detail_mod
 from .. import detail_panel, llm_sentiment, market_data, phrasing, spend
+from .. import watch
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
 from ..market_calendars import session_bounds, session_state
 from ._blueprint import radar_bp
@@ -472,6 +473,27 @@ def board():
         return jsonify(build_payload(request.args))
     except BadQuery as exc:
         return jsonify({'error': str(exc)}), 400
+
+
+@radar_bp.route('/api/watch/<ticker>', methods=['PUT'])
+@login_required
+def watch_put(ticker):
+    """Mark a ticker for the caller. Idempotent; answers the whole list so
+    the client never merges."""
+    try:
+        return jsonify({'watching': watch.add(current_user().id, ticker)})
+    except watch.BadTicker:
+        return jsonify({'error': 'bad ticker'}), 400
+
+
+@radar_bp.route('/api/watch/<ticker>', methods=['DELETE'])
+@login_required
+def watch_delete(ticker):
+    """Unmark a ticker for the caller. Unmarking the unmarked is a 200."""
+    try:
+        return jsonify({'watching': watch.remove(current_user().id, ticker)})
+    except watch.BadTicker:
+        return jsonify({'error': 'bad ticker'}), 400
 
 
 def serialize_detail(d):

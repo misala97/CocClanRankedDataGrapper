@@ -18,6 +18,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Radar</title>
 
+  {# The per-session CSRF token the island sends as X-CSRF-Token on every
+     write (the watch endpoints). auth.py mints it; the radar blueprint's
+     before_request checks it. #}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+
   {# Both values are --bg for their theme, so the browser chrome does not frame
      a pale board in a dark bar (or the reverse). #}
   <meta name="theme-color" content="#FBFBFC" media="(prefers-color-scheme: light)">

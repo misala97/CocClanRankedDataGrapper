@@ -5,6 +5,9 @@
   from Flask with the first board embedded; this shell has no Jinja, so the
   island fetches its opening board from /radar/api/board (see embedded.ts),
   proxied to Flask on :5001 by vite.radar.dev.config.ts. Sign in there first.
+
+  No csrf-token meta here: the harness has no Jinja. Reads work; the watch
+  toggles answer 403 under the harness and that is expected.
 -->
 <html lang="en">
 <head>
