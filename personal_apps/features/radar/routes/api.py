@@ -10,6 +10,7 @@ from auth import current_user, login_required
 from .. import board as board_mod
 from .. import detail as detail_mod
 from .. import detail_panel, llm_sentiment, market_data, phrasing, spend
+from .. import search as search_mod
 from .. import watch
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
 from ..market_calendars import session_bounds, session_state
@@ -494,6 +495,19 @@ def watch_delete(ticker):
         return jsonify({'watching': watch.remove(current_user().id, ticker)})
     except watch.BadTicker:
         return jsonify({'error': 'bad ticker'}), 400
+
+
+@radar_bp.route('/api/search')
+@login_required
+def search():
+    """Symbol-or-name search over the universe, eight matches at most."""
+    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    watching = set(watch.tickers_for(current_user().id))
+    return jsonify({'matches': [
+        {'ticker': m.ticker, 'name': m.name, 'exchange': m.exchange,
+         'segment': m.segment, 'watching': m.ticker in watching}
+        for m in search_mod.search_universe(request.args.get('q', ''), now.date())
+    ]})
 
 
 def serialize_detail(d):
