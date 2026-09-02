@@ -1287,7 +1287,7 @@ whether it cleared the floor."
 - Create: `static/radar/src/csrf.ts`
 - Create: `static/radar/src/fixtures.ts` (the board/detail shapes tests share)
 - Modify: `static/radar/src/board/BoardPage.tsx`
-- Test: `static/radar/src/api.test.ts` (create), `static/radar/src/board/watching.test.tsx` (create)
+- Test: `static/radar/src/api.test.ts` (create)
 
 **Interfaces:**
 - Produces: `Row.eligible?: boolean`; `BoardPayload.watching?: string[]`, `BoardPayload.watch_rows?: Row[]`; `SearchMatch` type; `fetchSearch(q, signal?) -> Promise<SearchMatch[]>`; `setWatch(ticker, on) -> Promise<string[]>`; `csrfToken()`; `BoardPage` state `watching: string[]` and `toggleWatch(ticker)` passed down as `watching` + `onToggleWatch` props to `ListPane` and `DetailPane` (consumed in Tasks 7–9).
@@ -1344,77 +1344,10 @@ describe('watching', () => {
 })
 ```
 
-```tsx
-// static/radar/src/board/watching.test.tsx
-// The star's optimism: it flips at once, the server is told, the board is
-// refetched on success, and it reverts on failure.
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-import { BoardPage } from './BoardPage'
-import { detail, payload, row } from '../fixtures'
-
-function stubFetch({ watchFails = false, watching = ['BBB'] } = {}) {
-  const spy = vi.fn(async (url: string, init?: RequestInit) => {
-    if (url.includes('/api/watch/')) {
-      if (watchFails) return { ok: false, redirected: false, status: 500, json: async () => ({}) }
-      return { ok: true, redirected: false, status: 200, json: async () => ({ watching }) }
-    }
-    if (url.includes('/api/ticker/')) {
-      return { ok: true, redirected: false, status: 200,
-        json: async () => detail(url.split('/api/ticker/')[1]!.split('?')[0]!) }
-    }
-    return { ok: true, redirected: false, status: 200,
-      json: async () => payload({ watching, watch_rows: [row({ ticker: 'BBB' })] }) }
-  })
-  vi.stubGlobal('fetch', spy)
-  return spy
-}
-const calls = (part: string) => vi.mocked(fetch).mock.calls.filter((c) => String(c[0]).includes(part))
-
-beforeEach(() => { window.history.replaceState(null, '', '/radar/') })
-afterEach(() => vi.unstubAllGlobals())
-
-describe('marking a stock', () => {
-  it('flips the star at once, tells the server, then refetches the board', async () => {
-    stubFetch()
-    render(<BoardPage initial={payload()} />)
-    await screen.findByText(/AAA is being discussed/)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Watch BBB' }))
-
-    expect(screen.getByRole('button', { name: 'Stop watching BBB' })).toBeInTheDocument()
-    await waitFor(() => expect(calls('/api/watch/BBB')).toHaveLength(1))
-    await waitFor(() => expect(calls('/api/board')).toHaveLength(1))
-  })
-
-  it('reverts the star when the server refuses', async () => {
-    stubFetch({ watchFails: true })
-    render(<BoardPage initial={payload()} />)
-    await screen.findByText(/AAA is being discussed/)
-
-    await userEvent.click(screen.getByRole('button', { name: 'Watch BBB' }))
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Watch BBB' })).toBeInTheDocument())
-    expect(calls('/api/board')).toHaveLength(0)
-  })
-
-  it('opens on the watching list the server embedded', () => {
-    stubFetch()
-    render(<BoardPage initial={payload({ watching: ['AAA'] })} />)
-
-    expect(screen.getByRole('button', { name: 'Stop watching AAA' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Watch BBB' })).toBeInTheDocument()
-  })
-})
-```
-
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `npx vitest run -c vite.radar.config.ts static/radar/src/api.test.ts static/radar/src/board/watching.test.tsx`
-Expected: FAIL — `fetchSearch is not a function` / `Unable to find an accessible element with the role "button" and name "Watch BBB"`.
+Run: `npx vitest run -c vite.radar.config.ts static/radar/src/api.test.ts`
+Expected: FAIL — `fetchSearch is not a function`.
 
 - [ ] **Step 3: Types**
 
@@ -1649,17 +1582,17 @@ after `select` add:
 
 and pass both to the panes: `<ListPane ... watching={watching} onToggleWatch={toggleWatch} />` and `<DetailPane ... watching={watching.includes(selected ?? '')} onToggleWatch={selected ? () => void toggleWatch(selected) : undefined} />`.
 
-Until Tasks 7 and 8 land, `ListPane` and `DetailPane` do not accept these props; add them to both components' prop types now as optional (`watching?: string[]; onToggleWatch?: (ticker: string) => void` on ListPane, `watching?: boolean; onToggleWatch?: () => void` on DetailPane) without using them, so `tsc` stays green. `ListPane` must pass `watching`/`onToggleWatch` through to `TickerRow` for the watching test's buttons to exist — that is Task 7's job; the watching test stays RED until Task 7 completes. Run only `api.test.ts` green here.
+Until Tasks 7 and 8 land, `ListPane` and `DetailPane` do not accept these props; add them to both components' prop types now as optional (`watching?: string[]; onToggleWatch?: (ticker: string) => void` on ListPane, `watching?: boolean; onToggleWatch?: () => void` on DetailPane) without using them, so `tsc` stays green. `ListPane` passing `watching`/`onToggleWatch` through to `TickerRow` is Task 7's job, and Task 7 carries the BoardPage-level test of the optimistic toggle; this task's own gate is `api.test.ts` plus a clean typecheck.
 
 - [ ] **Step 7: Run the tests**
 
 Run: `npx vitest run -c vite.radar.config.ts static/radar/src/api.test.ts && npx tsc --noEmit`
-Expected: `2 passed`; tsc clean. (`watching.test.tsx` goes green in Task 7.)
+Expected: `2 passed`; tsc clean.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add static/radar/src/types.ts static/radar/src/api.ts static/radar/src/csrf.ts static/radar/src/fixtures.ts static/radar/src/api.test.ts static/radar/src/board/BoardPage.tsx static/radar/src/board/watching.test.tsx static/radar/src/list/ListPane.tsx static/radar/src/detail/DetailPane.tsx
+git add static/radar/src/types.ts static/radar/src/api.ts static/radar/src/csrf.ts static/radar/src/fixtures.ts static/radar/src/api.test.ts static/radar/src/board/BoardPage.tsx static/radar/src/list/ListPane.tsx static/radar/src/detail/DetailPane.tsx
 git commit -m "feat(radar): watching state and the search and watch API calls
 
 Optimistic toggle in BoardPage; setWatch carries the CSRF token; the
@@ -1674,7 +1607,7 @@ payload's watching list is the source of truth after every refetch."
 - Modify: `static/radar/src/list/ListPane.tsx`
 - Modify: `static/radar/src/list/TickerRow.tsx`
 - Modify: `static/radar/radar.css`
-- Test: `static/radar/src/list/watchtier.test.tsx` (create); `static/radar/src/list/tiers.test.tsx`, `keys.test.tsx`, `narrow.test.tsx`, `marks.test.tsx`, `TickerRow.test.tsx` (unchanged, must stay green); `static/radar/src/board/watching.test.tsx` (goes green)
+- Test: `static/radar/src/list/watchtier.test.tsx` (create), `static/radar/src/board/watching.test.tsx` (create); `static/radar/src/list/tiers.test.tsx`, `keys.test.tsx`, `narrow.test.tsx`, `marks.test.tsx`, `TickerRow.test.tsx` (unchanged, must stay green)
 
 **Interfaces:**
 - Consumes: `watching`, `onToggleWatch` props (Task 6); `Row.eligible`, `payload.watch_rows`.
@@ -1773,9 +1706,78 @@ describe('the Watching tier', () => {
 })
 ```
 
+And the BoardPage-level test of the optimistic toggle, which needs the star buttons this task adds (`toggleWatch`, `setWatch` and the fixtures come from Task 6):
+
+```tsx
+// static/radar/src/board/watching.test.tsx
+// The star's optimism: it flips at once, the server is told, the board is
+// refetched on success, and it reverts on failure.
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { BoardPage } from './BoardPage'
+import { detail, payload, row } from '../fixtures'
+
+function stubFetch({ watchFails = false, watching = ['BBB'] } = {}) {
+  const spy = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/api/watch/')) {
+      if (watchFails) return { ok: false, redirected: false, status: 500, json: async () => ({}) }
+      return { ok: true, redirected: false, status: 200, json: async () => ({ watching }) }
+    }
+    if (url.includes('/api/ticker/')) {
+      return { ok: true, redirected: false, status: 200,
+        json: async () => detail(url.split('/api/ticker/')[1]!.split('?')[0]!) }
+    }
+    return { ok: true, redirected: false, status: 200,
+      json: async () => payload({ watching, watch_rows: [row({ ticker: 'BBB' })] }) }
+  })
+  vi.stubGlobal('fetch', spy)
+  return spy
+}
+const calls = (part: string) => vi.mocked(fetch).mock.calls.filter((c) => String(c[0]).includes(part))
+
+beforeEach(() => { window.history.replaceState(null, '', '/radar/') })
+afterEach(() => vi.unstubAllGlobals())
+
+describe('marking a stock', () => {
+  it('flips the star at once, tells the server, then refetches the board', async () => {
+    stubFetch()
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Watch BBB' }))
+
+    expect(screen.getByRole('button', { name: 'Stop watching BBB' })).toBeInTheDocument()
+    await waitFor(() => expect(calls('/api/watch/BBB')).toHaveLength(1))
+    await waitFor(() => expect(calls('/api/board')).toHaveLength(1))
+  })
+
+  it('reverts the star when the server refuses', async () => {
+    stubFetch({ watchFails: true })
+    render(<BoardPage initial={payload()} />)
+    await screen.findByText(/AAA is being discussed/)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Watch BBB' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Watch BBB' })).toBeInTheDocument())
+    expect(calls('/api/board')).toHaveLength(0)
+  })
+
+  it('opens on the watching list the server embedded', () => {
+    stubFetch()
+    render(<BoardPage initial={payload({ watching: ['AAA'] })} />)
+
+    expect(screen.getByRole('button', { name: 'Stop watching AAA' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Watch BBB' })).toBeInTheDocument()
+  })
+})
+```
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `npx vitest run -c vite.radar.config.ts static/radar/src/list/watchtier.test.tsx`
+Run: `npx vitest run -c vite.radar.config.ts static/radar/src/list/watchtier.test.tsx static/radar/src/board/watching.test.tsx`
 Expected: FAIL — no Watching tier, no star buttons.
 
 - [ ] **Step 3: `TickerRow` — star, quiet, `scoreText`**
@@ -1943,12 +1945,12 @@ Extend the press layer: add `.line .star` to the selector list of the `:active` 
 - [ ] **Step 6: Run the tests**
 
 Run: `npx vitest run -c vite.radar.config.ts && npx tsc --noEmit`
-Expected: all green, including `watchtier.test.tsx` (5) and `board/watching.test.tsx` (3) from Task 6; the existing row/tier/keys/narrow suites unchanged.
+Expected: all green, including `watchtier.test.tsx` (5) and `board/watching.test.tsx` (3); the existing row/tier/keys/narrow suites unchanged.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add static/radar/src/list/ListPane.tsx static/radar/src/list/TickerRow.tsx static/radar/radar.css static/radar/src/list/watchtier.test.tsx
+git add static/radar/src/list/ListPane.tsx static/radar/src/list/TickerRow.tsx static/radar/radar.css static/radar/src/list/watchtier.test.tsx static/radar/src/board/watching.test.tsx
 git commit -m "feat(radar): the Watching tier, a star on every row, quiet rows
 
 Marked stocks sit above the board in every view; a fresh star moves the
