@@ -31,6 +31,13 @@ def normalise(ticker):
     return ticker.upper()
 
 
+def all_tickers():
+    """Every ticker any account watches. The pollers and the judge gate
+    read this: a mark says "keep this one current", whoever made it."""
+    return sorted({ticker for (ticker,) in
+                   db.session.query(RadarWatch.ticker).distinct().all()})
+
+
 def tickers_for(user_id):
     """The account's marks, oldest first -- the order they were made in."""
     rows = (db.session.query(RadarWatch.ticker)

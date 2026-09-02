@@ -276,3 +276,13 @@ describe('the Xetra->Tradegate history seam label', () => {
     expect(container.querySelector('.history-proxy-note')).toBeNull()
   })
 })
+
+describe('the axis currency', () => {
+  it('labels a German chart in euros and a US one in dollars', () => {
+    const { container: de } = render(<PriceChart chart={chart()} currency="EUR" />)
+    expect(de.textContent).toContain('€')
+    expect(de.textContent).not.toContain('$')
+    const { container: us } = render(<PriceChart chart={chart()} />)
+    expect(us.textContent).toContain('$')
+  })
+})

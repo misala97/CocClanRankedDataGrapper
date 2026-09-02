@@ -879,6 +879,20 @@ JUDGE_GATE_ENABLED = True            # False = judge everything, as before
 JUDGE_SKIP_SEGMENTS = ('large', 'fund')
 JUDGE_FLOOR_HOURS = 24
 
+# ---- the German delayed-data feed's host quota ------------------------------
+# Deutsche Börse publishes one file per minute per channel. On 2026-09-01 the
+# collector pulled ~520 minute-files in a few hours, the host answered HTTP
+# 429 from then on, and the collector kept retrying two files every five
+# minutes for 21 hours -- which kept the window full. The board needs one
+# snapshot per cycle, not every minute-file, so: newest files first under a
+# per-cycle cap, a rolling 24h download budget read from the cycle rows, and
+# exponential backoff on 429 for the whole feed (the throttle is per IP).
+# German trade history is sampled as a result, about one minute-file in
+# five; decided by Michi on 2026-09-02.
+DE_FILES_PER_CYCLE = 1                        # per channel, newest first
+DE_DOWNLOAD_BUDGET_24H = 300                  # attempted downloads, all channels
+DE_THROTTLE_BACKOFF_SECONDS = (1800, 21600)   # first wait, longest wait
+
 # Distinct CHANNELS a broadcast source needs, against MIN_DISTINCT_AUTHORS for
 # a forum. Two rather than three because there are orders of magnitude fewer
 # channels than authors, and a symbol reaching two independent channels is

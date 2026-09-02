@@ -271,10 +271,14 @@ export function dayStamp(iso: string | null): string {
  *  printed, so a pair of axis labels either side of one chart cannot come out
  *  as `$202` above `$46.33`. It defaults to the value itself.
  */
-export function money(value: number, scale = value): string {
-  if (scale >= 100) return `$${value.toFixed(0)}`
-  if (scale >= 1) return `$${value.toFixed(2)}`
-  return `$${value.toFixed(4)}`
+export function money(value: number, scale = value, currency = 'USD'): string {
+  // The venue's currency, as a sign where one is common and as a code
+  // otherwise: a German chart printed `$1.93` for a euro print until
+  // 2026-09-02, and a number in the wrong currency is worse than none.
+  const sign = currency === 'USD' ? '$' : currency === 'EUR' ? '\u20ac' : `${currency} `
+  if (scale >= 100) return `${sign}${value.toFixed(0)}`
+  if (scale >= 1) return `${sign}${value.toFixed(2)}`
+  return `${sign}${value.toFixed(4)}`
 }
 
 /** A venue price in its provider-declared currency.

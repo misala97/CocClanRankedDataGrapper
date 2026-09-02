@@ -208,3 +208,12 @@ describe('count', () => {
     expect(count(1000)).toBe('1,000')
   })
 })
+
+describe('money in the venue currency', () => {
+  it('prints the euro sign for a German quote and keeps the dollar default', () => {
+    expect(money(1.5, 1.5, 'EUR')).toBe('€1.50')
+    expect(money(202.4, 202.4, 'EUR')).toBe('€202')
+    expect(money(1.5, 1.5)).toBe('$1.50')
+    expect(money(1.5, 1.5, 'GBP')).toBe('GBP 1.50')
+  })
+})

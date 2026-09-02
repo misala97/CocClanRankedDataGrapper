@@ -20,11 +20,15 @@ import json
 import logging
 import time
 
+import sqlalchemy as sa
+
 from extensions import db
 from models import (RadarMarketDataCursor, RadarMarketDataCycle,
                     RadarMarketTradeEvent)
 
+from . import config as _config
 from . import quotes as quotes_mod
+from . import watch as _watch
 from .instruments import MappingDecision, VENUE_BY_MIC
 from .prices import Quote
 from .prices.deutsche_boerse import FeedRejected
@@ -180,6 +184,45 @@ def _advance_cursor(mic, channel, batch, checksum, now):
     return cursor
 
 
+# ---- the host's quota (config.py explains the 2026-09-01 outage) -----------
+DE_FILES_PER_CYCLE = _config.DE_FILES_PER_CYCLE
+DE_DOWNLOAD_BUDGET_24H = _config.DE_DOWNLOAD_BUDGET_24H
+DE_THROTTLE_BACKOFF_SECONDS = _config.DE_THROTTLE_BACKOFF_SECONDS
+# One state for the whole feed, not per channel: the host throttles the IP.
+# In-process on purpose -- a restart forgets it and the first cycle probes
+# once, which is the right amount of optimism after a deploy.
+_THROTTLE = {}
+
+
+def _throttled_until(now):
+    state = _THROTTLE.get('feed')
+    return state['until'] if state and state['until'] > now else None
+
+
+def _note_throttle(now):
+    """HTTP 429 seen: wait twice as long as last time, up to the cap."""
+    state = _THROTTLE.setdefault('feed', {'failures': 0, 'until': now})
+    state['failures'] += 1
+    first, longest = DE_THROTTLE_BACKOFF_SECONDS
+    state['until'] = now + dt.timedelta(
+        seconds=min(longest, first * 2 ** (state['failures'] - 1)))
+
+
+def _clear_throttle():
+    _THROTTLE.pop('feed', None)
+
+
+def downloads_last_24h(now):
+    """Downloads attempted against the host in the trailing day. The cycle
+    rows are the ledger: files_seen counts files a download was asked for,
+    never files merely listed."""
+    return int(db.session.query(
+        sa.func.coalesce(sa.func.sum(RadarMarketDataCycle.files_seen), 0))
+        .filter(RadarMarketDataCycle.source == 'deutsche_boerse_delayed',
+                RadarMarketDataCycle.completed_at >= now - dt.timedelta(hours=24))
+        .scalar() or 0)
+
+
 def collect_german_cycle(provider, generation_id, active_tickers, now,
                          *, mode='shadow'):
     """One five-minute collection pass over both channels of every mapped MIC."""
@@ -236,15 +279,39 @@ def _collect_channel(provider, mic, channel, by_identity, isins,
                'status': 'no_newer', 'error_code': None,
                'newest': None, 'records': 0, 'compressed': 0,
                'parse_ms': 0}
+    # The host's quota, before a single request: a backoff in force or a
+    # spent budget records the cycle and asks for nothing.
+    until = _throttled_until(now)
+    if until is not None:
+        outcome['status'] = 'transport_error'
+        outcome['error_code'] = f'throttled until {until:%H:%M} UTC'[:48]
+        _record_cycle_row(mic, channel, now, mode, outcome)
+        return outcome
+    spent = downloads_last_24h(now)
+    if spent >= DE_DOWNLOAD_BUDGET_24H:
+        outcome['status'] = 'transport_error'
+        outcome['error_code'] = (f'download budget spent '
+                                 f'{spent}/{DE_DOWNLOAD_BUDGET_24H}')[:48]
+        _record_cycle_row(mic, channel, now, mode, outcome)
+        return outcome
     cursor = RadarMarketDataCursor.query.get(
         ('deutsche_boerse_delayed', mic, channel))
     try:
         files = provider.files_after(mic, channel, cursor)
     except Exception as exc:
+        if 'HTTP 429' in str(exc):
+            _note_throttle(now)
         outcome['status'] = 'transport_error'
         outcome['error_code'] = str(exc)[:48]
         _record_cycle_row(mic, channel, now, mode, outcome)
         return outcome
+    # Newest first, under the cap. The files come oldest-first for the
+    # cursor's sake; what a live board needs is the latest snapshot, and a
+    # backlog of minute-files is exactly what filled the host's quota.
+    backlog_skipped = 0
+    if len(files) > DE_FILES_PER_CYCLE:
+        backlog_skipped = len(files) - DE_FILES_PER_CYCLE
+        files = files[-DE_FILES_PER_CYCLE:]
 
     newest_accepted = None
     newest_checksum = None
@@ -259,6 +326,8 @@ def _collect_channel(provider, mic, channel, by_identity, isins,
         try:
             compressed = provider.download(file, **limits)
         except Exception as exc:
+            if 'HTTP 429' in str(exc):
+                _note_throttle(now)
             if now - file.source_ts > STALE_SKIP_AGE:
                 # Expired upstream; skip past it instead of wedging here.
                 stale_skipped = file
@@ -339,6 +408,12 @@ def _collect_channel(provider, mic, channel, by_identity, isins,
 
     if not failed and stale_skips and outcome['status'] == 'no_newer':
         outcome['error_code'] = f'{stale_skips} expired files skipped'[:48]
+    if not failed and backlog_skipped and not outcome['error_code']:
+        outcome['error_code'] = f'skipped {backlog_skipped} backlog files'[:48]
+    if not failed and outcome['seen']:
+        # A download the host accepted: the throttle is over. An empty
+        # listing proves nothing and must not reset the backoff counter.
+        _clear_throttle()
     if not failed and (newest_accepted is not None or
                        duplicate_only is not None or
                        stale_skipped is not None):
@@ -486,6 +561,9 @@ def active_price_tickers(now):
     for hours in (1, 4, 24):
         union.update(leaderboard.chatter_candidates(list(SOURCES), now,
                                                     hours))
+    # A starred ticker is watched whether or not anyone talks about it;
+    # its row must not sit on a days-old quote (RZLV, 2026-09-02).
+    union.update(_watch.all_tickers())
     return sorted(union)
 
 

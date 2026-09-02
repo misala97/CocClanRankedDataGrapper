@@ -51,7 +51,11 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
  *  as 52 fragments (the gray wash names those days instead). On the intraday
  *  spans it breaks at gaps: an hour nobody quoted is a real absence.
  */
-export function PriceChart({ chart }: { chart: DetailChart }) {
+export function PriceChart({ chart, currency = 'USD' }: {
+  chart: DetailChart
+  /** The quote's currency, for the axis and the hover readout. */
+  currency?: string
+}) {
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 
   const { paths, gaps, low, high, lastX, lastY } = pricePaths(chart, priced)
@@ -110,8 +114,8 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
           <>
             {/* One format for both: `$202` above `$46.33` is two different
                 kinds of number stacked in one gutter. The larger end decides. */}
-            <Gutter y={priceY(high, low, high)} label={money(high, high)} />
-            <Gutter y={priceY(low, low, high)} label={money(low, high)} />
+            <Gutter y={priceY(high, low, high)} label={money(high, high, currency)} />
+            <Gutter y={priceY(low, low, high)} label={money(low, high, currency)} />
           </>
         ) : (
           // One sentence instead of an empty upper band. Muted, not amber: a
@@ -206,7 +210,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
       </g>
       {/* The chart answering the cursor: a hairline on the nearest slot and its
           three facts in words. Last, so it sits over everything it reads. */}
-      <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} />
+      <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} currency={currency} />
     </svg>
   </>)
 }

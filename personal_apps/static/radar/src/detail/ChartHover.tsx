@@ -48,9 +48,10 @@ export interface HoverGeometry {
  *  the facts it shows are the chart's own, already in the gutter and the
  *  breakdown.
  */
-export function ChartHover({ chart, geometry }: {
+export function ChartHover({ chart, geometry, currency = 'USD' }: {
   chart: DetailChart
   geometry: HoverGeometry
+  currency?: string
 }) {
   const [at, setAt] = useState<number | null>(null)
 
@@ -88,7 +89,7 @@ export function ChartHover({ chart, geometry }: {
           )}
           <Readout x={xAt(at)} lines={[
             whenLabel(chart, at),
-            geometry.priced && close !== null ? money(close, geometry.high) : 'no close',
+            geometry.priced && close !== null ? money(close, geometry.high, currency) : 'no close',
             talk === null ? 'not observed' : `${count(talk)}${perSlot(chart)}`,
           ]} />
         </>

@@ -293,7 +293,8 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
             scaled until its axis is unreadable -- see radar.css. */}
         <div className="chartwrap" ref={chartScroller}
              aria-busy={revalidating || undefined}>
-          <PriceChart key={drawn} chart={detail.chart} />
+          <PriceChart key={drawn} chart={detail.chart}
+                      currency={detail.identity.quote.currency ?? undefined} />
         </div>
         {/* CSS shows this only at the widths where the chart pans. The right
             edge is the most recent price, so a chart silently cut off there

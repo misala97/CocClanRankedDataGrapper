@@ -118,6 +118,14 @@ def test_selection_ignores_other_instruments_events():
 
 # --- transactional collection ------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def uncapped(monkeypatch):
+    """The transaction-shape tests below predate the host quota and feed
+    two files per cycle; the cap is the quota tests' business (`calm`)."""
+    monkeypatch.setattr(market_data, 'DE_FILES_PER_CYCLE', 50)
+    monkeypatch.setattr(market_data, '_THROTTLE', {})
+
+
 def _seed_generation_and_universe(ticker):
     from features.radar import instruments as inst
     decision = inst.MappingDecision(
@@ -151,9 +159,11 @@ def _post_row(event_id, minute, second, price):
 class ScriptedProvider:
     source = 'deutsche_boerse_delayed'
 
-    def __init__(self, files_by_channel, bodies):
+    def __init__(self, files_by_channel, bodies, throttled=False):
         self.files_by_channel = files_by_channel
         self.bodies = bodies
+        self.downloads = []            # every remote_id a download was asked for
+        self.throttled = throttled     # answer HTTP 429 to every download
         self._parser = dbag.DeutscheBoerseProvider(http=None)
 
     def files_after(self, mic, channel, cursor):
@@ -162,6 +172,9 @@ class ScriptedProvider:
         return sorted(files, key=lambda file: file.source_ts)
 
     def download(self, file, **limits):
+        self.downloads.append(file.remote_id)
+        if self.throttled:
+            raise dbag.PriceUnavailable(f'HTTP 429 ({file.remote_id})')
         return self.bodies[file.remote_id]
 
     def parse(self, file, compressed, **limits):
@@ -770,3 +783,147 @@ def test_prune_market_data_bounds_events_and_cycles(ctx):
         source='deutsche_boerse_delayed').all()
     assert [cycle.scheduled_at for cycle in remaining_cycles] == [
         NOW - dt.timedelta(days=1)]
+
+
+# --- the host's quota (2026-09-02 outage) ------------------------------------
+#
+# Deutsche Börse throttled the VPS after ~520 minute-file downloads and kept
+# it throttled while the collector retried two files every five minutes.
+# Three rules close that: newest-first with a per-cycle cap, a rolling 24h
+# download budget, and exponential backoff on HTTP 429.
+
+
+def _minute_files(minutes, channel='posttrade'):
+    files, bodies = [], {}
+    for index, minute in enumerate(minutes):
+        file = _feed_file(f'DGAT-{channel}-2027-01-04T12_{minute:02d}.json.gz', minute,
+                          channel=channel)
+        files.append(file)
+        bodies[file.remote_id] = _ndjson_gz(
+            [_post_row(f't{minute}', minute, 5, 100.0 + index)])
+    return files, bodies
+
+
+@pytest.fixture()
+def calm(monkeypatch):
+    """A fresh throttle memory and a generous budget, per test."""
+    monkeypatch.setattr(market_data, '_THROTTLE', {})
+    monkeypatch.setattr(market_data, 'DE_DOWNLOAD_BUDGET_24H', 1000)
+    monkeypatch.setattr(market_data, 'DE_FILES_PER_CYCLE', 1)
+
+
+def test_a_cycle_downloads_only_the_newest_files_and_skips_the_backlog(ctx, calm):
+    """Five minute-files newer than the cursor, cap 1: only the newest is
+    fetched, the cursor lands on it, the skip is written down. Trades in
+    the skipped files are gone -- sampled history, by decision."""
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    files, bodies = _minute_files([36, 37, 38, 39, 40])
+    provider = ScriptedProvider({'posttrade': tuple(files), 'pretrade': ()}, bodies)
+
+    summary = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW, mode='active')
+
+    assert provider.downloads == ['DGAT-posttrade-2027-01-04T12_40.json.gz']
+    assert summary.status == 'accepted'
+    cursor = RadarMarketDataCursor.query.get(('deutsche_boerse_delayed', 'XGAT', 'posttrade'))
+    assert cursor.remote_id == 'DGAT-posttrade-2027-01-04T12_40.json.gz'
+    row = RadarMarketDataCycle.query.filter_by(channel='posttrade').order_by(
+        RadarMarketDataCycle.id.desc()).first()
+    assert row.files_seen == 1
+    assert 'skipped 4' in (row.error_code or '')
+
+
+def test_a_429_backs_the_channel_off_and_the_next_cycle_makes_no_request(ctx, calm):
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    files, bodies = _minute_files([40])
+    provider = ScriptedProvider({'posttrade': tuple(files), 'pretrade': ()}, bodies,
+                                throttled=True)
+
+    first = market_data.collect_german_cycle(provider, generation.id, [ticker], NOW,
+                                             mode='active')
+    assert first.status == 'transport_error'
+    assert provider.downloads == ['DGAT-posttrade-2027-01-04T12_40.json.gz']
+
+    # Five minutes later: inside the backoff, not even a listing.
+    provider.throttled = False
+    second = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW + dt.timedelta(minutes=5), mode='active')
+    assert second.status == 'transport_error'
+    assert 'throttled' in (second.error_code or '')
+    assert len(provider.downloads) == 1
+    row = RadarMarketDataCycle.query.filter_by(channel='posttrade').order_by(
+        RadarMarketDataCycle.id.desc()).first()
+    assert row.files_seen == 0
+
+    # Past the backoff: it tries again, and the host having relented, succeeds.
+    third = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW + dt.timedelta(minutes=31), mode='active')
+    assert third.status == 'accepted'
+    assert len(provider.downloads) == 2
+
+
+def test_a_second_429_doubles_the_backoff(ctx, calm):
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    files, bodies = _minute_files([40])
+    provider = ScriptedProvider({'posttrade': tuple(files), 'pretrade': ()}, bodies,
+                                throttled=True)
+
+    market_data.collect_german_cycle(provider, generation.id, [ticker], NOW, mode='active')
+    market_data.collect_german_cycle(provider, generation.id, [ticker],
+                                     NOW + dt.timedelta(minutes=31), mode='active')
+    assert len(provider.downloads) == 2
+
+    # 31 minutes after the second failure is inside a 60-minute backoff.
+    market_data.collect_german_cycle(provider, generation.id, [ticker],
+                                     NOW + dt.timedelta(minutes=62), mode='active')
+    assert len(provider.downloads) == 2
+    market_data.collect_german_cycle(provider, generation.id, [ticker],
+                                     NOW + dt.timedelta(minutes=92), mode='active')
+    assert len(provider.downloads) == 3
+
+
+def test_the_rolling_download_budget_stops_the_collector(ctx, calm, monkeypatch):
+    """Cycle rows are the ledger: files_seen is downloads attempted. Over
+    the 24h budget, a cycle records itself and asks for nothing."""
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    files, bodies = _minute_files([40])
+    provider = ScriptedProvider({'posttrade': tuple(files), 'pretrade': ()}, bodies)
+    monkeypatch.setattr(market_data, 'DE_DOWNLOAD_BUDGET_24H', 3)
+    for minute in (5, 10, 15):
+        db.session.add(RadarMarketDataCycle(
+            source='deutsche_boerse_delayed', mic='XGAT', channel='posttrade',
+            scheduled_at=NOW - dt.timedelta(hours=1, minutes=minute),
+            completed_at=NOW - dt.timedelta(hours=1, minutes=minute),
+            mode='active', status='accepted', files_seen=1, files_accepted=1,
+            record_count=1, selected_count=0, rejected_records=0,
+            compressed_bytes=0, uncompressed_bytes=0, parse_ms=0))
+    db.session.commit()
+
+    summary = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW, mode='active')
+
+    assert provider.downloads == []
+    assert summary.status == 'transport_error'
+    assert 'budget' in (summary.error_code or '')
+
+
+def test_watched_tickers_are_priced_even_when_nobody_talks_about_them(ctx, monkeypatch):
+    """The quote pollers take active_price_tickers; a starred ticker with
+    no chatter must be in it, or its row keeps a days-old quote."""
+    from features.radar import leaderboard
+    from models import RadarWatch
+    from conftest import _admin_id
+    monkeypatch.setattr(leaderboard, 'chatter_candidates', lambda *a, **k: [f'{PREFIX}LOUD'])
+    RadarWatch.query.filter_by(ticker=f'{PREFIX}STAR').delete()
+    db.session.add(RadarWatch(user_id=_admin_id(), ticker=f'{PREFIX}STAR', created_at=NOW))
+    db.session.commit()
+    try:
+        tickers = market_data.active_price_tickers(NOW)
+        assert f'{PREFIX}STAR' in tickers and f'{PREFIX}LOUD' in tickers
+    finally:
+        RadarWatch.query.filter_by(ticker=f'{PREFIX}STAR').delete()
+        db.session.commit()
