@@ -83,7 +83,10 @@ never collapsed into a single badge or bar.
 
 ## Deliberately absent
 
-- No watchlist, no portfolio, no positions
+- No portfolio, no positions. **Watching exists** since 2026-09-02: the
+  reader's own marks, kept per account, never a signal from the tool. A
+  watched stock gets a row above the board saying what was measured, and
+  the surface still recommends nothing.
 - No alerts (the infrastructure exists; the product decision was to defer)
 - No charts of price alone — price only ever appears in relation to chatter
 - No crypto

@@ -1,6 +1,6 @@
 # Radar — Watching and search
 
-**Status:** approved in brainstorm 2026-09-02, spec for review
+**Status:** built 2026-09-02 (plan `docs/superpowers/plans/2026-09-02-radar-watching-and-search.md`)
 **Builds on:** `2026-09-01-radar-board-layout-round-design.md` (ledger rows,
 tiers, views row, folded summary line). Everything not named here is
 unchanged.
