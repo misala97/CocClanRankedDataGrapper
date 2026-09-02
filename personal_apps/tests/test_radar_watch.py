@@ -2,6 +2,7 @@
 import datetime as dt
 
 import pytest
+import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
@@ -73,6 +74,8 @@ def test_a_malformed_ticker_is_refused(two_users):
         for bad in ('', '1ABC', 'TOO-LONG-TICKER', 'a b', 'NV;DA'):
             with pytest.raises(watch.BadTicker):
                 watch.add(a, bad)
+            with pytest.raises(watch.BadTicker):
+                watch.remove(a, bad)
         assert watch.tickers_for(a) == []
 
 
@@ -84,3 +87,17 @@ def test_deleting_the_account_deletes_its_marks(two_users):
         db.session.commit()
 
         assert RadarWatch.query.filter_by(user_id=a).count() == 0
+
+
+def test_a_mark_for_an_account_that_does_not_exist_is_an_error(two_users):
+    """The duplicate race is forgiven; nothing else is. An account id with
+    no row behind it fails the foreign key, and that must surface -- not
+    come back as an empty list."""
+    a, _ = two_users
+    with flask_app.app_context():
+        nobody = db.session.query(sa.func.max(AppUser.id)).scalar() + 1000
+        with pytest.raises(sa.exc.IntegrityError):
+            watch.add(nobody, 'NVDA')
+        # The session is usable afterwards, and nothing leaked in.
+        assert watch.tickers_for(a) == []
+        assert RadarWatch.query.filter_by(user_id=nobody).count() == 0
