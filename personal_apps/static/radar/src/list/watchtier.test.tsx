@@ -50,6 +50,15 @@ describe('the Watching tier', () => {
     expect(screen.getByText(/Scored against price/).closest('.tier')).toHaveTextContent(/\b2\b/)
   })
 
+  it('orders the tier by the reader\'s marks, not by the server\'s array', () => {
+    const { container } = list({ watching: ['Q', 'B'], watch_rows: [r('B'), quiet('Q')] })
+
+    expect(sequence(container)).toEqual([
+      'tier:Watching', 'row:Q(quiet)', 'row:B',
+      'tier:Scored against price', 'row:A', 'row:C',
+    ])
+  })
+
   it('is absent when nothing is watched', () => {
     list()
     expect(screen.queryByText(/^Watching/)).toBeNull()

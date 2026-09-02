@@ -659,8 +659,6 @@ body {
 }
 .tier .why { color: var(--warn); font-weight: 600; white-space: nowrap; }
 .tier .n { margin-left: auto; padding-left: var(--s3); color: var(--ink-2); }
-/* The reader's own tier: no term, because its order is the reader's. */
-.tier.watching .what { color: var(--muted); }
 
 /* The board being replaced goes quiet while the new one is fetched -- and it
    does so WITHOUT dimming any text.
@@ -686,7 +684,7 @@ body {
    browser animates whatever the new board inserts. The rows the reader
    was already looking at stay put: only inserted elements start an
    animation. */
-.rows.settled .row, .rows.settled .tier {
+.rows.settled .line, .rows.settled .tier {
   animation: settle 200ms var(--ease) backwards;
 }
 
