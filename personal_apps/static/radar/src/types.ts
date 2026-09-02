@@ -246,6 +246,10 @@ export interface Row {
    *  the panel: at the 3Y span it is ~780 numbers, and a twenty-row board
    *  would have carried sixteen thousand of them to draw twenty sparklines. */
   clauses: Clause[]
+  /** False only on a watched row the floor would have dropped: the island
+   *  renders it quiet and its warn clause says why. Absent on payloads
+   *  embedded before 2026-09-02, which is the same as true. */
+  eligible?: boolean
 }
 
 /** The exchange's state. It changes what the ranking MEANS, not merely how it
@@ -279,6 +283,10 @@ export interface BoardPayload {
   /** What the eligibility floor and the breadth filter left out, by reason.
    *  Without it a quiet board and a stopped ingest look identical. */
   excluded: Record<string, number>
+  /** The caller's marks, oldest first, and one row per mark for the
+   *  current selection -- whatever the floor said. Absent on older embeds. */
+  watching?: string[]
+  watch_rows?: Row[]
   /** What the model tone pass has cost. SPEND, never a balance -- the Claude
    *  API has no balance endpoint, so nothing here knows what is left. Absent
    *  until the first pass books something. */
@@ -308,4 +316,14 @@ export interface Selection {
    *  is no filter, which is what the All chip sets. */
   segments: SegmentFilter[]
   window: number
+}
+
+/** One universe match. Identity only: whether it is on the board, and its
+ *  score, the island knows from the rows it holds. */
+export interface SearchMatch {
+  ticker: string
+  name: string | null
+  exchange: string | null
+  segment: Segment
+  watching: boolean
 }

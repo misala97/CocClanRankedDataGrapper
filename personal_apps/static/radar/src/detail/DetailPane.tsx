@@ -75,7 +75,7 @@ const LEGEND: Record<PanelSpan, { price: string; chatter: string }> = {
  *  column header look like the same kind of thing.
  */
 export function DetailPane({ ticker, selection, windowHours, hasRows,
-                            baselineDays, fallBack }: {
+                            baselineDays, fallBack, watching, onToggleWatch }: {
   ticker: string | null
   selection: Selection
   windowHours: number
@@ -91,6 +91,10 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
    *  the escape had to stop pointing at the top row (see BoardPage), and a
    *  button that says where it goes is right either way. */
   fallBack?: { ticker: string; go: () => void }
+  /** Whether the SELECTED ticker is watched. Optional until Task 8 wires
+   *  the panel's own star button. */
+  watching?: boolean
+  onToggleWatch?: () => void
 }) {
   const [span, setSpan] = useState<PanelSpan>(() => openingSpan(baselineDays))
   const [loaded, setLoaded] = useState<{

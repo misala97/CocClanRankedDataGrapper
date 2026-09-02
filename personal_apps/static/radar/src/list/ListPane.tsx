@@ -327,7 +327,7 @@ function TierCaption({ tier, windowHours, count, reason }: {
  *  900px the page places it after the panel instead -- see BoardPage.
  */
 export function ListPane({ payload, selection, selected, busy, onSelect,
-                          onChange, account }: {
+                          onChange, account, watching, onToggleWatch }: {
   payload: BoardPayload
   selection: Selection
   selected: string | null
@@ -336,6 +336,9 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   onChange: (next: Selection) => void
   /** The footer matter, when this pane is where it belongs. */
   account?: ReactNode
+  /** The caller's marks. Optional until Task 7 wires TickerRow's star. */
+  watching?: string[]
+  onToggleWatch?: (ticker: string) => void
 }) {
   const shared = universalMarks(payload.rows)
   const quoteShared = universalQuoteFacts(payload.rows)

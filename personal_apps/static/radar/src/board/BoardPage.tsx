@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { BoardUnavailable, fetchBoard, queryFor } from '../api'
+import { BoardUnavailable, fetchBoard, queryFor, setWatch } from '../api'
 import { Boundary } from '../Broken'
 import { DetailPane } from '../detail/DetailPane'
 import { Account } from '../list/Account'
@@ -31,6 +31,12 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   })
   const [selected, setSelected] = useState<string | null>(
     () => initialTicker(initial))
+  // The caller's marks. Optimistic: the star flips before the server
+  // answers, the server's list replaces it, and a refusal puts it back.
+  // The board's own payload also carries the list, so a refetch keeps it
+  // true without a second request.
+  const [watching, setWatching] = useState<string[]>(initial.watching ?? [])
+  useEffect(() => { setWatching(payload.watching ?? []) }, [payload])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<BoardUnavailable | null>(null)
   const inflight = useRef<AbortController | null>(null)
@@ -101,6 +107,20 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     writeUrl(selection, ticker)
   }, [selection])
 
+  const toggleWatch = useCallback(async (ticker: string) => {
+    const before = watching
+    const on = !before.includes(ticker)
+    setWatching(on ? [...before, ticker] : before.filter((t) => t !== ticker))
+    try {
+      setWatching(await setWatch(ticker, on))
+      // The watched rows are built server-side; a refetch brings the new
+      // one in (or takes the old one out). Memo hit, so instant.
+      void load(selection, selected, true)
+    } catch {
+      setWatching(before)
+    }
+  }, [watching, selection, selected, load])
+
   const narrow = useNarrow()
   const page = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -160,7 +180,8 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       <Boundary label="The list">
         <ListPane payload={payload} selection={selection} selected={selected}
                   busy={busy} onSelect={select} onChange={setSelection}
-                  account={narrow ? null : account} />
+                  account={narrow ? null : account}
+                  watching={watching} onToggleWatch={toggleWatch} />
       </Boundary>
       {/* Its own boundary, and this is the one that earns them: the panel
           renders arbitrary post text and charts built from series with holes
@@ -175,7 +196,9 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                       (r) => r.ticker === selected)?.baseline_days ?? null}
                     fallBack={elsewhere
                       ? { ticker: elsewhere, go: () => select(elsewhere) }
-                      : undefined} />
+                      : undefined}
+                    watching={watching.includes(selected ?? '')}
+                    onToggleWatch={selected ? () => void toggleWatch(selected) : undefined} />
       </Boundary>
       {narrow && <div className="account">{account}</div>}
     </div>

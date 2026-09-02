@@ -1,4 +1,5 @@
-import type { BoardPayload, Detail, PanelSpan, Selection } from './types'
+import { csrfToken } from './csrf'
+import type { BoardPayload, Detail, PanelSpan, SearchMatch, Selection } from './types'
 
 // `Accept: application/json` is explicit and not optional. A bare fetch() sends
 // `*/*`, a wildcard accepts HTML, and the login redirect this route sits behind
@@ -61,7 +62,8 @@ export function queryFor(selection: Selection): string {
  *  @login_required, which redirects rather than 401s, and fetch follows that
  *  transparently -- so an expired session arrives as a 200 full of HTML. Two
  *  copies of that check is one copy that eventually goes missing. */
-async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+async function getJson<T>(url: string, signal?: AbortSignal,
+                          init: RequestInit = {}): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   // Checked before the listener is attached: a signal that was ALREADY
@@ -73,7 +75,9 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 
   try {
     const response = await fetch(url, {
-      headers: HEADERS, credentials: 'same-origin', signal: controller.signal,
+      ...init,
+      headers: { ...HEADERS, ...(init.headers as Record<string, string> | undefined) },
+      credentials: 'same-origin', signal: controller.signal,
     })
     if (response.redirected) throw new BoardUnavailable('session')
     if (!response.ok) throw new BoardUnavailable(statusReason(response.status))
@@ -129,4 +133,21 @@ export async function fetchDetail(
   params.set('market', selection.market)
   return getJson<Detail>(
     `/radar/api/ticker/${encodeURIComponent(ticker)}?${params}`, signal)
+}
+
+/** Symbol-or-name matches from the whole universe, eight at most. */
+export async function fetchSearch(q: string, signal?: AbortSignal): Promise<SearchMatch[]> {
+  const found = await getJson<{ matches: SearchMatch[] }>(
+    `/radar/api/search?q=${encodeURIComponent(q)}`, signal)
+  return found.matches
+}
+
+/** Mark or unmark a ticker. Answers the caller's whole list, so nothing is
+ *  merged client-side. Carries the CSRF token the radar blueprint demands
+ *  on writes. */
+export async function setWatch(ticker: string, on: boolean): Promise<string[]> {
+  const answer = await getJson<{ watching: string[] }>(
+    `/radar/api/watch/${encodeURIComponent(ticker)}`, undefined,
+    { method: on ? 'PUT' : 'DELETE', headers: { 'X-CSRF-Token': csrfToken() } })
+  return answer.watching
 }
