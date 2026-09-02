@@ -47,9 +47,13 @@ def add(user_id, ticker, now=None):
         try:
             db.session.commit()
         except sa.exc.IntegrityError:
-            # Two taps racing past the SELECT above: the row exists, which
-            # is what was asked for.
             db.session.rollback()
+            # Two taps racing past the SELECT above leave the row in place,
+            # which is what was asked for. Any other integrity failure (an
+            # account that does not exist, say) is a real error and must
+            # not hide behind an empty list.
+            if RadarWatch.query.filter_by(user_id=user_id, ticker=ticker).one_or_none() is None:
+                raise
     return tickers_for(user_id)
 
 

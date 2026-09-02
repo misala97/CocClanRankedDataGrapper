@@ -48,6 +48,16 @@ def test_add_is_idempotent_and_keeps_first_seen_order(two_users):
         assert RadarWatch.query.filter_by(user_id=a).count() == 2
 
 
+def test_marks_made_in_the_same_instant_keep_insertion_order(two_users):
+    a, _ = two_users
+    same = dt.datetime(2026, 9, 2, 10, 0)
+    with flask_app.app_context():
+        for ticker in ('TSLA', 'NVDA', 'AMD'):
+            watch.add(a, ticker, now=same)
+
+        assert watch.tickers_for(a) == ['TSLA', 'NVDA', 'AMD']
+
+
 def test_remove_of_an_unwatched_ticker_is_not_an_error(two_users):
     a, _ = two_users
     with flask_app.app_context():

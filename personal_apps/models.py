@@ -1217,8 +1217,10 @@ class RadarWatch(db.Model):
     user_id    = db.Column(db.Integer,
                            db.ForeignKey('app_user.id', ondelete='CASCADE'),
                            nullable=False, index=True)
-    # The radar ticker identity, market-independent, same collation as
-    # radar_ticker_universe.symbol so 'IT' and 'it' cannot both exist.
+    # The radar ticker identity, market-independent. Same collation as
+    # radar_ticker_universe.symbol so a join or comparison between the two
+    # never mixes collations; watch.normalise() uppercases before every
+    # write, which is what keeps 'IT' and 'it' from both existing.
     ticker     = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
 
