@@ -763,19 +763,43 @@ def run_review_pass(client=None, now=None):
     return written
 
 
-def pending_count():
+def _unjudged(since=None):
+    """The unjudged high-confidence mentions the live pass could owe."""
+    query = (db.session.query(RadarMention.id, RadarMention.ticker, RadarPost.created_utc)
+             .join(RadarPost, RadarPost.id == RadarMention.post_id)
+             .filter(RadarMention.confidence == 'high',
+                     RadarMention.sentiment_judged_at.is_(None),
+                     RadarPost.created_utc >= V2_ACTIVATION_CUTOFF))
+    if since is not None:
+        query = query.filter(RadarPost.created_utc >= since)
+    return query
+
+
+def pending_count(tickers=None, since=None):
     """How many mentions the LIVE pass still owes. For the daemon log.
 
     Same activation cutoff as pending(): the legacy backlog is the rejudge
     script's business and must not read as a live backlog here or in
-    ops_summary's p95.
+    ops_summary's p95. With the gate's `tickers` and `since`, counts only
+    what the pass will actually take.
     """
-    return (db.session.query(sa.func.count(RadarMention.id))
-            .join(RadarPost, RadarPost.id == RadarMention.post_id)
-            .filter(RadarMention.confidence == 'high',
-                    RadarMention.sentiment_judged_at.is_(None),
-                    RadarPost.created_utc >= V2_ACTIVATION_CUTOFF).scalar()
-            or 0)
+    if tickers is not None and not tickers:
+        return 0
+    query = _unjudged(since)
+    if tickers is not None:
+        query = query.filter(RadarMention.ticker.in_(list(tickers)))
+    return query.count()
+
+
+def gated_count(gate, now):
+    """Unjudged mentions inside the window that the gate holds back --
+    what was NOT spent. Zero when the gate is off."""
+    if not gate.enabled:
+        return 0
+    query = _unjudged(now - dt.timedelta(hours=gate.hours))
+    if gate.tickers:
+        query = query.filter(~RadarMention.ticker.in_(list(gate.tickers)))
+    return query.count()
 
 
 def ops_summary(now=None):
@@ -788,17 +812,27 @@ def ops_summary(now=None):
     absent).
     """
     now = now or dt.datetime.utcnow()
-    waiting = pending_count()
+    # The backlog is what the pass will still take: inside the gate and
+    # its window. What the gate holds back is reported apart, as
+    # gated_pending, so a permanently gated tail never reads as lag.
+    gate = judge_gate.judgeable_tickers(now)
+    tickers = gate.tickers if gate.enabled else None
+    since = now - dt.timedelta(hours=gate.hours) if gate.enabled else None
+    waiting = pending_count(tickers=tickers, since=since)
     p95 = None
     if waiting:
         offset = int(waiting * 0.05)
-        oldest_5th = (db.session.query(RadarPost.created_utc)
-                      .join(RadarMention,
-                            RadarMention.post_id == RadarPost.id)
-                      .filter(RadarMention.confidence == 'high',
-                              RadarMention.sentiment_judged_at.is_(None),
-                              RadarPost.created_utc >= V2_ACTIVATION_CUTOFF)
-                      .order_by(RadarPost.created_utc.asc())
+        query = (db.session.query(RadarPost.created_utc)
+                 .join(RadarMention,
+                       RadarMention.post_id == RadarPost.id)
+                 .filter(RadarMention.confidence == 'high',
+                         RadarMention.sentiment_judged_at.is_(None),
+                         RadarPost.created_utc >= V2_ACTIVATION_CUTOFF))
+        if tickers is not None:
+            query = query.filter(RadarMention.ticker.in_(list(tickers)))
+        if since is not None:
+            query = query.filter(RadarPost.created_utc >= since)
+        oldest_5th = (query.order_by(RadarPost.created_utc.asc())
                       .offset(offset).limit(1).scalar())
         if oldest_5th is not None:
             p95 = max(0.0, (now - oldest_5th).total_seconds() / 60.0)
@@ -814,7 +848,8 @@ def ops_summary(now=None):
         'capped': meter_row.capped if meter_row else 0,
     }
     review['over_ceiling'] = _over_ceiling_gauge(now, review['attempted'])
-    return {'pending': waiting, 'p95_age_minutes': p95, 'review': review}
+    return {'pending': waiting, 'gated_pending': gated_count(gate, now),
+            'p95_age_minutes': p95, 'review': review}
 
 
 _gauge_cache = {'at': None, 'value': 0}

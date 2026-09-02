@@ -253,3 +253,25 @@ def test_a_watched_tickers_backlog_inside_the_window_is_judged(clean_posts, monk
         finally:
             RadarWatch.query.filter_by(ticker='ZZW').delete()
             db.session.commit()
+
+
+def test_ops_summary_counts_the_gated_backlog_apart_from_the_pending_one(clean_posts, monkeypatch):
+    gate_on(monkeypatch)
+    from conftest import _admin_id
+    from models import RadarWatch
+    with flask_app.app_context():
+        RadarWatch.query.filter_by(ticker='ZZW').delete()
+        db.session.add(RadarWatch(user_id=_admin_id(), ticker='ZZW', created_at=NOW))
+        db.session.commit()
+        make_post('zztest-ops-w', ticker='ZZW', when=NOW - dt.timedelta(hours=1))      # admitted
+        make_post('zztest-ops-lone', ticker='ZZLONE', when=NOW - dt.timedelta(hours=1)) # held back
+        make_post('zztest-ops-old', ticker='ZZW', when=NOW - dt.timedelta(hours=30))    # outside the window
+        try:
+            before = llm_sentiment.ops_summary(now=NOW)
+            # Only the seeded rows carry these tickers; the dev DB's own
+            # backlog is far older than NOW and outside the window.
+            assert before['pending'] == 1
+            assert before['gated_pending'] == 1
+        finally:
+            RadarWatch.query.filter_by(ticker='ZZW').delete()
+            db.session.commit()

@@ -94,6 +94,11 @@ export function Spend({ payload }: { payload: BoardPayload }) {
         <> Review: <b>{count(review.served)}</b>/{count(review.demanded)} served
         {review.capped > 0 && <>, {count(review.capped)} capped</>}.</>
       )}
+      {(payload.sentiment_ops?.gated_pending ?? 0) > 0 && (
+        // The gate's day so far: mentions it declined to read because their
+        // ticker cannot reach the board or sits in a skipped segment.
+        <> {count(payload.sentiment_ops!.gated_pending!)} mentions left unread by the gate.</>
+      )}
     </p>
   )
 }

@@ -296,6 +296,9 @@ export interface BoardPayload {
    *  over-ceiling gauge. Visibility, never control. */
   sentiment_ops?: {
     pending: number
+    /** Unjudged mentions in the window the judge gate held back -- what
+     *  was not spent. Absent on payloads embedded before the gate. */
+    gated_pending?: number
     p95_age_minutes: number | null
     review: {
       demanded: number

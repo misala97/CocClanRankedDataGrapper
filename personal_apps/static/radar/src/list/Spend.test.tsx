@@ -101,3 +101,30 @@ describe('the review meter line', () => {
     expect(container.textContent).not.toContain('Review')
   })
 })
+
+describe('the judge gate line', () => {
+  it('says how many mentions the gate left unread', () => {
+    const withGate = {
+      spend: { today_usd: 0.42, month_usd: 3.1, unpriced_tokens: 0 },
+      sentiment_ops: { pending: 12, gated_pending: 1234, p95_age_minutes: 3,
+        review: { demanded: 0, attempted: 0, served: 0, capped: 0, over_ceiling: 0 } },
+      excluded: {}, rows: [],
+    } as unknown as BoardPayload
+    render(<Spend payload={withGate} />)
+
+    expect(screen.getByText(/1,234/)).toBeInTheDocument()
+    expect(screen.getByText(/left unread/)).toBeInTheDocument()
+  })
+
+  it('says nothing while the gate has held nothing back', () => {
+    const quiet = {
+      spend: { today_usd: 0.42, month_usd: 3.1, unpriced_tokens: 0 },
+      sentiment_ops: { pending: 12, gated_pending: 0, p95_age_minutes: 3,
+        review: { demanded: 0, attempted: 0, served: 0, capped: 0, over_ceiling: 0 } },
+      excluded: {}, rows: [],
+    } as unknown as BoardPayload
+    const { container } = render(<Spend payload={quiet} />)
+
+    expect(container.textContent).not.toMatch(/unread/)
+  })
+})
