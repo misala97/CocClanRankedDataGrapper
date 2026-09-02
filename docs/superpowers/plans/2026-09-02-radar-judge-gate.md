@@ -98,8 +98,14 @@ def gate():
     return judge_gate.judgeable_tickers(now=NOW)
 
 
+# The gate reads every account's marks, and the dev DB carries real ones;
+# counters are asserted as deltas against a baseline taken before seeding.
+# Reachability is relative to NOW (2027), so real mentions contribute none.
+
+
 def test_a_watched_ticker_is_judgeable_whatever_its_segment_or_volume(clean):
     with flask_app.app_context():
+        baseline = gate()
         profile('ZGLARGE', cap='50000000000')
         db.session.add(RadarWatch(user_id=_admin_id(), ticker='ZGLARGE', created_at=NOW))
         db.session.commit()
@@ -107,11 +113,12 @@ def test_a_watched_ticker_is_judgeable_whatever_its_segment_or_volume(clean):
         g = gate()
 
         assert 'ZGLARGE' in g.tickers
-        assert g.watched == 1
+        assert g.watched == baseline.watched + 1
 
 
 def test_large_and_fund_tickers_are_skipped_even_with_plenty_of_chatter(clean):
     with flask_app.app_context():
+        baseline = gate()
         profile('ZGLARGE', cap='50000000000')
         profile('ZGFUND', cap='900000000', is_etf=True)
         chatter('ZGLARGE', 8, 4)
@@ -121,8 +128,8 @@ def test_large_and_fund_tickers_are_skipped_even_with_plenty_of_chatter(clean):
 
         assert 'ZGLARGE' not in g.tickers
         assert 'ZGFUND' not in g.tickers
-        assert g.reachable >= 2
-        assert g.skipped_segment >= 2
+        assert g.reachable == baseline.reachable + 2
+        assert g.skipped_segment == baseline.skipped_segment + 2
 
 
 def test_the_floor_needs_five_mentions_from_three_voices(clean):
@@ -678,21 +685,28 @@ def test_each_post_says_who_judged_it(clean):
     disagree with the colour: model for a v2 attitude or a legacy label
     (a decided neutral included), lexicon for the local float alone."""
     from features.radar import detail_panel
+    from models import RadarMention, RadarPost
     ticker = f'{PREFIX}J'
     post_for(ticker, 10, 'ann', 'to the moon', attitude='positive')           # model, bullish
     post_for(ticker, 20, 'bob', 'meh', attitude='none')                        # model, neutral
     post_for(ticker, 30, 'cy', 'looks weak', llm_sentiment='bearish')          # model (legacy)
     post_for(ticker, 40, 'dee', 'to the moon again')                           # lexicon, bullish
+    post_for(ticker, 50, 'eve', 'nothing has scored this yet')                 # nothing at all
+    unscored = (db.session.query(RadarMention)
+                .join(RadarPost, RadarPost.id == RadarMention.post_id)
+                .filter(RadarMention.ticker == ticker, RadarPost.author == 'eve').one())
+    unscored.lexicon_sentiment = None      # post_for always scores; undo that here
     db.session.commit()
 
     posts, total = detail_panel._posts(ticker, ['bluesky'], NOW - dt.timedelta(hours=2), NOW)
 
-    assert total == 4
+    assert total == 5
     by_author = {post.author: (tone, judged_by) for post, tone, judged_by in posts}
     assert by_author['ann'] == ('bullish', 'model')
     assert by_author['bob'] == ('neutral', 'model')
     assert by_author['cy'] == ('bearish', 'model')
     assert by_author['dee'] == ('bullish', 'lexicon')
+    assert by_author['eve'] == ('neutral', None)
 ```
 
 Create `static/radar/src/detail/Posts.test.tsx`:
@@ -832,7 +846,7 @@ Expected: every suite green.
 
 - [ ] **Step 2: Browser check of the post labels**
 
-Start the Flask dev server (`preview_start` name `personal_apps`, port 5001) and run a python-playwright script with the minted session cookie (`scratchpad/radar_cookie.txt`, value after `session=`): open `/radar/?market=us&window=24&t=<a ticker with posts>`, wait for `.post`, print `[...document.querySelectorAll('.post')].map(p => [p.querySelector('.ptone')?.textContent, p.querySelector('.pby')?.textContent])`, screenshot the panel at 1440×900 and 390×844, and view the PNGs. Expect `Claude` on judged posts and `wording` on unjudged ones; nothing overlapping the author handle.
+Start the Flask dev server (`preview_start` name `personal_apps`, port 5001) and run a python-playwright script with the minted session cookie (`scratchpad/radar_cookie.txt`, value after `session=`): open `/radar/?market=us&window=24&t=<a ticker with posts>`, wait for `.post`, print `[...document.querySelectorAll('.post')].map(p => [p.querySelector('.ptone')?.textContent, p.querySelector('.pby')?.textContent])`, screenshot the panel at 1440×900 and 390×844, and view the PNGs. Expect `Claude` on judged posts, `wording` on unjudged posts that carry a lexicon score, and no label on a post nothing has scored (rare live: ingest scores every mention; if the window has none, the Python test covers it); nothing overlapping the author handle.
 
 - [ ] **Step 3: Dry-run the gate against the dev DB**
 
