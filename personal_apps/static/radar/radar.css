@@ -1375,6 +1375,14 @@ body {
 .phead .when { color: var(--muted); flex: none; }
 .phead .out { margin-left: auto; flex: none; color: var(--muted); text-decoration: none; }
 .phead .out:hover { color: var(--mark); text-decoration: underline; }
+@media (max-width: 900px) {
+  /* Six things compete for 390px once the provenance word is in: the handle
+     must keep enough to read and the link must stay on screen, so the stamp
+     and the link may drop under the rest. Measured, not assumed: without
+     this the handle collapsed to nothing and "open" sat past the edge. */
+  .phead { flex-wrap: wrap; row-gap: 2px; }
+  .phead .who { min-width: 9ch; }
+}
 .post p {
   margin: 7px 0 0;
   font-size: 14px; line-height: 1.58; color: var(--ink-2);

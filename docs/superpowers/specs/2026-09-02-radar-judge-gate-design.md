@@ -1,6 +1,6 @@
 # Radar — Gate the sentiment judge, and say who judged each post
 
-**Status:** approved in brainstorm 2026-09-02, spec for review
+**Status:** built 2026-09-02 (plan `docs/superpowers/plans/2026-09-02-radar-judge-gate.md`)
 **Builds on:** `2026-08-31-radar-sentiment-v2-final-design.md` (the judge pass,
 the review tier, chatter eligibility §7.2) and
 `2026-09-02-radar-watching-and-search-design.md` (`radar_watch`). Everything
