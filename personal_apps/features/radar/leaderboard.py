@@ -65,6 +65,14 @@ class Row:
     quote: object
     baseline_days: float | None
     marks: list
+    # Whether this row cleared the eligibility floor. Always True on a
+    # ranked board -- the floor is applied before a Row exists -- and
+    # False on a pinned (watched) row that would not have been listed.
+    eligible: bool = True
+    # Which gate it failed, when it did: one of _GATE_ORDER or
+    # 'no_mentions' (no bucket in the window at all). phrasing.py turns
+    # it into words.
+    floor_reason: str | None = None
 
 
 def _universe_rows(tickers):
@@ -121,6 +129,71 @@ def _quote_sigmas(quote_views, today):
     return sigmas
 
 
+def _aggregate(scored_sources, since, now, tickers=None):
+    """One aggregated row per (ticker, source) over the window.
+
+    Aggregated in SQL rather than in Python -- see _chatter_survivors for the
+    measurement that decided it. `tickers` narrows the scan to named ones
+    (the pinned path); None means every ticker with a scored bucket.
+    """
+    bucket = RadarBucketSource
+    query = (db.session.query(
+        bucket.ticker.label('ticker'),
+        bucket.source.label('source'),
+        sa.func.sum(bucket.mention_count).label('mentions'),
+        sa.func.sum(sa.func.coalesce(bucket.expected, 0.0)).label('expected'),
+        sa.func.sum(sa.func.coalesce(bucket.variance, 0.0)).label('variance'),
+        sa.func.max(bucket.distinct_authors).label('authors'),
+        sa.func.min(bucket.distinct_text_ratio).label('text_ratio'),
+        sa.func.min(bucket.baseline_days).label('baseline_days'),
+        sa.func.max(sa.case((bucket.status == 'truncated', 1), else_=0))
+        .label('truncated'))
+        .filter(bucket.source.in_(scored_sources),
+                bucket.bucket_start >= since,
+                bucket.bucket_start < now,
+                bucket.mention_z.isnot(None)))
+    if tickers is not None:
+        query = query.filter(bucket.ticker.in_(list(tickers)))
+    grouped = collections.defaultdict(list)
+    for row in query.group_by(bucket.ticker, bucket.source).all():
+        grouped[row.ticker].append(row)
+    return grouped
+
+
+def _fold(parts, authors, channels):
+    """One ticker's per-source rows folded into the figures the floor and the
+    row use. `authors` is the journal's true count or None (then the bucket
+    maximum, which undercounts in the safe direction)."""
+    # `parts` is one already-aggregated row per source, so these fold a
+    # handful of numbers rather than a few hundred bucket objects.
+    # Coerced here, once. SUM over an INTEGER column comes back as Decimal
+    # from MySQL and MariaDB alike, and Decimal minus float raises -- so
+    # the mention_z line below would have been the first thing to break,
+    # in the middle of scoring rather than at the boundary.
+    mentions = int(sum(part.mentions for part in parts))
+    expected = float(sum(part.expected for part in parts))
+    variance = float(sum(part.variance for part in parts))
+    authors = authors if authors is not None else int(max(part.authors for part in parts))
+    text_ratio = float(min(part.text_ratio for part in parts))
+
+    # The gate is per kind: a forum's independent voices are its authors, a
+    # broadcast network's are its channels. The pooled figures above still
+    # describe the row -- they just no longer decide it.
+    by_kind = collections.defaultdict(lambda: [0, 1.0])
+    for part in parts:
+        totals = by_kind[source_kind(part.source)]
+        totals[0] += int(part.mentions)
+        totals[1] = min(totals[1], float(part.text_ratio))
+    contributions = {
+        kind: scoring.Contribution(
+            mentions=totals[0],
+            voices=(channels if kind == 'broadcast' else authors),
+            text_ratio=totals[1])
+        for kind, totals in by_kind.items()
+    }
+    return mentions, expected, variance, authors, text_ratio, contributions
+
+
 def _chatter_survivors(sources, now, window_hours):
     """PASS ONE of build_rows, extracted whole: the chatter-only judgement.
 
@@ -151,28 +224,7 @@ def _chatter_survivors(sources, now, window_hours):
     # contributing count is: picking `reddit` is picking one venue, however
     # many subreddits it expands to.
     selected_venues = len({source_root(name) for name in sources})
-    bucket = RadarBucketSource
-    per_source = (db.session.query(
-        bucket.ticker.label('ticker'),
-        bucket.source.label('source'),
-        sa.func.sum(bucket.mention_count).label('mentions'),
-        sa.func.sum(sa.func.coalesce(bucket.expected, 0.0)).label('expected'),
-        sa.func.sum(sa.func.coalesce(bucket.variance, 0.0)).label('variance'),
-        sa.func.max(bucket.distinct_authors).label('authors'),
-        sa.func.min(bucket.distinct_text_ratio).label('text_ratio'),
-        sa.func.min(bucket.baseline_days).label('baseline_days'),
-        sa.func.max(sa.case((bucket.status == 'truncated', 1), else_=0))
-        .label('truncated'))
-        .filter(bucket.source.in_(scored_sources),
-                bucket.bucket_start >= since,
-                bucket.bucket_start < now,
-                bucket.mention_z.isnot(None))
-        .group_by(bucket.ticker, bucket.source)
-        .all())
-
-    grouped = collections.defaultdict(list)
-    for row in per_source:
-        grouped[row.ticker].append(row)
+    grouped = _aggregate(scored_sources, since, now)
 
     # Eligibility needs these two and nothing else -- and only for tickers
     # that can still be eligible. Under MIN_MENTIONS no voice count changes
@@ -200,41 +252,8 @@ def _chatter_survivors(sources, now, window_hours):
     excluded = collections.Counter()
 
     for ticker, parts in grouped.items():
-        # `parts` is one already-aggregated row per source, so these fold a
-        # handful of numbers rather than a few hundred bucket objects.
-        # Coerced here, once. SUM over an INTEGER column comes back as Decimal
-        # from MySQL and MariaDB alike, and Decimal minus float raises -- so
-        # the mention_z line below would have been the first thing to break,
-        # in the middle of scoring rather than at the boundary.
-        mentions = int(sum(part.mentions for part in parts))
-        expected = float(sum(part.expected for part in parts))
-        variance = float(sum(part.variance for part in parts))
-        # True count where the posts are still retained; the bucket maximum
-        # only as a fallback once they have aged out. The fallback undercounts,
-        # which is the safe direction -- it can hide a ticker but never invent
-        # breadth that was not there.
-        authors = author_counts.get(
-            ticker, int(max(part.authors for part in parts)))
-        text_ratio = float(min(part.text_ratio for part in parts))
-
-        # The gate is per kind: a forum's independent voices are its authors, a
-        # broadcast network's are its channels. The pooled figures above still
-        # describe the row -- they just no longer decide it.
-        by_kind = collections.defaultdict(
-            lambda: [0, 1.0])          # [mentions, lowest text ratio seen]
-        for part in parts:
-            totals = by_kind[source_kind(part.source)]
-            totals[0] += int(part.mentions)
-            totals[1] = min(totals[1], float(part.text_ratio))
-
-        contributions = {
-            kind: scoring.Contribution(
-                mentions=totals[0],
-                voices=(channel_counts.get(ticker, 0) if kind == 'broadcast'
-                        else authors),
-                text_ratio=totals[1])
-            for kind, totals in by_kind.items()
-        }
+        mentions, expected, variance, authors, text_ratio, contributions = _fold(
+            parts, author_counts.get(ticker), channel_counts.get(ticker, 0))
 
         # Below the floor there is nothing to rank. Showing it low would imply
         # it was measured and found wanting, when it was never measurable --
@@ -253,6 +272,94 @@ def chatter_candidates(sources, now, window_hours):
     """Sorted tickers whose chatter clears the floor in one window."""
     survivors, _, _, _ = _chatter_survivors(sources, now, window_hours)
     return sorted(survivors)
+
+
+def _assemble(ticker, folded, parts, profile, quote, moves, quote_sigmas,
+              window_hours, selected_venues, today,
+              eligible=True, floor_reason=None):
+    """Everything that costs a lookup, for one ticker, into a Row.
+
+    Shared by the ranked board and the pinned (watched) rows so the two can
+    never disagree about what a row says.
+    """
+    mentions, expected, variance, authors, text_ratio = folded
+    mention_z = ((mentions - expected)
+                 / max(variance, VARIANCE_FLOOR) ** 0.5) if variance else None
+
+    contributing = sorted({part.source for part in parts})
+    # One venue per ROOT, not per stored name -- see Row.venues.
+    venues = len({source_root(name) for name in contributing})
+    # MIN already skipped NULLs per source; this skips the sources that
+    # had nothing but NULLs, so a row with no usable baseline anywhere
+    # still reports None rather than raising. Coerced like the aggregates
+    # above for the same reason, even though MIN/MAX over a Float column
+    # (unlike SUM over an Integer one) do not promote to Decimal on
+    # MySQL/MariaDB -- matching the sibling pattern removes the ambiguity
+    # for a future reader rather than relying on that distinction silently.
+    baseline_days = min((float(part.baseline_days) for part in parts
+                         if part.baseline_days is not None), default=None)
+
+    status = quote.tape_status
+    move = (moves.get((ticker, quote.market))
+            if quote.score_eligible else None)
+
+    # A frozen tape reports no movement while mentions explode because it
+    # froze. That is maximum divergence produced by an artifact, so the
+    # row carries the mark and no score rather than a flattering number.
+    # 'closed' lands here too and for the same reason -- but it earns no
+    # mark, because the exchange being shut says nothing about the stock.
+    value = None
+    if quote.score_eligible and move is not None and mention_z is not None:
+        sigma = quote_sigmas.get(ticker)
+        move_z = divergence_mod.price_move_z(
+            move, quotes_mod.scale_sigma(sigma, window_hours))
+        if move_z is not None:
+            value = divergence_mod.divergence(mention_z, move_z)
+
+    marks = []
+    if status == 'stale':
+        marks.append('no-print')
+    if venues == 1 and selected_venues > 1:
+        marks.append('single-source')
+    if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
+        # Two different facts wear this badge, and only one is about the
+        # ticker. A NEW ticker has thin history of its own; every ticker on
+        # the board has thin history when the extraction rules changed
+        # recently, because baselines are built per config version. Saying
+        # `provisional` for both made it fire on all of them.
+        marks.append('provisional' if baseline_days >= 1.0 else 'warming-up')
+    if any(part.truncated for part in parts):
+        marks.append('partial')
+
+    segment = universe.segment_for(
+        profile.market_cap if profile else None,
+        profile.ipo_date if profile else None,
+        quote.price, today,
+        profile.name if profile else None,
+        profile.is_etf if profile else None)
+
+    return Row(
+        ticker=ticker,
+        name=profile.name if profile else None,
+        segment=segment,
+        divergence=value,
+        mention_z=mention_z,
+        mentions=mentions,
+        expected=expected,
+        authors=authors,
+        text_ratio=text_ratio,
+        sources=contributing,
+        venues=venues,
+        price=quote.price,
+        price_move=move,
+        direction=divergence_mod.direction(move),
+        price_status=status,
+        quote=quote,
+        baseline_days=baseline_days,
+        marks=marks,
+        eligible=eligible,
+        floor_reason=floor_reason,
+    )
 
 
 def build_rows(sources, now, window_hours=4, segments=(), limit=50,
@@ -297,96 +404,17 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
 
     for ticker, (mentions, expected, variance, authors,
                  text_ratio) in survivors.items():
-        parts = grouped[ticker]
-        mention_z = ((mentions - expected)
-                     / max(variance, VARIANCE_FLOOR) ** 0.5) if variance else None
-
-        contributing = sorted({part.source for part in parts})
-        # One venue per ROOT, not per stored name -- see Row.venues.
-        venues = len({source_root(name) for name in contributing})
-        # MIN already skipped NULLs per source; this skips the sources that
-        # had nothing but NULLs, so a row with no usable baseline anywhere
-        # still reports None rather than raising. Coerced like the aggregates
-        # above for the same reason, even though MIN/MAX over a Float column
-        # (unlike SUM over an Integer one) do not promote to Decimal on
-        # MySQL/MariaDB -- matching the sibling pattern removes the ambiguity
-        # for a future reader rather than relying on that distinction silently.
-        baseline_days = min((float(part.baseline_days) for part in parts
-                             if part.baseline_days is not None), default=None)
-
-        profile = profiles.get(ticker)
-        quote = quote_views[ticker]
-        status = quote.tape_status
-        move = (moves.get((ticker, quote.market))
-                if quote.score_eligible else None)
-
-        # A frozen tape reports no movement while mentions explode because it
-        # froze. That is maximum divergence produced by an artifact, so the
-        # row carries the mark and no score rather than a flattering number.
-        # 'closed' lands here too and for the same reason -- but it earns no
-        # mark, because the exchange being shut says nothing about the stock.
-        value = None
-        if quote.score_eligible and move is not None and mention_z is not None:
-            sigma = quote_sigmas.get(ticker)
-            move_z = divergence_mod.price_move_z(
-                move, quotes_mod.scale_sigma(sigma, window_hours))
-            if move_z is not None:
-                value = divergence_mod.divergence(mention_z, move_z)
-
-        marks = []
-        if status == 'stale':
-            marks.append('no-print')
-        if venues == 1 and selected_venues > 1:
-            marks.append('single-source')
-        if baseline_days is not None and baseline_days < PROVISIONAL_BASELINE_DAYS:
-            # Two different facts wear this badge, and only one is about the
-            # ticker. A NEW ticker has thin history of its own; every ticker on
-            # the board has thin history when the extraction rules changed
-            # recently, because baselines are built per config version. Saying
-            # `provisional` for both made it fire on all of them.
-            marks.append('provisional' if baseline_days >= 1.0 else 'warming-up')
-        if any(part.truncated for part in parts):
-            marks.append('partial')
-
-        row_segment = universe.segment_for(
-            profile.market_cap if profile else None,
-            profile.ipo_date if profile else None,
-            quote.price,
-            today, profile.name if profile else None,
-            profile.is_etf if profile else None)
-        if allowed and row_segment not in allowed:
+        row = _assemble(ticker, (mentions, expected, variance, authors, text_ratio),
+                        grouped[ticker], profiles.get(ticker), quote_views[ticker],
+                        moves, quote_sigmas, window_hours, selected_venues, today)
+        if allowed and row.segment not in allowed:
             continue
-        # Breadth as a filter, not as a score. `contributing` is the list of
-        # sources that actually said something, so this asks how many venues
-        # are talking rather than how many the viewer has switched on.
-        #
-        # Counted apart from the floor: this is the reader's own filter doing
-        # what they asked, not the data being too thin to measure. Merging the
-        # two would tell them the data was worse than it is.
-        if venues < min_venues:
+        # Breadth as a filter, not as a score -- counted apart from the
+        # floor: this is the reader's own filter doing what they asked.
+        if row.venues < min_venues:
             excluded['one_venue'] += 1
             continue
-
-        rows.append(Row(
-            ticker=ticker,
-            name=profile.name if profile else None,
-            segment=row_segment,
-            divergence=value,
-            mention_z=mention_z,
-            mentions=mentions,
-            expected=expected,
-            authors=authors,
-            text_ratio=text_ratio,
-            sources=contributing,
-            venues=venues,
-            price=quote.price,
-            price_move=move,
-            direction=divergence_mod.direction(move),
-            price_status=status,
-            quote=quote,
-            baseline_days=baseline_days,
-            marks=marks,
-        ))
+        rows.append(row)
 
     # Divergence first where it exists, then mention_z. A ticker with no price
     # is not evidence of anything about its price, so it sorts below one that
@@ -426,3 +454,52 @@ def _rejection(contributions):
         if best is None or _GATE_ORDER.index(reason) > _GATE_ORDER.index(best):
             best = reason
     return best
+
+
+def build_pinned(tickers, sources, now, window_hours=4, market='us'):
+    """Rows for named tickers regardless of the eligibility floor.
+
+    The floor decides ranking, not existence: a watched stock the reader
+    marked deserves a row saying what was measured and why it was not
+    ranked. Same aggregate, same lookups, same Row as the board -- with
+    `eligible` False and `floor_reason` set where the floor would have
+    dropped it, and every derived figure None where nothing was measured.
+    """
+    tickers = list(dict.fromkeys(t.upper() for t in tickers))
+    if not tickers:
+        return []
+    since = now - dt.timedelta(hours=window_hours)
+    scored_sources = expand_sources(sources)
+    selected_venues = len({source_root(name) for name in sources})
+
+    grouped = _aggregate(scored_sources, since, now, tickers=tickers)
+    voices = journal.distinct_voice_counts(tickers, sources, since, now)
+    profiles = _universe_rows(tickers)
+    quote_views = quotes_mod.quote_views_for(tickers, market, now)
+    moves = quotes_mod.moves_for(
+        [(ticker, view.market, view.mic) for ticker, view in quote_views.items()
+         if view.price is not None], window_hours, now)
+    today = now.date()
+    quote_sigmas = _quote_sigmas(quote_views, today)
+
+    rows = []
+    for ticker in tickers:
+        parts = grouped.get(ticker, [])
+        if parts:
+            authors_seen, channels_seen = voices.get(ticker, (None, 0))
+            mentions, expected, variance, authors, text_ratio, contributions = _fold(
+                parts, authors_seen, channels_seen)
+            eligible = scoring.is_eligible(contributions)
+            reason = None if eligible else _rejection(contributions)
+        else:
+            # No bucket in the window: nothing measured, and the fold would
+            # divide by nothing. Zeros here are counts of nothing observed,
+            # not measurements; the derived figures come out None.
+            mentions, expected, variance, authors, text_ratio = 0, 0.0, 0.0, 0, 1.0
+            eligible, reason = False, 'no_mentions'
+        rows.append(_assemble(
+            ticker, (mentions, expected, variance, authors, text_ratio), parts,
+            profiles.get(ticker), quote_views[ticker], moves, quote_sigmas,
+            window_hours, selected_venues, today,
+            eligible=eligible, floor_reason=reason))
+    return rows

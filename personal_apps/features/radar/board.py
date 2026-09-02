@@ -382,6 +382,47 @@ def _tones(tickers, sources, since, now):
     return out
 
 
+def _entries(ranked, sources, now, window_hours):
+    """What the surface needs to draw each row, beyond the rank: the 24h
+    series, the price series, the normal line, the triplet, the tone and
+    the words. Shared by the ranked board and the pinned rows."""
+    tickers = [row.ticker for row in ranked]
+    since = now - dt.timedelta(hours=SERIES_HOURS)
+
+    covered = _covered_hours(sources, since, now)
+    totals = _hourly_counts(tickers, sources, since, now)
+    prices = _hourly_prices(ranked, since, now)
+    triplets = _triplets(tickers, sources, now)
+    # The lean arrows must agree with the detail panel's chatter breakdown,
+    # which counts the SELECTED window -- not the sparkline's 24h axis.
+    tones = _tones(tickers, sources,
+                   now - dt.timedelta(hours=window_hours), now)
+
+    empty_triplet = {hours: None for hours in TRIPLET_HOURS}
+    return [BoardRow(
+        rank=row,
+        series=_series_for(row.ticker, totals, covered, since, now),
+        price_series=_price_series_for(row.ticker, prices, since, now),
+        # Guarded by the same rule as the ratio wording: an expected under
+        # the baseline floor is noise, and drawing a "normal" line off it
+        # would be the bar version of "200x normal".
+        normal_per_hour=(row.expected / window_hours
+                         if phrasing.ratio_value(row.mentions,
+                                                 row.expected) is not None
+                         else None),
+        triplet=triplets.get(row.ticker, empty_triplet),
+        tone=tones.get(row.ticker, Tone(0, 0, 0)),
+        clauses=phrasing.row_clauses(row, row.quote.session, window_hours),
+    ) for row in ranked]
+
+
+def build_pinned_rows(tickers, sources, now, window_hours=4, market='us'):
+    """Board entries for watched tickers, whatever the floor said."""
+    pinned = leaderboard.build_pinned(tickers, sources, now,
+                                      window_hours=window_hours, market=market)
+    return _entries(pinned, sources, now, window_hours)
+
+
 def build(sources, now, window_hours=4, segments=(), limit=50,
           leads=LEAD_COUNT, min_venues=1, market='us'):
     """The whole board.
@@ -439,34 +480,7 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
         ranked = kept
     ranked = ranked[:limit]
 
-    tickers = [row.ticker for row in ranked]
-    since = now - dt.timedelta(hours=SERIES_HOURS)
-
-    covered = _covered_hours(sources, since, now)
-    totals = _hourly_counts(tickers, sources, since, now)
-    prices = _hourly_prices(ranked, since, now)
-    triplets = _triplets(tickers, sources, now)
-    # The lean arrows must agree with the detail panel's chatter breakdown,
-    # which counts the SELECTED window -- not the sparkline's 24h axis.
-    tones = _tones(tickers, sources,
-                   now - dt.timedelta(hours=window_hours), now)
-
-    empty_triplet = {hours: None for hours in TRIPLET_HOURS}
-    rows = [BoardRow(
-        rank=row,
-        series=_series_for(row.ticker, totals, covered, since, now),
-        price_series=_price_series_for(row.ticker, prices, since, now),
-        # Guarded by the same rule as the ratio wording: an expected under
-        # the baseline floor is noise, and drawing a "normal" line off it
-        # would be the bar version of "200x normal".
-        normal_per_hour=(row.expected / window_hours
-                         if phrasing.ratio_value(row.mentions,
-                                                 row.expected) is not None
-                         else None),
-        triplet=triplets.get(row.ticker, empty_triplet),
-        tone=tones.get(row.ticker, Tone(0, 0, 0)),
-        clauses=phrasing.row_clauses(row, row.quote.session),
-    ) for row in ranked]
+    rows = _entries(ranked, sources, now, window_hours)
 
     return Board(generated_at=now, sources=list(sources), market=market,
                  display_timezone='Europe/Berlin',

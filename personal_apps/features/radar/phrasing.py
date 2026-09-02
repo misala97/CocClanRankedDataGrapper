@@ -66,13 +66,21 @@ def _ratio(mentions, expected):
     return f'{value:.1f}×'.replace('.0×', '×')
 
 
-def row_clauses(row, session):
+def row_clauses(row, session, window_hours=4):
     """The phrase for one leaderboard row, in reading order.
 
     `session` is the exchange state. With the market shut there is no price
     clause at all -- the page says "market closed" once, and a mark carried by
     every row is not a mark.
+
+    A row under the floor (a watched stock that was not ranked) says why,
+    once, instead of a ratio: "2 mentions in 4h, under the floor" is the
+    finding, and a ratio against a baseline the floor already rejected
+    would dress it up as one.
     """
+    if not getattr(row, 'eligible', True):
+        return [_floor_clause(row, window_hours)] + _price_clauses(row, session)
+
     clauses = []
 
     # An expected of zero is not "we expected none", it is "no baseline".
@@ -112,6 +120,24 @@ def _breadth_clauses(row):
         return [Clause('warn', ', '.join(narrow))]
     return [Clause('venues', f'{venues} venues'),
             Clause('people', f'{row.authors} people')]
+
+
+def _floor_clause(row, window_hours):
+    """Why the floor kept this row off the board, in the row's own words."""
+    reason = getattr(row, 'floor_reason', None)
+    if reason == 'no_mentions':
+        text = f'no mentions in {window_hours}h'
+    elif reason == 'too_few_mentions':
+        noun = 'mention' if row.mentions == 1 else 'mentions'
+        text = f'{row.mentions} {noun} in {window_hours}h, under the floor'
+    elif reason == 'too_few_voices':
+        text = ('one voice only' if row.authors <= 1 else f'{row.authors} voices') \
+            + ', under the floor'
+    elif reason == 'repeated_text':
+        text = 'repeated text, under the floor'
+    else:
+        text = 'under the floor'
+    return Clause('warn', text)
 
 
 def _price_clauses(row, session):

@@ -238,3 +238,29 @@ def test_the_read_has_no_baseline_sentence_when_there_is_no_baseline():
 
     assert 'no baseline yet' in joined
     assert '0 typical' not in joined
+
+
+def test_a_row_under_the_floor_says_why_instead_of_a_ratio():
+    from features.radar import leaderboard
+    from features.radar.phrasing import row_clauses
+
+    def quiet(reason, mentions=0, authors=0):
+        return leaderboard.Row(
+            ticker='LBQ', name='Q', segment='micro', divergence=None,
+            mention_z=None, mentions=mentions, expected=0.0, authors=authors,
+            text_ratio=1.0, sources=[], venues=0, price=None, price_move=None,
+            direction='flat', price_status='unknown', quote=None,
+            baseline_days=None, marks=[], eligible=False, floor_reason=reason)
+
+    texts = {reason: [c.text for c in row_clauses(quiet(reason, mentions, authors), 'closed', 4)]
+             for reason, mentions, authors in (
+                 ('no_mentions', 0, 0), ('too_few_mentions', 2, 1),
+                 ('too_few_mentions', 1, 1), ('too_few_voices', 6, 1),
+                 ('too_few_voices', 6, 2), ('repeated_text', 9, 4))}
+
+    assert texts['no_mentions'] == ['no mentions in 4h']
+    assert 'one voice only, under the floor' in texts['too_few_voices'] or \
+           '2 voices, under the floor' in texts['too_few_voices']
+    assert texts['repeated_text'] == ['repeated text, under the floor']
+    kinds = [c.kind for c in row_clauses(quiet('too_few_mentions', 2, 1), 'closed', 4)]
+    assert kinds == ['warn']

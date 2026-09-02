@@ -670,3 +670,65 @@ def test_sigma_history_is_read_once_per_day(monkeypatch):
 
     leaderboard._quote_sigmas(views, dt.date(2026, 1, 16))
     assert len(calls) == 2
+
+
+def test_a_pinned_ticker_below_the_floor_still_gets_a_row(board):
+    """Watching is the reader's mark; the floor decides ranking, not
+    existence. A watched stock with two mentions gets a row that says so."""
+    universe_row('LBPIN')
+    scored('LBPIN', mentions=2, authors=1)
+    quoted('LBPIN', '10.00', '9.80')
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBPIN'], ['bluesky'], NOW)
+
+    assert row.ticker == 'LBPIN'
+    assert row.eligible is False
+    assert row.floor_reason == 'too_few_mentions'
+    assert row.mentions == 2
+    assert row.price == decimal.Decimal('10.00')
+
+
+def test_a_pinned_ticker_above_the_floor_gets_the_row_it_would_have_had(board):
+    universe_row('LBPON')
+    scored('LBPON')
+    quoted('LBPON', '100.00', '100.00')
+    db.session.commit()
+
+    [ranked] = build_rows(['bluesky'], NOW)
+    [pinned] = leaderboard.build_pinned(['LBPON'], ['bluesky'], NOW)
+
+    assert pinned.eligible is True
+    assert pinned.floor_reason is None
+    assert (pinned.mentions, pinned.mention_z, pinned.divergence, pinned.marks) == \
+        (ranked.mentions, ranked.mention_z, ranked.divergence, ranked.marks)
+
+
+def test_a_pinned_ticker_with_no_bucket_is_absent_not_zero(board):
+    """No bucket in the window: nothing measured. Every derived figure is
+    None -- never 0 -- and the reason names the silence."""
+    universe_row('LBNIL')
+    quoted('LBNIL', '5.00', '5.00')
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBNIL'], ['bluesky'], NOW)
+
+    assert row.eligible is False
+    assert row.floor_reason == 'no_mentions'
+    assert row.mentions == 0
+    assert row.mention_z is None
+    assert row.divergence is None
+    assert row.baseline_days is None
+    assert row.sources == []
+
+
+def test_pinned_rows_keep_the_order_asked_and_drop_duplicates(board):
+    for ticker in ('LBP1', 'LBP2'):
+        universe_row(ticker)
+        quoted(ticker, '1.00', '1.00')
+    db.session.commit()
+
+    rows = leaderboard.build_pinned(['LBP2', 'LBP1', 'LBP2'], ['bluesky'], NOW)
+
+    assert [r.ticker for r in rows] == ['LBP2', 'LBP1']
+    assert leaderboard.build_pinned([], ['bluesky'], NOW) == []
