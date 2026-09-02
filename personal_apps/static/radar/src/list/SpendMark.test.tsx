@@ -27,6 +27,24 @@ describe('the spend mark in the masthead', () => {
     expect(mark).not.toHaveAttribute('aria-label')
   })
 
+  it('never reads as a broken meter: a day that rounds to nothing says so', () => {
+    /* Production at 02:00 CEST showed "$0.000 today" -- the UTC day had
+       started two hours earlier and the month's whole spend is ~$0.001.
+       True, and it reads as a meter that stopped working (Michi,
+       2026-09-02). Below display precision the token says "<$0.001";
+       with nothing booked today at all it shows the month instead. */
+    const { rerender } = render(<SpendMark payload={payload({
+      today_usd: 0.0002, month_usd: 0.00108, unpriced_tokens: 0,
+    })} />)
+    expect(screen.getByTitle(/spent reading tone/)).toHaveTextContent(/^<\$0\.001 today/)
+
+    rerender(<SpendMark payload={payload({
+      today_usd: 0, month_usd: 0.00108, unpriced_tokens: 0,
+    })} />)
+    expect(screen.getByTitle(/spent reading tone/)).toHaveTextContent(/^\$0\.001 this month/)
+    expect(screen.queryByText(/\$0\.000/)).toBeNull()
+  })
+
   it('is absent until the first pass books something', () => {
     /* A "$0.000 today" before any call would look like a working meter
        reading zero, which is a different claim from nothing to report. */

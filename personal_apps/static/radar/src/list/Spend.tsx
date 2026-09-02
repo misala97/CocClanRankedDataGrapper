@@ -33,13 +33,29 @@ export function SpendMark({ payload }: { payload: BoardPayload }) {
   if (!booked(spend)) return null
   const whole = `${usd(spend.today_usd)} spent reading tone today, `
     + `${usd(spend.month_usd)} this month`
+  // A day that rounds to nothing must not print "$0.000 today": true (the
+  // UTC day is two hours old at 02:00 CEST and a month of tone costs about
+  // a millidollar) and yet it reads as a meter that stopped. Below display
+  // precision the token says so; with nothing booked today it says the
+  // month, which is the figure that is actually moving.
+  const todayShown = spend.today_usd >= 0.0005
+  const todayTrace = spend.today_usd > 0 && !todayShown
   // Not aria-label: a bare span is role `generic`, which ARIA forbids naming,
   // so a label there is silently ignored. Hidden text is read; the title is
   // the same sentence for a mouse.
   return (
     <span className="spend" title={whole}>
-      <b>{usd(spend.today_usd)}</b> today
-      <span className="aural">, {usd(spend.month_usd)} this month, reading tone</span>
+      {todayShown || todayTrace ? (
+        <>
+          <b>{todayTrace ? '<$0.001' : usd(spend.today_usd)}</b> today
+          <span className="aural">, {usd(spend.month_usd)} this month, reading tone</span>
+        </>
+      ) : (
+        <>
+          <b>{usd(spend.month_usd)}</b> this month
+          <span className="aural">, nothing yet today, reading tone</span>
+        </>
+      )}
     </span>
   )
 }
