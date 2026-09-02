@@ -47,6 +47,8 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  const here = () => Boolean(root.current?.contains(document.activeElement))
+
   useEffect(() => {
     const query = q.trim()
     const mine = ++latest.current
@@ -58,10 +60,15 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
     const timer = setTimeout(() => {
       fetchSearch(query, controller.signal).then((found) => {
         if (mine !== latest.current) return
-        setMatches(found); setOpen(true); setActive(found.length ? 0 : -1)
+        setMatches(found); setActive(found.length ? 0 : -1)
+        // Open only while the reader is still here: a response landing
+        // after focus left must not float the list over whatever they
+        // moved to. The results are kept; coming back shows them.
+        if (here()) setOpen(true)
       }).catch(() => {
         if (mine !== latest.current) return
-        setMatches([]); setOpen(true); setActive(-1)
+        setMatches([]); setActive(-1)
+        if (here()) setOpen(true)
       })
     }, SETTLE_MS)
     return () => { clearTimeout(timer); controller.abort() }

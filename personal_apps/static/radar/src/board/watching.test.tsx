@@ -53,6 +53,46 @@ describe('marking a stock', () => {
     expect(calls('/api/board')).toHaveLength(0)
   })
 
+  it('keeps a later mark when an earlier unmark fails late', async () => {
+    /* Codex's case: removing A fails after adding B succeeded. The late
+       failure must undo only A's flip, never restore a snapshot that
+       predates B. Mutations run one at a time, in order. */
+    let failA!: () => void
+    const aFailure = new Promise<unknown>((resolve) => {
+      failA = () => resolve({ ok: false, redirected: false, status: 500, json: async () => ({}) })
+    })
+    const spy = vi.fn(async (url: string) => {
+      if (url.includes('/api/watch/AAA')) return aFailure
+      if (url.includes('/api/watch/BBB')) {
+        return { ok: true, redirected: false, status: 200, json: async () => ({ watching: ['AAA', 'BBB'] }) }
+      }
+      if (url.includes('/api/ticker/')) {
+        return { ok: true, redirected: false, status: 200,
+          json: async () => detail(url.split('/api/ticker/')[1]!.split('?')[0]!) }
+      }
+      return { ok: true, redirected: false, status: 200,
+        json: async () => payload({ watching: ['AAA', 'BBB'],
+                                    watch_rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' })] }) }
+    })
+    vi.stubGlobal('fetch', spy)
+    render(<BoardPage initial={payload({ watching: ['AAA'] })} />)
+    await screen.findByText(/AAA is being discussed/)
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Stop watching AAA' })[0]!)
+    await userEvent.click(screen.getByRole('button', { name: 'Watch BBB' }))
+    await waitFor(() => expect(calls('/api/watch/AAA')).toHaveLength(1))
+    failA()
+
+    // AAA is also the selected ticker, so its name appears on the row star
+    // and on the panel's button alike.
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Stop watching AAA' }).length).toBeGreaterThan(0))
+    await waitFor(() => expect(calls('/api/watch/BBB')).toHaveLength(1))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop watching BBB' })).toBeInTheDocument())
+    // One refetch, after the last mutation settled.
+    await waitFor(() => expect(calls('/api/board')).toHaveLength(1))
+    expect(screen.getAllByRole('button', { name: 'Stop watching AAA' }).length).toBeGreaterThan(0)
+  })
+
   it('opens on the watching list the server embedded', () => {
     stubFetch()
     render(<BoardPage initial={payload({ watching: ['AAA'] })} />)

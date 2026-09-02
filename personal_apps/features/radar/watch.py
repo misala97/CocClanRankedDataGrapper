@@ -24,7 +24,9 @@ class BadTicker(ValueError):
 
 def normalise(ticker):
     """The ticker uppercased, or BadTicker."""
-    if not ticker or not TICKER_SHAPE.match(ticker):
+    # fullmatch, not match: `$` alone forgives a trailing newline, and a
+    # ticker that ends in one would ride into IN clauses and client URLs.
+    if not ticker or not TICKER_SHAPE.fullmatch(ticker):
         raise BadTicker(ticker)
     return ticker.upper()
 

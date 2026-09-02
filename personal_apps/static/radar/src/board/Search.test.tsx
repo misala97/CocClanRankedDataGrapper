@@ -117,6 +117,28 @@ describe('finding a stock', () => {
     expect(input).toHaveValue('')
   })
 
+  it('does not reopen when a response lands after focus has left', async () => {
+    let deliver!: () => void
+    const late = new Promise<unknown>((resolve) => {
+      deliver = () => resolve({ ok: true, redirected: false, status: 200, json: async () => ({ matches }) })
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => late))
+    const { input } = search()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+    await user.type(input, 'nv')
+    vi.advanceTimersByTime(200)                      // the request goes out
+    input.blur()                                     // focus really leaves, as in a browser
+    deliver()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(screen.queryByRole('listbox')).toBeNull()
+    // The results were kept: coming back shows them without a new request.
+    input.focus()
+    expect(await screen.findByRole('listbox')).toBeInTheDocument()
+    expect(screen.getAllByRole('option')).toHaveLength(2)
+  })
+
   it('says so when nothing matches', async () => {
     stubSearch([])
     const { input } = search()

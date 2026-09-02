@@ -32,11 +32,21 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [selected, setSelected] = useState<string | null>(
     () => initialTicker(initial))
   // The caller's marks. Optimistic: the star flips before the server
-  // answers, the server's list replaces it, and a refusal puts it back.
-  // The board's own payload also carries the list, so a refetch keeps it
-  // true without a second request.
+  // answers, the server's list replaces it, and a refusal undoes that one
+  // flip. Mutations run one at a time, in order -- a queue, never parallel
+  // requests: with two in flight, a late failure could restore a snapshot
+  // that predates the later success (Codex's review of 26cc82d). The
+  // board's payload carries the list too; it is trusted only while nothing
+  // is in flight, and one refetch follows the last mutation.
   const [watching, setWatching] = useState<string[]>(initial.watching ?? [])
-  useEffect(() => { setWatching(payload.watching ?? []) }, [payload])
+  const marks = useRef<string[]>(initial.watching ?? [])   // the same list, readable now
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  const queued = useRef<{ ticker: string; on: boolean }[]>([])
+  const landed = useRef(false)   // a mutation the server accepted since the last refetch
+  const mark = useCallback((next: string[]) => { marks.current = next; setWatching(next) }, [])
+  useEffect(() => {
+    if (queued.current.length === 0) mark(payload.watching ?? [])
+  }, [payload, mark])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<BoardUnavailable | null>(null)
   const inflight = useRef<AbortController | null>(null)
@@ -107,19 +117,36 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     writeUrl(selection, ticker)
   }, [selection])
 
-  const toggleWatch = useCallback(async (ticker: string) => {
-    const before = watching
-    const on = !before.includes(ticker)
-    setWatching(on ? [...before, ticker] : before.filter((t) => t !== ticker))
-    try {
-      setWatching(await setWatch(ticker, on))
-      // The watched rows are built server-side; a refetch brings the new
-      // one in (or takes the old one out). Memo hit, so instant.
-      void load(selection, selected, true)
-    } catch {
-      setWatching(before)
-    }
-  }, [watching, selection, selected, load])
+  const toggleWatch = useCallback((ticker: string) => {
+    const on = !marks.current.includes(ticker)
+    const flip = { ticker, on }
+    queued.current.push(flip)
+    mark(on ? [...marks.current, ticker] : marks.current.filter((t) => t !== ticker))
+    queue.current = queue.current.then(async () => {
+      try {
+        const fresh = await setWatch(ticker, on)
+        landed.current = true
+        // The server's list is the truth up to this flip; flips still
+        // queued behind it were made after, so they stay applied on top.
+        mark(queued.current.filter((q) => q !== flip).reduce(
+          (list, q) => (q.on ? [...list.filter((t) => t !== q.ticker), q.ticker]
+                             : list.filter((t) => t !== q.ticker)),
+          fresh))
+      } catch {
+        // Undo this flip only; later flips of other tickers stand.
+        mark(on ? marks.current.filter((t) => t !== ticker) : [...marks.current, ticker])
+      } finally {
+        queued.current = queued.current.filter((q) => q !== flip)
+        if (queued.current.length === 0 && landed.current) {
+          // The watched rows are built server-side; one refetch after the
+          // last accepted mutation brings them in (or takes them out). Memo
+          // hit. A refused flip alone changes nothing, so nothing to fetch.
+          landed.current = false
+          void load(selection, selected, true)
+        }
+      }
+    })
+  }, [mark, selection, selected, load])
 
   const narrow = useNarrow()
   const page = useRef<HTMLDivElement>(null)

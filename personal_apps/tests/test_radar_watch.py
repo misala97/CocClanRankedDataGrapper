@@ -79,6 +79,19 @@ def test_a_malformed_ticker_is_refused(two_users):
         assert watch.tickers_for(a) == []
 
 
+def test_a_trailing_newline_is_not_a_ticker(two_users):
+    """re.match with $ accepts "NVDA\n"; the shape check must be a full
+    match, or a newline rides into the IN clauses and the client URL."""
+    a, _ = two_users
+    with flask_app.app_context():
+        for bad in ('NVDA\n', 'nvda\n', 'NV\nDA'):
+            with pytest.raises(watch.BadTicker):
+                watch.normalise(bad)
+            with pytest.raises(watch.BadTicker):
+                watch.add(a, bad)
+        assert watch.tickers_for(a) == []
+
+
 def test_deleting_the_account_deletes_its_marks(two_users):
     a, _ = two_users
     with flask_app.app_context():
