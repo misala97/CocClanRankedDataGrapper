@@ -911,6 +911,33 @@ def test_the_rolling_download_budget_stops_the_collector(ctx, calm, monkeypatch)
     assert 'budget' in (summary.error_code or '')
 
 
+def test_a_pre_quota_cycle_row_counts_as_one_attempt(ctx, calm, monkeypatch):
+    """Rows written before the cap carried files LISTED in files_seen (31 a
+    cycle) while attempting one download and breaking on it. Counted at
+    face value they spent the budget for a day after the deploy (seen
+    live: 'download budget spent 5056/300'). A row over the cap is one
+    attempt."""
+    ticker = f'{PREFIX}AA'
+    generation = _seed_generation_and_universe(ticker)
+    files, bodies = _minute_files([40])
+    provider = ScriptedProvider({'posttrade': tuple(files), 'pretrade': ()}, bodies)
+    monkeypatch.setattr(market_data, 'DE_DOWNLOAD_BUDGET_24H', 3)
+    db.session.add(RadarMarketDataCycle(
+        source='deutsche_boerse_delayed', mic='XGAT', channel='pretrade',
+        scheduled_at=NOW - dt.timedelta(hours=1), completed_at=NOW - dt.timedelta(hours=1),
+        mode='active', status='transport_error', files_seen=31, files_accepted=0,
+        record_count=0, selected_count=0, rejected_records=0,
+        compressed_bytes=0, uncompressed_bytes=0, parse_ms=0,
+        error_code='HTTP 429 (DGAT-pretrade-2027-01-04T11_45.json.gz'))
+    db.session.commit()
+
+    assert market_data.downloads_last_24h(NOW) == 1
+    summary = market_data.collect_german_cycle(
+        provider, generation.id, [ticker], NOW, mode='active')
+    assert summary.status == 'accepted'
+    assert provider.downloads == ['DGAT-posttrade-2027-01-04T12_40.json.gz']
+
+
 def test_watched_tickers_are_priced_even_when_nobody_talks_about_them(ctx, monkeypatch):
     """The quote pollers take active_price_tickers; a starred ticker with
     no chatter must be in it, or its row keeps a days-old quote."""

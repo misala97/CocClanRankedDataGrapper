@@ -215,12 +215,19 @@ def _clear_throttle():
 def downloads_last_24h(now):
     """Downloads attempted against the host in the trailing day. The cycle
     rows are the ledger: files_seen counts files a download was asked for,
-    never files merely listed."""
-    return int(db.session.query(
-        sa.func.coalesce(sa.func.sum(RadarMarketDataCycle.files_seen), 0))
-        .filter(RadarMarketDataCycle.source == 'deutsche_boerse_delayed',
-                RadarMarketDataCycle.completed_at >= now - dt.timedelta(hours=24))
-        .scalar() or 0)
+    never files merely listed.
+
+    Rows written before the cap carried files LISTED (31 a cycle) while
+    attempting one download and breaking on it; counted at face value they
+    spent the budget for a day after the deploy ('download budget spent
+    5056/300', 2026-09-02). A row over the cap is one attempt.
+    """
+    seen = RadarMarketDataCycle.files_seen
+    attempts = sa.case((seen > DE_FILES_PER_CYCLE, 1), else_=seen)
+    return int(db.session.query(sa.func.coalesce(sa.func.sum(attempts), 0))
+               .filter(RadarMarketDataCycle.source == 'deutsche_boerse_delayed',
+                       RadarMarketDataCycle.completed_at >= now - dt.timedelta(hours=24))
+               .scalar() or 0)
 
 
 def collect_german_cycle(provider, generation_id, active_tickers, now,
