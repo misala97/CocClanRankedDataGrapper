@@ -849,6 +849,8 @@ body {
 .row .fig .up { color: var(--up); font-weight: 600; }
 .row .fig .down { color: var(--down); font-weight: 600; }
 .row .fig .warn { color: var(--warn); font-weight: 600; }
+/* A watched row under the floor: "quiet" is a fact, not a warning. */
+.row .fig .muted { color: var(--muted); font-weight: 500; }
 
 .row .sub {
   display: block; font-size: var(--t-ax); color: var(--muted);

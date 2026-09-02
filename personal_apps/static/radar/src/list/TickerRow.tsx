@@ -209,7 +209,9 @@ export function TickerRow(props: {
 
       <span className="facts">
         <span className="fig">
-          {ratioShort(row.ratio) ?? <span className="warn">new here</span>}
+          {quiet
+            ? <span className="muted">quiet</span>
+            : ratioShort(row.ratio) ?? <span className="warn">new here</span>}
           {' · '}
           {rowFigPrice(row)}
           {moveClause && (

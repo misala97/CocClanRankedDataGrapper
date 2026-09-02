@@ -80,6 +80,10 @@ describe('the Watching tier', () => {
     expect(q.querySelector('.score')).toHaveTextContent('—')
     expect(q.querySelector('.sub.warn')).toHaveTextContent('2 mentions in 4h, under the floor')
     expect(q.querySelector('.chart path')).toBeNull()
+    // The ratio slot says "quiet", never "new here": nothing was said, and
+    // that is not the same as the ticker being new.
+    expect(q.querySelector('.fig')).toHaveTextContent('quiet')
+    expect(q.querySelector('.fig')).not.toHaveTextContent('new here')
   })
 
   it('puts a star beside every row, named for its action', async () => {
