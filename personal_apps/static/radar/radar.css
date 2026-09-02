@@ -1352,6 +1352,9 @@ body {
 }
 .post.bull .ptone { color: var(--up); }
 .post.bear .ptone { color: var(--down); }
+/* Who judged the post, beside the tone word: same size, never coloured --
+   the colour belongs to the tone, the provenance is a fact. */
+.phead .pby { flex: none; font-size: var(--t-xs); color: var(--muted); }
 .phead { display: flex; align-items: baseline; gap: 10px; font-size: var(--t-xs); }
 /* The venue tag stays neutral. Violet is chatter and selection; a violet badge
    on every post would spend the accent on a label. Fixed width so the author

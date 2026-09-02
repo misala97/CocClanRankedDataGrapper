@@ -256,7 +256,7 @@ def test_the_panel_returns_the_posts_themselves(panel_ticker):
     built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
 
     assert built.post_total == 3
-    post, tone = built.posts[0]
+    post, tone, _judged_by = built.posts[0]
     assert post.body == 'to the moon'
     assert post.url
     # The fixture's newest post carries a locally-bullish float and no
@@ -272,7 +272,7 @@ def test_each_post_carries_the_tone_the_tallies_use(panel_ticker):
     db.session.commit()
 
     built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
-    tones = {post.external_id: tone for post, tone in built.posts}
+    tones = {post.external_id: tone for post, tone, _judged_by in built.posts}
 
     assert tones[f'{PREFIX}-tone-neg'] == 'bearish'    # attitude beats local
     assert tones[f'{PREFIX}-tone-none'] == 'neutral'   # decided, undirected
@@ -362,7 +362,7 @@ def test_confirmed_non_chatter_leaves_the_breakdown_and_the_post_list(
     # keep + uncertain count while the two excluded rows vanish.
     assert b.mentions == 5
     assert b.bullish == 3
-    posts = {p.external_id for p, _tone in panel.posts}
+    posts = {p.external_id for p, _tone, _judged_by in panel.posts}
     assert f'{PREFIX}-elig-keep' in posts
     assert f'{PREFIX}-elig-uncertain' in posts
     assert f'{PREFIX}-elig-irrelevant' not in posts
@@ -969,3 +969,33 @@ def test_a_quote_without_provider_time_never_reaches_the_1d_chart(
         chart = detail.intraday_chart_for(f'{PREFIX}NOTS', ['bluesky'], NOW,
                                           '1D')
         assert all(c is None for c in chart.closes)
+
+
+def test_each_post_says_who_judged_it(clean):
+    """The label follows the same precedence as the tone, so it can never
+    disagree with the colour: model for a v2 attitude or a legacy label
+    (a decided neutral included), lexicon for the local float alone, and
+    nothing when nothing has scored the mention."""
+    from features.radar import detail_panel
+    from models import RadarMention, RadarPost
+    ticker = f'{PREFIX}J'
+    post_for(ticker, 10, 'ann', 'to the moon', attitude='positive')           # model, bullish
+    post_for(ticker, 20, 'bob', 'meh', attitude='none')                        # model, neutral
+    post_for(ticker, 30, 'cy', 'looks weak', llm_sentiment='bearish')          # model (legacy)
+    post_for(ticker, 40, 'dee', 'to the moon again')                           # lexicon, bullish
+    post_for(ticker, 50, 'eve', 'nothing has scored this yet')                 # nothing at all
+    unscored = (db.session.query(RadarMention)
+                .join(RadarPost, RadarPost.id == RadarMention.post_id)
+                .filter(RadarMention.ticker == ticker, RadarPost.author == 'eve').one())
+    unscored.lexicon_sentiment = None      # post_for always scores; undo that here
+    db.session.commit()
+
+    posts, total = detail_panel._posts(ticker, ['bluesky'], NOW - dt.timedelta(hours=2), NOW)
+
+    assert total == 5
+    by_author = {post.author: (tone, judged_by) for post, tone, judged_by in posts}
+    assert by_author['ann'] == ('bullish', 'model')
+    assert by_author['bob'] == ('neutral', 'model')
+    assert by_author['cy'] == ('bearish', 'model')
+    assert by_author['dee'] == ('bullish', 'lexicon')
+    assert by_author['eve'] == ('neutral', None)

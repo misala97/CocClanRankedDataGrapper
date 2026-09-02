@@ -80,6 +80,11 @@ export function Posts({ posts, total, retentionNote }: {
                     the lean chip's sanctioned green/red exception extends
                     here so a post can never disagree with the counts. */}
                 <span className={`ptone ${post.tone}`}>{post.tone}</span>
+                {post.judged_by && (
+                  // A fact, not a badge: who read this post -- the model, or
+                  // the wording score that stands in until it does.
+                  <span className="pby">{post.judged_by === 'model' ? 'Claude' : 'wording'}</span>
+                )}
                 {/* Handles have no length limit anywhere upstream, and a long
                     one used to push the outbound link off the row. It
                     truncates and keeps its full value for a hover. */}

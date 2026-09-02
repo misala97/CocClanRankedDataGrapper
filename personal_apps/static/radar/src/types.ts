@@ -150,6 +150,9 @@ export interface Post {
   /** The §7.1 tone read the tallies use, per post -- 'neutral' covers a
    *  decided even-handed read and a not-yet-scored mention alike. */
   tone: 'bullish' | 'bearish' | 'neutral'
+  /** Who decided `tone`: the model (a decided neutral included), the local
+   *  wording score, or nothing yet. */
+  judged_by: 'model' | 'lexicon' | null
 }
 
 export interface Venue {

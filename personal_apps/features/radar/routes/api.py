@@ -615,7 +615,9 @@ def serialize_detail(d):
             # The same §7.1 read the tallies use, per post, so the list
             # and the counts above it can never disagree.
             'tone': tone,
-        } for p, tone in d.posts],
+            # Who decided that tone: the model, or the local wording score.
+            'judged_by': judged_by,
+        } for p, tone, judged_by in d.posts],
         'post_total': d.post_total,
     }
 

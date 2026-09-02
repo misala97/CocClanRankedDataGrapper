@@ -120,11 +120,12 @@ def window_figures(ticker, sources, since, now):
 def _posts(ticker, sources, since, now):
     """The newest posts with their tone, and how many there were in all.
 
-    Returns ([(post, tone)], total) where tone is 'bullish', 'bearish' or
-    'neutral' -- the same §7.1 precedence the tallies use, so a post can
-    never disagree with the counts it sits under. 'neutral' covers both a
-    decided even-handed read and a mention nothing has scored yet; the
-    tallies make the same collapse.
+    Returns ([(post, tone, judged_by)], total) where tone is 'bullish',
+    'bearish' or 'neutral' -- the same §7.1 precedence the tallies use, so
+    a post can never disagree with the counts it sits under. 'neutral'
+    covers both a decided even-handed read and a mention nothing has
+    scored yet; the tallies make the same collapse. `judged_by` says who
+    decided that tone: 'model', 'lexicon', or None when nothing has.
     """
     sources = expand_sources_for_history(sources)
     base = (db.session.query(RadarPost, RadarMention.lexicon_sentiment,
@@ -138,7 +139,8 @@ def _posts(ticker, sources, since, now):
                     RadarMention.confidence.in_(('high', 'medium')),
                     *_eligibility_filter()))
     rows = base.order_by(RadarPost.created_utc.desc()).limit(POST_LIMIT).all()
-    posts = [(post, _tone_of(local, legacy, attitude) or 'neutral')
+    posts = [(post, _tone_of(local, legacy, attitude) or 'neutral',
+              _judged_by(local, legacy, attitude))
              for post, local, legacy, attitude in rows]
     return posts, base.count()
 
@@ -187,6 +189,19 @@ def _tone_of(local, legacy, attitude):
         return 'bullish'
     if local and local < 0:
         return 'bearish'
+    return None
+
+
+def _judged_by(local, legacy, attitude):
+    """Who decided the tone _tone_of returns -- the same precedence, so
+    the label can never disagree with the colour. 'model' for a v2
+    attitude or a legacy LLM label (a decided neutral counts: the model
+    read it and found no lean); 'lexicon' when only the local float has
+    scored it; None when nothing has."""
+    if attitude is not None or legacy is not None:
+        return 'model'
+    if local is not None:
+        return 'lexicon'
     return None
 
 
