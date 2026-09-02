@@ -252,15 +252,16 @@ def test_a_row_under_the_floor_says_why_instead_of_a_ratio():
             direction='flat', price_status='unknown', quote=None,
             baseline_days=None, marks=[], eligible=False, floor_reason=reason)
 
-    texts = {reason: [c.text for c in row_clauses(quiet(reason, mentions, authors), 'closed', 4)]
-             for reason, mentions, authors in (
-                 ('no_mentions', 0, 0), ('too_few_mentions', 2, 1),
-                 ('too_few_mentions', 1, 1), ('too_few_voices', 6, 1),
-                 ('too_few_voices', 6, 2), ('repeated_text', 9, 4))}
+    def words(reason, mentions=0, authors=0):
+        clauses = row_clauses(quiet(reason, mentions, authors), 'closed', 4)
+        assert [c.kind for c in clauses] == ['warn']
+        return clauses[0].text
 
-    assert texts['no_mentions'] == ['no mentions in 4h']
-    assert 'one voice only, under the floor' in texts['too_few_voices'] or \
-           '2 voices, under the floor' in texts['too_few_voices']
-    assert texts['repeated_text'] == ['repeated text, under the floor']
-    kinds = [c.kind for c in row_clauses(quiet('too_few_mentions', 2, 1), 'closed', 4)]
-    assert kinds == ['warn']
+    assert words('no_mentions') == 'no mentions in 4h'
+    assert words('too_few_mentions', 2, 1) == '2 mentions in 4h, under the floor'
+    assert words('too_few_mentions', 1, 1) == '1 mention in 4h, under the floor'
+    assert words('too_few_voices', 6, 1) == 'one voice only, under the floor'
+    assert words('too_few_voices', 6, 2) == '2 voices, under the floor'
+    assert words('repeated_text', 9, 4) == 'repeated text, under the floor'
+    # The window is the selection's, not a constant.
+    assert row_clauses(quiet('no_mentions'), 'closed', 24)[0].text == 'no mentions in 24h'

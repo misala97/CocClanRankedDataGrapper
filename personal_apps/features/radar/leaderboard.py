@@ -145,6 +145,10 @@ def _aggregate(scored_sources, since, now, tickers=None):
         sa.func.sum(sa.func.coalesce(bucket.variance, 0.0)).label('variance'),
         sa.func.max(bucket.distinct_authors).label('authors'),
         sa.func.min(bucket.distinct_text_ratio).label('text_ratio'),
+        # MIN over a nullable baseline_days skips NULLs, which is exactly
+        # what the Python it replaces did. The columns that must not skip --
+        # mention_count, distinct_authors, distinct_text_ratio, status -- are
+        # all NOT NULL.
         sa.func.min(bucket.baseline_days).label('baseline_days'),
         sa.func.max(sa.case((bucket.status == 'truncated', 1), else_=0))
         .label('truncated'))
@@ -168,8 +172,8 @@ def _fold(parts, authors, channels):
     # handful of numbers rather than a few hundred bucket objects.
     # Coerced here, once. SUM over an INTEGER column comes back as Decimal
     # from MySQL and MariaDB alike, and Decimal minus float raises -- so
-    # the mention_z line below would have been the first thing to break,
-    # in the middle of scoring rather than at the boundary.
+    # the mention_z arithmetic in `_assemble` would have been the first
+    # thing to break, in the middle of scoring rather than at the boundary.
     mentions = int(sum(part.mentions for part in parts))
     expected = float(sum(part.expected for part in parts))
     variance = float(sum(part.variance for part in parts))
@@ -179,7 +183,7 @@ def _fold(parts, authors, channels):
     # The gate is per kind: a forum's independent voices are its authors, a
     # broadcast network's are its channels. The pooled figures above still
     # describe the row -- they just no longer decide it.
-    by_kind = collections.defaultdict(lambda: [0, 1.0])
+    by_kind = collections.defaultdict(lambda: [0, 1.0])   # [mentions, lowest text ratio seen]
     for part in parts:
         totals = by_kind[source_kind(part.source)]
         totals[0] += int(part.mentions)
@@ -215,10 +219,6 @@ def _chatter_survivors(sources, now, window_hours):
     # Grouped by SOURCE as well as ticker, not folded to kind here: which kind
     # a source belongs to is `source_kind`'s judgement and it stays in Python.
     # Sources are a handful, so this is ~3 rows per ticker rather than ~96.
-    #
-    # MIN over a nullable baseline_days skips NULLs, which is exactly what the
-    # Python it replaces did. The columns that must not skip -- mention_count,
-    # distinct_authors, distinct_text_ratio, status -- are all NOT NULL.
     scored_sources = expand_sources(sources)
     # How many venues the VIEWER switched on, rooted for the same reason the
     # contributing count is: picking `reddit` is picking one venue, however
@@ -409,8 +409,13 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
                         moves, quote_sigmas, window_hours, selected_venues, today)
         if allowed and row.segment not in allowed:
             continue
-        # Breadth as a filter, not as a score -- counted apart from the
-        # floor: this is the reader's own filter doing what they asked.
+        # Breadth as a filter, not as a score. `contributing` is the list of
+        # sources that actually said something, so this asks how many venues
+        # are talking rather than how many the viewer has switched on.
+        #
+        # Counted apart from the floor: this is the reader's own filter doing
+        # what they asked, not the data being too thin to measure. Merging the
+        # two would tell them the data was worse than it is.
         if row.venues < min_venues:
             excluded['one_venue'] += 1
             continue

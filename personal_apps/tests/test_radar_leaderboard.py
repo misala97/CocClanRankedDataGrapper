@@ -5,6 +5,7 @@ appearance -- that is Plan 5 -- but does decide what is worth showing at all,
 which is the eligibility floor's job and the one place a thin board must not
 be padded.
 """
+import dataclasses
 import datetime as dt
 import decimal
 
@@ -700,8 +701,13 @@ def test_a_pinned_ticker_above_the_floor_gets_the_row_it_would_have_had(board):
 
     assert pinned.eligible is True
     assert pinned.floor_reason is None
-    assert (pinned.mentions, pinned.mention_z, pinned.divergence, pinned.marks) == \
-        (ranked.mentions, ranked.mention_z, ranked.divergence, ranked.marks)
+    # Every field the board would have shown, not a sample of them: the two
+    # paths share _assemble, so any difference is in the inputs.
+    same = {k: v for k, v in dataclasses.asdict(pinned).items()
+            if k not in ('eligible', 'floor_reason', 'quote')}
+    assert same == {k: v for k, v in dataclasses.asdict(ranked).items()
+                    if k not in ('eligible', 'floor_reason', 'quote')}
+    assert pinned.quote.price == ranked.quote.price
 
 
 def test_a_pinned_ticker_with_no_bucket_is_absent_not_zero(board):
