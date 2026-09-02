@@ -390,6 +390,9 @@ def _row(entry):
         'quote': _quote(r.quote),
         'baseline_days': r.baseline_days,
         'marks': r.marks,
+        # False only on a watched row the floor would have dropped; the
+        # island renders it quiet and its warn clause says why.
+        'eligible': r.eligible,
         # `count: null` is a measured gap, not a quiet hour -- see board.py.
         'series': [{'hour': p.hour.isoformat() + 'Z', 'count': p.count}
                    for p in entry.series],
@@ -445,8 +448,13 @@ def _build_board(query, now):
     return board
 
 
-def build_payload(args, now=None):
-    """Validated query -> serialized board. Shared by the page and the API."""
+def build_payload(args, now=None, user_id=None):
+    """Validated query -> serialized board. Shared by the page and the API.
+
+    `user_id` adds the caller's watching list and its rows on top of the
+    memoised, viewer-invariant board -- a handful of tickers, uncached
+    because it is per account.
+    """
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     query = parse_query(args, now=now)
     # The SELECTION, unexpanded. board.build hands it to each query, and the
@@ -463,7 +471,13 @@ def build_payload(args, now=None):
     # rendered every chip off -- a state it otherwise forbids, and one whose
     # first click silently discarded the concrete selection.
     board.sources = sorted({source_root(s) for s in query.sources})
-    return serialize(board)
+    payload = serialize(board)
+    watching = watch.tickers_for(user_id) if user_id is not None else []
+    payload['watching'] = watching
+    payload['watch_rows'] = [_row(entry) for entry in board_mod.build_pinned_rows(
+        watching, query.sources, now, window_hours=query.window,
+        market=query.market)] if watching else []
+    return payload
 
 
 @radar_bp.route('/api/board')
@@ -471,7 +485,7 @@ def build_payload(args, now=None):
 def board():
     """Ranked rows for the selected sources, segment and window."""
     try:
-        return jsonify(build_payload(request.args))
+        return jsonify(build_payload(request.args, user_id=current_user().id))
     except BadQuery as exc:
         return jsonify({'error': str(exc)}), 400
 

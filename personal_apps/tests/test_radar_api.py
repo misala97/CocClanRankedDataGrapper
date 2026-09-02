@@ -689,3 +689,48 @@ def test_the_board_payload_carries_sentiment_ops(client):
     assert ops['p95_age_minutes'] is None or ops['p95_age_minutes'] >= 0
     for key in ('demanded', 'attempted', 'served', 'capped', 'over_ceiling'):
         assert isinstance(ops['review'][key], int), key
+
+
+def test_the_board_carries_the_callers_watch_rows_and_nobody_elses(client, monkeypatch):
+    """Per-user data rides on top of the shared board: same rows for every
+    account, different watch_rows -- and the memo is keyed on the
+    selection alone."""
+    import datetime as dt
+    from app import app as flask_app
+    from extensions import db
+    from models import AppUser, RadarWatch
+    from features.radar.routes import api
+    from conftest import _admin_id
+
+    with flask_app.app_context():
+        AppUser.query.filter_by(username='pytest other watcher').delete()
+        db.session.commit()
+        other = AppUser(username='pytest other watcher', password_hash='x')
+        db.session.add(other)
+        db.session.commit()
+        other_id = other.id
+        RadarWatch.query.filter_by(user_id=_admin_id()).delete()
+        db.session.add(RadarWatch(user_id=_admin_id(), ticker='ZZWATCH',
+                                  created_at=dt.datetime(2026, 9, 2)))
+        db.session.commit()
+    try:
+        api.board_cache.clear()
+        mine = client.get('/radar/api/board?market=us').get_json()
+        with client.session_transaction() as flask_session:
+            flask_session['user_id'] = other_id
+        theirs = client.get('/radar/api/board?market=us').get_json()
+
+        assert mine['watching'] == ['ZZWATCH']
+        assert [r['ticker'] for r in mine['watch_rows']] == ['ZZWATCH']
+        assert mine['watch_rows'][0]['eligible'] is False
+        assert mine['watch_rows'][0]['clauses'][0] == {
+            'kind': 'warn', 'text': 'no mentions in 4h'}
+        assert theirs['watching'] == [] and theirs['watch_rows'] == []
+        assert theirs['rows'] == mine['rows']
+        assert all('eligible' in r for r in mine['rows'])
+        assert len(api.board_cache) == 1
+    finally:
+        with flask_app.app_context():
+            RadarWatch.query.filter_by(user_id=_admin_id()).delete()
+            AppUser.query.filter_by(id=other_id).delete()
+            db.session.commit()
