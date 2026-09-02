@@ -194,3 +194,26 @@ def test_the_month_stops_at_the_first_of_the_month(clean_spend):
         got = spend.summary(today=TODAY)
 
         assert got['month_usd'] == pytest.approx(1.00)
+
+
+def test_a_cost_belongs_to_the_readers_day_not_the_utc_one(clean_spend, monkeypatch):
+    """Every clock and date on the surface is Berlin time; the meter booked
+    and read its "today" as the UTC day, which flips at 02:00 CEST -- so at
+    02:00 the masthead reset to nothing while the reader's day was two hours
+    old (Michi, 2026-09-02). 23:30Z on 1 Sep is 01:30 CEST on 2 Sep."""
+    at = dt.datetime(2026, 9, 1, 23, 30, tzinfo=dt.timezone.utc)
+    monkeypatch.setattr(spend, '_clock', lambda: at)
+
+    assert spend.berlin_day(at) == dt.date(2026, 9, 2)
+
+    with flask_app.app_context():
+        try:
+            spend.record(MODEL, calls=1, input_tokens=1000, output_tokens=100)
+            row = RadarLlmSpend.query.filter_by(
+                day=dt.date(2026, 9, 2), model=MODEL).one()
+            assert row.day == dt.date(2026, 9, 2)
+            assert spend.summary()['today_usd'] > 0
+        finally:
+            RadarLlmSpend.query.filter_by(
+                day=dt.date(2026, 9, 2), model=MODEL).delete()
+            db.session.commit()

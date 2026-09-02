@@ -12,11 +12,30 @@ Read it against whatever was last loaded onto the account to know when to top
 up. It cannot tell you the balance, because nothing can.
 """
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 
 from extensions import db
 from models import RadarLlmSpend
+
+# The reader's calendar, which is the surface's calendar: every clock and date
+# on the board is Berlin time (routes/api.py: display_timezone). The meter
+# used to book and read its day as the UTC date, which flips at 02:00 CEST --
+# so at 02:00 the masthead reset to nothing while the reader's day was two
+# hours old. A cost belongs to the day the reader would say it was spent on.
+BERLIN = ZoneInfo('Europe/Berlin')
+
+
+def _clock():
+    """Patched by tests."""
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def berlin_day(when=None):
+    """The Berlin calendar day of an aware instant (default: now)."""
+    when = when or _clock()
+    return when.astimezone(BERLIN).date()
 
 # USD per million tokens, (input, output). Anthropic list price.
 #
@@ -55,7 +74,7 @@ def record(model, calls, input_tokens, output_tokens, day=None):
     if not calls and not input_tokens and not output_tokens:
         return
     if day is None:
-        day = dt.datetime.now(dt.timezone.utc).date()
+        day = berlin_day()
 
     row = RadarLlmSpend.query.filter_by(day=day, model=model).one_or_none()
     if row is None:
@@ -93,7 +112,7 @@ def summary(today=None):
     was loaded onto the account, and that is billed by calendar month.
     """
     if today is None:
-        today = dt.datetime.now(dt.timezone.utc).date()
+        today = berlin_day()
     first = today.replace(day=1)
 
     def total(since, until):
