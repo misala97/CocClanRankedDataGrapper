@@ -630,7 +630,7 @@ body {
   background: var(--surface);
   display: grid; grid-template-columns: var(--ledger);
   column-gap: var(--ledger-gap);
-  padding: 7px var(--s6) 5px;
+  padding: 7px var(--s6) 5px calc(var(--s6) + 22px);
   border-bottom: 1px solid var(--rule);
   font-size: var(--t-ax); font-weight: 500; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--muted); white-space: nowrap;
@@ -649,7 +649,7 @@ body {
   font-size: var(--t-xs); line-height: 1.4; color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-.row + .tier { margin-top: var(--s3); border-top: 1px solid var(--rule); }
+.line + .tier { margin-top: var(--s3); border-top: 1px solid var(--rule); }
 .tier b { color: var(--ink); font-weight: 600; white-space: nowrap; }
 .tier .dot { color: var(--dim); }
 .tier .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -659,6 +659,8 @@ body {
 }
 .tier .why { color: var(--warn); font-weight: 600; white-space: nowrap; }
 .tier .n { margin-left: auto; padding-left: var(--s3); color: var(--ink-2); }
+/* The reader's own tier: no term, because its order is the reader's. */
+.tier.watching .what { color: var(--muted); }
 
 /* The board being replaced goes quiet while the new one is fetched -- and it
    does so WITHOUT dimming any text.
@@ -708,11 +710,30 @@ body {
   align-items: center;
   position: relative;
   flex: none;
-  padding: 5px var(--s6);
+  padding: 5px var(--s6) 5px calc(var(--s6) + 22px);
   border-bottom: 1px solid var(--rule-soft);
   text-decoration: none; color: inherit;
   transition: background var(--fast) var(--ease);
 }
+
+/* The row and its star. The link keeps the ledger grid; the star sits in a
+   gutter the link leaves on its left -- a sibling, never a child, because a
+   control inside a link is invalid and the row must stay a copyable URL. */
+.line { position: relative; flex: none; }
+.line .star {
+  position: absolute; left: var(--s6); top: 50%; transform: translateY(-50%);
+  z-index: 1; font: inherit; font-size: 13px; line-height: 1;
+  padding: 6px; margin: -6px; border: 0; background: none;
+  color: var(--dim); cursor: pointer;
+  transition: color var(--fast) var(--ease);
+}
+.line .star:hover { color: var(--ink); }
+.line .star.on { color: var(--ink); }
+.line .star:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+/* A watched row the floor would have dropped: present, quiet, honest. */
+.row.quiet .tk { color: var(--ink-2); }
+.row.quiet .score b { color: var(--muted); font-weight: 500; }
+
 .row .cap { grid-area: cap; }
 .row .chart { grid-area: chart; }
 .row .score { grid-area: score; }
@@ -836,8 +857,9 @@ body {
       "cap chart score lean"
       "facts facts facts facts"
       "flags flags flags flags";
-    column-gap: var(--s3); padding: 7px var(--s5);
+    column-gap: var(--s3); padding: 7px var(--s5) 7px calc(var(--s5) + 22px);
   }
+  .line .star { left: var(--s5); }
   .row .fig, .row .facts .sub { display: inline; white-space: normal; }
   .row .facts .sub::before { content: " · "; color: var(--dim); font-weight: 400; }
   .row .flags { text-align: left; }
@@ -1402,7 +1424,7 @@ body {
    control shrinking away from the cursor. The release is slower than the
    press, which is the shape of a real button coming back up. */
 .t, .spans button, .oops button, .post .more, .summary button,
-.brand .age button, .detail .failed .acts button, .broken button {
+.brand .age button, .detail .failed .acts button, .broken button, .line .star {
   transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
               border-color var(--fast) var(--ease),
               transform var(--fast) var(--ease);
@@ -1412,7 +1434,7 @@ body {
    than one that visibly declines. */
 .t:not([aria-disabled="true"]):active, .spans button:active, .summary button:active,
 .oops button:active, .post .more:active, .brand .age button:active,
-.detail .failed .acts button:active, .broken button:active {
+.detail .failed .acts button:active, .broken button:active, .line .star:active {
   transform: scale(0.96);
   transition-duration: var(--tap);
 }
@@ -1441,6 +1463,7 @@ body {
   .spans button { padding-block: 7px; }
   .tabs, .grp, .spans { column-gap: var(--s3); }
   .post .more { padding-block: var(--s2); }
+  .line .star { padding: 10px; margin: -10px; }
 }
 
 /* -------------------------------------------------------- reduced motion - */

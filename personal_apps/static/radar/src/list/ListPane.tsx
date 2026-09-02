@@ -327,7 +327,7 @@ function TierCaption({ tier, windowHours, count, reason }: {
  *  900px the page places it after the panel instead -- see BoardPage.
  */
 export function ListPane({ payload, selection, selected, busy, onSelect,
-                          onChange, account, watching, onToggleWatch }: {
+                          onChange, account, watching = [], onToggleWatch }: {
   payload: BoardPayload
   selection: Selection
   selected: string | null
@@ -336,13 +336,26 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   onChange: (next: Selection) => void
   /** The footer matter, when this pane is where it belongs. */
   account?: ReactNode
-  /** The caller's marks. Optional until Task 7 wires TickerRow's star. */
+  /** The reader's marks and how to flip one; rendered as the Watching tier
+   *  and as the star beside each row. */
   watching?: string[]
   onToggleWatch?: (ticker: string) => void
 }) {
   const shared = universalMarks(payload.rows)
   const quoteShared = universalQuoteFacts(payload.rows)
-  const [scored, chatter] = splitTiers(payload.rows)
+  // Watched rows come from the server (`watch_rows`, built whatever the
+  // floor said) -- and, until the refetch after a star lands, from the
+  // board's own rows, so a fresh mark moves up at once. One row per ticker,
+  // in the order the marks were made; the ranked tiers skip them.
+  const marked = new Set(watching)
+  const served = payload.watch_rows ?? []
+  const watchRows = [
+    ...served.filter((r) => marked.has(r.ticker)),
+    ...payload.rows.filter((r) => marked.has(r.ticker)
+      && !served.some((w) => w.ticker === r.ticker)),
+  ].sort((a, b) => watching.indexOf(a.ticker) - watching.indexOf(b.ticker))
+  const ranked = payload.rows.filter((r) => !marked.has(r.ticker))
+  const [scored, chatter] = splitTiers(ranked)
   // The board loads into a task and performs no entrance. A board that
   // REPLACES the one on screen may settle -- as one block, no stagger -- so
   // the swap reads as arrival rather than a hard cut. `generated_at` is the
@@ -355,7 +368,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   // With the exchange shut every row is chatter-ranked and the status line
   // already says RANKED BY CHATTER; one caption over one tier would be a
   // heading with nothing to distinguish from.
-  const captions = payload.session !== 'closed' && payload.rows.length > 0
+  const captions = payload.session !== 'closed' && ranked.length > 0
   const thin = thinBaselineOf(shared)
 
   const renderRow = (row: Row) => (
@@ -363,7 +376,8 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
                suppress={shared} quoteSuppress={quoteShared.keys}
                liftedAge={quoteShared.agedTypical}
                session={payload.session} selection={selection}
-               selected={row.ticker === selected} />
+               selected={row.ticker === selected}
+               watching={marked.has(row.ticker)} onToggleWatch={onToggleWatch} />
   )
 
   return (
@@ -409,6 +423,16 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
           <span>Ratio · price · move</span>
           <span className="r">Lean</span>
         </div>
+        {watchRows.length > 0 && (
+          <p className="tier watching">
+            <b>Watching</b>
+            <span className="dot"> ·</span>{' '}
+            <span className="what">your marks, in every view</span>
+            {' '}
+            <span className="n">{watchRows.length}</span>
+          </p>
+        )}
+        {watchRows.map(renderRow)}
         {captions && (
           <TierCaption tier="scored" windowHours={payload.window_hours}
                        count={scored.rows.length}

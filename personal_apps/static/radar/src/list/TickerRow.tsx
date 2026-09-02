@@ -24,6 +24,12 @@ export function scoredAgainstPrice(row: Row): boolean {
     && row.divergence !== null
 }
 
+/** The score cell's text for any row, board or watched. */
+export function scoreText(row: Row): string {
+  if (row.eligible === false) return '—'
+  return scoredAgainstPrice(row) ? divergence(row.divergence) : zscore(row.mention_z)
+}
+
 /** What this row is ranked ON, which is not the same quantity in both
  *  sessions -- see leaderboard.py and the tier captions in ListPane.
  *
@@ -32,14 +38,18 @@ export function scoredAgainstPrice(row: Row): boolean {
  *  could not score (frozen tape, flat move, no quote) sits in the chatter
  *  tier and shows the quantity that tier is ordered by, not "not scored".
  *  WHY it was not scored is already on the row: the warn clause, the price
- *  figure, the flags. */
+ *  figure, the flags.
+ *
+ *  A watched row the floor would drop is a third case, checked first: it
+ *  carries no ranking term at all, only its own reason (the warn clause). */
 function rankedBy(row: Row) {
+  if (row.eligible === false) {
+    return { label: '', value: '—',
+             why: 'Under the floor this window: watched, not ranked.' }
+  }
   const scored = scoredAgainstPrice(row)
   const term = rankTermFor(scored ? 'divergence' : 'chatter')
-  return {
-    ...term,
-    value: scored ? divergence(row.divergence) : zscore(row.mention_z),
-  }
+  return { ...term, value: scoreText(row) }
 }
 
 /** One row of the ledger: identity, the drawing, the score, the figures,
@@ -80,9 +90,13 @@ export function TickerRow(props: {
   /** The link is used outside this client too, so it carries the whole view. */
   selection?: Selection
   onSelect: (ticker: string) => void
+  /** Whether the reader has marked this row, and how to flip that. Absent
+   *  where the row is rendered without an account (tests, legacy). */
+  watching?: boolean
+  onToggleWatch?: (ticker: string) => void
 }) {
   const { row, selected, suppress = [], quoteSuppress = [], liftedAge = null,
-          selection, onSelect } = props
+          selection, onSelect, watching = false, onToggleWatch } = props
   const ranked = rankedBy(row)
 
   // Mixed-version tolerance: an embedded payload cached from before the
@@ -93,8 +107,11 @@ export function TickerRow(props: {
   // One y scale for talk AND its normal, so the dashed line is honest about
   // where normal sits under the spike.
   const yMax = Math.max(peak(row.series), normalPerHour ?? 0)
-  const areas = chatterAreas(row.series, BOX, yMax)
-  const outline = chatterRuns(row.series, BOX, yMax)
+  // A quiet row with nothing counted draws no body: an empty violet lane
+  // beside the ranked rows would say "measured, and it was nothing".
+  const counted = row.series.some((point) => point.count !== null && point.count > 0)
+  const areas = counted ? chatterAreas(row.series, BOX, yMax) : []
+  const outline = counted ? chatterRuns(row.series, BOX, yMax) : []
   // The line draws only when there is a price STORY -- the same condition
   // under which phrasing.py writes a price clause at all. On a shut
   // exchange or a frozen tape the scattered stale fragments rendered as
@@ -118,9 +135,21 @@ export function TickerRow(props: {
 
   const marks = row.marks.filter((mark) => !suppress.includes(mark))
   const quoteFacts = deviantQuoteFacts(row, quoteSuppress, liftedAge)
+  const quiet = row.eligible === false
 
   return (
-    <a className={`row${selected ? ' on' : ''}`}
+    <div className={`line${quiet ? ' quiet' : ''}`}>
+      {/* A button beside the link, never inside it: a control inside a link
+          is invalid, and the row must stay a link with a copyable URL. */}
+      {onToggleWatch && (
+        <button type="button" className={`star${watching ? ' on' : ''}`}
+                aria-pressed={watching}
+                aria-label={`${watching ? 'Stop watching' : 'Watch'} ${row.ticker}`}
+                onClick={() => onToggleWatch(row.ticker)}>
+          {watching ? '★' : '☆'}
+        </button>
+      )}
+      <a className={`row${selected ? ' on' : ''}${quiet ? ' quiet' : ''}`}
        id={`radar-row-${row.ticker}`}
        href={selection
          ? `?${queryFor(selection)}&t=${encodeURIComponent(row.ticker)}`
@@ -211,6 +240,7 @@ export function TickerRow(props: {
         </span>
       )}
     </a>
+    </div>
   )
 }
 
