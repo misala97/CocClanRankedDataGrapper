@@ -266,7 +266,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     <main className="detail" key={ticker} tabIndex={-1}
           aria-labelledby="panel-ticker" ref={landing}>
       <a className="backboard" href={`#radar-row-${ticker}`}>Back to board</a>
-      <Identity identity={detail.identity} />
+      <Identity identity={detail.identity} watching={watching} onToggleWatch={onToggleWatch} />
 
       <p className="read">
         {detail.read.map((clause, index) => (

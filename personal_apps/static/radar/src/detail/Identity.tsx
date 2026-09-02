@@ -8,7 +8,14 @@ import type { Detail } from '../types'
  *  400px; the panel has the width, and "Subversive Congressional ..." is the
  *  half that carries the meaning.
  */
-export function Identity({ identity }: { identity: Detail['identity'] }) {
+export function Identity({ identity, watching = false, onToggleWatch }: {
+  identity: Detail['identity']
+  /** The reader's mark on this ticker, and how to flip it. Absent where the
+   *  panel is rendered without an account (tests, legacy) -- same convention
+   *  as the row's own star (TickerRow). */
+  watching?: boolean
+  onToggleWatch?: () => void
+}) {
   const facts = [
     exchangeLabel(identity.exchange),
     segmentPhrase(identity.segment),
@@ -25,6 +32,14 @@ export function Identity({ identity }: { identity: Detail['identity'] }) {
         <h2 id="panel-ticker">{identity.ticker}</h2>
         <div className="full">{identity.name ?? 'Name unknown'}</div>
         <div className="facts">{facts.join(' · ')}</div>
+        {onToggleWatch && (
+          <button type="button" className={`watch${watching ? ' on' : ''}`}
+                  aria-pressed={watching}
+                  aria-label={`${watching ? 'Stop watching' : 'Watch'} ${identity.ticker}`}
+                  onClick={onToggleWatch}>
+            {watching ? '★ Watching' : '☆ Watch'}
+          </button>
+        )}
       </div>
       <div className="px">
         <div className="v">
