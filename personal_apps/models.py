@@ -1198,6 +1198,31 @@ class RadarLlmSpend(db.Model):
     cost_micros   = db.Column(db.BigInteger, nullable=False, default=0)
 
 
+class RadarWatch(db.Model):
+    """A ticker one account is watching.
+
+    The first per-account fact in radar. Every other radar row is shared --
+    mention data is not personal -- but a mark is the reader's own, and the
+    gym feature already scopes by `app_user.id` the same way. One row per
+    (account, ticker); the surface orders by `created_at`, the order the
+    reader made the marks in.
+    """
+    __tablename__ = 'radar_watch'
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'ticker', name='uq_radar_watch_user_ticker'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id         = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    user_id    = db.Column(db.Integer,
+                           db.ForeignKey('app_user.id', ondelete='CASCADE'),
+                           nullable=False, index=True)
+    # The radar ticker identity, market-independent, same collation as
+    # radar_ticker_universe.symbol so 'IT' and 'it' cannot both exist.
+    ticker     = db.Column(db.String(12, collation='utf8mb4_bin'), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
+
+
 class RadarSentimentJudgment(db.Model):
     """Append-only record of every successful primary or review answer.
 
