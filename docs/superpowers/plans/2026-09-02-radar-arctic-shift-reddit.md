@@ -20,10 +20,12 @@
 - External ids are the Reddit fullnames the API returns as `name` (`t1_<id>` comments, `t3_<id>` posts); the RSS path stored the same `t1_` ids, so the switch dedupes comments. `url` is `https://www.reddit.com` + `permalink`, never the post's `url` field (an external link).
 - `score` is `int(item.get('score') or 0)`; `num_comments` likewise (0 for comments).
 - Arctic Shift: base `https://arctic-shift.photon-reddit.com/api`; endpoints `/comments/search`, `/posts/search` (params `subreddit`, `after` epoch seconds, `sort=asc`, `limit` ≤ 1000 or `auto`), `/posts/ids?ids=t3_a,t3_b` (≤100 ids). `after` is EXCLUSIVE at whole-second granularity: request `after = cursor − 1` and let ids dedupe. Responses are `{"data": [...]}`. A `429` ends the cycle's requests; the never-requested subs stay ABSENT from `per_source_status`.
+- A subreddit is atomic per cycle: its posts and BOTH cursor advances are published only when both reads (comments, posts) completed as `ok` or `truncated`; if either fails the sub is `missing`, none of its posts are returned and neither cursor moves, so the next cycle asks again from the same place (Codex review, 2026-09-02).
 - Per-sub status: `ok` when every page was read, `truncated` when the page cap was hit with a full last page, `missing` on any error. The aggregate reuses `sources.reddit._roll_up` (all missing → `missing`; any missing or truncated → `truncated`; else `ok`), the existing Reddit convention.
 - Cursor per `(sub, kind)` = newest `created_utc` accepted; cold start `now − 2 h` (the root cursor's cold start too, so no hole at the switch).
 - Config: `REDDIT_FETCHER = 'arctic_shift'` (`'rss'` = old path, unchanged), `ARCTIC_SHIFT_INTERVAL_SECONDS = 300`, `ARCTIC_SHIFT_MAX_PAGES = 3`, `ARCTIC_SHIFT_PAGE_SIZE = 1000`, `ARCTIC_SHIFT_COLD_START = dt.timedelta(hours=2)`. `reddit_subs` leaves the `source_config_version` hash; `reddit_fetcher` enters it.
 - Bucket growth: `roll_up` writes one `RadarBucketSource` child per countable source per touched (ticker, window), zeros included, so with 34 subs that table grows ~10× faster than today (~2 M rows/month). Michi accepted this on 2026-09-02 (105 GB free); no retention change in this plan.
+- The backfill rolls up one whole day across ALL configured subs with the full status map, so every sub gets its zero child rows exactly as a live cycle writes them; and it runs with `roll_up(..., preserve_parent=True)`, which never rewrites an existing parent `RadarBucket` (the journal keeps 48 h, so a rebuild of an old window would erase Bluesky/4chan totals from the parent). The daemon is STOPPED while the backfill runs: both sides floor to 15-minute buckets, so no time cutoff separates their windows.
 - Commit after every task; never stage `.superpowers/`, `.claude/`, `static/radar/dist/`, `scratchpad/`. Work on `dev_personal`; merge at the end (Task 6).
 
 ---
@@ -504,6 +506,23 @@ def test_a_failing_sub_is_missing_and_keeps_its_cursor_while_the_others_read():
     assert advanced[('zzarc', 'comments')] == minute(2)
 
 
+def test_a_sub_whose_posts_read_fails_publishes_nothing_and_moves_no_cursor():
+    """Comments came back, posts did not: nothing of that sub is returned
+    and neither cursor advances, so the comments are read again next cycle
+    instead of being stored under a missing source and never counted."""
+    client = FakeClient({
+        ('/comments/search', 'zzarc'): [[comment('c1', minute(2))]],
+        ('/posts/search', 'zzarc'): [arctic_shift.ArcticShiftUnavailable('HTTP 502')],
+    }, parents={'t3_parent1': 'x'})
+
+    result, advanced = arctic_shift.fetch({('zzarc', 'comments'): minute(30)}, client,
+                                          subs=['zzarc'], now=NOW)
+
+    assert result.per_source_status == {'reddit:zzarc': 'missing'}
+    assert result.posts == []
+    assert advanced == {}
+
+
 def test_a_429_ends_the_cycle_and_the_rest_are_not_asked():
     client = FakeClient({
         ('/comments/search', 'zzarc'): [arctic_shift.ArcticShiftThrottled('HTTP 429')],
@@ -798,12 +817,21 @@ def fetch(cursors, client, *, subs, now, max_pages=ARCTIC_SHIFT_MAX_PAGES,
           pause=0.0):
     """One cycle over `subs`. Returns (FetchResult, advanced) where
     `advanced` maps (sub, kind) to the newest created_utc accepted -- the
-    caller persists it; a read that failed leaves its key out, so its
-    cursor stays put and the next cycle asks again from there.
+    caller persists it.
+
+    A SUBREDDIT IS ATOMIC. Its posts and both cursor advances are published
+    only when both reads (comments, posts) completed as ok or truncated. If
+    either fails the sub is `missing`, none of its posts are returned and
+    neither cursor moves: run_cycle stores what a fetch returns whatever
+    the status says, but journals only countable sources -- so comments
+    returned under a missing sub would be stored and never counted while
+    an advanced cursor made sure they were never read again.
 
     A 429 ends the cycle: the archive is one host, so asking the next sub
-    would only deepen the throttle. Subs never asked stay ABSENT from
-    per_source_status (no observation, no row), the RSS convention.
+    would only deepen the throttle, and sleeping cannot recover the work
+    -- the radar_reddit job simply asks again in ARCTIC_SHIFT_INTERVAL
+    seconds. Subs never asked stay ABSENT from per_source_status (no
+    observation, no row), the RSS convention.
     """
     raw_by_sub = collections.defaultdict(list)
     statuses = {}
@@ -814,6 +842,8 @@ def fetch(cursors, client, *, subs, now, max_pages=ARCTIC_SHIFT_MAX_PAGES,
             break
         source = 'reddit:%s' % sub
         sub_status = 'ok'
+        reads = []
+        sub_advanced = {}
         for kind in KINDS:
             since = cursors.get((sub, kind)) or (now - cold_start)
             try:
@@ -829,10 +859,13 @@ def fetch(cursors, client, *, subs, now, max_pages=ARCTIC_SHIFT_MAX_PAGES,
             if not complete:
                 sub_status = 'truncated'
             if items:
-                advanced[(sub, kind)] = _naive_utc(
+                sub_advanced[(sub, kind)] = _naive_utc(
                     max(int(item['created_utc']) for item in items))
-            raw_by_sub[sub].append((kind, items))
+            reads.append((kind, items))
         statuses[source] = sub_status
+        if sub_status != 'missing':
+            raw_by_sub[sub] = reads
+            advanced.update(sub_advanced)
 
     link_ids = [item.get('link_id') for sub_reads in raw_by_sub.values()
                 for kind, items in sub_reads if kind == 'comments'
@@ -1063,12 +1096,13 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ### Task 5: The backfill script
 
 **Files:**
+- Modify: `features/radar/buckets.py` (`roll_up`, ~135-247: a `preserve_parent` keyword)
 - Create: `scripts/backfill_arctic_shift.py`
 - Test: `tests/test_radar_arctic_backfill.py`
 
 **Interfaces:**
 - Consumes: `arctic_shift.page_range/to_raw_posts/parent_titles/ArcticShiftClient` (Task 3), `ingest._store_mentioning_posts(raw_posts, lookup, now) -> (mention_rows, new_count, intake)`, `buckets.roll_up(rows, statuses, touched)` (commits), `buckets.bucket_start_for`, `universe.load_lookup()`, `config.BUCKET_MINUTES`, `config.POST_RETENTION_DAYS`, `config.REDDIT_SUBS`.
-- Produces: `backfill.days(start, end) -> list[(day_start, day_end)]`, `backfill.run_day(client, sub, day_start, day_end, lookup, *, apply) -> dict` (counts), `backfill.main(argv)`.
+- Produces: `buckets.roll_up(rows, statuses, touched, *, preserve_parent=False)` — with `preserve_parent=True` an existing parent `RadarBucket` is left exactly as it is (children are written as always; a parent that does not exist yet is created from the rows); `backfill.days(start, end) -> list[(day_start, day_end)]`, `backfill.run_day(client, subs, day_start, day_end, lookup, *, apply, pause=0.0) -> dict` (counts for the whole day across `subs`), `backfill.daemon_is_active() -> bool`, `backfill.main(argv)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1085,21 +1119,23 @@ from app import app as flask_app
 from extensions import db
 from features.radar import buckets
 from features.radar.config import source_config_version
-from models import RadarBucketSource, RadarMention, RadarPost
+from models import RadarBucket, RadarBucketSource, RadarPost
 from scripts import backfill_arctic_shift as backfill
 from test_radar_arctic_shift import FakeClient, comment, submission   # tests/ is on sys.path
 
 PREFIX = 'zzarcbf'
+QUIET = 'zzarcquiet'
 DAY = dt.datetime(2027, 1, 4)
 
 
 @pytest.fixture()
 def clean():
     def wipe():
-        RadarPost.query.filter(RadarPost.source == f'reddit:{PREFIX}').delete(
-            synchronize_session=False)
-        RadarBucketSource.query.filter(RadarBucketSource.source == f'reddit:{PREFIX}').delete(
-            synchronize_session=False)
+        for name in (PREFIX, QUIET):
+            RadarPost.query.filter(RadarPost.source == f'reddit:{name}').delete(
+                synchronize_session=False)
+            RadarBucketSource.query.filter(RadarBucketSource.source == f'reddit:{name}').delete(
+                synchronize_session=False)
         db.session.commit()
     with flask_app.app_context():
         wipe()
@@ -1122,67 +1158,160 @@ def test_resume_skips_what_was_done(tmp_path):
     assert backfill.load_resume(path) == {('2027-01-01', 'zzarc')}
 
 
-def test_one_day_lands_as_posts_and_an_ok_child_bucket_under_the_current_version(clean, monkeypatch):
-    when = DAY + dt.timedelta(hours=10, minutes=5)
-    client = FakeClient({
+def _lookup():
+    from features.radar import universe
+    return universe.annotate_distinctive({'ZZTQ': {'name': 'Zztq Corp', 'exchange': 'Q'}})
+
+
+def _day_client(when):
+    return FakeClient({
         ('/comments/search', PREFIX): [[comment('c1', when, body='ZZTQ to the moon'),
                                         comment('c2', when + dt.timedelta(minutes=1),
                                                 author='other', body='$ZZTQ again')], []],
         ('/posts/search', PREFIX): [[submission('p1', when, title='ZZTQ thesis')], []],
+        ('/comments/search', QUIET): [[], []],
+        ('/posts/search', QUIET): [[], []],
     }, parents={'t3_parent1': 'ZZTQ thread'})
-    with flask_app.app_context():
-        lookup = {'ZZTQ': {'name': 'Zztq Corp', 'exchange': 'Q'}}
-        from features.radar import universe
-        lookup = universe.annotate_distinctive(lookup)
 
-        counts = backfill.run_day(client, PREFIX, DAY, DAY + dt.timedelta(days=1), lookup,
-                                  apply=True)
+
+def test_a_day_lands_as_posts_and_ok_children_for_every_sub_under_the_current_version(clean):
+    """The whole day, all subs at once, one rollup with the full status
+    map: the sub that spoke gets its counts, the sub that did not gets an
+    explicit zero row -- the same rows a live cycle would have written."""
+    when = DAY + dt.timedelta(hours=10, minutes=5)
+    with flask_app.app_context():
+        counts = backfill.run_day(_day_client(when), [PREFIX, QUIET], DAY,
+                                  DAY + dt.timedelta(days=1), _lookup(), apply=True)
 
         assert counts['fetched'] == 3
         stored = RadarPost.query.filter_by(source=f'reddit:{PREFIX}').all()
         assert {p.external_id for p in stored} >= {'t1_c1', 't1_c2'}
-        child = RadarBucketSource.query.filter_by(
-            source=f'reddit:{PREFIX}', ticker='ZZTQ',
-            bucket_start=buckets.bucket_start_for(when)).one()
-        assert child.status == 'ok'
-        assert child.source_config_version == source_config_version()
-        assert child.mention_count >= 2
+        window = buckets.bucket_start_for(when)
+        loud = RadarBucketSource.query.filter_by(
+            source=f'reddit:{PREFIX}', ticker='ZZTQ', bucket_start=window).one()
+        quiet = RadarBucketSource.query.filter_by(
+            source=f'reddit:{QUIET}', ticker='ZZTQ', bucket_start=window).one()
+        assert loud.status == 'ok' and loud.mention_count >= 2
+        assert quiet.status == 'ok' and quiet.mention_count == 0
+        assert loud.source_config_version == source_config_version()
+        assert quiet.source_config_version == source_config_version()
 
         # Idempotent: the same day again stores nothing new.
-        client2 = FakeClient({
-            ('/comments/search', PREFIX): [[comment('c1', when, body='ZZTQ to the moon'),
-                                            comment('c2', when + dt.timedelta(minutes=1),
-                                                    author='other', body='$ZZTQ again')], []],
-            ('/posts/search', PREFIX): [[submission('p1', when, title='ZZTQ thesis')], []],
-        }, parents={'t3_parent1': 'ZZTQ thread'})
-        again = backfill.run_day(client2, PREFIX, DAY, DAY + dt.timedelta(days=1), lookup,
-                                 apply=True)
+        again = backfill.run_day(_day_client(when), [PREFIX, QUIET], DAY,
+                                 DAY + dt.timedelta(days=1), _lookup(), apply=True)
         assert again['new_posts'] == 0
         assert RadarPost.query.filter_by(source=f'reddit:{PREFIX}').count() == len(stored)
 
 
+def test_an_existing_parent_bucket_is_left_alone(clean):
+    """The journal keeps 48 h. Rebuilding an old window's parent from it
+    would erase Bluesky's and 4chan's totals; the backfill writes children
+    and leaves an existing parent exactly as it was."""
+    when = DAY + dt.timedelta(hours=10, minutes=5)
+    window = buckets.bucket_start_for(when)
+    with flask_app.app_context():
+        RadarBucket.query.filter_by(ticker='ZZTQ', bucket_start=window).delete()
+        db.session.add(RadarBucket(ticker='ZZTQ', bucket_start=window, mention_count=7,
+                                   high_confidence_count=7, low_count=0, distinct_authors=5,
+                                   sources_ok=2))
+        db.session.commit()
+        try:
+            backfill.run_day(_day_client(when), [PREFIX, QUIET], DAY,
+                             DAY + dt.timedelta(days=1), _lookup(), apply=True)
+
+            parent = RadarBucket.query.filter_by(ticker='ZZTQ', bucket_start=window).one()
+            assert parent.mention_count == 7 and parent.distinct_authors == 5
+            assert RadarBucketSource.query.filter_by(
+                source=f'reddit:{PREFIX}', ticker='ZZTQ', bucket_start=window).one().mention_count >= 2
+        finally:
+            RadarBucket.query.filter_by(ticker='ZZTQ', bucket_start=window).delete()
+            db.session.commit()
+
+
+def test_a_parent_that_did_not_exist_is_created_from_the_day(clean):
+    when = DAY + dt.timedelta(hours=10, minutes=5)
+    window = buckets.bucket_start_for(when)
+    with flask_app.app_context():
+        RadarBucket.query.filter_by(ticker='ZZTQ', bucket_start=window).delete()
+        db.session.commit()
+        try:
+            backfill.run_day(_day_client(when), [PREFIX, QUIET], DAY,
+                             DAY + dt.timedelta(days=1), _lookup(), apply=True)
+            parent = RadarBucket.query.filter_by(ticker='ZZTQ', bucket_start=window).one()
+            assert parent.mention_count >= 2
+        finally:
+            RadarBucket.query.filter_by(ticker='ZZTQ', bucket_start=window).delete()
+            db.session.commit()
+
+
 def test_a_dry_run_counts_and_stores_nothing(clean):
     when = DAY + dt.timedelta(hours=10)
-    client = FakeClient({('/comments/search', PREFIX): [[comment('c1', when, body='ZZTQ up')], []],
-                         ('/posts/search', PREFIX): [[], []]},
-                        parents={'t3_parent1': 'x'})
     with flask_app.app_context():
-        from features.radar import universe
-        lookup = universe.annotate_distinctive({'ZZTQ': {'name': 'Zztq Corp', 'exchange': 'Q'}})
-        counts = backfill.run_day(client, PREFIX, DAY, DAY + dt.timedelta(days=1), lookup,
-                                  apply=False)
-        assert counts['fetched'] == 1
+        counts = backfill.run_day(_day_client(when), [PREFIX, QUIET], DAY,
+                                  DAY + dt.timedelta(days=1), _lookup(), apply=False)
+        assert counts['fetched'] == 3
         assert RadarPost.query.filter_by(source=f'reddit:{PREFIX}').count() == 0
-```
 
-(`universe.annotate_distinctive` is what `load_lookup` applies to the raw symbol map — check its name at `features/radar/universe.py:238`; if the extractor needs more keys in the lookup entries, build the test lookup with `universe.load_lookup()` filtered to `{'ZZTQ'}` after seeding a `TickerUniverse` row instead, and say so.)
+
+def test_apply_refuses_while_the_daemon_runs(monkeypatch, capsys):
+    monkeypatch.setattr(backfill, 'daemon_is_active', lambda: True)
+    assert backfill.main(['--apply', '--days', '1', '--subs', PREFIX]) == 2
+    assert 'radar_ingest is running' in capsys.readouterr().err
+
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `python -m pytest tests/test_radar_arctic_backfill.py -q -p no:cacheprovider`
 Expected: FAIL — `ModuleNotFoundError: No module named 'scripts.backfill_arctic_shift'`.
 
-- [ ] **Step 3: Write the script**
+- [ ] **Step 3: Teach `roll_up` to leave an existing parent alone**
+
+In `features/radar/buckets.py`, change the signature to `def roll_up(rows, statuses, touched, *, preserve_parent=False):` and add to its docstring:
+
+```
+    `preserve_parent=True` is the backfill's mode: a parent RadarBucket
+    that already exists is left exactly as it is. The parent is rebuilt
+    from the journal, and the journal keeps 48 h -- rebuilding an old
+    window would erase every other source's totals from it. A parent that
+    does not exist yet is created from these rows, which is the truth for
+    a window nothing else observed.
+```
+
+Then replace the parent-writing block
+
+```python
+        bucket = RadarBucket.query.filter_by(
+            ticker=ticker, bucket_start=start).one_or_none()
+        if bucket is None:
+            bucket = RadarBucket(ticker=ticker, bucket_start=start)
+            db.session.add(bucket)
+        for field, value in totals.items():
+            setattr(bucket, field, value)
+        bucket.sources_ok = sources_ok
+        bucket.source_config_version = version
+```
+
+with
+
+```python
+        bucket = RadarBucket.query.filter_by(
+            ticker=ticker, bucket_start=start).one_or_none()
+        if bucket is None:
+            bucket = RadarBucket(ticker=ticker, bucket_start=start)
+            db.session.add(bucket)
+            existed = False
+        else:
+            existed = True
+        if not (preserve_parent and existed):
+            for field, value in totals.items():
+                setattr(bucket, field, value)
+            bucket.sources_ok = sources_ok
+            bucket.source_config_version = version
+```
+
+Nothing else in `roll_up` changes; the children are written exactly as before.
+
+- [ ] **Step 4: Write the script**
 
 ```python
 # scripts/backfill_arctic_shift.py
@@ -1195,19 +1324,27 @@ extraction, the journal, the bucket rollup -- so a backfilled bucket is
 indistinguishable from a lived one, stamped with the current
 source_config_version.
 
-Run on the VPS after the deploy, while the daemon runs (the two never
-touch the same windows: the backfill stops two hours short of now, the
-live reader cold-starts two hours back):
+Run on the VPS after the deploy WITH THE DAEMON STOPPED: both sides
+floor timestamps to 15-minute buckets, so no time cutoff keeps their
+windows apart and two roll_ups on one window would race. The script
+refuses --apply while radar_ingest is active.
 
     cd /root/coc-stats/personal_apps
+    systemctl stop radar_ingest
     PYTHONPATH=. /root/coc-stats/venv/bin/python -m scripts.backfill_arctic_shift --apply
+    systemctl start radar_ingest
 
 Options: --days N (default POST_RETENTION_DAYS), --subs a,b (default
 REDDIT_SUBS), --resume PATH (default scratchpad/arctic_backfill_resume.json),
 --pause SECONDS between requests (default 0.2). Without --apply it fetches
 and counts, storing nothing. Interrupted? Run it again: the resume file
-skips finished (day, sub) pairs and the unique keys make a repeated day
-harmless.
+skips finished days and the unique keys make a repeated day harmless.
+
+One DAY is the unit, across every configured sub at once: the day's
+posts are stored sub by sub, then ONE roll_up over the day's mention rows
+with the full status map, so every sub gets its zero child rows exactly
+as a live cycle writes them, and preserve_parent=True leaves the parent
+buckets other sources built alone (the journal only holds 48 h).
 
 Cost: the judge reads only mentions inside its 24 h window, so the last
 day's reachable tickers are judged exactly as the live cycle would have
@@ -1219,6 +1356,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -1231,7 +1369,17 @@ from features.radar.config import BUCKET_MINUTES, POST_RETENTION_DAYS, REDDIT_SU
 from features.radar.sources import arctic_shift  # noqa: E402
 
 DEFAULT_RESUME = os.path.join('scratchpad', 'arctic_backfill_resume.json')
-LIVE_MARGIN = dt.timedelta(hours=2)      # the live reader's cold start covers the rest
+
+
+def daemon_is_active():
+    """True when systemd says radar_ingest is running; False where there is
+    no systemd (a dev machine) so the guard never blocks local runs."""
+    try:
+        done = subprocess.run(['systemctl', 'is-active', '--quiet', 'radar_ingest'],
+                              check=False, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0
 
 
 def days(start, end):
@@ -1255,7 +1403,7 @@ def load_resume(path):
 
 def mark_done(path, day_key, sub):
     done = load_resume(path)
-    done.add((day_key, sub))
+    done.add((day_key, sub))          # sub is '*' for a whole day
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
     with open(path, 'w', encoding='utf-8') as handle:
         json.dump(sorted(done), handle)
@@ -1271,31 +1419,39 @@ def _windows(day_start, day_end):
     return out
 
 
-def run_day(client, sub, day_start, day_end, lookup, *, apply, pause=0.0):
-    """One (sub, day) through the live intake. Returns counts."""
-    raw = []
-    for kind in arctic_shift.KINDS:
-        items = arctic_shift.page_range(client, sub, kind, day_start, day_end, pause=pause)
-        titles = {}
-        if kind == 'comments':
-            link_ids = [i.get('link_id') for i in items if i.get('link_id')]
-            try:
-                titles = arctic_shift.parent_titles(client, link_ids) if link_ids else {}
-            except arctic_shift.ArcticShiftUnavailable:
-                titles = {}
-        raw.extend(arctic_shift.to_raw_posts(items, sub, kind, titles))
-    counts = {'sub': sub, 'day': day_start.date().isoformat(), 'fetched': len(raw),
-              'new_posts': 0, 'mentions': 0, 'buckets': 0}
-    if not apply or not raw:
+def run_day(client, subs, day_start, day_end, lookup, *, apply, pause=0.0):
+    """One day across `subs` through the live intake. Returns counts."""
+    counts = {'day': day_start.date().isoformat(), 'fetched': 0, 'new_posts': 0,
+              'mentions': 0, 'buckets': 0}
+    day_rows = []
+    for sub in subs:
+        raw = []
+        for kind in arctic_shift.KINDS:
+            items = arctic_shift.page_range(client, sub, kind, day_start, day_end, pause=pause)
+            titles = {}
+            if kind == 'comments':
+                link_ids = [i.get('link_id') for i in items if i.get('link_id')]
+                try:
+                    titles = arctic_shift.parent_titles(client, link_ids) if link_ids else {}
+                except arctic_shift.ArcticShiftUnavailable:
+                    titles = {}
+            raw.extend(arctic_shift.to_raw_posts(items, sub, kind, titles))
+        counts['fetched'] += len(raw)
+        if not apply or not raw:
+            continue
+        mention_rows, new_count, _intake = ingest._store_mentioning_posts(raw, lookup, day_end)
+        db.session.commit()
+        counts['new_posts'] += new_count
+        day_rows.extend(mention_rows)
+    if not apply:
         return counts
-    mention_rows, new_count, _intake = ingest._store_mentioning_posts(raw, lookup, day_end)
-    db.session.commit()
-    counts['new_posts'] = new_count
-    counts['mentions'] = len(mention_rows)
-    # Only this sub is countable here: bluesky/fourchan children for these
-    # windows were written by their own cycles and must not be restated.
+    counts['mentions'] = len(day_rows)
+    # ONE rollup for the day with EVERY sub countable: the quiet subs get
+    # their explicit zero rows, as a live cycle would write them. Parents
+    # other sources built for these windows are left as they are.
     counts['buckets'] = buckets.roll_up(
-        mention_rows, {'reddit:%s' % sub: 'ok'}, _windows(day_start, day_end))
+        day_rows, {'reddit:%s' % sub: 'ok' for sub in subs},
+        _windows(day_start, day_end), preserve_parent=True)
     return counts
 
 
@@ -1307,27 +1463,29 @@ def main(argv=None):
     parser.add_argument('--resume', default=DEFAULT_RESUME)
     parser.add_argument('--pause', type=float, default=0.2)
     args = parser.parse_args(argv)
+    if args.apply and daemon_is_active():
+        print('radar_ingest is running: stop it first (systemctl stop radar_ingest); '
+              'two rollups on one window would race', file=sys.stderr)
+        return 2
     subs = [s for s in args.subs.split(',') if s]
     now = dt.datetime.utcnow().replace(microsecond=0)
-    end = now - LIVE_MARGIN
-    start = end - dt.timedelta(days=args.days)
+    start = now - dt.timedelta(days=args.days)
     client = arctic_shift.ArcticShiftClient()
     done = load_resume(args.resume) if args.apply else set()
     with app.app_context():
         lookup = universe.load_lookup()
-        for day_start, day_end in days(start, end):
+        for day_start, day_end in days(start, now):
             key = day_start.date().isoformat()
-            for sub in subs:
-                if (key, sub) in done:
-                    continue
-                started = time.perf_counter()
-                counts = run_day(client, sub, day_start, day_end, lookup,
-                                 apply=args.apply, pause=args.pause)
-                print('%s r/%-22s fetched %6d  new posts %5d  mentions %5d  buckets %4d  %.1fs'
-                      % (key, sub, counts['fetched'], counts['new_posts'], counts['mentions'],
-                         counts['buckets'], time.perf_counter() - started), flush=True)
-                if args.apply:
-                    mark_done(args.resume, key, sub)
+            if (key, '*') in done:
+                continue
+            started = time.perf_counter()
+            counts = run_day(client, subs, day_start, day_end, lookup,
+                             apply=args.apply, pause=args.pause)
+            print('%s  fetched %7d  new posts %6d  mentions %6d  buckets %5d  %.0fs'
+                  % (key, counts['fetched'], counts['new_posts'], counts['mentions'],
+                     counts['buckets'], time.perf_counter() - started), flush=True)
+            if args.apply:
+                mark_done(args.resume, key, '*')
     return 0
 
 
@@ -1335,16 +1493,19 @@ if __name__ == '__main__':
     sys.exit(main())
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_radar_arctic_backfill.py tests/test_radar_ingest.py tests/test_radar_buckets.py -q -p no:cacheprovider`
 Expected: all pass. If `ingest._store_mentioning_posts` needs the lookup shape `load_lookup()` produces beyond what the test builds, seed a `TickerUniverse` row for `ZZTQ` in the fixture and use `universe.load_lookup()` — note the change in the report.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add personal_apps/scripts/backfill_arctic_shift.py personal_apps/tests/test_radar_arctic_backfill.py
+git add personal_apps/features/radar/buckets.py personal_apps/scripts/backfill_arctic_shift.py personal_apps/tests/test_radar_arctic_backfill.py
 git commit -m "feat(radar): backfill Reddit history through Arctic Shift, day by day, via the live intake
+
+One rollup per day with every sub countable; roll_up gains preserve_parent
+so a window other sources built keeps its parent (the journal holds 48 h)
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
@@ -1377,13 +1538,23 @@ Append to the spec, before "## Appendix":
 - **A comment whose thread the archive lacks** is titled
   `'/u/<author> on [thread unavailable]'`: the splitter needs a non-empty
   context (`clean_text` strips the trailing space).
+- **A subreddit is atomic per cycle**: posts and both cursor advances
+  are published only when both reads completed; a failed read leaves the
+  sub `missing` with nothing returned and nothing moved (a comments read
+  that succeeded would otherwise be stored under a missing source, never
+  counted, and never read again).
 - **Aggregate status reuses `reddit._roll_up`**: one sub missing among
   ok subs is `truncated`, all missing is `missing`. A `429` ends the
-  cycle's requests with no sleep; subs never asked are absent from the
-  per-source map.
-- **The backfill runs while the daemon runs**: it stops two hours short
-  of `now`, the live reader cold-starts two hours back, the unique keys
-  cover the overlap. No daemon stop needed.
+  cycle's requests with no sleep: the job asks again in five minutes, so
+  sleeping could not recover work and would only hold the scheduler
+  worker. Subs never asked are absent from the per-source map.
+- **The backfill runs with the daemon STOPPED** (the script refuses
+  `--apply` otherwise): both sides floor to 15-minute buckets, so no time
+  cutoff keeps their windows apart. One day across all subs is the unit,
+  rolled up once with every sub countable so the quiet subs get their
+  zero rows; `roll_up(preserve_parent=True)` leaves existing parent
+  buckets alone because the journal only holds 48 h and a rebuild would
+  erase the other sources' totals.
 - **The log line** for a cycle shows the concrete map under `sources=`
   (34 `reddit:<sub>` keys) and the root verdict under `aggregate=`.
 - **Bucket growth** accepted: ~34 child rows per touched (ticker, window).
@@ -1433,10 +1604,11 @@ git checkout main && git merge dev_personal && git push origin main && git push 
 
 1. Routine deploy (`update_coc.sh` runs the migration and restarts `radar_ingest`; the first `radar_reddit` cycle reads the last two hours of all 34 subs).
 2. Check the first cycles: `journalctl -u radar_ingest.service --since '15 minutes ago' --no-pager | grep -E 'radar reddit|aggregate='` — expect `aggregate=...reddit=ok` and, if any, a `the archive has nothing for` warning naming misspelled subs.
-3. Backfill, once, while the daemon runs:
+3. Backfill, once, with the daemon stopped (Bluesky and 4chan pause for the duration; their cursors resume):
    ```bash
+   systemctl stop radar_ingest
    cd /root/coc-stats/personal_apps && PYTHONPATH=. nohup /root/coc-stats/venv/bin/python -m scripts.backfill_arctic_shift --apply > /tmp/arctic_backfill.log 2>&1 &
    tail -f /tmp/arctic_backfill.log
    ```
-   Expect ~1,000 lines (30 days × 34 subs), r/wallstreetbets days at 20–40k fetched and a minute or two each, the rest seconds. Interrupted: run the same command again.
+   Expect 30 lines, one per day, ~40–60k fetched each, a few minutes each. Interrupted: run the same command again, finished days are skipped. When it ends: `systemctl start radar_ingest`.
 4. Next morning: the board's Reddit venues show 30-day baselines (no `baselines starting over` for tickers Reddit has talked about all month); `radar_bucket_sources` has grown by a few hundred thousand rows.
