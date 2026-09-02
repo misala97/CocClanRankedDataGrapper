@@ -49,7 +49,7 @@ from extensions import db
 from models import (RadarMention, RadarPost, RadarReviewMeter,
                     RadarSentimentJudgment)
 
-from . import config, sentiment_input, spend
+from . import config, judge_gate, sentiment_input, spend
 
 logger = logging.getLogger('radar.llm_sentiment')
 
@@ -366,7 +366,7 @@ def judge(items, client=None, model=PRIMARY_MODEL, on_usage=None,
 judge_v2 = judge
 
 
-def pending(limit=PASS_LIMIT):
+def pending(limit=PASS_LIMIT, tickers=None, since=None):
     """[(mention, post)] for high-confidence mentions with no v2 judgment.
 
     Only `high`: RadarMention holds high or low, `medium` is awarded in
@@ -375,14 +375,24 @@ def pending(limit=PASS_LIMIT):
     board is about to render. Keyed on sentiment_judged_at, not the
     legacy llm_sentiment: the projection column keeps being written for
     compatibility and must not hide unjudged rows.
+
+    `tickers` narrows the pick to the judge gate's set (judge_gate.py) and
+    `since` to its window; None for either means no narrowing, the
+    pre-gate behaviour the rejudge script and the pass tests rely on. An
+    empty set answers [] without a query.
     """
-    return (db.session.query(RadarMention, RadarPost)
-            .join(RadarPost, RadarPost.id == RadarMention.post_id)
-            .filter(RadarMention.confidence == 'high',
-                    RadarMention.sentiment_judged_at.is_(None),
-                    RadarPost.created_utc >= V2_ACTIVATION_CUTOFF)
-            .order_by(RadarPost.created_utc.desc())
-            .limit(limit).all())
+    if tickers is not None and not tickers:
+        return []
+    query = (db.session.query(RadarMention, RadarPost)
+             .join(RadarPost, RadarPost.id == RadarMention.post_id)
+             .filter(RadarMention.confidence == 'high',
+                     RadarMention.sentiment_judged_at.is_(None),
+                     RadarPost.created_utc >= V2_ACTIVATION_CUTOFF))
+    if tickers is not None:
+        query = query.filter(RadarMention.ticker.in_(list(tickers)))
+    if since is not None:
+        query = query.filter(RadarPost.created_utc >= since)
+    return query.order_by(RadarPost.created_utc.desc()).limit(limit).all()
 
 
 pending_v2 = pending
@@ -577,13 +587,28 @@ def items_for(rows):
     return out
 
 
-def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL):
+def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL, now=None):
     """Judge the pending mentions with the v2 prompt. Returns how many.
+
+    Reads only what the judge gate admits (judge_gate.py): watched
+    tickers, and tickers outside the skipped segments that can reach the
+    board in the trailing window. Older backlog of an admitted ticker
+    stays unjudged; it keeps counting provisionally and nothing shows it.
 
     Books what it cost off the responses rather than estimating, which
     keeps the figure exact for radar specifically.
     """
-    rows = pending(limit)
+    now = now or dt.datetime.utcnow()
+    gate = judge_gate.judgeable_tickers(now)
+    if gate.enabled:
+        rows = pending(limit, tickers=gate.tickers,
+                       since=now - dt.timedelta(hours=gate.hours))
+        logger.info('radar judge gate: %d judgeable (%d watched, %d reachable, '
+                    '%d skipped by segment); %d mentions picked',
+                    len(gate.tickers), gate.watched, gate.reachable,
+                    gate.skipped_segment, len(rows))
+    else:
+        rows = pending(limit)
     if not rows:
         return 0
 

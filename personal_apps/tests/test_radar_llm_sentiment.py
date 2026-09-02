@@ -73,11 +73,19 @@ def clean_posts():
         db.session.commit()
 
 
+@pytest.fixture(autouse=True)
+def gate_off(monkeypatch):
+    """The pass tests below are about the pass, not the gate: a lone seeded
+    mention must still be judged. The gate tests re-enable it explicitly."""
+    from features.radar import judge_gate
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+
 def make_post(external_id, ticker='ZZA', confidence='high',
-              llm=None, body='ZZA ripping', judged_at=None):
+              llm=None, body='ZZA ripping', judged_at=None, when=NOW):
     post = RadarPost(source='bluesky', external_id=external_id,
-                     channel='firehose', author='someone', created_utc=NOW,
-                     title=None, body=body, first_seen=NOW, last_seen=NOW)
+                     channel='firehose', author='someone', created_utc=when,
+                     title=None, body=body, first_seen=when, last_seen=when)
     db.session.add(post)
     db.session.flush()
     mention = RadarMention(post_id=post.id, ticker=ticker,
@@ -181,3 +189,67 @@ def test_every_enum_value_fits_its_column():
         m.sentiment_prompt_version.type.length
     legacy_worst = max(('bullish', 'bearish', 'neutral', 'unclear'), key=len)
     assert len(legacy_worst) <= m.llm_sentiment.type.length
+
+
+# ---- the judge gate (judge_gate.py) -----------------------------------------
+
+
+def gate_on(monkeypatch):
+    from features.radar import judge_gate
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', True)
+
+
+def test_pending_honours_a_ticker_set_and_a_window(clean_posts):
+    with flask_app.app_context():
+        a = make_post('zztest-gate-a', ticker='ZZA')
+        b = make_post('zztest-gate-b', ticker='ZZB')
+        old = make_post('zztest-gate-old', ticker='ZZB', when=NOW - dt.timedelta(hours=30))
+
+        only_b = {m.id for m, _ in llm_sentiment.pending(50, tickers={'ZZB'})}
+        assert b in only_b and old in only_b and a not in only_b
+
+        windowed = {m.id for m, _ in llm_sentiment.pending(
+            50, tickers={'ZZB'}, since=NOW - dt.timedelta(hours=24))}
+        assert windowed == {b}
+
+        assert llm_sentiment.pending(50, tickers=frozenset()) == []
+
+
+def test_run_pass_with_an_empty_gate_makes_no_call_and_books_nothing(clean_posts, monkeypatch):
+    gate_on(monkeypatch)
+    with flask_app.app_context():
+        make_post('zztest-gate-lone', ticker='ZZLONE')      # one mention: under the floor
+        client = FakeClient([])                             # any call would pop from empty
+        spent_before = db.session.query(RadarLlmSpend).get(
+            (dt.date.today(), llm_sentiment.PRIMARY_MODEL))
+        calls_before = spent_before.calls if spent_before else 0
+
+        judged = llm_sentiment.run_pass(client=client, limit=5, now=NOW)
+
+        assert judged == 0
+        assert client.messages.requests == []
+        spent = db.session.query(RadarLlmSpend).get(
+            (dt.date.today(), llm_sentiment.PRIMARY_MODEL))
+        assert (spent.calls if spent else 0) == calls_before
+
+
+def test_a_watched_tickers_backlog_inside_the_window_is_judged(clean_posts, monkeypatch):
+    gate_on(monkeypatch)
+    from conftest import _admin_id
+    from models import RadarWatch
+    with flask_app.app_context():
+        RadarWatch.query.filter_by(ticker='ZZW').delete()
+        db.session.add(RadarWatch(user_id=_admin_id(), ticker='ZZW', created_at=NOW))
+        db.session.commit()
+        fresh = make_post('zztest-gate-w-new', ticker='ZZW', when=NOW - dt.timedelta(hours=1))
+        stale = make_post('zztest-gate-w-old', ticker='ZZW', when=NOW - dt.timedelta(hours=30))
+        client = FakeClient([answer([entry(1)], usage=usage_of(100, 20))])
+        try:
+            judged = llm_sentiment.run_pass(client=client, limit=5, now=NOW)
+
+            assert judged == 1
+            assert db.session.get(RadarMention, fresh).sentiment_judged_at is not None
+            assert db.session.get(RadarMention, stale).sentiment_judged_at is None
+        finally:
+            RadarWatch.query.filter_by(ticker='ZZW').delete()
+            db.session.commit()
