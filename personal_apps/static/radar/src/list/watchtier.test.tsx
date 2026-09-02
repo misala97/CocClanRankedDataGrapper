@@ -86,6 +86,18 @@ describe('the Watching tier', () => {
     expect(q.querySelector('.fig')).not.toHaveTextContent('new here')
   })
 
+  it('lifts a mark to the header only when the watched rows carry it too', () => {
+    /* A board where every ranked row is warming-up, and a watched row that
+       is not: the header must not claim the mark is universal. */
+    const marked = (t: string) => r(t, { marks: ['warming-up'], baseline_days: 0.5 })
+    const { container } = list({
+      rows: [marked('A'), marked('B'), marked('C')],
+      watching: ['W'], watch_rows: [r('W', { marks: [], baseline_days: 30 })],
+    })
+    expect(container.querySelector('.status')?.textContent ?? '').not.toMatch(/baselines starting over/)
+    expect(container.querySelectorAll('.flags').length).toBeGreaterThan(0)
+  })
+
   it('puts a star beside every row, named for its action', async () => {
     const { onToggleWatch } = list({ watching: ['B'], watch_rows: [r('B')] })
 

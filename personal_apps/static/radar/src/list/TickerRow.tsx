@@ -138,7 +138,7 @@ export function TickerRow(props: {
   const quiet = row.eligible === false
 
   return (
-    <div className={`line${quiet ? ' quiet' : ''}`}>
+    <div className="line">
       {/* A button beside the link, never inside it: a control inside a link
           is invalid, and the row must stay a link with a copyable URL. */}
       {onToggleWatch && (

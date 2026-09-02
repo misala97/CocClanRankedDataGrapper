@@ -19,6 +19,9 @@ SEEDED = [
     ('ZQC',   'Other Name Corp',        'S', '4000000', None),
     ('ZQGONE','Zqa Delisted Co',        'Q', '1000000', dt.datetime(2026, 1, 1)),
     ('ZQZ',   'Something With zqa in',  'P', None, None),
+    ('ZQAZ',  'Zqaz Giant Corp',        'N', '3000000000000', None),
+    ('ZQLONG','Zqlong Industries Of The Northern Territories Inc',
+              'Q', '10000000', None),
 ]
 
 
@@ -46,19 +49,19 @@ def seeded():
 def test_symbol_exact_then_prefix_then_name(seeded):
     with flask_app.app_context():
         found = [m.ticker for m in search.search_universe('zqa', TODAY)]
-    # ZQA exact; then the prefix group by cap: ZQAB (900M) before ZQAA (1M);
-    # then the name group. ZQGONE is delisted and never appears.
-    assert found == ['ZQA', 'ZQAB', 'ZQAA', 'ZQZ']
+    # ZQA exact; then the prefix group by cap: ZQAZ (3T), ZQAB (900M),
+    # ZQAA (1M); then the name group. ZQGONE is delisted and never appears.
+    assert found == ['ZQA', 'ZQAZ', 'ZQAB', 'ZQAA', 'ZQZ']
 
 
 def test_inside_a_group_the_bigger_company_comes_first(seeded):
     """Typing `nv` must surface NVDA, not the eight alphabetically-first
-    NV* symbols: inside each group, market cap decides, then the symbol."""
+    NV* symbols: inside each group, market cap decides, then the symbol.
+    ZQAZ sorts last by the alphabet and first by size."""
     with flask_app.app_context():
         found = [m.ticker for m in search.search_universe('zqa', TODAY)]
-    # ZQA exact; then the prefix group by cap: ZQAB (900M) before ZQAA (1M);
-    # then the name group.
-    assert found == ['ZQA', 'ZQAB', 'ZQAA', 'ZQZ']
+    assert found.index('ZQAZ') < found.index('ZQAB') < found.index('ZQAA')
+    assert found[0] == 'ZQA'   # the exact match still leads
 
 
 def test_name_search_is_case_insensitive_and_carries_identity(seeded):
@@ -80,8 +83,13 @@ def test_empty_and_overlong_queries(seeded):
     with flask_app.app_context():
         assert search.search_universe('', TODAY) == []
         assert search.search_universe('   ', TODAY) == []
-        # Capped at 40 characters, so a pasted paragraph is a cheap query.
-        assert search.search_universe('z' * 200, TODAY) == search.search_universe('z' * 40, TODAY)
+        # Capped at 40 characters, so a pasted paragraph is a cheap query --
+        # and the cap truncates rather than rejects: the first 40 characters
+        # of a long name still find it, however much follows.
+        name = 'Zqlong Industries Of The Northern Territories Inc'
+        assert [m.ticker for m in search.search_universe(name + 'x' * 150, TODAY)] == ['ZQLONG']
+        assert search.search_universe(name + 'x' * 150, TODAY) == search.search_universe(name[:40], TODAY)
+        assert search.search_universe('z' * 200, TODAY) == []
 
 
 def test_at_most_eight(seeded):
@@ -105,3 +113,11 @@ def test_the_endpoint_marks_what_the_caller_watches(client, seeded):
 
 def test_the_endpoint_needs_a_session(anon_client):
     assert anon_client.get('/radar/api/search?q=zqa').status_code in (302, 401, 403)
+
+
+def test_an_empty_query_answers_without_touching_the_marks(client, monkeypatch):
+    from features.radar import watch
+    def boom(*args, **kwargs):
+        raise AssertionError('watch.tickers_for must not run for an empty query')
+    monkeypatch.setattr(watch, 'tickers_for', boom)
+    assert client.get('/radar/api/search?q=').get_json() == {'matches': []}

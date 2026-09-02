@@ -342,8 +342,6 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   watching?: string[]
   onToggleWatch?: (ticker: string) => void
 }) {
-  const shared = universalMarks(payload.rows)
-  const quoteShared = universalQuoteFacts(payload.rows)
   // Watched rows come from the server (`watch_rows`, built whatever the
   // floor said) -- and, until the refetch after a star lands, from the
   // board's own rows, so a fresh mark moves up at once. One row per ticker,
@@ -356,6 +354,12 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
       && !served.some((w) => w.ticker === r.ticker)),
   ].sort((a, b) => watching.indexOf(a.ticker) - watching.indexOf(b.ticker))
   const ranked = payload.rows.filter((r) => !marked.has(r.ticker))
+  // The universal marks/quote facts are lifted to the header only when
+  // every row actually ON SCREEN carries them -- the watched rows included,
+  // not just the ranked ones the server counted them over.
+  const shown = [...watchRows, ...ranked]
+  const shared = universalMarks(shown)
+  const quoteShared = universalQuoteFacts(shown)
   const [scored, chatter] = splitTiers(ranked)
   // The board loads into a task and performs no entrance. A board that
   // REPLACES the one on screen may settle -- as one block, no stagger -- so

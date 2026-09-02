@@ -1213,7 +1213,9 @@ class RadarWatch(db.Model):
         {'mysql_charset': 'utf8mb4'},
     )
 
-    id         = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id         = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
     user_id    = db.Column(db.Integer,
                            db.ForeignKey('app_user.id', ondelete='CASCADE'),
                            nullable=False, index=True)

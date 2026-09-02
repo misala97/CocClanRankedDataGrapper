@@ -338,6 +338,10 @@ def test_the_page_embeds_the_board_it_would_otherwise_have_to_fetch(client):
                           .replace('&lt;', '<').replace('&gt;', '>')
                           .replace('&amp;', '&'))
     assert 'rows' in embedded and 'segment_counts' in embedded
+    # Per-user fields: the page must not make the client fetch them
+    # separately just to know what the caller is already watching.
+    assert isinstance(embedded['watching'], list)
+    assert isinstance(embedded['watch_rows'], list)
 
 
 def test_the_page_falls_back_to_the_default_board_on_a_bad_query(client):

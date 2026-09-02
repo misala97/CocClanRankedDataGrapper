@@ -1522,6 +1522,8 @@ body {
   .tabs, .grp, .spans { column-gap: var(--s3); }
   .post .more { padding-block: var(--s2); }
   .line .star { padding: 10px; margin: -10px; }
+  /* The panel's Watch pill sat under the 24px floor at its base 2px padding-block. */
+  .ident .watch { padding-block: 5px; }
 }
 
 /* -------------------------------------------------------- reduced motion - */

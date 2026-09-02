@@ -516,11 +516,14 @@ def watch_delete(ticker):
 def search():
     """Symbol-or-name search over the universe, eight matches at most."""
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    matches = search_mod.search_universe(request.args.get('q', ''), now.date())
+    if not matches:
+        return jsonify({'matches': []})
     watching = set(watch.tickers_for(current_user().id))
     return jsonify({'matches': [
         {'ticker': m.ticker, 'name': m.name, 'exchange': m.exchange,
          'segment': m.segment, 'watching': m.ticker in watching}
-        for m in search_mod.search_universe(request.args.get('q', ''), now.date())
+        for m in matches
     ]})
 
 
