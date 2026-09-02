@@ -354,3 +354,30 @@ def test_a_runtime_failing_artifact_falls_back_at_scoring(artifact_dir,
                 prepared.author_text)
     assert any('failed at scoring' in message for message in caplog.messages)
     assert sentiment._active_cache['artifact'] is None
+
+
+def test_the_universe_lookup_is_loaded_once_per_hour_not_once_per_row(monkeypatch):
+    """classifier_text ran per mention and reloaded the whole universe each
+    time: 0.7 s a row, over an hour for the trainer's rows. The symbol set
+    is memoised with an hourly refresh; reset_known_tickers() drops it."""
+    from features.radar import sentiment, sentiment_input, universe
+    calls = {'n': 0}
+
+    def fake_lookup():
+        calls['n'] += 1
+        return {'ZZA': {'name': 'Zza Corp', 'exchange': 'Q'},
+                'ZZB': {'name': 'Zzb Corp', 'exchange': 'Q'}}
+    monkeypatch.setattr(universe, 'load_lookup', fake_lookup)
+    sentiment.reset_known_tickers()
+    prepared = sentiment_input.prepare_sentiment_input(
+        'bluesky', None, 'ZZA to the moon, dump ZZB', 'ZZA')
+
+    first = sentiment.classifier_text(prepared)
+    second = sentiment.classifier_text(prepared)
+
+    assert first == second
+    assert '__TARGET__' in first and '__OTHER_TICKER__' in first
+    assert calls['n'] == 1
+    sentiment.reset_known_tickers()
+    sentiment.classifier_text(prepared)
+    assert calls['n'] == 2

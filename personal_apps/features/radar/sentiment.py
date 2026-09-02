@@ -120,9 +120,29 @@ def _load_active():
     return artifact
 
 
+# The universe's symbols, loaded once an hour rather than once per call.
+# classifier_text runs per mention -- in the trainer over every finalized
+# row -- and load_lookup() reads the whole table: 0.7 s a row, an hour for
+# 5,800 rows, seen on 2026-09-02. An hour is far shorter than the universe
+# changes; reset_known_tickers() drops the memo for tests.
+_KNOWN = {'at': None, 'tickers': frozenset()}
+_KNOWN_TTL_SECONDS = 3600
+
+
 def _known_tickers():
-    from . import universe
-    return set(universe.load_lookup().keys())
+    import time
+    now = time.monotonic()
+    if _KNOWN['at'] is None or now - _KNOWN['at'] > _KNOWN_TTL_SECONDS:
+        from . import universe
+        _KNOWN['tickers'] = frozenset(universe.load_lookup().keys())
+        _KNOWN['at'] = now
+    return _KNOWN['tickers']
+
+
+def reset_known_tickers():
+    """Forget the memoised symbol set (tests, or after a universe reload)."""
+    _KNOWN['at'] = None
+    _KNOWN['tickers'] = frozenset()
 
 
 def classifier_text(prepared):
