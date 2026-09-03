@@ -267,3 +267,37 @@ def test_probe_names_the_subs_the_archive_has_nothing_for():
     client = FakeClient({('/posts/search', 'zzarc'): [[submission('p1', minute(5))]],
                          ('/posts/search', 'zzempty'): [[]]})
     assert arctic_shift.probe_subs(client, ['zzarc', 'zzempty']) == ['zzempty']
+
+
+# --- 'auto' pages, whose size says nothing (probed 2026-09-02) ----------------
+
+def test_an_auto_sized_read_pages_until_an_empty_page():
+    """A numeric limit is refused above 100 and 'auto' answers with ~600,
+    so 'the page was short' cannot mean 'that was the last of it'. Only an
+    empty page ends the range."""
+    page1 = [comment(f'a{i}', minute(60) + dt.timedelta(seconds=i)) for i in range(4)]
+    page2 = [comment(f'b{i}', minute(50) + dt.timedelta(seconds=i)) for i in range(2)]
+    client = FakeClient({('/comments/search', 'zzarc'): [page1, page2, []],
+                         ('/posts/search', 'zzarc'): [[]]}, parents={'t3_parent1': 'x'})
+
+    result, advanced = arctic_shift.fetch({('zzarc', 'comments'): minute(70)}, client,
+                                          subs=['zzarc'], now=NOW, page_size='auto',
+                                          max_pages=5)
+
+    assert len(result.posts) == 6                      # the short page was not the end
+    assert result.per_source_status == {'reddit:zzarc': 'ok'}
+    assert client.calls[0][1]['limit'] == 'auto'
+    assert advanced[('zzarc', 'comments')] == minute(50) + dt.timedelta(seconds=1)
+
+
+def test_an_auto_sized_read_that_hits_the_cap_is_truncated():
+    pages = [[comment(f'p{n}i{i}', minute(60 - 10 * n) + dt.timedelta(seconds=i))
+              for i in range(2)] for n in range(4)]
+    client = FakeClient({('/comments/search', 'zzarc'): list(pages),
+                         ('/posts/search', 'zzarc'): [[]]}, parents={'t3_parent1': 'x'})
+
+    result, _ = arctic_shift.fetch({('zzarc', 'comments'): minute(70)}, client,
+                                   subs=['zzarc'], now=NOW, page_size='auto', max_pages=2)
+
+    assert result.per_source_status == {'reddit:zzarc': 'truncated'}
+    assert len(result.posts) == 4

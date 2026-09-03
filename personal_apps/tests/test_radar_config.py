@@ -418,7 +418,10 @@ def test_the_arctic_shift_constants_are_sane():
     assert config.REDDIT_FETCHER in ('arctic_shift', 'rss')
     assert config.ARCTIC_SHIFT_INTERVAL_SECONDS >= 120
     assert 1 <= config.ARCTIC_SHIFT_MAX_PAGES <= 10
-    assert config.ARCTIC_SHIFT_PAGE_SIZE <= 1000
+    # 'auto' or a number the API accepts: probed 2026-09-02, a numeric limit
+    # above 100 is a 400 ("'limit' must be between 1 and 100").
+    assert (config.ARCTIC_SHIFT_PAGE_SIZE == 'auto'
+            or 1 <= config.ARCTIC_SHIFT_PAGE_SIZE <= 100)
     assert len(config.REDDIT_SUBS) == len(set(s.lower() for s in config.REDDIT_SUBS))
     for sub in config.REDDIT_SUBS:
         assert sub == sub.lower(), sub

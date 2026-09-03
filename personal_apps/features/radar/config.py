@@ -441,7 +441,12 @@ REDDIT_SUBS = (
 REDDIT_FETCHER = 'arctic_shift'
 ARCTIC_SHIFT_INTERVAL_SECONDS = 300        # the archive lags 5-10 min; 5-min reads are enough
 ARCTIC_SHIFT_MAX_PAGES = 3                 # per (sub, kind) per cycle; more = truncated
-ARCTIC_SHIFT_PAGE_SIZE = 1000              # the API's 'auto' ceiling
+# 'auto', not a number. Probed 2026-09-02: a NUMERIC limit is rejected above
+# 100 ("'limit' must be between 1 and 100"), while 'auto' answers with
+# ~600 items a page -- a day of r/wallstreetbets is 12 pages instead of 71.
+# The size is then unknown per page, so the reader treats an EMPTY page as
+# the end of the range rather than a short one (sources/arctic_shift.py).
+ARCTIC_SHIFT_PAGE_SIZE = 'auto'
 ARCTIC_SHIFT_COLD_START = dt.timedelta(hours=2)   # same as the root cursor's
 
 

@@ -177,7 +177,13 @@ def _pages(client, sub, kind, since, *, until=None, max_pages=None,
     """Items with created_utc >= since (and < until when given), ascending,
     deduplicated by fullname across the overlap at each second boundary.
     Returns (items, complete): complete is False when max_pages was hit
-    with a full page still coming back."""
+    with a page still coming back.
+
+    THE END OF THE RANGE IS AN EMPTY PAGE, not a short one. The API caps a
+    numeric `limit` at 100 and answers 'auto' with whatever it feels like
+    (~600, probed 2026-09-02), so page length says nothing about whether
+    more is waiting. A numeric page_size keeps the short-page shortcut,
+    which saves the confirming request the tests script."""
     items, seen = [], set()
     after = _epoch(since) - 1
     pages = 0
@@ -201,7 +207,9 @@ def _pages(client, sub, kind, since, *, until=None, max_pages=None,
             seen.add(name)
             items.append(item)
             fresh += 1
-        if len(page) < page_size:
+        if not page:
+            return items, True
+        if isinstance(page_size, int) and len(page) < page_size:
             return items, True
         if max_pages is not None and pages >= max_pages:
             return items, False
