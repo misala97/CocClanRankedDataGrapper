@@ -88,6 +88,24 @@ split has nothing to say about it.
 It is the reader's own set rather than a ranking, and a sort is a question
 about the ranked board.
 
+## Width: desktop only
+
+Below 900px `radar.css` hides the header outright -- `.cols { display: none; }`
+-- because the row layout stacks there and, as the rule's own comment says,
+"there is no column to head at this width". Sorting is therefore a desktop
+feature: the phone board keeps the default ranking and shows no sort
+affordance at all.
+
+Decided 2026-09-04 rather than overlooked. The alternative was a second
+control (a compact "Sort" menu shown only under 900px), which is a second
+mechanism to build, test and keep in step with the first, for a width whose
+job is a glance rather than an analysis. If the phone later needs it, that
+control is an additive change and nothing here blocks it.
+
+A sort in the URL is still HONOURED at any width -- the server ranks by it
+and the phone shows the sorted rows. Only the means of CHANGING it is absent
+below 900px, so a link shared from a desktop keeps working on a phone.
+
 ## Where the sort lives
 
 `sort` and `dir` join `Selection` beside `market`, `window`, `segment` and
