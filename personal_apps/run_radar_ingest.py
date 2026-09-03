@@ -27,7 +27,8 @@ from flask import has_app_context
 
 from app import app
 from extensions import db
-from models import RadarInstrument, RadarPollState, RadarQuote
+from models import (RadarInstrument, RadarPollState, RadarQuote,
+                    RadarRedditCursor)
 from features.radar import (
     history, ingest, instruments, journal, llm_sentiment, market_calendar, quotes,
     retention, scheduling, scoring, universe)
@@ -36,10 +37,11 @@ from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.prices import normalize_snapshot
 from features.radar.config import (
-    MENTION_EVENT_RETENTION_HOURS, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
+    ARCTIC_SHIFT_INTERVAL_SECONDS, MENTION_EVENT_RETENTION_HOURS,
+    REDDIT_FETCHER, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
     REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
     expand_sources, prefer_ipv4_if_configured, source_config_version)
-from features.radar.sources import bluesky, fourchan, reddit
+from features.radar.sources import arctic_shift, bluesky, fourchan, reddit
 from features.radar.sources import FetchResult
 
 logger = logging.getLogger('radar.ingest')
@@ -283,16 +285,52 @@ def _reddit_fetcher(client):
     return fetch
 
 
+def _arctic_fetcher(client):
+    """Reddit through Arctic Shift (features/radar/sources/arctic_shift.py).
+
+    The per-sub cursors are loaded here, handed to the adapter, and the
+    advanced ones are STAGED in the session -- not committed. run_cycle's
+    single commit carries them with the posts they cover, so a cycle that
+    fails after the fetch moves nothing and the next one asks again from
+    the same place. `since` from the root cursor is ignored on purpose:
+    one shared watermark starves the quiet subs (reddit.py:185-191).
+    """
+    def fetch(since):
+        now = _utcnow()
+        cursors = {(row.sub, row.kind): row.cursor_utc
+                   for row in RadarRedditCursor.query.all()}
+        result, advanced = arctic_shift.fetch(cursors, client, subs=REDDIT_SUBS, now=now)
+        for (sub, kind), newest in advanced.items():
+            row = db.session.get(RadarRedditCursor, (sub, kind))
+            if row is None:
+                db.session.add(RadarRedditCursor(sub=sub, kind=kind,
+                                                 cursor_utc=newest, updated_at=now))
+            elif newest > row.cursor_utc:
+                row.cursor_utc = newest
+                row.updated_at = now
+        return result
+    return fetch
+
+
+def _reddit_job_seconds():
+    """The radar_reddit job's interval follows the reader: the archive lags
+    minutes, the feed turned over in under two."""
+    return (ARCTIC_SHIFT_INTERVAL_SECONDS if REDDIT_FETCHER == 'arctic_shift'
+            else REDDIT_INTERVAL_SECONDS)
+
+
 def build_fetchers():
     """One callable per active source, each taking `since`."""
     fc_client = fourchan.FourChanClient()
-    rd_client = reddit.RedditClient()
-
+    if REDDIT_FETCHER == 'arctic_shift':
+        reddit_fetch = _arctic_fetcher(arctic_shift.ArcticShiftClient())
+    else:
+        reddit_fetch = _reddit_fetcher(reddit.RedditClient())
     return {
         'bluesky': lambda since: bluesky.fetch(since, bluesky.live_drain),
         'fourchan': lambda since: fourchan.fetch(
             since, fc_client, pause=fourchan.REQUEST_INTERVAL_SECONDS),
-        'reddit': _reddit_fetcher(rd_client),
+        'reddit': reddit_fetch,
     }
 
 
@@ -990,6 +1028,10 @@ def _scheduled_reddit(fetcher):
     to the point, its feed holds 25 comments with no cursor, so a slow poll
     does not arrive late, it never arrives at all.
 
+    Under REDDIT_FETCHER='arctic_shift' the same job runs the archive reader
+    every ARCTIC_SHIFT_INTERVAL_SECONDS; it stays a job of its own so a slow
+    archive never delays Bluesky and 4chan.
+
     Riding the session cycle, four subs per 1800-second overnight cycle meant
     a full rotation of eighteen took over two hours against a feed that turns
     over in under two minutes. Six hours of that produced one scorable
@@ -1154,6 +1196,17 @@ def main(argv=None):
 
     fetchers = build_fetchers()
 
+    if REDDIT_FETCHER == 'arctic_shift':
+        # A misspelled subreddit answers 200 and an empty list forever; say
+        # so once at start rather than build a baseline out of nothing.
+        try:
+            silent = arctic_shift.probe_subs(arctic_shift.ArcticShiftClient(), REDDIT_SUBS)
+        except Exception:      # the probe must never keep the daemon from starting
+            silent = []
+        if silent:
+            logger.warning('radar reddit: the archive has nothing for %s',
+                           ', '.join(silent))
+
     scheduler = BackgroundScheduler(timezone='UTC')
     # next_run_time is not a nicety. An interval trigger otherwise fires only
     # after the first interval has elapsed, so starting the service overnight
@@ -1169,8 +1222,9 @@ def main(argv=None):
                       max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc))
     if 'reddit' in fetchers:
+        # RSS: REDDIT_INTERVAL_SECONDS; Arctic Shift: ARCTIC_SHIFT_INTERVAL_SECONDS
         scheduler.add_job(_scheduled_reddit(fetchers['reddit']), 'interval',
-                          seconds=REDDIT_INTERVAL_SECONDS, id='radar_reddit',
+                          seconds=_reddit_job_seconds(), id='radar_reddit',
                           max_instances=1, coalesce=True,
                           next_run_time=dt.datetime.now(dt.timezone.utc)
                           + dt.timedelta(seconds=30))

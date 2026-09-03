@@ -1155,3 +1155,63 @@ def test_ops_summary_is_memoized_and_provider_free(monkeypatch):
         assert 'grouped_closes' in first
         assert 'post_close_claims' in first
         market_data.clear_ops_memo()
+
+
+# --- the Reddit reader switch (Arctic Shift plan, Task 4) -------------------
+
+def test_the_switch_picks_the_reddit_reader(monkeypatch):
+    monkeypatch.setattr(daemon, 'REDDIT_FETCHER', 'arctic_shift')
+    assert daemon.build_fetchers()['reddit'].__qualname__.startswith('_arctic_fetcher')
+    monkeypatch.setattr(daemon, 'REDDIT_FETCHER', 'rss')
+    assert daemon.build_fetchers()['reddit'].__qualname__.startswith('_reddit_fetcher')
+    assert set(daemon.build_fetchers()) == set(daemon.SOURCES)
+
+
+def test_the_reddit_job_interval_follows_the_reader(monkeypatch):
+    monkeypatch.setattr(daemon, 'REDDIT_FETCHER', 'arctic_shift')
+    assert daemon._reddit_job_seconds() == daemon.ARCTIC_SHIFT_INTERVAL_SECONDS
+    monkeypatch.setattr(daemon, 'REDDIT_FETCHER', 'rss')
+    assert daemon._reddit_job_seconds() == daemon.REDDIT_INTERVAL_SECONDS
+
+
+def test_the_arctic_fetcher_stages_cursors_for_the_cycles_commit(monkeypatch):
+    """The closure loads the per-sub cursors, calls the adapter, and stages
+    the advanced ones WITHOUT committing -- run_cycle's single commit
+    carries them with the posts they cover, so a failed cycle moves
+    nothing."""
+    import datetime as dt
+    from extensions import db
+    from features.radar.sources import FetchResult
+    from features.radar.sources import arctic_shift
+    from models import RadarRedditCursor
+    now = dt.datetime(2027, 1, 4, 12, 45, 0)
+    seen = {}
+
+    def fake_fetch(cursors, client, *, subs, now, **kwargs):
+        seen['cursors'] = dict(cursors)
+        seen['subs'] = list(subs)
+        return (FetchResult(posts=[], status='ok', per_source_status={'reddit:zzarc': 'ok'}),
+                {('zzarc', 'comments'): now - dt.timedelta(minutes=1)})
+    monkeypatch.setattr(arctic_shift, 'fetch', fake_fetch)
+    monkeypatch.setattr(daemon, 'REDDIT_SUBS', ('zzarc',))
+    monkeypatch.setattr(daemon, '_utcnow', lambda: now)
+    with daemon.app.app_context():
+        RadarRedditCursor.query.filter_by(sub='zzarc').delete()
+        db.session.add(RadarRedditCursor(sub='zzarc', kind='posts',
+                                         cursor_utc=now - dt.timedelta(hours=3), updated_at=now))
+        db.session.commit()
+        try:
+            fetch = daemon._arctic_fetcher(client=object())
+            result = fetch(now - dt.timedelta(hours=2))
+
+            assert result.status == 'ok'
+            assert seen['subs'] == ['zzarc']
+            assert seen['cursors'] == {('zzarc', 'posts'): now - dt.timedelta(hours=3)}
+            staged = db.session.get(RadarRedditCursor, ('zzarc', 'comments'))
+            assert staged is not None
+            assert staged.cursor_utc == now - dt.timedelta(minutes=1)
+            db.session.rollback()                      # nothing was committed
+            assert db.session.get(RadarRedditCursor, ('zzarc', 'comments')) is None
+        finally:
+            RadarRedditCursor.query.filter_by(sub='zzarc').delete()
+            db.session.commit()
