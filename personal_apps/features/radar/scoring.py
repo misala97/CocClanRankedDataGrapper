@@ -22,7 +22,9 @@ from models import RadarBucketSource
 from . import baselines, profile
 from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
                      MIN_DISTINCT_TEXT_RATIO, MIN_MENTIONS,
-                     SCOREABLE_STATUSES,
+                     PROVISIONAL_BASELINE_DAYS, SCOREABLE_STATUSES,
+                     SCORE_WRITE_TOLERANCE_DAYS, SCORE_WRITE_TOLERANCE_REL,
+                     SCORE_WRITE_TOLERANCE_Z,
                      SUSTAINED_HOURS_CONSIDERED, SUSTAINED_HOURS_REQUIRED,
                      VARIANCE_FLOOR, expand_sources, source_config_version)
 
@@ -97,8 +99,40 @@ def invalidate_incompatible_scores(version, since, source=None):
                          'baseline_days': None}, synchronize_session=False)
 
 
+def _crossed(old, new, line):
+    return (old >= line) != (new >= line)
+
+
+def _worth_writing(row, expected, variance, mention_z, baseline_days):
+    """Whether a recomputed score differs from the stored one enough to write.
+
+    Every value moves a little every pass -- see SCORE_WRITE_TOLERANCE_* in
+    config for the measurement -- and rewriting 4.5M rows by 0.1% each was
+    most of a 28-minute pass. The tolerance is against the STORED value, so
+    a row can never drift past it unwritten; and a crossing of the two
+    lines anything downstream compares against (ELEVATED_Z for the board,
+    PROVISIONAL_BASELINE_DAYS for the mark) always writes, however small
+    the move, so a threshold is never seen late.
+    """
+    if row.expected is None or row.variance is None or row.mention_z is None             or row.baseline_days is None:
+        return True
+    if _crossed(row.mention_z, mention_z, ELEVATED_Z):
+        return True
+    if _crossed(row.baseline_days, baseline_days, PROVISIONAL_BASELINE_DAYS):
+        return True
+    if abs(expected - row.expected) > SCORE_WRITE_TOLERANCE_REL * max(abs(row.expected), 1e-9):
+        return True
+    if abs(variance - row.variance) > SCORE_WRITE_TOLERANCE_REL * max(abs(row.variance), 1e-9):
+        return True
+    if abs(mention_z - row.mention_z) > SCORE_WRITE_TOLERANCE_Z:
+        return True
+    return abs(baseline_days - row.baseline_days) > SCORE_WRITE_TOLERANCE_DAYS
+
+
 def score_source(source, now, lookback_days=30, excluded=None):
-    """Score every bucket of every ticker on one source. Returns rows written.
+    """Score every bucket of every ticker on one source. Returns rows written
+    -- rows whose stored score moved enough to rewrite (_worth_writing), not
+    rows scored: most rows recompute to within tolerance and are left alone.
 
     `excluded` is the set of bucket starts to keep out of baselines, wired to
     open spikes in Plan 3 so a ticker that squeezed last week does not carry
@@ -170,10 +204,13 @@ def score_source(source, now, lookback_days=30, excluded=None):
 
             expected = baselines.expected_for(rate, prof, row.bucket_start)
             variance = baselines.variance_for(expected, k)
+            mention_z = ((row.mention_count - expected)
+                         / max(variance, VARIANCE_FLOOR) ** 0.5)
+            if not _worth_writing(row, expected, variance, mention_z, baseline_days):
+                continue
             row.expected = expected
             row.variance = variance
-            row.mention_z = ((row.mention_count - expected)
-                             / max(variance, VARIANCE_FLOOR) ** 0.5)
+            row.mention_z = mention_z
             row.baseline_days = baseline_days
             written += 1
 

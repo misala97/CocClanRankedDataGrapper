@@ -630,3 +630,61 @@ def test_the_scores_survive_screening_once(rows):
     assert row.mention_z > 5
     assert row.expected is not None and row.variance is not None
     assert row.baseline_days > 14
+
+
+# --- the write tolerance (measured 2026-09-03) ------------------------------
+
+class _Stored:
+    def __init__(self, expected, variance, mention_z, baseline_days):
+        self.expected, self.variance = expected, variance
+        self.mention_z, self.baseline_days = mention_z, baseline_days
+
+
+def test_a_recompute_within_tolerance_is_not_written():
+    """Every value drifts ~0.1% per pass because the profile is normalised
+    over the whole window; rewriting 4.5M rows for that was 15 minutes of
+    a 28-minute pass. Inside tolerance the stored row stands."""
+    row = _Stored(expected=2.000, variance=4.000, mention_z=1.500, baseline_days=29.90)
+    assert scoring._worth_writing(row, 2.002, 4.004, 1.505, 29.95) is False
+
+
+def test_a_real_move_is_written():
+    row = _Stored(expected=2.000, variance=4.000, mention_z=1.500, baseline_days=29.90)
+    assert scoring._worth_writing(row, 2.10, 4.000, 1.500, 29.90) is True      # expected +5%
+    assert scoring._worth_writing(row, 2.000, 4.000, 1.60, 29.90) is True      # z +0.1
+    assert scoring._worth_writing(row, 2.000, 4.000, 1.500, 30.50) is True     # days +0.6
+
+
+def test_crossing_a_threshold_always_writes_however_small_the_move():
+    """The board compares against ELEVATED_Z and the mark against
+    PROVISIONAL_BASELINE_DAYS. A crossing must never be seen late, so it
+    writes even when the move is inside the tolerance."""
+    from features.radar.config import ELEVATED_Z, PROVISIONAL_BASELINE_DAYS
+    row = _Stored(expected=2.0, variance=4.0, mention_z=ELEVATED_Z - 0.005,
+                  baseline_days=PROVISIONAL_BASELINE_DAYS - 0.05)
+    assert scoring._worth_writing(row, 2.0, 4.0, ELEVATED_Z + 0.005, row.baseline_days) is True
+    assert scoring._worth_writing(row, 2.0, 4.0, row.mention_z, PROVISIONAL_BASELINE_DAYS + 0.05) is True
+    # ...and the same tiny moves that cross nothing are left alone.
+    assert scoring._worth_writing(row, 2.0, 4.0, row.mention_z - 0.005, row.baseline_days - 0.05) is False
+
+
+def test_a_never_scored_row_is_always_written():
+    row = _Stored(expected=None, variance=None, mention_z=None, baseline_days=None)
+    assert scoring._worth_writing(row, 0.0, 0.0, 0.0, 0.0) is True
+
+
+def test_scoring_the_same_rows_twice_writes_nothing_the_second_time(rows):
+    """The end-to-end form of the tolerance: identical inputs, identical
+    outputs, zero rows rewritten -- and the stored values are the same
+    scores the first pass produced."""
+    steady_history(source=REDDIT)
+    db.session.commit()
+    first = scoring.score_source(REDDIT, NOW)
+    assert first > 0
+    before = {(r.ticker, r.bucket_start): (r.expected, r.variance, r.mention_z, r.baseline_days)
+              for r in RadarBucketSource.query.filter_by(source=REDDIT).all()}
+    second = scoring.score_source(REDDIT, NOW)
+    after = {(r.ticker, r.bucket_start): (r.expected, r.variance, r.mention_z, r.baseline_days)
+             for r in RadarBucketSource.query.filter_by(source=REDDIT).all()}
+    assert second == 0
+    assert after == before

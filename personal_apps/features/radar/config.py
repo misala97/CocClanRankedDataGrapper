@@ -1057,3 +1057,19 @@ RECENT_IPO_DAYS = 365
 
 # Below this many days of history a reading is marked provisional (spec 6.8).
 PROVISIONAL_BASELINE_DAYS = 14
+
+# ---- scoring write tolerance ------------------------------------------------
+# A scoring pass recomputes every row's expected/variance/mention_z, and every
+# value moves a little every pass: the profile is normalised over the whole
+# window and the prior is a global median, so one new mention anywhere nudges
+# every ticker's expectation by ~0.1% (median relative drift 1.5e-3 per pass,
+# measured 2026-09-03). Writing 4.5M rows to move each by 0.1% was 15 of a
+# 28-minute pass. A row is rewritten only when it moved past these, or when it
+# crosses ELEVATED_Z or PROVISIONAL_BASELINE_DAYS -- the two lines anything
+# downstream compares against -- or was never scored. Staleness is bounded by
+# the tolerance at all times (the comparison is against the STORED value, so
+# drift cannot accumulate past it). Simulated on live data: 4.6% of
+# r/wallstreetbets rows and 3.9% of r/schwab's write per pass instead of ~100%.
+SCORE_WRITE_TOLERANCE_REL = 0.01      # expected and variance, relative
+SCORE_WRITE_TOLERANCE_Z = 0.02        # mention_z, absolute
+SCORE_WRITE_TOLERANCE_DAYS = 0.25     # baseline_days, absolute
