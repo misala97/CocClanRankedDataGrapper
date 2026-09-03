@@ -51,7 +51,7 @@ ledger target has no room for. It stays visible on the row's sub-line.
 | `Score` | `divergence` | largest first |
 | `Ratio` | `ratio` | largest first |
 | `move` | `price_move` | largest first |
-| `Lean` | `tone.bullish − tone.bearish` (share) | most bullish first |
+| `Lean` | `tone.bullish − tone.bearish` (count) | most bullish first |
 
 `Score` sorts on **divergence only**, never on the score cell's rendered
 text. `scoreText` shows divergence for price-scored rows and `mention_z`
@@ -59,9 +59,16 @@ for the rest (`TickerRow.tsx:28-31`); ranking those two against each
 other is precisely what the 2026-09-01 critique caught and what the tier
 split exists to prevent.
 
-`Lean` needs a scalar and `Tone` is a distribution, so bullish share minus
-bearish share is computed for the comparison. Neutral-heavy rows land in
-the middle, which is what they are.
+`Lean` needs a scalar and `Tone` is a distribution, so the net count
+`bullish − bearish` is computed for the comparison — the arithmetic on the
+two numbers the row actually displays, so the order can be verified by
+looking at it. A ticker discussed with no lean either way is a real zero; a
+ticker nobody used a sentiment word about has no lean at all and sorts with
+the missing.
+
+A SHARE was tried first and reverted the same day (see "Built as"): it was
+decided by `neutral`, which the row never shows, and it made a single
+bullish post a perfect 1.000 above nine bullish posts.
 
 ## Ordering rules
 
@@ -204,6 +211,13 @@ Pytest:
   taken against the pre-change build, so the buttons did not disturb the
   shared grid. At 390x844 the header is absent and a `?sort=` URL still
   renders sorted rows under its caption.
+- **`Lean` sorts on the net COUNT, not a share** — changed hours after
+  shipping, on the board. The share was decided by `neutral`, a number the
+  row does not display, so BLK on one bullish post outranked CIFR on nine
+  and the ordering was unreadable from the screen. It also made that one
+  post a perfect 1.000, which is the confident-reading-from-a-handful that
+  `Tone`'s own docstring warns about. The count is the arithmetic on the
+  two arrows the row shows.
 - **Sorting is desktop-only**, recorded above under "Width".
 
 ## Out of scope

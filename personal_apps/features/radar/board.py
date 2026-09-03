@@ -450,22 +450,33 @@ SORT_KEYS = ('ticker', 'mentions', 'divergence', 'ratio', 'move', 'lean')
 
 
 def _lean_value(tone):
-    """Net bullish share, or None when nothing was said.
+    """Bullish voices minus bearish ones, or None when nothing was said.
 
-    Tone is a distribution and a sort needs a scalar. Bullish share minus
-    bearish share puts a balanced argument in the middle, which is what it
-    is -- and a ticker nobody used a sentiment word about has no lean at
-    all rather than a neutral one, so it sorts with the missing.
+    A COUNT, not a share. The share version shipped first and was wrong
+    twice over (2026-09-04). It was decided by `neutral`, which the row
+    does not display at all, so the ordering was unreadable from the
+    screen -- BLK on one bullish post outranked CIFR on nine, because BLK
+    had no neutrals. And it made that single post a perfect 1.000, which
+    is the exact confident-looking-reading-from-a-handful-of-posts that
+    Tone's own docstring exists to warn about.
+
+    The count is the arithmetic on the two numbers the row actually shows,
+    so a reader can verify the order by looking at it, and the loudest
+    positive talk sorts to the top -- which is what "most bullish" means
+    on a board about how much is being said.
+
+    A ticker nobody used a sentiment word about has no lean at all rather
+    than a neutral one, so it sorts with the missing. A ticker that was
+    discussed neutrally has a real net of zero and keeps its place.
     """
     if tone is None:
         return None
     # Attribute access, not subscript: _tones returns board.Tone dataclasses,
     # and `tone['bullish']` raises TypeError on the first lean sort rather
     # than at import.
-    total = tone.bullish + tone.neutral + tone.bearish
-    if total <= 0:
+    if tone.bullish + tone.neutral + tone.bearish <= 0:
         return None
-    return (tone.bullish - tone.bearish) / total
+    return tone.bullish - tone.bearish
 
 
 def _sort_value(row, key, leans):

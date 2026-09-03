@@ -68,18 +68,34 @@ def test_ratio_is_mentions_against_its_own_expected():
     assert tickers(board.sort_rows(rows, 'ratio', 'desc', {})) == ['ODD', 'LOUD']
 
 
-def test_lean_reads_the_tone_map_and_ranks_by_net_share():
-    rows = [row('BULL'), row('BEAR'), row('QUIET')]
+def test_lean_ranks_by_net_bullish_COUNT_not_share():
+    """The loudest positive talk goes to the top. A share instead put a
+    single bullish post at 1.000 above nine bullish posts with two
+    neutrals -- decided by a `neutral` count the row never displays."""
+    rows = [row('LOUD'), row('THIN'), row('BEAR'), row('QUIET')]
     # Real Tone dataclasses -- what _tones actually hands sort_rows.
-    leans = {'BULL': board.Tone(bullish=8, neutral=2, bearish=0),
-             'BEAR': board.Tone(bullish=0, neutral=2, bearish=8),
-             'QUIET': board.Tone(bullish=0, neutral=0, bearish=0)}
+    leans = {'LOUD': board.Tone(bullish=9, neutral=2, bearish=0),   # net +9
+             'THIN': board.Tone(bullish=1, neutral=0, bearish=0),   # net +1
+             'BEAR': board.Tone(bullish=0, neutral=2, bearish=8),   # net -8
+             'QUIET': board.Tone(bullish=0, neutral=0, bearish=0)}  # no tone
 
-    # QUIET has no tone at all -- last, not "most bearish".
+    # THIN would be FIRST under a share: 1/1 is a perfect 1.000.
     assert tickers(board.sort_rows(rows, 'lean', 'desc', leans)) == [
-        'BULL', 'BEAR', 'QUIET']
+        'LOUD', 'THIN', 'BEAR', 'QUIET']
     assert tickers(board.sort_rows(rows, 'lean', 'asc', leans)) == [
-        'BEAR', 'BULL', 'QUIET']
+        'BEAR', 'THIN', 'LOUD', 'QUIET']
+
+
+def test_a_neutrally_discussed_ticker_keeps_its_place_at_zero():
+    """Talked about with no lean either way is a real reading of zero --
+    unlike a ticker nobody used a sentiment word about, which has none."""
+    rows = [row('UP'), row('FLAT'), row('DOWN')]
+    leans = {'UP': board.Tone(bullish=3, neutral=0, bearish=0),
+             'FLAT': board.Tone(bullish=0, neutral=6, bearish=0),
+             'DOWN': board.Tone(bullish=0, neutral=0, bearish=3)}
+
+    assert tickers(board.sort_rows(rows, 'lean', 'desc', leans)) == [
+        'UP', 'FLAT', 'DOWN']
 
 
 def test_an_unknown_key_leaves_the_order_alone():
