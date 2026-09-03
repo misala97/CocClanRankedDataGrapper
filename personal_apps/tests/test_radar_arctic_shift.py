@@ -301,3 +301,20 @@ def test_an_auto_sized_read_that_hits_the_cap_is_truncated():
 
     assert result.per_source_status == {'reddit:zzarc': 'truncated'}
     assert len(result.posts) == 4
+
+
+def test_an_item_without_a_timestamp_does_not_take_the_whole_cycle_down():
+    """The filter tolerates a missing created_utc; the paging key used to
+    subscript it. One malformed item would have raised out of fetch() and
+    run_cycle's blanket except would have marked every sub missing."""
+    broken = [{'id': 'x1', 'name': 't1_x1', 'author': 'a', 'body': 'ZZA',
+               'link_id': 't3_parent1', 'permalink': '/r/zzarc/x1/'}]
+    client = FakeClient({('/comments/search', 'zzarc'): [broken],
+                         ('/posts/search', 'zzarc'): [[]]}, parents={'t3_parent1': 'x'})
+
+    result, advanced = arctic_shift.fetch({('zzarc', 'comments'): minute(30)}, client,
+                                          subs=['zzarc'], now=NOW, page_size='auto')
+
+    assert result.per_source_status == {'reddit:zzarc': 'ok'}
+    assert result.posts == []
+    assert advanced == {}

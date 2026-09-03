@@ -213,7 +213,15 @@ def _pages(client, sub, kind, since, *, until=None, max_pages=None,
             return items, True
         if max_pages is not None and pages >= max_pages:
             return items, False
-        newest = max(int(item['created_utc']) for item in page)
+        # Read the same way the filter above reads it. Subscripting here
+        # while tolerating a missing key there would turn one malformed
+        # item into a KeyError out of fetch(), and run_cycle's blanket
+        # except would mark ALL 34 subreddits missing for that cycle.
+        stamps = [int(item['created_utc']) for item in page
+                  if item.get('created_utc') is not None]
+        if not stamps:
+            return items, True
+        newest = max(stamps)
         if newest - 1 <= after and fresh == 0:
             # A whole page inside one second and nothing new: the archive
             # cannot be paged past it with a one-second key. Take what we
