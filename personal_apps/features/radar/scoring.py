@@ -126,17 +126,29 @@ def score_source(source, now, lookback_days=30, excluded=None):
     # source does. Spec 6.8 wants a segment median, which needs market cap and
     # therefore Plan 3; a global median is the same shape with a coarser peer
     # group.
-    rates = []
-    for rows in grouped.values():
+    #
+    # Screened ONCE per ticker and kept. Both passes below ask the same
+    # question of the same rows, and building the observations twice was
+    # most of a 28-minute pass: 4,839 tickers on r/wallstreetbets alone,
+    # times 36 sources (measured 2026-09-03, after the Arctic Shift
+    # backfill made every source's 30-day window full). The two weekly_rate
+    # calls genuinely differ -- the second one carries the prior -- so only
+    # the screening is shared.
+    usable_rows = {}
+    for ticker, rows in grouped.items():
         good = baselines.usable(_observations(rows), version, excluded)
         if good:
-            rate, _ = baselines.weekly_rate(good, prof)
-            rates.append(rate)
+            usable_rows[ticker] = good
+
+    rates = []
+    for good in usable_rows.values():
+        rate, _ = baselines.weekly_rate(good, prof)
+        rates.append(rate)
     prior_rate = sorted(rates)[len(rates) // 2] if rates else 0.0
 
     written = 0
-    for rows in grouped.values():
-        good = baselines.usable(_observations(rows), version, excluded)
+    for ticker, rows in grouped.items():
+        good = usable_rows.get(ticker)
         if not good:
             continue
 

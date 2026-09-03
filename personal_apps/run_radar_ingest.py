@@ -47,6 +47,9 @@ from features.radar.sources import FetchResult
 
 logger = logging.getLogger('radar.ingest')
 
+# See the radar_scoring job in main() for why this is not fifteen.
+SCORING_INTERVAL_MINUTES = 30
+
 INTERVALS = {
     'premarket': 180,
     'regular': 180,
@@ -1248,7 +1251,13 @@ def main(argv=None):
                           + dt.timedelta(seconds=30))
     # Two minutes behind the first cycle, so there are buckets to read before
     # the first scoring pass goes looking for them.
-    scheduler.add_job(_scheduled_scoring, 'interval', minutes=15,
+    #
+    # Thirty minutes, not fifteen: a pass measured 27m52s on 2026-09-03,
+    # against 42s before the Arctic Shift backfill filled every source's
+    # 30-day window. At fifteen the scheduler simply skipped every second
+    # firing (max_instances=1) and said so only in a warning -- an interval
+    # the work cannot fit is a worse lie than a slower one that can.
+    scheduler.add_job(_scheduled_scoring, 'interval', minutes=SCORING_INTERVAL_MINUTES,
                       id='radar_scoring', max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc)
                       + dt.timedelta(minutes=2))

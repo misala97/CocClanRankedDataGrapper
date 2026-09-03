@@ -583,3 +583,50 @@ def test_a_baseline_shorter_than_a_day_is_not_reported_as_zero_days(clean_bucket
     scored = RadarBucketSource.query.filter_by(
         ticker='ZZA', source='bluesky').first()
     assert 0 < scored.baseline_days < 1
+
+
+# --- pass cost (measured 2026-09-03) ----------------------------------------
+
+def test_each_ticker_is_screened_once_per_pass(rows, monkeypatch):
+    """Both passes over the tickers ask usable() the same question of the
+    same rows. Building the observations twice was most of a 28-minute
+    pass once the Arctic Shift backfill filled every source's 30-day
+    window: 4,839 tickers on r/wallstreetbets alone, times 36 sources.
+
+    The two weekly_rate calls are NOT redundant -- the second carries the
+    prior -- so this pins the screening only.
+    """
+    steady_history(ticker='SSA', source=REDDIT)
+    steady_history(ticker='SSB', source=REDDIT)
+    db.session.commit()
+
+    screened = []
+    original = scoring.baselines.usable
+
+    def counted(observations, config_version, excluded):
+        screened.append(len(observations))
+        return original(observations, config_version, excluded)
+
+    monkeypatch.setattr(scoring.baselines, 'usable', counted)
+    scoring.score_source(REDDIT, NOW)
+
+    assert len(screened) == 2, f'{len(screened)} screenings for 2 tickers'
+    assert all(count > 0 for count in screened)
+
+
+def test_the_scores_survive_screening_once(rows):
+    """The refactor must not move a single number: same rows, same z."""
+    steady_history(ticker='SSA', source=REDDIT)
+    loud = MONDAY + dt.timedelta(days=20)
+    db.session.commit()
+    RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=loud, source=REDDIT).update({'mention_count': 60})
+    db.session.commit()
+
+    scoring.score_source(REDDIT, NOW)
+    row = RadarBucketSource.query.filter_by(
+        ticker='SSA', bucket_start=loud, source=REDDIT).one()
+
+    assert row.mention_z > 5
+    assert row.expected is not None and row.variance is not None
+    assert row.baseline_days > 14
