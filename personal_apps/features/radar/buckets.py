@@ -15,6 +15,9 @@ import collections
 import dataclasses
 import datetime as dt
 import statistics
+import time
+
+import sqlalchemy.exc
 
 from extensions import db
 from models import RadarBucket, RadarBucketSource
@@ -132,8 +135,46 @@ def _summarize(rows):
     }
 
 
+# InnoDB picks a victim when two transactions grab the same rows in a
+# different order and rolls it back whole; retrying the transaction is the
+# documented remedy, not a workaround. It became reachable on 2026-09-03,
+# when the Reddit cycle went from one subreddit's handful of rows to 34
+# subreddits over 35-78 seconds and started overlapping the three-minute
+# main cycle -- and scoring writes the same child rows every 15 minutes.
+# Safe to repeat: a rollback undoes the whole attempt, and the rebuild
+# reads the journal from scratch.
+DEADLOCK_RETRIES = 3
+DEADLOCK_BACKOFF_SECONDS = 0.5
+_DEADLOCK_CODES = (1213, 1205)          # deadlock, lock wait timeout
+
+
+def _is_deadlock(error):
+    code = getattr(getattr(error, 'orig', None), 'args', (None,))[0]
+    return code in _DEADLOCK_CODES
+
+
 def roll_up(rows, statuses, touched, *, preserve_parent=False):
-    """Write bucket totals and per-source rows for `touched` windows.
+    """Write bucket totals and per-source rows, retrying a deadlock.
+
+    See _roll_up_once for what the pass does. A losing transaction is
+    retried whole rather than failed: the cycle above stores its posts and
+    advances its cursors BEFORE this runs, so giving up here would leave
+    those mentions journalled and never counted.
+    """
+    for attempt in range(DEADLOCK_RETRIES + 1):
+        try:
+            return _roll_up_once(rows, statuses, touched,
+                                 preserve_parent=preserve_parent)
+        except sqlalchemy.exc.OperationalError as error:
+            if attempt >= DEADLOCK_RETRIES or not _is_deadlock(error):
+                raise
+            db.session.rollback()
+            time.sleep(DEADLOCK_BACKOFF_SECONDS * (attempt + 1))
+
+
+def _roll_up_once(rows, statuses, touched, *, preserve_parent=False):
+    """One attempt at writing bucket totals and per-source rows for
+    `touched` windows.
 
     statuses maps source name to 'ok' | 'missing' | 'truncated'. The set of
     source names is open -- nothing here knows or cares which they are.

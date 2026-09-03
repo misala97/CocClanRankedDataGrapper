@@ -426,3 +426,52 @@ def test_the_promotion_ceiling_is_hashed_into_the_config_version():
     with mock.patch.object(config, 'MAX_BARE_PER_VOUCHER',
                            config.MAX_BARE_PER_VOUCHER + 1):
         assert config.source_config_version() != before
+
+
+# --- deadlock retry (production 2026-09-03) ---------------------------------
+
+def test_a_deadlocked_rollup_is_retried_whole(monkeypatch):
+    """InnoDB rolls a losing transaction back entirely. The cycle above has
+    already committed its posts and advanced its cursors, so giving up here
+    would leave those mentions journalled and never counted."""
+    import sqlalchemy.exc
+
+    from features.radar import buckets as buckets_module
+
+    calls = []
+
+    def flaky(rows, statuses, touched, *, preserve_parent=False):
+        calls.append(1)
+        if len(calls) < 3:
+            raise sqlalchemy.exc.OperationalError(
+                'UPDATE radar_bucket_sources', {},
+                Exception(1213, 'Deadlock found when trying to get lock'))
+        return 7
+
+    monkeypatch.setattr(buckets_module, '_roll_up_once', flaky)
+    monkeypatch.setattr(buckets_module.time, 'sleep', lambda _s: None)
+
+    with flask_app.app_context():          # the retry rolls the session back
+        assert buckets_module.roll_up([], {}, set()) == 7
+    assert len(calls) == 3
+
+
+def test_a_non_deadlock_database_error_is_not_retried(monkeypatch):
+    """Retrying a bad column name three times only delays the traceback."""
+    import sqlalchemy.exc
+
+    from features.radar import buckets as buckets_module
+
+    calls = []
+
+    def broken(rows, statuses, touched, *, preserve_parent=False):
+        calls.append(1)
+        raise sqlalchemy.exc.OperationalError(
+            'SELECT', {}, Exception(1054, "Unknown column 'nope'"))
+
+    monkeypatch.setattr(buckets_module, '_roll_up_once', broken)
+    monkeypatch.setattr(buckets_module.time, 'sleep', lambda _s: None)
+
+    with pytest.raises(sqlalchemy.exc.OperationalError):
+        buckets_module.roll_up([], {}, set())
+    assert len(calls) == 1
