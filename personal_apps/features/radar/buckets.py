@@ -132,11 +132,18 @@ def _summarize(rows):
     }
 
 
-def roll_up(rows, statuses, touched):
+def roll_up(rows, statuses, touched, *, preserve_parent=False):
     """Write bucket totals and per-source rows for `touched` windows.
 
     statuses maps source name to 'ok' | 'missing' | 'truncated'. The set of
     source names is open -- nothing here knows or cares which they are.
+
+    `preserve_parent=True` is the backfill's mode: a parent RadarBucket
+    that already exists is left exactly as it is. The parent is rebuilt
+    from the journal, and the journal keeps 48 h -- rebuilding an old
+    window would erase every other source's totals from it. A parent that
+    does not exist yet is created from these rows, which is the truth for
+    a window nothing else observed.
 
     Returns the number of bucket rows written.
     """
@@ -194,10 +201,14 @@ def roll_up(rows, statuses, touched):
         if bucket is None:
             bucket = RadarBucket(ticker=ticker, bucket_start=start)
             db.session.add(bucket)
-        for field, value in totals.items():
-            setattr(bucket, field, value)
-        bucket.sources_ok = sources_ok
-        bucket.source_config_version = version
+            existed = False
+        else:
+            existed = True
+        if not (preserve_parent and existed):
+            for field, value in totals.items():
+                setattr(bucket, field, value)
+            bucket.sources_ok = sources_ok
+            bucket.source_config_version = version
 
         by_source = collections.defaultdict(list)
         for row in bucket_rows:
