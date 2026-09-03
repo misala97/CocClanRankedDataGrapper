@@ -203,6 +203,13 @@ per-sub map.
   day half-read would be written as a complete day, while the live cycle
   does not retry at all — its windows are five minutes, and giving the
   subreddit up with its cursor unmoved costs one cycle.
+- **A read timeout is the same fact as a 422** and retries with it
+  (2026-09-03, day 23 of the first live backfill died on a `ReadTimeout`
+  after the 422 fix had already shipped). `requests.Timeout` and
+  `ConnectionError` raise `ArcticShiftBusy`; anything else the transport
+  raises stays a hard `ArcticShiftUnavailable`. The backfill's client
+  also gets a 90 s timeout against the live cycle's 30 s, because a whole
+  day of a busy subreddit is a far heavier query than five minutes of one.
 - **The log line** for a cycle shows the concrete map under `sources=`
   (34 `reddit:<sub>` keys) and the root verdict under `aggregate=`.
 - **Bucket growth** accepted: ~34 child rows per touched (ticker, window).

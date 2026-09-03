@@ -155,7 +155,8 @@ def main(argv=None):
     subs = [s for s in args.subs.split(',') if s]
     now = dt.datetime.utcnow().replace(microsecond=0)
     start = now - dt.timedelta(days=args.days)
-    client = arctic_shift.ArcticShiftClient()
+    client = arctic_shift.ArcticShiftClient(
+        timeout=arctic_shift.RANGE_TIMEOUT_SECONDS)
     done = load_resume(args.resume) if args.apply else set()
     with app.app_context():
         lookup = universe.load_lookup()

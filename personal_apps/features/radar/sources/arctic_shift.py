@@ -42,6 +42,9 @@ IDS_PER_CALL = 100
 # bit'. Deep pagination through a busy day provokes it; the backfill waits
 # and asks again rather than losing the day.
 RANGE_RETRIES = 6
+# A whole day of a busy subreddit is a heavy query; 30 s read-timed-out on
+# day 23 of the first live backfill. The live cycle keeps the short one.
+RANGE_TIMEOUT_SECONDS = 90
 RETRY_DELAY_SECONDS = 2.0
 RETRY_DELAY_MAX = 60.0
 KINDS = ('comments', 'posts')
@@ -57,7 +60,8 @@ class ArcticShiftThrottled(ArcticShiftUnavailable):
 
 
 class ArcticShiftBusy(ArcticShiftUnavailable):
-    """HTTP 422 'Timeout. Maybe slow down a bit'.
+    """The archive was too slow to answer: HTTP 422 'Timeout. Maybe slow
+    down a bit', or a read timeout / dropped connection on our side.
 
     The archive timed out on THIS query, not a ban and not a bad request:
     the identical request answered on the next attempt when it appeared
@@ -79,6 +83,11 @@ class ArcticShiftClient:
         try:
             response = self._session.get(API_BASE + path, params=params,
                                          timeout=self._timeout)
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            # The same fact as a 422, arriving on our side of the wire: the
+            # archive is slow or briefly unreachable, not wrong. Measured
+            # 2026-09-03, a ReadTimeout on day 23 of the first live backfill.
+            raise ArcticShiftBusy(f'{path}: {exc}') from exc
         except requests.RequestException as exc:
             raise ArcticShiftUnavailable(f'{path}: {exc}') from exc
         if response.status_code == 429:

@@ -397,3 +397,39 @@ def test_a_live_cycle_does_not_wait_on_a_busy_archive(monkeypatch):
 
     assert result.per_source_status == {'reddit:zzarc': 'missing'}
     assert advanced == {} and slept == []
+
+
+def test_a_read_timeout_is_busy_not_a_dead_archive():
+    """Day 23 of the first live backfill died on a requests ReadTimeout: a
+    422 and a read timeout are the same fact -- the archive was too slow --
+    but only one of them was retryable, so the run stopped."""
+    import requests
+
+    class Session:
+        headers = {}
+
+        def get(self, url, params=None, timeout=None):
+            raise requests.exceptions.ReadTimeout('read timed out')
+
+    client = arctic_shift.ArcticShiftClient()
+    client._session = Session()
+    with pytest.raises(arctic_shift.ArcticShiftBusy):
+        client.get_json('/comments/search', {'subreddit': 'zzarc'})
+
+
+def test_a_broken_answer_is_still_a_hard_failure():
+    """Only slowness retries. A malformed request or a refused protocol is
+    not going to answer differently six times in a row."""
+    import requests
+
+    class Session:
+        headers = {}
+
+        def get(self, url, params=None, timeout=None):
+            raise requests.exceptions.TooManyRedirects('loop')
+
+    client = arctic_shift.ArcticShiftClient()
+    client._session = Session()
+    with pytest.raises(arctic_shift.ArcticShiftUnavailable) as caught:
+        client.get_json('/comments/search', {'subreddit': 'zzarc'})
+    assert not isinstance(caught.value, arctic_shift.ArcticShiftBusy)
