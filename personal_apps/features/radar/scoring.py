@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from extensions import db
 from models import RadarBucketSource
 
-from . import baselines, profile
+from . import baselines, buckets, profile
 from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
                      MIN_DISTINCT_TEXT_RATIO, MIN_MENTIONS,
                      PROVISIONAL_BASELINE_DAYS, SCOREABLE_STATUSES,
@@ -114,7 +114,8 @@ def _worth_writing(row, expected, variance, mention_z, baseline_days):
     PROVISIONAL_BASELINE_DAYS for the mark) always writes, however small
     the move, so a threshold is never seen late.
     """
-    if row.expected is None or row.variance is None or row.mention_z is None             or row.baseline_days is None:
+    if (row.expected is None or row.variance is None
+            or row.mention_z is None or row.baseline_days is None):
         return True
     if _crossed(row.mention_z, mention_z, ELEVATED_Z):
         return True
@@ -151,7 +152,12 @@ def score_source(source, now, lookback_days=30, excluded=None):
     # only stops it sitting there forever still LOOKING scored to anything
     # that reads the column directly (spec: leaderboard ranks on mention_z
     # IS NOT NULL).
-    invalidate_incompatible_scores(version, since, source=source)
+    # Committed on its own: the bulk UPDATE takes row locks the moment it
+    # runs, and carrying them through the reads below held them for the
+    # whole source (~25 s) against every cycle's roll_up.
+    with buckets.BUCKET_WRITE_LOCK:
+        invalidate_incompatible_scores(version, since, source=source)
+        db.session.commit()
 
     prof = profile.build_profile(source, now, version)
     grouped = _rows_by_ticker(source, since, now, version)
@@ -180,7 +186,12 @@ def score_source(source, now, lookback_days=30, excluded=None):
         rates.append(rate)
     prior_rate = sorted(rates)[len(rates) // 2] if rates else 0.0
 
-    written = 0
+    # Decide every write first, in Python, with no lock held; then take the
+    # table's write lock only for the flush. The lock is what keeps this
+    # pass from deadlocking a cycle's roll_up (buckets.BUCKET_WRITE_LOCK),
+    # and holding it across the arithmetic would make every cycle wait on
+    # a pass instead of on a flush.
+    pending = []
     for ticker, rows in grouped.items():
         good = usable_rows.get(ticker)
         if not good:
@@ -208,14 +219,16 @@ def score_source(source, now, lookback_days=30, excluded=None):
                          / max(variance, VARIANCE_FLOOR) ** 0.5)
             if not _worth_writing(row, expected, variance, mention_z, baseline_days):
                 continue
+            pending.append((row, expected, variance, mention_z, baseline_days))
+
+    with buckets.BUCKET_WRITE_LOCK:
+        for row, expected, variance, mention_z, baseline_days in pending:
             row.expected = expected
             row.variance = variance
             row.mention_z = mention_z
             row.baseline_days = baseline_days
-            written += 1
-
-    db.session.commit()
-    return written
+        db.session.commit()
+    return len(pending)
 
 
 def pooled_z(ticker, bucket_start, sources):

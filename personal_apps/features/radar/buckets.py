@@ -15,6 +15,7 @@ import collections
 import dataclasses
 import datetime as dt
 import statistics
+import threading
 import time
 
 import sqlalchemy.exc
@@ -152,6 +153,20 @@ DEADLOCK_BACKOFF_SECONDS = 1.0
 DEADLOCK_BACKOFF_MAX = 16.0
 _DEADLOCK_CODES = (1213, 1205)          # deadlock, lock wait timeout
 
+# ONE lock for every writer of radar_buckets / radar_bucket_sources, held
+# only while rows are actually being written. Four writers share one
+# process: the main cycle's roll_up, the Reddit cycle's roll_up, the scoring
+# pass's flush, and the chatter-correction rebuild. Any two of them
+# interleaving can deadlock InnoDB, and the retry above cannot outlast a
+# flush that holds row locks for a minute (11 of 11 Reddit cycles lost
+# their counts that way on the evening of 2026-09-03, once per scoring
+# pass). A lock on the two CYCLES was the first attempt and missed the
+# scoring pass; the lock belongs to the table, not to the job.
+#
+# Held around the WRITE PHASE only. Scoring's reads and arithmetic run
+# outside it, so a cycle waits for a flush -- seconds -- not for a pass.
+BUCKET_WRITE_LOCK = threading.Lock()
+
 
 def _is_deadlock(error):
     code = getattr(getattr(error, 'orig', None), 'args', (None,))[0]
@@ -166,16 +181,17 @@ def roll_up(rows, statuses, touched, *, preserve_parent=False):
     advances its cursors BEFORE this runs, so giving up here would leave
     those mentions journalled and never counted.
     """
-    for attempt in range(DEADLOCK_RETRIES + 1):
-        try:
-            return _roll_up_once(rows, statuses, touched,
-                                 preserve_parent=preserve_parent)
-        except sqlalchemy.exc.OperationalError as error:
-            if attempt >= DEADLOCK_RETRIES or not _is_deadlock(error):
-                raise
-            db.session.rollback()
-            time.sleep(min(DEADLOCK_BACKOFF_SECONDS * 2 ** attempt,
-                           DEADLOCK_BACKOFF_MAX))
+    with BUCKET_WRITE_LOCK:
+        for attempt in range(DEADLOCK_RETRIES + 1):
+            try:
+                return _roll_up_once(rows, statuses, touched,
+                                     preserve_parent=preserve_parent)
+            except sqlalchemy.exc.OperationalError as error:
+                if attempt >= DEADLOCK_RETRIES or not _is_deadlock(error):
+                    raise
+                db.session.rollback()
+                time.sleep(min(DEADLOCK_BACKOFF_SECONDS * 2 ** attempt,
+                               DEADLOCK_BACKOFF_MAX))
 
 
 def _roll_up_once(rows, statuses, touched, *, preserve_parent=False):
@@ -335,7 +351,11 @@ def rebuild_windows(windows):
     windows = set(windows)
     if not windows:
         return 0
+    with BUCKET_WRITE_LOCK:
+        return _rebuild_windows_locked(windows)
 
+
+def _rebuild_windows_locked(windows):
     version = source_config_version()
     complete = journal.events_for(windows)
     promoted_rows = _promote(complete)

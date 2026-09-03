@@ -688,3 +688,29 @@ def test_scoring_the_same_rows_twice_writes_nothing_the_second_time(rows):
              for r in RadarBucketSource.query.filter_by(source=REDDIT).all()}
     assert second == 0
     assert after == before
+
+
+def test_scoring_writes_only_under_the_bucket_write_lock(rows, monkeypatch):
+    """The scoring pass is the third writer of radar_bucket_sources. Its
+    flush held row locks for up to a minute per source, and a cycle's
+    roll_up deadlocked against it once per pass (11 of 11 Reddit cycles,
+    evening of 2026-09-03). Both of its writes -- the invalidation UPDATE
+    and the score flush -- go through buckets.BUCKET_WRITE_LOCK, and the
+    reads and arithmetic between them do not."""
+    entries = []
+
+    class Lock:
+        def __enter__(self):
+            entries.append('enter')
+
+        def __exit__(self, *exc):
+            entries.append('exit')
+            return False
+
+    steady_history(source=REDDIT)
+    db.session.commit()
+    monkeypatch.setattr(scoring.buckets, 'BUCKET_WRITE_LOCK', Lock())
+    written = scoring.score_source(REDDIT, NOW)
+
+    assert written > 0
+    assert entries == ['enter', 'exit', 'enter', 'exit'], entries

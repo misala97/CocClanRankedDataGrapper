@@ -475,3 +475,59 @@ def test_a_non_deadlock_database_error_is_not_retried(monkeypatch):
     with pytest.raises(sqlalchemy.exc.OperationalError):
         buckets_module.roll_up([], {}, set())
     assert len(calls) == 1
+
+
+# --- one write lock for every bucket writer (production, evening of 2026-09-03)
+
+def test_two_rollups_never_write_at_the_same_time(monkeypatch):
+    """Four writers share the bucket tables in one process; any two
+    interleaving deadlocked InnoDB, and the retry cannot outlast a flush
+    that holds row locks for a minute. The lock lives with the table."""
+    import threading
+
+    from features.radar import buckets as buckets_module
+
+    started = threading.Event()
+    release = threading.Event()
+    trace = []
+
+    def slow(rows, statuses, touched, *, preserve_parent=False):
+        started.set()
+        trace.append('in')
+        release.wait(timeout=5)
+        trace.append('out')
+        return 1
+
+    monkeypatch.setattr(buckets_module, '_roll_up_once', slow)
+
+    first = threading.Thread(target=buckets_module.roll_up, args=([], {}, set()))
+    first.start()
+    assert started.wait(timeout=5)
+    second = threading.Thread(target=buckets_module.roll_up, args=([], {}, set()))
+    second.start()
+    second.join(timeout=0.5)
+    assert second.is_alive(), 'the second rollup wrote while the first held the lock'
+
+    release.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+    assert trace == ['in', 'out', 'in', 'out']
+
+
+def test_the_chatter_rebuild_takes_the_same_lock(monkeypatch):
+    """rebuild_windows is the fourth writer -- the sentiment path's
+    correction of a window -- and it writes the same rows."""
+    import datetime as dt
+
+    from features.radar import buckets as buckets_module
+
+    held = []
+
+    def record(windows):
+        held.append(buckets_module.BUCKET_WRITE_LOCK.locked())
+        return 0
+
+    monkeypatch.setattr(buckets_module, '_rebuild_windows_locked', record)
+    buckets_module.rebuild_windows({('ZZLOCK', dt.datetime(2027, 1, 4, 12, 0))})
+    assert held == [True]
+    assert not buckets_module.BUCKET_WRITE_LOCK.locked()
