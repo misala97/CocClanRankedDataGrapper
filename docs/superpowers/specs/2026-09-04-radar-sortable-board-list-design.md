@@ -1,6 +1,6 @@
 # Radar — a sortable board list
 
-**Status:** approved in brainstorm 2026-09-04, spec for review
+**Status:** built 2026-09-04 (plan docs/superpowers/plans/2026-09-04-radar-sortable-board-list.md)
 **Builds on:** the ledger layout from the 2026-09-01 layout round
 (`static/radar/src/list/ListPane.tsx`), the two-tier split from the
 2026-09-01 critique, and `features/radar/leaderboard.py`'s ranking.
@@ -160,6 +160,51 @@ Pytest:
 - each key orders as specified, nulls last both ways
 - an unknown key falls back to the default ranking
 - no sort asked for produces exactly today's order
+
+## Built as (2026-09-04, deviations from the text above)
+
+- **The sort lives in `board.build`, not `leaderboard.build_rows`.** The spec
+  named the wrong file: `board.py` already calls `build_rows` with
+  `limit=None`, and the real top-N is `ranked = ranked[:limit]`, after the
+  segment and venue filters. The sort goes immediately before that line.
+  Measured live 2026-09-04: 106 candidates against a limit of 50, so 56 rows
+  are genuinely in play.
+- **An invalid `sort` or `dir` raises `BadQuery` (400)** rather than falling
+  back to the default ranking as the spec said. `routes/api.py` validates
+  every other parameter and refuses rather than coerces, for the reason
+  stated there: answering with a board under a selection the viewer never
+  made. A silently-ignored sort would draw the default ranking under a
+  header claiming otherwise.
+- **The sort is part of the board memo's CACHE KEY**, which the spec did not
+  mention at all. `_build_board` memoises per selection for 60 s; a key
+  without the sort would have served the unsorted board to the next reader
+  who asked for a sorted one -- inside the same minute, silently, and only
+  sometimes. Found while implementing, pinned by a test that counts the
+  cache entries.
+- **The payload echoes `sort` and `dir` back, and the island seeds from the
+  echo.** The spec said the island would parse the URL; it does not.
+  `BoardPage.tsx` hydrates every control from the payload and reads only
+  `?t=` from the address bar, so an unechoed sort would have rendered sorted
+  rows under a header that believed nothing was sorted.
+- **A lean sort fetches tones for the whole candidate set.** `_tones` runs
+  inside `_entries`, which sees only the rows that survived the limit -- so
+  ranking by lean has to know the tones before choosing which rows those
+  are. It doubles one grouped query (106 tickers instead of 50) on a
+  candidate build measured at 1.7 s, and only when that key is chosen.
+- **`queryFor` also builds every row's detail href**, so the sort rides into
+  the detail link and returns with the reader. Wanted rather than tolerated:
+  coming back to a board that had forgotten its sort is the lost-place
+  complaint `?t=` exists to fix.
+- **Verified live 2026-09-04** on a local board of 21 rows: sorting by
+  mentions returned CAT 17, GPRO 16, AMZN 15, SPY 14 -- strictly descending,
+  with CAT absent from the default top six, so the re-rank demonstrably
+  changes WHICH rows lead rather than only their order. Ticker sorted A-Z.
+  The header's column edges measured `[42, 134, 254, 326, 485]` against the
+  rows' `[42, 134, 254, 326, 493]` -- byte-identical to the same measurement
+  taken against the pre-change build, so the buttons did not disturb the
+  shared grid. At 390x844 the header is absent and a `?sort=` URL still
+  renders sorted rows under its caption.
+- **Sorting is desktop-only**, recorded above under "Width".
 
 ## Out of scope
 
