@@ -893,6 +893,9 @@ body {
 .row .sub.lean.bull { background: var(--up-soft); }
 .row .sub.lean.bear { background: var(--down-soft); }
 .row .sub.lean b { color: var(--ink); font-weight: 650; }
+/* The net leads the chip and is what the Lean sort orders by, so it reads
+   first and the two counts stay as the volume behind it. */
+.row .sub.lean .net { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* Marks and deviant quote facts, full width under the line: crammed into
    the facts column they truncated, and a caution the reader cannot finish

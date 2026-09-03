@@ -246,23 +246,34 @@ export function TickerRow(props: {
   )
 }
 
-/** Which way the scored talk leans: `↑4 ↓2` on a washed chip --
+/** Which way the scored talk leans: `+46 ↑124 ↓78` on a washed chip --
  *  green-tinted bullish, red-tinted bearish, gray when even or unscored.
  *
  *  The tint is Michi's 2026-08-31 call and the one sanctioned exception to
  *  green/red meaning price direction alone; it stays confined to this chip
- *  and faint, so it reads as annotation rather than verdict. The counts
- *  still carry the fact, the dominant side is bold, and equal counts show
- *  their own equality: neither bold, no tint.
+ *  and faint, so it reads as annotation rather than verdict.
+ *
+ *  THE NET LEADS, and is what the Lean sort orders by (board.SORT_KEYS).
+ *  Added 2026-09-04: the two counts alone could not be put in order by
+ *  eye -- `↑12 ↓1` against `↑22 ↓14` is +11 against +8, which nobody
+ *  computes while scanning a column. The counts stay because the net
+ *  cannot tell `↑124 ↓78` from `↑46 ↓0`, and the difference between a
+ *  loud argument and a quiet consensus is the whole point of the chip.
+ *  The dominant side stays bold, and equal counts show their own
+ *  equality: no bold, no tint, a net of zero.
  */
 function Lean({ tone }: { tone: Row['tone'] }) {
   const bull = tone.bullish > tone.bearish
   const bear = tone.bearish > tone.bullish
+  const net = tone.bullish - tone.bearish
   // Unscored renders too, on gray -- "no wording at all" is itself worth a
   // glance (Michi, 2026-08-31; supersedes the render-nothing first cut).
   return (
     <span className={`sub lean${bull ? ' bull' : bear ? ' bear' : ''}`}
-          aria-label={`${tone.bullish} bullish, ${tone.bearish} bearish`}>
+          aria-label={`net ${net > 0 ? '+' : ''}${net}, `
+                      + `${tone.bullish} bullish, ${tone.bearish} bearish`}>
+      <b className="net">{net > 0 ? `+${net}` : net}</b>
+      {' '}
       {bull ? <b>{'↑'}{tone.bullish}</b>
             : <span>{'↑'}{tone.bullish}</span>}
       {' '}

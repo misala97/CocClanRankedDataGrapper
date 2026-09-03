@@ -48,7 +48,9 @@ describe('a ticker row', () => {
     const lean = container.querySelector('.sub.lean')!
     expect(lean.className).toContain('bull')
     expect(lean).toHaveTextContent('↑4')
-    expect(lean.querySelector('b')).toHaveTextContent('↑4')
+    expect(lean.querySelector('b:not(.net)')).toHaveTextContent('↑4')
+    // The net leads and is what the Lean sort orders by: +4 - 2.
+    expect(lean.querySelector('.net')).toHaveTextContent('+2')
 
     rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
                         row={row({ tone: { bullish: 1, neutral: 0, bearish: 5 } })} />)
@@ -56,10 +58,12 @@ describe('a ticker row', () => {
 
     rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
                         row={row({ tone: { bullish: 2, neutral: 0, bearish: 2 } })} />)
-    // Even: gray chip, neither side bold, neither tint.
+    // Even: gray chip, neither ARROW bold, neither tint -- and a net of
+    // zero, which is the equality said as a number.
     const even = container.querySelector('.sub.lean')!
     expect(even.className).not.toMatch(/bull|bear/)
-    expect(even.querySelector('b')).toBeNull()
+    expect(even.querySelector('b:not(.net)')).toBeNull()
+    expect(even.querySelector('.net')).toHaveTextContent('0')
 
     rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
                         row={row({ tone: { bullish: 0, neutral: 7, bearish: 0 } })} />)
