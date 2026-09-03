@@ -333,6 +333,13 @@ const TOKENS: { text: string; key: SortKey | null; name?: string }[][] = [
   [{ text: 'Lean', key: 'lean', name: 'lean' }],
 ]
 
+/** What the flat list says it is ordered by. The header token's word is
+ *  too terse on its own line: "Sorted by Talk" reads as a proper noun. */
+const SORT_LABEL: Record<SortKey, string> = {
+  ticker: 'ticker', mentions: 'mentions', divergence: 'divergence',
+  ratio: 'ratio to normal', move: 'price move', lean: 'lean',
+}
+
 /** The ledger's column header, and the board's only sort control.
  *
  *  Was `aria-hidden` decoration until 2026-09-04. Each dot-separated token
@@ -512,17 +519,35 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
           </p>
         )}
         {watchRows.map(renderRow)}
-        {captions && (
-          <TierCaption tier="scored" windowHours={payload.window_hours}
-                       count={scored.rows.length}
-                       reason={thin ? UNIVERSAL[thin] : null} />
+        {selection.sort ? (
+          <>
+            <p className="tier">
+              <b>Sorted by {SORT_LABEL[selection.sort]}</b>
+              <span className="dot"> ·</span>{' '}
+              <span className="what">
+                {selection.dir === 'asc' ? 'smallest first' : 'largest first'}
+                , across the whole board
+              </span>
+              {' '}
+              <span className="n">{ranked.length}</span>
+            </p>
+            {ranked.map(renderRow)}
+          </>
+        ) : (
+          <>
+            {captions && (
+              <TierCaption tier="scored" windowHours={payload.window_hours}
+                           count={scored.rows.length}
+                           reason={thin ? UNIVERSAL[thin] : null} />
+            )}
+            {scored.rows.map(renderRow)}
+            {captions && chatter.rows.length > 0 && (
+              <TierCaption tier="chatter" windowHours={payload.window_hours}
+                           count={chatter.rows.length} reason={null} />
+            )}
+            {chatter.rows.map(renderRow)}
+          </>
         )}
-        {scored.rows.map(renderRow)}
-        {captions && chatter.rows.length > 0 && (
-          <TierCaption tier="chatter" windowHours={payload.window_hours}
-                       count={chatter.rows.length} reason={null} />
-        )}
-        {chatter.rows.map(renderRow)}
         {payload.rows.length === 0 && (
           // Where the first row would have been, not as a footnote under an
           // empty frame: on this board it is the entire answer.

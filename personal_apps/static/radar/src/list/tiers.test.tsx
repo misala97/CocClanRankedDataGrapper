@@ -151,3 +151,38 @@ describe('the two tiers', () => {
     expect(container.querySelector('.row .score .k')).toBeNull()
   })
 })
+
+describe('a sorted board', () => {
+  it('drops the tier captions for one flat list', () => {
+    const rows = [row('AAA', 0.5), row('BBB', null), row('CCC', 0.2)]
+    const sorted: Selection = { ...selection, sort: 'mentions', dir: 'desc' }
+    render(<ListPane payload={payload({ rows })} selection={sorted}
+                     selected={null} busy={false} onSelect={() => {}}
+                     onChange={() => {}} />)
+
+    // The captions name the two quantities; a sort is one quantity.
+    expect(screen.queryByText(/Scored against price/)).toBeNull()
+    expect(screen.queryByText(/Chatter only/)).toBeNull()
+    expect(screen.getByText(/Sorted by mentions/)).toBeTruthy()
+  })
+
+  it('keeps the captions when no sort is asked for', () => {
+    const rows = [row('AAA', 0.5), row('BBB', null)]
+    render(<ListPane payload={payload({ rows })} selection={selection}
+                     selected={null} busy={false} onSelect={() => {}}
+                     onChange={() => {}} />)
+
+    expect(screen.queryByText(/Sorted by/)).toBeNull()
+  })
+
+  it('leaves Watching pinned above the sorted rows', () => {
+    const rows = [row('AAA', 0.5), row('BBB', null)]
+    const sorted: Selection = { ...selection, sort: 'mentions', dir: 'desc' }
+    render(<ListPane payload={payload({ rows, watch_rows: [row('ZZZ', 0.1)] })}
+                     selection={sorted} selected={null} busy={false}
+                     onSelect={() => {}} onChange={() => {}}
+                     watching={['ZZZ']} />)
+
+    expect(screen.getByText('Watching')).toBeTruthy()
+  })
+})
