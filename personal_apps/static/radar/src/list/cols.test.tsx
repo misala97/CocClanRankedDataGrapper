@@ -66,3 +66,18 @@ it('is not hidden from assistive tech', () => {
   // cosmetic one: it is reachable by keyboard and absent from the tree.
   expect(container.querySelector('.cols')?.getAttribute('aria-hidden')).toBeNull()
 })
+
+it('shows which way the active column is pointed', async () => {
+  setup({ sort: 'mentions', dir: 'desc' })
+  expect(screen.getByRole('button', { name: /sort by mentions/i }).textContent)
+    .toContain('↓')
+
+  cleanup()
+  setup({ sort: 'mentions', dir: 'asc' })
+  expect(screen.getByRole('button', { name: /sort by mentions/i }).textContent)
+    .toContain('↑')
+
+  // Only the active one carries an arrow.
+  expect(screen.getByRole('button', { name: /sort by ticker/i }).textContent)
+    .not.toContain('↑')
+})

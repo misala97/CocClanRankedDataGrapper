@@ -693,7 +693,14 @@ body {
   color: inherit; cursor: pointer;
 }
 .cols button:hover { color: var(--fg); }
-.cols button.on { color: var(--fg); font-weight: 700; }
+.cols button.on { color: var(--mark); font-weight: 700; }
+/* The direction arrow. Sized in its own right rather than inherited: at the
+   header's 10.5px an arrow is a smudge, and the one thing this element
+   exists to say is which way. */
+.cols button .dir {
+  margin-left: 3px; font-size: 11px; line-height: 1;
+  vertical-align: -1px;
+}
 .cols button:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
 
 /* A tier caption: the rule between two quantities, not a section heading.

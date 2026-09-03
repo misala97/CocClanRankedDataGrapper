@@ -391,6 +391,14 @@ export function SortCols({ selection, onChange }: {
                           aria-label={`Sort by ${token.name}`}
                           onClick={() => click(token.key as SortKey)}>
                     {token.text}
+                    {/* The arrow, not the weight, is what says "this one".
+                        Bold uppercase at 10.5px reads as emphasis, not as
+                        state, and it cannot say WHICH WAY at all. */}
+                    {token.key === selection.sort && (
+                      <span className="dir" aria-hidden="true">
+                        {selection.dir === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
                   </button>
                 ) : token.text}
               </Fragment>
