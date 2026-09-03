@@ -324,6 +324,18 @@ def test_an_unknown_sort_is_refused_rather_than_ignored(client):
 
 def test_an_unknown_direction_is_refused(client):
     assert client.get('/radar/api/board?sort=mentions&dir=sideways').status_code == 400
+
+
+def test_the_payload_echoes_the_sort_back(client):
+    """The island seeds its Selection from the payload, never from the URL
+    (BoardPage.tsx:25-31). Without the echo, reloading a ?sort= link draws
+    sorted rows under a header that believes nothing is sorted."""
+    body = client.get('/radar/api/board?sort=mentions&dir=asc').get_json()
+    assert body['sort'] == 'mentions'
+    assert body['dir'] == 'asc'
+
+    plain = client.get('/radar/api/board').get_json()
+    assert plain['sort'] is None
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -347,7 +359,16 @@ In `features/radar/routes/api.py`, inside `parse_query`, directly after the `seg
         raise BadQuery('unknown sort direction')
 ```
 
-Add `sort` and `direction` to whatever structure `parse_query` returns, following the shape already used for `segments` and `min_venues`, and pass them through to `board.build(...)` as `sort=` and `direction=` at the call site that builds the payload.
+Add `sort` and `direction` to the `Query` dataclass `parse_query` returns (beside `min_venues`, ~line 44) and pass them into `board.build(...)` as `sort=` and `direction=` at the call site (~line 322).
+
+**The payload must echo them back.** `BoardPage.tsx:25-31` seeds its `Selection` from the payload's echo fields (`initial.market`, `initial.sources`, `initial.segments`, `initial.window_hours`, `initial.min_venues`) and never parses the URL for them — only `?t=` is read from the address bar. Without an echo, a reload of a `?sort=` URL would render sorted rows under a header that thinks nothing is sorted, and the reader's first click would go the wrong way.
+
+So: add `sort: str | None` and `direction: str` to the `Board` dataclass (`board.py`, beside `min_venues` at ~125), set them in the `Board(...)` construction at the end of `build`, and serialise them beside `'min_venues': board.min_venues` (`routes/api.py:343`):
+
+```python
+        'sort': board.sort,
+        'dir': board.direction,
+```
 
 If `board` is not already imported in this module, add `from features.radar import board` beside the existing feature imports.
 
@@ -438,6 +459,11 @@ In `static/radar/src/api.ts`, add to `queryFor`, after the `venues` line:
 ```ts
   // Omitted at the default, the way venues is omitted at 1, so an unsorted
   // board keeps a clean URL.
+  //
+  // queryFor also builds every row's detail href (TickerRow.tsx:155), so the
+  // sort rides into the detail link and comes back with the reader. That is
+  // wanted: returning from a ticker to a board that had forgotten its sort
+  // would be the same lost-place complaint the ?t= parameter exists to fix.
   if (selection.sort) {
     params.set('sort', selection.sort)
     params.set('dir', selection.dir)
@@ -454,7 +480,25 @@ export function defaultDirection(key: SortKey): 'asc' | 'desc' {
 }
 ```
 
-In `BoardPage.tsx`, add `sort: null, dir: 'desc'` to the initial `Selection`, and parse them back from the URL beside the existing parameters — `sort` only when it is one of `SORT_KEYS`, `dir` only when it is `asc` or `desc`, and both reset to the default otherwise. `writeUrl` needs no change: it already serialises through `queryFor`.
+In `static/radar/src/types.ts`, add the two echo fields to `BoardPayload` beside `min_venues` (~278):
+
+```ts
+  /** Echoed so the island can seed its Selection from the server's own
+   *  parsed answer rather than re-parsing the URL. null is unsorted. */
+  sort: SortKey | null
+  dir: 'asc' | 'desc'
+```
+
+In `BoardPage.tsx`, seed from the echo the way every other field is seeded (~25-31) — **not** from the URL, which is only read for `?t=`:
+
+```ts
+    sort: initial.sort,
+    dir: initial.dir,
+```
+
+`writeUrl` needs no change: it already serialises through `queryFor`.
+
+Update `static/radar/src/fixtures.ts` — `payload()` gains `sort: null, dir: 'desc'` — so every existing test keeps compiling.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -650,7 +694,7 @@ If `--focus` is not a token in this stylesheet, use the value the rest of the fi
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run -c vite.radar.config.ts && npx tsc --noEmit`
-Expected: all pass. `tiers.test.tsx` renders `ListPane` and will need `sort`/`dir` on its `Selection` literal.
+Expected: all pass. Two existing suites build their own `Selection` literal and will not compile until each gains `sort: null, dir: 'desc'` — `src/list/tiers.test.tsx` (~26) and `src/list/watchtier.test.tsx`. `tiers.test.tsx` also asserts that `#radar-rows`' FIRST child is `.cols`; `SortCols` still renders a `.cols` div as the first child, so that assertion holds — check it does rather than assuming.
 
 - [ ] **Step 5: Commit**
 
@@ -718,7 +762,9 @@ describe('a sorted board', () => {
 })
 ```
 
-Update this file's `selection` literal (line ~26) to include `sort: null, dir: 'desc'`, and its `payload` to whatever the file already builds — if it has none, import `payload` from `../fixtures`.
+Update this file's `selection` literal (~26) to include `sort: null, dir: 'desc'`, and use its existing `payload` — if it has none, import `payload` from `../fixtures`.
+
+This file also pins the CLOSED-MARKET rule: with the market shut there are no captions at all. A sort must not resurrect one — check that existing test still passes rather than assuming, since the new "Sorted by" line is rendered from the same region.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
