@@ -1227,6 +1227,24 @@ class RadarWatch(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=dt.datetime.utcnow)
 
 
+class RadarRedditCursor(db.Model):
+    """Where the Arctic Shift reader is, per subreddit and kind.
+
+    Not radar_source_cursors: that table holds ONE cursor per root source
+    and ingest advances it every cycle; a per-sub watermark is a different
+    fact (reddit.py explains why one shared watermark starves the quiet
+    subs). Advanced only when a sub's read succeeded, and staged in the
+    cycle's session so it commits with the posts it covers.
+    """
+    __tablename__ = 'radar_reddit_cursors'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
+
+    sub        = db.Column(db.String(64, collation='utf8mb4_bin'), primary_key=True)
+    kind       = db.Column(db.String(12), primary_key=True)      # 'comments' | 'posts'
+    cursor_utc = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    updated_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
 class RadarSentimentJudgment(db.Model):
     """Append-only record of every successful primary or review answer.
 
