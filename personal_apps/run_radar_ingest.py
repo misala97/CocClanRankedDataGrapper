@@ -19,6 +19,7 @@ import argparse
 import datetime as dt
 import logging
 import sys
+import threading
 import time
 
 import sqlalchemy as sa
@@ -343,15 +344,32 @@ def _format_operational_map(values):
         for source, value in sorted(values.items()))
 
 
+# The main cycle and the Reddit cycle are separate JOBS on purpose -- a slow
+# archive must not delay Bluesky and 4chan -- but they are not separate
+# WRITERS: both rebuild the same radar_bucket_sources rows for the same
+# windows. Overlapping, they deadlocked InnoDB and two of three Reddit cycles
+# died (2026-09-03). Under RSS the Reddit write was one subreddit's handful of
+# rows and the overlap was too brief to collide; at 34 subreddits it runs
+# 35-78 seconds against a three-minute cycle and collides almost every time.
+#
+# They run in one process, so one lock is enough. Latency isolation survives:
+# what the separate job buys is that Reddit keeps its own five-minute clock
+# and its own failure domain, not that its writes interleave with a cycle's.
+_CYCLE_LOCK = threading.Lock()
+
+
 def tick(now_utc, fetchers):
     """One cycle across every source, with failures contained.
 
     APScheduler drops a job whose function raises, so an unhandled error here
     would silently end ingest until the next restart -- losing far more than
     the cycle that failed.
+
+    Serialized against the other cycle by _CYCLE_LOCK: see above.
     """
     try:
-        summary = ingest.run_cycle(now_utc.replace(tzinfo=None), fetchers)
+        with _CYCLE_LOCK:
+            summary = ingest.run_cycle(now_utc.replace(tzinfo=None), fetchers)
     except Exception:
         logger.exception('radar ingest cycle failed')
         return {'status': 'error', 'posts_seen': 0, 'posts_new': 0,

@@ -1215,3 +1215,44 @@ def test_the_arctic_fetcher_stages_cursors_for_the_cycles_commit(monkeypatch):
         finally:
             RadarRedditCursor.query.filter_by(sub='zzarc').delete()
             db.session.commit()
+
+
+def test_the_two_cycles_never_write_at_the_same_time():
+    """Reddit keeps its own job for latency isolation, but both jobs rebuild
+    the same radar_bucket_sources rows. Overlapping, they deadlocked InnoDB
+    and killed two of three Reddit cycles in production (2026-09-03)."""
+    import threading
+
+    started = threading.Event()
+    release = threading.Event()
+    overlapped = []
+
+    def slow_cycle(now, fetchers):
+        started.set()
+        overlapped.append('in')
+        release.wait(timeout=5)
+        overlapped.append('out')
+        return {'posts_seen': 0, 'posts_new': 0, 'mentions': 0,
+                'buckets_written': 0, 'per_source': {}, 'aggregate_status': {},
+                'catchup_depth': {}}
+
+    original = daemon.ingest.run_cycle
+    daemon.ingest.run_cycle = slow_cycle
+    try:
+        first = threading.Thread(target=daemon.tick, args=(_utc(2026, 8, 21, 14), {}))
+        first.start()
+        assert started.wait(timeout=5)
+
+        second = threading.Thread(target=daemon.tick, args=(_utc(2026, 8, 21, 14), {}))
+        second.start()
+        second.join(timeout=0.5)
+        assert second.is_alive(), 'the second cycle ran while the first held the session'
+
+        release.set()
+        first.join(timeout=5)
+        second.join(timeout=5)
+    finally:
+        daemon.ingest.run_cycle = original
+        release.set()
+
+    assert overlapped == ['in', 'out', 'in', 'out']

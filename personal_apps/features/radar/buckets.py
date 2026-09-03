@@ -143,8 +143,13 @@ def _summarize(rows):
 # main cycle -- and scoring writes the same child rows every 15 minutes.
 # Safe to repeat: a rollback undoes the whole attempt, and the rebuild
 # reads the journal from scratch.
-DEADLOCK_RETRIES = 3
-DEADLOCK_BACKOFF_SECONDS = 0.5
+# Five tries doubling from one second: the competing writer is a whole
+# cycle or a scoring pass, which runs for tens of seconds, so a backoff
+# measured in fractions of a second simply burned the budget while the
+# other transaction still held its locks (measured 2026-09-03).
+DEADLOCK_RETRIES = 5
+DEADLOCK_BACKOFF_SECONDS = 1.0
+DEADLOCK_BACKOFF_MAX = 16.0
 _DEADLOCK_CODES = (1213, 1205)          # deadlock, lock wait timeout
 
 
@@ -169,7 +174,8 @@ def roll_up(rows, statuses, touched, *, preserve_parent=False):
             if attempt >= DEADLOCK_RETRIES or not _is_deadlock(error):
                 raise
             db.session.rollback()
-            time.sleep(DEADLOCK_BACKOFF_SECONDS * (attempt + 1))
+            time.sleep(min(DEADLOCK_BACKOFF_SECONDS * 2 ** attempt,
+                           DEADLOCK_BACKOFF_MAX))
 
 
 def _roll_up_once(rows, statuses, touched, *, preserve_parent=False):
