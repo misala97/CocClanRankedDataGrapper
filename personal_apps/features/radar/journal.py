@@ -303,10 +303,33 @@ def distinct_voice_counts(tickers, sources, since, now):
     # readers on the same platform, and dropping them would undercount
     # breadth for every ticker discussed before the split.
     sources = expand_sources_for_history(sources)
-    rows = (db.session.query(
+    rows = _voice_count_query(tickers, sources, since, now).all()
+    # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
+    return {ticker: (int(authors), int(channels))
+            for ticker, authors, channels in rows}
+
+
+def _voice_count_query(tickers, sources, since, now):
+    """The query behind distinct_voice_counts, as its own seam so a test can
+    compile it and see the index hint that keeps the board under its
+    timeout."""
+    return (db.session.query(
                 RadarMentionEvent.ticker,
                 sa.func.count(sa.distinct(RadarMentionEvent.author)),
                 sa.func.count(sa.distinct(RadarMentionEvent.channel)))
+            # FORCED, and it has to be. ix_radar_mention_events_ticker_time
+            # exists for exactly this query, but once Arctic Shift took the
+            # journal from thousands of rows to ~700k the planner started
+            # preferring ix_..._bucket (ticker, bucket_start) -- which can
+            # only use `ticker`, then reads every one of that ticker's rows
+            # from the heap to test created_utc. Measured on prod
+            # 2026-09-04: 7.53s planner-chosen against 0.17s forced, and
+            # ANALYZE TABLE did not change its mind. That put the 12h and
+            # 24h boards past the island's 8s timeout, so the reader saw
+            # "The board did not answer in time" instead of a board.
+            .with_hint(RadarMentionEvent,
+                       'FORCE INDEX (ix_radar_mention_events_ticker_time)',
+                       dialect_name='mysql')
             .filter(RadarMentionEvent.ticker.in_(list(tickers)),
                     RadarMentionEvent.source.in_(list(sources)),
                     RadarMentionEvent.created_utc >= since,
@@ -316,7 +339,4 @@ def distinct_voice_counts(tickers, sources, since, now):
                     # A confirmed non-chatter voice is not a voice (spec
                     # §7.2); NULL/True keep counting.
                     RadarMentionEvent.counts_as_human_chatter.isnot(False))
-            .group_by(RadarMentionEvent.ticker).all())
-    # int() at the boundary: COUNT is Decimal on MySQL and MariaDB alike.
-    return {ticker: (int(authors), int(channels))
-            for ticker, authors, channels in rows}
+            .group_by(RadarMentionEvent.ticker))

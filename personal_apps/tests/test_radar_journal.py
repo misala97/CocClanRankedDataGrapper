@@ -408,3 +408,23 @@ def test_the_same_mention_cannot_be_stored_twice(clean_events):
     with pytest.raises(sa.exc.IntegrityError):
         db.session.commit()
     db.session.rollback()
+
+
+def test_the_voice_count_forces_the_index_built_for_it():
+    """The planner stopped choosing ix_radar_mention_events_ticker_time once
+    Arctic Shift grew the journal to ~700k rows, and picked the (ticker,
+    bucket_start) index instead -- which can only use `ticker` and then
+    tests created_utc against the heap. 7.53s against 0.17s on prod
+    (2026-09-04), which put the 12h and 24h boards past the island's 8s
+    timeout. ANALYZE TABLE did not change its mind, so the hint is load
+    bearing rather than decorative."""
+    from features.radar import journal
+
+    with flask_app.app_context():
+        query = journal._voice_count_query(
+            ['ZZVOICE'], ['bluesky'],
+            dt.datetime(2026, 9, 4), dt.datetime(2026, 9, 5))
+        statement = str(query.statement.compile(
+            dialect=sa.dialects.mysql.dialect()))
+
+    assert 'FORCE INDEX (ix_radar_mention_events_ticker_time)' in statement
