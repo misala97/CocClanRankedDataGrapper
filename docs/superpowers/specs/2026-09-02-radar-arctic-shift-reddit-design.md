@@ -1,6 +1,6 @@
 # Radar — Reddit through Arctic Shift
 
-**Status:** approved in brainstorm 2026-09-02, spec for review
+**Status:** built 2026-09-02 (plan docs/superpowers/plans/2026-09-02-radar-arctic-shift-reddit.md)
 **Builds on:** `2026-08-24-radar-subreddit-source-list.md` (why single-ticker
 and regional subs are out), the source contract in
 `features/radar/sources/__init__.py`, and the judge gate
@@ -151,6 +151,63 @@ by hand once: `python scripts/backfill_arctic_shift.py` on the VPS with the
 daemon stopped, then start the daemon. First live cycle logs
 `sources={'bluesky': 'ok', 'fourchan': 'ok', 'reddit': 'ok'}` with the
 per-sub map.
+
+## Built as (2026-09-02, deviations from the text above)
+
+- **Reddit keeps its own scheduler job** (`radar_reddit`, every
+  `ARCTIC_SHIFT_INTERVAL_SECONDS` = 300 s) rather than joining the main
+  cycle: a slow archive must never delay Bluesky and 4chan, and the daemon
+  tests pin that wiring. Its cycle still goes through `run_cycle`.
+- **Cursor table is `radar_reddit_cursors`** (`sub`, `kind`, `cursor_utc`,
+  `updated_at`); `radar_source_cursors` already existed with one root
+  cursor per source. Cursor = newest accepted `created_utc`; requests use
+  `after = cursor − 1` (the API is exclusive at the second) and ids dedupe.
+  Cold start 2 h, the root cursor's own.
+- **Authors are stored as `/u/<name>`**, the RSS path's spelling, so voice
+  counts and author rules see one person across the switch.
+- **A comment whose thread the archive lacks** is titled
+  `'/u/<author> on [thread unavailable]'`: the splitter needs a non-empty
+  context (`clean_text` strips the trailing space).
+- **A subreddit is atomic per cycle**: posts and both cursor advances
+  are published only when both reads completed; a failed read leaves the
+  sub `missing` with nothing returned and nothing moved (a comments read
+  that succeeded would otherwise be stored under a missing source, never
+  counted, and never read again).
+- **Aggregate status reuses `reddit._roll_up`**: one sub missing among
+  ok subs is `truncated`, all missing is `missing`. A `429` ends the
+  cycle's requests with no sleep: the job asks again in five minutes, so
+  sleeping could not recover work and would only hold the scheduler
+  worker. Subs never asked are absent from the per-source map.
+- **The backfill runs with the daemon STOPPED** (the script refuses
+  `--apply` otherwise): both sides floor to 15-minute buckets, so no time
+  cutoff keeps their windows apart. One day across all subs is the unit,
+  rolled up once with every sub countable so the quiet subs get their
+  zero rows; `roll_up(preserve_parent=True)` leaves existing parent
+  buckets alone because the journal only holds 48 h and a rebuild would
+  erase the other sources' totals.
+- **`ARCTIC_SHIFT_PAGE_SIZE = 'auto'`, and an EMPTY page ends a read.**
+  Probed live 2026-09-02: a numeric `limit` above 100 is a 400
+  (`'limit' must be between 1 and 100`), so the planned 1000 could not
+  work; `limit=auto` answers with ~600 items a page, and a day of
+  r/wallstreetbets pages in 12 requests rather than 71. Page length then
+  carries no information about whether more is waiting, so the reader
+  stops on an empty page and keeps the short-page shortcut only for a
+  numeric `page_size`. Cost per live cycle is one confirming request per
+  (sub, kind): ~136 requests per 5 minutes, ~1.4 % of the allowance.
+- **The log line** for a cycle shows the concrete map under `sources=`
+  (34 `reddit:<sub>` keys) and the root verdict under `aggregate=`.
+- **Bucket growth** accepted: ~34 child rows per touched (ticker, window).
+- **The 2026-08-25 subreddit cut is marked superseded in `config.py`.**
+  That comment block argued Daytrading, stocks, StockMarket, SPACs,
+  Biotechplays and UraniumSqueeze out on a ~30-feeds/hour budget; the
+  budget is gone and all six are back in the list, so the block now says
+  so rather than contradicting the tuple beneath it.
+- **`radar_buckets.source_config_version` is NOT NULL**, so the backfill
+  test that seeds a pre-existing parent bucket stamps it with
+  `source_config_version()`; the plan's fixture omitted the column and
+  hit an IntegrityError.
+- **Commits are attributed to Claude Opus 5**, the model that built it,
+  rather than the plan's Fable 5.1 trailer.
 
 ## Appendix — `REDDIT_SUBS`
 
