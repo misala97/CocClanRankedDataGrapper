@@ -738,3 +738,75 @@ def test_the_board_carries_the_callers_watch_rows_and_nobody_elses(client, monke
             RadarWatch.query.filter_by(user_id=_admin_id()).delete()
             AppUser.query.filter_by(id=other_id).delete()
             db.session.commit()
+
+
+# --- board sort parameters (sortable-list plan, Task 2) --------------------
+
+def test_a_sort_parameter_reaches_the_board(client, monkeypatch):
+    """The route's job is to carry the reader's ask through intact."""
+    from features.radar.routes import api as api_mod
+    seen = {}
+    original = api_mod.board_mod.build
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(api_mod.board_mod, 'build', spy)
+    api_mod.board_cache.clear()
+    assert client.get('/radar/api/board?sort=mentions&dir=asc').status_code == 200
+    assert seen['sort'] == 'mentions'
+    assert seen['direction'] == 'asc'
+
+
+def test_no_sort_asked_for_leaves_the_default_ranking(client, monkeypatch):
+    from features.radar.routes import api as api_mod
+    seen = {}
+    original = api_mod.board_mod.build
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(api_mod.board_mod, 'build', spy)
+    api_mod.board_cache.clear()
+    assert client.get('/radar/api/board').status_code == 200
+    assert seen['sort'] is None
+
+
+def test_an_unknown_sort_is_refused_rather_than_ignored(client):
+    """The rule this file already follows for segment, source and market:
+    answering with a board under a selection the viewer never made is worse
+    than saying no."""
+    assert client.get('/radar/api/board?sort=nonsense').status_code == 400
+
+
+def test_an_unknown_direction_is_refused(client):
+    assert client.get('/radar/api/board?sort=mentions&dir=sideways').status_code == 400
+
+
+def test_the_payload_echoes_the_sort_back(client):
+    """The island seeds its Selection from the payload, never from the URL
+    (BoardPage.tsx:25-31). Without the echo, reloading a ?sort= link draws
+    sorted rows under a header that believes nothing is sorted."""
+    body = json.loads(client.get('/radar/api/board?sort=mentions&dir=asc').data)
+    assert body['sort'] == 'mentions'
+    assert body['dir'] == 'asc'
+
+    plain = json.loads(client.get('/radar/api/board').data)
+    assert plain['sort'] is None
+
+
+def test_the_sort_is_part_of_the_board_cache_key(client):
+    """The build is memoised per selection for 60s. A key that ignored the
+    sort would serve the unsorted board to the next reader who asked for a
+    sorted one -- inside the same minute, silently, and only sometimes."""
+    from features.radar.routes import api as api_mod
+
+    api_mod.board_cache.clear()
+    assert client.get('/radar/api/board').status_code == 200
+    assert client.get('/radar/api/board?sort=mentions').status_code == 200
+    assert client.get('/radar/api/board?sort=mentions&dir=asc').status_code == 200
+
+    keys = list(api_mod.board_cache)
+    assert len(keys) == 3, f'sort is missing from the cache key: {keys}'

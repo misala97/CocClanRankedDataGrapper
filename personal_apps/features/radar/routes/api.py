@@ -46,6 +46,9 @@ class Query:
     # strict for any value that is supplied, so a typo cannot silently return
     # a different market.
     market: str = 'de'
+    # None is the default two-tier ranking; otherwise one of board.SORT_KEYS.
+    sort: str = None
+    direction: str = 'desc'
 
 
 def _decimal_or_none(value):
@@ -318,8 +321,19 @@ def parse_query(args, now=None):
     if min_venues not in VENUE_FLOORS:
         raise BadQuery('unsupported venues')
 
+    # Validated, never coerced -- the rule stated on the segment block above.
+    # A sort the server silently ignored would draw the default ranking under
+    # a header claiming it was sorted, which is the same lie in a new place.
+    sort = args.get('sort') or None
+    if sort is not None and sort not in board_mod.SORT_KEYS:
+        raise BadQuery('unknown sort')
+    direction = args.get('dir', 'desc')
+    if direction not in ('asc', 'desc'):
+        raise BadQuery('unknown sort direction')
+
     return Query(sources=selected, segments=segments, window=window,
-                 limit=limit, min_venues=min_venues, market=market)
+                 limit=limit, min_venues=min_venues, market=market,
+                 sort=sort, direction=direction)
 
 
 def serialize(board):
@@ -341,6 +355,10 @@ def serialize(board):
         'segments': board.segments,
         'session': board.session,
         'min_venues': board.min_venues,
+        # Echoed so the island can seed its Selection from the server's own
+        # parsed answer rather than re-parsing the URL (BoardPage.tsx).
+        'sort': board.sort,
+        'dir': board.direction,
         'venue_counts': board.venue_counts,
         'window_hours': board.window_hours,
         'segment_counts': board.segment_counts,
@@ -426,8 +444,13 @@ _board_lock = threading.Lock()
 
 
 def _build_board(query, now):
+    # The sort is part of the KEY, not just of the build: it changes which
+    # rows the board holds, so a key without it would serve the unsorted
+    # board to the next reader who asked for a sorted one -- inside the
+    # same minute, silently, and only sometimes.
     key = (tuple(query.sources), tuple(query.segments), query.window,
-           query.limit, query.min_venues, query.market)
+           query.limit, query.min_venues, query.market,
+           query.sort, query.direction)
     with _board_lock:
         hit = board_cache.get(key)
         if hit is not None and hit[0] > now:
@@ -435,7 +458,8 @@ def _build_board(query, now):
     board = board_mod.build(query.sources, now,
                             window_hours=query.window,
                             segments=query.segments, limit=query.limit,
-                            min_venues=query.min_venues, market=query.market)
+                            min_venues=query.min_venues, market=query.market,
+                            sort=query.sort, direction=query.direction)
     with _board_lock:
         board_cache[key] = (now + BOARD_TTL, board)
         # A handful of distinct selections per minute; past that it is old

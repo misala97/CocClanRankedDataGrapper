@@ -126,6 +126,12 @@ class Board:
     # What the eligibility floor and the breadth filter left out, by reason.
     # Without it a quiet board and a stopped ingest look the same.
     excluded: dict
+    # What this board was sorted by, echoed to the island so it can seed its
+    # Selection from the server's own parsed answer. None is the default
+    # two-tier ranking. Last, and defaulted, because every field above it is
+    # required and a dataclass cannot follow a default with a non-default.
+    sort: object = None
+    direction: str = 'desc'
 
 
 def _hour_floor(when):
@@ -591,4 +597,6 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
                   segments=list(segments),
                  window_hours=window_hours, segment_counts=segment_counts,
                  rows=rows, session=session, venue_counts=venue_counts,
-                 min_venues=min_venues, excluded=ranking.excluded)
+                 min_venues=min_venues, excluded=ranking.excluded,
+                 sort=sort if sort in SORT_KEYS else None,
+                 direction=direction)
