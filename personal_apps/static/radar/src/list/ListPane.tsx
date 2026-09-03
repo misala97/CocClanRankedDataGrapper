@@ -4,11 +4,12 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
 import { Search } from '../board/Search'
+import { defaultDirection } from '../api'
 import { formatMarketTime, humanAge, plural, stampTime } from '../format'
 import { Widen } from '../Widen'
 import { SpendMark } from './Spend'
 import { TickerRow, scoredAgainstPrice } from './TickerRow'
-import type { BoardPayload, Mark, Row, Selection } from '../types'
+import type { BoardPayload, Mark, Row, Selection, SortKey } from '../types'
 
 /** When the always-visible UTC stamp becomes a stale-board warning.
  *
@@ -318,6 +319,83 @@ function TierCaption({ tier, windowHours, count, reason }: {
   )
 }
 
+/** One header token and what it sorts by. `null` is a label that is not a
+ *  control: `price` is a sparkline in one column and the quoted price in
+ *  the other, and neither is a ranking anyone asks for. */
+const TOKENS: { text: string; key: SortKey | null; name?: string }[][] = [
+  [{ text: 'Ticker', key: 'ticker', name: 'ticker A to Z' }],
+  [{ text: 'Talk', key: 'mentions', name: 'mentions' },
+   { text: 'price', key: null }],
+  [{ text: 'Score', key: 'divergence', name: 'divergence' }],
+  [{ text: 'Ratio', key: 'ratio', name: 'ratio to normal' },
+   { text: 'price', key: null },
+   { text: 'move', key: 'move', name: 'price move' }],
+  [{ text: 'Lean', key: 'lean', name: 'lean' }],
+]
+
+/** The ledger's column header, and the board's only sort control.
+ *
+ *  Was `aria-hidden` decoration until 2026-09-04. Each dot-separated token
+ *  is its own button, so six keys fit without a new control and without
+ *  touching the grid: `.cols` is INSIDE the rows scroller and shares one
+ *  grid with the rows, so anything that changes a cell's width drifts the
+ *  columns off the figures under them (radar.css).
+ *
+ *  The aria-hidden had to go with it. A focusable button inside an
+ *  aria-hidden container is reachable by keyboard and absent from the
+ *  accessibility tree at the same time -- a violation rather than a
+ *  cosmetic slip -- so each button now names its own action instead.
+ *
+ *  Hidden below 900px with the rest of the header: the rows stack there and
+ *  there is no column to head. A sort in the URL is still honoured at any
+ *  width; only the means of changing it is absent. */
+export function SortCols({ selection, onChange }: {
+  selection: Selection
+  onChange: (next: Selection) => void
+}) {
+  function click(key: SortKey) {
+    if (selection.sort !== key) {
+      onChange({ ...selection, sort: key, dir: defaultDirection(key) })
+    } else if (selection.dir === defaultDirection(key)) {
+      onChange({ ...selection, dir: selection.dir === 'asc' ? 'desc' : 'asc' })
+    } else {
+      // Third click: back to the default ranking, where a reader's hand
+      // already is rather than at a Reset that exists to undo furniture.
+      onChange({ ...selection, sort: null, dir: 'desc' })
+    }
+  }
+
+  return (
+    <div className="cols">
+      {TOKENS.map((group, index) => {
+        const active = group.some((t) => t.key && t.key === selection.sort)
+        return (
+          <span key={index}
+                className={index === 2 || index === 4 ? 'r' : undefined}
+                aria-sort={active
+                  ? (selection.dir === 'asc' ? 'ascending' : 'descending')
+                  : undefined}>
+            {group.map((token, at) => (
+              <Fragment key={token.text + at}>
+                {at > 0 && ' · '}
+                {token.key ? (
+                  <button type="button"
+                          className={token.key === selection.sort ? 'on' : undefined}
+                          aria-label={`Sort by ${token.name}`}
+                          onClick={() => click(token.key as SortKey)}>
+                    {token.text}
+                  </button>
+                ) : token.text}
+              </Fragment>
+            ))}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+
 /** The list: what the board found, in two tiers, over an account of what it
  *  did not show.
  *
@@ -423,13 +501,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
             scrollbar 17px narrower, and the fr column absorbed the difference
             -- Score and Lean drifted ~20px off the cells under them. One grid
             on one width, and it stays put on a long board. */}
-        <div className="cols" aria-hidden="true">
-          <span>Ticker</span>
-          <span>Talk · price</span>
-          <span className="r">Score</span>
-          <span>Ratio · price · move</span>
-          <span className="r">Lean</span>
-        </div>
+        <SortCols selection={selection} onChange={onChange} />
         {watchRows.length > 0 && (
           <p className="tier watching">
             <b>Watching</b>
