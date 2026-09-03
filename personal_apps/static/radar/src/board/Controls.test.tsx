@@ -13,7 +13,7 @@ const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
   sources: ['bluesky', 'fourchan', 'reddit'],
   all_sources: ['bluesky', 'fourchan', 'reddit'],
   segments: [], session: 'regular', window_hours: 4,
-  min_venues: 1, venue_counts: { any: 37, multi: 35 },
+  min_venues: 1, sort: null, dir: 'desc' as const, venue_counts: { any: 37, multi: 35 },
   segment_counts: { all: 37, discover: 9, large: 22, mid: 5, micro: 3,
                     recent_ipo: 1, unknown: 1, fund: 5 },
   triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
@@ -23,7 +23,7 @@ const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
 
 const selection = (over: Partial<Selection> = {}): Selection => ({
   market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
-  window: 4, minVenues: 1, ...over,
+  window: 4, minVenues: 1, sort: null, dir: 'desc' as const, ...over,
 })
 
 function controls(sel: Selection = selection(), onChange = vi.fn()) {
@@ -113,7 +113,7 @@ describe('the summary line', () => {
   })
 
   it('names the sources when one is off, and the floor when it is raised', () => {
-    controls(selection({ sources: ['bluesky', 'reddit'], minVenues: 2, window: 12 }))
+    controls(selection({ sources: ['bluesky', 'reddit'], minVenues: 2, sort: null, dir: 'desc' as const, window: 12 }))
 
     expect(screen.getByText((_, node) =>
       node?.classList.contains('summary') === true

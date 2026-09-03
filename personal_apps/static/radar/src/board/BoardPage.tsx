@@ -28,6 +28,10 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     segments: initial.segments,
     window: initial.window_hours,
     minVenues: initial.min_venues,
+    // From the ECHO, not the URL: the server already parsed and validated
+    // it, and this page reads the address bar for ?t= alone.
+    sort: initial.sort,
+    dir: initial.dir,
   })
   const [selected, setSelected] = useState<string | null>(
     () => initialTicker(initial))

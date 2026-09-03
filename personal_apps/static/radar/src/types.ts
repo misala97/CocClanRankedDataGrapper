@@ -276,6 +276,10 @@ export interface BoardPayload {
   session: Session
   /** 1 = any, 2 = only rows more than one venue is talking about. */
   min_venues: number
+  /** Echoed so the island can seed its Selection from the server's own
+   *  parsed answer rather than re-parsing the URL. null is unsorted. */
+  sort: SortKey | null
+  dir: 'asc' | 'desc'
   venue_counts: Record<string, number>
   window_hours: number
   segment_counts: Record<string, number>
@@ -313,6 +317,12 @@ export interface BoardPayload {
   }
 }
 
+/** The board's sort keys, in the order the header reads left to right. Same
+ *  spelling as the query parameter and as board.SORT_KEYS on the server. */
+export const SORT_KEYS = ['ticker', 'mentions', 'divergence', 'ratio',
+                          'move', 'lean'] as const
+export type SortKey = typeof SORT_KEYS[number]
+
 export interface Selection {
   market: Market
   sources: string[]
@@ -322,6 +332,10 @@ export interface Selection {
    *  is no filter, which is what the All chip sets. */
   segments: SegmentFilter[]
   window: number
+  /** null is the default two-tier ranking. Server-side: changing it
+   *  refetches, because it changes WHICH rows are on the board. */
+  sort: SortKey | null
+  dir: 'asc' | 'desc'
 }
 
 /** One universe match. Identity only: whether it is on the board, and its

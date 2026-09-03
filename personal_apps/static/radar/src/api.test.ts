@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchSearch, setWatch } from './api'
+import { defaultDirection, fetchSearch, queryFor, setWatch } from './api'
 import { resetCsrfCache } from './csrf'
+import type { Selection } from './types'
+
+const baseSelection: Selection = {
+  market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
+  window: 4, minVenues: 1, sort: null, dir: 'desc' as const,
+}
 
 beforeEach(() => {
   document.head.innerHTML = '<meta name="csrf-token" content="tok-123">'
@@ -42,5 +48,29 @@ describe('watching', () => {
     expect(offInit.method).toBe('DELETE')
     expect((onInit.headers as Record<string, string>)['X-CSRF-Token']).toBe('tok-123')
     expect((onInit.headers as Record<string, string>).Accept).toBe('application/json')
+  })
+})
+
+
+describe('sort in the query', () => {
+  it('is absent when no sort is asked for', () => {
+    const query = queryFor({ ...baseSelection, sort: null, dir: 'desc' as const })
+    expect(query).not.toContain('sort=')
+    expect(query).not.toContain('dir=')
+  })
+
+  it('carries the key and the direction when one is', () => {
+    const query = queryFor({ ...baseSelection, sort: 'mentions', dir: 'asc' })
+    expect(query).toContain('sort=mentions')
+    expect(query).toContain('dir=asc')
+  })
+})
+
+describe('defaultDirection', () => {
+  it('reads ticker A to Z and every number largest first', () => {
+    expect(defaultDirection('ticker')).toBe('asc')
+    for (const key of ['mentions', 'divergence', 'ratio', 'move', 'lean'] as const) {
+      expect(defaultDirection(key)).toBe('desc')
+    }
   })
 })

@@ -136,7 +136,7 @@ describe('a ticker row', () => {
        board, with different filters and score window. */
     const selection: Selection = {
       market: 'de', sources: ['bluesky', 'reddit'], segments: ['micro'],
-      minVenues: 2, window: 24,
+      minVenues: 2, sort: null, dir: 'desc' as const, window: 24,
     }
     render(<TickerRow session="regular" row={row()} selected={false}
                       selection={selection} onSelect={() => {}} />)

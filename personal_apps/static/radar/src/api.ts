@@ -1,5 +1,5 @@
 import { csrfToken } from './csrf'
-import type { BoardPayload, Detail, PanelSpan, SearchMatch, Selection } from './types'
+import type { BoardPayload, Detail, PanelSpan, SearchMatch, Selection, SortKey } from './types'
 
 // `Accept: application/json` is explicit and not optional. A bare fetch() sends
 // `*/*`, a wildcard accepts HTML, and the login redirect this route sits behind
@@ -53,7 +53,25 @@ export function queryFor(selection: Selection): string {
   params.set('market', selection.market)
   // Omitted at 1 so the default board keeps a clean URL.
   if (selection.minVenues > 1) params.set('venues', String(selection.minVenues))
+  // Omitted at the default, the way venues is omitted at 1, so an unsorted
+  // board keeps a clean URL.
+  //
+  // queryFor also builds every row's detail href (TickerRow.tsx), so the
+  // sort rides into the detail link and comes back with the reader. That is
+  // wanted: returning from a ticker to a board that had forgotten its sort
+  // would be the same lost-place complaint the ?t= parameter exists to fix.
+  if (selection.sort) {
+    params.set('sort', selection.sort)
+    params.set('dir', selection.dir)
+  }
   return params.toString()
+}
+
+
+/** Ticker reads A-to-Z; every number opens largest-first, because "show me
+ *  the biggest" is the question a reader clicks a number to ask. */
+export function defaultDirection(key: SortKey): 'asc' | 'desc' {
+  return key === 'ticker' ? 'asc' : 'desc'
 }
 
 /** One GET behind the timeout, the abort plumbing and the session check.

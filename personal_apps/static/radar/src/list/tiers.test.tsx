@@ -25,7 +25,7 @@ const row = (ticker: string, divergence: number | null): Row => ({
 
 const selection: Selection = {
   market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
-  window: 4, minVenues: 1,
+  window: 4, minVenues: 1, sort: null, dir: 'desc' as const,
 }
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
@@ -37,7 +37,7 @@ function payload(over: Partial<BoardPayload> = {}): BoardPayload {
     sources: ['bluesky', 'fourchan', 'reddit'],
     all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,
-    min_venues: 1, venue_counts: { any: 5, multi: 3 },
+    min_venues: 1, sort: null, dir: 'desc' as const, venue_counts: { any: 5, multi: 3 },
     segment_counts: { all: 5, micro: 5 },
     triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
     rows: [], excluded: {},

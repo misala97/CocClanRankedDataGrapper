@@ -47,6 +47,7 @@ export function payload(over: Partial<BoardPayload> = {}): BoardPayload {
     all_sources: ['bluesky', 'fourchan', 'reddit'],
     segments: [], session: 'regular', window_hours: 4,
     min_venues: 1, venue_counts: { any: 4, multi: 2 },
+    sort: null, dir: 'desc',
     segment_counts: { all: 4, large: 4 },
     triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
     rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' }),

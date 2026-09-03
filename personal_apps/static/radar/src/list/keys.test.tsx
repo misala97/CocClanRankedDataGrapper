@@ -28,7 +28,7 @@ const row = (ticker: string): Row => ({
 
 const selection: Selection = {
   market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
-  window: 4, minVenues: 1,
+  window: 4, minVenues: 1, sort: null, dir: 'desc' as const,
 }
 
 const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
@@ -39,7 +39,7 @@ const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
   sources: ['bluesky', 'fourchan', 'reddit'],
   all_sources: ['bluesky', 'fourchan', 'reddit'],
   segments: [], session: 'regular', window_hours: 4,
-  min_venues: 1, venue_counts: { any: 3, multi: 1 },
+  min_venues: 1, sort: null, dir: 'desc' as const, venue_counts: { any: 3, multi: 1 },
   segment_counts: { all: 3, micro: 3 },
   triplet_hours: [1, 4, 24], series_hours: 24, lead_count: 3,
   rows: [row('AAA'), row('BBB'), row('CCC')], excluded: {},

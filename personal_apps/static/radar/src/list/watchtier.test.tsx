@@ -17,7 +17,7 @@ const quiet = (ticker: string): Row => r(ticker, {
 })
 
 const selection: Selection = {
-  market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [], window: 4, minVenues: 1,
+  market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [], window: 4, minVenues: 1, sort: null, dir: 'desc' as const,
 }
 
 const payload = (over: Partial<BoardPayload> = {}): BoardPayload => basePayload({
