@@ -437,8 +437,83 @@ def build_pinned_rows(tickers, sources, now, window_hours=4, market='us'):
     return _entries(pinned, sources, now, window_hours)
 
 
+# The board's sort keys, in the order the header reads left to right. This
+# spelling IS the wire format: the query parameter, the island's Selection
+# field and this tuple never diverge.
+SORT_KEYS = ('ticker', 'mentions', 'divergence', 'ratio', 'move', 'lean')
+
+
+def _lean_value(tone):
+    """Net bullish share, or None when nothing was said.
+
+    Tone is a distribution and a sort needs a scalar. Bullish share minus
+    bearish share puts a balanced argument in the middle, which is what it
+    is -- and a ticker nobody used a sentiment word about has no lean at
+    all rather than a neutral one, so it sorts with the missing.
+    """
+    if tone is None:
+        return None
+    # Attribute access, not subscript: _tones returns board.Tone dataclasses,
+    # and `tone['bullish']` raises TypeError on the first lean sort rather
+    # than at import.
+    total = tone.bullish + tone.neutral + tone.bearish
+    if total <= 0:
+        return None
+    return (tone.bullish - tone.bearish) / total
+
+
+def _sort_value(row, key, leans):
+    """The one number (or string) a key ranks on. None means 'this row has
+    no such measurement', which sorts last however the sort is pointed."""
+    if key == 'ticker':
+        return row.ticker.lower()
+    if key == 'mentions':
+        return row.mentions
+    if key == 'divergence':
+        return row.divergence
+    if key == 'ratio':
+        return phrasing.ratio_value(row.mentions, row.expected)
+    if key == 'move':
+        return row.price_move
+    if key == 'lean':
+        return _lean_value(leans.get(row.ticker))
+    return None
+
+
+def sort_rows(ranked, key, direction, leans):
+    """`ranked` reordered by one key. Unknown or absent key: unchanged.
+
+    NEVER `reverse=True`. A descending sort with reverse would lift every
+    row whose value is None to the top, so reversing a price sort would
+    answer with a wall of dashes -- the rows that have nothing to say about
+    the very thing being sorted. Missing sorts last in both directions
+    instead, and descending is expressed by negating the number.
+    """
+    if key not in SORT_KEYS:
+        return list(ranked)
+    descending = direction != 'asc'
+
+    def ordering(row):
+        value = _sort_value(row, key, leans)
+        if value is None:
+            return (1, 0)
+        if isinstance(value, str):
+            return (0, value)
+        return (0, -value if descending else value)
+
+    ordered = sorted(ranked, key=ordering)
+    if descending and key == 'ticker':
+        # A string cannot be negated. Reverse the rows that HAVE a ticker
+        # and keep the (impossible, but not assumed) missing ones last.
+        present = [r for r in ordered if _sort_value(r, key, leans) is not None]
+        missing = [r for r in ordered if _sort_value(r, key, leans) is None]
+        ordered = list(reversed(present)) + missing
+    return ordered
+
+
 def build(sources, now, window_hours=4, segments=(), limit=50,
-          leads=LEAD_COUNT, min_venues=1, market='us'):
+          leads=LEAD_COUNT, min_venues=1, market='us', sort=None,
+          direction='desc'):
     """The whole board.
 
     `sources` is the viewer's SELECTION, root-level (`reddit`) or concrete
@@ -492,6 +567,18 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
             ranking.excluded['one_venue'] = (
                 ranking.excluded.get('one_venue', 0) + removed)
         ranked = kept
+    # BEFORE the limit, which is the whole reason this is server-side.
+    # Sorting the already-limited rows would answer "the loudest among the
+    # top 50 by divergence" -- indistinguishable on screen from "the
+    # loudest 50", and a different list. Measured 2026-09-04: 106
+    # candidates against a limit of 50, so 56 rows are in play.
+    if sort in SORT_KEYS:
+        # _entries computes tones for the rows that SURVIVE the limit; a
+        # lean sort has to know them before choosing which those are.
+        leans = (_tones(tuple(row.ticker for row in ranked), sources,
+                        now - dt.timedelta(hours=window_hours), now)
+                 if sort == 'lean' else {})
+        ranked = sort_rows(ranked, sort, direction, leans)
     ranked = ranked[:limit]
 
     rows = _entries(ranked, sources, now, window_hours)
