@@ -394,3 +394,32 @@ def test_automated_author_membership_is_hashed_into_the_version():
     with unittest.mock.patch.object(config, 'AUTOMATED_AUTHORS', grown):
         assert config.source_config_version() != before
     assert config.source_config_version() == before
+
+
+# --- The Reddit reader switch (Arctic Shift plan, Task 1) -------------------
+
+def test_the_subreddit_list_no_longer_moves_the_version(monkeypatch):
+    """Since the 2026-08-26 split every reddit:<sub> is its own population
+    with its own baseline; adding a sub must not restart Bluesky's."""
+    before = config.source_config_version()
+    monkeypatch.setattr(config, 'REDDIT_SUBS', config.REDDIT_SUBS + ('zz_new_sub',))
+    assert config.source_config_version() == before
+
+
+def test_the_reddit_fetcher_moves_the_version(monkeypatch):
+    """RSS saw a few percent of Reddit; Arctic Shift sees all of it. The two
+    are different populations and must not share a baseline."""
+    before = config.source_config_version()
+    monkeypatch.setattr(config, 'REDDIT_FETCHER', 'rss')
+    assert config.source_config_version() != before
+
+
+def test_the_arctic_shift_constants_are_sane():
+    assert config.REDDIT_FETCHER in ('arctic_shift', 'rss')
+    assert config.ARCTIC_SHIFT_INTERVAL_SECONDS >= 120
+    assert 1 <= config.ARCTIC_SHIFT_MAX_PAGES <= 10
+    assert config.ARCTIC_SHIFT_PAGE_SIZE <= 1000
+    assert len(config.REDDIT_SUBS) == len(set(s.lower() for s in config.REDDIT_SUBS))
+    for sub in config.REDDIT_SUBS:
+        assert sub == sub.lower(), sub
+        assert len('reddit:' + sub) <= 48, sub

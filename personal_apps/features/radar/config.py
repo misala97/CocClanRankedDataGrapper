@@ -2,10 +2,13 @@
 """Radar tunables.
 
 Everything here is configuration in the sense that changing it changes what
-gets ingested -- which is exactly why SUBREDDITS is hashed into a version
-stamped onto every bucket. Baselines are computed only over buckets sharing the
-current version, so adding a source starts a warm-up instead of reading
-straight through the discontinuity (spec 6.6).
+gets ingested -- which is exactly why the source list and the extraction rules
+are hashed into a version stamped onto every bucket. Baselines are computed
+only over buckets sharing the current version, so adding a source starts a
+warm-up instead of reading straight through the discontinuity (spec 6.6). The
+SUBREDDIT list is the one exception, since 2026-09-02: each `reddit:<sub>` is
+its own population, so a new sub warms up alone and must not restart everyone
+else's baseline. Which READER produced them (REDDIT_FETCHER) is hashed.
 """
 import datetime as dt
 import hashlib
@@ -401,14 +404,45 @@ def is_automated_author(source, author):
 # Frees 19.6 feeds/hour. Demand drops 67.3 to 47.7 and r/wallstreetbets moves
 # from a 3.4-minute poll to 2.4, against a feed that turns over every 1.8.
 #
-# Hashed into source_config_version, so this starts a baseline warm-up. And
-# note run_radar_ingest retires the dropped subs' poll state -- due_symbols
-# filters by source rather than by this list, so without that they would keep
-# taking turns forever and the cut would be a silent no-op.
+# THAT CUT WAS A SPENDING DECISION AND THE BUDGET IS GONE (2026-09-02). Under
+# REDDIT_FETCHER='arctic_shift' a subreddit costs a couple of requests per
+# cycle out of ~120k an hour, so the subs cut for cost above are back and the
+# list is a taste decision again: general trading communities only,
+# single-ticker and regional subs still out. Re-measured through the archive
+# with the real extractor (scripts/measure_arctic_shift_subreddits.py).
+#
+# Not hashed into source_config_version since 2026-09-02: each `reddit:<sub>`
+# is its own population, a new sub warms up alone. And note run_radar_ingest
+# retires the dropped subs' poll state -- due_symbols filters by source rather
+# than by this list, so without that they would keep taking turns forever and
+# the cut would be a silent no-op.
 REDDIT_SUBS = (
+    # The eight the RSS path read, spelled exactly as stored.
     'wallstreetbets', 'pennystocks', 'shortsqueeze', 'thetagang',
     'options', 'smallstreetbets', 'swingtrading', 'weedstocks',
+    # Measured through Arctic Shift on 2026-09-02 with the real extractor
+    # (scripts/measure_arctic_shift_subreddits.py); general trading
+    # communities only, single-ticker subs stay out, regional ones except
+    # the German WSB stay out (their symbols collide with the US universe).
+    'daytrading', 'stocks', 'valueinvesting', 'trading', 'stockmarket',
+    'pennystock', 'stocks_picks', 'wallstreetbetshuzzah', 'futurestrading',
+    'schwab', 'optionswheel', 'biotech_stocks', 'technicalanalysis',
+    'fidelity', 'webull', 'thinkorswim', 'realdaytrading', 'burryology',
+    'shroomstocks', 'uraniumsqueeze', 'spacs', 'spacstocks', 'squeezeplays',
+    'biotechplays', 'investing', 'mauerstrassenwetten',
 )
+
+# ---- which Reddit reader runs ----------------------------------------------
+# 'arctic_shift': the open archive's public API, the full comment and post
+# stream per subreddit, 5-10 minutes behind, ~120k requests/hour allowed.
+# 'rss': the anonymous feed path this replaced on 2026-09-02 -- one feed per
+# ~100 s for every subreddit together, a few percent of the stream. Kept in
+# the tree in case the archive goes away; flipping back is this one line.
+REDDIT_FETCHER = 'arctic_shift'
+ARCTIC_SHIFT_INTERVAL_SECONDS = 300        # the archive lags 5-10 min; 5-min reads are enough
+ARCTIC_SHIFT_MAX_PAGES = 3                 # per (sub, kind) per cycle; more = truncated
+ARCTIC_SHIFT_PAGE_SIZE = 1000              # the API's 'auto' ceiling
+ARCTIC_SHIFT_COLD_START = dt.timedelta(hours=2)   # same as the root cursor's
 
 
 # TWO expansions exist, and merging them back into one is a data-loss bug in
@@ -784,9 +818,11 @@ def source_config_version():
         'bot_re': _BOT_FEED_RE.pattern,
         'name_df': [MAX_NAME_TOKEN_DF, MAX_NAME_TOKEN_RATIO,
                     MIN_NAME_TOKEN_LEN],
-        # Adding or dropping a subreddit changes the set of concrete Reddit
-        # populations while the root source list stays identical.
-        'reddit_subs': sorted(REDDIT_SUBS),
+        # Which Reddit reader produced the population: RSS saw a few percent
+        # of the stream, Arctic Shift sees all of it. The subreddit LIST is
+        # deliberately not hashed (2026-09-02): every reddit:<sub> is its own
+        # population and a new sub warms up alone.
+        'reddit_fetcher': REDDIT_FETCHER,
         # The same roots and subreddits can still produce a different stored
         # population when the source-name scheme changes.
         'source_name_generation': SOURCE_NAME_GENERATION,
