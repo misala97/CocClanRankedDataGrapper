@@ -38,6 +38,12 @@ REDDIT_BASE = 'https://www.reddit.com'
 TITLE_MAX = 512                      # RadarPost.title is String(512)
 UNKNOWN_PARENT = '[thread unavailable]'
 IDS_PER_CALL = 100
+# The archive answers a too-slow query with 422 'Timeout. Maybe slow down a
+# bit'. Deep pagination through a busy day provokes it; the backfill waits
+# and asks again rather than losing the day.
+RANGE_RETRIES = 6
+RETRY_DELAY_SECONDS = 2.0
+RETRY_DELAY_MAX = 60.0
 KINDS = ('comments', 'posts')
 _EPOCH = dt.datetime(1970, 1, 1)
 
@@ -48,6 +54,17 @@ class ArcticShiftUnavailable(Exception):
 
 class ArcticShiftThrottled(ArcticShiftUnavailable):
     """HTTP 429: the host is throttling us; nothing more this cycle."""
+
+
+class ArcticShiftBusy(ArcticShiftUnavailable):
+    """HTTP 422 'Timeout. Maybe slow down a bit'.
+
+    The archive timed out on THIS query, not a ban and not a bad request:
+    the identical request answered on the next attempt when it appeared
+    (page 41 of a 24-hour window, measured 2026-09-03). Deep pagination
+    provokes it, so the backfill retries and the live cycle -- whose
+    windows are five minutes -- does not, letting the sub come back on
+    its own five minutes later with its cursor unmoved."""
 
 
 class ArcticShiftClient:
@@ -66,6 +83,8 @@ class ArcticShiftClient:
             raise ArcticShiftUnavailable(f'{path}: {exc}') from exc
         if response.status_code == 429:
             raise ArcticShiftThrottled(f'{path}: HTTP 429')
+        if response.status_code == 422:
+            raise ArcticShiftBusy(f'{path}: HTTP 422 {response.text[:120]}')
         if not response.ok:
             raise ArcticShiftUnavailable(f'{path}: HTTP {response.status_code}')
         try:
@@ -154,13 +173,18 @@ def reset_title_cache():
     _TITLES.clear()
 
 
-def parent_titles(client, link_ids):
+def parent_titles(client, link_ids, *, retries=0, pause=0.0):
     """Titles for the given t3_ fullnames, batched, cached. Ids the archive
-    does not hold are simply absent from the answer."""
+    does not hold are simply absent from the answer.
+
+    `retries` waits out a 422 the way page_range does: the caller loses
+    every parent title of the batch otherwise, and a whole day of
+    comments would be stored as '[thread unavailable]'."""
     wanted = [i for i in dict.fromkeys(link_ids) if i and i not in _TITLES]
     for start in range(0, len(wanted), IDS_PER_CALL):
         chunk = wanted[start:start + IDS_PER_CALL]
-        for post in client.get_json('/posts/ids', {'ids': ','.join(chunk)}):
+        for post in _get_page(client, '/posts/ids', {'ids': ','.join(chunk)},
+                              retries=retries, pause=pause):
             name = post.get('name') or 't3_%s' % post.get('id')
             _TITLES[name] = post.get('title') or ''
     if len(_TITLES) > _TITLE_CACHE_MAX:
@@ -172,8 +196,25 @@ def parent_titles(client, link_ids):
 
 # ---- paging ------------------------------------------------------------------
 
+def _get_page(client, path, params, *, retries, pause):
+    """One search request, retrying only the archive's own 'slow down'.
+
+    Nothing else is retried here: a 500 or a 429 means something the
+    caller has to decide about, and the live cycle decides by giving the
+    subreddit up until the next one five minutes later."""
+    delay = max(pause, RETRY_DELAY_SECONDS)
+    for attempt in range(retries + 1):
+        try:
+            return client.get_json(path, params)
+        except ArcticShiftBusy:
+            if attempt >= retries:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, RETRY_DELAY_MAX)
+
+
 def _pages(client, sub, kind, since, *, until=None, max_pages=None,
-           page_size=ARCTIC_SHIFT_PAGE_SIZE, pause=0.0):
+           page_size=ARCTIC_SHIFT_PAGE_SIZE, pause=0.0, retries=0):
     """Items with created_utc >= since (and < until when given), ascending,
     deduplicated by fullname across the overlap at each second boundary.
     Returns (items, complete): complete is False when max_pages was hit
@@ -191,7 +232,8 @@ def _pages(client, sub, kind, since, *, until=None, max_pages=None,
         params = {'subreddit': sub, 'after': after, 'sort': 'asc', 'limit': page_size}
         if until is not None:
             params['before'] = _epoch(until)
-        page = client.get_json('/%s/search' % kind, params)
+        page = _get_page(client, '/%s/search' % kind, params,
+                         retries=retries, pause=pause)
         pages += 1
         fresh = 0
         for item in page:
@@ -233,10 +275,14 @@ def _pages(client, sub, kind, since, *, until=None, max_pages=None,
 
 
 def page_range(client, sub, kind, since, until, *, page_size=ARCTIC_SHIFT_PAGE_SIZE,
-               pause=0.0):
-    """Every item in [since, until), fully paged. The backfill's reader."""
+               pause=0.0, retries=RANGE_RETRIES):
+    """Every item in [since, until), fully paged. The backfill's reader.
+
+    Retries the archive's 'slow down' answer, which a whole busy day
+    reliably provokes somewhere around the fortieth page. A day half read
+    would be written as a complete day."""
     items, _complete = _pages(client, sub, kind, since, until=until,
-                              page_size=page_size, pause=pause)
+                              page_size=page_size, pause=pause, retries=retries)
     return items
 
 

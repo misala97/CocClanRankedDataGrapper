@@ -115,7 +115,9 @@ def run_day(client, subs, day_start, day_end, lookup, *, apply, pause=0.0):
             if kind == 'comments':
                 link_ids = [i.get('link_id') for i in items if i.get('link_id')]
                 try:
-                    titles = arctic_shift.parent_titles(client, link_ids) if link_ids else {}
+                    titles = (arctic_shift.parent_titles(
+                        client, link_ids, retries=arctic_shift.RANGE_RETRIES,
+                        pause=pause) if link_ids else {})
                 except arctic_shift.ArcticShiftUnavailable:
                     titles = {}
             raw.extend(arctic_shift.to_raw_posts(items, sub, kind, titles))

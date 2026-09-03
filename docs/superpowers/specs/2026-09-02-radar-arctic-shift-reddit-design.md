@@ -194,6 +194,15 @@ per-sub map.
   stops on an empty page and keeps the short-page shortcut only for a
   numeric `page_size`. Cost per live cycle is one confirming request per
   (sub, kind): ~136 requests per 5 minutes, ~1.4 % of the allowance.
+- **HTTP 422 is the archive asking us to slow down**, not a bad request:
+  `{"data":null,"error":"Timeout. Maybe slow down a bit"}`, hit on the
+  first live backfill around page 41 of a 24-hour window (2026-09-03).
+  The identical request answered on the next attempt. It is its own
+  exception class, `ArcticShiftBusy`; `page_range` and the backfill's
+  `parent_titles` wait it out (6 tries, 2 s doubling to 60 s) because a
+  day half-read would be written as a complete day, while the live cycle
+  does not retry at all — its windows are five minutes, and giving the
+  subreddit up with its cursor unmoved costs one cycle.
 - **The log line** for a cycle shows the concrete map under `sources=`
   (34 `reddit:<sub>` keys) and the root verdict under `aggregate=`.
 - **Bucket growth** accepted: ~34 child rows per touched (ticker, window).

@@ -318,3 +318,82 @@ def test_an_item_without_a_timestamp_does_not_take_the_whole_cycle_down():
     assert result.per_source_status == {'reddit:zzarc': 'ok'}
     assert result.posts == []
     assert advanced == {}
+
+
+# --- the archive's own 'slow down' (measured 2026-09-03) ----------------------
+
+class BusyOnceClient(FakeClient):
+    """Raises ArcticShiftBusy for the first `busy` search calls, then
+    behaves like FakeClient."""
+
+    def __init__(self, script, busy=1, **kwargs):
+        super().__init__(script, **kwargs)
+        self.busy = busy
+
+    def get_json(self, path, params):
+        if path.endswith('/search') and self.busy:
+            self.busy -= 1
+            self.calls.append((path, dict(params)))
+            raise arctic_shift.ArcticShiftBusy('HTTP 422 Timeout. Maybe slow down a bit')
+        return super().get_json(path, params)
+
+
+def test_a_422_is_the_archive_asking_us_to_slow_down_not_a_bad_request():
+    """Deep pagination through a busy day answers 422 'Timeout. Maybe slow
+    down a bit' around the fortieth page; the identical request then
+    succeeds. It must be its own class, or the backfill cannot tell it
+    from a 500 and gives the day up."""
+    class Response:
+        status_code = 422
+        text = '{"data":null,"error":"Timeout. Maybe slow down a bit"}'
+        ok = False
+
+    class Session:
+        headers = {}
+
+        def get(self, url, params=None, timeout=None):
+            return Response()
+
+    client = arctic_shift.ArcticShiftClient()
+    client._session = Session()
+    with pytest.raises(arctic_shift.ArcticShiftBusy):
+        client.get_json('/comments/search', {'subreddit': 'zzarc'})
+    assert issubclass(arctic_shift.ArcticShiftBusy, arctic_shift.ArcticShiftUnavailable)
+
+
+def test_page_range_waits_out_a_busy_archive(monkeypatch):
+    slept = []
+    monkeypatch.setattr(arctic_shift.time, 'sleep', slept.append)
+    client = BusyOnceClient({('/comments/search', 'zzarc'): [[comment('c1', minute(30))], []]},
+                            busy=1)
+
+    items = arctic_shift.page_range(client, 'zzarc', 'comments', minute(60), NOW,
+                                    page_size='auto')
+
+    assert [i['id'] for i in items] == ['c1']
+    assert slept and slept[0] >= 2.0
+
+
+def test_page_range_gives_up_after_the_retry_budget(monkeypatch):
+    monkeypatch.setattr(arctic_shift.time, 'sleep', lambda _s: None)
+    client = BusyOnceClient({('/comments/search', 'zzarc'): [[]]}, busy=99)
+
+    with pytest.raises(arctic_shift.ArcticShiftBusy):
+        arctic_shift.page_range(client, 'zzarc', 'comments', minute(60), NOW, retries=2)
+    assert len(client.calls) == 3          # the first try plus two retries
+
+
+def test_a_live_cycle_does_not_wait_on_a_busy_archive(monkeypatch):
+    """Five-minute windows are cheap queries. If one still times out, the
+    sub is missing with its cursor unmoved and the next cycle asks again
+    -- cheaper than holding the scheduler worker for 34 subreddits."""
+    slept = []
+    monkeypatch.setattr(arctic_shift.time, 'sleep', slept.append)
+    client = BusyOnceClient({('/comments/search', 'zzarc'): [[comment('c1', minute(2))]],
+                             ('/posts/search', 'zzarc'): [[]]}, busy=1)
+
+    result, advanced = arctic_shift.fetch({('zzarc', 'comments'): minute(30)}, client,
+                                          subs=['zzarc'], now=NOW)
+
+    assert result.per_source_status == {'reddit:zzarc': 'missing'}
+    assert advanced == {} and slept == []
