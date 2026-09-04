@@ -977,6 +977,40 @@ class RadarDailyClose(db.Model):
                                  server_default=sa.false())
 
 
+class RadarFxRate(db.Model):
+    """One published FX reference rate per day, per currency pair.
+
+    Here so a US listing's closes can be drawn on a EUR axis without the
+    close store ever holding a derived number. Conversion happens at read
+    time against these rows; what is stored is only ever what a venue
+    printed and what a central bank published.
+
+    The ECB publishes on TARGET business days, so this table has holes by
+    construction. A reader carries the last published rate forward across
+    them (features/radar/fx.py) rather than interpolating -- a weekend has
+    no rate because no rate was set, not because one was missed.
+    """
+    __tablename__ = 'radar_fx_rates'
+    __table_args__ = (
+        db.UniqueConstraint('rate_date', 'base', 'quote',
+                            name='uq_radar_fx_rate_day'),
+        db.Index('ix_radar_fx_rates_pair_day', 'base', 'quote', 'rate_date'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id         = db.Column(
+        db.BigInteger().with_variant(db.Integer(), 'sqlite'),
+        primary_key=True, autoincrement=True)
+    rate_date  = db.Column(db.Date, nullable=False)
+    base       = db.Column(db.String(3), nullable=False)
+    quote      = db.Column(db.String(3), nullable=False)
+    # Units of `quote` per one `base`. EUR/USD 1.1615 means one euro buys
+    # 1.1615 dollars, which is the direction the ECB publishes in.
+    rate       = db.Column(db.Numeric(18, 8), nullable=False)
+    source     = db.Column(db.String(16), nullable=False)
+    fetched_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+
 class RadarMappingGeneration(db.Model):
     """One complete, hashed German-mapping decision set (spec §5.4).
 
