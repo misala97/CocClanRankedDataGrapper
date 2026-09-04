@@ -1077,3 +1077,54 @@ def test_chart_carries_its_basis_not_the_quotes_venue():
     assert chart.converted_from is None
     assert chart.priced_from == 'daily'
     assert not hasattr(chart, 'history_proxy')
+
+
+def test_a_print_stamped_at_the_bell_is_an_anchor():
+    """`opens <= ts < closes` dropped every print stamped exactly at 20:00Z.
+
+    Measured on production 2026-09-04: all 54 of RZLV's prints for 2026-08-28
+    carried exactly that timestamp, so its week line had nothing to draw.
+    """
+    from features.radar import detail as detail_mod
+    from features.radar.market_calendars import session_bounds
+
+    day = dt.datetime(2026, 9, 3, 12, 0, tzinfo=dt.timezone.utc)
+    bounds = session_bounds('us', day)
+    bell = bounds.regular_closes_at.astimezone(
+        dt.timezone.utc).replace(tzinfo=None)
+
+    kept = detail_mod._session_prints(
+        [(bell, 10.0)], bounds)
+
+    assert kept == [(bell, 10.0)]
+
+
+def test_extended_hours_prints_anchor_when_the_session_had_none():
+    """Tradegate's whole poll window is its late session.
+
+    Its regular window is 09:00-17:30 Berlin and every stored XGAT quote_ts
+    on production falls after it, so a regular-only filter kept zero of them.
+    """
+    from features.radar import detail as detail_mod
+    from features.radar.market_calendars import session_bounds
+
+    day = dt.datetime(2026, 9, 3, 12, 0, tzinfo=dt.timezone.utc)
+    bounds = session_bounds('de', day, mic='XGAT')
+    late = bounds.regular_closes_at.astimezone(
+        dt.timezone.utc).replace(tzinfo=None) + dt.timedelta(minutes=30)
+
+    kept = detail_mod._session_prints([(late, 10.0)], bounds)
+
+    assert kept == [(late, 10.0)]
+
+
+def test_a_print_outside_the_extended_session_is_not_an_anchor():
+    from features.radar import detail as detail_mod
+    from features.radar.market_calendars import session_bounds
+
+    day = dt.datetime(2026, 9, 3, 12, 0, tzinfo=dt.timezone.utc)
+    bounds = session_bounds('us', day)
+    stray = bounds.opens_at.astimezone(
+        dt.timezone.utc).replace(tzinfo=None) - dt.timedelta(hours=2)
+
+    assert detail_mod._session_prints([(stray, 10.0)], bounds) == []

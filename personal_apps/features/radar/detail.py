@@ -258,6 +258,27 @@ def watched_slots(sources, start, now, step_minutes, slots):
     return covered
 
 
+def _session_prints(prints, bounds):
+    """The day's prints worth anchoring, best band first.
+
+    Regular-session prints where there are any, extended-hours ones where
+    there are not. Both edges are inclusive: a print stamped exactly at the
+    closing bell is the closing print. Extended hours are a fallback because
+    regular prints are a better answer to what traded today, while some
+    venues' entire poll window lies outside their regular session.
+    """
+    def naive(when):
+        return when.astimezone(dt.timezone.utc).replace(tzinfo=None)
+
+    regular = [(ts, price) for ts, price in prints
+               if naive(bounds.regular_opens_at) <= ts
+               <= naive(bounds.regular_closes_at)]
+    if regular:
+        return regular
+    return [(ts, price) for ts, price in prints
+            if naive(bounds.opens_at) <= ts <= naive(bounds.closes_at)]
+
+
 def _daily_anchors(ticker, start, now, step_minutes, slots, stored, *,
                    market='us', mic=None, use_quote_prints=True):
     """Up to three REAL prints per trading day, else that day's close.
@@ -297,8 +318,8 @@ def _daily_anchors(ticker, start, now, step_minutes, slots, stored, *,
         closes = bounds.regular_closes_at.astimezone(
             dt.timezone.utc).replace(tzinfo=None)
 
-        in_session = [(ts, float(price)) for ts, price in prints
-                      if opens <= ts < closes]
+        in_session = _session_prints(
+            [(ts, float(price)) for ts, price in prints], bounds)
         if in_session:
             midpoint = opens + (closes - opens) / 2
             picks = {in_session[0], in_session[-1],
