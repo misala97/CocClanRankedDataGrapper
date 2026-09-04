@@ -111,14 +111,20 @@ def _quote_sigmas(quote_views, today):
             by_identity[(quote.market, quote.mic)].append(ticker)
 
     for (market, mic), tickers in by_identity.items():
-        if market == 'de' and mic == 'XGAT':
-            # A Tradegate identity may seed its volatility from the
-            # exact-ISIN Xetra proxy until native history accumulates
-            # (spec §8.2); series_for owns that one seam.
+        if market == 'de':
+            # A German identity seeds its volatility from whichever of the
+            # ticker's listings actually has depth -- the Xetra sibling, or
+            # the US primary converted into euros. Tradegate itself stores
+            # about two days of closes, and a sigma from two closes is a
+            # number with no information in it.
+            #
+            # Converted rather than raw dollars on purpose: the move this
+            # sigma is compared against is measured in the quote's own
+            # currency, so the volatility must be too.
             for ticker in tickers:
-                series = history.series_for(
-                    ticker, market, mic, history.HISTORY_DAYS, today)
-                sigmas[ticker] = quotes_mod.daily_sigma(list(series.closes))
+                basis = history.resolve_basis(
+                    ticker, quote_views[ticker], history.HISTORY_DAYS, today)
+                sigmas[ticker] = quotes_mod.daily_sigma(list(basis.closes))
                 sigma_cache[(ticker, market, mic, today)] = sigmas[ticker]
             continue
         closes = history.closes_for(tickers, days=history.HISTORY_DAYS,

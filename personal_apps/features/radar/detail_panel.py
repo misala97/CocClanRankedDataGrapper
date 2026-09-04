@@ -335,26 +335,21 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN,
     # sources, different granularity, same array shape out.
     if chart_mod.is_intraday(span):
         chart = chart_mod.intraday_chart_for(
-            ticker, sources, now, span, market=quote.market, mic=quote.mic)
+            ticker, sources, now, span, quote=quote)
     else:
         days = chart_mod.SPAN_DAYS[span]
         start = now.date() - dt.timedelta(days=days - 1)
         from_dt = dt.datetime.combine(start, dt.time.min)
-        # series_for owns the one Xetra->Tradegate seam; only the close
-        # pairs enter the existing calendar alignment, the metadata rides
-        # beside them (spec §8.2).
-        series = history.series_for(ticker, quote.market, quote.mic, days,
-                                    now.date())
+        # The basis owns which venue's closes these are and what currency
+        # they are in; the chart only aligns them to calendar days.
+        basis = history.resolve_basis(ticker, quote, days, now.date())
         chart = chart_mod.chart_for(
-            ticker, start, days, dict(series.closes),
+            ticker, start, days, dict(basis.closes),
             chart_mod.daily_counts([ticker], sources, from_dt, now),
             chart_mod.first_watched_day(sources, from_dt, now))
-        chart.history_proxy = series.history_proxy
-        chart.proxy_mic = series.proxy_mic
-        chart.proxy_venue = series.proxy_venue
-        chart.native_mic = series.native_mic
-        chart.native_venue = series.native_venue
-        chart.native_from = series.native_from
+        chart.currency = basis.currency or quote.currency
+        chart.basis_venue = basis.venue or quote.venue
+        chart.converted_from = basis.converted_from
 
     breakdown = breakdown_for(ticker, sources, since, now)
     breakdown.first_seen = first_mention_day(ticker)

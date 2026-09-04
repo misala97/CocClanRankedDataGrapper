@@ -82,14 +82,16 @@ class Chart:
     # dashed line the row charts already carry, so "above its normal" reads
     # the same at every zoom.
     normal_per_slot: object = None
-    # Xetra->Tradegate history-seam provenance (spec §8.2). Defaults keep
-    # every non-proxy chart, including all intraday spans, byte-compatible.
-    history_proxy: bool = False
-    proxy_mic: str | None = None
-    proxy_venue: str | None = None
-    native_mic: str | None = None
-    native_venue: str | None = None
-    native_from: dt.date | None = None
+    # Where this chart's price line came from (features/radar/history.py).
+    # Not the quote's venue: a Nasdaq listing quoted at Tradegate draws its
+    # Nasdaq closes, converted, and the panel states that beside the chart.
+    currency: str | None = None
+    basis_venue: str | None = None
+    converted_from: str | None = None
+    # 'intraday' when the line came from quote snapshots, 'daily' when it
+    # came from stored closes. The 1D span may be either, and the panel's
+    # subtitle must not claim the wrong one.
+    priced_from: str = 'daily'
 
 
 def daily_counts(tickers, sources, start, now):
@@ -311,13 +313,19 @@ def _daily_anchors(ticker, start, now, step_minutes, slots, stored, *,
     return prices
 
 
-def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
+def intraday_chart_for(ticker, sources, now, span, *, quote):
     """One Chart over slots of minutes rather than calendar days.
 
     Same array shape as the daily chart on purpose: the renderer draws evenly
     spaced slots and does not need to know what a slot means, beyond
     `step_minutes` for its axis labels.
+
+    Takes the whole quote view rather than a (market, mic) pair because the
+    week's price line no longer comes from that identity: it comes from
+    whichever of the ticker's listings has the depth, which is a question
+    only history.resolve_basis can answer and only from the quote.
     """
+    market, mic = quote.market, quote.mic
     slots, step_minutes = INTRADAY_SPANS[span]
     start = now - dt.timedelta(minutes=slots * step_minutes)
 
@@ -327,18 +335,19 @@ def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
     # price for days and then a cliff, and the week view drew exactly that --
     # a morse-code crawl (seen live 2026-08-30, twice). Five clean anchors
     # beat a hundred and sixty stale fragments.
-    price_series = None
+    basis = None
+    priced_from = 'daily'
     if span == '1D':
         closes = intraday_prices(ticker, start, now, step_minutes, slots,
                                  market=market, mic=mic)
+        priced_from = 'intraday'
     else:
         from . import history
         days = int(slots * step_minutes / 1440) + 2
-        price_series = history.series_for(
-            ticker, market, mic, days, now.date())
+        basis = history.resolve_basis(ticker, quote, days, now.date())
         closes = _daily_anchors(
             ticker, start, now, step_minutes, slots,
-            dict(price_series.closes), market=market, mic=mic)
+            dict(basis.closes), market=market, mic=mic)
     counts, _seen = intraday_counts(ticker, sources, start, now,
                                     step_minutes, slots)
     covered = watched_slots(sources, start, now, step_minutes, slots)
@@ -355,14 +364,7 @@ def intraday_chart_for(ticker, sources, now, span, *, market='us', mic=None):
             minutes=first_watched * step_minutes)
                       if first_watched is not None else None),
         step_minutes=step_minutes,
-        history_proxy=(price_series.history_proxy
-                       if price_series is not None else False),
-        proxy_mic=(price_series.proxy_mic if price_series is not None else None),
-        proxy_venue=(price_series.proxy_venue
-                     if price_series is not None else None),
-        native_mic=(price_series.native_mic
-                    if price_series is not None else None),
-        native_venue=(price_series.native_venue
-                      if price_series is not None else None),
-        native_from=(price_series.native_from
-                     if price_series is not None else None))
+        priced_from=priced_from,
+        currency=(basis.currency if basis is not None else quote.currency),
+        basis_venue=(basis.venue if basis is not None else quote.venue),
+        converted_from=(basis.converted_from if basis is not None else None))

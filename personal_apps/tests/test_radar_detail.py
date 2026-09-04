@@ -25,6 +25,24 @@ from models import (RadarBucketSource, RadarDailyClose, RadarInstrument,
 
 NOW = dt.datetime(2026, 3, 12, 15, 0, 0)
 PREFIX = 'DT'
+
+
+class _Quote:
+    """Only the four fields the chart reads off a quote view.
+
+    intraday_chart_for takes the whole quote since 2026-09-05: the week's
+    price line comes from whichever of the ticker's listings has depth, and
+    a (market, mic) pair cannot answer that question.
+    """
+
+    def __init__(self, market='us', mic=None, venue='NYSE', currency='USD'):
+        self.market = market
+        self.mic = mic
+        self.venue = venue
+        self.currency = currency
+
+
+US_QUOTE = _Quote()
 SPAN = detail.SPAN_DAYS['1Y']
 
 
@@ -658,7 +676,7 @@ def test_price_comes_from_quotes_not_daily_closes(clean_intraday):
         quote(f'{PREFIX}A', minutes_ago=10, price=4.25)
         db.session.commit()
 
-        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D', quote=US_QUOTE)
 
         assert any(c is not None for c in chart.closes)
         assert chart.closes[-1] == pytest.approx(4.25)
@@ -677,7 +695,8 @@ def test_a_german_intraday_chart_never_splices_usd_quote_history(clean_intraday)
         db.session.commit()
 
         chart = detail.intraday_chart_for(
-            f'{PREFIX}A', ['bluesky'], NOW, '1D', market='de', mic='XETR')
+            f'{PREFIX}A', ['bluesky'], NOW, '1D',
+            quote=_Quote('de', 'XETR', 'Xetra', 'EUR'))
 
         assert all(price is None for price in chart.closes)
 
@@ -694,9 +713,13 @@ def test_germany_detail_marks_us_fallback_and_uses_its_us_history(clean):
             fetched_at=NOW - dt.timedelta(minutes=5),
             quote_ts=NOW - dt.timedelta(minutes=5),
             price=decimal.Decimal('4.25'), prev_close=decimal.Decimal('4.00')))
-        db.session.add(RadarDailyClose(
-            ticker=ticker, market='us', mic='XNAS', currency='USD',
-            close_date=NOW.date(), close=decimal.Decimal('4.25'), fetched_at=NOW))
+        # Two closes: a single stored close is a dot, and the basis refuses
+        # to draw a dot as a price line (history.MIN_BASIS_CLOSES).
+        for back, price in ((0, '4.25'), (1, '4.10')):
+            db.session.add(RadarDailyClose(
+                ticker=ticker, market='us', mic='XNAS', currency='USD',
+                close_date=NOW.date() - dt.timedelta(days=back),
+                close=decimal.Decimal(price), fetched_at=NOW))
         db.session.commit()
 
         built = detail_panel.build(ticker, ['bluesky'], NOW, span='1M', market='de')
@@ -705,6 +728,10 @@ def test_germany_detail_marks_us_fallback_and_uses_its_us_history(clean):
         assert built.quote.is_fallback is True
         assert built.quote.currency == 'USD'
         assert built.chart.closes[-1] == decimal.Decimal('4.25')
+        # A US-fallback quote is USD, so its history is USD too -- never
+        # converted, and never labelled as anything but its own venue.
+        assert built.chart.currency == 'USD'
+        assert built.chart.converted_from is None
 
 
 def test_a_slot_with_no_quote_is_none_rather_than_the_last_price(clean_intraday):
@@ -716,7 +743,7 @@ def test_a_slot_with_no_quote_is_none_rather_than_the_last_price(clean_intraday)
         quote(f'{PREFIX}A', minutes_ago=10, price=4.25)
         db.session.commit()
 
-        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D', quote=US_QUOTE)
 
         assert chart.closes[0] is None
 
@@ -729,7 +756,7 @@ def test_the_last_quote_in_a_slot_wins(clean_intraday):
         quote(f'{PREFIX}A', minutes_ago=6, price=4.50)
         db.session.commit()
 
-        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D', quote=US_QUOTE)
 
         assert chart.closes[-1] == pytest.approx(4.50)
 
@@ -739,7 +766,7 @@ def test_chatter_is_summed_into_its_slot(clean_intraday):
         bucket(f'{PREFIX}A', minutes_ago=10, mentions=7)
         db.session.commit()
 
-        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D', quote=US_QUOTE)
 
         assert chart.chatter[-1] == 7
 
@@ -752,17 +779,21 @@ def test_a_week_pools_several_buckets_into_one_slot(clean_intraday):
             bucket(f'{PREFIX}A', minutes_ago=minutes, mentions=3)
         db.session.commit()
 
-        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1W')
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1W', quote=US_QUOTE)
 
         assert chart.chatter[-1] == 12
 
 
-def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_proxy(
+def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_sibling(
         clean_intraday):
-    """The week chart must consume the same exact-ISIN history seam as the
-    month chart when native Tradegate closes have not materialized yet."""
+    """The week chart consumes the same basis the month chart does.
+
+    It used to consume the exact-ISIN Xetra SEAM, which filled only the days
+    before the first native Tradegate close. There is no seam now: the
+    sibling wins the basis whole when it has the depth, and the chart says
+    which venue that was.
+    """
     ticker = f'{PREFIX}WPROXY'
-    close_day = NOW.date() - dt.timedelta(days=1)
     with flask_app.app_context():
         db.session.add_all([
             RadarInstrument(
@@ -775,20 +806,26 @@ def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_proxy(
                 provider_symbol='ZZXE', currency='EUR',
                 isin='DE000ZZTST05', is_primary=False,
                 mapping_status='mapped', mapped_at=NOW),
-            RadarDailyClose(
-                ticker=ticker, market='de', mic='XETR', currency='EUR',
-                close_date=close_day, close=decimal.Decimal('42.50'),
-                fetched_at=NOW, source='yahoo_chart',
-                adjustment_basis='split', is_shadow=False),
         ])
+        # Two closes, not one: one stored close is a dot, and the basis
+        # refuses to call a dot a price line (history.MIN_BASIS_CLOSES).
+        for back, price in ((1, '42.50'), (2, '41.00')):
+            db.session.add(RadarDailyClose(
+                ticker=ticker, market='de', mic='XETR', currency='EUR',
+                close_date=NOW.date() - dt.timedelta(days=back),
+                close=decimal.Decimal(price), fetched_at=NOW,
+                source='yahoo_chart', adjustment_basis='split',
+                is_shadow=False))
         db.session.commit()
 
         chart = detail.intraday_chart_for(
-            ticker, ['bluesky'], NOW, '1W', market='de', mic='XGAT')
+            ticker, ['bluesky'], NOW, '1W',
+            quote=_Quote('de', 'XGAT', 'Tradegate BSX', 'EUR'))
 
-        assert [price for price in chart.closes if price is not None] == [42.5]
-        assert chart.history_proxy is True
-        assert (chart.proxy_mic, chart.native_mic) == ('XETR', 'XGAT')
+        assert 42.5 in [price for price in chart.closes if price is not None]
+        assert chart.basis_venue == 'Xetra'
+        assert chart.currency == 'EUR'
+        assert chart.converted_from is None
 
 
 def test_a_slot_before_observation_began_is_unknown_not_zero(clean_intraday):
@@ -799,7 +836,7 @@ def test_a_slot_before_observation_began_is_unknown_not_zero(clean_intraday):
         bucket(f'{PREFIX}A', minutes_ago=10, mentions=7)
         db.session.commit()
 
-        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
+        chart = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D', quote=US_QUOTE)
 
         assert chart.chatter[0] is None
 
@@ -843,7 +880,7 @@ def test_an_outage_in_the_middle_of_the_window_is_not_drawn_as_quiet(
     db.session.commit()
 
     chart = detail.intraday_chart_for(
-        clean_intraday_gap, ['bluesky'], now, '1D')
+        clean_intraday_gap, ['bluesky'], now, '1D', quote=US_QUOTE)
     first_index = detail._slot_index(first, chart.start, chart.step_minutes,
                                      len(chart.chatter))
     last_index = detail._slot_index(last, chart.start, chart.step_minutes,
@@ -861,8 +898,8 @@ def test_the_chart_reports_its_own_granularity(clean_intraday):
     with flask_app.app_context():
         db.session.commit()
 
-        day = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D')
-        week = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1W')
+        day = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1D', quote=US_QUOTE)
+        week = detail.intraday_chart_for(f'{PREFIX}A', ['bluesky'], NOW, '1W', quote=US_QUOTE)
 
         assert day.step_minutes == 15
         assert week.step_minutes == 60
@@ -920,7 +957,7 @@ def test_an_out_of_span_print_refetched_all_day_draws_zero_slots(
                       poll_minutes=(50, 40, 30, 20, 10))
         db.session.commit()
         chart = detail.intraday_chart_for(f'{PREFIX}STL', ['bluesky'], NOW,
-                                          '1D')
+                                          '1D', quote=US_QUOTE)
         assert all(c is None for c in chart.closes)
 
 
@@ -930,7 +967,7 @@ def test_an_in_span_print_refetched_occupies_exactly_one_slot(clean_intraday):
                       poll_minutes=(50, 40, 30))
         db.session.commit()
         chart = detail.intraday_chart_for(f'{PREFIX}ONE', ['bluesky'], NOW,
-                                          '1D')
+                                          '1D', quote=US_QUOTE)
         populated = [index for index, c in enumerate(chart.closes)
                      if c is not None]
         assert len(populated) == 1
@@ -952,7 +989,7 @@ def test_equal_prices_at_distinct_event_times_remain_distinct(clean_intraday):
                 price=decimal.Decimal('5.55')))
         db.session.commit()
         chart = detail.intraday_chart_for(f'{PREFIX}EQ', ['bluesky'], NOW,
-                                          '1D')
+                                          '1D', quote=US_QUOTE)
         populated = [c for c in chart.closes if c is not None]
         assert len(populated) == 2
 
@@ -967,7 +1004,7 @@ def test_a_quote_without_provider_time_never_reaches_the_1d_chart(
             quote_ts=None, price=decimal.Decimal('9.99')))
         db.session.commit()
         chart = detail.intraday_chart_for(f'{PREFIX}NOTS', ['bluesky'], NOW,
-                                          '1D')
+                                          '1D', quote=US_QUOTE)
         assert all(c is None for c in chart.closes)
 
 
@@ -999,3 +1036,19 @@ def test_each_post_says_who_judged_it(clean):
     assert by_author['cy'] == ('bearish', 'model')
     assert by_author['dee'] == ('bullish', 'lexicon')
     assert by_author['eve'] == ('neutral', None)
+
+
+def test_chart_carries_its_basis_not_the_quotes_venue():
+    """A chart drawn from a converted US series says so on the chart itself.
+
+    The header keeps saying Tradegate: that is where the headline price is
+    from. The chart is a different statement and carries its own.
+    """
+    chart = detail.Chart(start=dt.date(2026, 9, 1), closes=[1.0, 2.0],
+                         chatter=[None, None], watched_from=None)
+
+    assert chart.currency is None
+    assert chart.basis_venue is None
+    assert chart.converted_from is None
+    assert chart.priced_from == 'daily'
+    assert not hasattr(chart, 'history_proxy')

@@ -334,7 +334,12 @@ def test_shadow_and_live_write_lanes_do_not_collide(clean):
                      True: decimal.Decimal('55.1000')}
 
 
-def test_series_for_composes_one_xetra_proxy_seam(clean):
+class _TradegateQuote:
+    """Only the fields resolve_basis reads off a quote view."""
+    market, mic, venue, currency = 'de', 'XGAT', 'Tradegate BSX', 'EUR'
+
+
+def test_the_basis_takes_the_deeper_venue_whole(clean):
     from models import RadarInstrument, RadarMappingGeneration
     ticker = f'{PREFIX}SEAM'
     payload = '{"decisions":[]}'
@@ -367,33 +372,26 @@ def test_series_for_composes_one_xetra_proxy_seam(clean):
                   price_basis='close')
     db.session.commit()
 
-    series = history.series_for(ticker, 'de', 'XGAT', 30, DAY)
-    by_day = dict(series.closes)
-    # Proxy strictly before the first native date; native from there on.
-    assert by_day[DAY - dt.timedelta(days=3)] == decimal.Decimal('10.0000')
-    assert by_day[DAY - dt.timedelta(days=2)] == decimal.Decimal('11.0000')
-    assert series.history_proxy is True
-    assert (series.proxy_mic, series.native_mic) == ('XETR', 'XGAT')
-    assert series.native_from == DAY - dt.timedelta(days=2)
+    basis = history.resolve_basis(ticker, _TradegateQuote(), 30, DAY)
+    # Five Xetra closes against three Tradegate ones: the deeper series wins
+    # WHOLE. There is no seam to compose any more -- the old rule filled the
+    # days before the first native date from Xetra and left later native
+    # holes as holes, which on real data meant a two-point line.
+    assert basis.mic == 'XETR'
+    assert basis.venue == 'Xetra'
+    assert len(basis.closes) == 5
+    assert all(close == decimal.Decimal('10.0000')
+               for _, close in basis.closes)
 
-    # A missing native date after the seam stays missing, never patched.
-    RadarDailyClose.query.filter_by(
-        ticker=ticker, mic='XGAT',
-        close_date=DAY - dt.timedelta(days=1)).delete(
-        synchronize_session=False)
-    db.session.commit()
-    series = history.series_for(ticker, 'de', 'XGAT', 30, DAY)
-    days = {day for day, _ in series.closes}
-    assert DAY - dt.timedelta(days=1) not in days
-
-    # ISIN mismatch removes the proxy entirely.
+    # ISIN mismatch disqualifies the sibling, and the native stub is then
+    # all there is.
     RadarInstrument.query.filter_by(ticker=ticker, mic='XETR').update(
         {RadarInstrument.isin: 'DE000ZZTST06'}, synchronize_session=False)
     db.session.commit()
-    series = history.series_for(ticker, 'de', 'XGAT', 30, DAY)
-    assert series.history_proxy is False
+    basis = history.resolve_basis(ticker, _TradegateQuote(), 30, DAY)
+    assert basis.mic == 'XGAT'
     assert all(close == decimal.Decimal('11.0000')
-               for _, close in series.closes)
+               for _, close in basis.closes)
     RadarInstrument.query.filter_by(ticker=ticker).delete(
         synchronize_session=False)
     db.session.commit()
