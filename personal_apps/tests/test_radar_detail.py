@@ -682,6 +682,48 @@ def test_price_comes_from_quotes_not_daily_closes(clean_intraday):
         assert chart.closes[-1] == pytest.approx(4.25)
 
 
+def test_one_quote_in_the_day_falls_back_to_daily_closes(clean_intraday):
+    """A single quote cannot draw a 1D line, but daily anchors can."""
+    from features.radar import detail as detail_mod
+
+    assert detail_mod.MIN_INTRADAY_POINTS == 2
+    ticker = f'{PREFIX}THIN'
+    with flask_app.app_context():
+        quote(ticker, minutes_ago=10, price=4.25)
+        close_on(ticker, 1, '4.00')
+        close_on(ticker, 2, '3.75')
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(
+            ticker, ['bluesky'], NOW, '1D', quote=US_QUOTE)
+
+        assert chart.priced_from == 'daily'
+        assert 4.00 in [price for price in chart.closes if price is not None]
+        assert len([price for price in chart.closes if price is not None]) >= 2
+
+
+def test_the_1d_chart_reports_where_its_line_came_from(client, panel_live):
+    """The panel's 1D provenance makes a sparse line honest to its reader."""
+    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    with flask_app.app_context():
+        for minutes_ago, price in ((10, '12.50'), (30, '12.00')):
+            db.session.add(RadarQuote(
+                ticker=f'{PREFIX}A', fetched_at=now - dt.timedelta(minutes=minutes_ago),
+                quote_ts=now - dt.timedelta(minutes=minutes_ago),
+                price=decimal.Decimal(price)))
+        db.session.commit()
+
+    response = client.get(f'/radar/api/ticker/{PREFIX}A?span=1D')
+
+    assert response.status_code == 200
+    chart = response.get_json()['chart']
+    real = [close for close in chart['closes'] if close is not None]
+    if chart['priced_from'] == 'intraday':
+        assert len(real) >= 2
+    else:
+        assert chart['basis_venue'] is not None
+
+
 def test_a_german_intraday_chart_never_splices_usd_quote_history(clean_intraday):
     """Germany with no Xetra print is not a USD chart with a German label."""
     from models import RadarQuote

@@ -42,6 +42,15 @@ SPAN_DAYS = {'1M': 30, '6M': 182, '1Y': 365, '3Y': 1095}
 # buckets per slot.
 INTRADAY_SPANS = {'1D': (96, 15), '1W': (168, 60)}
 
+# Below this many priced slots, the 1D span stops being an intraday chart.
+#
+# Two, because the renderer needs two points for a line and one stored quote
+# draws the same "no stored price" text as none at all. The poller only
+# covers chatter-selected tickers at 55 a cycle, so on 2026-09-04 that was
+# 76% of every US-quoted ticker on production: a whole span that said
+# "nothing known" about tickers with three years of stored closes.
+MIN_INTRADAY_POINTS = 2
+
 DEFAULT_SPAN = '1Y'
 
 
@@ -364,6 +373,25 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
         closes = intraday_prices(ticker, start, now, step_minutes, slots,
                                  market=market, mic=mic)
         priced_from = 'intraday'
+        if sum(1 for close in closes if close is not None) < MIN_INTRADAY_POINTS:
+            from . import history
+            basis = history.resolve_basis(ticker, quote, 3, now.date())
+            if basis.closes:
+                basis_market, basis_mic = basis.market, basis.mic
+            else:
+                basis_market, basis_mic = market, mic
+            native_basis = (not basis.closes
+                            or (basis.market == quote.market
+                                and basis.mic == quote.mic
+                                and basis.converted_from is None))
+            anchored = _daily_anchors(
+                ticker, start, now, step_minutes, slots,
+                dict(basis.closes), market=basis_market, mic=basis_mic,
+                use_quote_prints=native_basis)
+            if sum(1 for close in anchored
+                   if close is not None) >= MIN_INTRADAY_POINTS:
+                closes = anchored
+                priced_from = 'daily'
     else:
         from . import history
         days = int(slots * step_minutes / 1440) + 2
