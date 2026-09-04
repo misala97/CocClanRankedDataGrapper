@@ -69,8 +69,8 @@ function detail(ticker = 'AAA'): Detail {
       from: '2025-08-23T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
-      sessions: [], history_proxy: false, proxy_mic: null, proxy_venue: null,
-      native_mic: null, native_venue: null, native_from: null,
+      sessions: [], currency: null, basis_venue: null, converted_from: null,
+      priced_from: 'daily',
       normal_per_slot: null, watched_from: '2026-08-18',
     },
     breakdown: {

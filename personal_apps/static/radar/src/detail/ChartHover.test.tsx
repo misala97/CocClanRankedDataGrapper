@@ -10,8 +10,8 @@ function chart(over: Partial<DetailChart> = {}): DetailChart {
     closes: [null, 1.5, 1.7, null, 2.1],
     chatter: [null, null, 4, 0, 9],
     normal_per_slot: 2, sessions: [], watched_from: '2026-08-22',
-    history_proxy: false, proxy_mic: null, proxy_venue: null,
-    native_mic: null, native_venue: null, native_from: null,
+    currency: null, basis_venue: null, converted_from: null,
+    priced_from: 'daily',
     ...over,
   }
 }

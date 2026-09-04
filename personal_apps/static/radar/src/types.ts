@@ -127,16 +127,17 @@ export interface DetailChart {
   /** The day observation began. Before it the chatter lane is unobserved
    *  rather than silent, and the panel draws that boundary. */
   watched_from: string | null
-  /** Xetra->Tradegate history-seam provenance (spec 8.2): older Xetra
-   *  closes may seed a Tradegate chart for the same ISIN, labelled, with
-   *  one seam at `native_from`. All false/null on every other identity
-   *  and on the intraday spans. */
-  history_proxy: boolean
-  proxy_mic: string | null
-  proxy_venue: string | null
-  native_mic: string | null
-  native_venue: string | null
-  native_from: string | null
+  /** The currency `closes` is expressed in, and the venue those closes came
+   *  from. Not necessarily the quote's: a Nasdaq listing quoted at Tradegate
+   *  draws its Nasdaq closes converted to EUR. */
+  currency: string | null
+  basis_venue: string | null
+  /** Set only when `closes` was converted out of another currency. The panel
+   *  states it beside the chart -- a converted line must never read native. */
+  converted_from: string | null
+  /** 'intraday' when the line is quote snapshots, 'daily' when it is stored
+   *  closes. 1D may be either. */
+  priced_from: 'intraday' | 'daily'
 }
 
 export interface Post {

@@ -810,3 +810,18 @@ def test_the_sort_is_part_of_the_board_cache_key(client):
 
     keys = list(api_mod.board_cache)
     assert len(keys) == 3, f'sort is missing from the cache key: {keys}'
+
+
+def test_panel_chart_states_its_basis(client):
+    """The chart's own provenance travels with the chart, not the quote."""
+    response = client.get('/radar/api/ticker/AAPL?span=1M&market=de')
+    assert response.status_code == 200
+    chart = response.get_json()['chart']
+
+    assert 'currency' in chart
+    assert 'basis_venue' in chart
+    assert 'converted_from' in chart
+    assert chart['priced_from'] in ('daily', 'intraday')
+    for gone in ('history_proxy', 'proxy_mic', 'proxy_venue',
+                 'native_mic', 'native_venue', 'native_from'):
+        assert gone not in chart

@@ -600,15 +600,14 @@ def serialize_detail(d):
                       if d.chart.watched_from else None)),
             'sessions': _chart_sessions(d.chart, d.quote.market, d.span,
                                         mic=d.quote.mic),
-            # Xetra->Tradegate seam provenance: visible near the chart,
-            # never silently native (spec §8.2/§10).
-            'history_proxy': d.chart.history_proxy,
-            'proxy_mic': d.chart.proxy_mic,
-            'proxy_venue': d.chart.proxy_venue,
-            'native_mic': d.chart.native_mic,
-            'native_venue': d.chart.native_venue,
-            'native_from': (d.chart.native_from.isoformat()
-                            if d.chart.native_from else None),
+            # Where this line came from. The axis reads `currency` from
+            # here, never from the quote: they differ exactly when the
+            # basis is a converted foreign listing, which is the case the
+            # reader most needs told (spec §1/§3).
+            'currency': d.chart.currency,
+            'basis_venue': d.chart.basis_venue,
+            'converted_from': d.chart.converted_from,
+            'priced_from': d.chart.priced_from,
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,

@@ -1,4 +1,4 @@
-import { count, formatMarketDate, money } from '../format'
+import { count, money } from '../format'
 import type { DetailChart, PanelSpan } from '../types'
 import { ChartHover } from './ChartHover'
 import { SessionBands, sessionNames } from './SessionBands'
@@ -51,11 +51,15 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
  *  as 52 fragments (the gray wash names those days instead). On the intraday
  *  spans it breaks at gaps: an hour nobody quoted is a real absence.
  */
-export function PriceChart({ chart, currency = 'USD' }: {
+export function PriceChart({ chart, quoteVenue }: {
   chart: DetailChart
-  /** The quote's currency, for the axis and the hover readout. */
-  currency?: string
+  /** The venue in the header. The basis note appears when the line came
+   *  from somewhere else. */
+  quoteVenue?: string | null
 }) {
+  // The axis belongs to the LINE, not the headline price. They differ
+  // exactly when the basis is a converted foreign listing.
+  const currency = chart.currency ?? 'USD'
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 
   const { paths, gaps, low, high, lastX, lastY } = pricePaths(chart, priced)
@@ -84,17 +88,16 @@ export function PriceChart({ chart, currency = 'USD' }: {
   // anything -- rules, dates, the gutter numbers -- and it fades in as one
   // piece. `.plot` is what was measured, and it wipes in along x, which is
   // time. One clip on one group keeps that affordable at the long spans.
-  /* The Xetra->Tradegate seam is stated in text NEXT TO the chart, never a
-   * tooltip: proxy history must not read as native (spec 8.2/10). */
-  const proxyNote = chart.history_proxy && chart.proxy_venue &&
-      chart.native_venue
-    ? `${chart.proxy_venue} history${chart.native_from
-        ? ` through ${formatMarketDate(chart.native_from)}`
-        : ''} · ${chart.native_venue} now`
-    : null
+  /* The basis is stated in text NEXT TO the chart, never in a tooltip: a
+   * converted or foreign-venue line must not read as native (spec §1/§3). */
+  const basisNote = !chart.basis_venue || chart.basis_venue === quoteVenue
+    ? null
+    : chart.converted_from
+      ? `${chart.basis_venue} closes, converted to ${currency} at the ECB daily rate`
+      : `${chart.basis_venue} closes${quoteVenue ? ` · quoted at ${quoteVenue}` : ''}`
 
   return (<>
-    {proxyNote ? <p className="history-proxy-note">{proxyNote}</p> : null}
+    {basisNote ? <p className="history-proxy-note">{basisNote}</p> : null}
     <svg className="pxchart" viewBox={`0 0 ${W} ${H}`} role="img"
          aria-label={`price over ${chart.span} with chatter beneath${
            sessionContext ? `; extended sessions: ${sessionContext}` : ''}`}>

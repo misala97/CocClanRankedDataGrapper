@@ -4,7 +4,7 @@ import { Breakdown } from './Breakdown'
 import { Identity } from './Identity'
 import { Posts } from './Posts'
 import { PriceChart } from './PriceChart'
-import type { Detail, PanelSpan, Selection } from '../types'
+import type { Detail, DetailChart, PanelSpan, Selection } from '../types'
 
 const SPANS: PanelSpan[] = ['1D', '1W', '1M', '6M', '1Y', '3Y']
 
@@ -45,6 +45,16 @@ const CAPTIONS: Record<PanelSpan, string> = {
   '6M': 'daily closes · mentions per day',
   '1Y': 'daily closes · mentions per day',
   '3Y': 'daily closes · mentions per day',
+}
+
+/** 1D prices from quote snapshots when there are enough of them and from
+ *  stored daily closes when there are not, so its subtitle cannot be a
+ *  constant -- it would claim intraday resolution the line does not have. */
+function subtitleFor(chart: DetailChart): string {
+  if (chart.span === '1D' && chart.priced_from === 'daily') {
+    return 'daily closes · mentions per 15 min'
+  }
+  return CAPTIONS[chart.span]
 }
 
 /** The legend says the same thing as the caption, in two halves.
@@ -279,7 +289,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
       <section className="zone" aria-labelledby="zone-chart">
         <h3 id="zone-chart">
           Price and chatter
-          <span className="q">{CAPTIONS[span]}</span>
+          <span className="q">{subtitleFor(detail.chart)}</span>
           <span className="print-span" aria-hidden="true"> · {span}</span>
           <span className="spans" role="group" aria-label="Chart span">
             {SPANS.map((option) => (
@@ -294,7 +304,7 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         <div className="chartwrap" ref={chartScroller}
              aria-busy={revalidating || undefined}>
           <PriceChart key={drawn} chart={detail.chart}
-                      currency={detail.identity.quote.currency ?? undefined} />
+                      quoteVenue={detail.identity.quote.venue} />
         </div>
         {/* CSS shows this only at the widths where the chart pans. The right
             edge is the most recent price, so a chart silently cut off there
