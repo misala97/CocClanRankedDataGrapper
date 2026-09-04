@@ -784,6 +784,21 @@ def test_a_week_pools_several_buckets_into_one_slot(clean_intraday):
         assert chart.chatter[-1] == 12
 
 
+def test_a_week_uses_native_quote_prints_without_a_daily_basis(
+        clean_intraday):
+    """Native prints still draw a week when no daily line qualifies."""
+    ticker = f'{PREFIX}WPRINT'
+    with flask_app.app_context():
+        quote(ticker, minutes_ago=24 * 60, price=4.25)
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(
+            ticker, ['bluesky'], NOW, '1W', quote=US_QUOTE)
+
+        assert 4.25 in [price for price in chart.closes
+                        if price is not None]
+
+
 def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_sibling(
         clean_intraday):
     """The week chart consumes the same basis the month chart does.

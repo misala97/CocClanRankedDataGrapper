@@ -351,10 +351,10 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
             basis_market, basis_mic = basis.market, basis.mic
         else:
             basis_market, basis_mic = market, mic
-        native_basis = (bool(basis.closes)
-                        and basis.market == quote.market
-                        and basis.mic == quote.mic
-                        and basis.converted_from is None)
+        native_basis = (not basis.closes
+                        or (basis.market == quote.market
+                            and basis.mic == quote.mic
+                            and basis.converted_from is None))
         closes = _daily_anchors(
             ticker, start, now, step_minutes, slots,
             dict(basis.closes), market=basis_market, mic=basis_mic,
