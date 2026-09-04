@@ -742,6 +742,72 @@ def test_rejected_daily_anchors_keep_intraday_quote_provenance(clean_intraday):
         assert chart.converted_from is None
 
 
+def test_a_converted_basis_never_uses_its_unconverted_quote_prints(
+        clean_intraday):
+    """Changing `use_quote_prints=native_basis` to true must fail here.
+
+    Two US prints would make the converted fallback line acceptable, but they
+    are raw dollars and cannot be mixed into an EUR-priced daily anchor line.
+    """
+    from features.radar import fx
+    from models import RadarFxRate
+
+    ticker = f'{PREFIX}CONVERT'
+    now = dt.datetime(1990, 1, 9, 15, 0, 0)
+    rate_source = 'dt-convert'
+    quote_view = _Quote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+    with flask_app.app_context():
+        RadarFxRate.query.filter_by(source=rate_source).delete(
+            synchronize_session=False)
+        try:
+            db.session.add_all([
+                RadarInstrument(
+                    ticker=ticker, market='de', venue='Tradegate BSX',
+                    mic='XGAT', provider_symbol='ZZTG', currency='EUR',
+                    isin='DE000ZZTST07', is_primary=True,
+                    mapping_status='mapped', mapped_at=now),
+                RadarInstrument(
+                    ticker=ticker, market='us', venue='Nasdaq',
+                    mic='XNAS', provider_symbol='ZZUS', currency='USD',
+                    isin=None, is_primary=True,
+                    mapping_status='mapped', mapped_at=now),
+                RadarQuote(
+                    ticker=ticker, market='de', mic='XGAT', currency='EUR',
+                    fetched_at=now - dt.timedelta(minutes=10),
+                    quote_ts=now - dt.timedelta(minutes=10),
+                    price=decimal.Decimal('99.00')),
+            ])
+            for minutes_ago, price in ((10, '500.00'), (50, '600.00')):
+                db.session.add(RadarQuote(
+                    ticker=ticker, market='us', mic='XNAS', currency='USD',
+                    fetched_at=now - dt.timedelta(minutes=minutes_ago),
+                    quote_ts=now - dt.timedelta(minutes=minutes_ago),
+                    price=decimal.Decimal(price)))
+            for back, price in ((1, '10.00'), (2, '9.00')):
+                db.session.add(RadarDailyClose(
+                    ticker=ticker, market='us', mic='XNAS', currency='USD',
+                    close_date=now.date() - dt.timedelta(days=back),
+                    close=decimal.Decimal(price), fetched_at=now,
+                    source='yahoo_chart', adjustment_basis='split',
+                    is_shadow=False))
+            db.session.commit()
+            fx.record_rates(
+                [(now.date() - dt.timedelta(days=back), decimal.Decimal('2.0'))
+                 for back in (1, 2)], now, source=rate_source)
+
+            chart = detail.intraday_chart_for(
+                ticker, ['bluesky'], now, '1D', quote=quote_view)
+
+            assert chart.priced_from == 'intraday'
+            assert [price for price in chart.closes if price is not None] == [99.0]
+            assert chart.basis_venue == 'Tradegate BSX'
+            assert chart.converted_from is None
+        finally:
+            RadarFxRate.query.filter_by(source=rate_source).delete(
+                synchronize_session=False)
+            db.session.commit()
+
+
 def test_the_1d_chart_reports_where_its_line_came_from(client, panel_live):
     """The panel's 1D provenance makes a sparse line honest to its reader."""
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
