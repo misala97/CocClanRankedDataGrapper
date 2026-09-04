@@ -467,6 +467,15 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   // already says RANKED BY CHATTER; one caption over one tier would be a
   // heading with nothing to distinguish from.
   const captions = payload.session !== 'closed' && ranked.length > 0
+  // ...unless the reader has marks. Then there ARE two things to tell apart,
+  // and the Watching caption alone cannot do it: it is a heading that starts
+  // its group, so with nothing heading the ranked rows the marks bleed
+  // straight into the board (reported 2026-09-04, market shut). One caption
+  // where the ownership changes, which is exactly what the tier captions are
+  // for. All ranked rows are chatter with the exchange shut, so it is the
+  // chatter caption that belongs here.
+  const marksNeedABoundary = (
+    !captions && watchRows.length > 0 && chatter.rows.length > 0)
   const thin = thinBaselineOf(shared)
 
   const renderRow = (row: Row) => (
@@ -549,7 +558,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
                            reason={thin ? UNIVERSAL[thin] : null} />
             )}
             {scored.rows.map(renderRow)}
-            {captions && chatter.rows.length > 0 && (
+            {(captions || marksNeedABoundary) && chatter.rows.length > 0 && (
               <TierCaption tier="chatter" windowHours={payload.window_hours}
                            count={chatter.rows.length} reason={null} />
             )}

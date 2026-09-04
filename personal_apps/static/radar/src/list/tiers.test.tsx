@@ -186,3 +186,33 @@ describe('a sorted board', () => {
     expect(screen.getByText('Watching')).toBeTruthy()
   })
 })
+
+describe('marks against a shut exchange', () => {
+  const shut = { session: 'closed' as const }
+
+  it('heads the ranked rows so the marks do not bleed into the board', () => {
+    /* The Watching caption STARTS its group; it cannot also end it. With
+       the exchange shut every caption was suppressed, so a reader with
+       marks saw their rows run straight into the ranked ones with nothing
+       between (reported 2026-09-04). */
+    const rows = [row('AAA', null), row('BBB', null)]
+    render(<ListPane payload={payload({ ...shut, rows, watch_rows: [row('ZZZ', null)] })}
+                     selection={selection} selected={null} busy={false}
+                     onSelect={() => {}} onChange={() => {}} watching={['ZZZ']} />)
+
+    expect(screen.getByText('Watching')).toBeTruthy()
+    expect(screen.getByText(/Chatter only/)).toBeTruthy()
+  })
+
+  it('still says nothing when there are no marks to tell apart', () => {
+    /* The original rule, unchanged: one caption over one tier is a heading
+       with nothing to distinguish from, and the status line already says
+       RANKED BY CHATTER. */
+    const rows = [row('AAA', null), row('BBB', null)]
+    render(<ListPane payload={payload({ ...shut, rows })} selection={selection}
+                     selected={null} busy={false} onSelect={() => {}}
+                     onChange={() => {}} />)
+
+    expect(screen.queryByText(/Chatter only/)).toBeNull()
+  })
+})
