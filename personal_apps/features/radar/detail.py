@@ -375,23 +375,27 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
         priced_from = 'intraday'
         if sum(1 for close in closes if close is not None) < MIN_INTRADAY_POINTS:
             from . import history
-            basis = history.resolve_basis(ticker, quote, 3, now.date())
-            if basis.closes:
-                basis_market, basis_mic = basis.market, basis.mic
+            candidate_basis = history.resolve_basis(ticker, quote, 3,
+                                                    now.date())
+            if candidate_basis.closes:
+                basis_market, basis_mic = (candidate_basis.market,
+                                           candidate_basis.mic)
             else:
                 basis_market, basis_mic = market, mic
-            native_basis = (not basis.closes
-                            or (basis.market == quote.market
-                                and basis.mic == quote.mic
-                                and basis.converted_from is None))
+            native_basis = (not candidate_basis.closes
+                            or (candidate_basis.market == quote.market
+                                and candidate_basis.mic == quote.mic
+                                and candidate_basis.converted_from is None))
             anchored = _daily_anchors(
                 ticker, start, now, step_minutes, slots,
-                dict(basis.closes), market=basis_market, mic=basis_mic,
+                dict(candidate_basis.closes), market=basis_market,
+                mic=basis_mic,
                 use_quote_prints=native_basis)
             if sum(1 for close in anchored
                    if close is not None) >= MIN_INTRADAY_POINTS:
                 closes = anchored
                 priced_from = 'daily'
+                basis = candidate_basis
     else:
         from . import history
         days = int(slots * step_minutes / 1440) + 2

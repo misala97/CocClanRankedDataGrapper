@@ -702,6 +702,46 @@ def test_one_quote_in_the_day_falls_back_to_daily_closes(clean_intraday):
         assert len([price for price in chart.closes if price is not None]) >= 2
 
 
+def test_rejected_daily_anchors_keep_intraday_quote_provenance(clean_intraday):
+    """A thin foreign basis must not relabel the surviving native quote."""
+    ticker = f'{PREFIX}REJECT'
+    quote_view = _Quote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+    with flask_app.app_context():
+        db.session.add_all([
+            RadarInstrument(
+                ticker=ticker, market='de', venue='Tradegate BSX',
+                mic='XGAT', provider_symbol='ZZTG', currency='EUR',
+                isin='DE000ZZTST06', is_primary=True,
+                mapping_status='mapped', mapped_at=NOW),
+            RadarInstrument(
+                ticker=ticker, market='de', venue='Xetra', mic='XETR',
+                provider_symbol='ZZXE', currency='EUR',
+                isin='DE000ZZTST06', is_primary=False,
+                mapping_status='mapped', mapped_at=NOW),
+            RadarQuote(
+                ticker=ticker, market='de', mic='XGAT', currency='EUR',
+                fetched_at=NOW - dt.timedelta(minutes=10),
+                quote_ts=NOW - dt.timedelta(minutes=10),
+                price=decimal.Decimal('99.00')),
+        ])
+        for back, price in ((1, '42.50'), (2, '41.00')):
+            db.session.add(RadarDailyClose(
+                ticker=ticker, market='de', mic='XETR', currency='EUR',
+                close_date=NOW.date() - dt.timedelta(days=back),
+                close=decimal.Decimal(price), fetched_at=NOW,
+                source='yahoo_chart', adjustment_basis='split',
+                is_shadow=False))
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(
+            ticker, ['bluesky'], NOW, '1D', quote=quote_view)
+
+        assert chart.priced_from == 'intraday'
+        assert 99.0 in [price for price in chart.closes if price is not None]
+        assert chart.basis_venue == 'Tradegate BSX'
+        assert chart.converted_from is None
+
+
 def test_the_1d_chart_reports_where_its_line_came_from(client, panel_live):
     """The panel's 1D provenance makes a sparse line honest to its reader."""
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
@@ -718,10 +758,8 @@ def test_the_1d_chart_reports_where_its_line_came_from(client, panel_live):
     assert response.status_code == 200
     chart = response.get_json()['chart']
     real = [close for close in chart['closes'] if close is not None]
-    if chart['priced_from'] == 'intraday':
-        assert len(real) >= 2
-    else:
-        assert chart['basis_venue'] is not None
+    assert chart['priced_from'] == 'intraday'
+    assert len(real) >= 2
 
 
 def test_a_german_intraday_chart_never_splices_usd_quote_history(clean_intraday):
