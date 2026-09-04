@@ -168,64 +168,123 @@ def closes_for(tickers, days=HISTORY_DAYS, today=None, *, market='us', mic=None)
     return dict(series)
 
 
+# A line needs two points. One stored close is a dot, and a dot drawn as a
+# price line is a claim about a trend that one number cannot support.
+MIN_BASIS_CLOSES = 2
+
+
 @dataclasses.dataclass(frozen=True)
-class HistorySeries:
-    """One identity's composed daily series plus its provenance seam."""
-    closes: tuple
-    history_proxy: bool
-    proxy_mic: str | None
-    proxy_venue: str | None
-    native_mic: str | None
-    native_venue: str | None
-    native_from: dt.date | None
+class HistoryBasis:
+    """Where one chart's price line actually came from.
 
+    The venue that QUOTES a ticker and the venue that has its HISTORY are
+    different questions, and the panel used to answer both with the quote.
+    On the German board that made a Nasdaq listing read its two stored
+    Tradegate closes instead of its 780 stored Nasdaq ones.
 
-def series_for(ticker, market, mic, days, today):
-    """The chartable series for one exact identity, with one honest seam.
-
-    For a Tradegate-primary instrument, verified Xetra closes may fill the
-    OLDER portion only -- exact same ISIN, EUR, and strictly before the
-    first native Tradegate date. From that date on, missing Tradegate days
-    stay missing rather than being silently patched (spec §8.2). Every
-    other identity returns its native rows with no proxy.
+    `currency` is the currency `closes` is expressed in, which the axis and
+    the hover read. `converted_from` is set only when these closes were
+    priced in another currency and converted here -- the renderer states it
+    beside the chart, because a converted line must never read as native.
     """
-    native = tuple(closes_for([ticker], days=days, today=today,
-                              market=market, mic=mic).get(ticker, []))
-    if market != 'de' or mic != 'XGAT':
-        return HistorySeries(closes=native, history_proxy=False,
-                             proxy_mic=None, proxy_venue=None,
-                             native_mic=mic, native_venue=None,
-                             native_from=None)
+    closes: tuple
+    market: str | None
+    mic: str | None
+    venue: str | None
+    currency: str | None
+    converted_from: str | None
+
+
+EMPTY_BASIS = HistoryBasis(closes=(), market=None, mic=None, venue=None,
+                           currency=None, converted_from=None)
+
+
+def _native_basis(ticker, quote, days, today):
+    rows = closes_for([ticker], days=days, today=today,
+                      market=quote.market, mic=quote.mic).get(ticker, [])
+    return HistoryBasis(closes=tuple(rows), market=quote.market,
+                        mic=quote.mic, venue=quote.venue,
+                        currency=quote.currency, converted_from=None)
+
+
+def _sibling_basis(ticker, quote, days, today):
+    """The other venue in the same market, when it is provably the same paper.
+
+    Same ISIN, both non-null, same currency. That is the §8.2 test the old
+    Xetra proxy used, moved here: it was always a question about which
+    series may stand in for which, and never about how to stitch them.
+    """
+    from models import RadarInstrument
+    rows = RadarInstrument.query.filter_by(
+        ticker=ticker, market=quote.market).all()
+    here = next((r for r in rows if r.mic == quote.mic), None)
+    if here is None or here.isin is None:
+        return None
+    sibling = next((r for r in rows
+                    if r.mic != quote.mic and r.isin == here.isin
+                    and r.currency == here.currency), None)
+    if sibling is None:
+        return None
+    closes = closes_for([ticker], days=days, today=today,
+                        market=sibling.market, mic=sibling.mic).get(ticker, [])
+    return HistoryBasis(closes=tuple(closes), market=sibling.market,
+                        mic=sibling.mic, venue=sibling.venue,
+                        currency=sibling.currency, converted_from=None)
+
+
+def _converted_basis(ticker, quote, days, today):
+    """The primary US listing, in the quote's currency.
+
+    Only EUR is served, because only the German board asks. A pair we cannot
+    price returns None rather than an unconverted dollar series: a USD line
+    under a EUR axis label is the exact lie this whole basis exists to stop.
+    """
+    if quote.currency != 'EUR':
+        return None
 
     from models import RadarInstrument
-    rows = {row.mic: row for row in RadarInstrument.query.filter_by(
-        ticker=ticker, market='de').all()}
-    xgat = rows.get('XGAT')
-    xetr = rows.get('XETR')
-    proxy_allowed = (
-        xgat is not None and xetr is not None and
-        xgat.isin is not None and xgat.isin == xetr.isin and
-        xgat.currency == 'EUR' and xetr.currency == 'EUR')
-    if not proxy_allowed:
-        return HistorySeries(closes=native, history_proxy=False,
-                             proxy_mic=None, proxy_venue=None,
-                             native_mic='XGAT', native_venue='Tradegate BSX',
-                             native_from=None)
+    us = (RadarInstrument.query
+          .filter_by(ticker=ticker, market='us', is_primary=True)
+          .first())
+    if us is None:
+        return None
 
-    xetra = closes_for([ticker], days=days, today=today,
-                       market='de', mic='XETR').get(ticker, [])
-    native_by_day = dict(native)
-    native_from = min(native_by_day) if native_by_day else None
-    proxy = {day: close for day, close in xetra
-             if native_from is None or day < native_from}
-    combined = {**proxy, **native_by_day}
-    return HistorySeries(
-        closes=tuple(sorted(combined.items())),
-        history_proxy=bool(proxy),
-        proxy_mic='XETR' if proxy else None,
-        proxy_venue='Xetra' if proxy else None,
-        native_mic='XGAT', native_venue='Tradegate BSX',
-        native_from=native_from)
+    closes = closes_for([ticker], days=days, today=today,
+                        market='us', mic=us.mic).get(ticker, [])
+    if not closes:
+        return None
+
+    from . import fx
+    series = fx.rate_series(min(day for day, _ in closes), today)
+    converted = fx.convert_usd_to_eur(closes, series)
+    if not converted:
+        return None
+    return HistoryBasis(closes=converted, market='us', mic=us.mic,
+                        venue=us.venue, currency='EUR', converted_from='USD')
+
+
+def resolve_basis(ticker, quote, days, today):
+    """The chartable series for one ticker over `days`, and where it is from.
+
+    Candidates in precedence order -- the quote's own venue, the ISIN-matched
+    sibling, the converted US primary -- and the one with the MOST closes in
+    the span wins. `max` keeps the first of equal counts, so precedence breaks
+    ties. Evaluated per span on purpose: a ticker may have a deep Xetra month
+    and a deeper converted three years, and each span should draw the most
+    price it can while saying which venue that was.
+
+    Fewer than MIN_BASIS_CLOSES is not a candidate at all. When nothing
+    qualifies the caller gets EMPTY_BASIS and the panel says so, which is the
+    honest answer and the one the renderer already draws.
+    """
+    candidates = [_native_basis(ticker, quote, days, today),
+                  _sibling_basis(ticker, quote, days, today),
+                  _converted_basis(ticker, quote, days, today)]
+    usable = [c for c in candidates
+              if c is not None and len(c.closes) >= MIN_BASIS_CLOSES]
+    if not usable:
+        return EMPTY_BASIS
+    return max(usable, key=lambda c: len(c.closes))
 
 
 def tickers_needing_history(candidates, today, stale_after_days=STALE_AFTER_DAYS,
