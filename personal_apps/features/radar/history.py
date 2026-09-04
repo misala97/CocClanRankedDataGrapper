@@ -255,7 +255,9 @@ def _converted_basis(ticker, quote, days, today):
         return None
 
     from . import fx
-    series = fx.rate_series(min(day for day, _ in closes), today)
+    first_close = min(day for day, _ in closes)
+    series = fx.rate_series(
+        first_close - dt.timedelta(days=fx.MAX_CARRY_DAYS), today)
     converted = fx.convert_usd_to_eur(closes, series)
     if not converted:
         return None

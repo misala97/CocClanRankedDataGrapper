@@ -15,8 +15,10 @@ from extensions import db
 from features.radar import fx, history
 from models import RadarDailyClose, RadarFxRate, RadarInstrument
 
-TODAY = dt.date(2026, 9, 4)
-NOW = dt.datetime(2026, 9, 4, 20, 0, 0)
+# Deliberately predates the ECB's 1999 series, so these EUR/USD fixtures can
+# never overwrite or delete the local development store's real rows.
+TODAY = dt.date(1990, 1, 7)
+NOW = dt.datetime(1990, 1, 7, 20, 0, 0)
 PREFIX = 'HB'
 
 
@@ -141,6 +143,29 @@ def test_converted_us_history_wins_when_germany_has_nothing(clean):
     assert basis.converted_from == 'USD'
     # Parity rate of 2.0 -- ten dollars is five euros.
     assert basis.closes[0][1] == decimal.Decimal('5.0000')
+
+
+def test_conversion_loads_the_rate_before_a_non_publication_day(clean):
+    """A Saturday close can use Friday's rate at the query-window edge."""
+    ticker = f'{PREFIX}EDGE'
+    for day in (dt.date(1990, 1, 6), dt.date(1990, 1, 7)):
+        db.session.add(RadarDailyClose(
+            ticker=ticker, market='us', mic='XNMS', currency='USD',
+            close_date=day, close=decimal.Decimal('10.00'), fetched_at=NOW))
+    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR',
+               'GB00TEST0003')
+    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD', None)
+    fx.record_rates([(dt.date(1990, 1, 5), decimal.Decimal('2.0000'))],
+                    NOW, source='test-basis')
+    db.session.commit()
+
+    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
+
+    assert basis.converted_from == 'USD'
+    assert basis.closes == (
+        (dt.date(1990, 1, 6), decimal.Decimal('5.0000')),
+        (dt.date(1990, 1, 7), decimal.Decimal('5.0000')),
+    )
 
 
 def test_conversion_is_skipped_without_stored_rates(clean):

@@ -259,7 +259,7 @@ def watched_slots(sources, start, now, step_minutes, slots):
 
 
 def _daily_anchors(ticker, start, now, step_minutes, slots, stored, *,
-                   market='us', mic=None):
+                   market='us', mic=None, use_quote_prints=True):
     """Up to three REAL prints per trading day, else that day's close.
 
     The week line wants more shape than one close per day, and the quote
@@ -274,12 +274,14 @@ def _daily_anchors(ticker, start, now, step_minutes, slots, stored, *,
     """
     from .market_calendars import session_bounds, session_state
 
-    prints = (db.session.query(RadarQuote.quote_ts, RadarQuote.price)
-              .filter(*quotes_mod._quote_matches(ticker, market, mic),
-                      RadarQuote.quote_ts.isnot(None),
-                      RadarQuote.quote_ts >= start,
-                      RadarQuote.quote_ts < now)
-              .order_by(RadarQuote.quote_ts).all())
+    prints = []
+    if use_quote_prints:
+        prints = (db.session.query(RadarQuote.quote_ts, RadarQuote.price)
+                  .filter(*quotes_mod._quote_matches(ticker, market, mic),
+                          RadarQuote.quote_ts.isnot(None),
+                          RadarQuote.quote_ts >= start,
+                          RadarQuote.quote_ts < now)
+                  .order_by(RadarQuote.quote_ts).all())
 
     prices = [None] * slots
     day = start.date()
@@ -345,9 +347,18 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
         from . import history
         days = int(slots * step_minutes / 1440) + 2
         basis = history.resolve_basis(ticker, quote, days, now.date())
+        if basis.closes:
+            basis_market, basis_mic = basis.market, basis.mic
+        else:
+            basis_market, basis_mic = market, mic
+        native_basis = (bool(basis.closes)
+                        and basis.market == quote.market
+                        and basis.mic == quote.mic
+                        and basis.converted_from is None)
         closes = _daily_anchors(
             ticker, start, now, step_minutes, slots,
-            dict(basis.closes), market=market, mic=mic)
+            dict(basis.closes), market=basis_market, mic=basis_mic,
+            use_quote_prints=native_basis)
     counts, _seen = intraday_counts(ticker, sources, start, now,
                                     step_minutes, slots)
     covered = watched_slots(sources, start, now, step_minutes, slots)

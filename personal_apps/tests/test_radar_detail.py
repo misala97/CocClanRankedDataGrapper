@@ -816,13 +816,23 @@ def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_sibling(
                 close=decimal.Decimal(price), fetched_at=NOW,
                 source='yahoo_chart', adjustment_basis='split',
                 is_shadow=False))
+        # A real Tradegate print must not leak into a chart whose selected
+        # basis is Xetra. The chart's venue label and prices stay one claim.
+        db.session.add(RadarQuote(
+            ticker=ticker, market='de', mic='XGAT', currency='EUR',
+            fetched_at=NOW - dt.timedelta(days=1, hours=3),
+            quote_ts=NOW - dt.timedelta(days=1, hours=3),
+            price=decimal.Decimal('99.00')))
         db.session.commit()
 
         chart = detail.intraday_chart_for(
             ticker, ['bluesky'], NOW, '1W',
             quote=_Quote('de', 'XGAT', 'Tradegate BSX', 'EUR'))
 
-        assert 42.5 in [price for price in chart.closes if price is not None]
+        prices = [price for price in chart.closes if price is not None]
+        assert 42.5 in prices
+        assert 41.0 in prices
+        assert 99.0 not in prices
         assert chart.basis_venue == 'Xetra'
         assert chart.currency == 'EUR'
         assert chart.converted_from is None
