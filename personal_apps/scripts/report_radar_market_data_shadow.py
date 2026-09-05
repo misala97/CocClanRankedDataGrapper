@@ -346,17 +346,20 @@ def _grouped_gate(session, end, us_close_audit, instrument_map_sha):
         truth.append('conflicting grouped duplicate symbols: %s' %
                      [d.isoformat() for d in duplicate_days[:5]])
 
-    # Recompute current-active coverage from current identities and persisted
-    # closes. The ingestion-time counters are diagnostic only.
+    # Recompute date-aware active coverage from current identities and
+    # persisted closes. The ingestion-time counters are diagnostic only.
     instrument_map, _ = market_data.grouped_instrument_map()
-    active_tickers = set(market_data.active_price_tickers(end))
+    active_symbols_by_day = market_data.grouped_active_symbols_by_day(
+        expected, end, instrument_map)
     active_symbols = {
-        (identity.ticker, identity.mic): symbol
-        for symbol, identity in instrument_map.items()
-        if identity.ticker in active_tickers
+        day: {(identity.ticker, identity.mic): symbol
+              for symbol, identity in symbols.items()}
+        for day, symbols in active_symbols_by_day.items()
     }
+    all_active_keys = set().union(*active_symbols.values()) if \
+        active_symbols else set()
     present_by_day = {day: set() for day in expected}
-    if active_symbols and expected:
+    if all_active_keys and expected:
         active_rows = (session.query(
             RadarDailyClose.close_date, RadarDailyClose.ticker,
             RadarDailyClose.mic)
@@ -366,35 +369,42 @@ def _grouped_gate(session, end, us_close_audit, instrument_map_sha):
                     RadarDailyClose.close_date.in_(expected),
                     sa.tuple_(RadarDailyClose.ticker,
                               RadarDailyClose.mic).in_(
-                                  list(active_symbols))).all())
+                                  list(all_active_keys))).all())
         for close_date, ticker, mic in active_rows:
             present_by_day[close_date].add((ticker, mic))
 
     coverage_gaps = []
     unmatched_universe = set()
     coverage_values = []
-    if not active_symbols:
+    if not all_active_keys:
         incomplete.append('zero active denominator for grouped coverage')
     else:
-        denominator = decimal.Decimal(len(active_symbols))
         for expected_day in expected:
-            present = present_by_day[expected_day]
-            coverage = decimal.Decimal(len(present)) / denominator
+            expected_symbols = active_symbols[expected_day]
+            if not expected_symbols:
+                coverage_gaps.append({
+                    'date': expected_day.isoformat(), 'matched': 0,
+                    'expected': 0, 'ratio': None,
+                })
+                continue
+            present = present_by_day[expected_day] & set(expected_symbols)
+            coverage = (decimal.Decimal(len(present)) /
+                        decimal.Decimal(len(expected_symbols)))
             coverage_values.append(coverage)
-            missing_keys = set(active_symbols) - present
-            unmatched_universe.update(active_symbols[key]
+            missing_keys = set(expected_symbols) - present
+            unmatched_universe.update(expected_symbols[key]
                                       for key in missing_keys)
             if coverage < MIN_GROUPED_ACTIVE_COVERAGE:
                 coverage_gaps.append({
                     'date': expected_day.isoformat(),
                     'matched': len(present),
-                    'expected': len(active_symbols),
+                    'expected': len(expected_symbols),
                     'ratio': str(coverage),
                 })
         if coverage_gaps:
             incomplete.append(
                 f'{len(coverage_gaps)} expected trading days are below '
-                'current-active grouped coverage')
+                'historically eligible grouped coverage')
 
     # Agreement over the most recent expected dates: recomputed from
     # persisted shadow rows against incumbent live closes.
@@ -525,7 +535,7 @@ def _grouped_gate(session, end, us_close_audit, instrument_map_sha):
     evidence['audit_problems'] = audit_problems
     evidence['report_sha256'] = report_sha
     passed = (not missing and not thin and not duplicate_days and
-              not coverage_gaps and active_symbols and
+              not coverage_gaps and all_active_keys and
               not split_candidates and not basis_conflicts and
               not delta_failures and
               len(agreement_days) >= MIN_GROUPED_AGREEMENT_DAYS and

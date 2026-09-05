@@ -420,6 +420,53 @@ def test_us_universe_dry_run_counts_unaccepted_trading_days(
     assert 'next resume key:' in out
 
 
+def test_us_universe_backfill_reports_periodic_progress(
+        ctx, monkeypatch, capsys):
+    """A long rate-limited run exposes progress before its final summary."""
+    from scripts import backfill_radar_market_history as cli
+    from features.radar import market_data as md
+    from features.radar.prices import massive
+
+    days = [dt.date(2099, 1, day) for day in range(1, 13)]
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    monkeypatch.setattr(cli, '_us_trading_days', lambda newest, depth: days)
+    monkeypatch.setattr(massive, 'MassiveProvider', lambda http: object())
+    monkeypatch.setattr(
+        md, 'ingest_grouped_day',
+        lambda provider, day, now: type('Result', (), {
+            'status': 'accepted' if day.day != 11 else 'rejected'})())
+
+    assert cli.main(['--market', 'us-universe', '--apply']) == 0
+
+    out = capsys.readouterr().out
+    assert 'starting 12 trading days' in out
+    assert 'progress 10/12 (83.3%) accepted=10 failed=0' in out
+    assert 'progress 12/12 (100.0%) accepted=11 failed=1' in out
+
+
+def test_instrument_backfill_reports_progress(
+        ctx, monkeypatch, capsys):
+    """Instrument history backfills also remain visible while they run."""
+    from scripts import backfill_radar_market_history as cli
+    from features.radar.prices import yahoo
+
+    target = type('Target', (), {
+        'ticker': f'{PREFIX}GA', 'mic': 'XETR', 'provider_symbol': f'{PREFIX}GA',
+        'market': 'de', 'currency': 'EUR'})()
+    monkeypatch.setattr(cli, '_instrument_targets',
+                        lambda market, now: [target])
+    monkeypatch.setattr(
+        yahoo, 'YahooProvider',
+        lambda http: type('Provider', (), {
+            'daily_closes': lambda self, symbol, days, mic_code: []})())
+
+    assert cli.main(['--market', 'de', '--apply']) == 0
+
+    out = capsys.readouterr().out
+    assert 'de: starting 1 instruments' in out
+    assert 'de: progress 1/1 (100.0%) stored=0' in out
+
+
 def test_instrument_dry_run_reports_the_resume_key(ctx, monkeypatch, capsys):
     from scripts import backfill_radar_market_history as cli
     from features.radar import market_data as md
@@ -638,6 +685,34 @@ def test_grouped_ingest_writes_shadow_rows_and_accepted_state(
         is_shadow=True).one()
     assert state.status == 'accepted'
     assert state.active_matched == state.active_expected == 1
+
+
+def test_grouped_ingest_excludes_pre_ipo_tickers_from_historical_coverage(
+        grouped_ctx, monkeypatch):
+    """A symbol cannot be a coverage miss before its provider IPO date."""
+    import decimal as _decimal
+    from models import RadarGroupedCloseDay, TickerUniverse
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    tickers = [f'{PREFIX}GA', f'{PREFIX}GB']
+    monkeypatch.setattr(market_data, 'active_price_tickers',
+                        lambda now: tickers)
+    for ticker in tickers:
+        _us_instrument(ticker)
+    TickerUniverse.query.filter_by(symbol=f'{PREFIX}GB').one().ipo_date = (
+        NOW.date() + dt.timedelta(days=1))
+    db.session.commit()
+
+    result = market_data.ingest_grouped_day(
+        OneDayProvider(_accepted_fetch(
+            {f'{PREFIX}GA': _decimal.Decimal('55.25')})),
+        NOW.date(), NOW)
+
+    assert result.status == 'accepted'
+    assert (result.active_matched, result.active_expected) == (1, 1)
+    state = RadarGroupedCloseDay.query.filter_by(
+        source='massive_grouped', close_date=NOW.date(),
+        is_shadow=True).one()
+    assert (state.active_matched, state.active_expected) == (1, 1)
 
 
 def test_grouped_ingest_below_floor_rejects_and_stays_retryable(

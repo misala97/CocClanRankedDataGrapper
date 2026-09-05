@@ -157,7 +157,7 @@ def grouped_gate_evidence(ctx, monkeypatch):
     """Three compact expected days with two exact mapped identities."""
     from features.radar import market_data
     from features.radar import market_calendars
-    from models import RadarDailyClose, RadarGroupedCloseDay
+    from models import RadarDailyClose, RadarGroupedCloseDay, TickerUniverse
 
     dates = tuple(NOW.date() - dt.timedelta(days=offset)
                   for offset in (4, 3, 2, 1))
@@ -177,6 +177,13 @@ def grouped_gate_evidence(ctx, monkeypatch):
                         lambda: (identities, []))
     monkeypatch.setattr(market_data, 'active_price_tickers',
                         lambda now: ['RPG1A', 'RPG1B'])
+    TickerUniverse.query.filter(
+        TickerUniverse.symbol.in_(['RPG1A', 'RPG1B'])).delete(
+            synchronize_session=False)
+    db.session.add_all([
+        TickerUniverse(symbol='RPG1A', name='RPG1A', first_seen=NOW),
+        TickerUniverse(symbol='RPG1B', name='RPG1B', first_seen=NOW),
+    ])
 
     for day in dates:
         db.session.add(RadarGroupedCloseDay(
@@ -225,6 +232,9 @@ def grouped_gate_evidence(ctx, monkeypatch):
         RadarGroupedCloseDay.source == 'massive_grouped',
         RadarGroupedCloseDay.is_shadow.is_(True)).delete(
             synchronize_session=False)
+    TickerUniverse.query.filter(
+        TickerUniverse.symbol.in_(['RPG1A', 'RPG1B'])).delete(
+            synchronize_session=False)
     db.session.commit()
 
 
@@ -259,6 +269,43 @@ def test_grouped_gate_recomputes_active_coverage_from_shadow_rows(
     report = grouped_gate_evidence.build(audit=None)
     assert report.gate('grouped_agreement').passed is False
     assert report.grouped_informational['active_coverage_gaps']
+
+
+def test_grouped_gate_excludes_pre_ipo_tickers_from_historical_coverage(
+        grouped_gate_evidence):
+    """The activation report must use the same date-aware denominator."""
+    from models import RadarDailyClose, TickerUniverse
+    day = grouped_gate_evidence.dates[0]
+    TickerUniverse.query.filter_by(symbol='RPG1B').one().ipo_date = (
+        day + dt.timedelta(days=1))
+    RadarDailyClose.query.filter_by(
+        ticker='RPG1B', close_date=day, source='massive_grouped',
+        is_shadow=True).delete()
+    db.session.commit()
+
+    report = grouped_gate_evidence.build(audit=None)
+
+    assert report.grouped_informational['active_coverage_gaps'] == []
+    assert report.grouped_informational['active_coverage_min'] == '1'
+
+
+def test_grouped_gate_does_not_count_a_pre_ipo_row_as_coverage(
+        grouped_gate_evidence):
+    """An old pre-IPO close cannot cover for a missing eligible ticker."""
+    from models import RadarDailyClose, TickerUniverse
+    day = grouped_gate_evidence.dates[0]
+    TickerUniverse.query.filter_by(symbol='RPG1B').one().ipo_date = (
+        day + dt.timedelta(days=1))
+    RadarDailyClose.query.filter_by(
+        ticker='RPG1A', close_date=day, source='massive_grouped',
+        is_shadow=True).delete()
+    db.session.commit()
+
+    report = grouped_gate_evidence.build(audit=None)
+
+    assert report.grouped_informational['active_coverage_gaps'] == [{
+        'date': day.isoformat(), 'matched': 0, 'expected': 1, 'ratio': '0',
+    }]
 
 
 def test_grouped_gate_blocks_persisted_duplicate_conflicts(

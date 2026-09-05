@@ -77,10 +77,10 @@ def _run_instruments(args, now):
 
     provider = yahoo.YahooProvider(yahoo.YahooHttp())
     stored = 0
-    attempted = 0
     last_key = None
-    for row in targets:
-        attempted += 1
+    total = len(targets)
+    print(f'{args.market}: starting {total} instruments')
+    for attempted, row in enumerate(targets, start=1):
         last_key = f'{row.ticker}:{row.mic}'
         symbol = row.provider_symbol
         if args.market == 'de':
@@ -90,15 +90,18 @@ def _run_instruments(args, now):
         history_mic = 'XETR' if args.market == 'de' else row.mic
         closes = provider.daily_closes(
             symbol, history.HISTORY_DAYS, mic_code=history_mic)
-        if not closes:
-            continue
-        currency = 'EUR' if args.market == 'de' else row.currency
-        history.record_closes(
-            row.ticker, closes, now, market=row.market, mic=row.mic,
-            currency=currency, source='yahoo_chart',
-            adjustment_basis='split')
-        stored += 1
-    print(f'{args.market}: attempted={attempted} stored={stored} '
+        if closes:
+            currency = 'EUR' if args.market == 'de' else row.currency
+            history.record_closes(
+                row.ticker, closes, now, market=row.market, mic=row.mic,
+                currency=currency, source='yahoo_chart',
+                adjustment_basis='split')
+            stored += 1
+        if attempted % 10 == 0 or attempted == total:
+            print(f'{args.market}: progress {attempted}/{total} '
+                  f'({attempted / total:.1%}) stored={stored} '
+                  f'current={last_key}')
+    print(f'{args.market}: attempted={total} stored={stored} '
           f'last_key={last_key}')
     return 0
 
@@ -156,13 +159,21 @@ def _run_universe(args, now):
 
     provider = massive.MassiveProvider(massive.MassiveHttp())
     counts = {'accepted': 0, 'failed': 0}
-    for day in days:
+    total = len(days)
+    print(f'us-universe: starting {total} trading days '
+          f'(~{total / 5:.0f} minutes at 5 calls/minute)')
+    for attempted, day in enumerate(days, start=1):
         result = market_data.ingest_grouped_day(provider, day, now)
         if result.status == 'accepted':
             counts['accepted'] += 1
         else:
             counts['failed'] += 1
             print(f'{day}: {result.status}')
+        if attempted % 10 == 0 or attempted == total:
+            print(f'us-universe: progress {attempted}/{total} '
+                  f'({attempted / total:.1%}) '
+                  f'accepted={counts["accepted"]} '
+                  f'failed={counts["failed"]} current={day}')
     print(f'us-universe: attempted={len(days)} accepted={counts["accepted"]} '
           f'failed={counts["failed"]}')
     return 0

@@ -634,6 +634,40 @@ def grouped_instrument_map():
     return found, sorted(ambiguous)
 
 
+def grouped_active_symbols_by_day(days, now, instrument_map=None):
+    """Mapped active US symbols eligible to trade on each historical day.
+
+    ``ipo_date`` is provider metadata, so a known future IPO excludes that
+    ticker only before it listed.  Missing IPO metadata stays in the
+    denominator: an unknown listing date is not evidence that a provider
+    omission is harmless.
+    """
+    from models import TickerUniverse
+
+    days = tuple(days)
+    if instrument_map is None:
+        instrument_map, _ = grouped_instrument_map()
+    active = set(active_price_tickers(now))
+    candidates = {symbol: identity for symbol, identity in
+                  instrument_map.items() if identity.ticker in active}
+    if not candidates:
+        return {day: {} for day in days}
+
+    ipo_dates = dict(
+        TickerUniverse.query.with_entities(
+            TickerUniverse.symbol, TickerUniverse.ipo_date)
+        .filter(TickerUniverse.symbol.in_(
+            {identity.ticker for identity in candidates.values()})).all())
+    return {
+        day: {
+            symbol: identity for symbol, identity in candidates.items()
+            if ipo_dates.get(identity.ticker) is None or
+            ipo_dates[identity.ticker] <= day
+        }
+        for day in days
+    }
+
+
 @dataclasses.dataclass(frozen=True)
 class GroupedDayResult:
     day: dt.date
@@ -683,9 +717,8 @@ def ingest_grouped_day(provider, day, now):
     fetch = provider.grouped_closes(day)
 
     instrument_map, ambiguous = grouped_instrument_map()
-    active = set(active_price_tickers(now))
-    active_symbols = {symbol for symbol, identity in instrument_map.items()
-                      if identity.ticker in active}
+    active_symbols = set(grouped_active_symbols_by_day(
+        (day,), now, instrument_map)[day])
 
     def persist_state(status, *, written=0, mapped=0, unmatched_provider=0,
                       unmatched_universe=0, active_matched=0,
