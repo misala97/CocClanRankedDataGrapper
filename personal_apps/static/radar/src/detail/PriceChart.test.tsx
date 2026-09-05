@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { PLOT_R, PriceChart } from './PriceChart'
+import { ChartBasisNote, PLOT_R, PriceChart } from './PriceChart'
 import type { DetailChart } from '../types'
 
 const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
@@ -251,7 +251,7 @@ describe('the axis on an intraday span', () => {
 
 describe('the chart basis label', () => {
   it('states a converted basis beside the chart', () => {
-    render(<PriceChart chart={chart({
+    render(<ChartBasisNote chart={chart({
       closes: [1, 2, 3], currency: 'EUR',
       basis_venue: 'Nasdaq Global Market', converted_from: 'USD',
     })} />)
@@ -262,7 +262,7 @@ describe('the chart basis label', () => {
   })
 
   it('says nothing when the basis is the quote’s own venue', () => {
-    render(<PriceChart chart={chart({
+    render(<ChartBasisNote chart={chart({
       closes: [1, 2, 3], currency: 'EUR',
       basis_venue: 'Tradegate BSX', converted_from: null,
     })} quoteVenue="Tradegate BSX" />)

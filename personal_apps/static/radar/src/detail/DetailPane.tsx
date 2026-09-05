@@ -3,7 +3,7 @@ import { fetchDetail } from '../api'
 import { Breakdown } from './Breakdown'
 import { Identity } from './Identity'
 import { Posts } from './Posts'
-import { PriceChart } from './PriceChart'
+import { ChartBasisNote, PriceChart } from './PriceChart'
 import type { Detail, DetailChart, PanelSpan, Selection } from '../types'
 
 const SPANS: PanelSpan[] = ['1D', '1W', '1M', '6M', '1Y', '3Y']
@@ -299,12 +299,13 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
             ))}
           </span>
         </h3>
+        <ChartBasisNote chart={detail.chart}
+                        quoteVenue={detail.identity.quote.venue} />
         {/* Its own scroller. Below 900px the chart pans instead of being
             scaled until its axis is unreadable -- see radar.css. */}
         <div className="chartwrap" ref={chartScroller}
              aria-busy={revalidating || undefined}>
-          <PriceChart key={drawn} chart={detail.chart}
-                      quoteVenue={detail.identity.quote.venue} />
+          <PriceChart key={drawn} chart={detail.chart} />
         </div>
         {/* CSS shows this only at the widths where the chart pans. The right
             edge is the most recent price, so a chart silently cut off there

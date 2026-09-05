@@ -51,14 +51,23 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
  *  as 52 fragments (the gray wash names those days instead). On the intraday
  *  spans it breaks at gaps: an hour nobody quoted is a real absence.
  */
-export function PriceChart({ chart, quoteVenue }: {
+export function ChartBasisNote({ chart, quoteVenue }: {
   chart: DetailChart
-  /** The venue in the header. The basis note appears when the line came
-   *  from somewhere else. */
   quoteVenue?: string | null
 }) {
-  // The axis belongs to the LINE, not the headline price. They differ
-  // exactly when the basis is a converted foreign listing.
+  const currency = chart.currency ?? 'USD'
+  /* The basis is stated in text NEXT TO the chart, never in a tooltip: a
+   * converted or foreign-venue line must not read as native (spec §1/§3). */
+  const basisNote = !chart.basis_venue || chart.basis_venue === quoteVenue
+    ? null
+    : chart.converted_from
+      ? `${chart.basis_venue} closes, converted to ${currency} at the ECB daily rate`
+      : `${chart.basis_venue} closes${quoteVenue ? ` · quoted at ${quoteVenue}` : ''}`
+
+  return basisNote ? <p className="history-proxy-note">{basisNote}</p> : null
+}
+
+export function PriceChart({ chart }: { chart: DetailChart }) {
   const currency = chart.currency ?? 'USD'
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 
@@ -88,16 +97,7 @@ export function PriceChart({ chart, quoteVenue }: {
   // anything -- rules, dates, the gutter numbers -- and it fades in as one
   // piece. `.plot` is what was measured, and it wipes in along x, which is
   // time. One clip on one group keeps that affordable at the long spans.
-  /* The basis is stated in text NEXT TO the chart, never in a tooltip: a
-   * converted or foreign-venue line must not read as native (spec §1/§3). */
-  const basisNote = !chart.basis_venue || chart.basis_venue === quoteVenue
-    ? null
-    : chart.converted_from
-      ? `${chart.basis_venue} closes, converted to ${currency} at the ECB daily rate`
-      : `${chart.basis_venue} closes${quoteVenue ? ` · quoted at ${quoteVenue}` : ''}`
-
-  return (<>
-    {basisNote ? <p className="history-proxy-note">{basisNote}</p> : null}
+  return (
     <svg className="pxchart" viewBox={`0 0 ${W} ${H}`} role="img"
          aria-label={`price over ${chart.span} with chatter beneath${
            sessionContext ? `; extended sessions: ${sessionContext}` : ''}`}>
@@ -215,7 +215,7 @@ export function PriceChart({ chart, quoteVenue }: {
           three facts in words. Last, so it sits over everything it reads. */}
       <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} currency={currency} />
     </svg>
-  </>)
+  )
 }
 
 /** An axis label out in the gutter, tied to its own height by a tick. Without

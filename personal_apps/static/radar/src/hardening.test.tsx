@@ -591,6 +591,32 @@ describe('how old the board is', () => {
 describe('mobile continuity', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('keeps the chart basis note outside the horizontally panning plot', async () => {
+    const converted = detail()
+    converted.identity.quote = quote({
+      market: 'de', venue: 'Tradegate BSX', mic: 'XGAT', currency: 'EUR',
+    })
+    converted.chart = {
+      ...converted.chart,
+      currency: 'EUR', basis_venue: 'Nasdaq Global Market',
+      converted_from: 'USD',
+    }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      redirected: false,
+      status: 200,
+      json: async () => url.includes('/api/ticker/') ? converted : payload(),
+    })))
+
+    render(<BoardPage initial={payload()} />)
+    const note = await screen.findByText(
+      'Nasdaq Global Market closes, converted to EUR at the ECB daily rate')
+    const scroller = document.querySelector('.chartwrap')!
+
+    expect(scroller).not.toContainElement(note)
+    expect(note.nextElementSibling).toBe(scroller)
+  })
+
   it('offers a route from the loaded panel back to the selected row', async () => {
     render(<BoardPage initial={payload()} />)
     await screen.findByText(/AAA is being discussed/)
