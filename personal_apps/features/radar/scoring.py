@@ -50,13 +50,29 @@ def _rows_by_ticker(source, since, until, config_version):
     row overwritten with a freshly computed z from the CURRENT baseline, which
     disguises it as current data while its own source_config_version still
     says otherwise.
+
+    Core tuples, not ORM objects. A pass hydrates ~128k rows per source
+    across 36 sources; as mapped instances that peaked at 1.7 GB resident
+    and Python never returned it, which left the box with 200 MB free and
+    no swap. The nine columns below are everything the scoring loop reads,
+    and a Row weighs a fraction of an instance with its identity-map entry
+    and change tracking. Writes go through a bulk UPDATE instead (see
+    score_source), so nothing here needs to be a mapped object.
     """
-    rows = (RadarBucketSource.query
-            .filter(RadarBucketSource.source == source,
-                    RadarBucketSource.source_config_version == config_version,
-                    RadarBucketSource.bucket_start >= since,
-                    RadarBucketSource.bucket_start < until)
-            .all())
+    rows = db.session.execute(
+        sa.select(RadarBucketSource.ticker,
+                  RadarBucketSource.bucket_start,
+                  RadarBucketSource.mention_count,
+                  RadarBucketSource.status,
+                  RadarBucketSource.source_config_version,
+                  RadarBucketSource.expected,
+                  RadarBucketSource.variance,
+                  RadarBucketSource.mention_z,
+                  RadarBucketSource.baseline_days)
+        .where(RadarBucketSource.source == source,
+               RadarBucketSource.source_config_version == config_version,
+               RadarBucketSource.bucket_start >= since,
+               RadarBucketSource.bucket_start < until)).all()
 
     grouped = collections.defaultdict(list)
     for row in rows:
@@ -219,15 +235,33 @@ def score_source(source, now, lookback_days=30, excluded=None):
                          / max(variance, VARIANCE_FLOOR) ** 0.5)
             if not _worth_writing(row, expected, variance, mention_z, baseline_days):
                 continue
-            pending.append((row, expected, variance, mention_z, baseline_days))
+            pending.append({'b_ticker': row.ticker,
+                            'b_bucket_start': row.bucket_start,
+                            'expected': expected, 'variance': variance,
+                            'mention_z': mention_z,
+                            'baseline_days': baseline_days})
 
-    with buckets.BUCKET_WRITE_LOCK:
-        for row, expected, variance, mention_z, baseline_days in pending:
-            row.expected = expected
-            row.variance = variance
-            row.mention_z = mention_z
-            row.baseline_days = baseline_days
-        db.session.commit()
+    # One executemany against the primary key, rather than the unit of work
+    # flushing a mapped instance per row: the rows were never loaded as
+    # objects (see _rows_by_ticker), and the statement is the same UPDATE
+    # the ORM would have emitted. `source` is bound once -- a pass scores a
+    # single source -- so only the two varying key columns are per-row.
+    if pending:
+        # The Core table, not the mapped class: this is a plain executemany
+        # and asking the ORM to interpret it turns it into a bulk-update-by-
+        # primary-key that wants attribute keys instead of these bindparams.
+        table = RadarBucketSource.__table__
+        statement = (sa.update(table)
+                     .where(table.c.source == source,
+                            table.c.ticker == sa.bindparam('b_ticker'),
+                            table.c.bucket_start == sa.bindparam('b_bucket_start'))
+                     .values(expected=sa.bindparam('expected'),
+                             variance=sa.bindparam('variance'),
+                             mention_z=sa.bindparam('mention_z'),
+                             baseline_days=sa.bindparam('baseline_days')))
+        with buckets.BUCKET_WRITE_LOCK:
+            db.session.execute(statement, pending)
+            db.session.commit()
     return len(pending)
 
 
