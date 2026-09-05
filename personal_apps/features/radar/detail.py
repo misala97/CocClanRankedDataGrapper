@@ -294,7 +294,8 @@ def _daily_anchors(ticker, start, now, step_minutes, slots, stored, *,
 
     The week line wants more shape than one close per day, and the quote
     store has it -- but only where `quote_ts`, the provider's own print
-    time, actually falls inside that day's regular session. Selecting by
+    time, actually falls inside that day's regular session, with extended
+    session prints as the fallback when no regular print exists. Selecting by
     `fetched_at` would readmit the stale-repeat disease this replaced: a
     46-hour-old price re-fetched every five minutes for days, drawn as a
     flat crawl. Days with real prints get open-ish, midday-ish and
@@ -422,6 +423,7 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
 
     first_watched = min(covered) if covered else None
 
+    effective_basis = basis if basis is not None and basis.closes else None
     return Chart(
         start=start, closes=closes, chatter=chatter,
         watched_from=(start + dt.timedelta(
@@ -429,6 +431,8 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
                       if first_watched is not None else None),
         step_minutes=step_minutes,
         priced_from=priced_from,
-        currency=(basis.currency if basis is not None else quote.currency),
-        basis_venue=(basis.venue if basis is not None else quote.venue),
-        converted_from=(basis.converted_from if basis is not None else None))
+        currency=(effective_basis.currency
+                  if effective_basis else quote.currency),
+        basis_venue=(effective_basis.venue if effective_basis else quote.venue),
+        converted_from=(effective_basis.converted_from
+                        if effective_basis else None))

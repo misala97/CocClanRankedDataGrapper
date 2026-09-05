@@ -8,6 +8,42 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 
+def _load_plan_migration(filename, name):
+    path = Path(__file__).parents[1] / 'migrations' / 'versions' / filename
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class _DdlRecorder:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, statement):
+        self.calls.append(str(statement))
+
+
+@pytest.mark.parametrize('filename,name,expected', [
+    ('d4e7a1b93c25_add_radar_fx_rates.py', 'plan_fx', 'radar_fx_rates'),
+    ('e5f8b2ca4d36_add_instrument_history_due.py', 'plan_due',
+     'history_due_at'),
+])
+def test_plan_migrations_use_one_atomic_ddl_per_direction(
+        filename, name, expected):
+    migration = _load_plan_migration(filename, name)
+    recorder = _DdlRecorder()
+    migration.op = recorder
+
+    migration.upgrade()
+    assert len(recorder.calls) == 1
+    assert expected in recorder.calls[0]
+
+    recorder.calls.clear()
+    migration.downgrade()
+    assert len(recorder.calls) == 1
+
+
 def _load_source_width_migration():
     path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
             '08316d3e4d77_widen_radar_source_columns.py')

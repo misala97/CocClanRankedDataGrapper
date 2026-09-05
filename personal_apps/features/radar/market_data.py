@@ -239,7 +239,7 @@ def downloads_last_24h(now):
 
 def collect_german_cycle(provider, generation_id, active_tickers, now,
                          *, mode='shadow'):
-    """One five-minute collection pass over both channels of every mapped MIC."""
+    """One five-minute collection pass over both XGAT quote channels."""
     from .market_calendars import session_state
 
     aware = now if now.tzinfo else now.replace(tzinfo=dt.timezone.utc)

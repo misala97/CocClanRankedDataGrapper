@@ -279,9 +279,20 @@ def resolve_basis(ticker, quote, days, today):
     qualifies the caller gets EMPTY_BASIS and the panel says so, which is the
     honest answer and the one the renderer already draws.
     """
+    first_visible = today - dt.timedelta(days=max(days - 1, 0))
     candidates = [_native_basis(ticker, quote, days, today),
                   _sibling_basis(ticker, quote, days, today),
                   _converted_basis(ticker, quote, days, today)]
+    # closes_for intentionally includes `today-days` for other callers. A
+    # chart of N calendar days starts at today-(N-1), so choose the basis from
+    # the points the reader can actually see rather than an extra boundary row.
+    candidates = [
+        (dataclasses.replace(
+            candidate,
+            closes=tuple((day, close) for day, close in candidate.closes
+                         if first_visible <= day <= today))
+         if candidate is not None else None)
+        for candidate in candidates]
     usable = [c for c in candidates
               if c is not None and len(c.closes) >= MIN_BASIS_CLOSES]
     if not usable:

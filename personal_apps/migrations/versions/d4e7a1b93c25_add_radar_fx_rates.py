@@ -9,7 +9,6 @@ Create Date: 2026-09-05
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
 
 
 revision = 'd4e7a1b93c25'
@@ -19,23 +18,24 @@ depends_on = None
 
 
 def upgrade():
-    op.create_table(
-        'radar_fx_rates',
-        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
-        sa.Column('rate_date', sa.Date(), nullable=False),
-        sa.Column('base', sa.String(length=3), nullable=False),
-        sa.Column('quote', sa.String(length=3), nullable=False),
-        sa.Column('rate', sa.Numeric(18, 8), nullable=False),
-        sa.Column('source', sa.String(length=16), nullable=False),
-        sa.Column('fetched_at', mysql.DATETIME(fsp=6), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('rate_date', 'base', 'quote',
-                            name='uq_radar_fx_rate_day'),
-        mysql_charset='utf8mb4')
-    op.create_index('ix_radar_fx_rates_pair_day', 'radar_fx_rates',
-                    ['base', 'quote', 'rate_date'])
+    # MariaDB commits DDL. Keep the table, unique key, and lookup index in one
+    # atomic CREATE so a retry never meets a half-created schema.
+    op.execute(sa.text("""
+        CREATE TABLE radar_fx_rates (
+            id BIGINT NOT NULL AUTO_INCREMENT,
+            rate_date DATE NOT NULL,
+            base VARCHAR(3) NOT NULL,
+            quote VARCHAR(3) NOT NULL,
+            rate NUMERIC(18, 8) NOT NULL,
+            source VARCHAR(16) NOT NULL,
+            fetched_at DATETIME(6) NOT NULL,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_radar_fx_rate_day
+                UNIQUE (rate_date, base, quote),
+            KEY ix_radar_fx_rates_pair_day (base, quote, rate_date)
+        ) DEFAULT CHARSET=utf8mb4
+    """))
 
 
 def downgrade():
-    op.drop_index('ix_radar_fx_rates_pair_day', table_name='radar_fx_rates')
-    op.drop_table('radar_fx_rates')
+    op.execute(sa.text('DROP TABLE radar_fx_rates'))

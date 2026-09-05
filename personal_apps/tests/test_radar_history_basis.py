@@ -20,6 +20,10 @@ from models import RadarDailyClose, RadarFxRate, RadarInstrument
 TODAY = dt.date(1990, 1, 7)
 NOW = dt.datetime(1990, 1, 7, 20, 0, 0)
 PREFIX = 'HB'
+OWNED_TICKERS = frozenset({
+    'HBBND', 'HBEDGE', 'HBISIN', 'HBNAT', 'HBNOFX', 'HBONE', 'HBRZLV', 'HBSIB',
+    'HBUSQ', 'HBVOID',
+})
 
 
 class FakeQuote:
@@ -36,23 +40,52 @@ DE_QUOTE = FakeQuote('de', 'XGAT', 'Tradegate BSX', 'EUR')
 US_QUOTE = FakeQuote('us', 'XNMS', 'Nasdaq Global Market', 'USD')
 
 
+def _wipe_owned_rows():
+    RadarDailyClose.query.filter(
+        RadarDailyClose.ticker.in_(OWNED_TICKERS)).delete(
+            synchronize_session=False)
+    RadarInstrument.query.filter(
+        RadarInstrument.ticker.in_(OWNED_TICKERS)).delete(
+            synchronize_session=False)
+    RadarFxRate.query.filter_by(source='test-basis').delete(
+        synchronize_session=False)
+    db.session.commit()
+
+
 @pytest.fixture()
 def clean():
-    def wipe():
-        RadarDailyClose.query.filter(
-            RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
-                synchronize_session=False)
-        RadarInstrument.query.filter(
-            RadarInstrument.ticker.like(f'{PREFIX}%')).delete(
-                synchronize_session=False)
-        RadarFxRate.query.filter_by(source='test-basis').delete(
-            synchronize_session=False)
-        db.session.commit()
 
     with flask_app.app_context():
-        wipe()
+        _wipe_owned_rows()
         yield
-        wipe()
+        _wipe_owned_rows()
+
+
+def test_cleanup_preserves_a_non_test_hb_identity():
+    """Exact ownership must survive future additions of real HB* symbols."""
+    ticker = 'HB!SAFEFIX'
+    with flask_app.app_context():
+        assert RadarInstrument.query.filter_by(ticker=ticker).count() == 0
+        assert RadarDailyClose.query.filter_by(ticker=ticker).count() == 0
+        db.session.add(RadarInstrument(
+            ticker=ticker, market='us', mic='XNMS',
+            venue='Nasdaq Global Market', provider_symbol=ticker,
+            currency='USD', is_primary=True, mapping_status='mapped',
+            mapped_at=NOW))
+        db.session.add(RadarDailyClose(
+            ticker=ticker, market='us', mic='XNMS', currency='USD',
+            close_date=TODAY, close=decimal.Decimal('10.00'),
+            fetched_at=NOW))
+        db.session.commit()
+        try:
+            _wipe_owned_rows()
+
+            assert RadarInstrument.query.filter_by(ticker=ticker).count() == 1
+            assert RadarDailyClose.query.filter_by(ticker=ticker).count() == 1
+        finally:
+            RadarDailyClose.query.filter_by(ticker=ticker).delete()
+            RadarInstrument.query.filter_by(ticker=ticker).delete()
+            db.session.commit()
 
 
 def close(ticker, days_back, price, *, market, mic, currency):
@@ -109,6 +142,26 @@ def test_isin_matched_sibling_wins_over_a_two_day_native_stub(clean):
     assert basis.venue == 'Xetra'
     assert basis.currency == 'EUR'
     assert basis.converted_from is None
+
+
+def test_basis_counts_only_closes_visible_in_the_requested_span(clean):
+    ticker = f'{PREFIX}BND'
+    # closes_for includes TODAY-days, but a `days`-wide chart begins one day
+    # later. The invisible native row must not defeat two visible siblings.
+    close(ticker, 3, '10.00', market='de', mic='XGAT', currency='EUR')
+    close(ticker, 1, '10.00', market='de', mic='XGAT', currency='EUR')
+    close(ticker, 2, '11.00', market='de', mic='XETR', currency='EUR')
+    close(ticker, 1, '12.00', market='de', mic='XETR', currency='EUR')
+    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR', 'DE000TESTBND')
+    instrument(ticker, 'de', 'XETR', 'Xetra', 'EUR', 'DE000TESTBND',
+               primary=False)
+    db.session.commit()
+
+    basis = history.resolve_basis(ticker, DE_QUOTE, 3, TODAY)
+
+    assert basis.mic == 'XETR'
+    assert [day for day, _ in basis.closes] == [
+        TODAY - dt.timedelta(days=2), TODAY - dt.timedelta(days=1)]
 
 
 def test_a_sibling_with_a_different_isin_is_not_a_sibling(clean):

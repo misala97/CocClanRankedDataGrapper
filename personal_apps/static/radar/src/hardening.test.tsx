@@ -591,6 +591,20 @@ describe('how old the board is', () => {
 describe('mobile continuity', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('labels a daily 1D fallback as a daily close in both caption and legend', async () => {
+    const fallback = detail()
+    fallback.chart = { ...fallback.chart, span: '1D', priced_from: 'daily' }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true, redirected: false, status: 200,
+      json: async () => url.includes('/api/ticker/') ? fallback : payload(),
+    })))
+
+    render(<BoardPage initial={payload()} />)
+
+    expect(await screen.findByText('daily closes · mentions per 15 min')).toBeInTheDocument()
+    expect(screen.getByText('price · daily close')).toBeInTheDocument()
+  })
+
   it('keeps the chart basis note outside the horizontally panning plot', async () => {
     const converted = detail()
     converted.identity.quote = quote({

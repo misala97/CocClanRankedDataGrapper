@@ -72,6 +72,13 @@ const LEGEND: Record<PanelSpan, { price: string; chatter: string }> = {
   '3Y': { price: 'daily close', chatter: 'mentions per day' },
 }
 
+function legendFor(chart: DetailChart): { price: string; chatter: string } {
+  if (chart.span === '1D' && chart.priced_from === 'daily') {
+    return { ...LEGEND['1D'], price: 'daily close' }
+  }
+  return LEGEND[chart.span]
+}
+
 /** One ticker, in depth: is this real?
  *
  *  The span lives here rather than in the board controls because it changes
@@ -313,8 +320,8 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         <p className="panhint">Swipe sideways for earlier history.</p>
         <div className="legend">
           <i><span className={`key line${rising ? '' : ' down'}`} />
-            price · {LEGEND[span].price}</i>
-          <i><span className="key" />chatter · {LEGEND[span].chatter}</i>
+            price · {legendFor(detail.chart).price}</i>
+          <i><span className="key" />chatter · {legendFor(detail.chart).chatter}</i>
         </div>
       </section>
 

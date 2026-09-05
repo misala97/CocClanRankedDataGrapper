@@ -9,7 +9,6 @@ Create Date: 2026-09-05
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import mysql
 
 
 revision = 'e5f8b2ca4d36'
@@ -19,14 +18,16 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('radar_instruments',
-                  sa.Column('history_due_at', mysql.DATETIME(fsp=6),
-                            nullable=True))
-    op.create_index('ix_radar_instruments_history_due', 'radar_instruments',
-                    ['market', 'history_due_at'])
+    op.execute(sa.text("""
+        ALTER TABLE radar_instruments
+        ADD COLUMN history_due_at DATETIME(6) NULL,
+        ADD INDEX ix_radar_instruments_history_due (market, history_due_at)
+    """))
 
 
 def downgrade():
-    op.drop_index('ix_radar_instruments_history_due',
-                  table_name='radar_instruments')
-    op.drop_column('radar_instruments', 'history_due_at')
+    op.execute(sa.text("""
+        ALTER TABLE radar_instruments
+        DROP INDEX ix_radar_instruments_history_due,
+        DROP COLUMN history_due_at
+    """))

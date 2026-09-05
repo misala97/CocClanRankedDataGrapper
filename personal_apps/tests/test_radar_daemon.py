@@ -521,6 +521,26 @@ def test_german_history_has_its_own_bound_and_provider_symbols(monkeypatch):
     }
 
 
+def test_yahoo_german_history_uses_the_xetra_dot_de_symbol(monkeypatch):
+    row = SimpleNamespace(
+        ticker='AAA', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='APC', currency='EUR', history_due_at=None)
+    seen = {}
+    provider = SimpleNamespace(source='yahoo_chart')
+
+    def fake_fetch(_provider, tickers, now, **kwargs):
+        seen.update(kwargs)
+        return 1, 0
+
+    monkeypatch.setattr(daemon, '_xetra_history_instruments', lambda: [row])
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+    monkeypatch.setattr(daemon.db.session, 'commit', lambda: None)
+
+    assert daemon.refresh_de_history(
+        _utc(2026, 8, 21, 14), provider, limit=1) == (1, 0)
+    assert seen['provider_symbols'] == {'AAA': 'APC.DE'}
+
+
 def test_german_history_advances_an_empty_never_fetched_instrument(monkeypatch):
     """A refused symbol is visible and moves behind untouched queue entries."""
     now = _utc(2026, 8, 21, 14)
@@ -584,6 +604,35 @@ def test_the_daemon_schedules_a_history_job():
 
     assert "id='radar_history'" in source
     assert '_scheduled_history' in source
+
+
+def test_daily_ecb_refresh_records_the_publication(monkeypatch):
+    day = dt.date(2026, 9, 4)
+    seen = {}
+    provider = SimpleNamespace(rates=lambda: [(day, decimal.Decimal('1.16'))])
+    monkeypatch.setattr(
+        daemon.fx, 'record_rates',
+        lambda rates, now: seen.update(rates=list(rates), now=now) or 1)
+
+    assert daemon.refresh_ecb_rates(_utc(2026, 9, 4, 14, 30), provider) == 1
+    assert seen['rates'] == [(day, decimal.Decimal('1.16'))]
+
+
+def test_daily_ecb_refresh_keeps_an_absent_publication_nonfatal(caplog):
+    provider = SimpleNamespace(rates=lambda: [])
+    assert daemon.refresh_ecb_rates(_utc(2026, 9, 5, 14, 30), provider) == 0
+    assert 'returned no publication' in caplog.text
+
+
+def test_scheduled_ecb_failure_does_not_kill_the_daemon(monkeypatch, caplog):
+    from features.radar.prices import ecb
+    monkeypatch.setattr(
+        ecb, 'EcbProvider',
+        lambda http: SimpleNamespace(
+            rates=lambda: (_ for _ in ()).throw(RuntimeError('ECB down'))))
+
+    assert daemon._scheduled_ecb_fx() == 0
+    assert 'ECB daily refresh failed' in caplog.text
 
 
 def test_the_daemon_schedules_a_sentiment_job():
@@ -1068,6 +1117,30 @@ def test_the_five_market_data_jobs_register_once_and_radar_quotes_is_gone(
     assert grouped[1] == 'cron'
     assert (grouped[2]['hour'], grouped[2]['minute']) == (23, 30)
     assert jobs['radar_mappings'][2]['weeks'] == 1
+    ecb = jobs['radar_ecb_fx']
+    assert ecb[0] is daemon._scheduled_ecb_fx
+    assert ecb[1] == 'cron'
+    assert (ecb[2]['hour'], ecb[2]['minute']) == (16, 30)
+    assert ecb[2]['timezone'] == 'Europe/Berlin'
+
+
+@pytest.mark.parametrize('mode', ['legacy', 'shadow', 'active'])
+def test_scheduled_history_always_runs_the_bounded_yahoo_xetra_queue(
+        monkeypatch, mode):
+    seen = []
+    monkeypatch.setattr(
+        'features.radar.config.price_provider_config',
+        lambda: ('finnhub', mode, 'massive'))
+    monkeypatch.setattr(daemon, '_yahoo_de_history_provider',
+                        lambda: 'yahoo-de')
+    monkeypatch.setattr(daemon, 'refresh_de_history',
+                        lambda now, provider: seen.append(provider) or (1, 0))
+    monkeypatch.setattr(daemon, '_yahoo_deep_tail', lambda now: 0)
+    monkeypatch.setattr(daemon, '_current_de_generation_id', lambda: None)
+
+    daemon._scheduled_history()
+
+    assert seen == ['yahoo-de']
 
 
 def test_the_yahoo_fallback_flag_widens_the_us_cadence(monkeypatch):

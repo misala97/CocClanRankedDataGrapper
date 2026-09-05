@@ -20,6 +20,7 @@ import datetime as dt
 import logging
 import sys
 import time
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -30,8 +31,8 @@ from extensions import db
 from models import (RadarInstrument, RadarPollState, RadarQuote,
                     RadarRedditCursor)
 from features.radar import (
-    history, ingest, instruments, journal, llm_sentiment, market_calendar, quotes,
-    retention, scheduling, scoring, universe)
+    fx, history, ingest, instruments, journal, llm_sentiment,
+    market_calendar, quotes, retention, scheduling, scoring, universe)
 from features.radar.markets import classify_quality
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
@@ -929,6 +930,10 @@ def refresh_de_history(now_utc, provider, limit=DE_HISTORY_LIMIT):
             return 0, 0
         tickers = [row.ticker for row in batch]
         symbols = {row.ticker: row.provider_symbol for row in batch}
+        if getattr(provider, 'source', None) == 'yahoo_chart':
+            symbols = {
+                ticker: (symbol if symbol.endswith('.DE') else f'{symbol}.DE')
+                for ticker, symbol in symbols.items()}
         stored, empty = history.fetch_into_store(
             provider, tickers, naive, market='de', mic='XETR', currency='EUR',
             provider_symbols=symbols)
@@ -939,6 +944,39 @@ def refresh_de_history(now_utc, provider, limit=DE_HISTORY_LIMIT):
     except Exception:
         logger.exception('radar German history refresh failed')
         return 0, 0
+
+
+def _yahoo_de_history_provider():
+    """The canonical split-only daily-history provider for Xetra identities."""
+    from features.radar.prices import yahoo
+    return yahoo.YahooProvider(yahoo.YahooHttp())
+
+
+def refresh_ecb_rates(now_utc, provider):
+    """Store the ECB daily publication without erasing the last usable rate."""
+    rates = provider.rates()
+    if not rates:
+        logger.warning('radar ECB daily refresh returned no publication')
+        return 0
+    newest = max(day for day, _ in rates)
+    local_day = now_utc.astimezone(ZoneInfo('Europe/Berlin')).date()
+    if newest < local_day:
+        logger.warning('radar ECB daily publication is stale: newest=%s', newest)
+    return fx.record_rates(rates, now_utc.replace(tzinfo=None))
+
+
+def _scheduled_ecb_fx():
+    from features.radar.prices import ecb
+    now = dt.datetime.now(dt.timezone.utc)
+    try:
+        provider = ecb.EcbProvider(ecb.EcbHttp())
+        with app.app_context():
+            written = refresh_ecb_rates(now, provider)
+    except Exception:
+        logger.exception('radar ECB daily refresh failed')
+        return 0
+    logger.info('radar ECB daily refresh wrote %d rate rows', written)
+    return written
 
 
 def _yahoo_deep_tail(now_aware, limit=2):
@@ -1010,22 +1048,25 @@ def _scheduled_history():
             tail = _yahoo_deep_tail(now)
         de_stored = 0
         de_empty = 0
-        if de_mode == 'legacy':
-            provider = twelvedata_provider.TwelveDataProvider(
-                twelvedata_provider.TwelveDataHttp())
-            de_stored, de_empty = refresh_de_history(now, provider)
-        else:
+        # Xetra history is a durable Yahoo queue in every quote-feed mode.
+        # German delayed quotes and daily history solve different problems;
+        # activating one must never silently switch the other off.
+        de_stored, de_empty = refresh_de_history(
+            now, _yahoo_de_history_provider())
+        native_stored = 0
+        if de_mode != 'legacy':
             generation_id = _current_de_generation_id()
             if generation_id is not None:
                 try:
-                    de_stored = market_data.materialize_native_closes(
+                    native_stored = market_data.materialize_native_closes(
                         generation_id, now.replace(tzinfo=None),
                         mode='shadow' if de_mode == 'shadow' else 'active')
                 except Exception:
                     logger.exception('radar native close materialization '
                                      'failed')
-    logger.info('radar history us=%d empty=%d yahoo_tail=%d de=%d empty=%d',
-                stored, empty, tail, de_stored, de_empty)
+    logger.info('radar history us=%d us_empty=%d yahoo_tail=%d '
+                'de_yahoo=%d de_empty=%d de_native=%d',
+                stored, empty, tail, de_stored, de_empty, native_stored)
 
 
 def _scheduled_volatility():
@@ -1269,6 +1310,9 @@ def main(argv=None):
     # 23:30 UTC is after the US close in both DST states [A1].
     scheduler.add_job(_scheduled_us_grouped_closes, 'cron', hour=23,
                       minute=30, id='radar_us_grouped_closes',
+                      max_instances=1, coalesce=True)
+    scheduler.add_job(_scheduled_ecb_fx, 'cron', hour=16, minute=30,
+                      timezone='Europe/Berlin', id='radar_ecb_fx',
                       max_instances=1, coalesce=True)
     # Legacy keeps the pre-v2 cadence: weekly only, nothing at startup.
     # Shadow/active additionally build a generation shortly after every

@@ -945,6 +945,26 @@ def test_a_week_uses_native_quote_prints_without_a_daily_basis(
                         if price is not None]
 
 
+def test_a_quote_only_eur_week_keeps_quote_currency_and_venue(clean_intraday):
+    ticker = f'{PREFIX}WEUR'
+    quote_view = _Quote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+    with flask_app.app_context():
+        for days_back, price in ((1, '4.25'), (2, '4.00')):
+            observed = NOW - dt.timedelta(days=days_back)
+            db.session.add(RadarQuote(
+                ticker=ticker, market='de', mic='XGAT', currency='EUR',
+                fetched_at=observed, quote_ts=observed,
+                price=decimal.Decimal(price)))
+        db.session.commit()
+
+        chart = detail.intraday_chart_for(
+            ticker, ['bluesky'], NOW, '1W', quote=quote_view)
+
+        assert len([value for value in chart.closes if value is not None]) == 2
+        assert chart.currency == 'EUR'
+        assert chart.basis_venue == 'Tradegate BSX'
+
+
 def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_sibling(
         clean_intraday):
     """The week chart consumes the same basis the month chart does.
