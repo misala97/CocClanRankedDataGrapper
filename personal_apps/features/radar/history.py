@@ -112,11 +112,35 @@ def record_closes(ticker, closes, now, *, market='us', mic=None,
     for day, close in closes:
         row = existing.get(day)
         if row is None:
-            db.session.add(RadarDailyClose(
+            values = dict(
                 ticker=ticker, market=market, mic=mic, currency=currency,
                 close_date=day, close=close, fetched_at=now,
                 source=source, price_basis=price_basis,
-                adjustment_basis=adjustment_basis, is_shadow=is_shadow))
+                adjustment_basis=adjustment_basis, is_shadow=is_shadow)
+            if db.session.get_bind().dialect.name == 'mysql':
+                # The daemon and a one-time backfill may both observe an
+                # absent row before either writes it. Make that final write
+                # atomic so the loser reconciles instead of raising 1062.
+                from sqlalchemy.dialects.mysql import insert as mysql_insert
+                table = RadarDailyClose.__table__
+                insert = mysql_insert(table).values(**values)
+                eligible_sources = [
+                    candidate for candidate, priority
+                    in CLOSE_SOURCE_PRIORITY.items()
+                    if priority <= incoming_priority]
+                replace = sa.or_(table.c.source.is_(None),
+                                 table.c.source.in_(eligible_sources))
+                assignments = {
+                    name: sa.case(
+                        (replace, getattr(insert.inserted, name)),
+                        else_=getattr(table.c, name))
+                    for name in ('close', 'fetched_at', 'currency', 'source',
+                                 'price_basis', 'adjustment_basis')
+                }
+                db.session.execute(
+                    insert.on_duplicate_key_update(**assignments))
+            else:
+                db.session.add(RadarDailyClose(**values))
             written += 1
             continue
         stored_priority = CLOSE_SOURCE_PRIORITY.get(

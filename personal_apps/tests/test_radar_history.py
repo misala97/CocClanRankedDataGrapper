@@ -10,6 +10,7 @@ import decimal
 import hashlib
 
 import pytest
+import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
@@ -381,6 +382,40 @@ def test_massive_overwrites_the_incumbent_twelvedata_row(clean):
     row = RadarDailyClose.query.filter_by(ticker=ticker, close_date=DAY).one()
     assert (row.close, row.source) == (
         decimal.Decimal('100.1000'), 'massive_grouped')
+
+
+def test_concurrent_close_insert_is_reconciled_as_an_upsert(clean, monkeypatch):
+    """A daemon/CLI race cannot turn an idempotent close write into 1062."""
+    ticker = f'{PREFIX}RACE'
+    original_all = sa.orm.Query.all
+    injected = False
+
+    def insert_competing_row_after_lookup(query):
+        nonlocal injected
+        rows = original_all(query)
+        if not injected and not rows:
+            injected = True
+            with db.engine.begin() as connection:
+                connection.execute(RadarDailyClose.__table__.insert().values(
+                    ticker=ticker, market='us', mic='XNGS', currency='USD',
+                    close_date=DAY, close=decimal.Decimal('100.00'),
+                    fetched_at=NOW, source='twelvedata', price_basis='close',
+                    adjustment_basis='split', is_shadow=False))
+        return rows
+
+    monkeypatch.setattr(sa.orm.Query, 'all', insert_competing_row_after_lookup)
+
+    written = history.record_closes(
+        ticker, [(DAY, decimal.Decimal('101.00'))],
+        NOW + dt.timedelta(minutes=1), market='us', mic='XNGS',
+        currency='USD', source='massive_grouped', adjustment_basis='split')
+
+    row = RadarDailyClose.query.filter_by(
+        ticker=ticker, market='us', mic='XNGS', close_date=DAY,
+        is_shadow=False).one()
+    assert written == 1
+    assert (row.close, row.source) == (
+        decimal.Decimal('101.0000'), 'massive_grouped')
 
 
 def test_live_history_reader_excludes_newer_shadow_close(clean):
