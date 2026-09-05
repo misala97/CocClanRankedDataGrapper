@@ -558,6 +558,8 @@ class RadarInstrument(db.Model):
                            name='ck_radar_instrument_market'),
         db.Index('ix_radar_instrument_primary',
                  'ticker', 'market', 'is_primary'),
+        db.Index('ix_radar_instruments_history_due',
+                 'market', 'history_due_at'),
         {'mysql_charset': 'utf8mb4'},
     )
 
@@ -583,6 +585,15 @@ class RadarInstrument(db.Model):
         db.ForeignKey('radar_mapping_generations.id',
                       name='fk_radar_instrument_generation'),
         nullable=True)
+    # When this instrument's daily history is next worth fetching. NULL means
+    # never fetched, which sorts first: a ticker the panel cannot draw at all
+    # outranks one whose last close is a day stale.
+    #
+    # A durable schedule rather than a per-cycle ranking. The history job used
+    # to select from the loudest hundred tickers by chatter, so a ticker that
+    # had never been loud was unreachable however long it sat on the board --
+    # 10,676 of 12,599 active tickers had no stored close on 2026-09-04.
+    history_due_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
 
 
 class RadarPost(db.Model):

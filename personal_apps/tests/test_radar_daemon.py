@@ -423,7 +423,7 @@ def test_history_is_fetched_for_tickers_that_have_none(monkeypatch):
 
     def fake_fetch(provider, tickers, now):
         seen['tickers'] = list(tickers)
-        return len(tickers)
+        return len(tickers), 0
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
     # This is the mixed-version path: no primary instruments have been seeded
@@ -435,7 +435,7 @@ def test_history_is_fetched_for_tickers_that_have_none(monkeypatch):
                         lambda candidates, today: ['BBB'])
     monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
 
-    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 1
+    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == (1, 0)
     assert seen['tickers'] == ['BBB']
 
 
@@ -448,7 +448,7 @@ def test_us_history_uses_the_primary_instrument_mic_and_provider_symbol(monkeypa
     def fake_fetch(provider, tickers, now, **kwargs):
         seen['tickers'] = list(tickers)
         seen.update(kwargs)
-        return len(tickers)
+        return len(tickers), 0
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
     monkeypatch.setattr(daemon, '_market_instruments',
@@ -457,7 +457,7 @@ def test_us_history_uses_the_primary_instrument_mic_and_provider_symbol(monkeypa
                         lambda candidates, today, **kwargs: list(candidates))
     monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
 
-    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 1
+    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == (1, 0)
     assert seen == {
         'tickers': ['AAA'], 'market': 'us', 'mic': 'XNYS', 'currency': 'USD',
         'provider_symbols': {'AAA': 'AAA.US'},
@@ -471,7 +471,7 @@ def test_the_history_job_respects_its_per_cycle_cap(monkeypatch):
 
     def fake_fetch(provider, tickers, now):
         asked['n'] = len(tickers)
-        return len(tickers)
+        return len(tickers), 0
 
     many = [f'T{n}' for n in range(100)]
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: many)
@@ -494,31 +494,70 @@ def test_a_failing_history_provider_does_not_kill_the_cycle(monkeypatch):
                         lambda candidates, today: ['AAA'])
     monkeypatch.setattr(daemon.history, 'fetch_into_store', boom)
 
-    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == 0
+    assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == (0, 0)
 
 
 def test_german_history_has_its_own_bound_and_provider_symbols(monkeypatch):
     de = SimpleNamespace(ticker='AAA', market='de', venue='Xetra', mic='XETR',
-                         provider_symbol='APC', currency='EUR')
+                         provider_symbol='APC', currency='EUR',
+                         history_due_at=None)
     seen = {}
 
     def fake_fetch(provider, tickers, now, **kwargs):
         seen['tickers'] = list(tickers)
         seen.update(kwargs)
-        return len(tickers)
+        return len(tickers), 0
 
-    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
-    monkeypatch.setattr(daemon, '_market_instruments',
-                        lambda tickers, market: [de] if market == 'de' else [])
-    monkeypatch.setattr(daemon.history, 'tickers_needing_history',
-                        lambda candidates, today, **kwargs: list(candidates))
+    monkeypatch.setattr(daemon, '_xetra_history_instruments', lambda: [de],
+                        raising=False)
     monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+    monkeypatch.setattr(daemon.db.session, 'commit', lambda: None)
 
-    assert daemon.refresh_de_history(_utc(2026, 8, 21, 14), object(), limit=1) == 1
+    assert daemon.refresh_de_history(
+        _utc(2026, 8, 21, 14), object(), limit=1) == (1, 0)
     assert seen == {
         'tickers': ['AAA'], 'market': 'de', 'mic': 'XETR', 'currency': 'EUR',
         'provider_symbols': {'AAA': 'APC'},
     }
+
+
+def test_german_history_advances_an_empty_never_fetched_instrument(monkeypatch):
+    """A refused symbol is visible and moves behind untouched queue entries."""
+    now = _utc(2026, 8, 21, 14)
+    never = SimpleNamespace(
+        ticker='NEVER', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='NVR', currency='EUR', history_due_at=None)
+    older_attempt = SimpleNamespace(
+        ticker='OLD', market='de', venue='Xetra', mic='XETR',
+        provider_symbol='OLD', currency='EUR',
+        history_due_at=now.replace(tzinfo=None) - dt.timedelta(hours=1))
+    seen = {}
+    commits = []
+
+    def fake_fetch(provider, tickers, fetched_at, **kwargs):
+        seen['tickers'] = list(tickers)
+        seen.update(kwargs)
+        return 0, len(tickers)
+
+    monkeypatch.setattr(
+        daemon, '_loud_tickers',
+        lambda *_: pytest.fail('German history must not depend on chatter'))
+    monkeypatch.setattr(
+        daemon, '_xetra_history_instruments',
+        lambda: [older_attempt, never], raising=False)
+    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
+    monkeypatch.setattr(daemon.db.session, 'commit',
+                        lambda: commits.append('commit'))
+
+    assert daemon.refresh_de_history(now, object(), limit=1) == (0, 1)
+    assert seen == {
+        'tickers': ['NEVER'], 'market': 'de', 'mic': 'XETR',
+        'currency': 'EUR', 'provider_symbols': {'NEVER': 'NVR'},
+    }
+    assert never.history_due_at == now.replace(tzinfo=None) + dt.timedelta(days=1)
+    assert older_attempt.history_due_at == (
+        now.replace(tzinfo=None) - dt.timedelta(hours=1))
+    assert commits == ['commit']
 
 
 def test_nothing_due_spends_no_requests(monkeypatch):
@@ -526,7 +565,7 @@ def test_nothing_due_spends_no_requests(monkeypatch):
 
     def counting(provider, tickers, now):
         called['n'] += 1
-        return 0
+        return 0, 0
 
     monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
     monkeypatch.setattr(daemon.history, 'tickers_needing_history',

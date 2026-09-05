@@ -330,12 +330,13 @@ def fetch_into_store(provider, tickers, now, *, market='us', mic=None,
                      currency='USD', provider_symbols=None):
     """Fetch a year of closes for each ticker and store it.
 
-    Returns how many tickers came back with anything. A provider answering
-    nothing leaves the stored rows alone: blanking a year of history because
-    one call failed would empty the column for that ticker until the next
-    cycle, which is worse than showing yesterday's.
+    Returns ``(stored, empty)``. A provider answering nothing leaves the
+    stored rows alone: blanking a year of history because one call failed
+    would empty the column for that ticker until the next cycle, which is
+    worse than showing yesterday's.
     """
     stored = 0
+    empty = 0
     provider_symbols = provider_symbols or {}
     for ticker in tickers:
         symbol = provider_symbols.get(ticker, ticker)
@@ -344,6 +345,12 @@ def fetch_into_store(provider, tickers, now, *, market='us', mic=None,
         else:
             closes = provider.daily_closes(symbol, HISTORY_DAYS, mic_code=mic)
         if not closes:
+            # Counted, not swallowed. A provider that refuses an identity --
+            # Yahoo rejects any MIC outside its allowlist before it looks at
+            # a single bar -- otherwise reports a successful cycle that
+            # stored nothing, which is how the German history fetcher ran
+            # for weeks writing zero rows.
+            empty += 1
             continue
         record_closes(ticker, closes, now, market=market, mic=mic,
                       currency=currency,
@@ -353,4 +360,21 @@ def fetch_into_store(provider, tickers, now, *, market='us', mic=None,
                           in ('yahoo_chart', 'massive_grouped',
                               'twelvedata') else None))
         stored += 1
-    return stored
+    return stored, empty
+
+
+def due_instruments(instruments, now, limit):
+    """The next `limit` instruments to spend history requests on.
+
+    Never fetched first, then longest overdue. A plain ordering over a stored
+    timestamp, so the queue DRAINS: a budget that runs out delays an
+    instrument rather than dropping it, which is the difference between a
+    backlog and a ticker that is never reachable at all.
+    """
+    eligible = (row for row in instruments
+                if row.history_due_at is None or row.history_due_at <= now)
+    ordered = sorted(
+        eligible,
+        key=lambda row: (row.history_due_at is not None, row.history_due_at
+                         or now))
+    return ordered[:limit]

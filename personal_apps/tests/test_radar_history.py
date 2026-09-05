@@ -28,8 +28,9 @@ def clean():
         RadarDailyClose.query.filter(
             RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
                 synchronize_session=False)
-        RadarInstrument.query.filter_by(ticker=f'{PREFIX}SEAM').delete(
-            synchronize_session=False)
+        RadarInstrument.query.filter(
+            RadarInstrument.ticker.like(f'{PREFIX}%')).delete(
+                synchronize_session=False)
         RadarMappingGeneration.query.filter_by(
             source='test-history-proxy').delete(synchronize_session=False)
         db.session.commit()
@@ -127,7 +128,8 @@ def test_fetching_replaces_a_day_rather_than_duplicating_it(clean):
     db.session.commit()
 
     provider = FakeProvider({f'{PREFIX}A': [(TODAY, decimal.Decimal('99.00'))]})
-    history.fetch_into_store(provider, [f'{PREFIX}A'], NOW)
+    assert history.fetch_into_store(
+        provider, [f'{PREFIX}A'], NOW) == (1, 0)
 
     rows = RadarDailyClose.query.filter_by(ticker=f'{PREFIX}A').all()
     assert len(rows) == 1
@@ -140,17 +142,67 @@ def test_a_provider_returning_nothing_leaves_what_we_had(clean):
     store(f'{PREFIX}A', 1, '10.00')
     db.session.commit()
 
-    history.fetch_into_store(FakeProvider({}), [f'{PREFIX}A'], NOW)
+    assert history.fetch_into_store(
+        FakeProvider({}), [f'{PREFIX}A'], NOW) == (0, 1)
 
     assert RadarDailyClose.query.filter_by(ticker=f'{PREFIX}A').count() == 1
 
 
 def test_a_full_year_is_requested(clean):
     provider = FakeProvider({})
-    history.fetch_into_store(provider, [f'{PREFIX}A'], NOW)
+    assert history.fetch_into_store(
+        provider, [f'{PREFIX}A'], NOW) == (0, 1)
 
     assert provider.asked == [(f'{PREFIX}A', history.HISTORY_DAYS)]
     assert history.HISTORY_DAYS >= 252
+
+
+def test_an_empty_fetch_is_counted_not_swallowed(clean):
+    """`if not closes: continue` reported success while storing nothing.
+
+    Yahoo refuses any MIC outside its allowlist, which has no XGAT, so the
+    German per-ticker fetcher has silently stored zero rows since it was
+    written -- and the log line said it had run.
+    """
+    provider = FakeProvider({})
+
+    stored, empty = history.fetch_into_store(
+        provider, [f'{PREFIX}EMPTY'], NOW)
+
+    assert stored == 0
+    assert empty == 1
+
+
+def test_due_instruments_serves_the_never_fetched_first(clean):
+    from models import RadarInstrument
+
+    never = RadarInstrument(
+        ticker=f'{PREFIX}NEW', market='de', mic='XETR', venue='Xetra',
+        provider_symbol='NEW', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW, history_due_at=None)
+    recent = RadarInstrument(
+        ticker=f'{PREFIX}OLD', market='de', mic='XETR', venue='Xetra',
+        provider_symbol='OLD', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW,
+        history_due_at=NOW - dt.timedelta(hours=1))
+    db.session.add_all([recent, never])
+    db.session.commit()
+
+    due = history.due_instruments([recent, never], NOW, limit=2)
+
+    assert [row.ticker for row in due] == [f'{PREFIX}NEW', f'{PREFIX}OLD']
+
+
+def test_due_instruments_waits_until_the_stored_schedule(clean):
+    from models import RadarInstrument
+
+    tomorrow = RadarInstrument(
+        ticker=f'{PREFIX}LATER', market='de', mic='XETR', venue='Xetra',
+        provider_symbol='LATER', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW,
+        history_due_at=NOW + dt.timedelta(days=1))
+
+    assert history.due_instruments([tomorrow], NOW, limit=1) == []
 
 
 # Three years, added 2026-08-23 for the detail panel's 3Y span.
@@ -240,7 +292,7 @@ def test_german_history_uses_the_verified_mic_and_keeps_old_rows_on_error(clean)
 
     assert history.fetch_into_store(
         provider, [f'{PREFIX}ERR'], NOW, market='de', mic='XETR',
-        currency='EUR', provider_symbols={f'{PREFIX}ERR': 'APC'}) == 0
+        currency='EUR', provider_symbols={f'{PREFIX}ERR': 'APC'}) == (0, 1)
     assert provider.asked == [('APC', history.HISTORY_DAYS, 'XETR')]
     assert history.closes_for(
         [f'{PREFIX}ERR'], today=TODAY, market='de', mic='XETR')[

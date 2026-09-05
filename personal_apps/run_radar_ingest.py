@@ -449,6 +449,15 @@ def _market_instruments(tickers, market):
             .order_by(RadarInstrument.ticker, RadarInstrument.mic).all())
 
 
+def _xetra_history_instruments():
+    """Mapped Xetra identities in the durable German history queue."""
+    return (RadarInstrument.query
+            .filter(RadarInstrument.market == 'de',
+                    RadarInstrument.mic == 'XETR',
+                    RadarInstrument.mapping_status == 'mapped')
+            .order_by(RadarInstrument.ticker).all())
+
+
 def _mapping_refresh_due(now):
     newest = (db.session.query(sa.func.max(RadarInstrument.mapped_at))
               .filter(RadarInstrument.market == 'de').scalar())
@@ -863,13 +872,13 @@ def _scheduled_profiles():
 def refresh_history(now_utc, provider, limit=HISTORY_LIMIT):
     """Fetch a year of daily closes for board tickers that need them.
 
-    Returns how many tickers came back with data. Ordering is the history
+    Returns ``(stored, empty)``. Ordering is the history
     module's decision -- missing before stale -- because a ticker the board
     cannot draw at all is worth more than a fresher copy of one it can.
     """
     candidates = _loud_tickers(now_utc, limit * 5)
     if not candidates:
-        return 0
+        return 0, 0
 
     naive = now_utc.replace(tzinfo=None)
     try:
@@ -879,10 +888,11 @@ def refresh_history(now_utc, provider, limit=HISTORY_LIMIT):
             due = history.tickers_needing_history(
                 candidates, naive.date())[:limit]
             if not due:
-                return 0
+                return 0, 0
             return history.fetch_into_store(provider, due, naive)
 
         stored = 0
+        empty = 0
         remaining = limit
         by_mic = {}
         for instrument in primary:
@@ -897,48 +907,38 @@ def refresh_history(now_utc, provider, limit=HISTORY_LIMIT):
                 continue
             symbols = {row.ticker: row.provider_symbol for row in rows
                        if row.ticker in due}
-            stored += history.fetch_into_store(
+            batch_stored, batch_empty = history.fetch_into_store(
                 provider, due, naive, market='us', mic=mic, currency='USD',
                 provider_symbols=symbols)
+            stored += batch_stored
+            empty += batch_empty
             remaining -= len(due)
-        return stored
+        return stored, empty
     except Exception:
         logger.exception('radar history refresh failed')
-        return 0
+        return 0, 0
 
 
 def refresh_de_history(now_utc, provider, limit=DE_HISTORY_LIMIT):
     """Refresh mapped Xetra daily bars without spending the US history budget."""
-    candidates = _loud_tickers(now_utc, limit * 5)
-    if not candidates:
-        return 0
-
     naive = now_utc.replace(tzinfo=None)
     try:
-        german = _market_instruments(candidates, 'de')[:limit]
-        if not german:
-            return 0
-        # Xetra is the only supported German venue in this release; retaining
-        # the MIC grouping keeps this correct when a future venue is added.
-        stored = 0
-        by_mic = {}
-        for instrument in german:
-            by_mic.setdefault(instrument.mic, []).append(instrument)
-        for mic, rows in by_mic.items():
-            tickers = [row.ticker for row in rows]
-            due = history.tickers_needing_history(
-                tickers, naive.date(), market='de', mic=mic)[:limit]
-            if not due:
-                continue
-            symbols = {row.ticker: row.provider_symbol for row in rows
-                       if row.ticker in due}
-            stored += history.fetch_into_store(
-                provider, due, naive, market='de', mic=mic, currency='EUR',
-                provider_symbols=symbols)
-        return stored
+        candidates = _xetra_history_instruments()
+        batch = history.due_instruments(candidates, naive, limit)
+        if not batch:
+            return 0, 0
+        tickers = [row.ticker for row in batch]
+        symbols = {row.ticker: row.provider_symbol for row in batch}
+        stored, empty = history.fetch_into_store(
+            provider, tickers, naive, market='de', mic='XETR', currency='EUR',
+            provider_symbols=symbols)
+        for instrument in batch:
+            instrument.history_due_at = naive + dt.timedelta(days=1)
+        db.session.commit()
+        return stored, empty
     except Exception:
         logger.exception('radar German history refresh failed')
-        return 0
+        return 0, 0
 
 
 def _yahoo_deep_tail(now_aware, limit=2):
@@ -998,20 +998,22 @@ def _scheduled_history():
     now = dt.datetime.now(dt.timezone.utc)
     with app.app_context():
         stored = 0
+        empty = 0
         if close_source in ('legacy', 'shadow'):
             # The incumbent live writer keeps running through shadow so the
             # agreement gate has an independent series to compare against.
             provider = twelvedata_provider.TwelveDataProvider(
                 twelvedata_provider.TwelveDataHttp())
-            stored = refresh_history(now, provider)
+            stored, empty = refresh_history(now, provider)
         tail = 0
         if close_source in ('shadow', 'massive'):
             tail = _yahoo_deep_tail(now)
         de_stored = 0
+        de_empty = 0
         if de_mode == 'legacy':
             provider = twelvedata_provider.TwelveDataProvider(
                 twelvedata_provider.TwelveDataHttp())
-            de_stored = refresh_de_history(now, provider)
+            de_stored, de_empty = refresh_de_history(now, provider)
         else:
             generation_id = _current_de_generation_id()
             if generation_id is not None:
@@ -1022,8 +1024,8 @@ def _scheduled_history():
                 except Exception:
                     logger.exception('radar native close materialization '
                                      'failed')
-    logger.info('radar history us=%d yahoo_tail=%d de=%d', stored, tail,
-                de_stored)
+    logger.info('radar history us=%d empty=%d yahoo_tail=%d de=%d empty=%d',
+                stored, empty, tail, de_stored, de_empty)
 
 
 def _scheduled_volatility():
