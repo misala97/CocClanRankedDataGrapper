@@ -1199,7 +1199,28 @@ def test_a_quote_without_provider_time_never_reaches_the_1d_chart(
         assert all(c is None for c in chart.closes)
 
 
-def test_each_post_says_who_judged_it(clean):
+@pytest.fixture()
+def judged_posts(clean):
+    from models import RadarMention, RadarPost
+    ticker = f'{PREFIX}J'
+    external_ids = tuple(
+        f'{PREFIX}-{author}-{minutes}'
+        for minutes, author in ((10, 'ann'), (20, 'bob'), (30, 'cy'),
+                                (40, 'dee'), (50, 'eve')))
+
+    def wipe():
+        RadarMention.query.filter_by(ticker=ticker).delete(
+            synchronize_session=False)
+        RadarPost.query.filter(RadarPost.external_id.in_(external_ids)).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    wipe()
+    yield
+    wipe()
+
+
+def test_each_post_says_who_judged_it(judged_posts):
     """The label follows the same precedence as the tone, so it can never
     disagree with the colour: model for a v2 attitude or a legacy label
     (a decided neutral included), lexicon for the local float alone, and
