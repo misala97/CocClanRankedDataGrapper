@@ -19,6 +19,8 @@ from models import RadarDailyClose
 TODAY = dt.date(2026, 8, 21)
 NOW = dt.datetime(2026, 8, 21, 20, 0, 0)
 PREFIX = 'HS'
+OWNED_INSTRUMENT_TICKERS = (
+    f'{PREFIX}NEW', f'{PREFIX}OLD', f'{PREFIX}SEAM')
 
 
 @pytest.fixture()
@@ -29,7 +31,7 @@ def clean():
             RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
                 synchronize_session=False)
         RadarInstrument.query.filter(
-            RadarInstrument.ticker.like(f'{PREFIX}%')).delete(
+            RadarInstrument.ticker.in_(OWNED_INSTRUMENT_TICKERS)).delete(
                 synchronize_session=False)
         RadarMappingGeneration.query.filter_by(
             source='test-history-proxy').delete(synchronize_session=False)
@@ -37,7 +39,7 @@ def clean():
 
     with flask_app.app_context():
         wipe()
-        yield
+        yield wipe
         wipe()
 
 
@@ -203,6 +205,28 @@ def test_due_instruments_waits_until_the_stored_schedule(clean):
         history_due_at=NOW + dt.timedelta(days=1))
 
     assert history.due_instruments([tomorrow], NOW, limit=1) == []
+
+
+def test_clean_fixture_preserves_an_unowned_hs_instrument(clean):
+    from models import RadarInstrument
+
+    ticker = f'{PREFIX}ZXQKEEP'
+    assert RadarInstrument.query.filter_by(ticker=ticker).one_or_none() is None
+    unowned = RadarInstrument(
+        ticker=ticker, market='de', mic='XETR', venue='Xetra',
+        provider_symbol='ZXQKEEP', currency='EUR', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW)
+    db.session.add(unowned)
+    db.session.commit()
+    row_id = unowned.id
+
+    try:
+        clean()
+        assert db.session.get(RadarInstrument, row_id) is not None
+    finally:
+        RadarInstrument.query.filter_by(id=row_id).delete(
+            synchronize_session=False)
+        db.session.commit()
 
 
 # Three years, added 2026-08-23 for the detail panel's 3Y span.
