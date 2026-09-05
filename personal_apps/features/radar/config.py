@@ -931,7 +931,13 @@ JUDGE_FLOOR_HOURS = 24
 # German trade history is sampled as a result, about one minute-file in
 # five; decided by Michi on 2026-09-02.
 DE_FILES_PER_CYCLE = 1                        # per channel, newest first
-DE_DOWNLOAD_BUDGET_24H = 300                  # attempted downloads, all channels
+# Session-gated collection over the quote-supplying MIC costs two downloads
+# a cycle, twelve cycles an hour, across Tradegate's ~14.5-hour day: about
+# 348. At 300 the budget was spent by mid-morning and every later cycle
+# recorded 'download budget spent 300/300' -- the safety net had become the
+# binding constraint. 400 leaves headroom above a full session and still
+# sits far under the ~170 files/hour that drew the original HTTP 429.
+DE_DOWNLOAD_BUDGET_24H = 400                  # attempted downloads, all channels
 DE_THROTTLE_BACKOFF_SECONDS = (1800, 21600)   # first wait, longest wait
 
 # Distinct CHANNELS a broadcast source needs, against MIN_DISTINCT_AUTHORS for

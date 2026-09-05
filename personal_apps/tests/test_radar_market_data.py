@@ -793,6 +793,78 @@ def test_prune_market_data_bounds_events_and_cycles(ctx):
 # download budget, and exponential backoff on HTTP 429.
 
 
+def test_the_collector_sleeps_outside_the_tradegate_session():
+    """A closed venue must cost no mapping, listing, or download work."""
+    night = dt.datetime(2026, 9, 3, 3, 0, 0)
+
+    summary = market_data.collect_german_cycle(
+        provider=None, generation_id=None, active_tickers=[], now=night,
+        mode='active')
+
+    assert summary.status == 'closed'
+    assert summary.files_seen == 0
+
+
+def test_only_quote_supplying_mics_are_collected():
+    assert market_data.DE_COLLECT_MICS == ('XGAT',)
+
+
+def test_a_mixed_generation_spends_feed_work_only_on_quote_supplying_mics(ctx):
+    from features.radar import instruments
+
+    tickers = [f'{PREFIX}TG', f'{PREFIX}XE']
+    generation = instruments.persist_generation([
+        instruments.MappingDecision(
+            ticker=tickers[0], status='mapped', reason=None, mic='XGAT',
+            symbol='ZZTG', isin='DE000ZZTST01', currency='EUR',
+            mapping_source='openfigi'),
+        instruments.MappingDecision(
+            ticker=tickers[1], status='mapped', reason=None, mic='XETR',
+            symbol='ZZXE', isin='DE000ZZTST02', currency='EUR',
+            mapping_source='openfigi'),
+    ], NOW)
+    provider = ScriptedProvider({'pretrade': (), 'posttrade': ()}, {})
+
+    market_data.collect_german_cycle(
+        provider, generation.id, tickers, NOW, mode='active')
+
+    assert {row.mic for row in RadarMarketDataCycle.query.all()} == {'XGAT'}
+
+
+def test_ops_summary_reports_the_clamped_german_download_budget(ctx, monkeypatch):
+    monkeypatch.setattr(market_data, 'DE_FILES_PER_CYCLE', 1)
+    monkeypatch.setattr(market_data, 'DE_DOWNLOAD_BUDGET_24H', 4)
+    for minute in range(5):
+        completed_at = NOW - dt.timedelta(minutes=minute)
+        db.session.add(RadarMarketDataCycle(
+            source='deutsche_boerse_delayed', mic='XGAT',
+            channel='posttrade', scheduled_at=completed_at,
+            completed_at=completed_at, mode='active', status='accepted',
+            files_seen=1, files_accepted=1, record_count=1,
+            selected_count=0, rejected_records=0, compressed_bytes=0,
+            uncompressed_bytes=0, parse_ms=0))
+    db.session.commit()
+    market_data.clear_ops_memo()
+    try:
+        summary = market_data.ops_summary(NOW)
+    finally:
+        market_data.clear_ops_memo()
+
+    assert summary['de_download_budget_24h'] == {
+        'spent': 5, 'limit': 4, 'remaining': 0}
+
+
+def test_ops_summary_exposes_the_configured_session_budget(ctx):
+    market_data.clear_ops_memo()
+    try:
+        summary = market_data.ops_summary(NOW)
+    finally:
+        market_data.clear_ops_memo()
+
+    assert summary['de_download_budget_24h'] == {
+        'spent': 0, 'limit': 400, 'remaining': 400}
+
+
 def _minute_files(minutes, channel='posttrade'):
     files, bodies = [], {}
     for index, minute in enumerate(minutes):

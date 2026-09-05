@@ -188,6 +188,13 @@ def _advance_cursor(mic, channel, batch, checksum, now):
 DE_FILES_PER_CYCLE = _config.DE_FILES_PER_CYCLE
 DE_DOWNLOAD_BUDGET_24H = _config.DE_DOWNLOAD_BUDGET_24H
 DE_THROTTLE_BACKOFF_SECONDS = _config.DE_THROTTLE_BACKOFF_SECONDS
+# MICs the collector actually spends downloads on.
+#
+# XGAT only: Tradegate is the venue that supplies German QUOTES, and Xetra's
+# daily closes come from the history path (features/radar/history.py), not
+# from this feed. Collecting both doubled the download cost for a series
+# nothing reads.
+DE_COLLECT_MICS = ('XGAT',)
 # One state for the whole feed, not per channel: the host throttles the IP.
 # In-process on purpose -- a restart forgets it and the first cycle probes
 # once, which is the right amount of optimism after a deploy.
@@ -233,8 +240,19 @@ def downloads_last_24h(now):
 def collect_german_cycle(provider, generation_id, active_tickers, now,
                          *, mode='shadow'):
     """One five-minute collection pass over both channels of every mapped MIC."""
+    from .market_calendars import session_state
+
+    aware = now if now.tzinfo else now.replace(tzinfo=dt.timezone.utc)
+    if session_state('de', aware, mic='XGAT') == 'closed':
+        # A file published while the venue is shut is a file the board will
+        # never draw, and the budget it costs is the one the session needs.
+        return CycleSummary(
+            mode=mode, status='closed', files_seen=0, files_accepted=0,
+            selected_quotes=0, rejected_records=0, error_code=None)
+
     by_identity = _mapped_decisions(generation_id, active_tickers)
-    mics = sorted({mic for mic, _ in by_identity}) or ['XGAT']
+    mics = [mic for mic in sorted({mic for mic, _ in by_identity})
+            if mic in DE_COLLECT_MICS] or list(DE_COLLECT_MICS)
     is_shadow = mode == 'shadow'
 
     total_seen = 0
@@ -898,6 +916,8 @@ def ops_summary(now):
             if row.last_post_close_session_date else None)
         for row in RadarProviderSessionState.query.all()}
 
+    de_budget_spent = downloads_last_24h(now)
+
     value = {
         'cycles': cycles,
         'mapping_generations': generations,
@@ -905,6 +925,11 @@ def ops_summary(now):
                             for key, count in basis_counts.items()},
         'grouped_closes': grouped,
         'post_close_claims': claims,
+        'de_download_budget_24h': {
+            'spent': de_budget_spent,
+            'limit': DE_DOWNLOAD_BUDGET_24H,
+            'remaining': max(0, DE_DOWNLOAD_BUDGET_24H - de_budget_spent),
+        },
     }
     _OPS_MEMO.update(at=now, value=value)
     return value
