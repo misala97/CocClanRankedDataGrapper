@@ -177,7 +177,7 @@ does not need it.
 
 ## 6 · Whole-market closes
 
-`RADAR_US_CLOSE_SOURCE=massive_grouped` with `RADAR_MASSIVE_API_KEY` set in
+`RADAR_US_CLOSE_SOURCE=massive` with `RADAR_MASSIVE_API_KEY` set in
 the production `.env`. Massive's grouped-daily endpoint returns **every US
 stock's OHLCV in one request per trading day**; the free tier's five calls
 per minute is ample for a daily tick and for a ~500-request backfill of two
@@ -186,7 +186,9 @@ years.
 `features/radar/prices/massive.py` and the identity mapping in
 `market_data.py` already exist, are tested, and are unused only because no
 key is configured. The work here is: wire the daily job into the scheduler,
-add the backfill script, and confirm `record_closes`' priority table does
+and run the resumable whole-market backfill through
+`python -m scripts.backfill_radar_market_history --market us-universe --apply`,
+then confirm `record_closes`' priority table does
 the right thing — `massive_grouped` (12) outranks `yahoo_chart`/`twelvedata`
 (10) and `legacy` (0), so it restates existing rows and takes ownership
 without a migration.
@@ -297,9 +299,10 @@ converted line. Merged to `main` by me.
 Deploy carries, in order:
 
 1. `flask db upgrade` in `personal_apps/`
-2. `RADAR_MASSIVE_API_KEY` added to the VPS `.env` (Michi's free key)
+2. `RADAR_MASSIVE_API_KEY` and `RADAR_US_CLOSE_SOURCE=massive` added to the VPS `.env` (Michi's free key)
 3. ECB rate backfill (one run, seconds)
-4. Massive two-year close backfill (~500 requests at 5/min, ~100 minutes)
+4. `python -m scripts.backfill_radar_market_history --market us-universe --apply`
+   — resumable Massive two-year close backfill (~500 requests at 5/min, ~100 minutes)
 5. Xetra 780-day backfill
 
 ## Risks

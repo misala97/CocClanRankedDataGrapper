@@ -1742,6 +1742,13 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `features/radar/prices/massive.py` — `MassiveHttp` (reads `RADAR_MASSIVE_API_KEY`, `RADAR_MASSIVE_BASE_URL`, paces at `CALLS_PER_MINUTE = 5`), `MassiveProvider(http).grouped_closes(day)` with `source = 'massive_grouped'`, and `MassiveTransportError`; `market_data.py`'s existing identity mapping; `history.record_closes` (which must be called with `adjustment_basis='split'` for this source or it raises).
 - Produces: `run_radar_ingest.store_grouped_day(provider, day, now) -> int` (tickers written), and `scripts/backfill_radar_us_closes.py` runnable as `python scripts/backfill_radar_us_closes.py --days 500`.
 
+**Implementation note (review correction):** The older helper, scheduler, and
+backfill names above are superseded by the existing stronger market-data-v2
+path (`market_data.ingest_grouped_day`,
+`_scheduled_us_grouped_closes`, and
+`python -m scripts.backfill_radar_market_history --market us-universe --apply`).
+Do not duplicate those responsibilities with a second helper, job, or script.
+
 Read `features/radar/prices/massive.py` and `features/radar/market_data.py` in full before writing this task's code — the symbol-to-identity mapping already exists there and must be reused, not reimplemented.
 
 - [ ] **Step 1: Write the failing test**
@@ -2348,9 +2355,9 @@ The `git checkout dev_personal` at the end is not optional: merging leaves HEAD 
 The deploy is Michi's. Tell him, in this order:
 
 1. `flask db upgrade` in `personal_apps/` — two new migrations (`d4e7a1b93c25`, `e5f8b2ca4d36`)
-2. add `RADAR_MASSIVE_API_KEY=<his free key>` to `/root/coc-stats/.env`
+2. add `RADAR_MASSIVE_API_KEY=<his free key>` and `RADAR_US_CLOSE_SOURCE=massive` to `/root/coc-stats/.env`
 3. `python scripts/backfill_radar_fx.py` — one request, seconds
-4. `python scripts/backfill_radar_us_closes.py --days 500` — ~100 minutes at 5 calls/min
+4. `python -m scripts.backfill_radar_market_history --market us-universe --apply` — resumable, ~100 minutes at 5 calls/min
 5. the Xetra depth backfill at `HISTORY_DAYS`
 
 ---
