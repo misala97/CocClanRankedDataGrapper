@@ -262,9 +262,15 @@ def test_grouped_gate_rejects_an_audit_for_a_different_report(
 def test_grouped_gate_recomputes_active_coverage_from_shadow_rows(
         grouped_gate_evidence):
     from models import RadarDailyClose
+    day = grouped_gate_evidence.dates[0]
     RadarDailyClose.query.filter_by(
-        ticker='RPG1B', close_date=grouped_gate_evidence.dates[0],
+        ticker='RPG1B', close_date=day,
         source='massive_grouped', is_shadow=True).delete()
+    db.session.add(RadarDailyClose(
+        ticker='RPG1B', market='us', mic='XNYS', currency='USD',
+        close_date=day - dt.timedelta(days=1), close=decimal.Decimal('101'),
+        fetched_at=NOW, source='massive_grouped', price_basis='close',
+        adjustment_basis='split', is_shadow=True))
     db.session.commit()
     report = grouped_gate_evidence.build(audit=None)
     assert report.gate('grouped_agreement').passed is False
@@ -289,6 +295,22 @@ def test_grouped_gate_excludes_pre_ipo_tickers_from_historical_coverage(
     assert report.grouped_informational['active_coverage_min'] == '1'
 
 
+def test_grouped_gate_excludes_a_symbol_before_massive_first_observed_day(
+        grouped_gate_evidence):
+    """The report shares ingestion's provider-availability denominator."""
+    from models import RadarDailyClose
+    day = grouped_gate_evidence.dates[0]
+    RadarDailyClose.query.filter_by(
+        ticker='RPG1B', close_date=day, source='massive_grouped',
+        is_shadow=True).delete()
+    db.session.commit()
+
+    report = grouped_gate_evidence.build(audit=None)
+
+    assert report.grouped_informational['active_coverage_gaps'] == []
+    assert report.grouped_informational['active_coverage_min'] == '1'
+
+
 def test_grouped_gate_does_not_count_a_pre_ipo_row_as_coverage(
         grouped_gate_evidence):
     """An old pre-IPO close cannot cover for a missing eligible ticker."""
@@ -299,6 +321,11 @@ def test_grouped_gate_does_not_count_a_pre_ipo_row_as_coverage(
     RadarDailyClose.query.filter_by(
         ticker='RPG1A', close_date=day, source='massive_grouped',
         is_shadow=True).delete()
+    db.session.add(RadarDailyClose(
+        ticker='RPG1A', market='us', mic='XNAS', currency='USD',
+        close_date=day - dt.timedelta(days=1), close=decimal.Decimal('100'),
+        fetched_at=NOW, source='massive_grouped', price_basis='close',
+        adjustment_basis='split', is_shadow=True))
     db.session.commit()
 
     report = grouped_gate_evidence.build(audit=None)

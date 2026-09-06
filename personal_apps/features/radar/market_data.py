@@ -634,15 +634,17 @@ def grouped_instrument_map():
     return found, sorted(ambiguous)
 
 
-def grouped_active_symbols_by_day(days, now, instrument_map=None):
+def grouped_active_symbols_by_day(days, now, instrument_map=None,
+                                  is_shadow=False):
     """Mapped active US symbols eligible to trade on each historical day.
 
     ``ipo_date`` is provider metadata, so a known future IPO excludes that
-    ticker only before it listed.  Missing IPO metadata stays in the
-    denominator: an unknown listing date is not evidence that a provider
-    omission is harmless.
+    ticker only before it listed.  A symbol that Massive first returned on a
+    later accepted day is likewise ineligible before that observed provider
+    availability date.  Missing dates stay in the denominator: unknown is
+    not evidence that a provider omission is harmless.
     """
-    from models import TickerUniverse
+    from models import RadarDailyClose, TickerUniverse
 
     days = tuple(days)
     if instrument_map is None:
@@ -658,11 +660,22 @@ def grouped_active_symbols_by_day(days, now, instrument_map=None):
             TickerUniverse.symbol, TickerUniverse.ipo_date)
         .filter(TickerUniverse.symbol.in_(
             {identity.ticker for identity in candidates.values()})).all())
+    first_observed = dict(
+        db.session.query(RadarDailyClose.ticker,
+                         sa.func.min(RadarDailyClose.close_date))
+        .filter(RadarDailyClose.market == 'us',
+                RadarDailyClose.source == 'massive_grouped',
+                RadarDailyClose.is_shadow.is_(is_shadow),
+                RadarDailyClose.ticker.in_(
+                    {identity.ticker for identity in candidates.values()}))
+        .group_by(RadarDailyClose.ticker).all())
     return {
         day: {
             symbol: identity for symbol, identity in candidates.items()
             if ipo_dates.get(identity.ticker) is None or
             ipo_dates[identity.ticker] <= day
+            if first_observed.get(identity.ticker) is None or
+            first_observed[identity.ticker] <= day
         }
         for day in days
     }
@@ -718,7 +731,7 @@ def ingest_grouped_day(provider, day, now):
 
     instrument_map, ambiguous = grouped_instrument_map()
     active_symbols = set(grouped_active_symbols_by_day(
-        (day,), now, instrument_map)[day])
+        (day,), now, instrument_map, is_shadow=is_shadow)[day])
 
     def persist_state(status, *, written=0, mapped=0, unmatched_provider=0,
                       unmatched_universe=0, active_matched=0,

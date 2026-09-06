@@ -715,6 +715,64 @@ def test_grouped_ingest_excludes_pre_ipo_tickers_from_historical_coverage(
     assert (state.active_matched, state.active_expected) == (1, 1)
 
 
+def test_grouped_ingest_excludes_a_symbol_before_massive_first_observed_day(
+        grouped_ctx, monkeypatch):
+    """A later Massive close proves an earlier provider absence is expected."""
+    import decimal as _decimal
+    from models import RadarDailyClose, RadarGroupedCloseDay
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    tickers = [f'{PREFIX}GA', f'{PREFIX}GB']
+    monkeypatch.setattr(market_data, 'active_price_tickers',
+                        lambda now: tickers)
+    for ticker in tickers:
+        _us_instrument(ticker)
+    db.session.add(RadarDailyClose(
+        ticker=f'{PREFIX}GB', market='us', mic='XNAS', currency='USD',
+        close_date=NOW.date() + dt.timedelta(days=1),
+        close=decimal.Decimal('12.00'), fetched_at=NOW,
+        source='massive_grouped', price_basis='close',
+        adjustment_basis='split', is_shadow=True))
+    db.session.commit()
+
+    result = market_data.ingest_grouped_day(
+        OneDayProvider(_accepted_fetch(
+            {f'{PREFIX}GA': _decimal.Decimal('55.25')})),
+        NOW.date(), NOW)
+
+    assert result.status == 'accepted'
+    assert (result.active_matched, result.active_expected) == (1, 1)
+    state = RadarGroupedCloseDay.query.filter_by(
+        source='massive_grouped', close_date=NOW.date(),
+        is_shadow=True).one()
+    assert (state.active_matched, state.active_expected) == (1, 1)
+
+
+def test_grouped_ingest_keeps_never_observed_symbol_in_coverage(
+        grouped_ctx, monkeypatch):
+    """No provider history is not proof that a missing symbol is harmless."""
+    import decimal as _decimal
+    from models import RadarGroupedCloseDay
+    monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
+    tickers = [f'{PREFIX}GA', f'{PREFIX}GB']
+    monkeypatch.setattr(market_data, 'active_price_tickers',
+                        lambda now: tickers)
+    for ticker in tickers:
+        _us_instrument(ticker)
+    db.session.commit()
+
+    result = market_data.ingest_grouped_day(
+        OneDayProvider(_accepted_fetch(
+            {f'{PREFIX}GA': _decimal.Decimal('55.25')})),
+        NOW.date(), NOW)
+
+    assert result.status == 'rejected'
+    assert (result.active_matched, result.active_expected) == (1, 2)
+    state = RadarGroupedCloseDay.query.filter_by(
+        source='massive_grouped', close_date=NOW.date(),
+        is_shadow=True).one()
+    assert state.error_code == 'below_acceptance_floor'
+
+
 def test_grouped_ingest_below_floor_rejects_and_stays_retryable(
         grouped_ctx, monkeypatch):
     import decimal as _decimal

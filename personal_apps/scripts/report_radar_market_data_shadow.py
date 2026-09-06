@@ -350,7 +350,7 @@ def _grouped_gate(session, end, us_close_audit, instrument_map_sha):
     # persisted closes. The ingestion-time counters are diagnostic only.
     instrument_map, _ = market_data.grouped_instrument_map()
     active_symbols_by_day = market_data.grouped_active_symbols_by_day(
-        expected, end, instrument_map)
+        expected, end, instrument_map, is_shadow=True)
     active_symbols = {
         day: {(identity.ticker, identity.mic): symbol
               for symbol, identity in symbols.items()}
