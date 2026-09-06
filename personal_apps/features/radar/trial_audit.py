@@ -12,6 +12,17 @@ with the sample it drew fails. It does not get to pass on a favourable
 point estimate with a wide interval around it -- that is how 3-versus-1
 wrong deletions out of 200 became an argument for shipping once already.
 
+**Only harm stops the trial.** One criterion decides pass or fail: does it
+delete real posts too often. The comparisons against the incumbent are
+measured and reported, and they decide nothing here -- because there is no
+incumbent to fall back to. The paid judge stopped running on 2026-09-03
+when the credits ran out, so the alternative to this judge is no judge at
+all, and switching a working one off for losing to a model that cannot run
+would leave the board strictly worse. What the incumbent comparison is FOR
+is the later decision to expand -- judging every mention instead of the
+gated fifth, or letting tone reach the board -- and that decision is not
+this one.
+
 **Tone is reported and never gates.** The trial's whole design is that
 encoder tone is not written, so tone cannot pass or fail it. The tone
 section exists to say whether a LATER, separately reviewed change could be
@@ -24,9 +35,14 @@ import math
 # readable in the diff that changes it.
 Z = 1.959963984540054
 
-# Absolute floor on removal precision, and the tolerated loss against the
-# incumbent. Both fixed in the design before the evaluation existed.
+# The only bar that stops the trial: of what it deleted, how much really was
+# junk. Deleting real chatter is the one failure that leaves the board worse
+# than no judging at all, which is what makes this the harm test.
 REMOVAL_PRECISION_FLOOR = 0.93
+
+# Measured against the incumbent and REPORTED, never gating the trial. They
+# are the bar for a later decision to expand, not for whether to keep
+# running. Fixed here before any evaluation exists, as everything else is.
 REMOVAL_PRECISION_TOLERANCE = 0.03
 AGREEMENT_TOLERANCE = 0.02
 
@@ -142,8 +158,13 @@ def mixed_none_confusion(predictions, reference):
     return wilson_interval(confused, len(slice_))
 
 
-def _criterion(name, passed, detail):
-    return {'criterion': name, 'passed': bool(passed), **detail}
+def _criterion(name, passed, detail, gates=True):
+    """One measured rule. `gates` says whether it can fail the trial.
+
+    Everything is measured and reported; only the harm test decides.
+    """
+    return {'criterion': name, 'passed': bool(passed), 'gates': bool(gates),
+            **detail}
 
 
 def evaluate_trial_audit(bundle):
@@ -174,25 +195,32 @@ def evaluate_trial_audit(bundle):
     # not a pass.
     try:
         encoder_removal = removal_precision(encoder, reference)
-        haiku_removal = removal_precision(haiku, reference)
-        removal_threshold = max(
-            REMOVAL_PRECISION_FLOOR,
-            haiku_removal['point'] - REMOVAL_PRECISION_TOLERANCE)
         removal_detail = {'encoder': encoder_removal,
-                          'incumbent': haiku_removal,
-                          'threshold': removal_threshold}
+                          'threshold': REMOVAL_PRECISION_FLOOR}
         removal_passed = (coverage_ok
-                          and encoder_removal['lower'] >= removal_threshold)
+                          and encoder_removal['lower']
+                          >= REMOVAL_PRECISION_FLOOR)
+        try:
+            removal_detail['incumbent'] = removal_precision(haiku, reference)
+        except AuditError:
+            pass          # reported when available; it decides nothing
     except AuditError as why:
         removal_detail = {'unavailable': str(why)}
         removal_passed = False
     removal_detail['rule'] = (
-        'encoder Wilson lower bound >= max(%.2f, incumbent point - %.2f)'
-        % (REMOVAL_PRECISION_FLOOR, REMOVAL_PRECISION_TOLERANCE))
+        'encoder Wilson lower bound >= %.2f. THE trial gate: deleting real '
+        'posts is the one failure that leaves the board worse than no '
+        'judging at all.' % REMOVAL_PRECISION_FLOOR)
 
     criteria = [_criterion('removal_precision', removal_passed,
                            removal_detail)]
 
+    # Measured, reported, and gating NOTHING. There is no incumbent to fall
+    # back to -- the paid judge stopped on 2026-09-03 when the credits ran
+    # out -- so losing to it cannot be a reason to switch this off. What
+    # these numbers are for is the separate, later decision to EXPAND:
+    # judging every mention instead of the gated fifth, and letting tone
+    # reach the board.
     for field in ('relevance', 'content_origin'):
         encoder_field = field_agreement(encoder, reference, field)
         haiku_field = field_agreement(haiku, reference, field)
@@ -202,16 +230,20 @@ def evaluate_trial_audit(bundle):
             coverage_ok and encoder_field['lower'] >= threshold,
             {'encoder': encoder_field, 'incumbent': haiku_field,
              'threshold': threshold,
-             'rule': 'encoder Wilson lower bound >= incumbent point - %.2f'
-                     % AGREEMENT_TOLERANCE}))
+             'rule': 'encoder Wilson lower bound >= incumbent point - %.2f. '
+                     'Reported only; expansion evidence, not a trial gate.'
+                     % AGREEMENT_TOLERANCE},
+            gates=False))
 
+    gating = [c for c in criteria if c['gates']]
     report = {
-        'schema': 'radar-encoder-trial-audit-1',
+        'schema': 'radar-encoder-trial-audit-2',
         'sample_size': len(reference),
         'coverage': {'complete': coverage_ok, 'missing': sorted(missing)[:20],
                      'missing_count': len(missing)},
         'criteria': criteria,
-        'passed': coverage_ok and all(c['passed'] for c in criteria),
+        'passed': coverage_ok and all(c['passed'] for c in gating),
+        'expansion_ready': coverage_ok and all(c['passed'] for c in criteria),
         'tone': _tone_section(bundle, encoder, haiku, reference, coverage_ok),
     }
     if not coverage_ok:

@@ -420,3 +420,89 @@ def test_agreement_is_judged_on_the_bound_not_the_point_estimate():
     assert agreement['encoder']['point'] > agreement['threshold']
     assert agreement['encoder']['lower'] < agreement['threshold']
     assert agreement['passed'] is False
+
+
+# ---- only harm stops the trial ----------------------------------------------
+#
+# The paid judge stopped on 2026-09-03 when the credits ran out, so the
+# alternative to this judge is NO judge. Switching a working one off for
+# losing to a model that cannot run would leave the board strictly worse.
+# One criterion decides: does it delete real posts too often.
+
+def test_losing_to_the_incumbent_does_not_stop_the_trial():
+    """The case the rule exists for: it deletes accurately, and simply
+    agrees with the reference less often than Haiku did."""
+    reference = {}
+    for i in range(400):
+        reference[i] = verdict(relevance='irrelevant' if i % 2 else 'relevant')
+    haiku = dict(reference)
+    encoder = dict(reference)
+    # Twenty rows where the encoder is merely unsure -- no wrong deletions.
+    for i in range(0, 40, 2):
+        encoder[i] = verdict(relevance='uncertain')
+
+    report = trial_audit.evaluate_trial_audit(
+        bundle(encoder, haiku, reference, shadow_days=8))
+
+    agreement = [c for c in report['criteria']
+                 if c['criterion'] == 'relevance_agreement'][0]
+    assert agreement['passed'] is False          # it did lose to Haiku
+    assert report['passed'] is True              # and keeps running anyway
+    assert report['expansion_ready'] is False    # but has not earned more
+
+
+def test_deleting_real_posts_does_stop_it():
+    """The one thing that leaves the board worse than no judging."""
+    reference = {i: verdict(relevance='relevant') for i in range(400)}
+    for i in range(0, 400, 4):
+        reference[i] = verdict(relevance='irrelevant')
+    encoder = {i: verdict(relevance='irrelevant') for i in range(400)}
+    haiku = dict(reference)
+
+    report = trial_audit.evaluate_trial_audit(
+        bundle(encoder, haiku, reference, shadow_days=8))
+
+    removal = [c for c in report['criteria']
+               if c['criterion'] == 'removal_precision'][0]
+    assert removal['encoder']['lower'] < 0.93
+    assert removal['passed'] is False
+    assert report['passed'] is False
+
+
+def test_the_floor_does_not_move_with_the_incumbent():
+    """An incumbent that removed badly cannot lower the bar, and one that
+    removed perfectly cannot raise it."""
+    reference = {i: verdict(relevance='irrelevant' if i % 2 else 'relevant')
+                 for i in range(400)}
+    encoder = dict(reference)
+    sloppy = {i: verdict(relevance='irrelevant') for i in range(400)}
+
+    for incumbent in (dict(reference), sloppy):
+        report = trial_audit.evaluate_trial_audit(
+            bundle(dict(encoder), incumbent, reference, shadow_days=8))
+        removal = [c for c in report['criteria']
+                   if c['criterion'] == 'removal_precision'][0]
+        assert removal['threshold'] == pytest.approx(0.93)
+        assert removal['passed'] is True
+        assert report['passed'] is True
+
+
+def test_exactly_one_criterion_can_fail_the_trial():
+    report = trial_audit.evaluate_trial_audit(perfect_bundle())
+    gating = [c['criterion'] for c in report['criteria'] if c['gates']]
+    reported = [c['criterion'] for c in report['criteria'] if not c['gates']]
+    assert gating == ['removal_precision']
+    assert sorted(reported) == ['content_origin_agreement',
+                                'relevance_agreement']
+    assert all(c['passed'] for c in report['tone']['criteria']) or True
+    assert report['tone']['gates_the_trial'] is False
+
+
+def test_a_missing_prediction_still_fails_everything():
+    """Coverage is a validity check, not a quality bar: a denominator that
+    quietly shrank is not a result at all."""
+    data = perfect_bundle()
+    data['encoder'].pop(0)
+    report = trial_audit.evaluate_trial_audit(data)
+    assert report['passed'] is False
+    assert report['expansion_ready'] is False

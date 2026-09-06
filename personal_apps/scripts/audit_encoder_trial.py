@@ -176,10 +176,15 @@ def cmd_evaluate(out_dir, labels, encoder, haiku, shadow_days):
         out.write(_markdown(report))
     print('%s -- %s' % ('PASSED' if report['passed'] else 'FAILED', path))
     for criterion in report['criteria']:
-        print('  %-26s %s' % (criterion['criterion'],
-                              'pass' if criterion['passed'] else 'FAIL'))
-    print('  tone qualification         %s (never gates the trial)'
-          % ('qualified' if report['tone']['qualified'] else 'not qualified'))
+        print('  %-26s %-5s %s' % (
+            criterion['criterion'],
+            'pass' if criterion['passed'] else 'FAIL',
+            '' if criterion['gates'] else '(reported; does not stop the trial)'))
+    print('  tone qualification         %-5s (reported; does not stop the trial)'
+          % ('qual' if report['tone']['qualified'] else 'no'))
+    print()
+    print('  ready to expand later:     %s'
+          % ('yes' if report.get('expansion_ready') else 'not yet'))
     return 0
 
 
@@ -187,17 +192,25 @@ def _markdown(report):
     lines = ['# Encoder trial audit', '',
              '**Result: %s**' % ('PASSED' if report['passed'] else 'FAILED'),
              '', 'Sample size: %d' % report['sample_size'], '',
-             '| criterion | encoder | incumbent | threshold | verdict |',
-             '|---|---|---|---|---|']
+             'One criterion stops the trial: whether it deletes real posts '
+             'too often. The comparisons against the paid judge are measured '
+             'and reported, and decide nothing here -- that judge stopped '
+             'running on 2026-09-03 and is not an alternative. They are the '
+             'evidence for a later decision to expand.', '',
+             '| criterion | stops the trial | encoder | incumbent | threshold | verdict |',
+             '|---|---|---|---|---|---|']
     for criterion in report['criteria']:
         encoder = criterion.get('encoder') or {}
         incumbent = criterion.get('incumbent') or {}
-        lines.append('| %s | %s | %s | %s | %s |' % (
+        lines.append('| %s | %s | %s | %s | %s | %s |' % (
             criterion['criterion'],
+            'yes' if criterion['gates'] else 'no',
             _cell(encoder), _cell(incumbent),
             ('%.4f' % criterion['threshold']) if 'threshold' in criterion
             else '--',
             'pass' if criterion['passed'] else '**FAIL**'))
+    lines += ['', 'Ready to expand later: **%s**'
+              % ('yes' if report.get('expansion_ready') else 'not yet')]
     lines += ['', '## Tone', '',
               'Reported, never gating: encoder tone is not written during '
               'the trial, so it cannot pass or fail it.', '',

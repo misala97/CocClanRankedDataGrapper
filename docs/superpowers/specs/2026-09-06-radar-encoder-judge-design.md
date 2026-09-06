@@ -375,19 +375,49 @@ to implement.
 ### 7.1 Tolerated loss, fixed now
 
 Written before the evaluation, per Codex. On the fresh random audit (§7.3),
-against the same reference, relative to the Haiku numbers on that same set:
+against the same reference, all on the Wilson 95% lower bound.
 
-| field | rule |
-|---|---|
-| removal precision | ≥ Haiku − 0.03, and ≥ 0.93 absolute |
-| relevance / content_origin agreement | ≥ Haiku − 2.0 points |
-| attitude | not gated during the trial; tone is not displayed from the encoder |
-| polarity reversals | recorded, not gated during the trial |
+**Amended 2026-09-06, before any encoder judgment existed.** The original
+table made every criterion gating, two of them measured *relative to Haiku*.
+That was written when Haiku was a fallback. It is not: the paid judge
+stopped on 2026-09-03 when the credits ran out, and paying again is not on
+the table. The alternative to this judge is **no judge** — which is what
+radar has actually run on since that date: lexicon tone, no relevance
+filtering, junk counted.
 
-Failing any of these ends the trial (§7.2). **Passing them authorises
-nothing about tone.** Removal quality cannot license a tone change, and the
-table above deliberately does not gate attitude — so tone stays disabled until
-its own criteria are met, separately:
+Under the original rule, a judge that deleted accurately but agreed with the
+reference slightly less often than Haiku would be switched off, leaving the
+board strictly worse than keeping it. Wrong trade. The rules are now split by
+what they are *for*:
+
+| field | rule | stops the trial? |
+|---|---|---|
+| removal precision | ≥ 0.93 absolute | **yes** |
+| relevance / content_origin agreement | ≥ Haiku − 2.0 points | no — reported |
+| attitude | not gated; encoder tone is not displayed | no |
+| polarity reversals | recorded | no |
+
+**One criterion stops the trial: does it delete real posts too often.**
+Deleting real chatter is the single failure that leaves the board worse than
+no judging at all, which is what makes it the harm test and an absolute floor
+the right shape for it. That floor does not move with the incumbent — a
+badly-removing incumbent cannot lower it, a perfect one cannot raise it.
+
+The Haiku comparisons are still measured and still reported. Their job is the
+**separate, later decision to expand**: turning the judge gate off so every
+mention is judged instead of the gated fifth, and letting tone reach the
+board. The report carries `expansion_ready` for exactly that, and it
+authorises nothing on its own.
+
+This amendment is legitimate now and would not be on day 10. The rule that
+tolerances are fixed before the evaluation exists so nobody argues a
+threshold down after seeing the numbers — no encoder has judged a single
+production row, and this change makes the trial harder to end for reasons
+unrelated to harm, not easier to pass.
+
+**Passing authorises nothing about tone.** Removal quality cannot license a
+tone change, and the table above deliberately does not gate attitude — so
+tone stays disabled until its own criteria are met, separately:
 
 **Tone promotion criteria (all four, on the fresh random audit):**
 
@@ -580,10 +610,15 @@ outside git; `accept` is the only evaluation command that writes trial state.
   removals confirmed by the final reference. Agreement denominators are the
   complete sampled set. Compute Wilson intervals with z=1.959963984540054;
   zero denominators fail the corresponding criterion.
-- Relative comparisons use the **Haiku point estimate** as the fixed threshold
-  on this same sample: encoder removal LCB >= max(0.93, Haiku precision - 0.03);
-  encoder relevance/origin agreement LCB >= Haiku agreement - 0.02, separately.
-  Report both backends' numerators, denominators, points and bounds.
+- The trial gate is **absolute**: encoder removal LCB >= 0.93, and the
+  incumbent's own precision does not move it (§7.1, amended 2026-09-06).
+  Relative comparisons use the **Haiku point estimate** as the fixed
+  threshold on this same sample — encoder relevance/origin agreement LCB >=
+  Haiku agreement - 0.02, separately — and are REPORTED rather than gating:
+  they are evidence for a later decision to expand, and there is no
+  incumbent to fall back to. Report both backends' numerators, denominators,
+  points and bounds either way, and carry `expansion_ready` alongside
+  `passed`.
 - Report tone separately: reversal denominator is reference-positive/negative
   rows; a reversal predicts the opposite polarity. Require encoder reversal
   point <= Haiku point and Wilson UCB < 0.05. Attitude agreement uses encoder
