@@ -221,16 +221,19 @@ def _blind_items():
     return items
 
 
-def cmd_label(label_pass, model):
+def cmd_label(label_pass, model, effort):
+    """Label the blind set with one model at one effort.
+
+    `effort` used to be inferred from the model id -- `'low' if model !=
+    PRIMARY_MODEL` -- which is the same shape of mistake as reading a
+    judgment's STAGE off its model id: it happened to be right for the two
+    models in use and silently wrong for a third. It is an explicit choice
+    now, defaulting to none, and the Sonnet and Opus recipes pass `--effort
+    low` because that is what they were always sending.
+    """
     items = _blind_items()
-    # The heuristic is preserved verbatim in this commit -- it is wrong (it
-    # infers a call parameter from a model id, the same shape of mistake as
-    # the stage proxy) but replacing it is a configuration change and
-    # belongs with the rest of them, not in a refactor that must not move
-    # any behaviour.
-    effort = 'low' if model != llm_sentiment.PRIMARY_MODEL else None
-    backend = judge_backends.construct_backend('anthropic:' + model,
-                                               effort=effort)
+    backend = judge_backends.construct_backend(
+        'anthropic:' + model, effort=None if effort == 'none' else effort)
     answers = llm_sentiment.judge(items, backend)
     out_path = _path('reference-labels-%s.jsonl' % label_pass)
     with open(out_path, 'w', encoding='utf-8') as out:
@@ -357,6 +360,10 @@ def main():
     label = sub.add_parser('label')
     label.add_argument('--label-pass', required=True, choices=('one', 'two'))
     label.add_argument('--model', required=True)
+    label.add_argument('--effort', default='none',
+                       choices=('none', 'low', 'medium', 'high'),
+                       help="reasoning effort; Haiku rejects anything but "
+                            "'none', the Sonnet and Opus recipes use 'low'")
     sub.add_parser('export-disagreements')
     sub.add_parser('freeze')
     args = parser.parse_args()
@@ -365,7 +372,7 @@ def main():
         cutoff = dt.datetime.strptime(args.cutoff, '%Y-%m-%d')
         return cmd_sample(cutoff, thin_slice_reason=args.accept_thin_slice)
     if args.command == 'label':
-        return cmd_label(args.label_pass, args.model)
+        return cmd_label(args.label_pass, args.model, args.effort)
     if args.command == 'export-disagreements':
         return cmd_export_disagreements()
     return cmd_freeze()

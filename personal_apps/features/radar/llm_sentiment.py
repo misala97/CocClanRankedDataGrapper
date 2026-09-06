@@ -709,21 +709,41 @@ def items_for(rows):
 
 
 def default_primary_backend():
-    """Haiku, constructed explicitly. Not read from the environment.
+    """Whatever startup resolved, or None.
 
-    Configuration resolution belongs to the daemon's startup (spec §2.3) and
-    arrives in a later task; until then an omitted backend means exactly
-    what it meant before this seam existed.
+    None means judge nothing. That is the DEFAULT (spec §2.3): a deploy
+    that forgets RADAR_JUDGE_PRIMARY judges nothing rather than judging
+    with whichever backend the code happens to name first, because the
+    wrong answers get stored and counted under the wrong provenance.
     """
-    from . import judge_backends
-    return judge_backends.construct_backend('anthropic:' + PRIMARY_MODEL)
+    from . import judge_config
+    return judge_config.active_primary()
 
 
 def default_review_backend():
-    """Sonnet at low effort -- a property of the model, not of the pass."""
+    """The configured review backend, or None if either half is missing.
+
+    Reviewing needs a backend AND a mode. A backend with no mode is a
+    rollout that was prepared and not started; a mode with no backend is
+    one that was started without a judge.
+    """
+    from . import judge_config
+    return judge_config.active_review()
+
+
+def _trial_guard(backend, now):
+    """The trial module, when this backend is one a trial governs.
+
+    None for Anthropic: a hosted judge has no trial, no deadline and no
+    evidence pin. The encoder has all three, and may not judge without
+    them -- there would be nothing holding the journal its recovery needs.
+    """
     from . import judge_backends
-    return judge_backends.construct_backend('anthropic:' + REVIEW_MODEL,
-                                            effort='low')
+    if getattr(backend, 'id', None) != judge_backends.ENCODER_MODEL_ID:
+        return None
+    from . import judge_trial
+    judge_trial.guard_encoder_trial(now)
+    return judge_trial
 
 
 def run_pass(backend=None, limit=None, now=None):
@@ -741,6 +761,8 @@ def run_pass(backend=None, limit=None, now=None):
     """
     from . import judge_backends
     backend = backend or default_primary_backend()
+    if backend is None:
+        return 0
     limit = backend.pass_limit if limit is None else limit
     now = now or dt.datetime.utcnow()
     gate = judge_gate.judgeable_tickers(now)
@@ -763,12 +785,30 @@ def run_pass(backend=None, limit=None, now=None):
         meter['input'] += getattr(usage, 'input_tokens', 0) or 0
         meter['output'] += getattr(usage, 'output_tokens', 0) or 0
 
+    trial = _trial_guard(backend, now)
     judgments = judge(items_for(rows), backend, on_usage=count)
+    if trial is not None and judgments:
+        # Checked AGAIN, after the answers came back. A batch can outlive
+        # the trial it belongs to -- a stop, a failed audit or the deadline
+        # can land while it is in flight -- and a late answer must be
+        # discarded rather than stored under a trial that has ended.
+        try:
+            trial.guard_encoder_trial(now)
+        except trial.TrialError as ended:
+            logger.warning('radar encoder: discarding %d in-flight answers, '
+                           '%s', len(judgments), ended)
+            return 0
     spend.record(backend.id, calls=meter['calls'],
                  input_tokens=meter['input'], output_tokens=meter['output'])
     written = apply_judgments(rows, judgments, stage='primary',
                               model=backend.id,
                               write_tone=judge_backends.writes_tone(backend))
+    if trial is not None and written:
+        # In the SAME transaction as the first materialized verdict. The
+        # deadline measures live traffic being changed, so it starts when a
+        # verdict is actually written -- never at startup, and never from a
+        # call that failed.
+        trial.note_first_judgment(now)
     changed = _sync_eligibility(rows, judgments)
     db.session.commit()
     _rebuild_corrected(changed)
@@ -834,11 +874,15 @@ def run_review_pass(backend=None, now=None):
     mention, anchored on review_requested_at, so a candidate waiting
     across 10-minute passes is counted once.
     """
-    mode = os.getenv('RADAR_SONNET_REVIEW', '').strip()
-    if mode not in ('shadow', '1', 'true', 'True'):
+    from . import judge_backends, judge_config
+    mode = judge_config.review_mode()
+    if mode == judge_config.OFF:
         return 0
-    from . import judge_backends
     backend = backend or default_review_backend()
+    if backend is None:
+        return 0
+    if not backend.supports_review:
+        raise ValueError('%r cannot serve the review role' % backend.id)
     now = now or dt.datetime.utcnow()
     # UTC day from the pass's own clock, not the machine's local calendar
     # (Codex review, finding 7).
@@ -874,7 +918,7 @@ def run_review_pass(backend=None, now=None):
                    commit=False)
     db.session.commit()
 
-    if mode == 'shadow':
+    if mode == judge_config.SHADOW:
         logger.info('radar review shadow: %d candidates (%d new), %d over '
                     'ceiling, vs %d primary today',
                     len(candidates), new_demand,
@@ -1013,8 +1057,8 @@ def _over_ceiling_gauge(now, attempted_today):
     enabled and is cached for a minute -- the board polls far more often
     than this number can change (Codex review, finding 12).
     """
-    if os.getenv('RADAR_SONNET_REVIEW', '').strip() not in ('shadow', '1',
-                                                            'true', 'True'):
+    from . import judge_config
+    if judge_config.review_mode() == judge_config.OFF:
         return 0
     cached_at = _gauge_cache['at']
     if cached_at is not None and (now - cached_at).total_seconds() < 60:

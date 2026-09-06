@@ -69,8 +69,11 @@ def _wipe():
     RadarJudgeTrial.query.delete(synchronize_session=False)
     # roll_up leaves buckets, and buckets are never pruned by anything.
     for model in (RadarBucketSource, RadarBucket):
-        model.query.filter(model.ticker == 'ZZT',
-                           model.bucket_start < SAFETY_CEILING).delete(
+        # Every ZZT bucket, not only the ones inside this suite's decade:
+        # buckets are never pruned by anything, so a stray one from an
+        # earlier version of these fixtures outlives the run that made it
+        # and trips the daemon's rollup-bootstrap guard at startup.
+        model.query.filter(model.ticker == 'ZZT').delete(
             synchronize_session=False)
     RadarMentionEvent.query.filter(
         RadarMentionEvent.external_id.like(PREFIX + '%')).delete(
@@ -985,13 +988,38 @@ def test_the_guard_refuses_on_the_deadline_itself(no_trial):
             judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=10))
 
 
-def test_a_passing_audit_does_not_extend_the_deadline(no_trial):
+def test_a_passing_audit_lifts_the_deadline_but_nothing_else(no_trial):
+    """The deadline exists because a trial that never tests its own
+    acceptance rules is not a trial. One that has tested them and passed
+    has answered that, so it keeps running -- still suppressed, still
+    pinned, still needing a separate change to be promoted."""
     with flask_app.app_context():
         row = started(arm())
         judge_trial.accept_audit(report_for(row), REPORT_SHA,
                                  NOW + dt.timedelta(days=5), passed=True)
+
+        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=11))
+        assert judge_trial.deadline(judge_trial.current()) is None
+        assert judge_trial.retention_floor() is not None
+        assert judge_trial.current().status == judge_trial.RUNNING
+
+
+def test_a_failing_audit_does_not_lift_the_deadline(no_trial):
+    with flask_app.app_context():
+        row = started(arm())
+        judge_trial.accept_audit(report_for(row, passed=False), REPORT_SHA,
+                                 NOW + dt.timedelta(days=5), passed=False)
+        # ...and it is already recovering, so it may not judge at all.
         with pytest.raises(judge_trial.TrialError):
-            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=11))
+            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=6))
+
+
+def test_an_unevaluated_trial_still_expires_on_day_ten(no_trial):
+    with flask_app.app_context():
+        started(arm())
+        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=9, hours=23))
+        with pytest.raises(judge_trial.TrialError):
+            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=10))
 
 
 def test_the_clock_starts_once_and_is_never_restarted(no_trial):

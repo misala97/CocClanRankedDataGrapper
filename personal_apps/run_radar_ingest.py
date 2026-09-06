@@ -31,7 +31,8 @@ from extensions import db
 from models import (RadarInstrument, RadarPollState, RadarQuote,
                     RadarRedditCursor)
 from features.radar import (
-    fx, history, ingest, instruments, journal, llm_sentiment,
+    fx, history, ingest, instruments, journal, judge_config, judge_trial,
+    llm_sentiment,
     market_calendar, quotes, retention, scheduling, scoring, universe)
 from features.radar.markets import classify_quality
 from features.radar.prices import finnhub as finnhub_provider
@@ -1249,6 +1250,24 @@ def main(argv=None):
         dt.datetime.now(dt.timezone.utc))
     logger.info('radar rollup generation prepared: recovered=%d invalidated=%d',
                recovered, invalidated)
+
+    # The judge is resolved and constructed HERE: before any fetcher, before
+    # the scheduler, and outside _scheduled_sentiment's exception handler.
+    # That handler exists so a failing optional enrichment cannot take the
+    # daemon down with it -- which is exactly why a MISCONFIGURED judge must
+    # not be discovered inside it, where it would be caught and logged every
+    # ten minutes into a warning nobody reads twice. Uncaught on purpose.
+    settings = judge_config.resolve_settings()
+    with app.app_context():
+        # The trial's own deadline is checked at startup as well as by its
+        # timer: the timer cannot promise execution while the host is down,
+        # and a trial must not resume judging across a gap that outlived
+        # it. Before initialize_judges, so an expired trial is already
+        # recovering when the encoder asks whether it may run.
+        expiry = judge_trial.tick(dt.datetime.utcnow())
+        if expiry.get('action') not in (None, 'none'):
+            logger.warning('radar encoder trial at startup: %s', expiry)
+        judge_config.initialize_judges(settings)
 
     fetchers = build_fetchers()
 

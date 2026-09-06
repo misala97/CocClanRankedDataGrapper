@@ -89,6 +89,22 @@ def cmd_stop(args):
     return 0
 
 
+def cmd_tick(args):
+    """Enforce the deadline. Reads the row; constructs no judge.
+
+    Run by its own timer every minute, deliberately not by the ingest
+    daemon: the thing most likely to need stopping IS the daemon.
+    """
+    with app.app_context():
+        report = judge_trial.tick(dt.datetime.utcnow(), limit=args.limit)
+    action = report.get('action', 'none')
+    if action == 'none':
+        return 0
+    print('%s: recovered %d, %d remaining'
+          % (action, report.get('recovered', 0), report.get('remaining', 0)))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -110,11 +126,25 @@ def main(argv=None):
     stop.add_argument('--reason', required=True,
                       help='why; it becomes the record')
 
+    tick = sub.add_parser('tick', help='enforce the deadline (the watchdog)')
+    tick.add_argument('--limit', type=int, default=2000,
+                      help='maximum mentions to recover in one tick')
+
     args = parser.parse_args(argv)
+    try:
+        return _dispatch(args)
+    except judge_trial.TrialError as refused:
+        print('refused: %s' % refused, file=sys.stderr)
+        return 1
+
+
+def _dispatch(args):
     if args.command == 'status':
         return cmd_status()
     if args.command == 'arm':
         return cmd_arm(args)
+    if args.command == 'tick':
+        return cmd_tick(args)
     return cmd_stop(args)
 
 

@@ -1,0 +1,23 @@
+# Every minute, and catching up after downtime.
+#
+# Persistent=true is the point: if the host is off when the deadline
+# passes, the first firing after boot still enforces it. The tick reads the
+# ORIGINAL first_judged_at, so a gap never extends a trial -- it only
+# delays the moment somebody notices it ended.
+#
+# A minute is far finer than a ten-day deadline needs. It is cheap (one
+# indexed read of a single row), and it means the operator's `stop` takes
+# effect within a minute rather than whenever something else happens to
+# run.
+
+[Unit]
+Description=Run the radar encoder trial watchdog every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
+Persistent=true
+Unit=radar-encoder-trial.service
+
+[Install]
+WantedBy=timers.target

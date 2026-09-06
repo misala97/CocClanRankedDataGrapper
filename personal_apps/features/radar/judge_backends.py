@@ -208,6 +208,28 @@ class EncoderBackend:
         self._tokenizer = None
         self._load_error = None
 
+    def bundle_sha256(self):
+        """SHA256 over the three artifact files, in a fixed order.
+
+        The identity of a DEPLOYED artifact, checked against the one the
+        trial was armed for. Not stored inside config.json, which would
+        make the hash cover itself; and computed over all three files
+        because swapping the tokenizer alone changes every verdict while
+        leaving the weights untouched.
+        """
+        import hashlib
+        digest = hashlib.sha256()
+        version_dir = os.path.dirname(self.model_path)
+        for name in ('model.onnx', 'tokenizer.json', 'config.json'):
+            path = os.path.join(version_dir, name)
+            file_digest = hashlib.sha256()
+            with open(path, 'rb') as handle:
+                for chunk in iter(lambda: handle.read(1 << 20), b''):
+                    file_digest.update(chunk)
+            line = '%s=%s\n' % (name, file_digest.hexdigest())
+            digest.update(line.encode('utf-8'))
+        return digest.hexdigest()
+
     # -- construction-time checks -------------------------------------------
 
     def _read_json(self, path, what):

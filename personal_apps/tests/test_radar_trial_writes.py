@@ -478,23 +478,59 @@ class ToneFreeBackend:
 
 def test_the_pass_takes_its_tone_policy_from_the_backend(clean_posts,
                                                          monkeypatch):
-    from features.radar import judge_gate
+    from features.radar import judge_gate, judge_trial
+    from models import RadarJudgeTrial
     monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
     with flask_app.app_context():
-        mention_id = make_post('zztrial-wiring')
-        backend = ToneFreeBackend({mention_id: ja(attitude='negative',
-                                                  move='down')})
+        RadarJudgeTrial.query.delete(synchronize_session=False)
+        db.session.commit()
+        # The encoder may not judge without an armed trial: the armed row
+        # is what pins the journal its recovery would need.
+        judge_trial.arm_trial(dt.datetime.utcnow(), artifact_sha256='a' * 64,
+                              baseline_report='reports/baseline.json',
+                              baseline_removal_rate=0.3, seed=1)
+        try:
+            mention_id = make_post('zztrial-wiring')
+            backend = ToneFreeBackend({mention_id: ja(attitude='negative',
+                                                      move='down')})
 
-        assert llm_sentiment.run_pass(backend=backend, limit=5) >= 1
+            assert llm_sentiment.run_pass(backend=backend, limit=5) >= 1
 
-        m = db.session.get(RadarMention, mention_id)
-        assert m.sentiment_model == ENCODER
-        assert m.sentiment_relevance == 'relevant'
-        for column in TONE_COLUMNS:
-            assert getattr(m, column) is None, column
-        history = RadarSentimentJudgment.query.filter_by(
-            mention_id=mention_id).one()
-        assert history.attitude == 'negative'
+            m = db.session.get(RadarMention, mention_id)
+            assert m.sentiment_model == ENCODER
+            assert m.sentiment_relevance == 'relevant'
+            for column in TONE_COLUMNS:
+                assert getattr(m, column) is None, column
+            history = RadarSentimentJudgment.query.filter_by(
+                mention_id=mention_id).one()
+            assert history.attitude == 'negative'
+            # ...and the deadline clock started with that first verdict.
+            row = judge_trial.current()
+            assert row.first_judged_at is not None
+            assert row.status == judge_trial.RUNNING
+        finally:
+            RadarJudgeTrial.query.delete(synchronize_session=False)
+            db.session.commit()
+
+
+def test_the_encoder_will_not_judge_without_an_armed_trial(clean_posts,
+                                                           monkeypatch):
+    """Without a trial there is no pin holding the evidence, so the very
+    first judgment would already be unrecoverable."""
+    from features.radar import judge_gate, judge_trial
+    from models import RadarJudgeTrial
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+    with flask_app.app_context():
+        RadarJudgeTrial.query.delete(synchronize_session=False)
+        db.session.commit()
+        mention_id = make_post('zztrial-noarm')
+        backend = ToneFreeBackend({mention_id: ja()})
+
+        with pytest.raises(judge_trial.TrialError):
+            llm_sentiment.run_pass(backend=backend, limit=5)
+
+        assert db.session.get(RadarMention,
+                              mention_id).sentiment_judged_at is None
 
 
 # ---- 12. tone provenance ----------------------------------------------------
@@ -701,3 +737,43 @@ def test_the_sonnet_rate_is_list_price():
     from features.radar import spend
     assert spend.MODEL_RATES[SONNET] == (2.00, 10.00)
 
+
+
+def test_answers_that_outlive_their_trial_are_discarded(clean_posts,
+                                                        monkeypatch):
+    """A batch can outlive the trial it belongs to: a stop, a failed audit
+    or the deadline can land while it is in flight. A late answer must be
+    thrown away, not stored under a trial that has ended -- otherwise a
+    stop leaves judgments arriving after it.
+    """
+    from features.radar import judge_gate, judge_trial
+    from models import RadarJudgeTrial
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    with flask_app.app_context():
+        RadarJudgeTrial.query.delete(synchronize_session=False)
+        db.session.commit()
+        judge_trial.arm_trial(dt.datetime.utcnow(), artifact_sha256='a' * 64,
+                              baseline_report='reports/baseline.json',
+                              baseline_removal_rate=0.3, seed=1)
+        try:
+            mention_id = make_post('zztrial-inflight')
+
+            class StopsMidFlight(ToneFreeBackend):
+                def judge_batch(self, batch, *, preamble=None):
+                    answers = super().judge_batch(batch, preamble=preamble)
+                    # The operator stops the trial while this batch is out.
+                    judge_trial.request_stop('stopped mid-flight')
+                    return answers
+
+            backend = StopsMidFlight({mention_id: ja()})
+            assert llm_sentiment.run_pass(backend=backend, limit=5) == 0
+
+            m = db.session.get(RadarMention, mention_id)
+            assert m.sentiment_judged_at is None
+            assert m.sentiment_relevance is None
+            assert RadarSentimentJudgment.query.filter_by(
+                mention_id=mention_id).count() == 0
+        finally:
+            RadarJudgeTrial.query.delete(synchronize_session=False)
+            db.session.commit()

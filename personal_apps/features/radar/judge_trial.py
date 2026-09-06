@@ -456,14 +456,22 @@ TRIAL_DEADLINE_DAYS = 10
 
 
 def deadline(row):
-    """When an unevaluated trial ends by itself, or None before it starts.
+    """When an unevaluated trial ends by itself, or None if it cannot.
 
     Measured from the FIRST JUDGED MENTION, not from arming or from a
     restart: the clock belongs to the live traffic the trial is changing,
     and a trial that was armed but never judged anything has nothing to
     expire.
+
+    None once a PASSING audit is recorded. The deadline exists because a
+    trial that changes live counts without ever testing its own acceptance
+    rules is not a trial (spec §7.2b) -- and a trial that has tested them
+    and passed has answered that. It keeps running suppressed, with its
+    evidence still pinned; promoting it is a separate change.
     """
     if row is None or row.first_judged_at is None:
+        return None
+    if row.audit_evaluated_at is not None and row.audit_passed:
         return None
     return row.first_judged_at + dt.timedelta(days=TRIAL_DEADLINE_DAYS)
 
@@ -557,3 +565,39 @@ def note_first_judgment(now):
         row.first_judged_at = now
         row.status = RUNNING
     return row
+
+
+def tick(now, limit=2000):
+    """Enforce the deadline. Reads the row; constructs no backend.
+
+    Run by its own timer, independently of the ingest daemon, because the
+    thing most likely to need stopping is the daemon. It cannot promise
+    execution while the host is down -- so startup consults the same guard,
+    and the first tick after a gap enforces the ORIGINAL deadline rather
+    than a fresh one.
+
+    Idempotent and safe to run every minute: with no trial, an armed trial
+    that has not judged, a trial inside its deadline, or a recovered one,
+    it does nothing at all.
+    """
+    row = current()
+    if row is None or row.status == RECOVERED:
+        return {'action': 'none'}
+    if row.status == RECOVERING:
+        # Already stopped, by an operator or a failed audit. Drain it.
+        report = recover_trial(apply=True, limit=limit, now=now)
+        report['action'] = 'recovering'
+        return report
+
+    ends = deadline(row)
+    if ends is None or now < ends:
+        return {'action': 'none'}
+
+    logger.warning('radar encoder trial reached its %d-day deadline at %s '
+                   'without a passing audit; stopping and recovering',
+                   TRIAL_DEADLINE_DAYS, ends)
+    request_stop('reached the %d-day deadline without a passing audit'
+                 % TRIAL_DEADLINE_DAYS)
+    report = recover_trial(apply=True, limit=limit, now=now)
+    report['action'] = 'expired'
+    return report
