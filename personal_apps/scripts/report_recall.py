@@ -10,6 +10,17 @@ population pass measured over the same seven days.
         --candidates C:/Users/michi/Desktop/radar_labels/candidates-2026-09-06.jsonl \\
         --population C:/Users/michi/Desktop/radar_labels/raw/population/population.json
 
+EACH CAUSE IS WEIGHTED BY VOLUME, NOT BY THE WAVE'S OWN MIX. The wave
+caps rows per symbol so that GoPro and AI cannot be the whole
+measurement, which deliberately under-samples exactly the symbols with
+the most volume. Averaging the sample would then report the capped mix
+rather than the week: measured flat, name-only reads 67.4%, and weighted
+by what each symbol actually contributes, 72.4%. So every cause's rate is
+the volume-weighted one, per-symbol where the wave saw the symbol, at the
+sample's own rate for the tail it never reached; `volume_sampled_share`
+says how much of the cause rests on measurement rather than on that tail.
+`hit_rate_sample` keeps the flat number beside it.
+
 UNCERTAIN IS A BAND, NOT A VOTE. A label of `uncertain` says the text does
 not support a decision, so it is neither a recovered mention nor a
 confirmed miss. The report gives the low estimate (uncertain counts as
@@ -51,12 +62,37 @@ def build(labels, candidates, volumes, symbol_volumes=None):
         labelled = sum(counts.values())
         relevant = counts['relevant']
         uncertain = counts['uncertain']
-        low = _rate(relevant, labelled)
-        high = _rate(relevant + uncertain, labelled)
+        sample_low = _rate(relevant, labelled)
+        sample_high = _rate(relevant + uncertain, labelled)
+
+        low, high, sampled_share = sample_low, sample_high, None
+        per_cause_volumes = (symbol_volumes or {}).get(cause)
+        if per_cause_volumes and labelled:
+            seen = {symbol: counts_ for (c, symbol), counts_ in per_symbol.items()
+                    if c == cause and symbol in per_cause_volumes}
+            covered = sum(per_cause_volumes[symbol] for symbol in seen)
+            total = sum(per_cause_volumes.values())
+            if total:
+                sampled_share = covered / total
+                tail = max(total - covered, 0)
+
+                def weighted(hit_of):
+                    got = sum(per_cause_volumes[symbol] * hit_of(counts_)
+                              for symbol, counts_ in seen.items())
+                    # The tail the wave never reached is carried at the
+                    # sample's own rate: an assumption, and the share above
+                    # says how much of the answer rests on it.
+                    return (got + tail * hit_of(counts)) / total
+
+                low = weighted(lambda c: _rate(c['relevant'], sum(c.values())) or 0.0)
+                high = weighted(lambda c: _rate(c['relevant'] + c['uncertain'],
+                                                sum(c.values())) or 0.0)
+
         by_cause[cause] = {
             'labelled': labelled, 'relevant': relevant,
             'irrelevant': counts['irrelevant'], 'uncertain': uncertain,
             'hit_rate': low, 'hit_rate_low': low, 'hit_rate_high': high,
+            'hit_rate_sample': sample_low, 'volume_sampled_share': sampled_share,
             'weekly_volume': volume,
             'weekly_recovered': None if low is None else round(low * volume),
             'weekly_recovered_high': None if high is None else round(high * volume),
@@ -120,16 +156,18 @@ def main(argv=None):
     report = build(labels, candidates, volumes, symbol_volumes)
 
     print('labelled %d rows\n' % report['labelled_total'])
-    print('%-24s %7s %7s %7s %7s   %7s  %9s  %s'
-          % ('cause', 'labels', 'real', 'junk', 'unsure', 'hit', 'per week', 'recovered/wk'))
+    print('%-24s %7s %7s %7s %7s  %7s %7s %7s %9s  %s'
+          % ('cause', 'labels', 'real', 'junk', 'unsure', 'flat', 'weighted',
+             'covered', 'per week', 'recovered/wk'))
     for cause, row in sorted(report['by_cause'].items(),
                              key=lambda kv: -(kv[1]['weekly_recovered'] or 0)):
-        hit = '   -  ' if row['hit_rate'] is None else '%5.1f%%' % (100 * row['hit_rate'])
+        fmt = lambda v: '   -  ' if v is None else '%5.1f%%' % (100 * v)   # noqa: E731
         rec = '   -' if row['weekly_recovered'] is None else '%d' % row['weekly_recovered']
         high = '' if row['weekly_recovered_high'] is None else ' (up to %d)' % row['weekly_recovered_high']
-        print('%-24s %7d %7d %7d %7d   %7s  %9d  %s%s'
+        print('%-24s %7d %7d %7d %7d  %7s %7s %7s %9d  %s%s'
               % (cause, row['labelled'], row['relevant'], row['irrelevant'],
-                 row['uncertain'], hit, row['weekly_volume'], rec, high))
+                 row['uncertain'], fmt(row['hit_rate_sample']), fmt(row['hit_rate']),
+                 fmt(row['volume_sampled_share']), row['weekly_volume'], rec, high))
     print('\ntotal recovered per week (measured causes): %d'
           % report['weekly_recovered_total'])
 

@@ -71,3 +71,45 @@ def test_a_label_whose_candidate_is_unknown_is_refused_loudly():
         assert '-99' in str(exc)
     else:
         raise AssertionError('an unmatched label must not be silently dropped')
+
+
+def test_the_cause_estimate_weights_each_symbol_by_its_real_volume():
+    """The wave caps rows per symbol, so a high-volume symbol is
+    deliberately under-sampled; averaging the sample would then report the
+    capped mix rather than the week's. GoPro is 90% of this volume and
+    always real, BE is 10% and never real."""
+    labels = ([_label(-1, 'relevant', 'cand:name_only'),
+               _label(-2, 'relevant', 'cand:name_only')]
+              + [_label(-3, 'irrelevant', 'cand:name_only'),
+                 _label(-4, 'irrelevant', 'cand:name_only')])
+    candidates = [_cand(-1, 'GPRO', 'name_only'), _cand(-2, 'GPRO', 'name_only'),
+                  _cand(-3, 'BE', 'name_only'), _cand(-4, 'BE', 'name_only')]
+    report = report_recall.build(
+        labels, candidates, volumes={'name_only': 100},
+        symbol_volumes={'name_only': {'GPRO': 90, 'BE': 10}})
+    row = report['by_cause']['name_only']
+    assert row['hit_rate_sample'] == 0.5          # what the capped wave saw
+    assert row['hit_rate'] == 0.9                 # what the week actually is
+    assert row['weekly_recovered'] == 90
+
+
+def test_volume_the_wave_never_sampled_is_carried_at_the_sample_rate():
+    labels = [_label(-1, 'relevant', 'cand:name_only'),
+              _label(-2, 'irrelevant', 'cand:name_only')]
+    candidates = [_cand(-1, 'GPRO', 'name_only'), _cand(-2, 'BE', 'name_only')]
+    report = report_recall.build(
+        labels, candidates, volumes={'name_only': 100},
+        symbol_volumes={'name_only': {'GPRO': 40, 'BE': 40, 'NEVERSEEN': 20}})
+    row = report['by_cause']['name_only']
+    # 40 at 100% + 40 at 0% + the unsampled 20 at the sample's own 50%.
+    assert row['weekly_recovered'] == 50
+    assert row['volume_sampled_share'] == 0.8
+
+
+def test_without_symbol_volumes_the_estimate_is_the_plain_sample_rate():
+    labels = [_label(-1, 'relevant', 'cand:name_only'),
+              _label(-2, 'irrelevant', 'cand:name_only')]
+    candidates = [_cand(-1, 'GPRO', 'name_only'), _cand(-2, 'BE', 'name_only')]
+    report = report_recall.build(labels, candidates, volumes={'name_only': 100})
+    row = report['by_cause']['name_only']
+    assert row['hit_rate'] == 0.5 and row['volume_sampled_share'] is None
