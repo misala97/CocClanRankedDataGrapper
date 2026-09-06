@@ -112,6 +112,7 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 7c configuration/expiry | **COMPLETE** | `769f66c` | 365 across 8 suites | inline, diff read | 5 mutations bit; corrected the deadline rule |
 | 8 full verification | **COMPLETE** | `c236b1f` | 2251 passed, 1 environmental | inline | vitest 403+269, tsc clean |
 | 9 package + runbook | **runbook delivered** | `c236b1f`, `64e9877` | n/a | inline | deployment awaits Michi |
+| R3 Codex review fixes | **COMPLETE** | `b8f4a82`..`55793b1` | 261 across 9 suites; full suite below | inline, diff read | 6 findings, 15 mutations bit (1 survived and was fixed) |
 
 ## Task 1 record
 
@@ -464,9 +465,97 @@ at or after 2026-09-06 09:00. Verified afterwards: scoring 44/44.
 Frontend gates: vitest 403 + 269 passed, `tsc --noEmit` and both Vite
 builds clean.
 
+## Review round 3 record (Codex, 2026-09-06)
+
+Codex reviewed `d11ab54` and would not merge: four P1 findings in write
+fencing, recovery concurrency and audit validation, two P2s in guard
+coverage, plus audit-tooling omissions and three stale doc passages. Every
+finding was verified against the code before anything was changed; all six
+held, and finding 1 was worse than stated. Fixed in a fresh session, one
+commit per finding, tests first, mutations run and restored.
+
+| finding | what was true | fix | commit |
+|---|---|---|---|
+| 1 (P1) stopped trial still receives judgments, can be resurrected | the post-inference recheck read the trial row through the session's identity map and repeatable-read snapshot -- for a stop committed by the CLI or the timer it never even queried; `note_first_judgment` then took a row lock too late and moved `recovered` back to `running` | the write side is one locked transaction: `lock_for_write` reads the row FOR UPDATE with `populate_existing`, re-validates with a fresh clock, and is held through the commit that lands spend, verdicts, history, journal flags and the clock together; `note_first_judgment` takes the locked row and only ever turns `armed` into `running` | `b8f4a82` |
+| 2 (P1) deadline checked with the pass-start clock, no per-batch guard | `now` fixed at pass start | `judge()` asks `before_batch` before every batch; `run_pass` takes a `clock` it consults per batch and at the boundary | `b8f4a82` |
+| 6 (P2) guard does not enforce the full armed contract | prompt version and model id never compared to the code's; gate-off selection could reach before the pin | `_may_judge` checks both identities; selection never picks a post older than `retain_from`; `refuse_outside_retention` at the write side | `b8f4a82` |
+| 3 (P1) recovery erases a review that wins after selection; stale snapshot | planned ORM objects cleared under the guard without rechecking ownership; the plan's transaction kept its snapshot through the guard | the plan is ids only; each window opens a fresh transaction under the guard, locks the trial row, re-selects the planned mentions FOR UPDATE by the frozen identity, reads the journal as it is now; apply requires a stopped trial; the pin is released only after a count under the row lock and the retention lock | `9acd913` |
+| 5 (P2) writers outside the bucket guard; stale score writes | startup invalidation and the backfill repair ran unguarded (the repair autoflushes throughout its loop); scoring's flush landed a z computed from a count recovery had since corrected | both take the guard; scoring's UPDATE is conditional on the count the z was computed from, skipped rows logged | `39798fb` |
+| 4 (P1) an audit can lift the deadline without proving it audited this trial | `evaluate` took any files, made their keys the denominator; `accept` trusted the flag; empty verdicts agreed; a minimal report passed; acceptance possible before the first judgment | the chain: `sample` day-3/day-7/once with identity; new `predict` (exact ids, canonical inputs, frozen artifact, offline, metered, provenance header, `--confirm-spend` for paid); `evaluate` verifies sample reproduction, membership, provenance, validity, label provenance, shadow days from history, supplemental sets, completeness, input hashes; `accept` re-hashes, reproduces the verdict, requires acknowledgments against this report, checks day-3/day-7, then records; the primitive refuses a bare flag, an incomplete report, a foreign result, and a trial with no first judgment | `5d282cb`, `9726e8d` |
+| docs | encoder spec section 6 and v2 spec section 10.2 still described the relative gate; the evaluator docstring too; runbook section 10 predates the chain | amended in place with dated notes; runbook follows the chain | `55793b1` (docstring in `5d282cb`) |
+
+**Mutations, each applied to the finished code and restored.** Skipping
+the per-batch check (1 failed), validating with the pass-start clock (1),
+dropping `populate_existing` (1 -- the cross-process stop test), letting
+the clock start a stopped trial (2, after a direct test was added: the
+boundary refused first, so the second line had no test of its own),
+clearing the planned objects without re-selecting (1), keeping the plan's
+snapshot (1, re-run against the green suite), releasing without the
+locked recount (1), scoring regardless of the count (1), backfill without
+the guard (1), startup invalidation without the guard (1), accepting
+without reproducing (1), skipping the provenance check (1), scoring an
+invalid verdict as a verdict (5). **One survived**: dropping the
+stray-label refusal -- the foreign file was still refused, for carrying no
+valid label of any sampled row. The test is now a superset file (every
+sampled row correctly labelled plus five strays), and the mutation bites
+(`9726e8d`).
+
+**Test adjustments, all deliberate.** The twelve apply-mode recovery tests
+stop the trial first, as the CLI and the watchdog do. `report_for` in the
+trial suite is a complete, schema-bearing report, because that is the least
+the persistence step now accepts. The pure evaluator's `verdict()` helper
+carries all five fields, because a three-field dict is not a verdict any
+more. The three script round-trip tests and the pre-day-3 sampling test
+were replaced by `test_encoder_audit_chain.py` (22 tests, real fixture
+artifact for the prediction pass, fakes elsewhere). The old
+`note_first_judgment(now)` clock test was replaced by one on the locked
+row. Two of the new deadline tests initially passed for the wrong reason
+-- their posts predated `V2_ACTIVATION_CUTOFF` and were never picked; they
+use recent posts now and were watched to fail under mutation.
+
+**Interpretations applied without a new design decision.**
+
+- `recover_trial(apply=True)` refuses a trial that is not `recovering`
+  or `recovered`. The CLI and the tick already stop first; a direct apply
+  against a running trial was a way around the stop reason being recorded.
+- The two supplementary sets (spec 7.3) and the inspection acknowledgments
+  (spec 7.2c) are REQUIRED for a complete, acceptable report, as the spec
+  says. The format is generic JSONL; the runbook gives the recipe for the
+  200-row audit from the files on disk. The locked natural set has no
+  stored per-row predictions (the training runs kept aggregates), so
+  producing it means re-scoring 900 rows through the packaged artifact on
+  the PC -- an owed operator step, recorded in the runbook. Michi may rule
+  to waive it by amending the spec; the code enforces the spec as written.
+- `predict` is a separate command rather than part of `evaluate`, keeping
+  the earlier deviation's reason (an evaluating command must not spend),
+  while closing the gap it opened (predictions of unknown origin).
+- Spend for a pass whose answers are discarded at the boundary is NOT
+  booked (rolled back with the rest), which is what happened before; spend
+  for a pass discarded mid-batch by the per-batch guard is not booked
+  either. The encoder's spend is zero-cost calls, so nothing is misstated.
+- Codex's note on Task 3 -- a usage-less success counting as one call --
+  is acknowledged as a deliberate metering change, not a pure refactor; it
+  was already recorded in the Task 3 record and the commit. No change.
+
+**Not done, and why.** No frontend was touched, so vitest and the Vite
+builds were not rerun. The MariaDB-specific behaviour (`GET_LOCK`, `FOR
+UPDATE`) is exercised on the local MySQL 8 as before; `FOR UPDATE NOWAIT`
+appears only in a test probe, never in production code.
+
+**Full suite after the fixes:** 2,300 passed, 1 failed, in 11:12. The one
+failure is `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet`,
+the environmental `LEGACY-POLICY cohort` failure recorded at Task 8; no
+regression. Task 8 had 2,251 passed; the 49 more are this round's tests
+net of the five replaced.
+
 ## Carried minor findings
 
-(For the final whole-branch review. None yet.)
+- `llm_sentiment.py` still imports `os`, unused since Task 3 moved client
+  construction into `judge_backends` (it is used twice on `dev_personal`).
+  Found by an import scan after the review-3 fixes; left for the final
+  whole-branch tidy rather than folded into a review-fix commit.
+- `manage_encoder_trial.py`'s docstring still says `tick` "arrives with the
+  watchdog"; it has been there since Task 7c.
 
 ## Operator gates — Michi only, never bypassed
 
