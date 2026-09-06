@@ -104,7 +104,7 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 2 spec v2.1 amendment | **COMPLETE** | `af11dfa` | n/a (docs) | inline, diff read | six passages; §9 added beyond the plan's four |
 | 3 seam refactor | **COMPLETE** | `43f9b35` | 279 across 10 suites | inline, diff read | parity proven by fingerprint diff |
 | 4 encoder adapter | **COMPLETE** | `379cb9f` | 51 adapter, 255 wider | inline, diff read | 5 mutations bit; real ONNX fixture |
-| 5 trial writes | not started | — | — | — | |
+| 5 trial writes | **COMPLETE** | `645ad49` | 27 trial, 330 wider | inline, diff read | 9 mutations bit |
 | 6 provenance/spend/label | not started | — | — | — | migration |
 | 7a durable state + pin | not started | — | — | — | migration |
 | 7 bounded recovery | not started | — | — | — | |
@@ -253,6 +253,41 @@ Mutations, each applied to the finished adapter and then restored:
 Confirmed by import check: `judge_backends` pulls in neither onnxruntime,
 tokenizers, numpy nor torch at import time, and constructing an Anthropic
 backend pulls none of them either. The web process stays light.
+
+## Task 5 record
+
+`apply_judgments` gained a **required** keyword-only `write_tone`, which is
+why 35 existing test call sites had to be edited: a required argument forces
+every caller to decide rather than inherit. All three production callers read
+it from the backend's declared policy via `judge_backends.writes_tone()`.
+
+Review routing moved to history because the triggers read confidence,
+relevance and attitude — all NULL on a suppressed row. `_judgment_of` takes
+the newest primary history row for the current prompt version, ordered by
+`(created_utc DESC, id DESC)` because one `now` stamps a whole batch and the
+timestamp alone does not break ties.
+
+Nine mutations, each applied to the finished code and restored:
+
+| mutation | failures |
+|---|---|
+| force `write_tone` true | 11 |
+| clear the tone columns instead of preserving them | 4 |
+| drop a field from the history row | 2 |
+| stop stamping `sentiment_judged_at` | 7 |
+| route review from the mention instead of history | 1 |
+| take the oldest history row instead of the newest | 2 |
+| let an encoder-written mention serve as a fallback judgment | 1 |
+| declare the encoder as tone-writing | 1 |
+| hardcode `write_tone=True` in `run_pass` | 1 |
+
+The last one is why `ToneFreeBackend` and the pass-level wiring test exist:
+every other test calls `apply_judgments` directly and would have passed while
+the pass ignored its backend's policy entirely.
+
+Two of my own assumptions were wrong and caught by running: `board` exposes
+`_tones`, not a `tone_counts` helper, and `train_radar_sentiment.load_rows`
+keys its rows on `post_id`, not `mention_id`.
 
 ## Carried minor findings
 
