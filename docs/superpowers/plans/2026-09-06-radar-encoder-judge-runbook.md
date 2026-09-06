@@ -21,29 +21,57 @@ them cannot be supplied, the answer is not to arm the trial.
 | input | why it must exist first | status |
 |---|---|---|
 | FP32 ONNX export of `model-train13000` | the artifact on disk is `model-train8600` (see §1) | **owed** |
-| Baseline report path + its sha256 | the trial's gates are RELATIVE to the incumbent | **owed** |
-| Haiku-era removal proportion `p` | fixes the audit sample size as `ceil(400/p)` | **owed** |
+| Haiku-era removal proportion `p` | fixes the audit sample size as `ceil(400/p)` | **captured, below** |
+| Baseline report file + its sha256 | `arm` takes a path and records its hash | write it from the figures below |
 | Sampling seed | fixed before predictions exist, or the trial can pass itself | choose at arming |
-| Named human labeller and their dates | ~`ceil(400/p)` blind labels between day 3 and day 7 | **owed** |
+| Named human labeller and their dates | 746 blind labels between day 3 and day 7 | **owed** |
 | Free disk for the retention pin | the pin stops the pruners; the tables grow | measure in §5 |
 
-### The Haiku baseline expires
+### The baseline, captured 2026-09-06
 
-The removal-share baseline and `p` both come from `radar_sentiment_judgments`
-rows written 2026-08-31..09-03, the only period the paid judge ran. Those
-rows cascade with their posts under 30-day post retention, so they disappear
-from production around **2026-10-01**. Capture them before then:
+Read-only query against production, over the only window the paid judge ever
+ran — 2026-08-31 11:49:51 to 2026-09-03 16:37:37 UTC.
+
+| | |
+|---|---|
+| judged (stage `primary`, model `claude-haiku-4-5`) | **16,297** |
+| removed (`irrelevant` OR `broadcast_or_automated`) | **8,747** |
+| **p** | **0.5367** |
+| **audit sample size** `ceil(400 / p)` | **746** |
+
+Daily removal share: 0.5517, 0.6233, 0.5402, 0.4441. The §7.2 rollback
+trigger is ±50% relative on this, so the band is **0.268 – 0.805**; a daily
+share outside it stops the trial that day.
+
+Composition of the 8,747 removals — worth knowing, because it is not what
+the extraction work assumes:
+
+| | count | share of removals |
+|---|---|---|
+| broadcast/automated only | 5,589 | 64% |
+| irrelevant only | 2,509 | 29% |
+| both | 649 | 7% |
+| (`uncertain` on either field, not removed) | 1,868 | — |
+
+Roughly two thirds of what the incumbent removed is **broadcast or
+automated content** — relayed headlines, templated price feeds, bulk market
+lists — rather than junk tickers. The queued extraction work targets the
+irrelevant third.
+
+`p = 0.5367` is materially higher than the 0.30 assumed while planning,
+which came from the *irrelevant* rate in the quota-stratified Sonnet label
+set. The audit is therefore **746 rows, not ~1,300**.
+
+The query, for reproducing it before the rows expire around **2026-10-01**
+(they cascade with their posts under 30-day post retention):
 
 ```sql
--- On the VPS, read-only. Removal share and its denominator, Haiku era.
 SELECT COUNT(*) AS judged,
        SUM(relevance = 'irrelevant'
            OR content_origin = 'broadcast_or_automated') AS removed
 FROM radar_sentiment_judgments
 WHERE stage = 'primary' AND model = 'claude-haiku-4-5';
 ```
-
-`p = removed / judged`. Record both counts, not just the ratio.
 
 ---
 
@@ -214,13 +242,14 @@ for n, row in enumerate(map(json.loads, open('audit-200.jsonl', encoding='utf-8'
         row['source'], row.get('title'), row['text'], row['ticker'],
         author=row.get('author'), channel=row.get('channel'))
     items.append(item)
-got, _usage = {}, None
+got = {}
 for start in range(0, len(items), backend.batch_size):
-    verdicts, _u = backend.judge_batch(items[start:start + backend.batch_size])
+    verdicts, _usage = backend.judge_batch(
+        items[start:start + backend.batch_size])
     got.update(verdicts)
-json.dump({str(k): vars(v) if hasattr(v, '__dict__') else
-           [v.relevance, v.content_origin, v.attitude, v.expected_move,
-            v.confidence] for k, v in got.items()},
+json.dump({str(key): [v.relevance, v.content_origin, v.attitude,
+                      v.expected_move, v.confidence]
+           for key, v in got.items()},
           open('vps-verdicts.json', 'w'), sort_keys=True, indent=1)
 print('wrote', len(got))
 PY
@@ -240,7 +269,7 @@ cd /root/coc-stats/personal_apps
 venv/bin/python -m scripts.manage_encoder_trial arm \
     --artifact-sha256 <bundle hash from §1> \
     --baseline-report /root/coc-stats/reports/haiku-baseline.json \
-    --baseline-removal-rate <p from §0> \
+    --baseline-removal-rate 0.5367 \
     --seed <chosen seed>
 venv/bin/python -m scripts.manage_encoder_trial status
 ```
