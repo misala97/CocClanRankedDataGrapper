@@ -106,3 +106,23 @@ def test_capping_by_symbol_stays_the_default():
             + [_c(100 + i, 'DJTWW', 'name_only', 'trump') for i in range(50)])
     picked = sel.pick(pool, n=20, quotas={'name_only': 1.0}, cap_share=0.25, seed=1)
     assert collections.Counter(r['symbol'] for r in picked) == {'DJT': 5, 'DJTWW': 5}
+
+
+def test_a_wave_can_be_restricted_to_the_causes_worth_measuring():
+    """A top-up exists to test what the loose pass newly finds; without a
+    restriction the standing quotas spend a third of it on classes an
+    earlier wave already measured."""
+    quotas = sel.quotas_for(['name_only', 'metonym'])
+    assert set(quotas) == {'name_only', 'metonym'}
+    assert abs(sum(quotas.values()) - 1.0) < 1e-9
+    # The shares keep their relative weight from the standing plan.
+    assert quotas['name_only'] > quotas['metonym']
+
+
+def test_restricting_to_an_unknown_cause_is_refused():
+    try:
+        sel.quotas_for(['name_only', 'not_a_cause'])
+    except ValueError as exc:
+        assert 'not_a_cause' in str(exc)
+    else:
+        raise AssertionError('an unknown cause must not silently select nothing')

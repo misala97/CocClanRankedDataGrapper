@@ -52,6 +52,20 @@ DEFAULT_QUOTAS = {
 DEFAULT_CAP_SHARE = 0.03        # 90 rows per symbol in a wave of 3,000
 
 
+def quotas_for(causes):
+    """The standing quotas restricted to `causes`, renormalised.
+
+    A top-up exists to measure what the loose pass newly finds; without
+    this the standing plan spends a third of it on classes an earlier wave
+    already measured."""
+    unknown = [c for c in causes if c not in DEFAULT_QUOTAS]
+    if unknown:
+        raise ValueError('unknown cause(s): %s' % ', '.join(unknown))
+    kept = {c: DEFAULT_QUOTAS[c] for c in causes}
+    total = sum(kept.values())
+    return {c: share / total for c, share in kept.items()}
+
+
 def without(candidates, already):
     """Candidates an earlier wave did not hold, by (post, symbol, cause)."""
     return [c for c in candidates
@@ -155,6 +169,8 @@ def main(argv=None):
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--cap-share', type=float, default=DEFAULT_CAP_SHARE)
     parser.add_argument('--cap-by', choices=['symbol', 'evidence'], default='symbol')
+    parser.add_argument('--causes', default=None,
+                        help='comma-separated causes to restrict the wave to')
     parser.add_argument('--exclude', default=None,
                         help="an earlier wave's candidate file; its rows are skipped")
     args = parser.parse_args(argv)
@@ -170,7 +186,9 @@ def main(argv=None):
         candidates = without(candidates, already)
         print('excluded %d candidates an earlier wave already drew'
               % (before - len(candidates)))
-    picked = pick(candidates, args.n, DEFAULT_QUOTAS, args.cap_share, args.seed,
+    quotas = (quotas_for([c for c in args.causes.split(',') if c])
+              if args.causes else DEFAULT_QUOTAS)
+    picked = pick(candidates, args.n, quotas, args.cap_share, args.seed,
                   cap_key=args.cap_by)
     write_export(picked, args.out)
 
