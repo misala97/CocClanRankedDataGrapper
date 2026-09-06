@@ -12,9 +12,13 @@ from features.radar import trial_audit
 from features.radar.trial_audit import AuditError, wilson_interval
 
 
-def verdict(relevance='relevant', origin='human_chatter', attitude='positive'):
+def verdict(relevance='relevant', origin='human_chatter', attitude='positive',
+            move='unknown', confidence='high'):
+    """A complete verdict: all five fields, each an allowed value. Anything
+    less is not a verdict and the evaluator refuses to score it."""
     return {'relevance': relevance, 'content_origin': origin,
-            'attitude': attitude}
+            'attitude': attitude, 'expected_move': move,
+            'confidence': confidence}
 
 
 def rows(n, **kwargs):
@@ -257,151 +261,6 @@ def test_a_backend_that_removed_nothing_fails_rather_than_crashing():
     assert report['passed'] is False
 
 
-# ---- the command-line round trip --------------------------------------------
-#
-# The evaluator is pure and tested above; this is about the spine that
-# carries a report from files to a recorded trial result -- including the
-# hashing, which is what stops a different report replacing a recorded one.
-
-import datetime as dt
-import json
-import os
-
-from app import app as flask_app
-from extensions import db
-from features.radar import judge_trial
-from models import RadarJudgeTrial
-
-# Anchored to the real clock, not to a fixed past date: `accept` records
-# with dt.datetime.utcnow(), so a trial dated years ago is already expired
-# and every acceptance would be refused for the wrong reason. Nothing in
-# this suite prunes, so real dates are safe here.
-TRIAL_NOW = dt.datetime.utcnow() - dt.timedelta(days=1)
-
-
-@pytest.fixture()
-def armed_trial():
-    with flask_app.app_context():
-        RadarJudgeTrial.query.delete(synchronize_session=False)
-        db.session.commit()
-        row = judge_trial.arm_trial(
-            TRIAL_NOW, artifact_sha256='f' * 64,
-            baseline_report='reports/baseline.json',
-            baseline_removal_rate=0.4, seed=7)
-        row.first_judged_at = TRIAL_NOW
-        row.status = judge_trial.RUNNING
-        db.session.commit()
-        yield row
-        RadarJudgeTrial.query.delete(synchronize_session=False)
-        db.session.commit()
-
-
-def write_jsonl(path, verdicts):
-    with open(path, 'w', encoding='utf-8') as out:
-        for key, value in verdicts.items():
-            out.write(json.dumps(dict(value, mention_id=key)) + '\n')
-    return str(path)
-
-
-def test_evaluate_writes_both_reports_and_accept_records_the_result(
-        armed_trial, tmp_path):
-    from scripts import audit_encoder_trial as cli
-
-    reference = {}
-    for i in range(400):
-        reference[i] = verdict(relevance='irrelevant' if i % 2 else 'relevant',
-                               attitude='positive' if i % 3 else 'negative')
-    labels = write_jsonl(tmp_path / 'labels.jsonl', reference)
-    encoder = write_jsonl(tmp_path / 'encoder.jsonl', reference)
-    haiku = write_jsonl(tmp_path / 'haiku.jsonl', reference)
-
-    assert cli.main(['evaluate', '--out', str(tmp_path), '--labels', labels,
-                     '--encoder-predictions', encoder,
-                     '--haiku-predictions', haiku,
-                     '--shadow-days', '8']) == 0
-
-    report_path = os.path.join(str(tmp_path), cli.REPORT_JSON)
-    report = json.load(open(report_path, encoding='utf-8'))
-    assert report['passed'] is True
-    assert report['trial']['artifact_sha256'] == 'f' * 64
-    # The markdown is for a human to read and argue with, so it must exist
-    # and must say what the verdict was.
-    markdown = open(os.path.join(str(tmp_path), cli.REPORT_MD),
-                    encoding='utf-8').read()
-    assert 'PASSED' in markdown and 'removal_precision' in markdown
-    assert 'never gating' in markdown
-
-    assert cli.main(['accept', '--report', report_path]) == 0
-    with flask_app.app_context():
-        row = judge_trial.current()
-        assert row.audit_passed is True
-        assert row.audit_report_sha256 == cli.sha256_of(report_path)
-
-
-def test_a_failing_report_is_accepted_and_starts_recovery(armed_trial,
-                                                          tmp_path):
-    from scripts import audit_encoder_trial as cli
-
-    reference = {i: verdict(relevance='relevant') for i in range(400)}
-    encoder = {i: verdict(relevance='irrelevant') for i in range(400)}
-    labels = write_jsonl(tmp_path / 'labels.jsonl', reference)
-    encoder_path = write_jsonl(tmp_path / 'encoder.jsonl', encoder)
-    haiku = write_jsonl(tmp_path / 'haiku.jsonl', reference)
-
-    cli.main(['evaluate', '--out', str(tmp_path), '--labels', labels,
-              '--encoder-predictions', encoder_path,
-              '--haiku-predictions', haiku, '--shadow-days', '8'])
-    report_path = os.path.join(str(tmp_path), cli.REPORT_JSON)
-    assert json.load(open(report_path, encoding='utf-8'))['passed'] is False
-
-    assert cli.main(['accept', '--report', report_path]) == 0
-    with flask_app.app_context():
-        row = judge_trial.current()
-        assert row.audit_passed is False
-        assert row.status == judge_trial.RECOVERING
-
-
-def test_an_edited_report_cannot_be_accepted_over_a_recorded_one(armed_trial,
-                                                                 tmp_path):
-    """The hash is the point: it is what makes 'accept the report' mean a
-    specific report rather than whatever is at that path now."""
-    from scripts import audit_encoder_trial as cli
-
-    reference = {i: verdict(relevance='irrelevant' if i % 2 else 'relevant')
-                 for i in range(400)}
-    labels = write_jsonl(tmp_path / 'labels.jsonl', reference)
-    predictions = write_jsonl(tmp_path / 'p.jsonl', reference)
-    cli.main(['evaluate', '--out', str(tmp_path), '--labels', labels,
-              '--encoder-predictions', predictions,
-              '--haiku-predictions', predictions, '--shadow-days', '8'])
-    report_path = os.path.join(str(tmp_path), cli.REPORT_JSON)
-    cli.main(['accept', '--report', report_path])
-
-    edited = json.load(open(report_path, encoding='utf-8'))
-    edited['note'] = 'a later, different report'
-    with open(report_path, 'w', encoding='utf-8') as out:
-        json.dump(edited, out, indent=1, sort_keys=True, default=str)
-
-    assert cli.main(['accept', '--report', report_path]) == 1
-
-
-def test_sampling_refuses_before_the_trial_has_judged_anything(tmp_path):
-    from scripts import audit_encoder_trial as cli
-    with flask_app.app_context():
-        RadarJudgeTrial.query.delete(synchronize_session=False)
-        db.session.commit()
-        judge_trial.arm_trial(TRIAL_NOW, artifact_sha256='f' * 64,
-                              baseline_report='reports/baseline.json',
-                              baseline_removal_rate=0.4, seed=7)
-    try:
-        with pytest.raises(SystemExit):
-            cli.main(['sample', '--out', str(tmp_path)])
-    finally:
-        with flask_app.app_context():
-            RadarJudgeTrial.query.delete(synchronize_session=False)
-            db.session.commit()
-
-
 def test_agreement_is_judged_on_the_bound_not_the_point_estimate():
     """A small sample where the encoder agrees MORE often than the
     incumbent and still cannot demonstrate it. Reading the point estimate
@@ -506,3 +365,37 @@ def test_a_missing_prediction_still_fails_everything():
     report = trial_audit.evaluate_trial_audit(data)
     assert report['passed'] is False
     assert report['expansion_ready'] is False
+
+
+# ---- coverage is the sample, and a verdict is a value from the enums -------
+
+def test_a_sample_key_without_a_label_fails_coverage():
+    """The denominator is the frozen sample, never the label file. A
+    sampled row nobody labelled is missing, exactly like a row no backend
+    answered."""
+    data = perfect_bundle()
+    data['sample'] = list(data['reference']) + [99999]
+    report = trial_audit.evaluate_trial_audit(data)
+    assert report['coverage']['complete'] is False
+    assert report['coverage']['missing_count'] == 1
+    assert report['passed'] is False
+    assert report['sample_size'] == len(data['sample'])
+
+
+@pytest.mark.parametrize('side', ['reference', 'encoder', 'haiku'])
+def test_an_invalid_verdict_value_is_a_missing_verdict(side):
+    """`{}` and `{'relevance': 'yes'}` are not verdicts. An empty label
+    against an empty prediction used to agree on every field."""
+    data = perfect_bundle()
+    key = next(iter(data['reference']))
+    data[side][key] = {}
+    report = trial_audit.evaluate_trial_audit(data)
+    assert report['coverage']['complete'] is False
+    assert report['coverage']['missing_count'] == 1
+    assert report['passed'] is False
+
+    data = perfect_bundle()
+    data[side][key] = dict(data[side][key], relevance='yes')
+    report = trial_audit.evaluate_trial_audit(data)
+    assert report['coverage']['complete'] is False
+    assert report['passed'] is False

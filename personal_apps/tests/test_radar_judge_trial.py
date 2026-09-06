@@ -852,7 +852,11 @@ REPORT_SHA = 'd' * 64
 
 
 def report_for(row, passed=True):
-    return {'passed': passed,
+    """The least the persistence step accepts: an evaluated, complete
+    report about THIS trial. The audit CLI is what proves those claims;
+    here they are asserted, because this suite tests the record."""
+    return {'schema': 'radar-encoder-trial-audit-3', 'complete': True,
+            'passed': passed,
             'trial': {'artifact_sha256': row.artifact_sha256,
                       'prompt_version': row.prompt_version}}
 

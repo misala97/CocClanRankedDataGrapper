@@ -167,26 +167,67 @@ def _criterion(name, passed, detail, gates=True):
             **detail}
 
 
+def is_verdict(value):
+    """A dict carrying every field with an allowed value.
+
+    Anything else -- an empty dict, a missing field, a value outside the
+    enum -- is not a verdict and is never scored as one. An empty label
+    against an empty prediction used to agree on every field, which is
+    how invalid rows could count as complete coverage and still pass.
+    """
+    from .llm_sentiment import _FIELD_ENUMS
+    return isinstance(value, dict) and all(
+        value.get(field) in allowed for field, allowed in _FIELD_ENUMS.items())
+
+
 def evaluate_trial_audit(bundle):
     """The verdict, and every number behind it.
 
     `bundle` carries `reference`, `encoder`, `haiku` -- each {key: verdict}
-    -- plus the trial identity and provenance the acceptance step checks.
+    -- and, from the real audit, `sample`: the frozen list of sampled keys,
+    which is the denominator. Without it the reference's keys are the
+    sample, which is what the pure tests use.
 
-    Returns a report. The trial's own gates are relevance/origin agreement
-    and removal precision, all on the encoder's Wilson LOWER bound against
-    the incumbent's point estimate on this same sample. Tone is computed
-    and reported and takes no part in `passed`.
+    Returns a report. ONE gate decides `passed`: removal precision on the
+    encoder's Wilson LOWER bound against the absolute floor (spec 7.1,
+    amended 2026-09-06). Relevance and content-origin agreement against
+    the incumbent's point estimate are measured and reported and feed
+    `expansion_ready`; they cannot stop the trial. Tone is computed and
+    reported and takes no part in either.
+
+    Coverage is a validity check over the whole sample: every sampled key
+    needs a valid label AND a valid prediction from both backends, and a
+    missing or invalid one fails the audit outright -- a denominator is
+    never quietly shrunk to what was answered.
     """
     reference = bundle.get('reference') or {}
     encoder = bundle.get('encoder') or {}
     haiku = bundle.get('haiku') or {}
-    if not reference:
+    sample = bundle.get('sample')
+    keys = list(sample) if sample is not None else list(reference)
+    if not keys:
         raise AuditError('the audit has no reference labels')
 
-    missing = [key for key in reference
-               if key not in encoder or key not in haiku]
+    missing = {}
+    for key in keys:
+        for what, side in (('label', reference), ('encoder', encoder),
+                           ('haiku', haiku)):
+            if not is_verdict(side.get(key)):
+                missing.setdefault(key, []).append(what)
     coverage_ok = not missing
+    # Only VALID verdicts on SAMPLED keys are scored. An invalid one has
+    # already failed coverage above, and must not also be scored as an
+    # agreement; a key outside the sample is not part of this audit.
+    wanted = set(keys)
+    reference = {key: value for key, value in reference.items()
+                 if key in wanted and is_verdict(value)}
+    encoder = {key: value for key, value in encoder.items()
+               if key in reference and is_verdict(value)}
+    haiku = {key: value for key, value in haiku.items()
+             if key in reference and is_verdict(value)}
+    if not reference:
+        raise AuditError('none of the %d sampled rows carries a valid label'
+                         % len(keys))
 
     # A backend that removed NOTHING has no precision to report, and that
     # fails the criterion rather than aborting the audit or reading as a
@@ -236,10 +277,13 @@ def evaluate_trial_audit(bundle):
             gates=False))
 
     gating = [c for c in criteria if c['gates']]
+    listed = sorted(missing.items(), key=lambda item: str(item[0]))[:20]
     report = {
-        'schema': 'radar-encoder-trial-audit-2',
-        'sample_size': len(reference),
-        'coverage': {'complete': coverage_ok, 'missing': sorted(missing)[:20],
+        'schema': 'radar-encoder-trial-audit-3',
+        'sample_size': len(keys),
+        'coverage': {'complete': coverage_ok,
+                     'missing': [{'key': key, 'lacks': lacks}
+                                 for key, lacks in listed],
                      'missing_count': len(missing)},
         'criteria': criteria,
         'passed': coverage_ok and all(c['passed'] for c in gating),
@@ -248,10 +292,74 @@ def evaluate_trial_audit(bundle):
     }
     if not coverage_ok:
         report['failure'] = (
-            '%d of %d sampled rows lack a prediction from one or both '
-            'backends; a denominator is never quietly shrunk to what was '
-            'answered' % (len(missing), len(reference)))
+            '%d of %d sampled rows lack a valid label or a valid prediction '
+            'from one or both backends; a denominator is never quietly '
+            'shrunk to what was answered' % (len(missing), len(keys)))
     return report
+
+
+# ---- the supplementary sets: reported apart, never in the gate --------------
+
+def supplemental_section(rows, name):
+    """The original audit's halves and the locked natural set, recomputed
+    under THIS module's definitions (spec 7.3): the same reversal rule, the
+    same removal denominator, reported per half and never pooled, with
+    every reversal and every disagreement on a truncated post listed for
+    a human to look at.
+
+    `rows`: [{key, half, truncated, reference, prediction}]. Pure. Nothing
+    here enters the fresh audit's gate totals -- these sets were chosen
+    for other reasons and cannot estimate production removal precision.
+    """
+    valid = [row for row in rows
+             if is_verdict(row.get('reference'))
+             and is_verdict(row.get('prediction'))]
+
+    def stats(subset):
+        reference = {row['key']: row['reference'] for row in subset}
+        prediction = {row['key']: row['prediction'] for row in subset}
+        out = {'rows': len(subset)}
+        measures = [('reversal_rate', lambda: reversal_rate(prediction, reference)),
+                    ('removal_precision',
+                     lambda: removal_precision(prediction, reference))]
+        for field in ('relevance', 'content_origin', 'attitude'):
+            measures.append(('%s_agreement' % field,
+                             lambda field=field: field_agreement(
+                                 prediction, reference, field)))
+        for label, measure in measures:
+            try:
+                out[label] = measure()
+            except AuditError as why:
+                out[label] = {'unavailable': str(why)}
+        return out
+
+    halves = {}
+    for half in sorted({row.get('half') or 'all' for row in valid}):
+        halves[half] = stats([row for row in valid
+                              if (row.get('half') or 'all') == half])
+    reversals = []
+    truncated = []
+    for row in valid:
+        truth = row['reference'].get('attitude')
+        said = row['prediction'].get('attitude')
+        if truth in DIRECTIONAL and said in DIRECTIONAL and truth != said:
+            reversals.append({'key': row['key'], 'half': row.get('half'),
+                              'truncated': bool(row.get('truncated')),
+                              'reference': truth, 'predicted': said})
+        if row.get('truncated'):
+            for field in ('relevance', 'content_origin', 'attitude',
+                          'expected_move', 'confidence'):
+                if row['reference'].get(field) != row['prediction'].get(field):
+                    truncated.append({'key': row['key'], 'half': row.get('half'),
+                                      'field': field,
+                                      'reference': row['reference'].get(field),
+                                      'predicted': row['prediction'].get(field)})
+    section = stats(valid)
+    section.update(name=name, invalid_rows=len(rows) - len(valid),
+                   halves=halves, reversal_disagreements=reversals,
+                   truncated_disagreements=truncated,
+                   enters_gate_totals=False)
+    return section
 
 
 def _tone_section(bundle, encoder, haiku, reference, coverage_ok):
@@ -262,11 +370,23 @@ def _tone_section(bundle, encoder, haiku, reference, coverage_ok):
     question is not a pass.
     """
     section = {'gates_the_trial': False, 'qualified': False, 'criteria': []}
+    # The shadow period is a fact about the trial's history, not about
+    # this sample, so it is reported even when the sample cannot answer
+    # the tone questions at all.
+    shadow_days = bundle.get('shadow_days')
+    shadow = _criterion(
+        'shadow_period',
+        isinstance(shadow_days, (int, float))
+        and shadow_days >= SHADOW_DAYS_REQUIRED,
+        {'shadow_days': shadow_days, 'required': SHADOW_DAYS_REQUIRED,
+         'rule': 'at least %d days of trial-mode history to compare against '
+                 'the tone actually displayed' % SHADOW_DAYS_REQUIRED})
     try:
         encoder_reversal = reversal_rate(encoder, reference)
         haiku_reversal = reversal_rate(haiku, reference)
     except AuditError as why:
         section['unavailable'] = str(why)
+        section['criteria'].append(shadow)
         return section
 
     section['criteria'].append(_criterion(
@@ -301,14 +421,7 @@ def _tone_section(bundle, encoder, haiku, reference, coverage_ok):
             {'rule': 'the sample must contain reference mixed/none rows',
              'unavailable': str(why)}))
 
-    shadow_days = bundle.get('shadow_days')
-    section['criteria'].append(_criterion(
-        'shadow_period',
-        isinstance(shadow_days, (int, float))
-        and shadow_days >= SHADOW_DAYS_REQUIRED,
-        {'shadow_days': shadow_days, 'required': SHADOW_DAYS_REQUIRED,
-         'rule': 'at least %d days of trial-mode history to compare against '
-                 'the tone actually displayed' % SHADOW_DAYS_REQUIRED}))
+    section['criteria'].append(shadow)
 
     section['qualified'] = coverage_ok and all(c['passed']
                                                for c in section['criteria'])

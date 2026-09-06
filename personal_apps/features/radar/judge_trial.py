@@ -562,13 +562,30 @@ def accept_audit(report, report_sha256, now, *, passed):
     Idempotent for the same report. A DIFFERENT report cannot replace a
     recorded result, because that is how a second opinion quietly becomes
     the first one.
+
+    This is the persistence step, not the validation: the audit CLI
+    reproduces a report from its inputs before it gets here. What is
+    checked here is what a caller could otherwise get wrong on its own --
+    a bare flag is not a report, an incomplete report is not recorded,
+    the recorded result is the report's own, and a trial that has judged
+    nothing has nothing to have been audited.
     """
     if not report_sha256 or len(report_sha256) != 64:
         raise TrialError('an audit result needs its report hash')
+    if not isinstance(report, dict) or not report.get('schema'):
+        raise TrialError('a flag is not an audit report; the evaluated report '
+                         'with its schema, inputs and completeness is')
+    if report.get('complete') is not True:
+        raise TrialError('an incomplete report cannot be recorded')
+    if bool(report.get('passed')) != bool(passed):
+        raise TrialError('the recorded result must be the report\'s own')
     with advisory_lock(RETENTION_LOCK):
         row = current()
         if row is None:
             raise TrialError('no trial to accept an audit for')
+        if row.first_judged_at is None:
+            raise TrialError('the trial has not judged anything; there is '
+                             'nothing an audit could have audited')
         if row.audit_report_sha256 == report_sha256:
             return row                       # already recorded, same report
         if row.audit_evaluated_at is not None:
