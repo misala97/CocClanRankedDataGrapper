@@ -601,6 +601,14 @@ halves, not hashes, so an incomplete report can say what is missing.
   encoder fails the 0.93 lower-bound gate on noise alone (80 removal
   decisions: 78/80 -> 0.912). Recommendation recorded: keep 746, spread the
   labelling over days 3-7. Not changed.
+- **The four supplemental files exist**, built on the PC into
+  `C:/Users/michi/Desktop/radar_labels/supplemental/` (audit 200 rows in two
+  halves of 100; natural 900 rows). The natural set reproduces the training
+  run's recorded figures for train13000 exactly -- 401 predicted removals
+  at precision 0.880, 53 reversals over 322 directional rows (0.1646),
+  macro-F1 0.711 / 0.748 / 0.526 -- so the packaged artifact and the
+  adapter's scoring path ARE the trained model. (The next-steps note's
+  "relevance .711" is macro-F1; accuracy on the same rows is 0.846.)
 - **Two docs commits overstated themselves** (`b1b49cc`, `bf91158`): each
   landed part of this edit while its message described all of it, because
   an edit script failed mid-way and the commit was chained behind it. The
