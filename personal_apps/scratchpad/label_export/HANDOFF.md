@@ -122,7 +122,31 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
      single-stock fund inherits its underlying's SYMBOL as a name token;
    - debt listings get their due MONTH as a distinctive token ("Senior Notes due
      June 2070" makes `june` name T-Mobile's listing).
-6. **Bluesky and 4chan have no raw capture.** Bluesky has no archive — a raw
+6. **Replace the FINDING half of the extractor with a trained model (NER).**
+   Michi's own long-standing goal, confirmed 2026-09-07: the encoder answers
+   "is this text about ticker X" but cannot find X itself, so a second trained
+   model should do the finding. Shape: a token-classification head on the same
+   kind of backbone tags which words are company references (catching what no
+   list holds -- `Nvidea`, "the iPhone maker", a German phrasing); a STATIC
+   lookup then maps the span to one of the ~12,500 symbols, because that many
+   classes cannot be learned from ~20,000 examples; the existing encoder judges
+   each resulting pair. Trained, static, trained.
+
+   **The training data is nearly free.** Every wave row records the `evidence`
+   token that triggered it, and that token is locatable in `author_text` for
+   4,474 of 4,500 rows (99%), 2,198 of them labelled relevant. Span supervision
+   without a new labelling round; the production set adds more.
+
+   **Measure the headroom BEFORE building.** After the loose-pass fixes, 132,164
+   of 198,586 posts (66.6%) still produce no candidate at all -- that is the
+   pool NER would search. Sampled BEFORE the fixes, ~1.5% of that pool held a
+   company reference, and the fixes have since caught most of what that sample
+   showed (Apple, Google). So: one small wave labelling "does this post mention
+   any company at all" over current zero-candidate posts. At ~2% NER buys a few
+   hundred mentions a week and is not worth a second model; at ~10% it is.
+   Michi must name the size.
+
+7. **Bluesky and 4chan have no raw capture.** Bluesky has no archive — a raw
    slice means draining Jetstream live for a few hours. Everything above is
    Reddit-only.
 
