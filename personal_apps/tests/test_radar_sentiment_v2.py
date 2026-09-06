@@ -297,6 +297,225 @@ def test_review_overwrites_primary_but_not_vice_versa(clean_posts):
         assert [h.stage for h in history] == ['primary', 'review', 'primary']
 
 
+# --- Stage is a fact in the history, not an inference from the model id ----
+#
+# apply_judgments and review_candidates both used to read STAGE off the
+# mention's model column: `sentiment_model == REVIEW_MODEL` meant "a review
+# stands here", `== PRIMARY_MODEL` meant "this was judged by the primary".
+# That is only right while the two backends happen to carry different ids,
+# which is a fact about today's configuration and not about the pipeline.
+# It fails silently in both directions -- a standing review overwritten by a
+# later primary pass, or rows judged by a previous primary id dropping out of
+# the review pool -- and the suite stayed green because every existing test
+# uses two different fake ids. radar_sentiment_judgments.stage already holds
+# the truth; these tests ask it.
+
+import contextlib
+
+import sqlalchemy as sa
+
+# Deliberately neither PRIMARY_MODEL nor REVIEW_MODEL: one backend serving
+# both roles is exactly the configuration the model-id proxy cannot express.
+SAME_BACKEND = 'zz-same-backend'
+
+
+@contextlib.contextmanager
+def history_selects():
+    """Collect SELECTs issued against radar_sentiment_judgments in the block.
+
+    The stage lookup must be ONE query for the whole batch. A per-row
+    version would pass every correctness test here and quietly turn a
+    400-mention pass into 400 extra round trips.
+    """
+    seen = []
+
+    def before(conn, cursor, statement, parameters, context, executemany):
+        text = ' '.join(statement.split()).lower()
+        if text.startswith('select') and 'radar_sentiment_judgments' in text:
+            seen.append(text)
+
+    sa.event.listen(db.engine, 'before_cursor_execute', before)
+    try:
+        yield seen
+    finally:
+        sa.event.remove(db.engine, 'before_cursor_execute', before)
+
+
+def test_a_standing_review_survives_a_later_primary_from_the_same_id(
+        clean_posts):
+    """The identical-id case the old predicate could not express."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-same')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=SAME_BACKEND)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='negative', move='down')},
+            stage='review', model=SAME_BACKEND)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=SAME_BACKEND)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'    # the review still stands
+        assert m.sentiment_expected_move == 'down'
+        assert m.llm_sentiment == 'bearish'
+        # History is append-only and records the blocked pass too: the
+        # guard governs materialization, never the evidence.
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).order_by(RadarSentimentJudgment.id).all()
+        assert [h.stage for h in history] == ['primary', 'review', 'primary']
+        assert [h.model for h in history] == [SAME_BACKEND] * 3
+
+
+def test_two_primaries_under_the_review_id_do_not_protect_each_other(
+        clean_posts):
+    """The opposite false positive: a primary must never protect itself
+    just because it was written by the model that usually reviews."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-selfprot')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.REVIEW_MODEL)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='negative', move='down')},
+            stage='primary', model=llm_sentiment.REVIEW_MODEL)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'    # the second one won
+        assert m.llm_sentiment == 'bearish'
+
+
+def test_another_mentions_review_cannot_protect_this_one(clean_posts):
+    """Scoped to the mention. A batch lookup that answered 'some row in
+    this batch has been reviewed' would pass every single-row test."""
+    with flask_app.app_context():
+        reviewed_id = make_post('zztest-stage-neighbour-r')
+        plain_id = make_post('zztest-stage-neighbour-p')
+        llm_sentiment.apply_judgments(
+            rows_for([reviewed_id]), {reviewed_id: ja(attitude='negative',
+                                                      move='down')},
+            stage='review', model=llm_sentiment.REVIEW_MODEL)
+        db.session.commit()
+
+        both = rows_for([reviewed_id, plain_id])
+        llm_sentiment.apply_judgments(
+            both, {reviewed_id: ja(attitude='positive'),
+                   plain_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+
+        assert db.session.get(
+            RadarMention, reviewed_id).sentiment_attitude == 'negative'
+        assert db.session.get(
+            RadarMention, plain_id).sentiment_attitude == 'positive'
+
+
+def test_an_older_prompt_generations_review_does_not_protect(clean_posts):
+    """Scoped to the CURRENT prompt version, not to 'the latest history
+    row', which answers a different question."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-oldprompt')
+        db.session.add(RadarSentimentJudgment(
+            mention_id=mention_id, stage='review',
+            model=llm_sentiment.REVIEW_MODEL,
+            prompt_version='radar-sentiment-v2-retired-generation',
+            relevance='relevant', content_origin='human_chatter',
+            attitude='negative', expected_move='down', confidence='high',
+            input_tokens=0, output_tokens=0, created_utc=NOW))
+        db.session.commit()
+
+        llm_sentiment.apply_judgments(
+            rows_for([mention_id]), {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'positive'
+        assert m.sentiment_prompt_version == llm_sentiment.PROMPT_VERSION
+
+
+def test_the_review_lookup_sees_an_uncommitted_review(clean_posts):
+    """Both passes run inside one open transaction in production. A review
+    written but not yet committed must already protect its mention."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-uncommitted')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='negative', move='down')},
+            stage='review', model=llm_sentiment.REVIEW_MODEL)
+        # No commit here, deliberately.
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'
+
+
+def test_the_stage_lookup_is_one_query_for_the_whole_batch(clean_posts):
+    with flask_app.app_context():
+        ids = [make_post('zztest-stage-bulk-%d' % n) for n in range(3)]
+        rows = rows_for(ids)
+        answers = {mention_id: ja() for mention_id in ids}
+        with history_selects() as seen:
+            llm_sentiment.apply_judgments(
+                rows, answers, stage='primary',
+                model=llm_sentiment.PRIMARY_MODEL)
+        db.session.commit()
+        assert len(seen) == 1, seen
+
+        # A review pass has no standing review to respect -- review always
+        # wins -- so it asks nothing at all.
+        with history_selects() as seen:
+            llm_sentiment.apply_judgments(
+                rows, answers, stage='review',
+                model=llm_sentiment.REVIEW_MODEL)
+        db.session.commit()
+        assert seen == []
+
+
+def test_a_previous_primary_id_stays_eligible_for_review(clean_posts,
+                                                         own_candidates):
+    """The review pool is 'judged, not yet reviewed at this prompt
+    version'. Which backend produced the primary answer is irrelevant to
+    that question, and filtering on it silently emptied the pool after a
+    backend change."""
+    with flask_app.app_context():
+        old_id = make_post('zztest-stage-oldbackend')
+        llm_sentiment.apply_judgments(
+            rows_for([old_id]), {old_id: ja(confidence='low')},
+            stage='primary', model='claude-haiku-4-4-retired')
+        db.session.commit()
+
+        got = [mention.id for mention, _post
+               in llm_sentiment.review_candidates(NOW)]
+        assert old_id in got
+
+
+def test_a_standing_review_leaves_the_pool_whatever_id_wrote_it(
+        clean_posts, own_candidates):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-reviewed-same')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(confidence='low')},
+            stage='primary', model=SAME_BACKEND)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(confidence='low')},
+            stage='review', model=SAME_BACKEND)
+        db.session.commit()
+
+        got = [mention.id for mention, _post
+               in llm_sentiment.review_candidates(NOW)]
+        assert mention_id not in got
+
+
 def test_an_unjudged_mention_stays_null(clean_posts):
     with flask_app.app_context():
         mention_id = make_post('zztest-v2-c')

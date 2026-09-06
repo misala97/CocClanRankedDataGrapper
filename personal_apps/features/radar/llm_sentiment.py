@@ -398,6 +398,38 @@ def pending(limit=PASS_LIMIT, tickers=None, since=None):
 pending_v2 = pending
 
 
+def reviewed_at_this_version(mention_ids):
+    """Which of these mentions already carry a review verdict, now.
+
+    Stage is a fact recorded in radar_sentiment_judgments, not something
+    to infer from the mention's model column. The id proxy this replaces
+    was only ever right while the primary and review roles were filled by
+    two DIFFERENT models -- an accident of configuration, not a property
+    of the pipeline -- and it failed silently in both directions when they
+    were not: one backend serving both roles either lost a review verdict
+    to the next primary pass, or let a primary answer protect itself.
+
+    Scoped to the mention AND the current prompt version: an older
+    generation's review answers a question about text this prompt no
+    longer asks. Deliberately not "the latest history row", which answers
+    a third question again.
+
+    ONE query for the batch. The session autoflushes before it, so a
+    review written earlier in this still-open transaction already counts
+    -- which is the case production actually runs, both passes landing in
+    one commit.
+    """
+    mention_ids = list(mention_ids)
+    if not mention_ids:
+        return set()
+    rows = (db.session.query(RadarSentimentJudgment.mention_id)
+            .filter(RadarSentimentJudgment.mention_id.in_(mention_ids),
+                    RadarSentimentJudgment.stage == 'review',
+                    RadarSentimentJudgment.prompt_version == PROMPT_VERSION)
+            .distinct().all())
+    return {mention_id for (mention_id,) in rows}
+
+
 def apply_judgments(rows, judgments, stage, model):
     """Write the answers that arrived, and only those. Returns how many.
 
@@ -413,6 +445,13 @@ def apply_judgments(rows, judgments, stage, model):
     """
     now = dt.datetime.utcnow()
     by_id = {mention.id: mention for mention, _post in rows}
+    # Asked once, before this call appends anything, so a primary pass can
+    # never see its own answers. A review pass needs no lookup at all:
+    # review always wins.
+    reviewed_ids = set()
+    if stage == 'primary':
+        reviewed_ids = reviewed_at_this_version(
+            [mention_id for mention_id in by_id if mention_id in judgments])
     written = 0
     for key, answer in judgments.items():
         mention = by_id.get(key)
@@ -427,9 +466,7 @@ def apply_judgments(rows, judgments, stage, model):
             confidence=j.confidence,
             input_tokens=answer.input_tokens,
             output_tokens=answer.output_tokens, created_utc=now))
-        review_stands = (stage == 'primary'
-                         and mention.sentiment_model == REVIEW_MODEL
-                         and mention.sentiment_prompt_version == PROMPT_VERSION)
+        review_stands = stage == 'primary' and mention.id in reviewed_ids
         if not review_stands:
             mention.sentiment_relevance = j.relevance
             mention.sentiment_content_origin = j.content_origin
@@ -517,7 +554,7 @@ def _judgment_of(mention):
 
 
 def review_candidates(now, limit=PASS_LIMIT):
-    """Judged-by-primary mentions the triggers select, best-first.
+    """Judged, not yet reviewed at this prompt version, triggers selected.
 
     Read-only: stamping and metering are run_review_pass's job, so shadow
     mode measures the same demand the live mode would serve. Excludes
@@ -525,6 +562,12 @@ def review_candidates(now, limit=PASS_LIMIT):
     history). Priority is applied to the full trigger-selected set before
     any ceiling slice; the recency pre-scan bound below exists only to
     keep the query finite.
+
+    WHICH backend produced the primary answer is not part of the question.
+    A `sentiment_model == PRIMARY_MODEL` filter used to stand here as a
+    second, wrong way of asking "has this been reviewed" -- and it emptied
+    the pool silently the moment the primary backend changed. The NOT
+    EXISTS above already says it, in terms of the recorded stage.
     """
     reviewed = (db.session.query(RadarSentimentJudgment.id)
                 .filter(RadarSentimentJudgment.mention_id == RadarMention.id,
@@ -534,12 +577,11 @@ def review_candidates(now, limit=PASS_LIMIT):
     rows = (db.session.query(RadarMention, RadarPost)
             .join(RadarPost, RadarPost.id == RadarMention.post_id)
             .filter(RadarMention.sentiment_judged_at.isnot(None),
-                    RadarMention.sentiment_model == PRIMARY_MODEL,
                     # The review budget serves the LIVE flow only: the
                     # activation fence and the current prompt generation
                     # both apply, so historical rows rejudged through the
                     # bounded script cannot leak into ongoing Sonnet spend
-                    # (Codex final review, blocker 1).
+                    # (Codex final review, blocker 1). Both fences stay.
                     RadarMention.sentiment_prompt_version == PROMPT_VERSION,
                     RadarPost.created_utc >= V2_ACTIVATION_CUTOFF,
                     ~reviewed.exists())
