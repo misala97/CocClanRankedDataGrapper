@@ -22,10 +22,11 @@ protocol. Three backends exist at the end of this work:
 | `anthropic` | `claude-haiku-4-5` etc. | the existing path, unchanged, off by default |
 | `none` | — | judging disabled; the pass makes no calls |
 
-Everything the current module does apart from *how a batch of prepared items
-becomes verdicts* stays exactly as it is: the binding prompt, the binding
-schema, batching, enum validation, discard-never-default, the two-tier
-storage, journal eligibility sync, the meters, the gate.
+The binding prompt/schema, enum validation, discard-never-default, review
+precedence, eligibility semantics, meters and gate are preserved. The explicit
+exceptions are backend-sized batches, configuration/defaults, trial tone writes,
+and the recovery/expiry machinery below. The implementation separates the
+Anthropic seam refactor from these behavior changes.
 
 **The encoder does not use the prompt.** It reads `(ticker, author_text)` and
 emits the five fields directly. The prompt and its sha256 pins remain in the
@@ -135,18 +136,57 @@ v1/config.json       {heads, max_len, base, manifest}
 input hashes, git HEAD). The backend refuses to load an artifact whose
 `heads` do not match the code's `_FIELD_ENUMS`, and logs which key differs.
 
+Artifact identity for trial state/audit is SHA256 of UTF-8 lines
+`model.onnx=<file-sha256>\n`, `tokenizer.json=<file-sha256>\n`,
+`config.json=<file-sha256>\n` concatenated in that order, using lowercase hex.
+Store this bundle hash in the deployment record/state, not inside config.json
+(which would make the hash recursive). The config's manifest describes training
+inputs/export provenance; startup verifies the complete bundle against the
+armed trial. Replacing any constituent requires a separately reviewed trial.
+
 ### 2.3 Configuration
 
 ```
 RADAR_JUDGE_PRIMARY   encoder | anthropic:claude-haiku-4-5 | none   (default: none)
 RADAR_JUDGE_REVIEW    anthropic:claude-sonnet-5 | none              (default: none)
 RADAR_REVIEW_TIER     '' | shadow | 1        (RADAR_SONNET_REVIEW still honoured)
+RADAR_JUDGE_TONE      0                     (default: 0; encoder only)
 ```
 
 House idiom, matching `RADAR_FORCE_IPV4` and `RADAR_US_PRICE_PROVIDER`. A
 tiny registry parses the spec into a backend; an unknown spec is a startup
 error, not a silent fallback. **Default `none`** so a deploy that forgets the
 variable judges nothing rather than judging with the wrong thing.
+
+Configuration is resolved once in `run_radar_ingest.main`, before fetchers or
+scheduler jobs are created, outside `_scheduled_sentiment`'s exception handler.
+Selected adapters are constructed there and retained for the process lifetime;
+the ONNX session remains lazy. Web requests and maintenance commands do not
+construct a judge merely by importing the registry. Metadata/display lookup is
+pure and never opens an artifact or a client.
+
+`RADAR_REVIEW_TIER`, when present (including an empty value), wins over the old
+flag. Otherwise normalize the old flag's `shadow`, `1`, `true`, `True`; an
+unset/empty old flag is off. Reject other nonempty values visibly. The resolved
+mode is shared by the review pass and `_over_ceiling_gauge`. `none` as the
+review backend prevents calls, demand stamps and review-meter writes even if
+the mode is live/shadow; enabling review requires both a backend and a mode.
+`supports_review` means an adapter may serve the review role: Anthropic true,
+encoder/disabled false. Reject an unsupported review-role selection at startup.
+
+The tone flag applies only to the encoder. In this work `0` is the only
+accepted value: encoder writes are suppressed, Anthropic primary and review
+writes retain their existing semantics. A nonzero value fails startup; passing
+the separate tone criteria is evidence for a later explicit promotion change,
+not an automatically enabled feature of this build.
+
+The bounded rejudge CLI remains Anthropic-only and ignores the daemon's primary
+selection; its default remains Haiku. Historical encoder rejudging is outside
+this live-traffic trial. The reference-label CLI accepts explicit `--effort`
+(`none`, `low`, `medium`, `high`); after the separate configuration task its
+default is `none`,
+and existing Sonnet/Opus labeling recipes must explicitly supply `--effort low`.
+The review adapter is explicitly constructed with `effort='low'`.
 
 ---
 
@@ -179,12 +219,18 @@ The suite stays green because it uses two different fake model ids.
   the bounded rejudge script cannot leak into live review spend (Codex's
   earlier blocker 1) and that reason is untouched by this change.
 
-**Required tests** (both currently impossible to express):
+**Required tests** (expressible now through `apply_judgments`'s model argument):
 
 1. Primary and review backends with **identical ids**: a review verdict must
    still stand against a later primary pass.
 2. A **backend change**: rows judged by a previous primary id are still
    eligible for review, and a standing review verdict is still protected.
+
+Use a shared arbitrary id different from `REVIEW_MODEL` for test 1. Also test
+two successive primary judgments using `REVIEW_MODEL` with no review history:
+the second must update the mention. Another mention's review and an older
+prompt generation's review must not protect this mention. The primary-only
+case catches the opposite false-positive stage inference.
 
 This lands as its own commit with its own tests, before any seam work, so a
 regression here is attributable.
@@ -214,10 +260,17 @@ booked, so nothing is mis-billed, but the review tier would have overstated by
 **Post cards.** `Posts.tsx:86` renders the literal `'Claude'` for
 `judged_by === 'model'`. `_judged_by` in `detail_panel.py` is already
 backend-neutral (it never reads `sentiment_model`), so the payload carries no
-information about *who*. Add a server-side `judged_label` derived from
-`sentiment_model` through the registry — `'Claude'`, `'model'`, or the
-backend's display name — and render that. `judged_by`'s three-valued contract
-stays untouched: tone precedence depends on it.
+information about *who*. Add a server-side `judged_label` describing the source
+of the **displayed tone**. Add nullable `RadarMention.sentiment_tone_model`
+(`String(40)`), written alongside tone only when `write_tone=True`. Backfill it
+from `sentiment_model` where a v2 attitude exists; legacy-only tone without
+known provenance uses the generic label `model`. During suppressed encoder
+writes, neither tone nor its provenance changes. Resolve the tone model through
+pure registry metadata: Anthropic ids display `Claude`, unknown/missing ids
+display `model`. `judged_by` remains `model | lexicon | None`; the new label is
+null unless `judged_by == 'model'`. Never infer tone ownership from the new
+relevance model. The migration and serializer/TypeScript contract changes are
+deliverables, not UI-only edits.
 
 ---
 
@@ -228,17 +281,31 @@ they read is never written during the trial:
 
 | consumer | reads | why it is safe |
 |---|---|---|
-| `detail_panel._tone_of` (post cards) | `sentiment_attitude`, then `llm_sentiment`, then `lexicon_sentiment` | attitude stays NULL → falls through to the pre-existing chain, exactly as an unjudged row does today |
+| `detail_panel._tone_of` (post cards) | `sentiment_attitude`, then `llm_sentiment`, then `lexicon_sentiment` | existing values are preserved; a fresh NULL attitude falls through to the pre-existing chain |
 | `detail_panel` breakdown query (:219) | same three columns | same |
-| `board.py:358` bull/bear SQL `CASE` | `sentiment_attitude`, `llm_sentiment`, `lexicon_sentiment` | same; the `att.isnot(None)` guard never fires |
+| `board.py:358` bull/bear SQL `CASE` | `sentiment_attitude`, `llm_sentiment`, `lexicon_sentiment` | same; no encoder attitude activates its non-NULL branch |
 | `legacy_projection()` → `llm_sentiment` | derived from attitude | **not called** on the trial write path |
 
-`apply_judgments` gains a `write_tone: bool` decided by the backend's trial
-mode. When false it writes `sentiment_relevance`, `sentiment_content_origin`,
+`apply_judgments` gains a required keyword-only `write_tone: bool` decided by
+the backend policy (encoder false, Anthropic true). All three callers — live
+primary, live review, bounded Anthropic rejudge — pass it explicitly. When false
+it writes `sentiment_relevance`, `sentiment_content_origin`,
 `sentiment_model`, `sentiment_prompt_version`, `sentiment_judged_at` and the
 complete five-field `RadarSentimentJudgment` history row; it does not touch
 `sentiment_attitude`, `sentiment_expected_move`, `sentiment_confidence` or
 `llm_sentiment`.
+
+The Task 1 standing-review guard surrounds **all mention materialization**,
+including provenance and timestamps; history is appended even when that guard
+blocks an incoming primary. Suppression means preserve existing values, not
+clear them. `sentiment_tone_model` follows the same preservation rule.
+
+An enabled Anthropic review independently judges prepared text and writes all
+five mention fields, its legacy projection and tone provenance as before. It
+never copies an encoder history Judgment into a review write. Shadow review
+reads/routes and meters demand as before, with no verdict/history/tone write.
+The deployed trial has review off. This policy permits later explicitly enabled
+Anthropic review without treating its own tone as encoder output.
 
 Consequences to check in the plan, not assume:
 
@@ -246,14 +313,22 @@ Consequences to check in the plan, not assume:
   unaffected, and it is the whole point of the trial.
 - `pending()` keys on `sentiment_judged_at`, which IS written, so rows are not
   re-judged forever.
-- `_judgment_of(mention)` (review routing) would build a Judgment with NULL
-  attitude/confidence. Review is off by default in the trial
-  (`RADAR_JUDGE_REVIEW=none`); if it is ever enabled alongside trial mode, the
-  router must read the history row instead. A test pins this.
-- `train_radar_sentiment.load_rows` filters `sentiment_attitude IS NOT NULL`,
-  so trial rows never become training data for the local classifier. That is
-  correct — a model must not train on its own output — and it is now
-  load-bearing rather than incidental.
+- Review routing bulk-loads the latest **primary** history per candidate at
+  the mention's current `PROMPT_VERSION`, ordered by `created_utc DESC, id DESC`.
+  Do not filter by the currently configured backend id, or branch only on NULL
+  attitude. `_judgment_of(mention, primary_history)` uses all five history fields
+  together, never a mixture with preserved mention tone. Candidate fences and
+  exclusion of any current-version review remain. Missing history permits the
+  old mention-based fallback only for a non-encoder model with all five valid
+  fields; otherwise skip the candidate with a visible warning. No defaulted
+  Judgment and no per-mention query.
+- `train_radar_sentiment.load_rows` keeps its existing selection. Fresh encoder
+  rows have no attitude/confidence and are excluded. A row carrying a preserved
+  earlier human/Anthropic tone, or an independent Anthropic review, may still be
+  training-eligible: the invariant is **no encoder-generated tone labels enter
+  training**, not “every mention ever seen by the encoder is excluded.” History
+  is never used to fill missing training labels. Historical encoder rejudging
+  is not exposed by this build.
 
 ---
 
@@ -323,13 +398,14 @@ its own criteria are met, separately:
 | `mixed` / `none` confusion | not worse than the incumbent on the same set |
 | shadow period | ≥ 7 days of trial-mode history rows to compare against the displayed tone |
 
-Until all four pass, `write_tone` stays false and the board's tone comes from
-the pre-existing chain.
+Until all four pass, encoder `write_tone` stays false. This build only reports
+tone qualification; enabling encoder tone requires a subsequent reviewed
+promotion change. Independent Anthropic review retains its existing behavior.
 
 ### 7.2 Rollback trigger, fixed now
 
-Any one of these reverts `RADAR_JUDGE_PRIMARY` to `none` (or to `anthropic`
-with credits) within the same day:
+Any one of these stops the encoder and starts recovery within the same day.
+The operator may select Anthropic with credits after recovery:
 
 - the share of mentions removed per day moves by more than **±50% relative**
   versus the Haiku-era baseline in `radar_llm_spend`/journal history;
@@ -343,24 +419,89 @@ Switching to `none` stops new judgments but leaves every encoder deletion
 active in the counts, because `final_eligibility` already removed those
 mentions from buckets and journal.
 
-1. **Stop** (seconds): `RADAR_JUDGE_PRIMARY=none`, restart `radar_ingest`.
-   No new encoder verdicts.
+1. **Stop** (seconds): persist trial state `recovering` before changing service
+   configuration. This overrides `RADAR_JUDGE_PRIMARY=encoder` at startup and
+   before each batch/write, even if an old environment file survives. Then set
+   `RADAR_JUDGE_PRIMARY=none` and restart `radar_ingest`. The durable state, not
+   a successful edit to an environment file, is the enforcement boundary.
 2. **Recover** (a bounded script, written as part of this work, not improvised
    during an incident): select mentions where
-   `sentiment_model = 'radar-encoder-v1'` and `sentiment_prompt_version =
-   PROMPT_VERSION`; clear `sentiment_relevance`, `sentiment_content_origin`,
+   `sentiment_model = 'radar-encoder-v1'` and `sentiment_prompt_version` equal to
+   the trial's **frozen** prompt version; clear `sentiment_relevance`, `sentiment_content_origin`,
    `sentiment_model`, `sentiment_prompt_version`, `sentiment_judged_at`
    (returning them to the unjudged state that counts provisionally);
-   re-run `journal.sync_chatter_eligibility` for the affected windows and
-   `journal.rebuild_windows` for those windows, in one transaction per window,
-   the same discipline `_sync_eligibility` and `_rebuild_corrected` already
-   use. History rows are append-only and are KEPT — they are the evidence of
-   what the trial did.
+   re-run `journal.sync_chatter_eligibility` and rebuild the affected windows
+   from the complete retained journal, **one transaction per window**. Tone
+   values and `sentiment_tone_model` are preserved. Independent Anthropic review
+   winners are not selected and their decisions survive recovery. History is
+   append-only and KEPT — it is the evidence of what the trial did.
    `--dry-run` prints the affected mention and window counts and writes
    nothing; that is the default.
 
 The script is a deliverable of this work and is tested against the recovery
 case before the trial starts. An untested rollback is not a rollback.
+
+### 7.2a Recovery evidence and transactions
+
+The current helpers do not yet provide that recovery guarantee. Journal
+retention is 48 hours, `journal.rebuild_windows` refuses older windows, and
+`journal.mark_promoted` commits inside the bucket rebuild before its final
+commit. This build must change those mechanics explicitly:
+
+- A durable singleton `RadarJudgeTrial` row (`id=1`) is armed **before any
+  encoder writes**. Fields: `model_id` (`String(40)`), `prompt_version`
+  (`String(64)`), `artifact_sha256` (`String(64)`), `status` (`String(10)`,
+  `armed | running | recovering | recovered`), `armed_at`, `retain_from`,
+  nullable `first_judged_at`, nullable `audit_evaluated_at`, nullable
+  `audit_passed` (Boolean), nullable `audit_report_sha256` (`String(64)`),
+  `recipe` (JSON) and nullable `stop_reason` (Text). Timestamps use the existing
+  microsecond UTC storage convention. The recipe holds frozen sampling parameters
+  and baseline report hash. This build runs one trial; arming cannot overwrite
+  an existing row or reset its clock.
+- `retain_from` is the next quarter-hour boundary strictly after
+  `armed_at - 48h`. The live judge gate's 24-hour input window is inside it.
+  While status is armed/running/recovering, retention uses the earlier of its
+  normal cutoff and `retain_from` for **both journal events and posts**; this
+  also preserves mentions and cascading judgment history. Pin whole windows,
+  including non-encoder and low-confidence events, not just judged mentions.
+  Arming and retention serialize on a database advisory lock so a concurrent
+  prune cannot cross a newly installed pin. Selecting encoder without an armed
+  matching row fails startup. Batches outside the retained interval are refused.
+- A passing audit does not release the pin or promote the backend. Continuing
+  trial operation continues retaining recovery evidence. Only completed recovery
+  releases the pin in this build; eventual unconditional promotion/release is a
+  separate change. Record the storage cost in the deployment runbook and monitor
+  free disk space while pinned. Lack of recovery evidence is an error, never a
+  reason to rebuild incomplete historical buckets.
+- Add `commit: bool = True` to `journal.mark_promoted`,
+  `buckets.rebuild_windows` and its internal rebuild helper. With false, every
+  nested write flushes but none commits. Existing callers keep the true default.
+  Recovery calls the bucket helper with false after verifying its window is
+  inside the durable retained interval; the ordinary journal horizon guard
+  remains unchanged. The caller commits mention clears, journal flags,
+  promotion flags and bucket totals together, or rolls all of them back.
+- Extend the bucket write guard to a shared database advisory lock, in addition
+  to the existing in-process lock, at live rollup/rebuild and recovery entry
+  points. Recovery takes it before modifying mention/event state and holds it
+  through commit. Primary/review materialization and recovery also serialize
+  on the trial row, rechecking the state before writing. Lock order is bucket
+  guard then trial row for recovery; live judgment releases its trial-row
+  transaction before its existing subsequent bucket rebuild. Do not hold a DB
+  transaction across model inference.
+- `rollback_encoder_judge.py --apply --limit N` bounds **mentions** (positive
+  N, default 2000), selects by window then mention id, and may recover a subset
+  of mentions in its last window. Rebuild that whole window from all its events.
+  Each committed subset is resumable because cleared rows no longer match.
+  No final “recovered” state until a fresh count finds zero matching mentions.
+  Default/`--dry-run` computes capped and total counts with no writes, state
+  transition, model construction, or service changes. Explicit dry-run plus
+  apply is a CLI error. No matching rows is an idempotent successful recovery.
+
+Required recovery tests include a ten-day-old trial with the retention jobs
+actually run, mixed sources/low-confidence events, independent review winners,
+partial-window limits, interrupted/resumed runs and injected failure after
+promotion but before totals. A failed window must leave **all** its pre-call
+state intact, while earlier committed windows remain recovered.
 
 ### 7.2b Trial deadline
 
@@ -371,14 +512,104 @@ acceptance rules is not a trial. Therefore:
   trial's first judged mention**. It is scheduled as part of starting the
   trial, not after it.
 - If the audit has not been evaluated by **day 10**, the trial ends
-  automatically: `RADAR_JUDGE_PRIMARY=none` plus the §7.2 recovery script.
-- **Uncertainty, not point estimates, decides.** Each §7.1 threshold is
-  applied to the **Wilson 95% lower bound** of the measured proportion, not to
-  the point estimate. A trial that cannot demonstrate its bound with the audit
+  automatically through the durable stop override plus the §7.2 recovery
+  script. “Evaluated” means a valid passing report; a failed report stops the
+  trial immediately. Both sampling and completed labels must meet day 7.
+- **Uncertainty, not point estimates, decides the trial gates.** The removal
+  and relevance/origin thresholds in §7.1 apply to the **Wilson 95% lower
+  bound** of the encoder proportion. Separate tone criteria use the explicitly
+  stated directions and comparisons in §7.2c. A trial that cannot demonstrate
+  its bound with the audit
   it drew fails; it does not get to pass on a favourable point estimate with a
   wide interval. The audit is sized from this: to show removal precision ≥ 0.93
   at 95% confidence needs roughly 250-400 removal decisions, which fixes the
   sample size rather than leaving it to convenience.
+
+**Enforcement deliverable.** `judge_trial.tick(now, limit=2000)` reads the row
+without constructing a backend. At expiry (`now >= first_judged_at + 10 days`)
+without a timely passing audit, or after a failed audit, it persists recovering
+and calls the bounded recovery operation. Further ticks drain the remainder;
+exceptions leave recovering/pinning intact and are logged for operator action.
+`first_judged_at` is set in the same transaction as the first materialized
+encoder verdict, never at daemon startup or from a failed call. A guard before
+each encoder batch and again before materialization rejects an expired/stopped
+trial and discards late in-flight answers without history/materialization.
+
+No row or an armed row without a first judgment makes an unexpired tick inert;
+recovering always drains recovery, even if no first judgment was recorded, and
+recovered ticks are no-ops. A configured encoder with absent/mismatched trial
+identity fails startup; an existing recovering/recovered trial instead resolves
+the effective primary to none with a visible log, allowing ingestion to run.
+
+Ship a one-minute systemd timer/service invoking
+`python -m scripts.manage_encoder_trial tick --limit 2000` independently of
+`radar_ingest`, with `Persistent=true`, and call the same guard on daemon
+startup. An unavailable DB fails judging closed; the timer retries visibly.
+The timer cannot promise execution while the host is down; startup and the
+first timer run after recovery enforce the original deadline. Neither restart,
+`PRIMARY=none`, nor a stale `PRIMARY=encoder` resets the clock or releases the
+pin. State transitions serialize on the singleton row and duplicate ticks are
+idempotent. The timer uses the service's existing environment/venv credentials,
+not embedded secrets. Tone never auto-promotes on a passing audit.
+
+### 7.2c Audit implementation contract
+
+Deliver `scripts/audit_encoder_trial.py` with `sample`, `export-labels`,
+`evaluate` and `accept` commands. Artifacts live in a per-trial data directory
+outside git; `accept` is the only evaluation command that writes trial state.
+
+- At arming, record a fixed seed, the baseline report hash and removal
+  proportion `p` (0 < p <= 1), and `sample_size = ceil(400 / p)`. These are
+  inputs fixed before new predictions, not constants chosen after seeing them.
+  Freeze a frame of all retained extracted high-confidence mentions with post
+  time in `[first_judged_at, first_judged_at + 3 days)`, across all sources and
+  tickers, without gate/removal/confidence-of-judge enrichment. At day 3, choose
+  `sample_size` ids uniformly without replacement using the recorded seed;
+  insufficient traffic is a failed audit, not permission to change the frame.
+  Persist the frame hash, sampled ids and draw timestamp; reruns reuse them.
+- Obtain encoder and Haiku predictions for **exactly those ids** from the same
+  canonical prepared inputs using the frozen artifact/prompt. Scoring is
+  offline: no mention, history or spend writes through `apply_judgments`.
+  Meter any paid labeling/prediction calls using the existing spend mechanism.
+  Blind human exports omit both prediction sets. Preserve original human labels
+  separately from adjudicated labels and record each change with its reason.
+  Missing/invalid predictions or final labels fail coverage; never silently
+  shrink a denominator. Do not reuse the quota-based reference sampler.
+- For a backend, removal means irrelevant OR broadcast/automated; its removal
+  precision denominator is its own predicted removals and the numerator is
+  removals confirmed by the final reference. Agreement denominators are the
+  complete sampled set. Compute Wilson intervals with z=1.959963984540054;
+  zero denominators fail the corresponding criterion.
+- Relative comparisons use the **Haiku point estimate** as the fixed threshold
+  on this same sample: encoder removal LCB >= max(0.93, Haiku precision - 0.03);
+  encoder relevance/origin agreement LCB >= Haiku agreement - 0.02, separately.
+  Report both backends' numerators, denominators, points and bounds.
+- Report tone separately: reversal denominator is reference-positive/negative
+  rows; a reversal predicts the opposite polarity. Require encoder reversal
+  point <= Haiku point and Wilson UCB < 0.05. Attitude agreement uses encoder
+  LCB >= Haiku point - 0.02. Mixed/none confusion is the fraction of reference
+  mixed/none rows predicted as the other of those two classes; require encoder
+  point <= Haiku point. Missing that slice fails tone qualification. Seven days
+  of primary history and the contemporaneously displayed tone must accompany
+  the tone report. Capture displayed tone and its provenance with each encoder
+  history row in nullable `displayed_tone` (`String(8)`),
+  `displayed_tone_model` (`String(40)`) and `displayed_judged_by` (`String(8)`)
+  diagnostics, before materialization, even though mention tone is not written;
+  the five Judgment fields remain unchanged. Tone qualification never
+  changes the trial pass/fail result or the runtime write policy.
+- JSON plus Markdown reports include the original audit's two halves separately,
+  and recompute the locked-natural and existing-audit reversal rates using that
+  same denominator, with reversal/truncated-post disagreements listed for
+  inspection. These supplementary sets never enter fresh-audit gate totals.
+  Missing required supplemental files or label provenance makes the report
+  incomplete. `accept` verifies all file hashes, trial/artifact/prompt identity,
+  completed inspection acknowledgments, day-7 draw/label timestamps and the
+  day-10 deadline before persisting result/time/report SHA. An invalid or late
+  report cannot postpone expiry; a valid failing report requests recovery.
+
+The baseline's actual report path and proportion are recorded at deployment;
+if they cannot be supplied, do not arm. This is a concrete preflight input,
+not a license for the implementer to invent a baseline from current traffic.
 
 ### 7.3 The audit that is owed
 
@@ -404,26 +635,38 @@ Turning off the judge gate; retiring the lexicon; moving the relevance head
 into extraction (broadens its blast radius and needs separate validation);
 INT8 quantization (dynamic breaks the model and it is not needed at 1,081 MB);
 extraction recall measurement (never measured — every row we have is one the
-extractor accepted; see `radar-extractor-recall-unmeasured`).
+extractor accepted; see `radar-extractor-recall-unmeasured`); historical encoder
+rejudging; actual tone or unconditional promotion. The evaluator reports tone
+readiness but this build does not expose a tone-enabling switch.
 
 ---
 
 ## 8. Deployment
 
-1. `scp` the artifact directory to the VPS; `pip install onnxruntime
-   tokenizers` into the shared venv (~50 MB, no torch).
+1. Deploy migrations/code with both judge backends none. `scp` the artifact
+   directory to the VPS; `pip install onnxruntime tokenizers` into the shared
+   venv (~50 MB, no torch). Shipping `v1/model.onnx` is FP32; the exploratory
+   exporter's file with that basename is INT8 and must not be copied blindly.
 2. A **2 GB swapfile**. Measured headroom is ~0.7 GB with the encoder loaded
    and the slimmed daemon at 488 MB. Swap does NOT make an OOM impossible: it
    turns a transient spike into slowdown instead of a kill, and buys time for
    the RSS trigger in §7.2 to fire. A sustained leak still ends in an OOM,
    more slowly.
-3. Set `RADAR_JUDGE_PRIMARY=encoder`, restart `radar_ingest`.
-4. **Verify on the box before trusting it:** score the 200 audit rows through
+3. **Verify before activation:** score the 200 audit rows through
    the deployed backend and compare verdicts with the PC's for the same
    weights. They were identical in the benchmark; a mismatch means a tokenizer
    or opset difference and the trial stops there.
-5. Watch the first cycle's log line, then RSS, p95 backlog age, and the daily
-   removal share against §7.2.
+4. Install and verify the independent watchdog timer; record baseline report,
+   sampling recipe and labeling owner, and arm the durable retention pin before
+   encoder activation. Confirm recovery storage capacity and a successful dry-run.
+5. Set `RADAR_JUDGE_PRIMARY=encoder`, `RADAR_JUDGE_TONE=0`, review backend none,
+   review mode empty, gate ON; restart `radar_ingest`. Verify first_judged_at is
+   persisted with the first successful write; record and schedule the day-3,
+   day-7 and day-10 actions from that clock the same day.
+6. Watch the first cycle, RSS, p95 backlog and daily removal share against §7.2;
+   record exact monitoring/stop/recover commands in the deployment runbook.
+   Collect/evaluate the fresh audit on schedule. Deployment alone does not
+   complete that audit or certify tone/promotion.
 
 The artifact is **not** committed to git: 566 MB, and it is data, not code.
 It ships by scp and is pointed at by `active.json`, the same shape the
@@ -446,12 +689,19 @@ existing local classifier arm already uses.
   binding text and are not backend-specific.
 - New: encoder adapter against a real (small) artifact — enum-valid output,
   correct item keying, refusal-to-load on a head mismatch, `Usage(0,0)`.
-- New: the two stage tests from §3.
+- New: the positive and negative stage/history tests from §3.
 - New: backend id length, and `MODEL_RATES` containing every registered id.
 - `test_diagnose_extractor_feedback.py:127` monkeypatches
   `llm_sentiment._get_client` by name as its "no model call is possible"
   poison. It must poison the registry's construct function instead, or that
   guard loses its teeth silently.
+- New: the complete Task 5 write/routing matrix, including populated-value
+  preservation, projection poison, live/shadow review and all four consumers.
+- New: tone-provenance migration/backfill and encoder history display snapshots.
+- New: actual day-10 retention/recovery, fault-injected atomic windows,
+  cross-process lock serialization, bounded resume and write-poisoned dry-run.
+- New: sampling/label provenance, Wilson-bound failures, deadline/hash checks,
+  startup configuration and independent watchdog/in-flight expiry tests.
 
 ## 10. Definition of done
 
@@ -459,6 +709,10 @@ The seam exists with three backends; the stage bug is fixed with tests that
 would have caught it; provenance, spend and the post-card label carry the
 backend truthfully; the spec is amended rather than contradicted; the full
 suite is green; the artifact runs on the VPS producing verdicts identical to
-the PC's; the trial gates and rollback trigger in §7 are written down before
-any evaluation of the trial. Displayed tone still comes from the previous
-path, and the judge gate is still on.
+the PC's; the recovery evidence is pinned before the first encoder write;
+recovery is proven across retention and crashes; the independent watchdog and
+audit evaluator are installed/tested; the trial and tone rules remain fixed
+before evaluation. Encoder tone is suppressed, independent Anthropic review
+retains its defined behavior, and the judge gate stays on. Deployment handoff
+records the pending live-audit dates/owner; audit completion requires the actual
+report and acceptance record, not a checked deployment task.
