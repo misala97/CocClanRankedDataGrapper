@@ -107,8 +107,8 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 5 trial writes | **COMPLETE** | `645ad49` | 27 trial, 330 wider | inline, diff read | 9 mutations bit |
 | 6 provenance/spend/label | **COMPLETE** | `524787b` | 363 py, 519 vitest | inline, diff read | 6 mutations bit; migration applied to dev |
 | 7a durable state + pin | **COMPLETE** | `f320f6d` | 154 across 5 suites | inline, diff read | 7 mutations bit; found a lock self-deadlock |
-| 7 bounded recovery | not started | — | — | — | |
-| 7b audit evaluator | not started | — | — | — | |
+| 7 bounded recovery | **COMPLETE** | `3fcfc0f` | 98 trial+audit, 44 scoring | inline, diff read | 7 mutations bit; 2 real defects found |
+| 7b audit evaluator | **COMPLETE** | `3fcfc0f` | 32 audit | inline, diff read | landed with 7; 7 mutations bit |
 | 7c configuration/expiry | not started | — | — | — | |
 | 8 full verification | not started | — | — | — | |
 | 9 package + runbook | not started | — | — | — | no deploy without Michi |
@@ -327,6 +327,78 @@ to `RLock` in Task 7.
 The cutoff-once mutation initially survived because the first version of the
 arm-during-prune test armed on the FIRST floor read, which that mutation
 still performs. It arms between chunks now.
+
+## Task 7 record
+
+Two defects found by writing the tests, both of which would have hung or
+corrupted a real recovery:
+
+- **`BUCKET_WRITE_LOCK` was a plain `threading.Lock`** and recovery nests
+  the guard (it takes it for a window, then `rebuild_windows` takes it
+  again). It is depth-guarded per thread now rather than made an `RLock`,
+  because `RLock` has no `locked()` and `locked()` is how the existing
+  "every bucket writer holds the lock while it writes" tests ask the
+  question.
+- **`~reviewed.exists()` in the recovery selection was wrong.** I wrote it
+  to "preserve review winners", but a review WIN already fails the model
+  filter; what the clause actually did was skip mentions whose ENCODER
+  verdict was live merely because a review history row existed — leaving
+  encoder decisions in the counts, `remaining` never reaching zero, and the
+  retention pin never released. Removed, with a test for the case.
+
+Mutations: nested commit restored (1), rebuild committing on its own (1),
+clearing tone during recovery (1), ignoring the retention floor (1),
+marking recovered before a fresh zero count (2), selecting by the live
+prompt instead of the trial's frozen one (1), and selection ignoring the
+model id so review winners are taken too (1).
+
+**The dev database was damaged during this task and that is recorded here
+rather than quietly fixed.** The Task 7a retention tests call the REAL
+pruners against the whole table — deliberately, since a cutoff applied to
+nothing proves nothing — and their fixtures were dated 2027, which put
+every cutoff in the future. `prune_posts` and `prune_mention_events` then
+deleted the development database's `radar_posts` (cascading to
+`radar_mentions` and `radar_sentiment_judgments`) and
+`radar_mention_events`. Buckets survived; production was never touched.
+Michi's ruling: "I really dont care. Thats what the dev db is for." No
+restore was performed.
+
+The suite now lives entirely in 2020 and `prune_events`/`prune_posts`
+wrappers refuse any cutoff later than 2021, so the mistake cannot be
+repeated by editing one constant. Verified by restoring the 2027 dates: 7
+tests fail with `this cutoff (2027-02-27) would delete real development
+data` instead of deleting anything.
+
+**Consequence for Task 8:** the dev database now has zero posts, mentions,
+judgments and journal events. Suites that build their own fixtures are
+unaffected; any that assume ingested data will fail for that reason, and
+those failures must be reported as environmental with the reason named.
+
+## Task 7b record
+
+`trial_audit` is pure — no database, no model, no files — so the rules can
+be read and argued with directly. Wilson bounds are pinned against values
+computed independently in `decimal` at 30 significant digits.
+
+A defect the tests found: a backend that removed NOTHING made
+`removal_precision` raise, which aborted the whole evaluation instead of
+failing that one criterion. Zero denominators now fail their criterion, as
+the spec says.
+
+Mutations: reading the point estimate instead of the lower bound for
+removal (1) and for agreement (1), ignoring coverage (1), shrinking the
+agreement denominator to answered rows (1), letting tone gate the trial
+(5), letting a different report replace a recorded result (1), and
+accepting a report after the deadline (1, in the trial suite).
+
+The agreement-bound mutation initially survived: no fixture had an encoder
+whose point estimate passed while its bound did not. One was added.
+
+**Deviation, recorded:** `evaluate` takes prediction FILES rather than
+producing them. The spec's four commands are all present, but generating
+the two prediction sets means paid Haiku calls, and Michi's standing rule
+is that quota is never spent unasked. The runbook documents that step as an
+explicitly authorised one.
 
 ## Carried minor findings
 
