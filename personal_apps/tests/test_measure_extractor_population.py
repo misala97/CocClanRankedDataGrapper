@@ -183,3 +183,22 @@ def test_a_debt_listing_does_not_name_its_issuer_by_its_due_month():
     })
     row = pop.classify(_line('t1_r', 'June and April were rough'), lookup, NOT_COMMON)
     assert row['rejected'] == []
+
+
+def test_every_accepted_mention_is_written_with_its_provenance(tmp_path):
+    raw = _raw_dir(tmp_path, [
+        _line('t1_a', 'loading up on $GME'),
+        _line('t1_b', 'GME and gme', title='GME thread'),
+    ])
+    out = tmp_path / 'out'
+    pop.run(raw, LOOKUP, out, common_words=set())
+    with open(out / 'accepted-mentions.jsonl', encoding='utf-8') as handle:
+        rows = [json.loads(line) for line in handle]
+    by_id = {r['external_id']: r for r in rows}
+    assert by_id['t1_a']['ticker'] == 'GME'
+    assert by_id['t1_a']['reason'] == 'explicit_cashtag'
+    assert by_id['t1_b']['reason'] == 'bare_source_high'
+    assert by_id['t1_b']['in_author_text'] is True
+    assert by_id['t1_b']['in_thread_context'] is True
+    assert set(by_id['t1_b']) >= {'source', 'kind', 'created_utc', 'confidence', 'title',
+                                  'author_text'}

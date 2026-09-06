@@ -14,6 +14,12 @@ labelling wave possible, and the numbers the sampling plan is sized from.
         --labels C:/Users/michi/Desktop/radar_labels/labels-sonnet5.jsonl \\
         --export C:/Users/michi/Desktop/radar_labels/export-2026-09-05.jsonl
 
+OUTPUT
+    accepted-mentions.jsonl     every production match with its provenance,
+                                so a rule change can be costed against a week
+    rejected-candidates.jsonl   the loose pass, one row per post x symbol
+    population.json             the counts; external-ids.txt; labelled-join.jsonl
+
 REJECTION CAUSES (one row per post x symbol in rejected-candidates.jsonl)
     stopword                   bare token in the universe, blocked by STOPWORDS
                                and not reprieved by its company name
@@ -246,8 +252,9 @@ def run(raw_dir, lookup, out_dir, *, common_words):
                'top_accepted': collections.Counter(),
                'top_rejected': collections.defaultdict(collections.Counter)}
     external_ids = set()
+    accepted_path = os.path.join(str(out_dir), 'accepted-mentions.jsonl')
     with open(os.path.join(str(out_dir), 'rejected-candidates.jsonl'), 'w',
-              encoding='utf-8') as handle:
+              encoding='utf-8') as handle,             open(accepted_path, 'w', encoding='utf-8') as accepted_handle:
         for line in iter_raw(raw_dir):
             row = classify(line, lookup, is_common)
             external_ids.add(row['external_id'])
@@ -265,6 +272,15 @@ def run(raw_dir, lookup, out_dir, *, common_words):
                 summary['by_reason'][match['reason']] += 1
                 if match['confidence'] == 'high':
                     summary['top_accepted'][match['ticker']] += 1
+                accepted_handle.write(json.dumps({
+                    'external_id': row['external_id'], 'source': row['source'],
+                    'kind': row['kind'], 'created_utc': row['created_utc'],
+                    'ticker': match['ticker'], 'confidence': match['confidence'],
+                    'reason': match['reason'],
+                    'in_author_text': match['in_author_text'],
+                    'in_thread_context': match['in_thread_context'],
+                    'title': row['title'], 'author_text': row['author_text'][:TEXT_MAX],
+                }, ensure_ascii=False) + '\n')
             for cand in row['rejected']:
                 summary['rejected_by_cause'][cand['cause']] += 1
                 if not row['stored_today']:
