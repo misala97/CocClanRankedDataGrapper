@@ -20,7 +20,7 @@ them cannot be supplied, the answer is not to arm the trial.
 
 | input | why it must exist first | status |
 |---|---|---|
-| FP32 ONNX export of `model-train13000` | the artifact on disk is `model-train8600` (see §1) | **owed** |
+| FP32 ONNX export of `model-train13000` | the old artifact was `model-train8600` (see §1) | **done 2026-09-06** |
 | Haiku-era removal proportion `p` | fixes the audit sample size as `ceil(400/p)` | **captured, below** |
 | Baseline report file + its sha256 | `arm` takes a path and records its hash | write it from the figures below |
 | Sampling seed | fixed before predictions exist, or the trial can pass itself | choose at arming |
@@ -85,42 +85,65 @@ So the VPS benchmark (7.0–7.5 rows/s, 1,081 MB resident, "verdicts identical
 to the PC's") describes **train8600**, and the parity check in §6 would
 compare the wrong model against itself.
 
-Before deploying:
+**Packaged 2026-09-06** with `scripts/package_encoder_artifact.py`, which
+imports the model class from `train_encoder.py` rather than reimplementing
+it, writes FP32 only, and carries the training manifest into the artifact:
 
-1. Re-export `model-train13000` to FP32 ONNX in the training venv
-   (`C:\Users\michi\Desktop\radar_encoder_venv`). Roughly 10 GB of RAM and a
-   few minutes; ask before running it.
-2. Take the **FP32** file. The exploratory exporter writes `model.onnx` as
-   INT8 and `model-fp32.onnx` as FP32 — the plain name is the one that must
-   NOT ship. INT8 was measured and rejected: relevance 0.848 → 0.692,
-   removal precision 0.861 → 0.750.
-3. Assemble the shipping layout:
+```bash
+/c/Users/michi/Desktop/radar_encoder_venv/Scripts/python.exe \
+    personal_apps/scripts/package_encoder_artifact.py \
+    --model C:/Users/michi/Desktop/radar_labels/encoder/model-train13000 \
+    --out   personal_apps/artifacts/judge
+```
 
 ```
 artifacts/judge/active.json     {"path": "v1/", "id": "radar-encoder-v1"}
-artifacts/judge/v1/model.onnx        (FP32, ~566 MB)
+artifacts/judge/v1/model.onnx        565.8 MB, fp32, opset 17
 artifacts/judge/v1/tokenizer.json
 artifacts/judge/v1/config.json       {heads, max_len: 256, base, manifest}
 ```
 
+| | |
+|---|---|
+| `source_model` | `model-train13000` |
+| **bundle sha256** | `3bb32b5607a8a368d8ff72179b41de00c6a971223bbed21302e95dcfb90dccb5` |
+| PC throughput | 4.1 rows/s over the 200 audit rows (48.4 s) |
+
+**Verified to be the right model.** The 200-row audit was re-scored through
+this artifact and compared against its human labels. Every figure reproduces
+the ledger exactly:
+
+| | fresh export | ledger |
+|---|---|---|
+| relevance | 75.5% | 75.5% |
+| content origin | 93.5% | 93.5% |
+| attitude | 79.5% | 79.5% |
+| expected move | 85.0% | 85.0% |
+| removal precision | 0.968 (91/94) | 0.968 |
+| removal recall | 0.728 (91/125) | 0.728 |
+| polarity flips | 3/54 | 3/54 |
+
+The same comparison against the verdicts already stored in
+`audit-200.jsonl` agrees on only **128 of 200** rows — those were
+train8600's, which is exactly why the re-export was necessary.
+
+PC-side verdicts for the §6 parity check are saved at
+`C:\Users\michi\Desktop\radar_labels\pc-verdicts-train13000.json`,
+sha256 `d096a97a052e51fd7bfcfccafabe1bf59d04bead661861e634bdd3722a13bd5f`.
+
+The INT8 trap is gone: the packaging script writes no INT8 file at all. INT8
+was measured and rejected — relevance 0.848 → 0.692, removal precision
+0.861 → 0.750.
+
 `config.json`'s manifest carries the training record: seed 20260905, 15,200
 labelled rows, 13,492 train rows, the 142 shared-post and 166 near-duplicate
-exclusions, the label/export/locked-set hashes, and the git HEAD. `heads`
-must list the five class lists in the order `_FIELD_ENUMS` uses — the
-adapter refuses to load otherwise, naming the key that differs, and a
-reordered list would silently relabel every verdict.
-
-4. Compute the bundle hash — this is the trial's identity:
-
-```bash
-python - <<'PY'
-import sys; sys.path.insert(0, 'personal_apps')
-from features.radar.judge_backends import EncoderBackend
-print(EncoderBackend('personal_apps/artifacts/judge').bundle_sha256())
-PY
-```
+exclusions, the input hashes and git HEAD `c489f1c`. `heads` lists the five
+class lists in the order `_FIELD_ENUMS` uses — the adapter refuses to load
+otherwise, naming the key that differs, and a reordered list would silently
+relabel every verdict.
 
 The artifact is **not** committed to git: 566 MB, and it is data, not code.
+`personal_apps/artifacts/` is gitignored.
 
 ---
 
@@ -267,7 +290,7 @@ refuses to start without one.
 ```bash
 cd /root/coc-stats/personal_apps
 venv/bin/python -m scripts.manage_encoder_trial arm \
-    --artifact-sha256 <bundle hash from §1> \
+    --artifact-sha256 3bb32b5607a8a368d8ff72179b41de00c6a971223bbed21302e95dcfb90dccb5 \
     --baseline-report /root/coc-stats/reports/haiku-baseline.json \
     --baseline-removal-rate 0.5367 \
     --seed <chosen seed>
