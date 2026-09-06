@@ -105,8 +105,8 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 3 seam refactor | **COMPLETE** | `43f9b35` | 279 across 10 suites | inline, diff read | parity proven by fingerprint diff |
 | 4 encoder adapter | **COMPLETE** | `379cb9f` | 51 adapter, 255 wider | inline, diff read | 5 mutations bit; real ONNX fixture |
 | 5 trial writes | **COMPLETE** | `645ad49` | 27 trial, 330 wider | inline, diff read | 9 mutations bit |
-| 6 provenance/spend/label | not started | — | — | — | migration |
-| 7a durable state + pin | not started | — | — | — | migration |
+| 6 provenance/spend/label | **COMPLETE** | `524787b` | 363 py, 519 vitest | inline, diff read | 6 mutations bit; migration applied to dev |
+| 7a durable state + pin | **COMPLETE** | `f320f6d` | 154 across 5 suites | inline, diff read | 7 mutations bit; found a lock self-deadlock |
 | 7 bounded recovery | not started | — | — | — | |
 | 7b audit evaluator | not started | — | — | — | |
 | 7c configuration/expiry | not started | — | — | — | |
@@ -288,6 +288,45 @@ the pass ignored its backend's policy entirely.
 Two of my own assumptions were wrong and caught by running: `board` exposes
 `_tones`, not a `tone_counts` helper, and `train_radar_sentiment.load_rows`
 keys its rows on `post_id`, not `mention_id`.
+
+## Task 6 record
+
+Alembic head is now `a1c4f7b2e6d8`; applied to the shared dev database,
+backfilling 4301 of 4301 rows that carry a v2 attitude.
+
+Six mutations bit: writing `sentiment_tone_model` unconditionally (3
+failures), skipping the display capture (3), resolving the label from
+`sentiment_model` (1), labelling regardless of `judged_by` (1), removing the
+encoder rate so its tokens read as `unpriced` (2), and hardcoding 'Claude'
+back into the serializer (1).
+
+That last mutation initially **survived**, and finding out why exposed a
+gap: nothing in the suite exercised `serialize_detail`'s post tuples at all,
+so widening them would have reached the browser as a 500 rather than a red
+test. The new detail-suite test pins the serializer as pass-through position
+by position — and needed a deliberately non-Claude tone owner in the
+fixture, because with every post Claude-or-nothing a hardcode is
+indistinguishable from a pass-through.
+
+## Task 7a record
+
+Alembic head is now `b3d9e1f5a274`.
+
+Seven mutations bit: journal pruning ignoring the pin (3 failures), post
+pruning ignoring it (1), computing the cutoff once instead of per chunk (1),
+letting a recovered trial keep pinning (2), allowing a second arming (1), and
+a floor not landing on a quarter hour (1).
+
+**A real defect the tests found:** `advisory_lock` opens a connection of its
+own, so a nested acquisition blocked against its own outer holder for the
+full timeout — a self-deadlock that reads exactly like contention with
+another process. It is reentrant per thread now. The same class of bug then
+turned up in `BUCKET_WRITE_LOCK`, which recovery nests: changed from `Lock`
+to `RLock` in Task 7.
+
+The cutoff-once mutation initially survived because the first version of the
+arm-during-prune test armed on the FIRST floor read, which that mutation
+still performs. It arms between chunks now.
 
 ## Carried minor findings
 
