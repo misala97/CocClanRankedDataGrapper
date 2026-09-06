@@ -300,6 +300,78 @@ def _window_of(post_created):
                                 second=0, microsecond=0)
 
 
+def _locked_trial():
+    """The trial row FOR UPDATE, as the database holds it now.
+
+    populate_existing, because the session usually already holds a copy
+    of this row and the lock alone would keep its stale attributes.
+    """
+    return (db.session.query(RadarJudgeTrial).filter_by(id=TRIAL_ID)
+            .populate_existing().with_for_update().one())
+
+
+def _plan(row, limit):
+    """What to recover: mention ids per window, newest window first.
+
+    A PLAN, not a set of objects to act on. It is made before any guard
+    is taken and everything it remembers can be stale by the time it is
+    used -- a review may have taken one of these mentions since, the
+    journal may have grown. Execution re-reads every window under its
+    locks; the plan only decides which ids to ask about.
+
+    Keyed by (ticker, quarter-hour) -- the identity of a BUCKET, which is
+    what gets rebuilt. Two tickers in the same quarter-hour are two
+    separate windows and must not be merged.
+    """
+    rows = (_recoverable(row)
+            .with_entities(RadarMention.id, RadarMention.ticker,
+                           RadarPost.created_utc)
+            .order_by(RadarPost.created_utc.desc(), RadarMention.id.desc())
+            .all())
+    by_window = collections.OrderedDict()
+    for mention_id, ticker, created_utc in rows:
+        by_window.setdefault((ticker, _window_of(created_utc)),
+                             []).append(mention_id)
+
+    # Bounded by MENTIONS, and the bound is exact: the last window may be
+    # recovered only in part. That is safe because the window is rebuilt
+    # from ALL of its retained events either way -- the mentions still
+    # judged stay excluded, the cleared ones count provisionally again, and
+    # the next run finishes the job.
+    windows, taken = [], 0
+    for key, ids in by_window.items():
+        if limit is not None and taken >= limit:
+            break
+        room = len(ids) if limit is None else min(len(ids), limit - taken)
+        windows.append((key, ids[:room]))
+        taken += room
+    return len(rows), len(by_window), windows
+
+
+def _members_now(state, ids):
+    """The planned mentions that are STILL the trial's, locked.
+
+    Re-selected by the frozen model id and prompt version at the moment
+    of writing: a mention an independent review has taken since the plan
+    was made no longer matches, and is left exactly as the review left
+    it. FOR UPDATE on the mention rows, so nothing can take one between
+    this read and the clear.
+    """
+    if not ids:
+        return []
+    mentions = (db.session.query(RadarMention)
+                .filter(RadarMention.id.in_(ids),
+                        RadarMention.sentiment_model == state.model_id,
+                        RadarMention.sentiment_prompt_version
+                        == state.prompt_version)
+                .populate_existing().with_for_update().all())
+    if not mentions:
+        return []
+    posts = {post.id: post for post in db.session.query(RadarPost).filter(
+        RadarPost.id.in_({mention.post_id for mention in mentions})).all()}
+    return [(mention, posts[mention.post_id]) for mention in mentions]
+
+
 def recover_trial(*, apply=False, limit=2000, now=None):
     """Undo the trial's decisions, in bounded, whole-window transactions.
 
@@ -308,12 +380,23 @@ def recover_trial(*, apply=False, limit=2000, now=None):
     that undoes ten days of production judgments if somebody forgets a
     flag.
 
-    With `apply`, each window is one transaction: take the bucket guard,
-    re-check the trial is still the one that was armed, clear the five
-    non-tone fields, sync journal eligibility, rebuild the window from ALL
-    its retained events, commit. A failure rolls that window back whole and
-    leaves every earlier window recovered -- resumable, because a cleared
-    mention no longer matches the selection.
+    Applying needs a trial that is already STOPPED. The stop is durable
+    and comes first -- from the CLI, from the watchdog -- because recovery
+    undoes decisions while the daemon may still be making them, and the
+    two must never run against each other. A direct apply is not a way
+    around that.
+
+    With `apply`, each window is one transaction, and it reads the world
+    as it is under the locks, never as the plan remembered it: take the
+    bucket guard, START A FRESH TRANSACTION (repeatable read would
+    otherwise keep the snapshot the plan opened, and an event committed
+    since would be missing from the rebuild), lock the trial row and
+    re-check it, lock and re-select the window's mentions by the frozen
+    identity, clear the five non-tone fields, sync journal eligibility,
+    rebuild the window from ALL its retained events, commit. A failure
+    rolls that window back whole and leaves every earlier window recovered
+    -- resumable, because a cleared mention no longer matches the
+    selection.
 
     Tone and its provenance are NOT cleared. The trial never wrote them;
     what is there belongs to whoever did, and clearing it would delete a
@@ -328,34 +411,15 @@ def recover_trial(*, apply=False, limit=2000, now=None):
                          'proving the evidence is still here')
     if row.retain_from is None:
         raise TrialError('the trial has no retention floor')
+    if apply and row.status not in (RECOVERING, RECOVERED):
+        raise TrialError('the trial is %s; stop it first (manage_encoder_trial '
+                         'stop --reason ...) so the daemon cannot keep judging '
+                         'while recovery undoes it' % row.status)
+    identity = (row.model_id, row.prompt_version, row.retain_from)
 
-    rows = _recoverable(row).order_by(RadarPost.created_utc.desc(),
-                                     RadarMention.id.desc()).all()
-    total = len(rows)
-    # Keyed by (ticker, quarter-hour) -- the identity of a BUCKET, which is
-    # what gets rebuilt. Two tickers in the same quarter-hour are two
-    # separate windows and must not be merged.
-    by_window = collections.OrderedDict()
-    for mention, post in rows:
-        key = (mention.ticker, _window_of(post.created_utc))
-        by_window.setdefault(key, []).append((mention, post))
-
-    # Bounded by MENTIONS, and the bound is exact: the last window may be
-    # recovered only in part. That is safe because the window is rebuilt
-    # from ALL of its retained events either way -- the mentions still
-    # judged stay excluded, the cleared ones count provisionally again, and
-    # the next run finishes the job.
-    selected, windows, taken = [], [], 0
-    for key, members in by_window.items():
-        if limit is not None and taken >= limit:
-            break
-        room = len(members) if limit is None else min(len(members),
-                                                      limit - taken)
-        selected.extend(members[:room])
-        windows.append(key)
-        taken += room
-
-    outside = [start for _ticker, start in windows if start < row.retain_from]
+    total, total_windows, windows = _plan(row, limit)
+    outside = [start for (_ticker, start), _ids in windows
+               if start < row.retain_from]
     if outside:
         raise TrialError(
             '%d window(s) start before the retained interval (%s); their '
@@ -363,40 +427,38 @@ def recover_trial(*, apply=False, limit=2000, now=None):
             'counts that never happened'
             % (len(outside), row.retain_from))
 
-    report = {'total_mentions': total, 'total_windows': len(by_window),
-              'selected_mentions': len(selected), 'selected_windows':
-              len(windows), 'recovered': 0, 'remaining': total,
-              'applied': bool(apply)}
+    selected = sum(len(ids) for _key, ids in windows)
+    report = {'total_mentions': total, 'total_windows': total_windows,
+              'selected_mentions': selected, 'selected_windows': len(windows),
+              'recovered': 0, 'remaining': total, 'applied': bool(apply)}
     if not apply:
         return report
-    if not selected:
-        # Nothing matched. That is a successful, idempotent recovery -- a
-        # second --apply after a complete one must not error, and must not
-        # leave the pin held forever either.
-        _mark_recovered()
-        report.update(remaining=0, status=RECOVERED)
-        return report
+
+    # The plan's transaction ends here. Every window below opens its own
+    # under the guard, so its reads see what was committed before the
+    # guard was taken -- not the snapshot the plan opened.
+    db.session.rollback()
 
     recovered = 0
-    taken_by_window = {}
-    for key in windows:
-        taken_by_window[key] = [entry for entry in selected
-                                if (entry[0].ticker,
-                                    _window_of(entry[1].created_utc)) == key]
-    for key in windows:
-        members = taken_by_window[key]
+    for key, ids in windows:
         # One window, one transaction. Bucket guard first, then the trial
-        # row: every writer takes them in this order, which is what stops
-        # two of them each holding one.
+        # row, then the mentions: every writer takes them in this order,
+        # which is what stops two of them each holding one.
         with buckets_module().bucket_write_guard():
-            state = (db.session.query(RadarJudgeTrial)
-                     .filter_by(id=TRIAL_ID).with_for_update().one())
+            state = _locked_trial()
             if state.status == RECOVERED:
                 break
-            if (state.model_id != row.model_id
-                    or state.prompt_version != row.prompt_version
-                    or state.retain_from != row.retain_from):
+            if state.status != RECOVERING:
+                raise TrialError('the trial is %s; it was stopped when this '
+                                 'recovery began and something restarted it'
+                                 % state.status)
+            if (state.model_id, state.prompt_version,
+                    state.retain_from) != identity:
                 raise TrialError('the trial record changed while recovering')
+            if key[1] < state.retain_from:
+                raise TrialError('window %s starts before the retained '
+                                 'interval (%s)' % (key[1], state.retain_from))
+            members = _members_now(state, ids)
             pairs = []
             for mention, post in members:
                 mention.sentiment_relevance = None
@@ -406,36 +468,49 @@ def recover_trial(*, apply=False, limit=2000, now=None):
                 mention.sentiment_judged_at = None
                 pairs.append(((post.source, post.external_id, mention.ticker),
                               None))
-            journal_module().sync_chatter_eligibility(pairs)
-            # NOT journal.rebuild_windows: that one refuses anything past
-            # the 48-hour horizon, which is every window this is here for.
-            # The pin is what makes the older ones safe, and it was checked
+            if pairs:
+                journal_module().sync_chatter_eligibility(pairs)
+            # Rebuilt even when nothing was left to clear: the window was
+            # planned because the counts were computed without these
+            # mentions, and the journal is read as it is NOW. NOT
+            # journal.rebuild_windows: that one refuses anything past the
+            # 48-hour horizon, which is every window this is here for. The
+            # pin is what makes the older ones safe, and it was checked
             # above.
             buckets_module().rebuild_windows([key], commit=False)
             db.session.commit()
         recovered += len(members)
 
-    remaining = _recoverable(row).count()
+    remaining = _release_if_drained()
     report.update(recovered=recovered, remaining=remaining)
     if remaining == 0:
-        _mark_recovered()
         report['status'] = RECOVERED
     return report
 
 
-def _mark_recovered():
-    """Only after a FRESH count found nothing left.
+def _release_if_drained():
+    """Mark the trial recovered -- releasing the retention pin -- only
+    after a count taken UNDER THE LOCKS finds nothing left. Returns that
+    count.
 
-    Marking recovered releases the retention pin, so claiming it early
-    would let the pruner delete the evidence for whatever was still
-    outstanding.
+    A count taken before the lock is a count of a moment that has passed.
+    Marking recovered early would let the pruner delete the evidence for
+    whatever was still outstanding, so the row lock, the retention lock
+    and the count are one step here.
     """
     with advisory_lock(RETENTION_LOCK):
-        row = current()
-        if row is not None:
-            row.status = RECOVERED
-            db.session.commit()
+        state = _locked_trial()
+        if state.status == RECOVERED:
+            db.session.rollback()
+            return 0
+        remaining = _recoverable(state).count()
+        if remaining:
+            db.session.rollback()
+            return remaining
+        state.status = RECOVERED
+        db.session.commit()
     logger.info('radar encoder trial recovered; the retention pin is released')
+    return 0
 
 
 def buckets_module():

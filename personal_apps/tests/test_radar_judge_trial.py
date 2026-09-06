@@ -12,6 +12,7 @@ Every retention assertion here therefore runs the REAL pruners against real
 rows and checks what survived, rather than checking that a cutoff was
 computed.
 """
+import contextlib
 import datetime as dt
 
 import pytest
@@ -547,7 +548,7 @@ def test_recovery_puts_the_counts_back(counted_window):
         before = counted('ZZT', counted_window)
         assert before is not None
 
-        arm(now=NOW)
+        stopped(now=NOW)
         for mention in _our_mentions():
             judged_by_encoder(mention, NOW)
         db.session.commit()
@@ -575,7 +576,7 @@ def _pairs():
 
 def test_recovery_returns_mentions_to_the_unjudged_state(counted_window):
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         for mention in _our_mentions():
             judged_by_encoder(mention, NOW)
         db.session.commit()
@@ -600,7 +601,7 @@ def test_history_survives_recovery(counted_window):
     """It is the evidence of what the trial did. Recovery undoes the
     DECISIONS, not the record of having made them."""
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         for mention in _our_mentions():
             judged_by_encoder(mention, NOW)
         db.session.commit()
@@ -615,7 +616,7 @@ def test_tone_and_its_owner_are_never_cleared(counted_window):
     """The trial did not write them. What is there belongs to whoever did,
     and the board is showing it."""
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         for mention in _our_mentions():
             mention.sentiment_attitude = 'positive'
             mention.sentiment_expected_move = 'up'
@@ -639,7 +640,7 @@ def test_an_independent_review_winner_is_left_alone(counted_window):
     judged."""
     from features.radar import llm_sentiment
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         mentions = _our_mentions()
         for mention in mentions:
             judged_by_encoder(mention, NOW)
@@ -663,7 +664,7 @@ def test_an_independent_review_winner_is_left_alone(counted_window):
 def test_recovery_selects_by_the_trials_frozen_prompt(counted_window):
     """Recovered as the thing it WAS, even if the constants moved after."""
     with flask_app.app_context():
-        row = arm(now=NOW)
+        row = stopped(now=NOW)
         for mention in _our_mentions():
             judged_by_encoder(mention, NOW)
         db.session.commit()
@@ -678,7 +679,7 @@ def test_recovery_selects_by_the_trials_frozen_prompt(counted_window):
 
 def test_recovery_is_bounded_and_resumable(counted_window):
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         # Three mentions across three separate windows, so the mention
         # limit can cut between them.
         for index, (mention, post) in enumerate(_pairs()):
@@ -696,7 +697,7 @@ def test_recovery_is_bounded_and_resumable(counted_window):
 
 def test_the_pin_is_released_only_when_nothing_is_left(counted_window):
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         for index, (mention, post) in enumerate(_pairs()):
             post.created_utc = NOW - dt.timedelta(hours=30, minutes=20 * index)
             judged_by_encoder(mention, NOW)
@@ -712,7 +713,7 @@ def test_the_pin_is_released_only_when_nothing_is_left(counted_window):
 
 def test_recovering_nothing_is_a_success_not_an_error(counted_window):
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         report = judge_trial.recover_trial(apply=True, now=NOW)
         assert report['recovered'] == 0 and report['remaining'] == 0
         assert judge_trial.current().status == judge_trial.RECOVERED
@@ -729,7 +730,7 @@ def test_a_window_older_than_the_pin_refuses_rather_than_guesses(
     """Its events are pruned. Rebuilding from what is left would write a
     smaller count than really happened -- into forever-retained history."""
     with flask_app.app_context():
-        row = arm(now=NOW)
+        row = stopped(now=NOW)
         for mention in _our_mentions():
             judged_by_encoder(mention, NOW)
         db.session.commit()
@@ -756,7 +757,7 @@ def test_a_failed_window_leaves_all_of_its_state_untouched(counted_window,
     from features.radar import buckets
     with flask_app.app_context():
         before = counted('ZZT', counted_window)
-        arm(now=NOW)
+        stopped(now=NOW)
         for mention in _our_mentions():
             judged_by_encoder(mention, NOW)
         db.session.commit()
@@ -825,7 +826,7 @@ def test_an_encoder_verdict_is_recovered_even_beside_a_review_row(
     """
     from features.radar import llm_sentiment
     with flask_app.app_context():
-        arm(now=NOW)
+        stopped(now=NOW)
         mentions = _our_mentions()
         for mention in mentions:
             judged_by_encoder(mention, NOW)
@@ -1131,3 +1132,173 @@ def test_the_write_side_refuses_a_post_outside_the_retained_interval(
         judge_trial.refuse_outside_retention(row, [inside])
         with pytest.raises(judge_trial.TrialError):
             judge_trial.refuse_outside_retention(row, [inside, outside])
+
+
+# ---- recovery against a world that keeps moving -----------------------------
+#
+# The plan of what to recover is made before the guard is taken, and the
+# guard is what excludes every other writer. Anything the plan remembers
+# about a mention or a window can therefore be stale by the time it is
+# acted on. These change the world between the plan and the guard -- on a
+# separate connection, the way a live daemon would -- and require recovery
+# to act on what is true under the guard, not on what it planned.
+
+def stopped(now=NOW):
+    """An armed trial, durably stopped: what every apply must start from."""
+    row = arm(now=now)
+    judge_trial.request_stop('test: recovery')
+    return row
+
+
+def when_the_guard_is_first_taken(monkeypatch, side_effect):
+    """Run `side_effect` once, at the moment recovery first takes the
+    bucket guard for a window -- after its plan, before its first write."""
+    from features.radar import buckets
+    real = buckets.bucket_write_guard
+    fired = []
+
+    @contextlib.contextmanager
+    def guard_then_act(*args, **kwargs):
+        if not fired:
+            fired.append(True)
+            side_effect()
+        with real(*args, **kwargs):
+            yield
+
+    monkeypatch.setattr(buckets, 'bucket_write_guard', guard_then_act)
+    return fired
+
+
+def test_recovery_refuses_to_apply_against_a_trial_that_was_not_stopped(
+        counted_window):
+    """Recovery undoes decisions while the daemon may still be making
+    them. The stop is durable and comes first, always -- from the CLI and
+    from the watchdog -- and a direct apply is not a way around it."""
+    with flask_app.app_context():
+        arm(now=NOW)
+        for mention in _our_mentions():
+            judged_by_encoder(mention, NOW)
+        db.session.commit()
+
+        with pytest.raises(judge_trial.TrialError) as caught:
+            judge_trial.recover_trial(apply=True, now=NOW)
+        assert 'stop' in str(caught.value)
+        db.session.rollback()
+        assert len(encoder_mentions()) == 3
+        # A report is still allowed: it writes nothing.
+        assert judge_trial.recover_trial(apply=False, now=NOW)[
+            'total_mentions'] == 3
+
+
+def test_a_review_that_wins_after_the_plan_is_not_erased(counted_window,
+                                                         monkeypatch):
+    """Between planning and the guard, an independent review takes one of
+    the planned mentions. Its verdict is the one in the counts now, and it
+    is not the encoder's to withdraw: recovery must re-read ownership
+    under its locks and leave that mention alone."""
+    from features.radar import llm_sentiment
+    with flask_app.app_context():
+        stopped()
+        mentions = _our_mentions()
+        for mention in mentions:
+            judged_by_encoder(mention, NOW)
+        db.session.commit()
+        taken = mentions[0].id
+
+        def review_wins():
+            as_another_process(
+                'UPDATE radar_mentions SET sentiment_model = %s, '
+                'sentiment_relevance = %s, sentiment_content_origin = %s '
+                'WHERE id = %s',
+                'claude-sonnet-5', 'relevant', 'human_chatter', taken)
+
+        when_the_guard_is_first_taken(monkeypatch, review_wins)
+        report = judge_trial.recover_trial(apply=True, now=NOW)
+
+        assert report['recovered'] == 2
+        db.session.expire_all()
+        winner = db.session.get(RadarMention, taken)
+        assert winner.sentiment_model == 'claude-sonnet-5'
+        assert winner.sentiment_relevance == 'relevant'
+        assert winner.sentiment_prompt_version == \
+            llm_sentiment.PROMPT_VERSION
+        assert report['remaining'] == 0
+        assert judge_trial.current().status == judge_trial.RECOVERED
+
+
+def test_a_window_is_rebuilt_from_the_journal_as_it_is_under_the_guard(
+        counted_window, monkeypatch):
+    """Repeatable read keeps the snapshot the plan opened. An event that
+    lands after the plan and before the guard is committed, real, and
+    invisible to that snapshot; a rebuild that reads through it writes a
+    count the window never had. Recovery must start a fresh transaction
+    under the guard and read the journal as it is now."""
+    with flask_app.app_context():
+        before = counted('ZZT', counted_window)
+        stopped()
+        for mention in _our_mentions():
+            judged_by_encoder(mention, NOW)
+        db.session.commit()
+        when = counted_window + dt.timedelta(minutes=7)
+
+        def a_late_event_lands():
+            # Authorless, like the fixture's events: an author here would
+            # vouch for the fixture's low-confidence event and promote it,
+            # and the only difference a correct rebuild may show is this
+            # one event.
+            as_another_process(
+                'INSERT INTO radar_mention_events (source, external_id, '
+                'ticker, channel, created_utc, bucket_start, author, '
+                'simhash, confidence, sentiment, engagement, promoted) '
+                'VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)',
+                'bluesky', PREFIX + '-late', 'ZZT', 'firehose', when,
+                counted_window, None, 99, 'high', 0.2, 0.0, 0)
+
+        when_the_guard_is_first_taken(monkeypatch, a_late_event_lands)
+        report = judge_trial.recover_trial(apply=True, now=NOW)
+
+        assert report['recovered'] == 3
+        db.session.expire_all()
+        mention_count, high, authors, low = counted('ZZT', counted_window)
+        assert (mention_count, high, authors, low) ==             (before[0] + 1, before[1] + 1, before[2], before[3])
+
+
+def test_the_pin_is_not_released_while_a_matching_mention_remains(
+        counted_window, monkeypatch):
+    """`recovered` is what releases the retention pin. It may only be
+    written after a count taken UNDER THE LOCK finds nothing left -- a
+    count taken before it is a count of a moment that has passed."""
+    from features.radar import llm_sentiment
+    with flask_app.app_context():
+        stopped()
+        mentions = _our_mentions()
+        for mention in mentions:
+            judged_by_encoder(mention, NOW)
+        db.session.commit()
+        straggler = mentions[0].id
+        real = judge_trial.advisory_lock
+        fired = []
+
+        @contextlib.contextmanager
+        def a_verdict_lands_first(name, timeout=10):
+            # At the release step, one more encoder verdict is materialized
+            # by another process before the lock is taken.
+            if name == judge_trial.RETENTION_LOCK and not fired:
+                fired.append(True)
+                as_another_process(
+                    'UPDATE radar_mentions SET sentiment_model = %s, '
+                    'sentiment_prompt_version = %s, sentiment_relevance = %s, '
+                    'sentiment_judged_at = %s WHERE id = %s',
+                    'radar-encoder-v1', llm_sentiment.PROMPT_VERSION,
+                    'irrelevant', NOW, straggler)
+            with real(name, timeout=timeout):
+                yield
+
+        monkeypatch.setattr(judge_trial, 'advisory_lock', a_verdict_lands_first)
+        report = judge_trial.recover_trial(apply=True, now=NOW)
+
+        assert report.get('status') != judge_trial.RECOVERED
+        assert report['remaining'] == 1
+        db.session.expire_all()
+        assert judge_trial.current().status == judge_trial.RECOVERING
+        assert judge_trial.retention_floor() is not None
