@@ -692,11 +692,17 @@ encoder of `2026-09-06-radar-encoder-judge-design.md` scores 0 of 5 against
 it and does not pass.
 
 What is added is a **trial** gate, for a flagged, recoverable trial that is
-not a replacement. Its criteria are in that document's §7.1 and are
-*relative* to the incumbent paid judge on a fresh randomly-sampled audit,
-rather than absolute: removal precision at least Haiku's minus 0.03 and at
-least 0.93; relevance and content-origin agreement at least Haiku's minus 2.0
-points; judged on the Wilson 95% lower bound rather than a point estimate.
+not a replacement. Its criteria are in that document's §7.1. **One** of
+them stops the trial, and it is absolute: removal precision on a fresh
+randomly-sampled audit, Wilson 95% lower bound at least 0.93. The
+comparisons against the incumbent paid judge -- relevance and
+content-origin agreement within 2.0 points of Haiku's, on the same lower
+bound -- are measured and reported and feed the separate, later decision
+to expand; they cannot stop the trial. *(Amended again 2026-09-06, before
+any encoder judgment existed: the first amendment made those comparisons
+gating, which assumed Haiku was a fallback. It is not -- the paid judge
+stopped on 2026-09-03 -- so losing to it cannot be a reason to switch a
+working judge off.)*
 Attitude is deliberately **not** gated there, because encoder tone is never
 written during the trial (§4.1 of that document); the four separate
 criteria that would qualify tone are stated in the same §7.1, and meeting

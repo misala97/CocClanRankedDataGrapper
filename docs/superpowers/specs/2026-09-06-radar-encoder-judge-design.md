@@ -363,8 +363,12 @@ to implement.
 - **§10.2** — the absolute gates (80% attitude, 84% directional, ≤2%
   reversals, 90% F1s, 95% removal precision) were written for a frontier
   judge; the encoder scores 0 of 5. They stay as the standard for an
-  unconditional replacement. A **trial** gate is added: relative to the
-  incumbent, no field materially worse, with the tolerance stated in §7.1.
+  unconditional replacement. A **trial** gate is added, stated in §7.1:
+  one absolute criterion stops the trial (removal precision, Wilson lower
+  bound ≥ 0.93); the comparisons against the incumbent are reported and
+  feed the later expansion decision, and cannot stop it. *(Amended
+  2026-09-06: this paragraph originally described a relative gate,
+  which §7.1 replaced the same day, before any encoder judgment existed.)*
 - **§5.1/§5.3** — the local arm and the review tier now describe backends
   rather than named models.
 

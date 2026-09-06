@@ -405,33 +405,124 @@ From `first_judged_at`:
 
 | day | action | who |
 |---|---|---|
-| 3 | `audit_encoder_trial sample --out DIR` then `export-labels` | automatic + operator |
-| 3–7 | label `ceil(400/p)` blind rows | **named human, owed** |
-| 7 | labels and adjudication complete | labeller |
-| ≤10 | `evaluate` then `accept` | operator |
+| 3 | `sample --out DIR`, then `export-labels`, then `predict` twice | operator |
+| 3–7 | label `ceil(400/p)` blind rows, with `labelled_at` on every row | **named human, owed** |
+| 7 | labels and adjudication complete; supplemental sets ready | labeller + operator |
+| ≤10 | `evaluate`, inspect the disagreement lists, acknowledge, `accept` | operator |
+
+The commands are a **chain**: each reads what the one before it wrote and
+refuses what it did not. Run them in order, in the same directory.
 
 ```bash
-venv/bin/python -m scripts.audit_encoder_trial sample --out /root/audit-day3
-venv/bin/python -m scripts.audit_encoder_trial export-labels --out /root/audit-day3
-# ... labelling happens here, blind: no predictions in the file ...
-venv/bin/python -m scripts.audit_encoder_trial evaluate --out /root/audit-day3 \
-    --labels /root/audit-day3/labels.jsonl \
-    --encoder-predictions /root/audit-day3/encoder.jsonl \
-    --haiku-predictions /root/audit-day3/haiku.jsonl \
-    --shadow-days 7
-venv/bin/python -m scripts.audit_encoder_trial accept --report /root/audit-day3/report.json
+D=/root/audit-day3
+venv/bin/python -m scripts.audit_encoder_trial sample        --out $D
+venv/bin/python -m scripts.audit_encoder_trial export-labels --out $D
+venv/bin/python -m scripts.audit_encoder_trial predict       --out $D --backend encoder
+# PAID. A Haiku pass over the sampled rows; refuses without the flag.
+venv/bin/python -m scripts.audit_encoder_trial predict       --out $D     --backend anthropic:claude-haiku-4-5 --confirm-spend
+# ... labelling happens here, blind: no predictions in blind.jsonl ...
+venv/bin/python -m scripts.audit_encoder_trial evaluate      --out $D     --labels $D/labels.jsonl     --encoder-predictions $D/radar-encoder-v1.jsonl     --haiku-predictions $D/claude-haiku-4-5.jsonl     --supplemental-audit $D/supplemental-audit.jsonl     --supplemental-natural $D/supplemental-natural.jsonl
+# ... read report.md; look at the two disagreement lists in report.json ...
+venv/bin/python -m scripts.audit_encoder_trial accept        --report $D/report.json     --acknowledgments $D/acknowledgments.json
 ```
 
-**Producing `haiku.jsonl` costs money.** It is a paid Haiku pass over the
-sampled rows, scored offline — it never goes through `apply_judgments`, so
-it cannot move a mention, a bucket or the spend meter beyond its own call
-accounting. It is a separate authorised step, deliberately not folded into
-`evaluate`, because an evaluation command that quietly spends is one
-somebody runs twice.
+**`sample`** refuses before day 3 (the frame is not closed), after day 7
+(a draw then could never be accepted), and never redraws: a rerun reuses
+the recorded draw. Its `frame.json` and `sample.json` carry the trial's
+artifact hash, prompt version and model id.
+
+**`predict`** scores exactly the sampled ids, through the same prepared
+inputs the live pass uses, and never through `apply_judgments` -- it cannot
+move a mention, a bucket or the history. The encoder pass refuses an
+artifact whose bundle hash is not the armed one. Both passes book their
+calls on the spend meter. The output file's first line is a provenance
+header: backend, artifact hash, prompt version, the sample file's hash.
+
+**`labels.jsonl`** is the human's file, one row per sampled mention:
+
+```json
+{"mention_id": 123, "relevance": "relevant", "content_origin": "human_chatter",
+ "attitude": "positive", "expected_move": "up", "confidence": "high",
+ "labelled_at": "2026-09-14T10:22:00"}
+```
+
+`labelled_at` is required on every row; the latest one is when labelling
+finished, and it must be on or before day 7. A row that was adjudicated
+keeps its first label under `original` and says why:
+
+```json
+{"mention_id": 124, "relevance": "irrelevant", ..., "labelled_at": "...",
+ "original": {"relevance": "relevant", "content_origin": "human_chatter",
+              "attitude": "positive", "expected_move": "up", "confidence": "high"},
+ "adjudication_reason": "the ticker is a common word here, not the company"}
+```
+
+An adjudication without a reason makes the report **incomplete**, and an
+incomplete report cannot be accepted. Rows for mentions outside the sample
+are refused outright; a sampled mention with no row fails coverage.
+
+**The supplemental sets** (spec §7.3) are the two things the fresh audit is
+not: the original 200-row audit, both halves, and the locked natural test
+set. Both are required for a complete report. The format is one JSON object
+per line:
+
+```json
+{"key": "removal-17", "half": "removal", "truncated": false,
+ "reference": {five fields}, "prediction": {five fields}}
+```
+
+`evaluate` recomputes the reversal rate and removal precision per half under
+the audit's own definitions, never pools them, never lets them near the
+gate, and lists every reversal and every disagreement on a truncated post
+in `report.json` for inspection. To produce the audit set from what is on
+disk (`audit-200.jsonl` holds `half`, `human` and `n`;
+`pc-verdicts-train13000.json` holds the shipping model's verdicts by `n`):
+
+```python
+import json
+verdicts = json.load(open('pc-verdicts-train13000.json'))
+fields = ('relevance', 'content_origin', 'attitude', 'expected_move', 'confidence')
+with open('supplemental-audit.jsonl', 'w') as out:
+    for row in map(json.loads, open('audit-200.jsonl', encoding='utf-8')):
+        prediction = dict(zip(fields, verdicts[str(row['n'])]))
+        out.write(json.dumps({'key': 'audit-%d' % row['n'], 'half': row['half'],
+                              'truncated': bool(row.get('truncated')),
+                              'reference': row['human'],
+                              'prediction': prediction}) + '
+')
+```
+
+The locked natural set (`test-natural.json`, 900 rows) has no stored
+per-row predictions -- the training runs kept aggregates only. Producing
+`supplemental-natural.jsonl` means scoring those rows through the packaged
+artifact on the PC, the way the 200 were re-scored in §1. **Owed**, with
+the labeller, before day 7.
+
+**`evaluate`** writes `report.json` and `report.md`. The tone shadow period
+is read from the judgment history (encoder primary rows carrying
+`displayed_tone`), not from a flag. The report records the hash and path of
+every input it used and says whether it is complete; the reasons it is not
+are listed.
+
+**`acknowledgments.json`** is written by whoever inspected the two
+disagreement lists, against the exact report they inspected:
+
+```json
+{"report_sha256": "<sha256 of report.json>",
+ "inspected": ["reversal_disagreements", "truncated_disagreements"],
+ "by": "michi", "at": "2026-09-16T18:00:00"}
+```
+
+**`accept`** re-hashes every input the report names, recomputes the verdict
+from them and refuses a report that does not reproduce, checks the
+acknowledgments against this report's hash, checks the draw was between day
+3 and day 7 and the labels finished by day 7, and only then records the
+result. A failing report is accepted too: it stops the trial and starts
+recovery. That is a result, not an error.
 
 If day 10 arrives without a recorded passing audit, the watchdog stops the
 trial and drains recovery on its own. That is the design, not a failure of
-process — but it is a worse outcome than evaluating on time.
+process -- but it is a worse outcome than evaluating on time.
 
 **A passing audit changes almost nothing.** It lifts the deadline and
 authorises the trial to keep running, suppressed, with its evidence still
