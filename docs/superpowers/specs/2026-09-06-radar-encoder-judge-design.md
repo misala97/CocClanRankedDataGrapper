@@ -39,10 +39,18 @@ answered.
 Codex's conditions, adopted verbatim into the design:
 
 - The encoder **judges and stores** all five fields.
-- **Displayed tone stays on the previous path** for the trial: the board's
-  tone precedence must not read the encoder's `attitude`. Relevance and
-  content_origin — the fields that remove mentions from counts — DO take
-  effect, because those are the fields the evidence supports.
+- **Encoder tone never reaches any tone path** for the trial. This is a
+  WRITE decision, not a display one: there are four consumers of attitude
+  (`detail_panel._tone_of`, the detail breakdown query, `board.py`'s bull/bear
+  SQL `CASE`, and `legacy_projection` writing the old `llm_sentiment`
+  column), so changing a label achieves nothing. During the trial
+  `apply_judgments` writes relevance, content_origin, model, prompt_version
+  and judged_at to the mention, plus the FULL five-field history row — and
+  leaves `sentiment_attitude`, `sentiment_expected_move`,
+  `sentiment_confidence` and `llm_sentiment` untouched. Attitude is captured
+  for evaluation and is absent from production by construction (§4.1).
+- Relevance and content_origin — the fields that remove mentions from counts
+  — DO take effect, because those are the fields the evidence supports.
 - The **tolerated precision loss and the rollback trigger are written into
   this document before the trial's evaluation**, not decided after seeing it
   (§7).
@@ -97,7 +105,13 @@ and the model-id heuristic in `build_sentiment_reference.py`.
 
 **`EncoderBackend(artifact_dir)`** — ONNX Runtime session plus tokenizer.
 
-- Loads lazily on first use, holds one session for the process lifetime.
+- **Validated at construction, session loaded on first use.** Construction
+  reads `active.json` and the artifact's `config.json`, checks the files
+  exist and that `heads` matches the code's `_FIELD_ENUMS`, and raises if not
+  — a bad artifact fails daemon startup visibly. The ONNX session itself is
+  built on the first `judge_batch` and held for the process lifetime; a
+  session-load failure there raises `SentimentUnavailable`, is logged once,
+  and the pass judges nothing. It must never fall back to another backend.
 - `intra_op_num_threads=2`, `inter_op_num_threads=1`, `batch_size=4`
   (measured: 2 threads is as fast as 4; batch 16 spikes 1,715 MB where
   batch ≤ 4 stays flat at 1,081 MB).
@@ -105,9 +119,6 @@ and the model-id heuristic in `build_sentiment_reference.py`.
   prepared.author_text)`, truncated to the artifact's `max_len` (256).
 - Output: `argmax` per head mapped through the artifact's class lists.
 - `Usage(0, 0)`.
-- A load failure raises at construction and is caught by the registry (§2.3);
-  the pass then behaves exactly as it does today with no API key: it logs and
-  judges nothing. **It must never fall back to a different backend silently.**
 
 **Artifact layout** (`RADAR_JUDGE_ARTIFACT_DIR`, default
 `personal_apps/artifacts/judge/`), mirroring the existing local-arm pointer
@@ -210,6 +221,42 @@ stays untouched: tone precedence depends on it.
 
 ---
 
+### 4.1 Trial write path — how encoder tone is excluded, exactly
+
+Four places consume attitude. None of them is patched; instead the column
+they read is never written during the trial:
+
+| consumer | reads | why it is safe |
+|---|---|---|
+| `detail_panel._tone_of` (post cards) | `sentiment_attitude`, then `llm_sentiment`, then `lexicon_sentiment` | attitude stays NULL → falls through to the pre-existing chain, exactly as an unjudged row does today |
+| `detail_panel` breakdown query (:219) | same three columns | same |
+| `board.py:358` bull/bear SQL `CASE` | `sentiment_attitude`, `llm_sentiment`, `lexicon_sentiment` | same; the `att.isnot(None)` guard never fires |
+| `legacy_projection()` → `llm_sentiment` | derived from attitude | **not called** on the trial write path |
+
+`apply_judgments` gains a `write_tone: bool` decided by the backend's trial
+mode. When false it writes `sentiment_relevance`, `sentiment_content_origin`,
+`sentiment_model`, `sentiment_prompt_version`, `sentiment_judged_at` and the
+complete five-field `RadarSentimentJudgment` history row; it does not touch
+`sentiment_attitude`, `sentiment_expected_move`, `sentiment_confidence` or
+`llm_sentiment`.
+
+Consequences to check in the plan, not assume:
+
+- `final_eligibility()` reads relevance and content_origin from the mention —
+  unaffected, and it is the whole point of the trial.
+- `pending()` keys on `sentiment_judged_at`, which IS written, so rows are not
+  re-judged forever.
+- `_judgment_of(mention)` (review routing) would build a Judgment with NULL
+  attitude/confidence. Review is off by default in the trial
+  (`RADAR_JUDGE_REVIEW=none`); if it is ever enabled alongside trial mode, the
+  router must read the history row instead. A test pins this.
+- `train_radar_sentiment.load_rows` filters `sentiment_attitude IS NOT NULL`,
+  so trial rows never become training data for the local classifier. That is
+  correct — a model must not train on its own output — and it is now
+  load-bearing rather than incidental.
+
+---
+
 ## 5. Throughput and the pass
 
 `BATCH_SIZE = 20` and `PASS_LIMIT = 400` are module constants tuned for a
@@ -262,9 +309,22 @@ against the same reference, relative to the Haiku numbers on that same set:
 | attitude | not gated during the trial; tone is not displayed from the encoder |
 | polarity reversals | recorded, not gated during the trial |
 
-Failing any of these ends the trial. Passing them is what promotes the encoder
-from "stores verdicts" to "displays tone", not to "replaces Haiku" — that
-needs the absolute §10.2 gates.
+Failing any of these ends the trial (§7.2). **Passing them authorises
+nothing about tone.** Removal quality cannot license a tone change, and the
+table above deliberately does not gate attitude — so tone stays disabled until
+its own criteria are met, separately:
+
+**Tone promotion criteria (all four, on the fresh random audit):**
+
+| | rule |
+|---|---|
+| polarity reversals | ≤ Haiku's rate on the same set, with the Wilson upper bound below 5% |
+| attitude agreement | ≥ Haiku − 2.0 points |
+| `mixed` / `none` confusion | not worse than the incumbent on the same set |
+| shadow period | ≥ 7 days of trial-mode history rows to compare against the displayed tone |
+
+Until all four pass, `write_tone` stays false and the board's tone comes from
+the pre-existing chain.
 
 ### 7.2 Rollback trigger, fixed now
 
@@ -278,9 +338,47 @@ with credits) within the same day:
 - daemon RSS exceeds **2.5 GB**, or the box drops under **300 MB** available;
 - any bucket-count anomaly the journal's own rebuild cannot explain.
 
-Rollback is a config change plus a restart. Verdicts already written stay:
-they carry `sentiment_model = radar-encoder-v1`, so they are identifiable and
-can be re-judged by the bounded rejudge script.
+**Rollback is two steps, and the first one alone is not a rollback.**
+Switching to `none` stops new judgments but leaves every encoder deletion
+active in the counts, because `final_eligibility` already removed those
+mentions from buckets and journal.
+
+1. **Stop** (seconds): `RADAR_JUDGE_PRIMARY=none`, restart `radar_ingest`.
+   No new encoder verdicts.
+2. **Recover** (a bounded script, written as part of this work, not improvised
+   during an incident): select mentions where
+   `sentiment_model = 'radar-encoder-v1'` and `sentiment_prompt_version =
+   PROMPT_VERSION`; clear `sentiment_relevance`, `sentiment_content_origin`,
+   `sentiment_model`, `sentiment_prompt_version`, `sentiment_judged_at`
+   (returning them to the unjudged state that counts provisionally);
+   re-run `journal.sync_chatter_eligibility` for the affected windows and
+   `journal.rebuild_windows` for those windows, in one transaction per window,
+   the same discipline `_sync_eligibility` and `_rebuild_corrected` already
+   use. History rows are append-only and are KEPT — they are the evidence of
+   what the trial did.
+   `--dry-run` prints the affected mention and window counts and writes
+   nothing; that is the default.
+
+The script is a deliverable of this work and is tested against the recovery
+case before the trial starts. An untested rollback is not a rollback.
+
+### 7.2b Trial deadline
+
+An open-ended trial that changes live counts without ever testing its own
+acceptance rules is not a trial. Therefore:
+
+- The fresh random audit (§7.3) is drawn and labelled **within 7 days of the
+  trial's first judged mention**. It is scheduled as part of starting the
+  trial, not after it.
+- If the audit has not been evaluated by **day 10**, the trial ends
+  automatically: `RADAR_JUDGE_PRIMARY=none` plus the §7.2 recovery script.
+- **Uncertainty, not point estimates, decides.** Each §7.1 threshold is
+  applied to the **Wilson 95% lower bound** of the measured proportion, not to
+  the point estimate. A trial that cannot demonstrate its bound with the audit
+  it drew fails; it does not get to pass on a favourable point estimate with a
+  wide interval. The audit is sized from this: to show removal precision ≥ 0.93
+  at 95% confidence needs roughly 250-400 removal decisions, which fixes the
+  sample size rather than leaving it to convenience.
 
 ### 7.3 The audit that is owed
 
@@ -314,9 +412,11 @@ extractor accepted; see `radar-extractor-recall-unmeasured`).
 
 1. `scp` the artifact directory to the VPS; `pip install onnxruntime
    tokenizers` into the shared venv (~50 MB, no torch).
-2. A **2 GB swapfile** as the safety net. Measured headroom is ~0.7 GB with
-   the encoder loaded and the slimmed daemon at 488 MB; swap makes an OOM
-   impossible rather than unlikely.
+2. A **2 GB swapfile**. Measured headroom is ~0.7 GB with the encoder loaded
+   and the slimmed daemon at 488 MB. Swap does NOT make an OOM impossible: it
+   turns a transient spike into slowdown instead of a kill, and buys time for
+   the RSS trigger in §7.2 to fire. A sustained leak still ends in an OOM,
+   more slowly.
 3. Set `RADAR_JUDGE_PRIMARY=encoder`, restart `radar_ingest`.
 4. **Verify on the box before trusting it:** score the 200 audit rows through
    the deployed backend and compare verdicts with the PC's for the same
