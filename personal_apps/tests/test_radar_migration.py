@@ -75,6 +75,33 @@ def test_the_tone_provenance_migration_is_atomic_per_table():
     assert 'DROP COLUMN sentiment_tone_model' in recorder.calls[1]
 
 
+def test_the_trial_migration_is_one_statement_per_direction():
+    migration = _load_plan_migration(
+        'b3d9e1f5a274_add_radar_judge_trial.py', 'plan_judge_trial')
+    recorder = _DdlRecorder()
+    migration.op = recorder
+
+    migration.upgrade()
+    assert len(recorder.calls) == 1
+    created = recorder.calls[0]
+    assert 'CREATE TABLE radar_judge_trial' in created
+    # Singleton by construction, not by convention: nothing can insert a
+    # second trial even by mistake.
+    assert 'ck_radar_judge_trial_singleton' in created
+    assert 'CHECK (id = 1)' in created
+    # The four states recovery reasons about, enforced by the server.
+    for state in ('armed', 'recovering', 'recovered', 'running'):
+        assert "'%s'" % state in created
+    # Microsecond precision, matching every other radar timestamp.
+    assert 'armed_at DATETIME(6) NOT NULL' in created
+    assert 'retain_from DATETIME(6) NOT NULL' in created
+
+    recorder.calls.clear()
+    migration.downgrade()
+    assert len(recorder.calls) == 1
+    assert 'DROP TABLE radar_judge_trial' in recorder.calls[0]
+
+
 def _load_source_width_migration():
     path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
             '08316d3e4d77_widen_radar_source_columns.py')

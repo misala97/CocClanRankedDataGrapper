@@ -20,6 +20,32 @@ from .config import (MENTION_EVENT_RETENTION_HOURS, POST_RETENTION_DAYS,
 _CHUNK_PAUSE_SECONDS = 0.05
 
 
+def _pinned(cutoff):
+    """The cutoff an armed trial allows, which is never later than its own.
+
+    A trial pins the evidence its recovery would need: the journal keeps 48
+    hours and posts 30 days, and both of those forget faster than anyone
+    decides to stop a trial. While one is armed, running or recovering,
+    pruning stops at the EARLIER of the ordinary horizon and the trial's
+    floor -- so the ordinary rules still apply to everything the trial does
+    not need.
+
+    A trial that merely PASSED its audit still pins: passing authorises
+    continuing, and continuing still has to be undoable. Only a completed
+    recovery releases the floor, because only then has the evidence been
+    used.
+
+    A failure to READ the state aborts the prune rather than bypassing the
+    pin. Deleting evidence because a query failed is the one outcome this
+    cannot risk.
+    """
+    from . import judge_trial
+    floor = judge_trial.retention_floor()
+    if floor is None:
+        return cutoff
+    return min(cutoff, floor)
+
+
 def prune_market_data(now, chunk_size=5000):
     """Bound the v2 operational tables: events 48h, cycles 14 days.
 
@@ -194,23 +220,30 @@ def prune_posts(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
 
     Mentions follow via ON DELETE CASCADE. Returns the number deleted.
     """
-    cutoff = now - dt.timedelta(days=POST_RETENTION_DAYS)
+    from . import judge_trial
+    horizon = now - dt.timedelta(days=POST_RETENTION_DAYS)
     total = 0
 
     while True:
-        ids = [
-            row_id for (row_id,) in
-            db.session.query(RadarPost.id)
-            .filter(RadarPost.created_utc < cutoff)
-            .order_by(RadarPost.created_utc)
-            .limit(chunk_size).all()
-        ]
-        if not ids:
-            break
+        # The floor is re-read inside the lock on EVERY chunk. Arming takes
+        # the same lock, so a trial that begins halfway through a long prune
+        # cannot have its evidence deleted by a cutoff computed before it
+        # existed.
+        with judge_trial.advisory_lock(judge_trial.RETENTION_LOCK):
+            cutoff = _pinned(horizon)
+            ids = [
+                row_id for (row_id,) in
+                db.session.query(RadarPost.id)
+                .filter(RadarPost.created_utc < cutoff)
+                .order_by(RadarPost.created_utc)
+                .limit(chunk_size).all()
+            ]
+            if not ids:
+                break
 
-        db.session.query(RadarPost).filter(RadarPost.id.in_(ids)).delete(
-            synchronize_session=False)
-        db.session.commit()
+            db.session.query(RadarPost).filter(RadarPost.id.in_(ids)).delete(
+                synchronize_session=False)
+            db.session.commit()
         total += len(ids)
 
         if len(ids) < chunk_size:
@@ -281,23 +314,30 @@ def prune_mention_events(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):
 
     Returns the number deleted.
     """
-    cutoff = now - dt.timedelta(hours=MENTION_EVENT_RETENTION_HOURS)
+    from . import judge_trial
+    horizon = now - dt.timedelta(hours=MENTION_EVENT_RETENTION_HOURS)
     total = 0
 
     while True:
-        ids = [
-            row_id for (row_id,) in
-            db.session.query(RadarMentionEvent.id)
-            .filter(RadarMentionEvent.created_utc < cutoff)
-            .order_by(RadarMentionEvent.created_utc)
-            .limit(chunk_size).all()
-        ]
-        if not ids:
-            break
+        # Same discipline as prune_posts, and this is where the pin bites
+        # first: the journal horizon is 48 hours, so without it the windows
+        # a trial would have to rebuild are gone within two days.
+        with judge_trial.advisory_lock(judge_trial.RETENTION_LOCK):
+            cutoff = _pinned(horizon)
+            ids = [
+                row_id for (row_id,) in
+                db.session.query(RadarMentionEvent.id)
+                .filter(RadarMentionEvent.created_utc < cutoff)
+                .order_by(RadarMentionEvent.created_utc)
+                .limit(chunk_size).all()
+            ]
+            if not ids:
+                break
 
-        db.session.query(RadarMentionEvent).filter(
-            RadarMentionEvent.id.in_(ids)).delete(synchronize_session=False)
-        db.session.commit()
+            db.session.query(RadarMentionEvent).filter(
+                RadarMentionEvent.id.in_(ids)).delete(
+                synchronize_session=False)
+            db.session.commit()
         total += len(ids)
 
         if len(ids) < chunk_size:
