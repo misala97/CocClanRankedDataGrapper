@@ -580,7 +580,33 @@ halves, not hashes, so an incomplete report can say what is missing.
 
 **Full suite after the fixes:** 2,319 passed, 1 failed, in 11:56. The one failure is the environmental `LEGACY-POLICY cohort` failure recorded at Task 8; no regression. Round 3 had 2,300 passed; the 19 more are this round's tests.
 
-## Carried minor findings
+## After round 4: Michi's rulings and what followed (2026-09-06)
+
+- **No fifth Codex round.** Michi stopped the loop; the branch merges on
+  the round-4 fixes.
+- **No Haiku credits, ever again for this.** The incumbent's audit
+  predictions come from a Haiku subagent inside Claude Code: `export-prompts`
+  writes the API path's exact prompt text per batch, the subagent answers in
+  the binding schema, `import-predictions` makes the prediction file with
+  `via: claude-code-subagent` in its provenance header. Same enum boundary,
+  same coverage rule; the report names the source. Four chain tests, one
+  mutation (any value accepted as a verdict) bit. Commit `77b984e`.
+- **The natural set stays required** (Codex, round 4) and now has a way to
+  exist: `build_supplemental_sets.py` makes all four supplemental files from
+  the PC's label files and the packaged artifact, scoring the 900 natural
+  rows through the adapter. A row that cannot be built stops the build (one
+  mutation bit). Same commit.
+- **Audit size, open.** The armed recipe sizes the audit at `ceil(400/p)` =
+  746 rows; Michi's next-steps note wanted 150-200. With 150 rows a good
+  encoder fails the 0.93 lower-bound gate on noise alone (80 removal
+  decisions: 78/80 -> 0.912). Recommendation recorded: keep 746, spread the
+  labelling over days 3-7. Not changed.
+- **Two docs commits overstated themselves** (`b1b49cc`, `bf91158`): each
+  landed part of this edit while its message described all of it, because
+  an edit script failed mid-way and the commit was chained behind it. The
+  remainder is in the commit after this note. Lesson recorded: never chain
+  a commit behind a fallible script.
+
 
 - `llm_sentiment.py` still imports `os`, unused since Task 3 moved client
   construction into `judge_backends` (it is used twice on `dev_personal`).

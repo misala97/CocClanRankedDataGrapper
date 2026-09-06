@@ -25,7 +25,7 @@ them cannot be supplied, the answer is not to arm the trial.
 | Baseline report file + its sha256 | `arm` takes a path and records its hash | write it from the figures below |
 | Sampling seed | fixed before predictions exist, or the trial can pass itself | choose at arming |
 | Named human labeller and their dates | 746 blind labels between day 3 and day 7 | **owed** |
-| Supplemental membership files (two) | `arm` freezes WHICH rows the two supplementary sets are; §7 has the recipe | make from `audit-200.jsonl` and `test-natural.json` |
+| Supplemental files (four) | `arm` freezes WHICH rows the two supplementary sets are; `evaluate` needs their data | one command, §7 (`build_supplemental_sets.py`) |
 | Free disk for the retention pin | the pin stops the pruners; the tables grow | measure in §5 |
 
 ### The baseline, captured 2026-09-06
@@ -538,29 +538,10 @@ is one JSON object per line:
 `evaluate` recomputes the reversal rate and removal precision per half under
 the audit's own definitions, never pools them, never lets them near the
 gate, and lists every reversal and every disagreement on a truncated post
-in `report.json` for inspection. To produce the audit set from what is on
-disk (`audit-200.jsonl` holds `half`, `human` and `n`;
-`pc-verdicts-train13000.json` holds the shipping model's verdicts by `n`):
-
-```python
-import json
-verdicts = json.load(open('pc-verdicts-train13000.json'))
-fields = ('relevance', 'content_origin', 'attitude', 'expected_move', 'confidence')
-with open('supplemental-audit.jsonl', 'w') as out:
-    for row in map(json.loads, open('audit-200.jsonl', encoding='utf-8')):
-        prediction = dict(zip(fields, verdicts[str(row['n'])]))
-        out.write(json.dumps({'key': 'audit-%d' % row['n'], 'half': row['half'],
-                              'truncated': bool(row.get('truncated')),
-                              'reference': row['human'],
-                              'prediction': prediction}) + '
-')
-```
-
-The locked natural set (`test-natural.json`, 900 rows) has no stored
-per-row predictions -- the training runs kept aggregates only. Producing
-`supplemental-natural.jsonl` means scoring those rows through the packaged
-artifact on the PC, the way the 200 were re-scored in §1. **Owed**, with
-the labeller, before day 7.
+in `report.json` for inspection. Both data files come from the builder in
+§7 (`build_supplemental_sets.py`), which also scores the natural set's 900
+rows through the packaged artifact; they must be the same files whose
+membership was frozen at arming.
 
 **`evaluate`** writes `report.json` and `report.md`. The tone shadow period
 is read from the judgment history (encoder primary rows carrying

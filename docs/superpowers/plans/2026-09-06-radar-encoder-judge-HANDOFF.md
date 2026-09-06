@@ -39,18 +39,15 @@ is deployed; nothing is merged.
 
 ## Immediate next action
 
-**Send Codex the fifth brief** (`specs/2026-09-06-radar-encoder-judge-REVIEW-5.md`)
-and act on its answer. It asks Codex to verify the four round-4 fixes
-against its reproductions. Codex has already ruled that the locked
-natural set stays hard-required. After that, in order:
+Michi stopped the Codex loop after round 4 (the fifth brief exists and
+was not sent). Next, in order:
 
 1. **Merge to `dev_personal`.** Nothing here activates on merge: the
    default is `RADAR_JUDGE_PRIMARY` unset, which judges nothing.
 2. **Deployment**, per the runbook. The owed preflight inputs are in its
-   §0, §7 and §10: a named labeller, the two supplemental MEMBERSHIP files
-   for arming (recipe in §7), the two supplemental data files for the audit
-   (the audit set from the recipe in §10; the natural set needs 900 rows
-   scored through the packaged artifact on the PC), and a chosen seed.
+   §0, §7 and §10: a named labeller, the four supplemental files from
+   `build_supplemental_sets.py` (§7), and a chosen seed. The incumbent's
+   predictions come from a Haiku subagent in Claude Code (§10), not the API.
 
 ## Unresolved findings and rulings
 
