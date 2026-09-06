@@ -669,14 +669,27 @@ def grouped_active_symbols_by_day(days, now, instrument_map=None,
                 RadarDailyClose.ticker.in_(
                     {identity.ticker for identity in candidates.values()}))
         .group_by(RadarDailyClose.ticker).all())
-    return {
+    eligible_by_ipo = {
         day: {
             symbol: identity for symbol, identity in candidates.items()
             if ipo_dates.get(identity.ticker) is None or
             ipo_dates[identity.ticker] <= day
+        }
+        for day in days
+    }
+    active_by_day = {
+        day: {
+            symbol: identity for symbol, identity in eligible_by_ipo[day].items()
             if first_observed.get(identity.ticker) is None or
             first_observed[identity.ticker] <= day
         }
+        for day in days
+    }
+    # A first stored row is useful evidence only after this collector has
+    # bootstrapped.  For an older day all rows may have been first collected
+    # later, which cannot make a healthy provider response vacuous.
+    return {
+        day: active_by_day[day] or eligible_by_ipo[day]
         for day in days
     }
 
