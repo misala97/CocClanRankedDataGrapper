@@ -1,10 +1,22 @@
 # Radar sentiment v2 — final design
 
-**Status:** approved product direction; ready for an implementation plan
+**Status:** approved product direction; shipped, and amended to **v2.1** on
+2026-09-06
 
 **Decision date:** 2026-08-31
 
 **Supersedes:** `2026-08-30-radar-sentiment-v2-design.md`
+
+**Amendments (v2.1, 2026-09-06).** Six passages are amended in place, each
+marked *Amended 2026-09-06 (v2.1)* where it stands, so the original text and
+what changed about it stay readable together: §5.1 (which arm the encoder is
+not), §5.2 (primary is a role, not a model name), §5.3 (review is a role;
+stage is read from the history), §9 (disabling a removing judge is not a
+rollback), §10.2 (the absolute gates stand, and a separate relative trial gate
+is added), and §13 (generative models stay excluded; a distilled encoder is
+admitted through a flagged trial). All six exist to keep this document from
+contradicting `2026-09-06-radar-encoder-judge-design.md`, which specifies the
+trial itself. Nothing here relaxes an acceptance gate.
 
 ## 1. Decision
 
@@ -227,7 +239,26 @@ than silently turning every local score into zero.
 The local score is provisional. It covers the period before the LLM result and
 mentions that never enter the LLM tier.
 
-### 5.2 Primary Haiku judgment
+**Amended 2026-09-06 (v2.1).** The local arm above is the *lexicon and its
+candidate TF-IDF classifier*, feeding `lexicon_sentiment`. It is unchanged and
+is not retired. The distilled encoder admitted by §13 is a different thing in
+a different place: it fills the **primary judgment role** of §5.2, writing the
+five structured fields, and does not touch this provisional score. Both may be
+live at once, and §7.1's tone precedence continues to decide which one a
+reader sees.
+
+### 5.2 Primary judgment (Haiku today; a backend role)
+
+**Amended 2026-09-06 (v2.1).** "Primary" is a **role**, filled by a
+configured backend, not the name of a model. Today's backend is Haiku and its
+behaviour here is unchanged. The prompt, its schema and their sha256 pins
+remain binding for any backend that *uses* a prompt; `PROMPT_VERSION` names
+the version of the **label semantics**, which every backend answers to, while
+the stored backend id records who answered. The encoder backend reads the same
+canonical input and emits the same five fields without a prompt, which is why
+the pins bind its labels' meaning and not its call. Which model filled the
+role is recorded per judgment and is never inferred from the role, nor the
+role from the model — see §6 and the stage fix of 2026-09-06.
 
 Every eligible high-confidence mention is judged using the canonical input and
 a strict structured-output prompt. The prompt must:
@@ -429,6 +460,23 @@ least two percentage points in the primary attitude metric after accounting
 for its routing share. Otherwise it adds cost without earning its place and
 stays disabled.
 
+**Amended 2026-09-06 (v2.1).** "Review" is likewise a **role**, filled by a
+configured backend that declares it can serve it; Sonnet fills it today and
+its behaviour is unchanged. Three consequences, all of them things this
+section previously left to the accident that the two roles used different
+model ids:
+
+- The triggers above read the **primary answer**, whichever backend produced
+  it — "Haiku confidence is low" means the primary judgment's confidence.
+- Whether a mention has been reviewed is read from the recorded **stage** in
+  `radar_sentiment_judgments`, never from the mention's model column. One
+  backend may fill both roles, and the id proxy silently lost review verdicts
+  and emptied the review pool when it did.
+- A review is an **independent** judgment of the prepared text and keeps its
+  own tone policy. It never copies, promotes or launders another backend's
+  stored answer, and enabling it requires both a backend that supports the
+  role and a review mode; either alone judges nothing.
+
 ## 6. Storage and provenance
 
 `RadarMention` receives materialized final fields used by the board:
@@ -579,6 +627,25 @@ projection. Additive fields and judgment history remain harmless. Artifact
 promotion is atomic, so reverting the active local model pointer restores the
 previous scorer without rewriting mentions.
 
+**Amended 2026-09-06 (v2.1): that is true of tone and false of removals.**
+The paragraph above describes rolling back a change that only ever *rescored*
+mentions, where switching the writer off is enough because nothing was
+removed from the counting population. It does not describe rolling back a
+judge whose relevance and content-origin verdicts have already removed
+mentions from buckets and journal eligibility. There, disabling the backend
+stops new decisions and leaves every decision already made in force — so it is
+step one of a rollback, not a rollback.
+
+Recovery of such a change needs the mention's five judgment fields cleared
+back to the unjudged (provisional) state, `journal.sync_chatter_eligibility`
+re-run, and the affected windows rebuilt from a complete journal — which in
+turn requires the evidence to still exist, against a 48-hour journal horizon
+and 30-day post retention. `2026-09-06-radar-encoder-judge-design.md` §7.2,
+§7.2a and §7.2b specify that machinery: a durable trial record armed before
+the first write, a retention floor pinned to it, one transaction per window,
+and an enforced deadline. Judgment history is still append-only and still
+kept — it is the evidence of what the trial did.
+
 ## 10. Acceptance gates
 
 ### 10.1 Locked reference set
@@ -615,6 +682,32 @@ On the representative locked slice, the final routed result must achieve:
 Report both balanced and production-weighted metrics. A candidate does not
 pass by improving the weighted aggregate while breaking one source or rare
 but dangerous direct polarity errors.
+
+**Amended 2026-09-06 (v2.1): these gates, and a separate trial gate.**
+
+Everything above stays exactly as written, and stays the bar for an
+**unconditional replacement** of the primary judge. It was written for a
+frontier model and it is not lowered to admit a smaller one: the distilled
+encoder of `2026-09-06-radar-encoder-judge-design.md` scores 0 of 5 against
+it and does not pass.
+
+What is added is a **trial** gate, for a flagged, recoverable trial that is
+not a replacement. Its criteria are in that document's §7.1 and are
+*relative* to the incumbent paid judge on a fresh randomly-sampled audit,
+rather than absolute: removal precision at least Haiku's minus 0.03 and at
+least 0.93; relevance and content-origin agreement at least Haiku's minus 2.0
+points; judged on the Wilson 95% lower bound rather than a point estimate.
+Attitude is deliberately **not** gated there, because encoder tone is never
+written during the trial (§4.1 of that document); the four separate
+criteria that would qualify tone are stated in the same §7.1, and meeting
+them authorises nothing on its own — enabling encoder tone requires its own
+reviewed change.
+
+Two honest notes about this amendment. The relative rule replaced the
+absolute one *after* the numbers were seen, which is a moved goalpost even
+where the reasoning holds; it is written down here rather than left implicit.
+And the trial's tolerances and its rollback trigger were both fixed in
+writing before its evaluation, precisely so that this cannot happen twice.
 
 ### 10.3 Local classifier gates
 
@@ -691,7 +784,16 @@ is:
 - No all-Sonnet pass. Measured quality is better, but full-volume cost is not
   justified before selective review is measured.
 - No local generative LLM in v2; measured candidates missed the quality or
-  throughput gate.
+  throughput gate. **Amended 2026-09-06 (v2.1).** This stays true of
+  generative models and was re-measured, not relaxed: Qwen 3.5 4B and 9B
+  reached irrelevant precision of 0.4-0.5 against Haiku's, so they remain
+  excluded. A distilled *encoder* classifier is a different thing — it emits
+  the five fields directly and generates no text — and it is now admitted,
+  but only through the flagged, recoverable live-traffic trial specified in
+  `2026-09-06-radar-encoder-judge-design.md`, and only subject to §10 as
+  amended below. The sentence is amended rather than lawyered around on the
+  technicality: it was written to exclude exactly this kind of substitution,
+  and what has changed is the evidence, not the reading.
 - No silent reinterpretation of expected price movement as author attitude.
 - No scheduled classifier retraining until manual promotion is proven safe.
 - No deletion of legacy fields in the compatibility release.
