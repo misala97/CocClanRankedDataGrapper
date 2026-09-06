@@ -1216,9 +1216,13 @@ def _prepare_rollup_generation(now):
                     'against evidence that failed to bootstrap' %
                     (legacy.ticker, legacy.source, legacy.bucket_start))
 
-        invalidated = scoring.invalidate_incompatible_scores(
-            source_config_version(), since)
-        db.session.commit()
+        # A bucket write like any other: a recovery may be running from the
+        # CLI at this moment, and it takes the same database-wide guard.
+        from features.radar import buckets
+        with buckets.bucket_write_guard():
+            invalidated = scoring.invalidate_incompatible_scores(
+                source_config_version(), since)
+            db.session.commit()
         return recovered, invalidated
 
 

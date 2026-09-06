@@ -263,3 +263,50 @@ def test_stale_scores_follow_final_status_and_generation_policy(clean):
     assert rerun['stale_scores'] == 0
     assert _reread('ZZBF4').mention_z == 3.0
     assert _reread('ZZBF8').mention_z == 3.4
+
+
+
+# --- 5. It is a bucket writer, and takes the bucket writers' guard ----------
+
+def test_the_repair_writes_only_under_the_bucket_write_guard(clean,
+                                                             monkeypatch):
+    """Every statement the repair issues against the bucket tables --
+    including the autoflush the ORM emits when a later query runs while
+    earlier mutations are pending -- must happen while the guard is held.
+    A live cycle or a recovery landing between two of its writes is
+    exactly the interleaving the guard exists to prevent."""
+    from sqlalchemy import event
+
+    from features.radar import buckets as buckets_module
+
+    _source_row('ZZBF1', high_confidence_count=1, mention_count=1,
+               distinct_authors=1)
+    _source_row('ZZBF2', high_confidence_count=1, mention_count=1,
+               distinct_authors=1)
+    _post('ZZBF1', 'a', 1)
+    _post('ZZBF1', 'b', 2)
+    _post('ZZBF2', 'c', 3)
+    _post('ZZBF2', 'd', 4)
+    db.session.commit()
+
+    unguarded = []
+
+    def bucket_writes_must_be_guarded(conn, cursor, statement, parameters,
+                                      context, executemany):
+        head = statement.lstrip().split(None, 1)[0].upper()
+        if head in ('UPDATE', 'INSERT', 'DELETE') \
+                and 'radar_bucket' in statement \
+                and not buckets_module.BUCKET_WRITE_LOCK.locked():
+            unguarded.append(statement.strip().split('\n')[0][:60])
+
+    event.listen(db.engine, 'before_cursor_execute',
+                 bucket_writes_must_be_guarded)
+    try:
+        report = backfill.repair(apply=True, ticker_prefix='ZZBF')
+    finally:
+        event.remove(db.engine, 'before_cursor_execute',
+                     bucket_writes_must_be_guarded)
+
+    assert report['repaired'] == 2
+    assert unguarded == []
+    assert not buckets_module.BUCKET_WRITE_LOCK.locked()

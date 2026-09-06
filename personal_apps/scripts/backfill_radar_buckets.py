@@ -32,6 +32,7 @@ sys.path.insert(0, '.')
 from app import app                                        # noqa: E402
 from extensions import db                                  # noqa: E402
 from models import RadarBucketSource                       # noqa: E402
+from features.radar import buckets                         # noqa: E402
 from features.radar.config import (SCOREABLE_STATUSES,      # noqa: E402
                                    source_config_version)
 
@@ -70,8 +71,16 @@ def _unchanged(field, old, new):
 
 
 def repair(apply=False, ticker_prefix=None):
-    """Repair retained lower bounds; return integer report counters."""
-    with app.app_context():
+    """Repair retained lower bounds; return integer report counters.
+
+    The whole transaction runs under the bucket writers' guard. The ORM
+    autoflushes each row's mutation when the next row's lookup runs, so
+    the writes happen throughout the loop, not at the commit -- and every
+    one of them is a bucket write that a live rollup or a recovery must
+    not interleave with. It is held for the run: this is a one-shot
+    historical repair, run by hand and rarely.
+    """
+    with app.app_context(), buckets.bucket_write_guard():
         rows = db.session.execute(_TRUTH).all()
         repaired = examined = 0
 
