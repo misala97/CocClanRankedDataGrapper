@@ -102,8 +102,8 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 |---|---|---|---|---|---|
 | 1 stage fix | **COMPLETE** | `fbbd774` | 63 v2+llm, 220 neighbours | inline, diff read | 3 mutations bit and were restored |
 | 2 spec v2.1 amendment | **COMPLETE** | `af11dfa` | n/a (docs) | inline, diff read | six passages; §9 added beyond the plan's four |
-| 3 seam refactor | not started | — | — | — | pure refactor |
-| 4 encoder adapter | not started | — | — | — | needs onnxruntime install |
+| 3 seam refactor | **COMPLETE** | `43f9b35` | 279 across 10 suites | inline, diff read | parity proven by fingerprint diff |
+| 4 encoder adapter | **COMPLETE** | `379cb9f` | 51 adapter, 255 wider | inline, diff read | 5 mutations bit; real ONNX fixture |
 | 5 trial writes | not started | — | — | — | |
 | 6 provenance/spend/label | not started | — | — | — | migration |
 | 7a durable state + pin | not started | — | — | — | migration |
@@ -185,6 +185,74 @@ Six amendment anchors, all marked *Amended 2026-09-06 (v2.1)* in place, plus
 a summary in the document header. No acceptance gate was relaxed: §10.2's
 five absolute gates stand unchanged as the bar for an unconditional
 replacement, and the encoder still fails all five.
+
+## Task 3 record
+
+Proven, not asserted, to be a pure refactor: the pre-seam tree (`fbbd774`)
+and the post-seam tree were each run against identical fake responses, and
+their full request dictionaries, prompt bytes, verdicts and per-item token
+attribution compared for both the Haiku and the Sonnet-with-preamble path.
+Byte-identical. The prompt and schema sha256 pins never moved.
+
+**One deliberate semantic difference**, recorded rather than hidden: a
+successful response carrying no usage object now counts as one call with
+zero tokens, where before it counted as no call at all. Anthropic always
+sends usage, so production is unchanged — but a free backend must be able to
+report `Usage(0, 0)` and still be seen to have run, which is what makes an
+explicit 0.0 spend rate meaningful instead of "unknown". No test asserted
+the old behaviour.
+
+Validation deliberately did not move (spec §2.2). The adapter reports what
+the model said, missing fields included; `_enums_valid` in `llm_sentiment`
+is the single boundary, and it runs before the token split so a batch with
+one botched item attributes its tokens to the items that were stored.
+
+Tests split along the seam: vendor-shaped assertions to
+`test_radar_judge_backends.py` with the fake client, pipeline-shaped ones to
+a `FakeBackend`. The extractor diagnostic's poison moved from
+`llm_sentiment._get_client` to `judge_backends.construct_backend` — the only
+door to a backend now; the old name no longer exists, so poisoning it would
+have passed while guarding nothing. **TEETH:** judging was reintroduced into
+the diagnostic's own run and the poison fired.
+
+Also pinned: the rejudge script constructs Haiku explicitly and books and
+stores that id, and a dry run constructs no judge at all. It rewrites the
+past, and the past must not acquire a different judge because a trial is
+running later.
+
+**Not covered:** `build_sentiment_reference.cmd_label`'s rewired call. Its
+effort heuristic is preserved verbatim here by instruction, and Task 7c
+replaces it with an explicit `--effort` flag and tests the request
+dictionaries then.
+
+## Task 4 record
+
+The fixture is a real 12 KB ONNX graph and a real tokenizer, not a mock:
+every risk in this adapter is a join between what the tokenizer emits, the
+graph's input names, which output index is which head, and which class list
+an argmax indexes — and a mock asserts that join against itself. It has no
+weights; each head answers `(sum of unpadded ids + segment ids) mod
+len(classes)`, so a test computes the expected verdict independently and can
+assert which item got which verdict rather than that the answers differ.
+
+Two fixture attempts were discarded for being too weak to catch the bug they
+existed for: random weights collided on all five fields for two of four
+ordinary inputs, and a version that accepted `token_type_ids` without using
+it had the dead input pruned out of the graph by the exporter.
+
+Mutations, each applied to the finished adapter and then restored:
+
+| mutation | result |
+|---|---|
+| compare head classes as sets, not ordered tuples | 1 failed |
+| drop the session-load failure latch | 1 failed |
+| sort the batch before keying verdicts | 1 failed |
+| stop feeding `token_type_ids` | 5 failed |
+| drop the report-once marker | 1 failed |
+
+Confirmed by import check: `judge_backends` pulls in neither onnxruntime,
+tokenizers, numpy nor torch at import time, and constructing an Anthropic
+backend pulls none of them either. The web process stays light.
 
 ## Carried minor findings
 
