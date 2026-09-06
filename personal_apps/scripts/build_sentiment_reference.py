@@ -41,7 +41,7 @@ import sqlalchemy as sa  # noqa: E402
 
 from app import app  # noqa: E402
 from extensions import db  # noqa: E402
-from features.radar import llm_sentiment, sentiment, sentiment_input  # noqa: E402
+from features.radar import judge_backends, llm_sentiment, sentiment, sentiment_input  # noqa: E402
 from models import RadarMention, RadarPost  # noqa: E402
 from scripts.train_radar_sentiment import (  # noqa: E402
     BURNED_MANIFEST, HAMMING_LIMIT, hamming)
@@ -223,8 +223,15 @@ def _blind_items():
 
 def cmd_label(label_pass, model):
     items = _blind_items()
+    # The heuristic is preserved verbatim in this commit -- it is wrong (it
+    # infers a call parameter from a model id, the same shape of mistake as
+    # the stage proxy) but replacing it is a configuration change and
+    # belongs with the rest of them, not in a refactor that must not move
+    # any behaviour.
     effort = 'low' if model != llm_sentiment.PRIMARY_MODEL else None
-    answers = llm_sentiment.judge(items, model=model, effort=effort)
+    backend = judge_backends.construct_backend('anthropic:' + model,
+                                               effort=effort)
+    answers = llm_sentiment.judge(items, backend)
     out_path = _path('reference-labels-%s.jsonl' % label_pass)
     with open(out_path, 'w', encoding='utf-8') as out:
         for item in items:

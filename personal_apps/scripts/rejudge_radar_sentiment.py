@@ -29,7 +29,7 @@ import sqlalchemy as sa  # noqa: E402
 
 from app import app  # noqa: E402
 from extensions import db  # noqa: E402
-from features.radar import llm_sentiment  # noqa: E402
+from features.radar import judge_backends, llm_sentiment  # noqa: E402
 from models import RadarMention, RadarPost, RadarSentimentJudgment  # noqa: E402
 
 # When the judgment history is empty (first run after activation), the
@@ -110,6 +110,13 @@ def run(apply=False, limit=2000):
             print('dry run -- nothing judged, pass --apply')
             return 0
 
+        # Explicitly Haiku, and explicitly NOT whatever the daemon is
+        # configured to run: this script rewrites history, and history must
+        # not silently acquire a different judge because a live trial is
+        # under way. Its id is what gets booked and stored.
+        backend = judge_backends.construct_backend(
+            'anthropic:' + llm_sentiment.PRIMARY_MODEL)
+
         # --limit bounds ATTEMPTS, not successes: a partially failing run
         # must not keep pulling fresh slices past the requested spend
         # ceiling while retrying its failures (Codex review, finding 9).
@@ -130,14 +137,13 @@ def run(apply=False, limit=2000):
                 meter['output'] += getattr(usage, 'output_tokens', 0) or 0
 
             judgments = llm_sentiment.judge(
-                llm_sentiment.items_for(rows), on_usage=count)
+                llm_sentiment.items_for(rows), backend, on_usage=count)
             from features.radar import spend
-            spend.record(llm_sentiment.PRIMARY_MODEL, calls=meter['calls'],
+            spend.record(backend.id, calls=meter['calls'],
                          input_tokens=meter['input'],
                          output_tokens=meter['output'])
             written = llm_sentiment.apply_judgments(
-                rows, judgments, stage='primary',
-                model=llm_sentiment.PRIMARY_MODEL)
+                rows, judgments, stage='primary', model=backend.id)
             changed = llm_sentiment._sync_eligibility(rows, judgments)
             db.session.commit()
             llm_sentiment._rebuild_corrected(changed)

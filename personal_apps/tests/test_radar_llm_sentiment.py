@@ -56,6 +56,20 @@ def answer(entries, usage=None):
     return FakeResponse(json.dumps({'verdicts': entries}), usage=usage)
 
 
+def backend_over(answers, model=None):
+    """The real Anthropic adapter over a fake transport.
+
+    These are pass tests: what run_pass selects, writes and books. They keep
+    the real adapter so that "no call was made" still means no request was
+    built, and fake only the HTTP client -- the same coverage they had when
+    judge() spoke to a client directly.
+    """
+    from features.radar.judge_backends import AnthropicBackend
+    client = FakeClient(answers)
+    return AnthropicBackend(model or llm_sentiment.PRIMARY_MODEL,
+                            client=client), client
+
+
 def usage_of(input_tokens, output_tokens):
     return type('U', (), {'input_tokens': input_tokens,
                           'output_tokens': output_tokens})()
@@ -122,12 +136,12 @@ def test_an_already_judged_mention_is_not_repicked(clean_posts):
 def test_run_pass_judges_pending_and_books_spend(clean_posts):
     with flask_app.app_context():
         mention_id = make_post('zztest-pass')
-        client = FakeClient([answer([entry(1)], usage=usage_of(120, 30))])
+        backend, client = backend_over([answer([entry(1)], usage=usage_of(120, 30))])
         spent_before = (db.session.query(RadarLlmSpend).get(
             (dt.date.today(), llm_sentiment.PRIMARY_MODEL)))
         before_tokens = spent_before.input_tokens if spent_before else 0
 
-        judged = llm_sentiment.run_pass(client=client, limit=5)
+        judged = llm_sentiment.run_pass(backend=backend, limit=5)
 
         assert judged == 1
         m = db.session.get(RadarMention, mention_id)
@@ -149,9 +163,9 @@ def test_one_failed_batch_leaves_its_mentions_retryable(clean_posts):
         ok = answer([entry(n) for n in range(1, llm_sentiment.BATCH_SIZE + 1)])
         import anthropic
         boom = anthropic.APIConnectionError(request=None)
-        client = FakeClient([ok, boom])
+        backend, client = backend_over([ok, boom])
 
-        judged = llm_sentiment.run_pass(client=client,
+        judged = llm_sentiment.run_pass(backend=backend,
                                         limit=llm_sentiment.BATCH_SIZE + 1)
 
         assert judged == llm_sentiment.BATCH_SIZE
@@ -164,10 +178,10 @@ def test_one_failed_batch_leaves_its_mentions_retryable(clean_posts):
 def test_a_duplicated_item_number_keeps_only_one_answer(clean_posts):
     with flask_app.app_context():
         mention_id = make_post('zztest-dup')
-        client = FakeClient([answer([entry(1, attitude='positive'),
+        backend, client = backend_over([answer([entry(1, attitude='positive'),
                                      entry(1, attitude='negative',
                                            move='down')])])
-        judged = llm_sentiment.run_pass(client=client, limit=5)
+        judged = llm_sentiment.run_pass(backend=backend, limit=5)
         assert judged == 1
         m = db.session.get(RadarMention, mention_id)
         assert m.sentiment_attitude in ('positive', 'negative')
@@ -219,12 +233,12 @@ def test_run_pass_with_an_empty_gate_makes_no_call_and_books_nothing(clean_posts
     gate_on(monkeypatch)
     with flask_app.app_context():
         make_post('zztest-gate-lone', ticker='ZZLONE')      # one mention: under the floor
-        client = FakeClient([])                             # any call would pop from empty
+        backend, client = backend_over([])                             # any call would pop from empty
         spent_before = db.session.query(RadarLlmSpend).get(
             (dt.date.today(), llm_sentiment.PRIMARY_MODEL))
         calls_before = spent_before.calls if spent_before else 0
 
-        judged = llm_sentiment.run_pass(client=client, limit=5, now=NOW)
+        judged = llm_sentiment.run_pass(backend=backend, limit=5, now=NOW)
 
         assert judged == 0
         assert client.messages.requests == []
@@ -243,9 +257,9 @@ def test_a_watched_tickers_backlog_inside_the_window_is_judged(clean_posts, monk
         db.session.commit()
         fresh = make_post('zztest-gate-w-new', ticker='ZZW', when=NOW - dt.timedelta(hours=1))
         stale = make_post('zztest-gate-w-old', ticker='ZZW', when=NOW - dt.timedelta(hours=30))
-        client = FakeClient([answer([entry(1)], usage=usage_of(100, 20))])
+        backend, client = backend_over([answer([entry(1)], usage=usage_of(100, 20))])
         try:
-            judged = llm_sentiment.run_pass(client=client, limit=5, now=NOW)
+            judged = llm_sentiment.run_pass(backend=backend, limit=5, now=NOW)
 
             assert judged == 1
             assert db.session.get(RadarMention, fresh).sentiment_judged_at is not None

@@ -38,11 +38,9 @@ something upstream changed.
 """
 import dataclasses
 import datetime as dt
-import json
 import logging
 import os
 
-import anthropic
 import sqlalchemy as sa
 
 from extensions import db
@@ -56,6 +54,12 @@ logger = logging.getLogger('radar.llm_sentiment')
 # Posts per call. Large enough that the instructions amortize, small enough
 # that one failure costs little and the model is not asked to track a hundred
 # indices at once.
+#
+# Both of these are the HOSTED backend's sizes: AnthropicBackend reads them,
+# and a backend with different economics carries its own. They stay defined
+# here, rather than beside that adapter, only because the imports run this
+# way round -- an adapter may import the pipeline's canonical names, never
+# the reverse.
 BATCH_SIZE = 20
 
 # How many mentions one scheduled pass will judge. A ceiling on the bill if
@@ -229,16 +233,6 @@ class SentimentUnavailable(Exception):
     """The judgement did not arrive. Never becomes a verdict."""
 
 
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic()
-    return _client
-
-
 def legacy_projection(judgment):
     """The spec §6 compatibility table, in precedence order."""
     if judgment.relevance != 'relevant':
@@ -277,75 +271,45 @@ def _prompt_v2(batch, preamble=None):
     return '\n\n'.join(lines)
 
 
-def _judge_batch_v2(batch, client, model, effort, preamble=None):
-    output_config = {'format': {'type': 'json_schema', 'schema': V2_SCHEMA}}
-    if effort is not None:
-        # Sonnet-tier only. Haiku 4.5 rejects `effort` with a 400.
-        output_config['effort'] = effort
-    response = client.messages.create(
-        model=model, max_tokens=2048, output_config=output_config,
-        messages=[{'role': 'user',
-                   'content': _prompt_v2(batch, preamble=preamble)}])
-    if getattr(response, 'stop_reason', None) == 'refusal':
-        raise SentimentUnavailable('the model declined to classify this batch')
-    try:
-        text = next(block.text for block in response.content
-                    if block.type == 'text')
-        verdicts = json.loads(text)['verdicts']
-    except (StopIteration, ValueError, KeyError, TypeError) as exc:
-        raise SentimentUnavailable('unparseable response: %s' % exc)
-    # Well-formed JSON with the wrong SHAPE ({"verdicts": {"n": 1}}) must
-    # cost only this batch, exactly like malformed JSON -- iterating a
-    # dict here yielded strings and an AttributeError escaped the whole
-    # pass (Codex review, finding 8).
-    if not isinstance(verdicts, list):
-        raise SentimentUnavailable('verdicts is %s, not a list'
-                                   % type(verdicts).__name__)
+def _enums_valid(judgment):
+    """Every field one of its allowed values.
 
-    got = {}
-    for entry in verdicts:
-        if not isinstance(entry, dict):
-            continue
-        number = entry.get('n')
-        if not isinstance(number, int) or not 1 <= number <= len(batch):
-            continue
-        values = {}
-        for field, allowed in _FIELD_ENUMS.items():
-            value = entry.get(field)
-            if value not in allowed:
-                values = None
-                break
-            values[field] = value
-        if values is None:
-            continue        # partial or out-of-enum: discarded, never defaulted
-        got[batch[number - 1].key] = Judgment(**values)
-    return got, getattr(response, 'usage', None)
+    THE boundary (spec §5.2.2). It runs here, once, over whatever any
+    backend returned, so no adapter can turn a missing or invented field
+    into a stored verdict. A judgment that fails is discarded whole --
+    never partially written, never defaulted to a plausible value.
+    """
+    return all(getattr(judgment, field, None) in allowed
+               for field, allowed in _FIELD_ENUMS.items())
 
 
-def judge(items, client=None, model=PRIMARY_MODEL, on_usage=None,
-          effort=None, preamble=None):
-    """Judge every item in batches. Returns {key: JudgedAnswer}.
+def judge(items, backend, on_usage=None, preamble=None):
+    """Judge every item in the backend's batches. Returns {key: JudgedAnswer}.
 
-    A key absent from the result was NOT judged and must stay NULL.
-    Batch usage is split evenly over the batch's answered items -- the
-    API reports usage per call, not per item, and an even split is the
-    only attribution that sums back to the truth.
+    A key absent from the result was NOT judged and must stay NULL. Batch
+    usage is split evenly over the batch's answered items -- the API
+    reports usage per call, not per item, and an even split is the only
+    attribution that sums back to the truth.
+
+    The split runs over the items that SURVIVED validation, so a batch
+    where the model answered ten items and botched one attributes its
+    tokens to the ten that were stored.
     """
     if not items:
         return {}
-    client = client or _get_client()
     got = {}
-    for start in range(0, len(items), BATCH_SIZE):
-        batch = items[start:start + BATCH_SIZE]
+    for start in range(0, len(items), backend.batch_size):
+        batch = items[start:start + backend.batch_size]
         try:
-            judgments, usage = _judge_batch_v2(batch, client, model, effort,
-                                               preamble=preamble)
-        except (SentimentUnavailable, anthropic.APIError) as exc:
+            judgments, usage = backend.judge_batch(batch, preamble=preamble)
+        except SentimentUnavailable as exc:
             logger.warning('radar sentiment v2 batch of %d failed: %s',
                            len(batch), exc)
             continue
-        in_tok = getattr(usage, 'input_tokens', 0) or 0
-        out_tok = getattr(usage, 'output_tokens', 0) or 0
+        judgments = {key: judgment for key, judgment in judgments.items()
+                     if _enums_valid(judgment)}
+        in_tok = usage.input_tokens or 0
+        out_tok = usage.output_tokens or 0
         count = len(judgments) or 1
         share_in, share_out = in_tok // count, out_tok // count
         rest_in = in_tok - share_in * (count - 1)
@@ -356,7 +320,7 @@ def judge(items, client=None, model=PRIMARY_MODEL, on_usage=None,
                 judgment=judgment,
                 input_tokens=rest_in if last else share_in,
                 output_tokens=rest_out if last else share_out)
-        if on_usage is not None and usage is not None:
+        if on_usage is not None:
             on_usage(usage)
     return got
 
@@ -629,7 +593,25 @@ def items_for(rows):
     return out
 
 
-def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL, now=None):
+def default_primary_backend():
+    """Haiku, constructed explicitly. Not read from the environment.
+
+    Configuration resolution belongs to the daemon's startup (spec §2.3) and
+    arrives in a later task; until then an omitted backend means exactly
+    what it meant before this seam existed.
+    """
+    from . import judge_backends
+    return judge_backends.construct_backend('anthropic:' + PRIMARY_MODEL)
+
+
+def default_review_backend():
+    """Sonnet at low effort -- a property of the model, not of the pass."""
+    from . import judge_backends
+    return judge_backends.construct_backend('anthropic:' + REVIEW_MODEL,
+                                            effort='low')
+
+
+def run_pass(backend=None, limit=None, now=None):
     """Judge the pending mentions with the v2 prompt. Returns how many.
 
     Reads only what the judge gate admits (judge_gate.py): watched
@@ -638,8 +620,12 @@ def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL, now=None):
     stays unjudged; it keeps counting provisionally and nothing shows it.
 
     Books what it cost off the responses rather than estimating, which
-    keeps the figure exact for radar specifically.
+    keeps the figure exact for radar specifically. The backend's own id is
+    what gets booked and stored, so provenance and spend follow whoever
+    actually answered.
     """
+    backend = backend or default_primary_backend()
+    limit = backend.pass_limit if limit is None else limit
     now = now or dt.datetime.utcnow()
     gate = judge_gate.judgeable_tickers(now)
     if gate.enabled:
@@ -661,11 +647,11 @@ def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL, now=None):
         meter['input'] += getattr(usage, 'input_tokens', 0) or 0
         meter['output'] += getattr(usage, 'output_tokens', 0) or 0
 
-    judgments = judge(items_for(rows), client=client, model=model,
-                      on_usage=count)
-    spend.record(model, calls=meter['calls'], input_tokens=meter['input'],
-                 output_tokens=meter['output'])
-    written = apply_judgments(rows, judgments, stage='primary', model=model)
+    judgments = judge(items_for(rows), backend, on_usage=count)
+    spend.record(backend.id, calls=meter['calls'],
+                 input_tokens=meter['input'], output_tokens=meter['output'])
+    written = apply_judgments(rows, judgments, stage='primary',
+                              model=backend.id)
     changed = _sync_eligibility(rows, judgments)
     db.session.commit()
     _rebuild_corrected(changed)
@@ -718,8 +704,8 @@ def _primary_count(today):
         .scalar() or 0)
 
 
-def run_review_pass(client=None, now=None):
-    """The selective Sonnet tier (spec §5.3). Returns mentions reviewed.
+def run_review_pass(backend=None, now=None):
+    """The selective review tier (spec §5.3). Returns mentions reviewed.
 
     Gated by RADAR_SONNET_REVIEW following the house flag idiom
     (RADAR_FORCE_IPV4): off by default, 'shadow' measures routing share
@@ -734,6 +720,7 @@ def run_review_pass(client=None, now=None):
     mode = os.getenv('RADAR_SONNET_REVIEW', '').strip()
     if mode not in ('shadow', '1', 'true', 'True'):
         return 0
+    backend = backend or default_review_backend()
     now = now or dt.datetime.utcnow()
     # UTC day from the pass's own clock, not the machine's local calendar
     # (Codex review, finding 7).
@@ -743,7 +730,7 @@ def run_review_pass(client=None, now=None):
     # head gets stamped and counted instead of hiding behind the same
     # unserved top rows forever (finding 7). Serving still takes the
     # priority-ordered head, capped by PASS_LIMIT.
-    candidates = review_candidates(now, limit=PASS_LIMIT * 5)
+    candidates = review_candidates(now, limit=backend.pass_limit * 5)
     if not candidates:
         return 0
 
@@ -752,7 +739,7 @@ def run_review_pass(client=None, now=None):
     attempted_today = meter_row.attempted if meter_row else 0
     allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
                   - attempted_today)
-    take = candidates[:min(allowed, PASS_LIMIT)]
+    take = candidates[:min(allowed, backend.pass_limit)]
 
     # Unique-demand accounting: only FIRST-time candidates move the meter,
     # and the stamps land in the SAME commit as their meter increments --
@@ -788,13 +775,12 @@ def run_review_pass(client=None, now=None):
         meter['input'] += getattr(usage, 'input_tokens', 0) or 0
         meter['output'] += getattr(usage, 'output_tokens', 0) or 0
 
-    judgments = judge(items_for(take), client=client, model=REVIEW_MODEL,
-                      on_usage=count, effort='low',
+    judgments = judge(items_for(take), backend, on_usage=count,
                       preamble=REVIEW_PREAMBLE)
-    spend.record(REVIEW_MODEL, calls=meter['calls'],
+    spend.record(backend.id, calls=meter['calls'],
                  input_tokens=meter['input'], output_tokens=meter['output'])
     written = apply_judgments(take, judgments, stage='review',
-                              model=REVIEW_MODEL)
+                              model=backend.id)
     # A review REVERSAL must restore counting in the same transaction the
     # verdict lands in.
     changed = _sync_eligibility(take, judgments)

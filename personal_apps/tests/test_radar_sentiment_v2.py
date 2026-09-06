@@ -3,7 +3,7 @@
 import hashlib
 import json
 
-from features.radar import llm_sentiment, sentiment_input
+from features.radar import judge_backends, llm_sentiment, sentiment_input
 from features.radar.llm_sentiment import (
     ATTITUDE, CONFIDENCE, CONTENT_ORIGIN, EXPECTED_MOVE, RELEVANCE,
     JudgeItem, Judgment, legacy_projection)
@@ -60,33 +60,122 @@ def full(n, relevance='relevant', origin='human_chatter', attitude='positive',
             'confidence': confidence}
 
 
-def test_a_full_judgment_comes_back_typed():
-    client = FakeClient([answer([full(1)])])
-    got = judge([jitem(7)], client=client)
-    j = got[7].judgment
-    assert j.relevance == 'relevant' and j.attitude == 'positive'
-    assert j.expected_move == 'up' and j.confidence == 'high'
+class FakeBackend:
+    """A backend with no vendor inside it.
+
+    What the pipeline does with an answer -- validate it, split the batch's
+    tokens over it, store it, let review outrank primary -- is the same
+    whoever answered. These tests answer directly, so a change to the
+    Anthropic request shape can never make them pass or fail.
+
+    `answers` is one entry per batch: {item.key: Judgment} for what came
+    back, or an exception to raise instead.
+    """
+
+    supports_review = True
+
+    def __init__(self, answers, id='zz-fake-backend', batch_size=20,
+                 pass_limit=400, usage=None):
+        self.id = id
+        self.batch_size = batch_size
+        self.pass_limit = pass_limit
+        self.answers = list(answers)
+        self.usage = usage if usage is not None else judge_backends.Usage(0, 0)
+        self.batches = []
+
+    def judge_batch(self, batch, *, preamble=None):
+        self.batches.append((list(batch), preamble))
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return dict(answer), self.usage
 
 
-def test_the_item_serialization_matches_the_spec_shape():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1, text='body & text', ticker='ZZA',
-                 source='reddit:options')], client=client)
-    prompt = client.messages.requests[0]['messages'][0]['content']
-    assert '<item n="1">' in prompt
-    assert '<target_ticker>ZZA</target_ticker>' in prompt
-    assert '<content_type>submission</content_type>' in prompt
-    assert '<post>body &amp; text</post>' in prompt
+def jm(relevance='relevant', origin='human_chatter', attitude='positive',
+       move='up', confidence='high'):
+    return Judgment(relevance, origin, attitude, move, confidence)
 
 
-def test_a_reddit_comment_serializes_as_comment_without_parent_title():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1, text='my own words', ticker='ZZA',
-                 source='reddit:options', title='/u/parent on Big Thread')],
-          client=client)
-    prompt = client.messages.requests[0]['messages'][0]['content']
-    assert '<content_type>comment</content_type>' in prompt
-    assert 'Big Thread' not in prompt
+def test_judge_returns_what_the_backend_answered():
+    backend = FakeBackend([{7: jm()}])
+    got = judge([jitem(7)], backend)
+    assert set(got) == {7}
+    assert got[7].judgment.attitude == 'positive'
+
+
+def test_a_value_outside_the_enums_is_discarded_whoever_said_it():
+    """Validation is the pipeline's boundary, not the adapter's -- so it
+    holds for a backend that never saw the schema at all."""
+    backend = FakeBackend([{1: jm(attitude='bullish')}])
+    assert judge([jitem(1)], backend) == {}
+
+
+def test_a_partial_answer_is_discarded_not_defaulted():
+    backend = FakeBackend([{1: Judgment('relevant', None, 'positive',
+                                        'up', 'high')}])
+    assert judge([jitem(1)], backend) == {}
+
+
+def test_an_unavailable_batch_leaves_its_items_unjudged():
+    backend = FakeBackend([llm_sentiment.SentimentUnavailable('nope')])
+    assert judge([jitem(1), jitem(2)], backend) == {}
+
+
+def test_one_failed_batch_does_not_cost_the_others():
+    backend = FakeBackend([llm_sentiment.SentimentUnavailable('nope'),
+                           {2: jm()}], batch_size=1)
+    got = judge([jitem(1), jitem(2)], backend)
+    assert set(got) == {2}
+
+
+def test_items_are_batched_at_the_backends_size():
+    backend = FakeBackend([{1: jm()}, {2: jm()}, {3: jm()}], batch_size=1)
+    judge([jitem(1), jitem(2), jitem(3)], backend)
+    assert [len(batch) for batch, _preamble in backend.batches] == [1, 1, 1]
+
+    backend = FakeBackend([{1: jm(), 2: jm(), 3: jm()}], batch_size=20)
+    judge([jitem(1), jitem(2), jitem(3)], backend)
+    assert [len(batch) for batch, _preamble in backend.batches] == [3]
+
+
+def test_batch_usage_is_split_across_its_answers():
+    backend = FakeBackend([{1: jm(), 2: jm()}],
+                          usage=judge_backends.Usage(100, 21))
+    got = judge([jitem(1), jitem(2)], backend)
+    assert got[1].input_tokens + got[2].input_tokens == 100
+    assert got[1].output_tokens + got[2].output_tokens == 21
+
+
+def test_usage_is_split_over_what_survived_validation():
+    """A batch where the model answered one item and botched another must
+    attribute all of its tokens to the item that was stored."""
+    backend = FakeBackend([{1: jm(), 2: jm(confidence='very')}],
+                          usage=judge_backends.Usage(100, 20))
+    got = judge([jitem(1), jitem(2)], backend)
+    assert set(got) == {1}
+    assert (got[1].input_tokens, got[1].output_tokens) == (100, 20)
+
+
+def test_a_tokenless_backend_costs_nothing_and_still_answers():
+    backend = FakeBackend([{1: jm()}], id='radar-encoder-v1')
+    got = judge([jitem(1)], backend)
+    assert (got[1].input_tokens, got[1].output_tokens) == (0, 0)
+
+
+def test_the_preamble_reaches_the_backend_only_when_given():
+    backend = FakeBackend([{1: jm()}, {1: jm()}], batch_size=20)
+    judge([jitem(1)], backend)
+    judge([jitem(1)], backend, preamble=llm_sentiment.REVIEW_PREAMBLE)
+    assert [preamble for _batch, preamble in backend.batches] ==         [None, llm_sentiment.REVIEW_PREAMBLE]
+
+
+def test_no_items_asks_the_backend_nothing():
+    backend = FakeBackend([])
+    assert judge([], backend) == {}
+    assert backend.batches == []
+
+
+
 
 
 def test_the_binding_prompt_is_byte_exact():
@@ -119,67 +208,12 @@ def test_the_schema_is_the_binding_enum_set():
     assert props.keys() >= {'n'}
 
 
-def test_the_review_preamble_is_present_only_on_review_calls():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client)
-    assert llm_sentiment.REVIEW_PREAMBLE not in \
-        client.messages.requests[0]['messages'][0]['content']
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client, model=llm_sentiment.REVIEW_MODEL,
-          effort='low', preamble=llm_sentiment.REVIEW_PREAMBLE)
-    prompt = client.messages.requests[0]['messages'][0]['content']
-    assert prompt.startswith(llm_sentiment.REVIEW_PREAMBLE)
-    assert llm_sentiment._INSTRUCTIONS_V2 in prompt
 
 
-def test_an_entry_with_a_value_outside_the_enums_is_discarded():
-    bad = full(1)
-    bad['attitude'] = 'bullish'
-    client = FakeClient([answer([bad])])
-    assert judge([jitem(1)], client=client) == {}
 
 
-def test_a_partial_entry_is_discarded_not_defaulted():
-    entry = full(1)
-    del entry['content_origin']
-    client = FakeClient([answer([entry])])
-    assert judge([jitem(1)], client=client) == {}
 
 
-def test_malformed_json_leaves_the_batch_unjudged():
-    client = FakeClient([FakeResponse('this is not json')])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_a_missing_item_number_is_discarded():
-    entry = full(1)
-    del entry['n']
-    client = FakeClient([answer([entry])])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_a_refusal_leaves_the_batch_unjudged():
-    client = FakeClient([FakeResponse('no', stop_reason='refusal')])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_batch_usage_is_split_across_its_answers():
-    usage = type('U', (), {'input_tokens': 100, 'output_tokens': 21})()
-    client = FakeClient([answer([full(1), full(2)], usage=usage)])
-    got = judge([jitem(1), jitem(2)], client=client)
-    assert got[1].input_tokens + got[2].input_tokens == 100
-    assert got[1].output_tokens + got[2].output_tokens == 21
-
-
-def test_no_effort_is_sent_by_default_and_effort_reaches_sonnet():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client)
-    assert 'effort' not in client.messages.requests[0]['output_config']
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client, model=llm_sentiment.REVIEW_MODEL,
-          effort='low')
-    assert client.messages.requests[0]['output_config']['effort'] == 'low'
-    assert client.messages.requests[0]['model'] == 'claude-sonnet-5'
 
 
 def test_legacy_projection_matches_the_spec_table():
@@ -679,14 +713,26 @@ def test_review_candidates_orders_by_priority_and_skips_reviewed(clean_posts):
 
 # --- The Sonnet review pass (Task 8) ----------------------------------------
 
-def sentinel_client():
-    """A client whose any use fails the test: proves no call was made."""
-    class Boom:
-        def create(self, **kwargs):
-            raise AssertionError('the review pass must not call the API here')
-    client = type('C', (), {})()
-    client.messages = Boom()
-    return client
+def sentinel_backend():
+    """A backend whose every use fails the test: proves no call was made."""
+    class Boom(FakeBackend):
+        def judge_batch(self, batch, *, preamble=None):
+            raise AssertionError('the review pass must not judge here')
+    return Boom([], id=llm_sentiment.REVIEW_MODEL)
+
+
+def review_backend_over(answers):
+    """The real Sonnet adapter over a fake transport.
+
+    The review tests that survive here assert on stored fields, meters and
+    -- in one case -- the exact prompt bytes that prove the review is an
+    INDEPENDENT judgment. That last one needs the real request, so these
+    keep the adapter and fake only the HTTP client.
+    """
+    client = FakeClient(answers)
+    backend = judge_backends.AnthropicBackend(
+        llm_sentiment.REVIEW_MODEL, effort='low', client=client)
+    return backend, client
 
 
 @pytest.fixture()
@@ -743,7 +789,7 @@ def test_review_pass_is_off_without_the_flag(clean_posts, clean_meter_all,
     monkeypatch.delenv('RADAR_SONNET_REVIEW', raising=False)
     with flask_app.app_context():
         primary_judged('zztest-rv-off')
-        assert llm_sentiment.run_review_pass(client=sentinel_client()) == 0
+        assert llm_sentiment.run_review_pass(backend=sentinel_backend()) == 0
         assert RadarReviewMeter.query.count() == 0
 
 
@@ -752,7 +798,7 @@ def test_shadow_mode_meters_but_never_calls(clean_posts, clean_meter_all,
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-shadow')
-        assert llm_sentiment.run_review_pass(client=sentinel_client()) == 0
+        assert llm_sentiment.run_review_pass(backend=sentinel_backend()) == 0
         row = RadarReviewMeter.query.one()
         assert row.demanded == 1 and row.attempted == 0 and row.served == 0
         m = db.session.get(RadarMention, mention_id)
@@ -764,8 +810,8 @@ def test_demand_is_counted_once_across_passes(clean_posts, clean_meter_all,
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
     with flask_app.app_context():
         primary_judged('zztest-rv-once')
-        llm_sentiment.run_review_pass(client=sentinel_client())
-        llm_sentiment.run_review_pass(client=sentinel_client())
+        llm_sentiment.run_review_pass(backend=sentinel_backend())
+        llm_sentiment.run_review_pass(backend=sentinel_backend())
         row = RadarReviewMeter.query.one()
         assert row.demanded == 1
 
@@ -787,8 +833,8 @@ def test_the_ceiling_caps_on_attempted_and_priority_wins(
         # daemon's history cannot move `allowed`.
         monkeypatch.setattr(llm_sentiment, '_primary_count', lambda day: 2)
         monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 0.5)
-        client = FakeClient([answer([full(1)])])
-        served = llm_sentiment.run_review_pass(client=client)
+        backend, client = review_backend_over([answer([full(1)])])
+        served = llm_sentiment.run_review_pass(backend=backend)
         assert served == 1
         row = RadarReviewMeter.query.one()
         assert row.demanded == 2 and row.attempted == 1
@@ -808,8 +854,9 @@ def test_a_failed_sonnet_call_meters_attempted_but_not_served(
     monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-fail')
-        client = FakeClient([FakeResponse('not json at all')])
-        assert llm_sentiment.run_review_pass(client=client) == 0
+        backend, client = review_backend_over(
+            [FakeResponse('not json at all')])
+        assert llm_sentiment.run_review_pass(backend=backend) == 0
         row = RadarReviewMeter.query.one()
         assert row.attempted == 1 and row.served == 0
         # The invalid answer preserved the Haiku final result untouched.
@@ -826,9 +873,9 @@ def test_sonnet_result_overwrites_and_carries_the_preamble(
     monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-serve')
-        client = FakeClient([answer([full(1, attitude='negative',
-                                          move='down')])])
-        assert llm_sentiment.run_review_pass(client=client) == 1
+        backend, client = review_backend_over(
+            [answer([full(1, attitude='negative', move='down')])])
+        assert llm_sentiment.run_review_pass(backend=backend) == 1
         m = db.session.get(RadarMention, mention_id)
         assert m.sentiment_attitude == 'negative'
         assert m.sentiment_model == llm_sentiment.REVIEW_MODEL
@@ -938,6 +985,52 @@ def test_cost_projection_uses_measured_history_when_present(clean_posts):
 
 
 # --- Locked reference tooling, pure pieces (Task 13) ------------------------
+
+def test_rejudge_judges_through_an_explicitly_constructed_haiku(
+        clean_posts, monkeypatch):
+    """The bounded history rewrite builds its own judge.
+
+    It must not inherit whatever the daemon is configured with: this script
+    rewrites the past, and the past must not quietly acquire a different
+    judge because a trial is running. What it constructs is what it books
+    and what it stores.
+    """
+    with flask_app.app_context():
+        stale = make_post('zztest-rj-backend')
+        m = db.session.get(RadarMention, stale)
+        m.sentiment_prompt_version = 'radar-sentiment-v1-retired'
+        m.sentiment_judged_at = NOW
+        db.session.commit()
+
+        built = []
+        backend = FakeBackend([{stale: jm(attitude='negative', move='down')}],
+                              id=llm_sentiment.PRIMARY_MODEL,
+                              usage=judge_backends.Usage(11, 3))
+
+        def fake_construct(spec, **kwargs):
+            built.append(spec)
+            return backend
+
+        monkeypatch.setattr(judge_backends, 'construct_backend', fake_construct)
+        monkeypatch.setattr(rejudge, 'rejudge_backlog',
+                            lambda limit: rows_for([stale]))
+
+        assert rejudge.run(apply=True, limit=1) == 1
+        assert built == ['anthropic:' + llm_sentiment.PRIMARY_MODEL]
+        m = db.session.get(RadarMention, stale)
+        assert m.sentiment_model == llm_sentiment.PRIMARY_MODEL
+        assert m.sentiment_attitude == 'negative'
+        assert m.sentiment_prompt_version == llm_sentiment.PROMPT_VERSION
+
+
+def test_a_dry_run_constructs_no_judge_at_all(monkeypatch):
+    def boom(*args, **kwargs):
+        raise AssertionError('a dry run built a judge')
+
+    monkeypatch.setattr(judge_backends, 'construct_backend', boom)
+    with flask_app.app_context():
+        assert rejudge.run(apply=False) == 0
+
 
 from scripts import build_sentiment_reference as reference
 from scripts import score_sentiment_reference as scorer
@@ -1055,16 +1148,6 @@ def test_the_activation_cutoff_fences_the_legacy_backlog(clean_posts):
         assert legacy in backlog
 
 
-def test_a_dict_shaped_verdicts_value_costs_only_the_batch():
-    """Finding 8: {"verdicts": {"n": 1}} is well-formed JSON whose iteration
-    yielded strings and let an AttributeError kill the whole pass."""
-    client = FakeClient([FakeResponse(json.dumps({'verdicts': {'n': 1}}))])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_a_non_dict_entry_is_skipped():
-    client = FakeClient([FakeResponse(json.dumps({'verdicts': ['what']}))])
-    assert judge([jitem(1)], client=client) == {}
 
 
 def test_the_meter_lands_on_the_utc_day_of_the_pass(clean_posts,
@@ -1085,7 +1168,7 @@ def test_the_meter_lands_on_the_utc_day_of_the_pass(clean_posts,
                 synchronize_session=False)
         db.session.commit()
 
-        llm_sentiment.run_review_pass(client=sentinel_client(),
+        llm_sentiment.run_review_pass(backend=sentinel_backend(),
                                       now=target_day)
         row = RadarReviewMeter.query.one()
         assert row.day == target_day.date()
