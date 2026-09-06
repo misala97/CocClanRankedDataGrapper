@@ -445,15 +445,24 @@ refuses what it did not. Run them in order, in the same directory.
 
 ```bash
 D=/root/audit-day3
-venv/bin/python -m scripts.audit_encoder_trial sample        --out $D
-venv/bin/python -m scripts.audit_encoder_trial export-labels --out $D
-venv/bin/python -m scripts.audit_encoder_trial predict       --out $D --backend encoder
-# PAID. A Haiku pass over the sampled rows; refuses without the flag.
-venv/bin/python -m scripts.audit_encoder_trial predict       --out $D     --backend anthropic:claude-haiku-4-5 --confirm-spend
+venv/bin/python -m scripts.audit_encoder_trial sample         --out $D
+venv/bin/python -m scripts.audit_encoder_trial export-labels  --out $D
+venv/bin/python -m scripts.audit_encoder_trial predict        --out $D --backend encoder
+venv/bin/python -m scripts.audit_encoder_trial export-prompts --out $D
+# ... the incumbent: a Haiku subagent in Claude Code answers each prompt
+#     in $D/prompts/ (see below); its answers land in $D/answers/ ...
+venv/bin/python -m scripts.audit_encoder_trial import-predictions --out $D \
+    --backend claude-haiku-4-5@claude-code-subagent --answers $D/answers
 # ... labelling happens here, blind: no predictions in blind.jsonl ...
-venv/bin/python -m scripts.audit_encoder_trial evaluate      --out $D     --labels $D/labels.jsonl     --encoder-predictions $D/radar-encoder-v1.jsonl     --haiku-predictions $D/claude-haiku-4-5.jsonl     --supplemental-audit $D/supplemental-audit.jsonl     --supplemental-natural $D/supplemental-natural.jsonl
+venv/bin/python -m scripts.audit_encoder_trial evaluate --out $D \
+    --labels $D/labels.jsonl \
+    --encoder-predictions $D/radar-encoder-v1.jsonl \
+    --haiku-predictions $D/claude-haiku-4-5@claude-code-subagent.jsonl \
+    --supplemental-audit $D/supplemental-audit.jsonl \
+    --supplemental-natural $D/supplemental-natural.jsonl
 # ... read report.md; look at the two disagreement lists in report.json ...
-venv/bin/python -m scripts.audit_encoder_trial accept        --report $D/report.json     --acknowledgments $D/acknowledgments.json
+venv/bin/python -m scripts.audit_encoder_trial accept --report $D/report.json \
+    --acknowledgments $D/acknowledgments.json
 ```
 
 **`sample`** refuses before day 3 (the frame is not closed), after day 7
@@ -464,9 +473,32 @@ artifact hash, prompt version and model id.
 **`predict`** scores exactly the sampled ids, through the same prepared
 inputs the live pass uses, and never through `apply_judgments` -- it cannot
 move a mention, a bucket or the history. The encoder pass refuses an
-artifact whose bundle hash is not the armed one. Both passes book their
-calls on the spend meter. The output file's first line is a provenance
-header: backend, artifact hash, prompt version, the sample file's hash.
+artifact whose bundle hash is not the armed one and books its calls on the
+spend meter. The output file's first line is a provenance header: backend,
+artifact hash, prompt version, the sample file's hash.
+
+**The incumbent has no API credits** (the paid judge stopped on 2026-09-03
+and paying again is off the table -- Michi's ruling, 2026-09-06). Its
+predictions come from a Haiku subagent inside Claude Code instead:
+
+1. `export-prompts` writes `$D/prompts/batch-NNNN.txt` -- byte for byte the
+   prompt `AnthropicBackend` would have sent, twenty items each, in sample
+   order -- plus `manifest.json` (batch -> mention ids, sample hash, prompt
+   version, and the answer shape).
+2. Copy `$D/prompts/` to the PC. In Claude Code, one Haiku 4.5 subagent per
+   batch (38 for 746 rows) receives the prompt text verbatim and returns
+   the JSON `{"verdicts": [{"n": 1, "relevance": ..., "content_origin":
+   ..., "attitude": ..., "expected_move": ..., "confidence": ...}, ...]}`,
+   saved as `answers/batch-NNNN.json`. Nothing else is given to the
+   subagent: no labels, no encoder verdicts.
+3. Copy `answers/` back; `import-predictions` turns them into
+   `claude-haiku-4-5@claude-code-subagent.jsonl` with the provenance header
+   `via: claude-code-subagent`. A batch never answered, an answer outside
+   the enums, or an `n` outside the batch is an unanswered row and fails
+   coverage -- never a default.
+
+It is not the API path and the report says so (`predictions.incumbent`).
+The comparison it feeds is reported only; it cannot stop the trial.
 
 **`labels.jsonl`** is the human's file, one row per sampled mention:
 
