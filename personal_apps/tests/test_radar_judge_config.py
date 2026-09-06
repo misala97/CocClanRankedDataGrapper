@@ -43,13 +43,25 @@ def no_trial():
         db.session.commit()
 
 
+# The two supplementary sets' membership, frozen at arming (spec 7.2c). Two
+# keys per half is the least that satisfies the rules; the real sets are
+# the 200-row audit and the 900-row locked natural set.
+SUPPLEMENTAL = {
+    'audit': {'keys': ['a1', 'a2', 'a3', 'a4'],
+              'halves': {'a1': 'removal', 'a2': 'removal',
+                         'a3': 'natural', 'a4': 'natural'}},
+    'natural': {'keys': ['n1', 'n2']},
+}
+
+
 def armed(**over):
     fields = dict(artifact_sha256=judge_backends.EncoderBackend(
         FIXTURE).bundle_sha256(),
         baseline_report='reports/baseline.json',
         baseline_removal_rate=0.3, seed=1)
     fields.update(over)
-    return judge_trial.arm_trial(dt.datetime.utcnow(), **fields)
+    return judge_trial.arm_trial(dt.datetime.utcnow(),
+                                 supplemental=SUPPLEMENTAL, **fields)
 
 
 # ---- resolving ---------------------------------------------------------------

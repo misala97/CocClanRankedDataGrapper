@@ -62,21 +62,55 @@ def _audit_line(state):
         (state['audit_report_sha256'] or '')[:12])
 
 
+def _membership(path, *, halves):
+    """A supplementary set's membership from a JSON file: a list of keys,
+    or a list of {key, half} objects. The audit set needs the halves."""
+    import json
+    if not os.path.isfile(path):
+        raise judge_trial.TrialError('no membership file at %s' % path)
+    with open(path, encoding='utf-8') as handle:
+        entries = json.load(handle)
+    if not isinstance(entries, list):
+        raise judge_trial.TrialError('%s must hold a JSON list' % path)
+    keys, half_of = [], {}
+    for entry in entries:
+        if isinstance(entry, dict):
+            key = str(entry.get('key'))
+            if halves:
+                half_of[key] = str(entry.get('half'))
+        else:
+            key = str(entry)
+        keys.append(key)
+    membership = {'keys': keys}
+    if halves:
+        membership['halves'] = half_of
+    return membership
+
+
 def cmd_arm(args):
     baseline = args.baseline_report
     if not os.path.isfile(baseline):
         print('no baseline report at %s -- arming needs the actual report '
               'it will be compared against' % baseline, file=sys.stderr)
         return 2
+    supplemental = {
+        'audit': _membership(args.supplemental_audit_keys, halves=True),
+        'natural': _membership(args.supplemental_natural_keys, halves=False),
+    }
     with app.app_context():
         row = judge_trial.arm_trial(
             dt.datetime.utcnow(),
             artifact_sha256=args.artifact_sha256.strip().lower(),
             baseline_report=os.path.abspath(baseline),
             baseline_removal_rate=args.baseline_removal_rate,
-            seed=args.seed)
-        print('armed. evidence pinned from %s; sample size %d'
-              % (row.retain_from, row.recipe['sample_size']))
+            seed=args.seed, supplemental=supplemental)
+        frozen = row.recipe['supplemental']
+        print('armed. evidence pinned from %s; sample size %d; supplemental '
+              'membership frozen: audit %d keys in %d halves, natural %d keys'
+              % (row.retain_from, row.recipe['sample_size'],
+                 len(frozen['audit']['keys']),
+                 len(set(frozen['audit']['halves'].values())),
+                 len(frozen['natural']['keys'])))
     return 0
 
 
@@ -121,6 +155,11 @@ def main(argv=None):
                           'audit sample size')
     arm.add_argument('--seed', required=True, type=int,
                      help='sampling seed, fixed before any prediction')
+    arm.add_argument('--supplemental-audit-keys', required=True,
+                     help='JSON list of {key, half} for the original 200-row '
+                          'audit, both halves (spec 7.3)')
+    arm.add_argument('--supplemental-natural-keys', required=True,
+                     help='JSON list of keys for the locked natural set')
 
     stop = sub.add_parser('stop', help='durably request recovery')
     stop.add_argument('--reason', required=True,

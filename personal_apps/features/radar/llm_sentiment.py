@@ -841,10 +841,11 @@ def run_pass(backend=None, limit=None, now=None, clock=None):
         # answers came back: a stop, a failed audit, the deadline or a
         # recovery can land while a batch is in flight, and a late answer
         # must be discarded rather than stored under a trial that has
-        # ended. The lock is held until the commit below.
-        when = clock()
+        # ended. The lock is held until the commit below, and the clock is
+        # read once the lock is held: a reading taken before the wait
+        # would carry a lock wait past the deadline.
         try:
-            locked = trial.lock_for_write(when)
+            locked, when = trial.lock_for_write(clock)
             trial.refuse_outside_retention(
                 locked, [post for mention, post in rows
                          if mention.id in judgments])

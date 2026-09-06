@@ -462,10 +462,16 @@ def _shadow(row):
             'days': (last - first).total_seconds() / 86400.0}
 
 
-def _supplemental(audit_path, natural_path):
-    """The two supplementary sets (spec 7.3), or the reasons the report is
-    incomplete without them."""
+def _supplemental(audit_path, natural_path, frozen):
+    """The two supplementary sets (spec 7.3), checked against the
+    membership frozen at arming, or the reasons the report is incomplete.
+
+    A set is the rows that were frozen: every one of them, each once, in
+    the half it was frozen in. A file that exists and holds none of them
+    -- or a convenient subset, or extra rows -- is not the set.
+    """
     section, reasons = {}, []
+    frozen = frozen or {}
     for name, path in (('audit', audit_path), ('natural', natural_path)):
         if not path:
             reasons.append('no supplemental %s set was supplied' % name)
@@ -473,7 +479,35 @@ def _supplemental(audit_path, natural_path):
         if not os.path.isfile(path):
             reasons.append('supplemental %s set not found: %s' % (name, path))
             continue
+        wanted = frozen.get(name) or {}
+        keys = wanted.get('keys') or []
+        if not keys:
+            reasons.append('the armed recipe froze no membership for the '
+                           'supplemental %s set; it cannot be checked' % name)
+            continue
         rows = [row for _n, row in _rows(path)]
+        seen = [str(row.get('key')) for row in rows]
+        duplicates = len(seen) - len(set(seen))
+        missing = sorted(set(keys) - set(seen))
+        extra = sorted(set(seen) - set(keys))
+        if duplicates:
+            reasons.append('supplemental %s set: %d keys appear more than once'
+                           % (name, duplicates))
+        if missing:
+            reasons.append('supplemental %s set: %d of its %d frozen rows are '
+                           'missing' % (name, len(missing), len(keys)))
+        if extra:
+            reasons.append('supplemental %s set: %d rows are not in the frozen '
+                           'membership' % (name, len(extra)))
+        halves = wanted.get('halves') or {}
+        if halves:
+            wrong = [row.get('key') for row in rows
+                     if str(row.get('key')) in halves
+                     and str(row.get('half')) != halves[str(row.get('key'))]]
+            if wrong:
+                reasons.append('supplemental %s set: %d rows are in a '
+                               'different half than the one frozen'
+                               % (name, len(wrong)))
         section[name] = trial_audit.supplemental_section(rows, name)
         if section[name]['invalid_rows']:
             reasons.append('supplemental %s set: %d rows carry no valid '
@@ -512,6 +546,7 @@ def _assemble(out_dir, labels_path, encoder_path, haiku_path,
                              'and the armed seed')
         shadow = _shadow(row)
         first_judged_at = row.first_judged_at
+        frozen_supplemental = recipe.get('supplemental')
 
     ids = [int(i) for i in sample['mention_ids']]
     wanted = set(ids)
@@ -531,7 +566,8 @@ def _assemble(out_dir, labels_path, encoder_path, haiku_path,
                              'the sample' % (name, len(strays)))
 
     supplemental, incomplete = _supplemental(supplemental_audit,
-                                             supplemental_natural)
+                                             supplemental_natural,
+                                             frozen_supplemental)
     incomplete = incomplete + list(label_meta['problems'])
     inputs = {'labels': labels_path, 'encoder': encoder_path,
               'haiku': haiku_path, 'sample': sample_path, 'frame': frame_path}
@@ -563,12 +599,10 @@ def _assemble(out_dir, labels_path, encoder_path, haiku_path,
     }
 
 
-def cmd_evaluate(out_dir, labels, encoder, haiku, supplemental_audit=None,
-                 supplemental_natural=None, now=None):
-    """Score the two prediction sets against the reference. Offline."""
-    now = now or _utcnow()
-    assembled = _assemble(out_dir, labels, encoder, haiku,
-                          supplemental_audit, supplemental_natural)
+def _report_from(assembled, now):
+    """The whole report, deterministically, from what was assembled. Used
+    by `evaluate` to write it and by `accept` to reproduce it: everything
+    but `evaluated_at` must come out identical from the same inputs."""
     report = trial_audit.evaluate_trial_audit(assembled['bundle'])
     assert report['schema'] == SCHEMA
     for key in ('trial', 'inputs', 'sample', 'labels', 'predictions', 'shadow',
@@ -577,6 +611,25 @@ def cmd_evaluate(out_dir, labels, encoder, haiku, supplemental_audit=None,
     report['complete'] = not assembled['incomplete']
     report['incomplete_reasons'] = assembled['incomplete']
     report['evaluated_at'] = now
+    return report
+
+
+def _canonical(report):
+    """The report as it is compared: JSON-normalised, without the one
+    field that legitimately differs between two computations."""
+    stripped = dict(report)
+    stripped.pop('evaluated_at', None)
+    return json.loads(json.dumps(stripped, sort_keys=True,
+                                 default=_json_default))
+
+
+def cmd_evaluate(out_dir, labels, encoder, haiku, supplemental_audit=None,
+                 supplemental_natural=None, now=None):
+    """Score the two prediction sets against the reference. Offline."""
+    now = now or _utcnow()
+    assembled = _assemble(out_dir, labels, encoder, haiku,
+                          supplemental_audit, supplemental_natural)
+    report = _report_from(assembled, now)
 
     path = _write(os.path.join(out_dir, REPORT_JSON), report)
     with open(os.path.join(out_dir, REPORT_MD), 'w', encoding='utf-8') as out:
@@ -721,15 +774,13 @@ def cmd_accept(report_path, acknowledgments_path, now=None):
                           inputs['encoder']['path'], inputs['haiku']['path'],
                           (inputs.get('supplemental_audit') or {}).get('path'),
                           (inputs.get('supplemental_natural') or {}).get('path'))
-    fresh = trial_audit.evaluate_trial_audit(assembled['bundle'])
-    reproduced = (
-        fresh['passed'] == report.get('passed')
-        and fresh['expansion_ready'] == report.get('expansion_ready')
-        and fresh['coverage']['complete']
-        == (report.get('coverage') or {}).get('complete')
-        and [c['passed'] for c in fresh['criteria']]
-        == [c.get('passed') for c in (report.get('criteria') or [])])
-    if not reproduced or assembled['incomplete']:
+    # The WHOLE report, not its flags: every number, every interval, every
+    # disagreement list and every supplemental figure must come out of the
+    # inputs again exactly. The flags reproduced once while a numerator
+    # had been set to 99999 and a set's row count to 900, and the
+    # acknowledged report disagreed with its own evidence.
+    fresh = _report_from(assembled, now=None)
+    if _canonical(fresh) != _canonical(report) or assembled['incomplete']:
         raise AuditError('the report does not reproduce from its inputs; it '
                          'is not accepted')
 

@@ -170,15 +170,55 @@ def retention_floor():
     return row.retain_from
 
 
+def frozen_supplemental(supplemental):
+    """The two supplementary sets' membership, checked and normalised.
+
+    {'audit': {'keys': [...], 'halves': {key: half}}, 'natural': {'keys':
+    [...]}}. Keys become strings and are sorted; every audit key needs a
+    half and there must be at least two halves, because the spec reports
+    the original audit's two halves apart. Duplicates and empty sets are
+    refused: an evaluate later checks the supplied files against exactly
+    this, and a membership that could be satisfied by nothing would make
+    that check mean nothing.
+    """
+    if not isinstance(supplemental, dict):
+        raise TrialError('the supplemental membership is required: the two '
+                         'supplementary sets are part of an acceptable audit '
+                         'report (spec 7.2c), and which rows they are is '
+                         'fixed before any prediction exists')
+    frozen = {}
+    for name in ('audit', 'natural'):
+        entry = supplemental.get(name)
+        keys = [str(key) for key in ((entry or {}).get('keys') or [])]
+        if not keys:
+            raise TrialError('the supplemental %s set names no keys' % name)
+        if len(set(keys)) != len(keys):
+            raise TrialError('the supplemental %s set lists %d keys more than '
+                             'once' % (name, len(keys) - len(set(keys))))
+        frozen[name] = {'keys': sorted(keys)}
+    halves = {str(key): str(half) for key, half
+              in ((supplemental.get('audit') or {}).get('halves') or {}).items()}
+    unhalved = [key for key in frozen['audit']['keys'] if key not in halves]
+    if unhalved:
+        raise TrialError('%d audit keys have no half; the audit set is '
+                         'reported per half' % len(unhalved))
+    if len(set(halves[key] for key in frozen['audit']['keys'])) < 2:
+        raise TrialError('the audit set has one half; the spec reports its two '
+                         'halves apart')
+    frozen['audit']['halves'] = {key: halves[key]
+                                 for key in frozen['audit']['keys']}
+    return frozen
+
+
 def arm_trial(now, *, artifact_sha256, baseline_report, baseline_removal_rate,
-              seed):
+              seed, supplemental):
     """Create the trial record. Once, before any encoder write.
 
     Everything the later evaluation is not allowed to choose for itself is
     frozen here: the artifact bundle hash, the baseline report it will be
-    compared against, the removal rate that fixes the sample size, and the
-    sampling seed. Fixing them AFTER seeing predictions is how a trial
-    passes itself.
+    compared against, the removal rate that fixes the sample size, the
+    sampling seed, and which rows the two supplementary sets are. Fixing
+    them AFTER seeing predictions is how a trial passes itself.
 
     Arming cannot overwrite an existing row or reset its clock. A second
     arm is an error, not an idempotent no-op: if a trial is already
@@ -202,6 +242,7 @@ def arm_trial(now, *, artifact_sha256, baseline_report, baseline_removal_rate,
         seed = int(seed)
     except (TypeError, ValueError):
         raise TrialError('seed must be an integer')
+    frozen = frozen_supplemental(supplemental)
 
     with advisory_lock(RETENTION_LOCK):
         if current() is not None:
@@ -225,6 +266,7 @@ def arm_trial(now, *, artifact_sha256, baseline_report, baseline_removal_rate,
                 'sample_size': int(math.ceil(REMOVAL_DECISIONS_WANTED
                                              / removal_rate)),
                 'removal_decisions_wanted': REMOVAL_DECISIONS_WANTED,
+                'supplemental': frozen,
             })
         db.session.add(row)
         db.session.commit()
@@ -447,6 +489,11 @@ def recover_trial(*, apply=False, limit=2000, now=None):
         with buckets_module().bucket_write_guard():
             state = _locked_trial()
             if state.status == RECOVERED:
+                # Release the row before the exit path takes the retention
+                # lock: every other holder takes retention first, then the
+                # row, and this exit must not be the one that holds them
+                # the other way round.
+                db.session.rollback()
                 break
             if state.status != RECOVERING:
                 raise TrialError('the trial is %s; it was stopped when this '
@@ -667,7 +714,7 @@ def guard_encoder_trial(now):
     return row
 
 
-def lock_for_write(now):
+def lock_for_write(clock):
     """The write boundary: the row, LOCKED, as the database holds it now.
 
     `SELECT ... FOR UPDATE` reads the latest committed version regardless
@@ -679,13 +726,20 @@ def lock_for_write(now):
     becoming durable. Recovery locks the same row the same way, so the two
     cannot interleave.
 
-    Validated with the caller's fresh clock, not the pass's starting time.
-    Raises when judging is not allowed; the caller discards its answers.
+    `clock` is asked AFTER the lock is acquired, and that reading is what
+    is validated and what the caller starts the trial's clock from. A
+    reading taken before the wait would carry a lock wait past the
+    deadline: the answers came back in time, another process held the row
+    for two seconds, and the trial expired while this pass waited.
+
+    Returns (row, when). Raises when judging is not allowed; the caller
+    discards its answers.
     """
     row = (db.session.query(RadarJudgeTrial).filter_by(id=TRIAL_ID)
            .populate_existing().with_for_update().one_or_none())
-    _may_judge(row, now)
-    return row
+    when = clock()
+    _may_judge(row, when)
+    return row, when
 
 
 def refuse_outside_retention(row, posts):

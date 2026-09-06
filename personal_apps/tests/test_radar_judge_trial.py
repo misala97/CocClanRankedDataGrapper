@@ -39,6 +39,16 @@ SAFETY_CEILING = dt.datetime(2021, 1, 1)
 SHA = 'a' * 64
 PREFIX = 'zztrial-pin'
 
+# The two supplementary sets' membership, frozen at arming (spec 7.2c). Two
+# keys per half is the least that satisfies the rules; the real sets are
+# the 200-row audit and the 900-row locked natural set.
+SUPPLEMENTAL = {
+    'audit': {'keys': ['a1', 'a2', 'a3', 'a4'],
+              'halves': {'a1': 'removal', 'a2': 'removal',
+                         'a3': 'natural', 'a4': 'natural'}},
+    'natural': {'keys': ['n1', 'n2']},
+}
+
 
 def prune_events(now):
     """The real journal pruner, refused if its cutoff leaves 2020."""
@@ -90,7 +100,8 @@ def _wipe():
 def arm(now=NOW, rate=0.31, seed=20260906, sha=SHA):
     return judge_trial.arm_trial(now, artifact_sha256=sha,
                                  baseline_report='reports/baseline.json',
-                                 baseline_removal_rate=rate, seed=seed)
+                                 baseline_removal_rate=rate, seed=seed,
+                                 supplemental=SUPPLEMENTAL)
 
 
 def evidence(external_id, when, *, confidence='high', with_mention=True,
@@ -208,7 +219,7 @@ def test_arming_refuses_without_a_baseline(no_trial):
         with pytest.raises(judge_trial.TrialError):
             judge_trial.arm_trial(NOW, artifact_sha256=SHA,
                                   baseline_report='  ',
-                                  baseline_removal_rate=0.3, seed=1)
+                                  baseline_removal_rate=0.3, seed=1, supplemental=SUPPLEMENTAL)
         assert judge_trial.current() is None
 
 
@@ -1069,7 +1080,7 @@ def test_a_first_judgment_cannot_resurrect_a_stopped_trial(no_trial, status):
         row.status = status
         db.session.commit()
         with pytest.raises(judge_trial.TrialError):
-            judge_trial.lock_for_write(NOW)
+            judge_trial.lock_for_write(lambda: NOW)
         db.session.rollback()
         assert judge_trial.current().status == status
         assert judge_trial.current().first_judged_at is None
@@ -1102,22 +1113,23 @@ def test_the_write_lock_reads_the_row_as_it_is_now_not_as_it_was(no_trial):
         as_another_process('UPDATE radar_judge_trial SET status = %s '
                            'WHERE id = 1', judge_trial.RECOVERING)
         with pytest.raises(judge_trial.TrialError):
-            judge_trial.lock_for_write(NOW)
+            judge_trial.lock_for_write(lambda: NOW)
         db.session.rollback()
 
 
 def test_the_write_lock_starts_the_clock_once_and_only_from_armed(no_trial):
     with flask_app.app_context():
         arm()
-        row = judge_trial.lock_for_write(NOW)
-        judge_trial.note_first_judgment(row, NOW)
+        row, when = judge_trial.lock_for_write(lambda: NOW)
+        judge_trial.note_first_judgment(row, when)
         db.session.commit()
         assert judge_trial.current().status == judge_trial.RUNNING
         first = judge_trial.current().first_judged_at
         assert first == NOW
 
-        row = judge_trial.lock_for_write(NOW + dt.timedelta(days=3))
-        judge_trial.note_first_judgment(row, NOW + dt.timedelta(days=3))
+        row, when = judge_trial.lock_for_write(
+            lambda: NOW + dt.timedelta(days=3))
+        judge_trial.note_first_judgment(row, when)
         db.session.commit()
         assert judge_trial.current().first_judged_at == first
 
@@ -1306,3 +1318,90 @@ def test_the_pin_is_not_released_while_a_matching_mention_remains(
         db.session.expire_all()
         assert judge_trial.current().status == judge_trial.RECOVERING
         assert judge_trial.retention_floor() is not None
+
+
+# ---- lock order on the already-recovered exit ------------------------------
+
+def test_a_recovered_trial_releases_the_row_before_the_retention_lock(
+        counted_window, monkeypatch):
+    """The loop's FOR UPDATE was still held when the already-recovered
+    exit went on to take the retention lock -- the reverse of the order
+    arming, stopping and pruning use (retention lock, then the row)."""
+    with flask_app.app_context():
+        row = stopped(now=NOW)
+        row.status = judge_trial.RECOVERED
+        db.session.commit()
+        # A matching mention, so the plan is not empty and the loop takes
+        # the row lock before it finds the trial recovered.
+        for mention in _our_mentions():
+            judged_by_encoder(mention, NOW)
+        db.session.commit()
+
+        real = judge_trial.advisory_lock
+        seen = []
+
+        @contextlib.contextmanager
+        def watch(name, timeout=10):
+            if name == judge_trial.RETENTION_LOCK:
+                with db.engine.connect() as other:
+                    try:
+                        other.exec_driver_sql(
+                            'SELECT status FROM radar_judge_trial WHERE id = 1 '
+                            'FOR UPDATE NOWAIT')
+                        seen.append('free')
+                    except Exception:            # noqa: BLE001
+                        seen.append('locked')
+                    finally:
+                        other.rollback()
+            with real(name, timeout=timeout):
+                yield
+
+        monkeypatch.setattr(judge_trial, 'advisory_lock', watch)
+        judge_trial.recover_trial(apply=True, now=NOW)
+        assert seen == ['free']
+
+
+# ---- the supplemental membership is frozen at arming ------------------------
+
+def test_arming_freezes_the_supplemental_membership(no_trial):
+    """The two supplementary sets are required evidence (spec 7.2c/7.3).
+    WHICH rows they are is fixed here, before any prediction exists, so an
+    evaluate cannot be handed a convenient subset -- or nothing at all --
+    and call it the set."""
+    with flask_app.app_context():
+        row = arm()
+        frozen = row.recipe['supplemental']
+        assert frozen['audit']['keys'] == sorted(SUPPLEMENTAL['audit']['keys'])
+        assert frozen['audit']['halves'] == SUPPLEMENTAL['audit']['halves']
+        assert frozen['natural']['keys'] == sorted(SUPPLEMENTAL['natural']['keys'])
+
+
+@pytest.mark.parametrize('broken', [
+    None,
+    {},
+    {'audit': {'keys': [], 'halves': {}}, 'natural': {'keys': ['n1']}},
+    {'audit': {'keys': ['a1', 'a1'], 'halves': {'a1': 'removal'}},
+     'natural': {'keys': ['n1']}},
+    {'audit': {'keys': ['a1', 'a2'], 'halves': {'a1': 'removal'}},
+     'natural': {'keys': ['n1']}},
+    {'audit': {'keys': ['a1', 'a2'],
+               'halves': {'a1': 'removal', 'a2': 'removal'}},
+     'natural': {'keys': ['n1']}},
+    {'audit': {'keys': ['a1', 'a2'],
+               'halves': {'a1': 'removal', 'a2': 'natural'}},
+     'natural': {'keys': []}},
+    {'audit': {'keys': ['a1', 'a2'],
+               'halves': {'a1': 'removal', 'a2': 'natural'}},
+     'natural': {'keys': ['n1', 'n1']}},
+])
+def test_arming_refuses_a_supplemental_membership_it_cannot_trust(no_trial,
+                                                                  broken):
+    """Missing, empty, duplicated, half-less, or single-halved: none of
+    these freezes a membership an audit could be checked against."""
+    with flask_app.app_context():
+        with pytest.raises(judge_trial.TrialError):
+            judge_trial.arm_trial(NOW, artifact_sha256=SHA,
+                                  baseline_report='reports/baseline.json',
+                                  baseline_removal_rate=0.31, seed=1,
+                                  supplemental=broken)
+        assert judge_trial.current() is None

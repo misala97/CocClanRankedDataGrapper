@@ -24,6 +24,16 @@ from models import (RadarMention, RadarMentionEvent, RadarPost,
                     RadarSentimentJudgment)
 
 NOW = dt.datetime(2027, 1, 1, 12, 0, 0)
+
+# The two supplementary sets' membership, frozen at arming (spec 7.2c). Two
+# keys per half is the least that satisfies the rules; the real sets are
+# the 200-row audit and the 900-row locked natural set.
+SUPPLEMENTAL = {
+    'audit': {'keys': ['a1', 'a2', 'a3', 'a4'],
+              'halves': {'a1': 'removal', 'a2': 'removal',
+                         'a3': 'natural', 'a4': 'natural'}},
+    'natural': {'keys': ['n1', 'n2']},
+}
 ENCODER = judge_backends.ENCODER_MODEL_ID
 HAIKU = llm_sentiment.PRIMARY_MODEL
 SONNET = llm_sentiment.REVIEW_MODEL
@@ -488,7 +498,8 @@ def test_the_pass_takes_its_tone_policy_from_the_backend(clean_posts,
         # is what pins the journal its recovery would need.
         judge_trial.arm_trial(dt.datetime.utcnow(), artifact_sha256='a' * 64,
                               baseline_report='reports/baseline.json',
-                              baseline_removal_rate=0.3, seed=1)
+                              baseline_removal_rate=0.3, seed=1,
+                              supplemental=SUPPLEMENTAL)
         try:
             mention_id = make_post('zztrial-wiring')
             backend = ToneFreeBackend({mention_id: ja(attitude='negative',
@@ -755,7 +766,8 @@ def test_answers_that_outlive_their_trial_are_discarded(clean_posts,
         db.session.commit()
         judge_trial.arm_trial(dt.datetime.utcnow(), artifact_sha256='a' * 64,
                               baseline_report='reports/baseline.json',
-                              baseline_removal_rate=0.3, seed=1)
+                              baseline_removal_rate=0.3, seed=1,
+                              supplemental=SUPPLEMENTAL)
         try:
             mention_id = make_post('zztrial-inflight')
 
@@ -803,7 +815,8 @@ def arm_now(**overrides):
     row = judge_trial.arm_trial(overrides.pop('now', dt.datetime.utcnow()),
                                 artifact_sha256='a' * 64,
                                 baseline_report='reports/baseline.json',
-                                baseline_removal_rate=0.3, seed=1)
+                                baseline_removal_rate=0.3, seed=1,
+                                supplemental=SUPPLEMENTAL)
     for field, value in overrides.items():
         setattr(row, field, value)
     db.session.commit()
@@ -1024,5 +1037,87 @@ def test_a_mention_older_than_the_retained_interval_is_never_picked(
                                   old).sentiment_judged_at is None
             assert db.session.get(RadarMention,
                                   fresh).sentiment_judged_at is not None
+        finally:
+            drop_trial()
+
+
+# ---- 15. the boundary's clock is read after the lock is held ----------------
+
+def row_lock_probe():
+    """'locked' if some session holds the trial row, else 'free' -- asked
+    from a connection of its own with FOR UPDATE NOWAIT."""
+    with db.engine.connect() as other:
+        try:
+            other.exec_driver_sql('SELECT status FROM radar_judge_trial '
+                                  'WHERE id = 1 FOR UPDATE NOWAIT')
+            return 'free'
+        except sqlalchemy.exc.OperationalError as error:
+            code = getattr(error.orig, 'args', (None,))[0]
+            return 'locked' if code == LOCK_REFUSED else 'error'
+        finally:
+            other.rollback()
+
+
+def test_the_boundary_asks_the_clock_after_the_lock_is_held(clean_posts,
+                                                             monkeypatch):
+    """A lock wait can carry the boundary past expiry: the answers came
+    back in time, another process held the row for two seconds, and the
+    deadline passed while this pass waited. The reading that is validated
+    must be taken AFTER the lock is acquired. The clock here answers
+    'expired' only once this session holds the row -- the one way to tell
+    whether the boundary asked before or after acquiring it."""
+    from features.radar import judge_gate, judge_trial
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    with flask_app.app_context():
+        started = dt.datetime.utcnow() - dt.timedelta(days=10) \
+            + dt.timedelta(minutes=5)
+        arm_now(now=started - dt.timedelta(hours=1), first_judged_at=started,
+                status=judge_trial.RUNNING)
+        ends = started + dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS)
+        try:
+            mention_id = make_post('zztrial-lock-wait',
+                                   when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+
+            def clock():
+                return (ends + dt.timedelta(seconds=1)
+                        if row_lock_probe() == 'locked'
+                        else ends - dt.timedelta(seconds=1))
+
+            backend = ToneFreeBackend({mention_id: ja()})
+            judged = llm_sentiment.run_pass(
+                backend=backend, limit=5, now=ends - dt.timedelta(seconds=1),
+                clock=clock)
+
+            assert judged == 0
+            assert db.session.get(
+                RadarMention, mention_id).sentiment_judged_at is None
+        finally:
+            drop_trial()
+
+
+def test_the_first_judgment_clock_is_the_reading_taken_under_the_lock(
+        clean_posts, monkeypatch):
+    """Whatever time the boundary validated is the time the trial's clock
+    starts from -- not a reading taken before the wait."""
+    from features.radar import judge_gate, judge_trial
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    with flask_app.app_context():
+        arm_now()
+        try:
+            mention_id = make_post('zztrial-clock-under-lock',
+                                   when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+            before = dt.datetime.utcnow().replace(microsecond=0)
+            under = before + dt.timedelta(seconds=5)
+
+            def clock():
+                return under if row_lock_probe() == 'locked' else before
+
+            backend = ToneFreeBackend({mention_id: ja()})
+            assert llm_sentiment.run_pass(backend=backend, limit=5,
+                                          now=before, clock=clock) == 1
+            db.session.expire_all()
+            assert judge_trial.current().first_judged_at == under
         finally:
             drop_trial()

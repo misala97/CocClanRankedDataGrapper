@@ -47,6 +47,17 @@ REMOVED = dict(relevance='irrelevant', content_origin='human_chatter',
 KEPT = dict(relevance='relevant', content_origin='human_chatter',
             attitude='positive', expected_move='up', confidence='high')
 
+# What the fixture's supplemental files hold, frozen at arming: twenty
+# rows per half of the audit set, twenty in the natural set.
+SUPPLEMENTAL = {
+    'audit': {'keys': ['removal-%d' % i for i in range(20)]
+              + ['natural-%d' % i for i in range(20)],
+              'halves': dict([('removal-%d' % i, 'removal') for i in range(20)]
+                             + [('natural-%d' % i, 'natural')
+                                for i in range(20)])},
+    'natural': {'keys': ['natural-%d' % i for i in range(20)]},
+}
+
 
 def fixture_sha():
     return judge_backends.EncoderBackend(FIXTURE).bundle_sha256()
@@ -74,7 +85,8 @@ def trial(monkeypatch):
         row = judge_trial.arm_trial(started - dt.timedelta(hours=1),
                                     artifact_sha256=fixture_sha(),
                                     baseline_report='reports/baseline.json',
-                                    baseline_removal_rate=1.0, seed=7)
+                                    baseline_removal_rate=1.0, seed=7,
+                                    supplemental=SUPPLEMENTAL)
         row.first_judged_at = started
         row.status = judge_trial.RUNNING
         db.session.commit()
@@ -661,3 +673,76 @@ def test_acceptance_needs_a_first_judgment(trial):
         with pytest.raises(judge_trial.TrialError):
             judge_trial.accept_audit(report, 'c' * 64, dt.datetime.utcnow(),
                                      passed=True)
+
+
+# ---- 6. the supplemental sets are the frozen sets, not any file -------------
+
+def test_an_empty_supplemental_file_is_not_evidence(trial, tmp_path,
+                                                    monkeypatch):
+    """Two existing files with zero rows produced a complete report and
+    reached acceptance. A set is the rows frozen at arming, and a file
+    that holds none of them holds no evidence."""
+    out, labels_path, report_path, _ = chain(tmp_path, monkeypatch)
+    for name in ('supplemental-audit.jsonl', 'supplemental-natural.jsonl'):
+        open(os.path.join(out, name), 'w', encoding='utf-8').close()
+    assert cli.main(evaluate_args(out, labels_path)) == 0
+    report = read_json(report_path)
+    assert report['passed'] is True
+    assert report['complete'] is False
+    assert any('missing' in reason for reason in report['incomplete_reasons'])
+    ack = write_ack(out, report_path)
+    assert cli.main(['accept', '--report', report_path,
+                     '--acknowledgments', ack]) == 1
+    with flask_app.app_context():
+        assert judge_trial.current().audit_evaluated_at is None
+
+
+@pytest.mark.parametrize('damage', ['missing', 'extra', 'duplicate',
+                                    'wrong_half'])
+def test_supplemental_membership_must_match_what_was_frozen(
+        trial, tmp_path, monkeypatch, damage):
+    out, labels_path, report_path, report = chain(tmp_path, monkeypatch)
+    assert report['complete'] is True
+    audit_path = os.path.join(out, 'supplemental-audit.jsonl')
+    rows = [json.loads(line) for line in open(audit_path, encoding='utf-8')]
+    if damage == 'missing':
+        rows = rows[1:]
+    elif damage == 'extra':
+        rows.append(dict(rows[0], key='removal-999'))
+    elif damage == 'duplicate':
+        rows.append(dict(rows[0]))
+    else:
+        rows[0] = dict(rows[0], half='natural')
+    write_supplemental(audit_path, rows)
+
+    assert cli.main(evaluate_args(out, labels_path)) == 0
+    report = read_json(report_path)
+    assert report['complete'] is False
+    assert report['incomplete_reasons']
+    assert report['passed'] is True            # completeness, not the gate
+
+
+# ---- 7. accept reproduces the whole report, not its flags ------------------
+
+@pytest.mark.parametrize('edit', ['numbers', 'supplemental'])
+def test_accept_refuses_a_report_whose_content_was_edited(trial, tmp_path,
+                                                          monkeypatch, edit):
+    """The flags reproduced while the numbers behind them did not: a
+    numerator and denominator set to 99999, a natural-set count set to
+    900, and an acknowledgment of that report's hash still reached
+    persistence. What is acknowledged must be what the inputs say."""
+    out, _labels, report_path, report = chain(tmp_path, monkeypatch)
+    if edit == 'numbers':
+        removal = [c for c in report['criteria']
+                   if c['criterion'] == 'removal_precision'][0]
+        removal['encoder']['successes'] = 99999
+        removal['encoder']['total'] = 99999
+    else:
+        report['supplemental']['natural']['rows'] = 900
+    with open(report_path, 'w', encoding='utf-8') as handle:
+        json.dump(report, handle, indent=1, sort_keys=True, default=str)
+    ack = write_ack(out, report_path)             # acknowledges the edit
+    assert cli.main(['accept', '--report', report_path,
+                     '--acknowledgments', ack]) == 1
+    with flask_app.app_context():
+        assert judge_trial.current().audit_evaluated_at is None
