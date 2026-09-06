@@ -110,8 +110,8 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 7 bounded recovery | **COMPLETE** | `3fcfc0f` | 98 trial+audit, 44 scoring | inline, diff read | 7 mutations bit; 2 real defects found |
 | 7b audit evaluator | **COMPLETE** | `3fcfc0f` | 32 audit | inline, diff read | landed with 7; 7 mutations bit |
 | 7c configuration/expiry | **COMPLETE** | `769f66c` | 365 across 8 suites | inline, diff read | 5 mutations bit; corrected the deadline rule |
-| 8 full verification | not started | — | — | — | |
-| 9 package + runbook | not started | — | — | — | no deploy without Michi |
+| 8 full verification | **COMPLETE** | `c236b1f` | 2251 passed, 1 environmental | inline | vitest 403+269, tsc clean |
+| 9 package + runbook | **runbook delivered** | `c236b1f`, `64e9877` | n/a | inline | deployment awaits Michi |
 
 ## Task 1 record
 
@@ -432,10 +432,25 @@ covered a batch outliving its trial).
    outlives the run that made it. The wipe now removes every `ZZT` bucket
    regardless of date.
 
-## Task 8 record — environmental failures, named
+## Task 8 record
 
-One test fails for a data reason and not a code one, and it is named here
-rather than left for a reader to rediscover:
+**Full suite: 2,251 passed, 2 failed in 10:54.** Frontend: vitest 403 + 269
+passed, `tsc --noEmit` and both Vite builds clean. Single Alembic head
+`b3d9e1f5a274`, chain intact.
+
+Of the two failures, one was residue and is fixed; one is environmental and
+stays. Neither is a regression.
+
+**Fixed — `test_radar_scoring.py::test_each_ticker_is_screened_once_per_pass`.**
+It asserts a scoring pass screens each ticker once and saw 185 screenings for
+2 fixture tickers. Cause: the ingest daemon that started accidentally during
+a Task 7c teeth check ran one cycle, creating buckets for 183 reddit tickers
+in a 2-hour window on 2026-09-06. Nothing legitimate existed in that range
+(zero rows on 09-05), so the residue was removed precisely: 8,874
+bucket_sources, 262 buckets and 476 posts with `bucket_start`/`created_utc`
+at or after 2026-09-06 09:00. Verified afterwards: scoring 44/44.
+
+**Environmental, and named rather than left to be rediscovered:**
 
 - `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet`
   asserts the report contains a `LEGACY-POLICY cohort`, meaning mentions

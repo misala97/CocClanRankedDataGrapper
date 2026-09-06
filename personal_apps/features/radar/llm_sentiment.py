@@ -1058,7 +1058,15 @@ def _over_ceiling_gauge(now, attempted_today):
     than this number can change (Codex review, finding 12).
     """
     from . import judge_config
-    if judge_config.review_mode() == judge_config.OFF:
+    try:
+        mode = judge_config.review_mode()
+    except judge_config.ConfigError:
+        # This runs inside a WEB REQUEST, on every board build. A bad flag
+        # value must fail the daemon's startup, where an operator sees it;
+        # here it means review is certainly not running, and turning the
+        # board into a 500 over it would be the worse answer.
+        return 0
+    if mode == judge_config.OFF:
         return 0
     cached_at = _gauge_cache['at']
     if cached_at is not None and (now - cached_at).total_seconds() < 60:

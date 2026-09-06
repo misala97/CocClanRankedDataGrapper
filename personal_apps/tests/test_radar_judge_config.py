@@ -262,3 +262,18 @@ def test_an_unconfigured_review_pass_judges_nothing(no_trial, monkeypatch):
     with flask_app.app_context():
         judge_config.initialize_judges(judge_config.resolve_settings({}))
         assert llm_sentiment.run_review_pass() == 0
+
+
+def test_a_bad_flag_fails_startup_but_never_a_board_request(monkeypatch):
+    """The strict parser is shared by the daemon's startup and the board's
+    over-ceiling gauge. A typo must stop the daemon, where an operator sees
+    it -- and must not turn every board request into a 500, where it means
+    only that review is certainly not running."""
+    from features.radar import llm_sentiment
+    monkeypatch.setenv('RADAR_SONNET_REVIEW', 'yes')
+
+    with pytest.raises(ConfigError):
+        judge_config.resolve_settings()
+
+    with flask_app.app_context():
+        assert llm_sentiment._over_ceiling_gauge(dt.datetime.utcnow(), 0) == 0
