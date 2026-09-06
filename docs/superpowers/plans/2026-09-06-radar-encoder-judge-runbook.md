@@ -293,19 +293,26 @@ report must carry (spec §7.2c/§7.3): the original 200-row audit with its
 two halves, and the 900-row locked natural set. `evaluate` later checks the
 supplied files against exactly this membership -- every frozen row, each
 once, in its frozen half -- so a file holding nothing, or a convenient
-subset, is not the set. Make the two files on the PC from what is on disk:
+subset, is not the set. One command on the PC makes the two membership
+files AND the two data files evaluate needs later, from what is on disk
+(the natural set is scored through the packaged artifact here, ~4 minutes
+of CPU, because the training runs kept no per-row predictions):
 
-```python
-import json
-rows = [json.loads(l) for l in open('audit-200.jsonl', encoding='utf-8')]
-json.dump([{'key': 'audit-%d' % r['n'], 'half': r['half']} for r in rows],
-          open('supplemental-audit-keys.json', 'w'))
-json.dump([str(k) for k in json.load(open('test-natural.json'))],
-          open('supplemental-natural-keys.json', 'w'))
+```bash
+cd personal_apps
+python -m scripts.build_supplemental_sets \
+    --audit C:/Users/michi/Desktop/radar_labels/audit-200.jsonl \
+    --audit-verdicts C:/Users/michi/Desktop/radar_labels/pc-verdicts-train13000.json \
+    --natural C:/Users/michi/Desktop/radar_labels/test-natural.json \
+    --labels C:/Users/michi/Desktop/radar_labels/labels-sonnet5.jsonl \
+    --export C:/Users/michi/Desktop/radar_labels/export-2026-09-05.jsonl \
+    --artifact-dir artifacts/judge \
+    --out C:/Users/michi/Desktop/radar_labels/supplemental
 ```
 
-The keys must be the same strings the supplemental JSONL files use later
-(`audit-<n>` for the audit set; the natural set's row ids as strings).
+It writes `supplemental-audit-keys.json`, `supplemental-natural-keys.json`
+(for `arm`) and `supplemental-audit.jsonl`, `supplemental-natural.jsonl`
+(for `evaluate`, §10). Copy all four to the VPS.
 
 ```bash
 cd /root/coc-stats/personal_apps
