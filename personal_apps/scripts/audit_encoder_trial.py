@@ -367,6 +367,146 @@ def cmd_predict(out_dir, backend_spec, *, artifact_dir=None,
     return 0
 
 
+# ---- the incumbent through a subagent, not the API ------------------------------
+#
+# There are no Haiku credits, and paying again is off the table. The
+# incumbent predictions are produced by a Haiku subagent inside Claude Code
+# instead: `export-prompts` writes the exact prompt text the API path would
+# send, batch by batch; the subagent answers each batch in the binding JSON
+# schema; `import-predictions` turns those answers into a prediction file
+# with the same provenance header the API path writes, through the same
+# enum boundary. Nothing downstream cares who typed the answer, only that
+# the file says who did, for which sample, at which prompt version.
+
+PROMPTS_DIR = 'prompts'
+MANIFEST = 'manifest.json'
+SUBAGENT_VIA = 'claude-code-subagent'
+
+
+def cmd_export_prompts(out_dir, now=None):
+    """The prompts a subagent judges: byte for byte what AnthropicBackend
+    would have sent, twenty items per batch, in sample order."""
+    now = now or _utcnow()
+    sample_path = os.path.join(out_dir, SAMPLE)
+    if not os.path.exists(sample_path):
+        raise AuditError('no sample in %s; run `sample` first' % out_dir)
+    sample = _read(sample_path)
+    ids = [int(i) for i in sample['mention_ids']]
+    with app.app_context():
+        row = _current_trial()
+        identity = _identity(row)
+        if sample.get('trial') != identity:
+            raise AuditError('%s holds a draw for a different trial'
+                             % sample_path)
+        by_id = {mention.id: (mention, post)
+                 for mention, post in _sampled_rows(ids)}
+        items = llm_sentiment.items_for([by_id[key] for key in ids])
+        texts = []
+        for start in range(0, len(items), llm_sentiment.BATCH_SIZE):
+            batch = items[start:start + llm_sentiment.BATCH_SIZE]
+            texts.append(([item.key for item in batch],
+                          llm_sentiment._prompt_v2(batch)))
+
+    prompts = os.path.join(out_dir, PROMPTS_DIR)
+    os.makedirs(prompts, exist_ok=True)
+    batches = []
+    for number, (keys, text) in enumerate(texts, start=1):
+        name = 'batch-%04d' % number
+        with open(os.path.join(prompts, name + '.txt'), 'w',
+                  encoding='utf-8') as out:
+            out.write(text)
+        batches.append({'prompt': name + '.txt', 'answers': name + '.json',
+                        'mention_ids': keys})
+    _write(os.path.join(prompts, MANIFEST), {
+        'sample_sha256': sha256_of(sample_path),
+        'prompt_version': llm_sentiment.PROMPT_VERSION,
+        'batch_size': llm_sentiment.BATCH_SIZE,
+        'trial': identity, 'exported_at': now, 'batches': batches,
+        'answer_shape': {'verdicts': [dict({'n': 1}, **{
+            field: '<one of %s>' % '|'.join(allowed)
+            for field, allowed in llm_sentiment._FIELD_ENUMS.items()})]},
+    })
+    print('wrote %d prompts for %d sampled rows -> %s'
+          % (len(batches), len(ids), prompts))
+    return 0
+
+
+def cmd_import_predictions(out_dir, backend_id, answers_dir, now=None):
+    """The subagent's answers, as a prediction file the chain accepts.
+
+    One answer file per batch, `{"verdicts": [{"n": 1, ...five fields}]}`.
+    A batch with no file, a file that is not that shape, an `n` outside
+    the batch, or a value outside the enums is an UNANSWERED row -- never
+    a default -- and coverage fails on it, exactly as it would for an API
+    batch that did not come back.
+    """
+    now = now or _utcnow()
+    backend_id = (backend_id or '').strip()
+    if not backend_id.startswith('claude-'):
+        raise AuditError('%r is not an incumbent; the subagent path is for '
+                         'the incumbent alone, and the encoder answers through '
+                         '`predict`, from the armed artifact' % backend_id)
+    sample_path = os.path.join(out_dir, SAMPLE)
+    manifest = _read(os.path.join(out_dir, PROMPTS_DIR, MANIFEST))
+    if sha256_of(sample_path) != manifest.get('sample_sha256'):
+        raise AuditError('the prompts were exported for a different sample')
+    if manifest.get('prompt_version') != llm_sentiment.PROMPT_VERSION:
+        raise AuditError('the prompts were exported at prompt version %r, '
+                         'the code is at %r'
+                         % (manifest.get('prompt_version'),
+                            llm_sentiment.PROMPT_VERSION))
+    if not os.path.isdir(answers_dir):
+        raise AuditError('no answers directory: %s' % answers_dir)
+
+    verdicts = {}
+    answered_batches = 0
+    asked = 0
+    for batch in manifest['batches']:
+        keys = [int(i) for i in batch['mention_ids']]
+        asked += len(keys)
+        path = os.path.join(answers_dir, batch['answers'])
+        if not os.path.isfile(path):
+            print('  %s: no answer file' % batch['answers'])
+            continue
+        try:
+            with open(path, encoding='utf-8') as handle:
+                payload = json.load(handle)
+            entries = payload['verdicts']
+            if not isinstance(entries, list):
+                raise ValueError('verdicts is not a list')
+        except (ValueError, KeyError, TypeError) as why:
+            print('  %s: not an answer (%s)' % (batch['answers'], why))
+            continue
+        answered_batches += 1
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            number = entry.get('n')
+            if not isinstance(number, int) or not 1 <= number <= len(keys):
+                continue
+            verdict = {field: entry.get(field) for field in LABEL_FIELDS}
+            if not trial_audit.is_verdict(verdict):
+                continue
+            verdicts.setdefault(keys[number - 1], verdict)
+
+    provenance = {'backend': backend_id, 'artifact_sha256': None,
+                  'prompt_version': llm_sentiment.PROMPT_VERSION,
+                  'sample_sha256': sha256_of(sample_path),
+                  'predicted_at': now, 'asked': asked,
+                  'answered': len(verdicts), 'calls': answered_batches,
+                  'input_tokens': 0, 'output_tokens': 0,
+                  'via': SUBAGENT_VIA}
+    path = write_predictions(os.path.join(out_dir, '%s.jsonl' % backend_id),
+                             provenance, verdicts)
+    print('%s answered %d of %d sampled rows in %d of %d batches -> %s'
+          % (backend_id, len(verdicts), asked, answered_batches,
+             len(manifest['batches']), path))
+    if len(verdicts) < asked:
+        print('  %d unanswered: they will fail coverage, which is the point'
+              % (asked - len(verdicts)))
+    return 0
+
+
 # ---- evaluate --------------------------------------------------------------------
 
 def _labels(path, wanted):
@@ -831,6 +971,19 @@ def main(argv=None):
     predict.add_argument('--confirm-spend', action='store_true',
                          help='authorise a PAID backend to be called')
 
+    export_prompts = sub.add_parser('export-prompts')
+    export_prompts.add_argument('--out', required=True)
+
+    import_predictions = sub.add_parser('import-predictions')
+    import_predictions.add_argument('--out', required=True)
+    import_predictions.add_argument('--backend', required=True,
+                                    help='the incumbent id the answers came '
+                                         'from, e.g. claude-haiku-4-5@'
+                                         'claude-code-subagent')
+    import_predictions.add_argument('--answers', required=True,
+                                    help='directory of batch-NNNN.json '
+                                         'answer files')
+
     evaluate = sub.add_parser('evaluate')
     evaluate.add_argument('--out', required=True)
     evaluate.add_argument('--labels', required=True)
@@ -858,6 +1011,11 @@ def main(argv=None):
             return cmd_predict(args.out, args.backend,
                                artifact_dir=args.artifact_dir,
                                confirm_spend=args.confirm_spend)
+        if args.command == 'export-prompts':
+            return cmd_export_prompts(args.out)
+        if args.command == 'import-predictions':
+            return cmd_import_predictions(args.out, args.backend,
+                                          args.answers)
         if args.command == 'evaluate':
             return cmd_evaluate(args.out, args.labels,
                                 args.encoder_predictions,

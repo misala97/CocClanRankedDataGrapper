@@ -746,3 +746,154 @@ def test_accept_refuses_a_report_whose_content_was_edited(trial, tmp_path,
                      '--acknowledgments', ack]) == 1
     with flask_app.app_context():
         assert judge_trial.current().audit_evaluated_at is None
+
+
+# ---- 8. the incumbent through a Claude Code subagent, not the API -----------
+#
+# There are no Haiku credits, and paying again is off the table. The
+# incumbent predictions are produced by a Haiku subagent inside Claude
+# Code instead: `export-prompts` writes the exact prompt text the API path
+# would send, batch by batch; the subagent answers each batch in the
+# binding JSON schema; `import-predictions` turns those answers into a
+# prediction file with the same provenance header the API path writes,
+# through the same enum boundary. The chain does not care who typed the
+# answer, only that the file says who did and for which sample.
+
+def answers_for(out, verdict, batches=None):
+    """Answer files the way a subagent would: {"verdicts": [{n, ...}]}
+    per batch, in DIR/answers/."""
+    manifest = read_json(os.path.join(out, 'prompts', 'manifest.json'))
+    answers_dir = os.path.join(out, 'answers')
+    os.makedirs(answers_dir, exist_ok=True)
+    for index, batch in enumerate(manifest['batches']):
+        if batches is not None and index not in batches:
+            continue
+        payload = {'verdicts': [dict(verdict, n=n + 1)
+                                for n in range(len(batch['mention_ids']))]}
+        with open(os.path.join(answers_dir, batch['answers']), 'w',
+                  encoding='utf-8') as out_file:
+            json.dump(payload, out_file)
+    return answers_dir
+
+
+SUBAGENT = 'claude-haiku-4-5@claude-code-subagent'
+
+
+def test_export_prompts_writes_the_binding_prompt_batch_by_batch(
+        trial, tmp_path, monkeypatch):
+    """Byte for byte what AnthropicBackend would have sent: the same
+    instructions, the same item serialisation, twenty items per batch,
+    in sample order. A subagent reading these judges the same question."""
+    from features.radar import sentiment_input
+    out = str(tmp_path)
+    fake_backends(monkeypatch)
+    assert cli.main(['sample', '--out', out]) == 0
+    assert cli.main(['export-prompts', '--out', out]) == 0
+
+    manifest = read_json(os.path.join(out, 'prompts', 'manifest.json'))
+    ids = sampled_ids(out)
+    assert [i for batch in manifest['batches'] for i in batch['mention_ids']] == ids
+    assert all(len(b['mention_ids']) <= llm_sentiment.BATCH_SIZE
+               for b in manifest['batches'])
+    assert manifest['sample_sha256'] == sha256_of(os.path.join(out, cli.SAMPLE))
+    assert manifest['prompt_version'] == llm_sentiment.PROMPT_VERSION
+
+    first = manifest['batches'][0]
+    with flask_app.app_context():
+        rows = (db.session.query(RadarMention, RadarPost)
+                .join(RadarPost, RadarPost.id == RadarMention.post_id)
+                .filter(RadarMention.id.in_(first['mention_ids'])).all())
+        by_id = {mention.id: (mention, post) for mention, post in rows}
+        items = llm_sentiment.items_for([by_id[i] for i in first['mention_ids']])
+        expected = llm_sentiment._prompt_v2(items)
+    written = open(os.path.join(out, 'prompts', first['prompt']),
+                   encoding='utf-8').read()
+    assert written == expected
+    assert sentiment_input.prepare_sentiment_input  # the canonical inputs
+
+
+def test_import_predictions_makes_a_provenance_bearing_file_the_chain_accepts(
+        trial, tmp_path, monkeypatch):
+    out = str(tmp_path)
+    fake_backends(monkeypatch)
+    assert cli.main(['sample', '--out', out]) == 0
+    assert cli.main(['export-labels', '--out', out]) == 0
+    assert cli.main(['predict', '--out', out, '--backend', 'encoder']) == 0
+    assert cli.main(['export-prompts', '--out', out]) == 0
+    answers = answers_for(out, REMOVED)
+
+    assert cli.main(['import-predictions', '--out', out, '--backend', SUBAGENT,
+                     '--answers', answers]) == 0
+    path = predictions_path(out, SUBAGENT)
+    provenance, verdicts = cli.read_predictions(path)
+    assert sorted(verdicts) == sampled_ids(out)
+    assert provenance['backend'] == SUBAGENT
+    assert provenance['artifact_sha256'] is None
+    assert provenance['sample_sha256'] == sha256_of(os.path.join(out, cli.SAMPLE))
+    assert provenance['prompt_version'] == llm_sentiment.PROMPT_VERSION
+    assert provenance['calls'] == len(read_json(
+        os.path.join(out, 'prompts', 'manifest.json'))['batches'])
+    assert provenance['via'] == 'claude-code-subagent'
+
+    # ...and the rest of the chain takes it as the incumbent.
+    ids = sampled_ids(out)
+    labels_path = write_labels(tmp_path / 'labels.jsonl',
+                               {key: dict(REMOVED) for key in ids})
+    write_supplemental(tmp_path / 'supplemental-audit.jsonl',
+                       supplemental_rows(half='removal')
+                       + supplemental_rows(half='natural'))
+    write_supplemental(tmp_path / 'supplemental-natural.jsonl',
+                       supplemental_rows(half='natural'))
+    assert cli.main(evaluate_args(out, labels_path, haiku=path)) == 0
+    report_path = os.path.join(out, cli.REPORT_JSON)
+    report = read_json(report_path)
+    assert report['passed'] is True and report['complete'] is True
+    assert report['predictions']['incumbent']['backend'] == SUBAGENT
+    ack = write_ack(out, report_path)
+    assert cli.main(['accept', '--report', report_path,
+                     '--acknowledgments', ack]) == 0
+
+
+def test_an_unanswered_or_invalid_subagent_answer_fails_coverage(
+        trial, tmp_path, monkeypatch):
+    """A batch the subagent never answered, and an answer outside the
+    enums, are missing predictions -- never defaults, never agreement."""
+    out = str(tmp_path)
+    fake_backends(monkeypatch)
+    assert cli.main(['sample', '--out', out]) == 0
+    assert cli.main(['export-prompts', '--out', out]) == 0
+    manifest = read_json(os.path.join(out, 'prompts', 'manifest.json'))
+    answers = answers_for(out, REMOVED,
+                          batches=set(range(len(manifest['batches']))) - {0})
+    # The second batch answers item 1 with a value that is not a verdict,
+    # and item 2 with an n outside the batch.
+    second = manifest['batches'][1]
+    payload = {'verdicts': [dict(REMOVED, n=1, relevance='yes'),
+                            dict(REMOVED, n=999)]
+               + [dict(REMOVED, n=n + 1)
+                  for n in range(2, len(second['mention_ids']))]}
+    with open(os.path.join(answers, second['answers']), 'w',
+              encoding='utf-8') as out_file:
+        json.dump(payload, out_file)
+
+    assert cli.main(['import-predictions', '--out', out, '--backend', SUBAGENT,
+                     '--answers', answers]) == 0
+    provenance, verdicts = cli.read_predictions(predictions_path(out, SUBAGENT))
+    unanswered = set(manifest['batches'][0]['mention_ids']) \
+        | set(second['mention_ids'][:2])
+    assert set(sampled_ids(out)) - set(verdicts) == unanswered
+    assert provenance['answered'] == SIZE - len(unanswered)
+
+
+def test_import_refuses_a_backend_that_is_not_an_incumbent(trial, tmp_path,
+                                                           monkeypatch):
+    """The subagent path is for the incumbent. The encoder's predictions
+    come from the artifact, through `predict`, and nothing else."""
+    out = str(tmp_path)
+    fake_backends(monkeypatch)
+    assert cli.main(['sample', '--out', out]) == 0
+    assert cli.main(['export-prompts', '--out', out]) == 0
+    answers = answers_for(out, REMOVED)
+    assert cli.main(['import-predictions', '--out', out, '--backend', ENCODER,
+                     '--answers', answers]) == 1
+    assert not os.path.exists(predictions_path(out, ENCODER))
