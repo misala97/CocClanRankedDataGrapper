@@ -105,6 +105,46 @@ Against the ship rule the pre-fix encoder is NOT yet through: it beats Haiku on 
 - **INT8** — dynamic breaks the model. FFN-only or calibrated static would cut
   1,081 MB to ~400 MB. Worth doing only if the box gets tight again.
 
+## Codex verdict, 2026-09-06: BUILD BEHIND A FLAG
+
+"The evidence supports a controlled trial, but not an unconditional
+replacement of Haiku." Accepted in full. His three material issues, and the
+conditions they impose on the build:
+
+1. **The removal trade is not a production estimate.** Half the 200-row audit
+   was selected *because the encoder wanted to delete those rows*, so
+   measuring deletion quality on it is circular; more enriched rows cannot fix
+   it. "Per 200 posts" also conflated sampled mentions with posts.
+   → Report the two audit halves separately, and get **fresh randomly selected
+   traffic** before any unconditional ship.
+2. **Sampling noise does not establish non-inferiority.** 3 wrong deletions vs
+   1 is inconclusive, not evidence the precision bar is met. An exception is a
+   legitimate product choice, but **the acceptable precision loss and the
+   rollback trigger must be written down BEFORE the next evaluation**, not
+   after seeing it. "Provisional" tone needs an operational meaning; his
+   recommendation, adopted: **keep Haiku's displayed tone during the trial.**
+3. **The two reversal rates (16.5% locked vs 5.6% audit) are not comparable**
+   — different references, different populations — and the larger set measures
+   agreement with Sonnet, not real-world tone error. → Recompute both under
+   one definition, inspect the disagreements, and look specifically at
+   truncated posts: overall 256/512 parity can hide a difference on that small
+   but costly subset.
+
+Also: **"teacher validated" is too strong** while the reference carries a
+Fable pass. Preserving independent human labels and recording what
+adjudication changed is required for that claim.
+
+Arithmetic correction (his catch, my stale numerator): the `irrelevant` share
+is **3,865 / 15,200 = 25.4%**, not the 2,669/26.2% in the brief (that count
+was from 10,200 labels). His 17.6% divided my stale numerator by the new
+denominator. Prevalence-honest figure is the quota-stratified locked natural
+set: **25.6% of 900 rows**. Targeted runs cannot establish prevalence at all.
+
+Extraction ruling: narrow bare-token stopword fixes can proceed independently;
+**moving the relevance head upstream broadens its blast radius and needs its
+own validation.** And per [[radar-extractor-recall-unmeasured]], extraction
+recall has never been measured because every row we have is one it accepted.
+
 ## Ledger
 
 - [x] 1. Export 50k — `Desktopadar_labels\export-2026-09-05.jsonl`, 50,000 rows (reddit 35,379 / bluesky 14,516 / 4chan 105), 31 days, 5,178 tickers, 8,047 with Haiku labels. Read-only on prod; every step since reads this file, never a database.
@@ -136,9 +176,11 @@ Against the ship rule the pre-fix encoder is NOT yet through: it beats Haiku on 
 
 ### Everything above is done. What remains is one build.
 
-- [ ] 6. **Ship the judge** — the only open work. Spec + plan first, Codex reviews the plan before code (he found both real bugs so far).
+- [ ] 6. **Ship the judge BEHIND A FLAG, as a trial** — Codex's ruling, not an unconditional replacement. Spec + plan first, Codex reviews the plan before code.
+  - **Trial shape:** encoder judges and stores; Haiku's displayed tone is retained; the exception, the tolerated precision loss and the rollback trigger are written down BEFORE the trial's evaluation.
+  - **Owed before any unconditional ship:** a fresh randomly-sampled traffic audit (not removal-enriched), the two audit halves reported separately, and the two reversal rates recomputed under one definition with truncated posts inspected.
   - App: `JudgeBackend` protocol; encoder adapter; Anthropic adapter kept behind a config flag, off. ~200 lines, because `_judge_batch_v2` is the only vendor-shaped function.
-  - **The one real bug to fix first:** `apply_judgments` (~line 430) and `review_candidates` (~line 537) use the model id as a STAGE proxy; swap the backend and a review verdict can be silently overwritten. Needs a materialised stage or a history lookup.
+  - **The one real bug to fix first** (Codex confirmed both model-id dependencies and the shape of the fix): `apply_judgments` (~line 430) and `review_candidates` (~line 537) use the model id as a STAGE proxy. Use **review history scoped to mention + current prompt version** — not simply the latest history row — remove the primary-model filter, keep the activation-cutoff and prompt-version fences. **Test identical primary/review model ids, and a backend change.**
   - Tedious: ~55 tests across `test_radar_sentiment_v2.py` (45) and `test_radar_llm_sentiment.py` (10) are built on a fake Anthropic client and on primary/review ids differing.
   - Small: zero spend rate for the free backend (else the board reads "unpriced"); the literal `'Claude'` in `Posts.tsx:86`; spec v2.1 amendment for §13 and the §10 gate language.
   - VPS: scp the artifact + tokenizer, loader at batch 4 / 2 threads, 2 GB swapfile, watch the first cycle. Judge gate can then be switched OFF — all ~13k mentions/day judged instead of 2,400, since the judge is free.
