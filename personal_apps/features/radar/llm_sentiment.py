@@ -303,8 +303,14 @@ def judge(items, backend, on_usage=None, preamble=None):
         try:
             judgments, usage = backend.judge_batch(batch, preamble=preamble)
         except SentimentUnavailable as exc:
-            logger.warning('radar sentiment v2 batch of %d failed: %s',
-                           len(batch), exc)
+            # A backend may say it has already reported this failure. A
+            # hosted batch failing is news every time -- it is usually
+            # transient -- but a missing or corrupt local artifact is one
+            # standing fact, and repeating it every ten minutes forever
+            # buries the log entry that matters.
+            if not getattr(exc, 'already_reported', False):
+                logger.warning('radar sentiment v2 batch of %d failed: %s',
+                               len(batch), exc)
             continue
         judgments = {key: judgment for key, judgment in judgments.items()
                      if _enums_valid(judgment)}

@@ -23,6 +23,7 @@ Two rules keep it honest:
 import dataclasses
 import json
 import logging
+import os
 import typing
 
 import anthropic
@@ -141,6 +142,202 @@ class AnthropicBackend:
                           getattr(usage, 'output_tokens', 0) or 0)
 
 
+# ---- the local encoder ------------------------------------------------------
+
+ENCODER_MODEL_ID = 'radar-encoder-v1'
+
+# Measured on the VPS (onnxruntime 1.29, 2 vCPU): 7.0-7.5 rows/s at both 2
+# and 4 threads -- it is memory-bandwidth bound, so the extra threads buy
+# nothing. Resident stays flat at 1,081 MB for batch 1 and batch 4 and jumps
+# to 1,715 MB at batch 16, which is the whole reason the batch is 4.
+ENCODER_BATCH_SIZE = 4
+ENCODER_PASS_LIMIT = 400
+ENCODER_INTRA_OP_THREADS = 2
+ENCODER_INTER_OP_THREADS = 1
+
+# The window the shipping artifact was trained at. 512 was measured too and
+# scored identically on both locked sets while doubling inference memory and
+# time, so 256 is a decision, not a default.
+ENCODER_MAX_LEN = 256
+
+DEFAULT_ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), '..', '..',
+                                    'artifacts', 'judge')
+
+
+class EncoderArtifactError(Exception):
+    """The artifact on disk is not the one this code knows how to read."""
+
+
+class EncoderBackend:
+    """The distilled encoder: five heads over one shared encoder, local.
+
+    Validated at CONSTRUCTION, loaded on first use. The daemon resolves its
+    configuration at startup, so an artifact that does not match this code
+    must fail there -- loudly, before any judging -- rather than at the
+    first scheduled pass. The ONNX session is a different matter: it is
+    ~1 GB resident and belongs to the process that actually judges, so it
+    is built on the first batch and then held for the process lifetime.
+
+    A load failure is LATCHED. It raises SentimentUnavailable for the rest
+    of the adapter's life without retrying, and it never falls back to
+    another backend: judging with a different judge than the one recorded
+    would make the stored provenance a lie.
+    """
+
+    supports_review = False       # it has no independent second opinion to give
+    batch_size = ENCODER_BATCH_SIZE
+    pass_limit = ENCODER_PASS_LIMIT
+
+    def __init__(self, artifact_dir=None):
+        self.id = ENCODER_MODEL_ID
+        self.artifact_dir = os.path.abspath(artifact_dir or DEFAULT_ARTIFACT_DIR)
+        self.model_path, self.tokenizer_path, self.config = self._validate()
+        self.max_len = self.config['max_len']
+        self.heads = self.config['heads']
+        self._session = None
+        self._tokenizer = None
+        self._load_error = None
+
+    # -- construction-time checks -------------------------------------------
+
+    def _read_json(self, path, what):
+        if not os.path.isfile(path):
+            raise EncoderArtifactError('%s: no %s' % (path, what))
+        try:
+            with open(path, encoding='utf-8') as handle:
+                return json.load(handle)
+        except ValueError as exc:
+            raise EncoderArtifactError('%s is not readable JSON: %s'
+                                       % (path, exc))
+
+    def _validate(self):
+        pointer = self._read_json(os.path.join(self.artifact_dir, 'active.json'),
+                                  'active.json pointer')
+        if pointer.get('id') != ENCODER_MODEL_ID:
+            raise EncoderArtifactError(
+                'active.json names id %r, this build serves %r'
+                % (pointer.get('id'), ENCODER_MODEL_ID))
+        path = pointer.get('path')
+        if not path:
+            raise EncoderArtifactError('active.json names no path')
+        version_dir = os.path.join(self.artifact_dir, path)
+
+        config = self._read_json(os.path.join(version_dir, 'config.json'),
+                                 'config.json')
+        model_path = os.path.join(version_dir, 'model.onnx')
+        tokenizer_path = os.path.join(version_dir, 'tokenizer.json')
+        for candidate, what in ((model_path, 'model.onnx'),
+                                (tokenizer_path, 'tokenizer.json')):
+            if not os.path.isfile(candidate):
+                raise EncoderArtifactError('%s: no %s' % (version_dir, what))
+
+        if config.get('max_len') != ENCODER_MAX_LEN:
+            raise EncoderArtifactError(
+                'artifact max_len is %r, this build reads %d tokens'
+                % (config.get('max_len'), ENCODER_MAX_LEN))
+
+        heads = config.get('heads')
+        if not isinstance(heads, dict):
+            raise EncoderArtifactError('config.json has no heads mapping')
+        # Both the SET of heads and the ORDER of each class list matter: the
+        # class list is what an argmax index is looked up in, so a reordered
+        # list silently relabels every verdict. Compared as tuples because
+        # JSON gives lists and _FIELD_ENUMS holds tuples.
+        missing = sorted(set(_FIELD_ENUMS) - set(heads))
+        extra = sorted(set(heads) - set(_FIELD_ENUMS))
+        if missing or extra:
+            raise EncoderArtifactError(
+                'artifact heads do not match this build: missing %s, unexpected %s'
+                % (missing or 'none', extra or 'none'))
+        for field, allowed in _FIELD_ENUMS.items():
+            if tuple(heads[field]) != tuple(allowed):
+                raise EncoderArtifactError(
+                    "artifact head %r has classes %s, this build expects %s"
+                    % (field, list(heads[field]), list(allowed)))
+        return model_path, tokenizer_path, config
+
+    # -- lazy session --------------------------------------------------------
+
+    def _unavailable(self):
+        """The latched failure, marked so it is reported once, not per batch.
+
+        An Anthropic batch failure is news every time -- it is usually
+        transient. A missing or corrupt artifact is one fact, and repeating
+        it every ten minutes forever buries the log it belongs in.
+        """
+        error = SentimentUnavailable('encoder artifact unusable: %s'
+                                     % self._load_error)
+        error.already_reported = True
+        return error
+
+    def _load(self):
+        if self._load_error is not None:
+            raise self._unavailable()
+        if self._session is None:
+            try:
+                import numpy
+                import onnxruntime
+                from tokenizers import Tokenizer
+
+                options = onnxruntime.SessionOptions()
+                options.intra_op_num_threads = ENCODER_INTRA_OP_THREADS
+                options.inter_op_num_threads = ENCODER_INTER_OP_THREADS
+                session = onnxruntime.InferenceSession(
+                    self.model_path, options,
+                    providers=['CPUExecutionProvider'])
+                tokenizer = Tokenizer.from_file(self.tokenizer_path)
+                tokenizer.enable_truncation(self.max_len)
+                tokenizer.enable_padding(length=self.max_len)
+            except Exception as exc:          # noqa: BLE001 -- latched below
+                self._load_error = '%s: %s' % (type(exc).__name__, exc)
+                logger.error('radar encoder judge is unavailable: %s (%s); '
+                             'this backend will not retry',
+                             self._load_error, self.model_path)
+                raise self._unavailable()
+            self._numpy = numpy
+            self._session = session
+            self._tokenizer = tokenizer
+            self._inputs = {value.name for value in session.get_inputs()}
+            self._outputs = [value.name for value in session.get_outputs()]
+        return self._session, self._tokenizer
+
+    # -- judging -------------------------------------------------------------
+
+    def judge_batch(self, batch, *, preamble=None):
+        """The five fields for each item, straight from the heads.
+
+        `preamble` is accepted and unused: it exists to tell a hosted model
+        it is reviewing independently, and this backend does not read a
+        prompt at all. PROMPT_VERSION still describes the label semantics
+        it answers to; the stored backend id records that it answered.
+        """
+        session, tokenizer = self._load()
+        numpy = self._numpy
+        encoded = tokenizer.encode_batch(
+            [(item.prepared.target_ticker, item.prepared.author_text)
+             for item in batch])
+        feed = {'input_ids': numpy.array([e.ids for e in encoded],
+                                         dtype=numpy.int64),
+                'attention_mask': numpy.array([e.attention_mask for e in encoded],
+                                              dtype=numpy.int64)}
+        if 'token_type_ids' in self._inputs:
+            feed['token_type_ids'] = numpy.array([e.type_ids for e in encoded],
+                                                 dtype=numpy.int64)
+        try:
+            outputs = session.run(None, feed)
+        except Exception as exc:              # noqa: BLE001
+            raise SentimentUnavailable('encoder inference failed: %s' % exc)
+
+        by_head = {name: outputs[index].argmax(-1)
+                   for index, name in enumerate(self._outputs)}
+        got = {}
+        for position, item in enumerate(batch):
+            got[item.key] = Judgment(
+                **{field: self.heads[field][int(by_head[field][position])]
+                   for field in _FIELD_ENUMS})
+        return got, Usage(0, 0)
+
+
 # ---- registry --------------------------------------------------------------
 #
 # Parsing an environment variable is deliberately NOT here: construction is
@@ -154,14 +351,16 @@ _ANTHROPIC_PREFIX = 'anthropic:'
 def construct_backend(spec, *, effort=None, artifact_dir=None):
     """Build the backend a spec string names.
 
-    'anthropic:<model>' is the only accepted form today. An unknown spec is
-    an error rather than a silent fallback to a default judge: judging with
-    the wrong backend is worse than not judging, because the wrong answers
-    are stored and counted under the wrong provenance.
+    'anthropic:<model>' and 'encoder' are the accepted forms. An unknown
+    spec is an error rather than a silent fallback to a default judge:
+    judging with the wrong backend is worse than not judging, because the
+    wrong answers are stored and counted under the wrong provenance.
     """
     if not isinstance(spec, str) or not spec.strip():
         raise ValueError('judge backend spec must be a non-empty string')
     spec = spec.strip()
+    if spec == 'encoder':
+        return EncoderBackend(artifact_dir)
     if spec.startswith(_ANTHROPIC_PREFIX):
         model = spec[len(_ANTHROPIC_PREFIX):].strip()
         if not model:

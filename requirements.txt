@@ -19,5 +19,12 @@ Telethon
 scikit-learn>=1.4,<1.5
 scipy
 
+# radar encoder judge. It RUNS a graph, it does not build one, so torch is
+# deliberately absent: these two are about 50 MB against torch's couple of
+# gigabytes, on a box with 2 GB of RAM. Exporting an artifact and generating
+# the test fixture both happen off the server, in a separate environment.
+onnxruntime
+tokenizers
+
 # test
 pytest

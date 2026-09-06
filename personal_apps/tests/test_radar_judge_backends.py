@@ -246,7 +246,7 @@ def test_construct_backend_builds_the_named_anthropic_model():
 
 
 @pytest.mark.parametrize('spec', ['', '   ', 'anthropic:', 'haiku',
-                                  'openai:gpt-5', None, 'encoder'])
+                                  'openai:gpt-5', None, 'encoder:v1'])
 def test_an_unknown_spec_is_an_error_not_a_silent_default(spec):
     """Judging with the wrong backend is worse than not judging: the wrong
     answers get stored and counted under the wrong provenance."""
@@ -291,3 +291,276 @@ def test_the_enum_names_are_shared_not_copied():
     assert set(_FIELD_ENUMS) == {'relevance', 'content_origin', 'attitude',
                                  'expected_move', 'confidence'}
     assert _FIELD_ENUMS['confidence'] == CONFIDENCE
+
+
+# ---- the local encoder ------------------------------------------------------
+#
+# Against a real ONNX graph and a real tokenizer, not a mock: the whole risk
+# in this adapter is the mechanical join between tokenizer output, graph
+# input names, argmax indices and class lists, and a mock would assert that
+# join against itself. The fixture is tiny and has no weights -- each head
+# answers (sum of the unpadded input ids, plus their segment ids) modulo its
+# class count -- so a test can compute the right answer independently and
+# say WHICH verdict belongs to which item, not merely that they differ.
+# tests/fixtures/radar_encoder/make_fixture.py builds it.
+
+import os
+import shutil
+
+from features.radar.judge_backends import (ENCODER_MODEL_ID,
+                                           EncoderArtifactError,
+                                           EncoderBackend)
+from features.radar.llm_sentiment import _FIELD_ENUMS
+
+FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       'fixtures', 'radar_encoder')
+
+
+def expected_verdict(ticker, text):
+    """What the fixture graph must answer, derived from the tokenizer alone."""
+    from tokenizers import Tokenizer
+    tokenizer = Tokenizer.from_file(os.path.join(FIXTURE, 'v1',
+                                                 'tokenizer.json'))
+    encoded = tokenizer.encode(ticker, text)
+    total = sum(token + segment
+                for token, segment, mask in zip(encoded.ids, encoded.type_ids,
+                                                encoded.attention_mask)
+                if mask)
+    return {field: allowed[total % len(allowed)]
+            for field, allowed in _FIELD_ENUMS.items()}
+
+
+def verdict_tuple(judgment):
+    return tuple(getattr(judgment, field) for field in _FIELD_ENUMS)
+
+
+@pytest.fixture()
+def artifact(tmp_path):
+    """A writable copy, so one test may corrupt a file without breaking
+    every other test in this suite."""
+    target = tmp_path / 'judge'
+    shutil.copytree(FIXTURE, target,
+                    ignore=shutil.ignore_patterns('make_fixture.py',
+                                                  'README.md'))
+    return str(target)
+
+
+def encoder_items(pairs):
+    items = []
+    for key, (ticker, text) in enumerate(pairs, start=1):
+        item = JudgeItem()
+        item.key = key
+        item.prepared = sentiment_input.prepare_sentiment_input(
+            'bluesky', None, text, ticker, author='a1', channel='c1')
+        items.append(item)
+    return items
+
+
+def test_the_encoder_answers_every_head_inside_its_enum(artifact):
+    backend = EncoderBackend(artifact)
+    items = encoder_items([('zza', 'great buying calls'),
+                           ('zzb', 'terrible selling puts')])
+    got, usage = backend.judge_batch(items)
+    assert set(got) == {1, 2}
+    for judgment in got.values():
+        for field, allowed in _FIELD_ENUMS.items():
+            assert getattr(judgment, field) in allowed, field
+    assert usage == Usage(0, 0)
+
+
+def test_every_verdict_lands_on_the_item_it_belongs_to(artifact):
+    """Shuffled, so a positional bug cannot hide behind a stable order."""
+    backend = EncoderBackend(artifact)
+    pairs = [('zza', 'great buying calls'), ('zzb', 'terrible selling puts'),
+             ('zzc', 'w1 w2 w3'), ('zzd', 'earnings up down')]
+    items = encoder_items(pairs)
+    items.reverse()
+
+    got, _usage = backend.judge_batch(items)
+
+    for item in items:
+        ticker, text = pairs[item.key - 1]
+        for field, value in expected_verdict(ticker, text).items():
+            assert getattr(got[item.key], field) == value, (item.key, field)
+    # The fixture really does discriminate; without this, the assertions
+    # above could all hold while every item got the same answer.
+    assert len({verdict_tuple(j) for j in got.values()}) == 4
+
+
+def test_a_partial_final_batch_is_judged_like_any_other(artifact):
+    backend = EncoderBackend(artifact)
+    assert backend.batch_size == 4
+    items = encoder_items([('zza', 'w%d' % n) for n in range(5)])
+    got = llm_sentiment.judge(items, backend)
+    assert set(got) == {1, 2, 3, 4, 5}
+
+
+def test_the_encoder_reads_no_prompt_and_ignores_a_preamble(artifact):
+    """The review path's signature hands it a preamble. It has no prompt to
+    put one in, and must not answer differently because it arrived."""
+    backend = EncoderBackend(artifact)
+    items = encoder_items([('zza', 'great buying calls')])
+    plain, _usage = backend.judge_batch(items)
+    with_preamble, _usage = backend.judge_batch(
+        items, preamble=llm_sentiment.REVIEW_PREAMBLE)
+    assert verdict_tuple(plain[1]) == verdict_tuple(with_preamble[1])
+
+
+def test_the_encoder_declares_what_the_measurements_decided(artifact):
+    backend = EncoderBackend(artifact)
+    assert backend.id == ENCODER_MODEL_ID == 'radar-encoder-v1'
+    assert backend.batch_size == 4          # batch 16 spiked RSS to 1,715 MB
+    assert backend.pass_limit == 400
+    assert backend.max_len == 256
+    # Review exists to be an INDEPENDENT second opinion; the student cannot
+    # review the question its own teacher set.
+    assert backend.supports_review is False
+
+
+# ---- what it refuses to load ------------------------------------------------
+
+def rewrite_config(artifact, change):
+    path = os.path.join(artifact, 'v1', 'config.json')
+    with open(path, encoding='utf-8') as handle:
+        loaded = json.load(handle)
+    change(loaded)
+    with open(path, 'w', encoding='utf-8') as handle:
+        json.dump(loaded, handle)
+
+
+def test_a_head_mismatch_names_the_key_that_differs(artifact):
+    def drop_a_class(config):
+        config['heads']['attitude'] = ['positive', 'negative', 'mixed']
+
+    rewrite_config(artifact, drop_a_class)
+    with pytest.raises(EncoderArtifactError) as caught:
+        EncoderBackend(artifact)
+    assert 'attitude' in str(caught.value)
+
+
+def test_a_reordered_class_list_is_a_mismatch_not_a_detail(artifact):
+    """The class list is what an argmax index is looked up in, so a
+    reordering silently relabels every verdict it touches."""
+    def reorder(config):
+        config['heads']['relevance'] = ['irrelevant', 'relevant', 'uncertain']
+
+    rewrite_config(artifact, reorder)
+    with pytest.raises(EncoderArtifactError) as caught:
+        EncoderBackend(artifact)
+    assert 'relevance' in str(caught.value)
+
+
+def test_a_missing_head_is_named(artifact):
+    rewrite_config(artifact, lambda config: config['heads'].pop('confidence'))
+    with pytest.raises(EncoderArtifactError) as caught:
+        EncoderBackend(artifact)
+    assert 'confidence' in str(caught.value)
+
+
+def test_an_unexpected_head_is_named(artifact):
+    def add_one(config):
+        config['heads']['sarcasm'] = ['yes', 'no']
+
+    rewrite_config(artifact, add_one)
+    with pytest.raises(EncoderArtifactError) as caught:
+        EncoderBackend(artifact)
+    assert 'sarcasm' in str(caught.value)
+
+
+def test_a_different_window_is_refused(artifact):
+    def widen(config):
+        config['max_len'] = 512
+
+    rewrite_config(artifact, widen)
+    with pytest.raises(EncoderArtifactError) as caught:
+        EncoderBackend(artifact)
+    assert '512' in str(caught.value)
+
+
+def test_an_artifact_for_another_id_is_refused(artifact):
+    path = os.path.join(artifact, 'active.json')
+    with open(path, 'w', encoding='utf-8') as handle:
+        json.dump({'path': 'v1/', 'id': 'radar-encoder-v2'}, handle)
+    with pytest.raises(EncoderArtifactError) as caught:
+        EncoderBackend(artifact)
+    assert 'radar-encoder-v2' in str(caught.value)
+
+
+@pytest.mark.parametrize('missing', ['active.json', 'v1/config.json',
+                                     'v1/model.onnx', 'v1/tokenizer.json'])
+def test_a_missing_file_is_refused_at_construction(artifact, missing):
+    os.remove(os.path.join(artifact, *missing.split('/')))
+    with pytest.raises(EncoderArtifactError) as caught:
+        EncoderBackend(artifact)
+    assert os.path.basename(missing) in str(caught.value)
+
+
+def test_an_absent_artifact_directory_is_refused(tmp_path):
+    with pytest.raises(EncoderArtifactError):
+        EncoderBackend(str(tmp_path / 'no-such-dir'))
+
+
+# ---- the session ------------------------------------------------------------
+
+def test_the_session_is_not_built_until_the_first_batch(artifact, monkeypatch):
+    """~1 GB resident belongs to the process that judges, not to every
+    process that imports the registry."""
+    import onnxruntime
+
+    def boom(*args, **kwargs):
+        raise AssertionError('a session was built at construction time')
+
+    monkeypatch.setattr(onnxruntime, 'InferenceSession', boom)
+    backend = EncoderBackend(artifact)
+    assert backend.id == ENCODER_MODEL_ID
+
+
+def test_the_session_is_built_once_and_then_held(artifact):
+    backend = EncoderBackend(artifact)
+    items = encoder_items([('zza', 'great buying calls')])
+    backend.judge_batch(items)
+    first = backend._session
+    backend.judge_batch(items)
+    assert backend._session is first
+
+
+def test_a_corrupt_model_is_contained_latched_and_reported_once(artifact,
+                                                                caplog):
+    """A load failure must not crash the pass, must not be retried, and
+    must not repeat itself every ten minutes forever."""
+    with open(os.path.join(artifact, 'v1', 'model.onnx'), 'wb') as handle:
+        handle.write(b'not an onnx graph')
+    backend = EncoderBackend(artifact)       # construction still succeeds
+    items = encoder_items([('zza', 'great buying calls')])
+
+    with caplog.at_level('WARNING'):
+        assert llm_sentiment.judge(items, backend) == {}
+        assert llm_sentiment.judge(items, backend) == {}
+        assert llm_sentiment.judge(items, backend) == {}
+
+    assert backend._load_error is not None
+    said = [record.getMessage() for record in caplog.records
+            if 'encoder' in record.getMessage().lower()]
+    assert len(said) == 1, said
+
+
+def test_a_latched_failure_never_answers_and_never_falls_back(artifact):
+    with open(os.path.join(artifact, 'v1', 'model.onnx'), 'wb') as handle:
+        handle.write(b'not an onnx graph')
+    backend = EncoderBackend(artifact)
+    for _attempt in range(2):
+        with pytest.raises(SentimentUnavailable):
+            backend.judge_batch(encoder_items([('zza', 'w1')]))
+
+
+def test_construct_backend_builds_the_encoder_from_a_named_directory(artifact):
+    backend = judge_backends.construct_backend('encoder',
+                                               artifact_dir=artifact)
+    assert isinstance(backend, EncoderBackend)
+    assert backend.id == ENCODER_MODEL_ID
+
+
+def test_the_encoder_id_fits_the_provenance_column():
+    from models import RadarMention
+    assert len(ENCODER_MODEL_ID) <= \
+        RadarMention.__table__.c.sentiment_model.type.length
