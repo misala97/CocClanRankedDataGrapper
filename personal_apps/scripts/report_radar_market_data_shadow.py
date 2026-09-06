@@ -349,17 +349,16 @@ def _grouped_gate(session, end, us_close_audit, instrument_map_sha):
     # Recompute date-aware active coverage from current identities and
     # persisted closes. The ingestion-time counters are diagnostic only.
     instrument_map, _ = market_data.grouped_instrument_map()
-    active_symbols_by_day = market_data.grouped_active_symbols_by_day(
+    base_symbols_by_day = market_data.grouped_active_symbols_by_day(
         expected, end, instrument_map, is_shadow=True)
-    active_symbols = {
+    base_symbols = {
         day: {(identity.ticker, identity.mic): symbol
               for symbol, identity in symbols.items()}
-        for day, symbols in active_symbols_by_day.items()
+        for day, symbols in base_symbols_by_day.items()
     }
-    all_active_keys = set().union(*active_symbols.values()) if \
-        active_symbols else set()
+    all_base_keys = set().union(*base_symbols.values()) if base_symbols else set()
     present_by_day = {day: set() for day in expected}
-    if all_active_keys and expected:
+    if all_base_keys and expected:
         active_rows = (session.query(
             RadarDailyClose.close_date, RadarDailyClose.ticker,
             RadarDailyClose.mic)
@@ -369,9 +368,25 @@ def _grouped_gate(session, end, us_close_audit, instrument_map_sha):
                     RadarDailyClose.close_date.in_(expected),
                     sa.tuple_(RadarDailyClose.ticker,
                               RadarDailyClose.mic).in_(
-                                  list(all_active_keys))).all())
+                                  list(all_base_keys))).all())
         for close_date, ticker, mic in active_rows:
             present_by_day[close_date].add((ticker, mic))
+
+    observed_symbols_by_day = {
+        day: {base_symbols[day][key] for key in present_by_day[day]
+              if key in base_symbols[day]}
+        for day in expected
+    }
+    active_symbols_by_day = market_data.grouped_active_symbols_by_day(
+        expected, end, instrument_map, is_shadow=True,
+        observed_symbols_by_day=observed_symbols_by_day)
+    active_symbols = {
+        day: {(identity.ticker, identity.mic): symbol
+              for symbol, identity in symbols.items()}
+        for day, symbols in active_symbols_by_day.items()
+    }
+    all_active_keys = set().union(*active_symbols.values()) if \
+        active_symbols else set()
 
     coverage_gaps = []
     unmatched_universe = set()

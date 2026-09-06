@@ -747,9 +747,9 @@ def test_grouped_ingest_excludes_a_symbol_before_massive_first_observed_day(
     assert (state.active_matched, state.active_expected) == (1, 1)
 
 
-def test_grouped_ingest_uses_ipo_eligible_fallback_when_all_observations_are_later(
+def test_grouped_ingest_excludes_only_missing_symbols_with_later_observations(
         grouped_ctx, monkeypatch):
-    """Bootstrap history must not turn a healthy old provider day vacuous."""
+    """A returned bootstrap symbol remains coverage; a missing later one does not."""
     import decimal as _decimal
     from models import RadarDailyClose, RadarGroupedCloseDay
     monkeypatch.setenv('RADAR_US_CLOSE_SOURCE', 'shadow')
@@ -769,15 +769,14 @@ def test_grouped_ingest_uses_ipo_eligible_fallback_when_all_observations_are_lat
     result = market_data.ingest_grouped_day(
         OneDayProvider(_accepted_fetch({
             f'{PREFIX}GA': _decimal.Decimal('55.25'),
-            f'{PREFIX}GB': _decimal.Decimal('44.75'),
         })), NOW.date(), NOW)
 
     assert result.status == 'accepted'
-    assert (result.active_matched, result.active_expected) == (2, 2)
+    assert (result.active_matched, result.active_expected) == (1, 1)
     state = RadarGroupedCloseDay.query.filter_by(
         source='massive_grouped', close_date=NOW.date(),
         is_shadow=True).one()
-    assert (state.active_matched, state.active_expected) == (2, 2)
+    assert (state.active_matched, state.active_expected) == (1, 1)
 
 
 def test_grouped_ingest_keeps_never_observed_symbol_in_coverage(

@@ -635,14 +635,16 @@ def grouped_instrument_map():
 
 
 def grouped_active_symbols_by_day(days, now, instrument_map=None,
-                                  is_shadow=False):
+                                  is_shadow=False,
+                                  observed_symbols_by_day=None):
     """Mapped active US symbols eligible to trade on each historical day.
 
     ``ipo_date`` is provider metadata, so a known future IPO excludes that
     ticker only before it listed.  A symbol that Massive first returned on a
     later accepted day is likewise ineligible before that observed provider
-    availability date.  Missing dates stay in the denominator: unknown is
-    not evidence that a provider omission is harmless.
+    availability date only when Massive did not return it for this day.
+    Missing dates stay in the denominator: unknown is not evidence that a
+    provider omission is harmless.
     """
     from models import RadarDailyClose, TickerUniverse
 
@@ -677,19 +679,16 @@ def grouped_active_symbols_by_day(days, now, instrument_map=None,
         }
         for day in days
     }
-    active_by_day = {
+    if observed_symbols_by_day is None:
+        return eligible_by_ipo
+
+    return {
         day: {
             symbol: identity for symbol, identity in eligible_by_ipo[day].items()
-            if first_observed.get(identity.ticker) is None or
+            if symbol in observed_symbols_by_day.get(day, set()) or
+            first_observed.get(identity.ticker) is None or
             first_observed[identity.ticker] <= day
         }
-        for day in days
-    }
-    # A first stored row is useful evidence only after this collector has
-    # bootstrapped.  For an older day all rows may have been first collected
-    # later, which cannot make a healthy provider response vacuous.
-    return {
-        day: active_by_day[day] or eligible_by_ipo[day]
         for day in days
     }
 
@@ -792,6 +791,9 @@ def ingest_grouped_day(provider, day, now):
     grouped = fetch.day
     matched = {symbol: price for symbol, price in grouped.closes.items()
                if symbol in instrument_map}
+    active_symbols = set(grouped_active_symbols_by_day(
+        (day,), now, instrument_map, is_shadow=is_shadow,
+        observed_symbols_by_day={day: set(matched)})[day])
     unmatched_provider = len(grouped.closes) - len(matched)
     unmatched_universe = len(set(instrument_map) - set(grouped.closes))
     active_matched = len(active_symbols & set(matched))
