@@ -37,13 +37,25 @@ REJECTION CAUSES (one row per post x symbol in rejected-candidates.jsonl)
     bare_other / cashtag_other anything else the extractor dropped (coin
                                collisions, single-letter bare tokens)
 
-ORDINARY WORDS come from the corpus itself, not a dictionary: a token the
-stream writes mostly in lowercase (`app`, `time`, `people`) is a word, one
-it writes mostly Capitalised or in caps (`nvda`, `Nvidia`, `soxl`) is a
-name. Frequency alone cannot do this -- `nvidia` is as frequent as many
-words -- and a dictionary would call Apple, Meta and Snap words. Measured
-on the same stream it is applied to, with a floor of `min_posts` so a
-token seen twice proves nothing either way.
+TWO MEASUREMENTS OFF THE SAME CORPUS, NOT A DICTIONARY. A dictionary would
+call Apple, Meta and Snap words, and frequency alone cannot help --
+`nvidia` is as frequent as many words.
+
+  ordinary word  a token the stream writes mostly in lowercase (`app`,
+                 `time`, `people`); one it writes mostly Capitalised or in
+                 caps (`nvda`, `soxl`) is a symbol. Gates the LOWERCASE
+                 SYMBOL path.
+  name-shaped    a token capitalised MID-SENTENCE, where a capital is not
+                 grammar. Measured over the week: function words sit at
+                 0.3-3.6% of their occurrences (`that` 0.5%, `with` 0.3%,
+                 `people` 0.5%), company names at 23-81% (`nike` 69%,
+                 `apple` 58%, `nvidia` 42%, `reddit` 23%). Gates the NAME
+                 path, in whatever case the author then typed it, so `do
+                 not buy moderna today` is a candidate and `100% That
+                 happened in 2000` is not.
+
+Both carry a floor of occurrences, below which a token's casing proves
+nothing either way.
 
 Gated posts -- AutoModerator, bot feeds -- are counted and carry no
 candidates: the gate dropped the whole post, and a candidate inside it is
@@ -67,6 +79,8 @@ from features.radar.config import (  # noqa: E402
 
 DEFAULT_MIN_POSTS = 10          # below this a token's casing proves nothing
 DEFAULT_LOWER_SHARE = 0.5       # written lowercase at least this often = an ordinary word
+DEFAULT_MIN_OCCURRENCES = 10    # the same floor, over occurrences rather than posts
+DEFAULT_NAME_SHARE = 0.10       # capitalised mid-sentence this often = a name, not a word
 TEXT_MAX = 2000                 # what the label harness shows a labeller
 
 # A name may be claimed by a few listings and still mean something -- `apple`
@@ -104,6 +118,7 @@ def _opens_a_sentence(text, index):
 
 
 _TOKEN_RE = re.compile(r"(?<![A-Za-z])([A-Za-z][A-Za-z']{1,14})(?![A-Za-z])")
+_NAME_TOKEN_RE = re.compile(r"(?<![A-Za-z])([A-Za-z][A-Za-z']{2,14})(?![A-Za-z])")
 
 
 # ---- reading -----------------------------------------------------------------
@@ -148,6 +163,34 @@ def common_words(raw_dir, min_posts=DEFAULT_MIN_POSTS, lower_share=DEFAULT_LOWER
         total.update(seen_any)
     return {token for token, n in total.items()
             if n >= min_posts and lower[token] / n >= lower_share}
+
+
+class NameShapes(frozenset):
+    """The tokens the corpus writes like names. A set, named so a call site
+    reads as an instrument rather than as another word list."""
+
+
+def name_shapes(raw_dir, min_occurrences=DEFAULT_MIN_OCCURRENCES,
+                min_share=DEFAULT_NAME_SHARE):
+    """Tokens capitalised MID-SENTENCE often enough to be names.
+
+    Sentence-opening capitals are excluded because they are grammar: it is
+    the capital nobody had to write that carries the evidence."""
+    mid = collections.Counter()
+    total = collections.Counter()
+    for line in iter_raw(raw_dir):
+        prepared = extraction.prepare_extraction_input(
+            line['source'], line.get('title'), line.get('body'),
+            author=line.get('author'), channel=line.get('channel'))
+        text = prepared.author_text
+        for match in _NAME_TOKEN_RE.finditer(text):
+            written = match.group(1)
+            total[written.lower()] += 1
+            if (written[0].isupper() and not written.isupper()
+                    and not _opens_a_sentence(text, match.start())):
+                mid[written.lower()] += 1
+    return NameShapes(token for token, n in total.items()
+                      if n >= min_occurrences and mid[token] / n >= min_share)
 
 
 # ---- one post ----------------------------------------------------------------
@@ -197,7 +240,7 @@ def _names_for(lookup):
     return _NAME_INDEX_CACHE[1]
 
 
-def classify(line, lookup, is_common):
+def classify(line, lookup, is_common, name_shapes=None):
     """Production extraction plus the loose pass, for one captured post."""
     raw = _raw_post(line)
     source = raw.source
@@ -241,20 +284,13 @@ def classify(line, lookup, is_common):
     names = _names_for(lookup)
     lowered = text.lower()
     named = {}
-    for match in _WRITTEN_RE.finditer(text):
-        token = match.group(1).lower()
-        # A capital at a sentence start is grammar, not evidence: `People`
-        # opening a sentence named PPLI 93 times in one captured day. Only
-        # word-shaped names need the distinction -- `Nvidia` is a name
-        # wherever it sits.
-        if is_common(token) and _opens_a_sentence(text, match.start()):
-            continue
-        for symbol in names.get(token, ()):
-            named.setdefault(symbol, match.group(1))
+    # A name-shaped token counts in whatever case it was typed: the shape
+    # was settled once over the corpus, so the capital in THIS post is no
+    # longer evidence and `moderna` reads the same as `Moderna`. Aliases
+    # and misspellings are named explicitly and never need the measurement.
+    shaped = name_shapes if name_shapes is not None else NameShapes(names)
     for token, symbols in names.items():
-        # Lowercase only where the token is not an ordinary word: `moderna`
-        # and `gopro` mean the company in any case, `apple` does not.
-        if is_common(token) or token not in lowered:
+        if token not in NAME_ALIASES and token not in shaped:
             continue
         if not re.search(r"(?<![A-Za-z])%s(?![A-Za-z])" % re.escape(token), lowered):
             continue
@@ -306,7 +342,7 @@ def classify(line, lookup, is_common):
 
 # ---- the run -----------------------------------------------------------------
 
-def run(raw_dir, lookup, out_dir, *, common_words):
+def run(raw_dir, lookup, out_dir, *, common_words, name_shapes=None):
     """Classify every captured post; write the rejected candidates and the
     population summary; return the summary."""
     os.makedirs(str(out_dir), exist_ok=True)
@@ -323,7 +359,7 @@ def run(raw_dir, lookup, out_dir, *, common_words):
     with open(os.path.join(str(out_dir), 'rejected-candidates.jsonl'), 'w',
               encoding='utf-8') as handle,             open(accepted_path, 'w', encoding='utf-8') as accepted_handle:
         for line in iter_raw(raw_dir):
-            row = classify(line, lookup, is_common)
+            row = classify(line, lookup, is_common, name_shapes=name_shapes)
             external_ids.add(row['external_id'])
             summary['posts'] += 1
             summary['by_kind'][row['kind']] += 1
@@ -404,6 +440,8 @@ def main(argv=None):
     parser.add_argument('--export', default=None)
     parser.add_argument('--min-posts', type=int, default=DEFAULT_MIN_POSTS)
     parser.add_argument('--lower-share', type=float, default=DEFAULT_LOWER_SHARE)
+    parser.add_argument('--min-occurrences', type=int, default=DEFAULT_MIN_OCCURRENCES)
+    parser.add_argument('--name-share', type=float, default=DEFAULT_NAME_SHARE)
     args = parser.parse_args(argv)
 
     from app import app
@@ -414,7 +452,10 @@ def main(argv=None):
     words = common_words(args.raw, args.min_posts, args.lower_share)
     print('ordinary words: %d (min_posts %d, lower_share %.2f)'
           % (len(words), args.min_posts, args.lower_share), flush=True)
-    summary = run(args.raw, lookup, args.out, common_words=words)
+    shapes = name_shapes(args.raw, args.min_occurrences, args.name_share)
+    print('name-shaped tokens: %d (min_occurrences %d, share %.2f)'
+          % (len(shapes), args.min_occurrences, args.name_share), flush=True)
+    summary = run(args.raw, lookup, args.out, common_words=words, name_shapes=shapes)
     print(json.dumps({k: v for k, v in summary.items() if k != 'top_rejected'}, indent=1))
     for cause, top in summary['top_rejected'].items():
         print('\n%s top symbols: %s' % (cause, top[:25]))

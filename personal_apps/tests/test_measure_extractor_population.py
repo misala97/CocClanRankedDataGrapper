@@ -146,14 +146,13 @@ def test_labelled_rows_join_the_capture_by_external_id():
 
 
 def test_a_long_ordinary_word_written_capitalised_is_not_a_company_name():
-    """`People` at a sentence start named PPLI 93 times in one day. The
-    ordinary-word set has to cover name-length words, not just symbols."""
+    """`People` at a sentence start named PPLI 93 times in one day."""
     lookup = annotate_distinctive({
         'PPLI': {'name': 'People Inc', 'exchange': 'NASDAQ'},
         'NVDA': {'name': 'NVIDIA Corporation - Common Stock', 'exchange': 'NASDAQ'},
     })
-    common = lambda word: word in {'people'}   # noqa: E731
-    row = pop.classify(_line('t1_p', 'People love Nvidia'), lookup, common)
+    row = pop.classify(_line('t1_p', 'People love Nvidia'), lookup, NOT_COMMON,
+                       name_shapes=pop.NameShapes({'nvidia'}))
     assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('NVDA', 'name_only')]
 
 
@@ -266,19 +265,34 @@ def test_a_distinctive_name_written_lowercase_is_a_candidate():
     assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('MRNA', 'name_only')]
 
 
-def test_a_name_that_is_an_ordinary_word_needs_a_capital_mid_sentence():
-    """Where the name IS a word, the capital is the only evidence there is
-    -- and a capital at a sentence start is grammar, not evidence. `People`
-    opening a sentence named PPLI 93 times in one captured day; `Apple` in
-    the middle of one is the company."""
-    common = lambda word: word in {'apple'}   # noqa: E731
-    row = pop.classify(_line('t1_f', 'i ate an apple'), APPLE_LOOKUP, common)
+def test_a_function_word_never_names_a_company_however_it_is_written():
+    """`That` named HAVAR 171 times and `Your` named GYGY 158 in one week,
+    because a capital mid-sentence can be emphasis or a list. Measured over
+    the corpus the two are not close: function words are capitalised
+    mid-sentence in 0.3-3.6% of their occurrences, company names in
+    23-81%. So name-shaped is a property of the token, measured once, and
+    a token that fails it names nobody in any case."""
+    lookup = annotate_distinctive({
+        'HAVAR': {'name': 'That Company Inc', 'exchange': 'NYSE'},
+        'MRNA': {'name': 'Moderna, Inc. - Common Stock', 'exchange': 'NASDAQ'},
+    })
+    names = pop.NameShapes({'moderna'})
+    row = pop.classify(_line('t1_f', '100% That happened in 2000'), lookup, NOT_COMMON,
+                       name_shapes=names)
     assert row['rejected'] == []
-    row = pop.classify(_line('t1_g', 'Apple had a good quarter'), APPLE_LOOKUP, common)
-    assert row['rejected'] == []
-    row = pop.classify(_line('t1_h', 'I think Apple had a good quarter'),
-                       APPLE_LOOKUP, common)
-    assert {c['symbol'] for c in row['rejected']} == {'AAPL', 'APLE'}
+    row = pop.classify(_line('t1_g', 'do not buy moderna today'), lookup, NOT_COMMON,
+                       name_shapes=names)
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('MRNA', 'name_only')]
+
+
+def test_name_shapes_are_measured_from_the_corpus(tmp_path):
+    raw = _raw_dir(tmp_path, (
+        [_line('t1_a%d' % i, 'i think Apple is fine') for i in range(10)]
+        + [_line('t1_b%d' % i, 'well that is that') for i in range(10)]
+        + [_line('t1_c%d' % i, 'That is what I said') for i in range(10)]))
+    shapes = pop.name_shapes(raw, min_occurrences=5, min_share=0.1)
+    assert 'apple' in shapes          # capitalised mid-sentence every time
+    assert 'that' not in shapes       # capitalised only where a sentence opens
 
 
 def test_a_misspelled_name_is_a_candidate():
