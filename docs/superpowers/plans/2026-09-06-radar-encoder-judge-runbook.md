@@ -75,15 +75,15 @@ WHERE stage = 'primary' AND model = 'claude-haiku-4-5';
 
 ---
 
-## 1. The artifact is not the one that was benchmarked
+## 1. The artifact — packaged and verified
 
-`C:\Users\michi\Desktop\radar_labels\encoder\artifact\config.json` records
-`"source_model": "model-train8600"`. `model-train13000` — the model every
-number in the ledger describes — exists only as `weights.pt`.
+The exploratory export was the wrong model. `encoder/artifact/config.json`
+recorded `"source_model": "model-train8600"`, while `model-train13000` — the
+model every number in the ledger describes — existed only as `weights.pt`.
 
 So the VPS benchmark (7.0–7.5 rows/s, 1,081 MB resident, "verdicts identical
-to the PC's") describes **train8600**, and the parity check in §6 would
-compare the wrong model against itself.
+to the PC's") described **train8600**, and the §6 parity check would have
+compared the wrong model against itself and passed.
 
 **Packaged 2026-09-06** with `scripts/package_encoder_artifact.py`, which
 imports the model class from `train_encoder.py` rather than reimplementing
