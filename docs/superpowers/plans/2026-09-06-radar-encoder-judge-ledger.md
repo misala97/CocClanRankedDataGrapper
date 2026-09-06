@@ -651,7 +651,7 @@ Verification: three targeted schedule tests failed under the old constants
 passed**, covering trial/recovery, write fencing, audit chain and quality
 gates, plus four explicit fixed-frame/late-draw cases. Tests used fresh
 disposable LOCAL MySQL databases with a connection guard refusing every
-other database; both temporary databases were removed. The first full run
+other database; all temporary databases were removed. The first full run
 found one clock-once fixture at the new expiry; its second write now occurs
 on day 2, retaining the original test's purpose. No production tests or
 shared-development data writes were performed. Independent read-only
@@ -665,3 +665,13 @@ dependency, migration, artifact, frontend or trial-row change is required.
 Verify the live row remains running with first judgment
 `2026-09-06 19:38:24.047717 UTC`; its new milestones are September 7/8/9
 at **21:38:24 Berlin time**.
+
+
+**Deployment verified:** runtime commit `d745e8e` was fast-forwarded onto
+the VPS from `d54c013`; untracked reports/artifacts were preserved. Ingest
+and web restarted successfully; the watchdog completed at
+2026-09-07 00:57:02 CEST with exit 0. Read-only post-deploy checks confirmed
+1/2/3 constants, running state, unchanged first judgment and retention
+floor, sample size 746, tone shadow requirement 7, and refusal at the new
+day-3 expiry. Ingest startup reports encoder primary, review off. No
+trial-row or schema changes were made.
