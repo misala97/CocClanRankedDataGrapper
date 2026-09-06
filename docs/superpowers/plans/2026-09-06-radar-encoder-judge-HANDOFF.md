@@ -18,9 +18,10 @@ overwrite or merge the two.
 
 ## Completed tasks
 
-All eleven implementation units, and the fixes for Codex's third review
-(all six findings, `b8f4a82`..`55793b1`; the ledger's "Review round 3
-record" has the table). Nothing is deployed; nothing is merged.
+All eleven implementation units, the fixes for Codex's third review (all
+six findings, `b8f4a82`..`55793b1`) and for its fourth (all four,
+`aa380f4`); the ledger's review-round records have the tables. Nothing
+is deployed; nothing is merged.
 
 | task | commit |
 |---|---|
@@ -38,18 +39,18 @@ record" has the table). Nothing is deployed; nothing is merged.
 
 ## Immediate next action
 
-**Send Codex the fourth brief** (`specs/2026-09-06-radar-encoder-judge-REVIEW-4.md`)
-and act on its answer. It asks Codex to verify the six fixes against the
-reproductions it built, and to rule on the one open interpretation:
-whether the locked natural set stays a hard requirement for an acceptable
-audit. After that, in order:
+**Send Codex the fifth brief** (`specs/2026-09-06-radar-encoder-judge-REVIEW-5.md`)
+and act on its answer. It asks Codex to verify the four round-4 fixes
+against its reproductions. Codex has already ruled that the locked
+natural set stays hard-required. After that, in order:
 
 1. **Merge to `dev_personal`.** Nothing here activates on merge: the
    default is `RADAR_JUDGE_PRIMARY` unset, which judges nothing.
 2. **Deployment**, per the runbook. The owed preflight inputs are in its
-   §0 and §10: a named labeller, the two supplemental files (the audit set
-   from the recipe in §10; the natural set needs 900 rows scored through the
-   packaged artifact on the PC), and a chosen seed.
+   §0, §7 and §10: a named labeller, the two supplemental MEMBERSHIP files
+   for arming (recipe in §7), the two supplemental data files for the audit
+   (the audit set from the recipe in §10; the natural set needs 900 rows
+   scored through the packaged artifact on the PC), and a chosen seed.
 
 ## Unresolved findings and rulings
 
@@ -71,9 +72,10 @@ audit. After that, in order:
   tokens. Anthropic always sends usage; a free backend needs to be able to
   report `Usage(0, 0)` and still be seen to have run.
 - **The locked natural set has no per-row predictions on disk.** The spec
-  (7.2c/7.3) makes it a required input of a complete audit report, and the
-  code enforces that. Producing it is an operator step on the PC (runbook
-  §10); Michi may instead rule to waive it by amending the spec.
+  (7.2c/7.3) makes it a required input of a complete audit report, the
+  code enforces that, and Codex ruled (round 4) that it stays required.
+  Producing it is an operator step on the PC (runbook §10). Since round 4
+  its MEMBERSHIP is also frozen at arming (runbook §7).
 - **`recover_trial(apply=True)` now requires a stopped trial.** The CLI and
   the watchdog already stop first. Recorded in the ledger as an
   interpretation, not a design change.

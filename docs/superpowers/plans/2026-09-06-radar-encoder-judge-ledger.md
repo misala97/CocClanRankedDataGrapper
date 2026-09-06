@@ -113,6 +113,7 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 8 full verification | **COMPLETE** | `c236b1f` | 2251 passed, 1 environmental | inline | vitest 403+269, tsc clean |
 | 9 package + runbook | **runbook delivered** | `c236b1f`, `64e9877` | n/a | inline | deployment awaits Michi |
 | R3 Codex review fixes | **COMPLETE** | `b8f4a82`..`55793b1` | 261 across 9 suites; full suite below | inline, diff read | 6 findings, 15 mutations bit (1 survived and was fixed) |
+| R4 Codex review fixes | **COMPLETE** | `aa380f4` | 245 across 5 suites; full suite below | inline, diff read | 4 findings, 4 mutations bit |
 
 ## Task 1 record
 
@@ -547,6 +548,37 @@ failure is `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_
 the environmental `LEGACY-POLICY cohort` failure recorded at Task 8; no
 regression. Task 8 had 2,251 passed; the 49 more are this round's tests
 net of the five replaced.
+
+## Review round 4 record (Codex, 2026-09-06)
+
+Codex reviewed `128c9cc`: three P2s and a P3; everything else from round 3
+closed against its own reproductions; the locked natural set to stay
+hard-required (spec 7.2c). All four findings held.
+
+| finding | what was true | fix | commit |
+|---|---|---|---|
+| 1 (P2) empty supplemental files satisfy completeness | `_supplemental` checked invalid rows only; two existing empty files gave `complete=True` and reached acceptance | membership frozen at arming (`arm_trial(..., supplemental=)`, `frozen_supplemental`; CLI `--supplemental-audit-keys`/`--supplemental-natural-keys`); `evaluate` requires every frozen key once, no extras, each audit row in its frozen half; any departure is an incomplete reason | `aa380f4` |
+| 2 (P2) accept reproduces flags, not the report | booleans compared; numbers and supplemental content editable under a matching acknowledgment | `_report_from` shared by evaluate and accept; accept compares the JSON-canonical whole report minus `evaluated_at` | `aa380f4` |
+| 3 (P2) lock wait carries the boundary past expiry | `when = clock()` before `lock_for_write` acquired the row | `lock_for_write(clock)`: lock, then read, validate with that reading, return `(row, when)`; the first-judgment clock starts from it | `aa380f4` |
+| 4 (P3) row lock held into the retention lock | `break` on the recovered exit left the loop's FOR UPDATE open | `db.session.rollback()` before the break | `aa380f4` |
+
+**Mutations, applied and restored.** Reading the clock before the lock (2
+failed), dropping the rollback (1), skipping the membership check (4 of 5
+-- the fifth is the wrong-half case, whose check that mutation left
+intact), comparing flags only (2).
+
+**Test adjustments.** Every arm helper (`arm`, `arm_now`, `armed`, the
+chain fixture) passes a frozen membership; the chain fixture's matches the
+rows its supplemental files hold. The four `lock_for_write(NOW)` calls
+became `lock_for_write(lambda: NOW)` and unpack `(row, when)`.
+
+**Interpretation applied.** The membership is frozen at ARMING because that
+is where the spec fixes everything the evaluation may not choose for
+itself; it makes the two membership files preflight inputs (runbook §0,
+§7). Keys are strings; the recipe stores the sorted key lists and the audit
+halves, not hashes, so an incomplete report can say what is missing.
+
+**Full suite after the fixes:** 2,319 passed, 1 failed, in 11:56. The one failure is the environmental `LEGACY-POLICY cohort` failure recorded at Task 8; no regression. Round 3 had 2,300 passed; the 19 more are this round's tests.
 
 ## Carried minor findings
 

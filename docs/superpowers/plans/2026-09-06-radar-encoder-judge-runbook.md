@@ -25,6 +25,7 @@ them cannot be supplied, the answer is not to arm the trial.
 | Baseline report file + its sha256 | `arm` takes a path and records its hash | write it from the figures below |
 | Sampling seed | fixed before predictions exist, or the trial can pass itself | choose at arming |
 | Named human labeller and their dates | 746 blind labels between day 3 and day 7 | **owed** |
+| Supplemental membership files (two) | `arm` freezes WHICH rows the two supplementary sets are; §7 has the recipe | make from `audit-200.jsonl` and `test-natural.json` |
 | Free disk for the retention pin | the pin stops the pruners; the tables grow | measure in §5 |
 
 ### The baseline, captured 2026-09-06
@@ -287,18 +288,40 @@ Diff `vps-verdicts.json` against the PC's file. Record both sha256s.
 **Arm first.** The trial record is what pins the evidence, and the encoder
 refuses to start without one.
 
+Arming also freezes the membership of the two supplementary sets the audit
+report must carry (spec §7.2c/§7.3): the original 200-row audit with its
+two halves, and the 900-row locked natural set. `evaluate` later checks the
+supplied files against exactly this membership -- every frozen row, each
+once, in its frozen half -- so a file holding nothing, or a convenient
+subset, is not the set. Make the two files on the PC from what is on disk:
+
+```python
+import json
+rows = [json.loads(l) for l in open('audit-200.jsonl', encoding='utf-8')]
+json.dump([{'key': 'audit-%d' % r['n'], 'half': r['half']} for r in rows],
+          open('supplemental-audit-keys.json', 'w'))
+json.dump([str(k) for k in json.load(open('test-natural.json'))],
+          open('supplemental-natural-keys.json', 'w'))
+```
+
+The keys must be the same strings the supplemental JSONL files use later
+(`audit-<n>` for the audit set; the natural set's row ids as strings).
+
 ```bash
 cd /root/coc-stats/personal_apps
 venv/bin/python -m scripts.manage_encoder_trial arm \
     --artifact-sha256 3bb32b5607a8a368d8ff72179b41de00c6a971223bbed21302e95dcfb90dccb5 \
     --baseline-report /root/coc-stats/reports/haiku-baseline.json \
     --baseline-removal-rate 0.5367 \
-    --seed <chosen seed>
+    --seed <chosen seed> \
+    --supplemental-audit-keys /root/coc-stats/reports/supplemental-audit-keys.json \
+    --supplemental-natural-keys /root/coc-stats/reports/supplemental-natural-keys.json
 venv/bin/python -m scripts.manage_encoder_trial status
 ```
 
-Verify the pin is in place (`evidence pinned from ...`) and the sample size
-matches `ceil(400/p)`.
+Verify the pin is in place (`evidence pinned from ...`), the sample size
+matches `ceil(400/p)`, and the arm line reports `audit 200 keys in 2
+halves, natural 900 keys`.
 
 **Then activate**, changing nothing else:
 
@@ -463,8 +486,10 @@ are refused outright; a sampled mention with no row fails coverage.
 
 **The supplemental sets** (spec §7.3) are the two things the fresh audit is
 not: the original 200-row audit, both halves, and the locked natural test
-set. Both are required for a complete report. The format is one JSON object
-per line:
+set. Both are required for a complete report, and each must hold exactly
+the rows frozen at arming (§7), each once, in its frozen half -- a missing,
+extra, duplicated or re-halved row makes the report incomplete. The format
+is one JSON object per line:
 
 ```json
 {"key": "removal-17", "half": "removal", "truncated": false,
@@ -513,8 +538,10 @@ disagreement lists, against the exact report they inspected:
  "by": "michi", "at": "2026-09-16T18:00:00"}
 ```
 
-**`accept`** re-hashes every input the report names, recomputes the verdict
-from them and refuses a report that does not reproduce, checks the
+**`accept`** re-hashes every input the report names, recomputes the WHOLE
+report from them -- every interval, every disagreement list, every
+supplemental figure, not just the pass flag -- and refuses one that does
+not reproduce, checks the
 acknowledgments against this report's hash, checks the draw was between day
 3 and day 7 and the labels finished by day 7, and only then records the
 result. A failing report is accepted too: it stops the trial and starts
