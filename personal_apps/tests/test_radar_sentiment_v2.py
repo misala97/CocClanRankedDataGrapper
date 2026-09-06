@@ -75,8 +75,12 @@ class FakeBackend:
     supports_review = True
 
     def __init__(self, answers, id='zz-fake-backend', batch_size=20,
-                 pass_limit=400, usage=None):
+                 pass_limit=400, usage=None, writes_tone=True):
         self.id = id
+        # Declared, never defaulted: judge_backends.writes_tone refuses a
+        # backend that has no policy, so a fake without one would be a fake
+        # the production code would reject.
+        self.writes_tone = writes_tone
         self.batch_size = batch_size
         self.pass_limit = pass_limit
         self.answers = list(answers)
@@ -292,7 +296,7 @@ def test_apply_writes_history_final_fields_and_projection(clean_posts):
         mention_id = make_post('zztest-v2-a', body='love it, calls')
         written = llm_sentiment.apply_judgments(
             rows_for([mention_id]), {mention_id: ja()},
-            stage='primary', model='claude-haiku-4-5')
+            stage='primary', model='claude-haiku-4-5', write_tone=True)
         db.session.commit()      # apply never commits; the caller owns it
         assert written == 1
         m = db.session.get(RadarMention, mention_id)
@@ -314,13 +318,13 @@ def test_review_overwrites_primary_but_not_vice_versa(clean_posts):
         rows = rows_for([mention_id])
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='negative', move='down')},
-            stage='review', model=llm_sentiment.REVIEW_MODEL)
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         m = db.session.get(RadarMention, mention_id)
         assert m.sentiment_attitude == 'negative'    # review still stands
@@ -383,13 +387,13 @@ def test_a_standing_review_survives_a_later_primary_from_the_same_id(
         rows = rows_for([mention_id])
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=SAME_BACKEND)
+            stage='primary', model=SAME_BACKEND, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='negative', move='down')},
-            stage='review', model=SAME_BACKEND)
+            stage='review', model=SAME_BACKEND, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=SAME_BACKEND)
+            stage='primary', model=SAME_BACKEND, write_tone=True)
         db.session.commit()
 
         m = db.session.get(RadarMention, mention_id)
@@ -413,10 +417,10 @@ def test_two_primaries_under_the_review_id_do_not_protect_each_other(
         rows = rows_for([mention_id])
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.REVIEW_MODEL)
+            stage='primary', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='negative', move='down')},
-            stage='primary', model=llm_sentiment.REVIEW_MODEL)
+            stage='primary', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         db.session.commit()
 
         m = db.session.get(RadarMention, mention_id)
@@ -433,14 +437,14 @@ def test_another_mentions_review_cannot_protect_this_one(clean_posts):
         llm_sentiment.apply_judgments(
             rows_for([reviewed_id]), {reviewed_id: ja(attitude='negative',
                                                       move='down')},
-            stage='review', model=llm_sentiment.REVIEW_MODEL)
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         db.session.commit()
 
         both = rows_for([reviewed_id, plain_id])
         llm_sentiment.apply_judgments(
             both, {reviewed_id: ja(attitude='positive'),
                    plain_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
 
         assert db.session.get(
@@ -465,7 +469,7 @@ def test_an_older_prompt_generations_review_does_not_protect(clean_posts):
 
         llm_sentiment.apply_judgments(
             rows_for([mention_id]), {mention_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
 
         m = db.session.get(RadarMention, mention_id)
@@ -481,11 +485,11 @@ def test_the_review_lookup_sees_an_uncommitted_review(clean_posts):
         rows = rows_for([mention_id])
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='negative', move='down')},
-            stage='review', model=llm_sentiment.REVIEW_MODEL)
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         # No commit here, deliberately.
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
 
         m = db.session.get(RadarMention, mention_id)
@@ -500,7 +504,7 @@ def test_the_stage_lookup_is_one_query_for_the_whole_batch(clean_posts):
         with history_selects() as seen:
             llm_sentiment.apply_judgments(
                 rows, answers, stage='primary',
-                model=llm_sentiment.PRIMARY_MODEL)
+                model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         assert len(seen) == 1, seen
 
@@ -509,7 +513,7 @@ def test_the_stage_lookup_is_one_query_for_the_whole_batch(clean_posts):
         with history_selects() as seen:
             llm_sentiment.apply_judgments(
                 rows, answers, stage='review',
-                model=llm_sentiment.REVIEW_MODEL)
+                model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         db.session.commit()
         assert seen == []
 
@@ -524,7 +528,7 @@ def test_a_previous_primary_id_stays_eligible_for_review(clean_posts,
         old_id = make_post('zztest-stage-oldbackend')
         llm_sentiment.apply_judgments(
             rows_for([old_id]), {old_id: ja(confidence='low')},
-            stage='primary', model='claude-haiku-4-4-retired')
+            stage='primary', model='claude-haiku-4-4-retired', write_tone=True)
         db.session.commit()
 
         got = [mention.id for mention, _post
@@ -539,10 +543,10 @@ def test_a_standing_review_leaves_the_pool_whatever_id_wrote_it(
         rows = rows_for([mention_id])
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(confidence='low')},
-            stage='primary', model=SAME_BACKEND)
+            stage='primary', model=SAME_BACKEND, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(confidence='low')},
-            stage='review', model=SAME_BACKEND)
+            stage='review', model=SAME_BACKEND, write_tone=True)
         db.session.commit()
 
         got = [mention.id for mention, _post
@@ -555,7 +559,7 @@ def test_an_unjudged_mention_stays_null(clean_posts):
         mention_id = make_post('zztest-v2-c')
         written = llm_sentiment.apply_judgments(
             rows_for([mention_id]), {}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         assert written == 0
         m = db.session.get(RadarMention, mention_id)
@@ -582,7 +586,7 @@ def test_final_eligibility_maps_the_materialized_fields(clean_posts):
         for answer_, expected in cases:
             llm_sentiment.apply_judgments(rows, {mention_id: answer_},
                                           stage='review',
-                                          model=llm_sentiment.REVIEW_MODEL)
+                                          model=llm_sentiment.REVIEW_MODEL, write_tone=True)
             db.session.commit()
             assert llm_sentiment.final_eligibility(m) is expected, answer_
 
@@ -595,12 +599,12 @@ def test_a_sonnet_reversal_restores_eligibility(clean_posts):
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(relevance='irrelevant', attitude='none',
                                   move='unknown')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         assert llm_sentiment.final_eligibility(m) is False
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja()}, stage='review',
-            model=llm_sentiment.REVIEW_MODEL)
+            model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         db.session.commit()
         assert llm_sentiment.final_eligibility(m) is True
 
@@ -611,7 +615,7 @@ def test_pending_v2_targets_unjudged_v2_not_legacy(clean_posts):
         judged = make_post('zztest-v2-g')
         llm_sentiment.apply_judgments(
             rows_for([judged]), {judged: ja()}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         # pending() is the activated v2 selection (pending_v2 aliases it):
         # keyed on sentiment_judged_at, so a legacy verdict does not hide
@@ -689,19 +693,19 @@ def test_review_candidates_orders_by_priority_and_skips_reviewed(clean_posts):
         untriggered = make_post('zztest-rc-none')
         llm_sentiment.apply_judgments(
             rows_for([low_conf]), {low_conf: ja(confidence='low')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([uncertain]), {uncertain: ja(relevance='uncertain')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([reviewed]), {reviewed: ja(confidence='low')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([reviewed]), {reviewed: ja()},
-            stage='review', model=llm_sentiment.REVIEW_MODEL)
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([untriggered]), {untriggered: ja()},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
 
         got = [mention.id for mention, _post
@@ -779,7 +783,7 @@ def primary_judged(external_id, confidence='low'):
     mention_id = make_post(external_id)
     llm_sentiment.apply_judgments(
         rows_for([mention_id]), {mention_id: ja(confidence=confidence)},
-        stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
     db.session.commit()
     return mention_id
 
@@ -826,7 +830,7 @@ def test_the_ceiling_caps_on_attempted_and_priority_wins(
         uncertain = make_post('zztest-rv-cap-b')
         llm_sentiment.apply_judgments(
             rows_for([uncertain]), {uncertain: ja(relevance='uncertain')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         # Pin the fixture arithmetic: 2 primary judgments, share 0.5 ->
         # budget for exactly one. _primary_count is the seam so the real
@@ -918,13 +922,13 @@ def test_rejudge_selects_exactly_the_non_current_versions(clean_posts):
         current = make_post('zztest-rj-cur')
         llm_sentiment.apply_judgments(
             rows_for([current]), {current: ja()}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         # A row judged under an older prompt version.
         stale = make_post('zztest-rj-stale')
         llm_sentiment.apply_judgments(
             rows_for([stale]), {stale: ja()}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         m = db.session.get(RadarMention, stale)
         m.sentiment_prompt_version = 'radar-sentiment-v1-retired'
@@ -958,7 +962,7 @@ def test_rejudge_keeps_history_and_overwrites_the_projection(clean_posts):
                 if mention.id == stale]
         written = llm_sentiment.apply_judgments(
             ours, {stale: ja(attitude='positive')}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         assert written == 1
         m = db.session.get(RadarMention, stale)
@@ -976,7 +980,7 @@ def test_cost_projection_uses_measured_history_when_present(clean_posts):
         llm_sentiment.apply_judgments(
             rows_for([mention_id]),
             {mention_id: ja(input_tokens=1000, output_tokens=100)},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         per = rejudge.measured_tokens_per_mention()
         assert per is not None

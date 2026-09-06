@@ -53,6 +53,7 @@ class JudgeBackend(typing.Protocol):
     batch_size: int         # items per judge_batch call
     pass_limit: int         # items one scheduled pass will take
     supports_review: bool   # may this backend serve the review role
+    writes_tone: bool       # may its attitude reach the columns readers see
 
     def judge_batch(self, batch: list, *, preamble: str | None = None
                     ) -> tuple[dict[typing.Any, Judgment], Usage]:
@@ -78,6 +79,7 @@ class AnthropicBackend:
     """
 
     supports_review = True
+    writes_tone = True
     # The hosted sizes, still owned by llm_sentiment: 20 per call, 400 per
     # scheduled pass. A backend with different economics carries its own.
     batch_size = BATCH_SIZE
@@ -185,6 +187,14 @@ class EncoderBackend:
     """
 
     supports_review = False       # it has no independent second opinion to give
+    # Its relevance and content_origin verdicts take effect -- they are what
+    # the evidence supports -- but its attitude never reaches a column any
+    # reader sees. Tone is the one field a post card shows, the encoder
+    # reversed polarity on 3 of 54 directional rows where Haiku reversed
+    # none, and the trial's own gates deliberately do not test attitude. It
+    # is judged and stored in history for evaluation, and is absent from
+    # production by construction rather than by a display rule.
+    writes_tone = False
     batch_size = ENCODER_BATCH_SIZE
     pass_limit = ENCODER_PASS_LIMIT
 
@@ -367,6 +377,31 @@ def construct_backend(spec, *, effort=None, artifact_dir=None):
             raise ValueError('anthropic backend spec names no model: %r' % spec)
         return AnthropicBackend(model, effort=effort)
     raise ValueError('unknown judge backend spec: %r' % spec)
+
+
+def writes_tone(backend):
+    """Whether this backend's tone may be materialized.
+
+    Read off the backend rather than defaulted, and with no fallback: a new
+    backend that forgets to declare a tone policy must fail here, not
+    quietly acquire the permissive one and start writing what readers see.
+    """
+    try:
+        return bool(backend.writes_tone)
+    except AttributeError:
+        raise ValueError('backend %r declares no tone policy'
+                         % getattr(backend, 'id', backend))
+
+
+def writes_tone_for_model(model_id):
+    """The same question about a STORED id, for rows already on disk.
+
+    PURE -- it constructs nothing. Review routing needs it to decide
+    whether a mention's own tone columns belong to the same judgment as its
+    relevance columns, which is false for anything the encoder wrote during
+    a suppressed-tone trial.
+    """
+    return model_id != ENCODER_MODEL_ID
 
 
 def backend_label(model_id):

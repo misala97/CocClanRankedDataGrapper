@@ -143,7 +143,8 @@ def run(apply=False, limit=2000):
                          input_tokens=meter['input'],
                          output_tokens=meter['output'])
             written = llm_sentiment.apply_judgments(
-                rows, judgments, stage='primary', model=backend.id)
+                rows, judgments, stage='primary', model=backend.id,
+                write_tone=judge_backends.writes_tone(backend))
             changed = llm_sentiment._sync_eligibility(rows, judgments)
             db.session.commit()
             llm_sentiment._rebuild_corrected(changed)

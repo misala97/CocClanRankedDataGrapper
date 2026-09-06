@@ -400,7 +400,7 @@ def reviewed_at_this_version(mention_ids):
     return {mention_id for (mention_id,) in rows}
 
 
-def apply_judgments(rows, judgments, stage, model):
+def apply_judgments(rows, judgments, stage, model, *, write_tone):
     """Write the answers that arrived, and only those. Returns how many.
 
     History is append-only. Final fields: review always wins; a primary
@@ -412,6 +412,20 @@ def apply_judgments(rows, judgments, stage, model):
     from the materialized fields and commits both together -- one
     transaction, so a crash can never leave the mention saying
     'irrelevant' while the journal still counts it.
+
+    `write_tone` is REQUIRED and comes from the backend's declared policy,
+    never from a literal at the call site. False means: write relevance,
+    content_origin and the provenance stamps, append the COMPLETE five-field
+    history row, and leave `sentiment_attitude`, `sentiment_expected_move`,
+    `sentiment_confidence` and `llm_sentiment` exactly as they were.
+
+    Four surfaces read attitude -- the post cards, the detail breakdown,
+    board.py's bull/bear CASE, and the legacy projection column -- so
+    excluding a backend's tone by relabelling any one of them would leave
+    the other three showing it. Not writing the column is the only exclusion
+    that holds everywhere at once, and it makes the absence a fact about the
+    database rather than a rule somebody has to remember. Suppression
+    PRESERVES what is already there; it never clears it.
     """
     now = dt.datetime.utcnow()
     by_id = {mention.id: mention for mention, _post in rows}
@@ -440,13 +454,14 @@ def apply_judgments(rows, judgments, stage, model):
         if not review_stands:
             mention.sentiment_relevance = j.relevance
             mention.sentiment_content_origin = j.content_origin
-            mention.sentiment_attitude = j.attitude
-            mention.sentiment_expected_move = j.expected_move
-            mention.sentiment_confidence = j.confidence
             mention.sentiment_model = model
             mention.sentiment_prompt_version = PROMPT_VERSION
             mention.sentiment_judged_at = now
-            mention.llm_sentiment = legacy_projection(j)
+            if write_tone:
+                mention.sentiment_attitude = j.attitude
+                mention.sentiment_expected_move = j.expected_move
+                mention.sentiment_confidence = j.confidence
+                mention.llm_sentiment = legacy_projection(j)
         written += 1
     if written:
         db.session.flush()
@@ -515,12 +530,62 @@ def review_priority(judgment, local_score):
     return 3
 
 
-def _judgment_of(mention):
-    return Judgment(relevance=mention.sentiment_relevance,
-                    content_origin=mention.sentiment_content_origin,
-                    attitude=mention.sentiment_attitude,
-                    expected_move=mention.sentiment_expected_move,
-                    confidence=mention.sentiment_confidence)
+def latest_primary_history(mention_ids):
+    """The newest primary judgment per mention at the current prompt version.
+
+    One query for the whole candidate set. Ordered by
+    (created_utc DESC, id DESC) because the timestamp alone does not break
+    ties -- apply_judgments stamps an entire batch with one `now`, so
+    "latest" would otherwise be whichever row the database happened to
+    return first.
+    """
+    mention_ids = list(mention_ids)
+    if not mention_ids:
+        return {}
+    rows = (db.session.query(RadarSentimentJudgment)
+            .filter(RadarSentimentJudgment.mention_id.in_(mention_ids),
+                    RadarSentimentJudgment.stage == 'primary',
+                    RadarSentimentJudgment.prompt_version == PROMPT_VERSION)
+            .order_by(RadarSentimentJudgment.mention_id,
+                      RadarSentimentJudgment.created_utc.desc(),
+                      RadarSentimentJudgment.id.desc()).all())
+    latest = {}
+    for row in rows:
+        latest.setdefault(row.mention_id, row)
+    return latest
+
+
+def _judgment_of(mention, primary_history=None):
+    """The primary answer the review triggers should read, or None.
+
+    From the HISTORY row, all five fields together. The mention's own
+    columns are not a substitute while a tone-suppressed backend is
+    judging: its attitude columns then hold an OLDER answer, or nothing at
+    all, and taking relevance from one judgment and attitude from another
+    produces a judgment nobody ever made -- which would then route review
+    spend at a contradiction that does not exist.
+
+    The mention is used only when there is no history row for this prompt
+    generation AND its own stored judgment can be trusted whole: written by
+    a backend whose tone belongs with its relevance, and complete. That is
+    the pre-history-table row, and it is a real case. Anything else returns
+    None and the caller skips it visibly rather than inventing an answer.
+    """
+    if primary_history is not None:
+        return Judgment(relevance=primary_history.relevance,
+                        content_origin=primary_history.content_origin,
+                        attitude=primary_history.attitude,
+                        expected_move=primary_history.expected_move,
+                        confidence=primary_history.confidence)
+    from . import judge_backends
+    if not judge_backends.writes_tone_for_model(mention.sentiment_model):
+        return None
+    judgment = Judgment(relevance=mention.sentiment_relevance,
+                        content_origin=mention.sentiment_content_origin,
+                        attitude=mention.sentiment_attitude,
+                        expected_move=mention.sentiment_expected_move,
+                        confidence=mention.sentiment_confidence)
+    return judgment if _enums_valid(judgment) else None
 
 
 def review_candidates(now, limit=PASS_LIMIT):
@@ -557,13 +622,26 @@ def review_candidates(now, limit=PASS_LIMIT):
                     ~reviewed.exists())
             .order_by(RadarPost.created_utc.desc())
             .limit(limit * 5).all())
+    history = latest_primary_history([mention.id for mention, _post in rows])
     selected = []
+    unreadable = []
     for mention, post in rows:
-        judgment = _judgment_of(mention)
+        judgment = _judgment_of(mention, history.get(mention.id))
+        if judgment is None:
+            unreadable.append(mention.id)
+            continue
         if needs_review(judgment, mention.lexicon_sentiment):
             selected.append((review_priority(judgment,
                                              mention.lexicon_sentiment),
                              mention, post))
+    if unreadable:
+        # Loud, and once per pass rather than once per row: a candidate the
+        # router cannot read is a gap in the evidence, not a routine skip.
+        logger.warning('radar review: %d candidates have no readable primary '
+                       'judgment at %s and were skipped (%s%s)',
+                       len(unreadable), PROMPT_VERSION,
+                       ', '.join(str(i) for i in unreadable[:5]),
+                       ' ...' if len(unreadable) > 5 else '')
     selected.sort(key=lambda entry: entry[0])
     return [(mention, post) for _p, mention, post in selected[:limit]]
 
@@ -630,6 +708,7 @@ def run_pass(backend=None, limit=None, now=None):
     what gets booked and stored, so provenance and spend follow whoever
     actually answered.
     """
+    from . import judge_backends
     backend = backend or default_primary_backend()
     limit = backend.pass_limit if limit is None else limit
     now = now or dt.datetime.utcnow()
@@ -657,7 +736,8 @@ def run_pass(backend=None, limit=None, now=None):
     spend.record(backend.id, calls=meter['calls'],
                  input_tokens=meter['input'], output_tokens=meter['output'])
     written = apply_judgments(rows, judgments, stage='primary',
-                              model=backend.id)
+                              model=backend.id,
+                              write_tone=judge_backends.writes_tone(backend))
     changed = _sync_eligibility(rows, judgments)
     db.session.commit()
     _rebuild_corrected(changed)
@@ -726,6 +806,7 @@ def run_review_pass(backend=None, now=None):
     mode = os.getenv('RADAR_SONNET_REVIEW', '').strip()
     if mode not in ('shadow', '1', 'true', 'True'):
         return 0
+    from . import judge_backends
     backend = backend or default_review_backend()
     now = now or dt.datetime.utcnow()
     # UTC day from the pass's own clock, not the machine's local calendar
@@ -785,8 +866,13 @@ def run_review_pass(backend=None, now=None):
                       preamble=REVIEW_PREAMBLE)
     spend.record(backend.id, calls=meter['calls'],
                  input_tokens=meter['input'], output_tokens=meter['output'])
+    # The review backend's OWN policy. An enabled Anthropic review judges
+    # the prepared text independently and writes its own five fields; it
+    # never inherits a suppression that belongs to the primary, and never
+    # promotes a stored encoder answer into a review verdict.
     written = apply_judgments(take, judgments, stage='review',
-                              model=backend.id)
+                              model=backend.id,
+                              write_tone=judge_backends.writes_tone(backend))
     # A review REVERSAL must restore counting in the same transaction the
     # verdict lands in.
     changed = _sync_eligibility(take, judgments)
