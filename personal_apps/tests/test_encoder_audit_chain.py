@@ -364,9 +364,13 @@ def test_evaluate_refuses_labels_that_are_not_the_sample(trial, tmp_path,
     file that is not it is refused outright."""
     out, _labels, _report, _ = chain(tmp_path, monkeypatch)
     os.remove(os.path.join(out, cli.REPORT_JSON))
-    foreign = write_labels(tmp_path / 'foreign.jsonl',
-                           {1000000 + i: dict(REMOVED) for i in range(SIZE)})
-    assert cli.main(evaluate_args(out, foreign)) == 1
+    # Every sampled row correctly labelled AND five strays: the only thing
+    # wrong with this file is that it is not exactly the sample, so the
+    # only way to refuse it is the membership check itself.
+    rows = {key: dict(REMOVED) for key in sampled_ids(out)}
+    rows.update({1000000 + i: dict(REMOVED) for i in range(5)})
+    superset = write_labels(tmp_path / 'superset.jsonl', rows)
+    assert cli.main(evaluate_args(out, superset)) == 1
     assert not os.path.exists(os.path.join(out, cli.REPORT_JSON))
 
 
