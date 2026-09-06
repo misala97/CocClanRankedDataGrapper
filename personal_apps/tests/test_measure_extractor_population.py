@@ -159,3 +159,27 @@ def test_common_words_cover_name_length_words(tmp_path):
                    + [_line('t1_c%d' % i, 'People love Money') for i in range(2)])
     common = pop.common_words(raw, min_posts=1)
     assert 'people' in common and 'money' in common
+
+
+def test_a_name_token_that_is_itself_a_symbol_names_nobody():
+    """'ProShares Ultra NVDA' gives NVDB the token `nvda`; a post writing
+    NVDA is a symbol mention, not a name for the leveraged fund."""
+    lookup = annotate_distinctive({
+        'NVDA': {'name': 'NVIDIA Corporation - Common Stock', 'exchange': 'NASDAQ'},
+        'NVDB': {'name': 'ProShares Ultra NVDA', 'exchange': 'NASDAQ'},
+        'SPCF': {'name': 'ProShares Ultra SpaceX', 'exchange': 'NASDAQ'},
+    })
+    row = pop.classify(_line('t1_q', 'NVDA and SpaceX both ripping'), lookup, NOT_COMMON)
+    assert [m['ticker'] for m in row['accepted']] == ['NVDA']
+    assert row['rejected'] == []
+
+
+def test_a_debt_listing_does_not_name_its_issuer_by_its_due_month():
+    lookup = annotate_distinctive({
+        'TMUSI': {'name': 'T-Mobile US, Inc. - 5.500% Senior Notes due June 2070',
+                  'exchange': 'NASDAQ'},
+        'ENO': {'name': 'Entergy New Orleans, LLC First Mortgage Bonds, 5.50% Series due April 1, 2066',
+                'exchange': 'NYSE'},
+    })
+    row = pop.classify(_line('t1_r', 'June and April were rough'), lookup, NOT_COMMON)
+    assert row['rejected'] == []

@@ -113,25 +113,45 @@ def common_words(raw_dir, min_posts=DEFAULT_MIN_POSTS, lower_share=DEFAULT_LOWER
 
 # ---- one post ----------------------------------------------------------------
 
+# Listings whose names carry tokens that are not the issuer's name: a
+# leveraged single-stock fund named after its underlying's SYMBOL
+# ('ProShares Ultra NVDA' hands NVDB the token `nvda`), and a debt
+# listing whose distinctive token is its due month ('Senior Notes due June
+# 2070'). universe.is_pooled_vehicle misses the first and has no view of
+# the second; both are production findings for the precision round, kept
+# local here so the measurement is not polluted meanwhile.
+_NOT_AN_ISSUER_RE = re.compile(
+    r'\b(ultra|ultrashort|proshares|direxion)\b'
+    r'|\b(notes?|bonds?|debentures?)\b.*\bdue\b', re.IGNORECASE)
+
+
 def _name_index(lookup):
-    """distinctive token -> symbol, for tokens naming exactly ONE symbol."""
+    """distinctive token -> symbol, for tokens naming exactly ONE symbol.
+
+    A token that is itself a symbol in the universe names nobody: a post
+    writing it is a symbol mention, handled by the symbol path."""
     index = collections.defaultdict(set)
     for symbol, entry in lookup.items():
+        if _NOT_AN_ISSUER_RE.search(entry.get('name') or ''):
+            continue
         for token in entry.get('distinctive') or ():
+            if token.upper() in lookup:
+                continue
             index[token].add(symbol)
     return {token: next(iter(symbols)) for token, symbols in index.items()
             if len(symbols) == 1}
 
 
-_NAME_INDEX_CACHE = {}
+_NAME_INDEX_CACHE = []      # [lookup, index]: one lookup per process in practice
 
 
 def _names_for(lookup):
-    key = id(lookup)
-    if key not in _NAME_INDEX_CACHE:
-        _NAME_INDEX_CACHE.clear()
-        _NAME_INDEX_CACHE[key] = _name_index(lookup)
-    return _NAME_INDEX_CACHE[key]
+    # Compared by identity while holding the lookup, so a reused id after
+    # garbage collection (the test suite builds many small lookups) can
+    # never hand back a stale index.
+    if not _NAME_INDEX_CACHE or _NAME_INDEX_CACHE[0] is not lookup:
+        _NAME_INDEX_CACHE[:] = [lookup, _name_index(lookup)]
+    return _NAME_INDEX_CACHE[1]
 
 
 def classify(line, lookup, is_common):
