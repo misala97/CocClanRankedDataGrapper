@@ -69,9 +69,12 @@ def test_a_lowercase_word_that_is_common_is_not_a_candidate():
     assert ('APP', 'lowercase_symbol') not in causes
 
 
-def test_a_name_written_lowercase_does_not_count_as_naming():
+def test_a_lowercase_name_nobody_writes_as_a_word_is_a_candidate():
+    """Reversed on purpose: requiring the capital cost `my gopro broke` and
+    `do not buy moderna today`, and the capital was never the evidence --
+    being a word rather than a name is, and the corpus's casing says which."""
     row = pop.classify(_line('t1_e', 'my gopro broke'), LOOKUP, NOT_COMMON)
-    assert row['rejected'] == []
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('GPRO', 'name_only')]
 
 
 def test_an_accepted_ticker_is_never_also_a_rejected_candidate():
@@ -202,3 +205,83 @@ def test_every_accepted_mention_is_written_with_its_provenance(tmp_path):
     assert by_id['t1_b']['in_thread_context'] is True
     assert set(by_id['t1_b']) >= {'source', 'kind', 'created_utc', 'confidence', 'title',
                                   'author_text'}
+
+
+# --- the loose pass's own blind spots, found by scanning the posts where it
+# --- produced nothing at all (2,161 of 141,440 held a company reference).
+
+# Padded to a dozen listings on purpose: annotate_distinctive's ceiling is
+# a RATIO of the universe, so in a six-symbol lookup only single-issuer
+# tokens survive and `apple` would be gone before this module sees it.
+APPLE_LOOKUP = annotate_distinctive({
+    'PAD%d' % i: {'name': 'Padding %d Industries' % i, 'exchange': 'NYSE'}
+    for i in range(12)} | {
+    'AAPL': {'name': 'Apple Inc. - Common Stock', 'exchange': 'NASDAQ'},
+    'APLE': {'name': 'Apple Hospitality REIT, Inc. Common Shares', 'exchange': 'NYSE'},
+    'GOOGL': {'name': 'Alphabet Inc. Class A Common Stock', 'exchange': 'NASDAQ'},
+    'GOOG': {'name': 'Alphabet Inc. Class C Capital Stock', 'exchange': 'NASDAQ'},
+    'MRNA': {'name': 'Moderna, Inc. - Common Stock', 'exchange': 'NASDAQ'},
+    'META': {'name': 'Meta Platforms, Inc. - Class A Common Stock', 'exchange': 'NASDAQ'},
+})
+
+
+def test_a_name_shared_by_a_few_symbols_still_names_them():
+    """`apple` is Apple Inc and Apple Hospitality REIT, so requiring exactly
+    one symbol deleted the largest company on the board. A handful of
+    claimants is an ambiguity for the judge to settle, not a reason to see
+    nothing."""
+    row = pop.classify(_line('t1_a', 'I think Apple had a good quarter'),
+                       APPLE_LOOKUP, NOT_COMMON)
+    causes = {(c['symbol'], c['cause']) for c in row['rejected']}
+    assert ('AAPL', 'name_only') in causes
+    assert ('APLE', 'name_only') in causes
+
+
+def test_a_name_claimed_by_too_many_symbols_still_names_nobody():
+    lookup = annotate_distinctive({
+        'A%03d' % i: {'name': 'Zeta %d Corp' % i, 'exchange': 'NYSE'} for i in range(9)})
+    row = pop.classify(_line('t1_b', 'Zeta again'), lookup, NOT_COMMON)
+    assert row['rejected'] == []
+
+
+def test_a_brand_the_legal_name_never_carries_is_still_a_candidate():
+    """Alphabet's listings never say Google; Meta's never say Facebook."""
+    row = pop.classify(_line('t1_c', 'Google is cheap and Facebook is not'),
+                       APPLE_LOOKUP, NOT_COMMON)
+    causes = {(c['symbol'], c['cause']) for c in row['rejected']}
+    assert ('GOOGL', 'name_only') in causes
+    assert ('META', 'name_only') in causes
+
+
+def test_a_person_who_stands_for_a_company_is_a_candidate():
+    row = pop.classify(_line('t1_d', 'I would buy if Zuck leaves for good'),
+                       APPLE_LOOKUP, NOT_COMMON)
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('META', 'metonym')]
+
+
+def test_a_distinctive_name_written_lowercase_is_a_candidate():
+    """'do not buy moderna today' is unmistakably real; requiring the
+    capital M was a rule about typing, not about meaning."""
+    row = pop.classify(_line('t1_e', 'do not buy moderna today'), APPLE_LOOKUP, NOT_COMMON)
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('MRNA', 'name_only')]
+
+
+def test_a_name_that_is_an_ordinary_word_needs_a_capital_mid_sentence():
+    """Where the name IS a word, the capital is the only evidence there is
+    -- and a capital at a sentence start is grammar, not evidence. `People`
+    opening a sentence named PPLI 93 times in one captured day; `Apple` in
+    the middle of one is the company."""
+    common = lambda word: word in {'apple'}   # noqa: E731
+    row = pop.classify(_line('t1_f', 'i ate an apple'), APPLE_LOOKUP, common)
+    assert row['rejected'] == []
+    row = pop.classify(_line('t1_g', 'Apple had a good quarter'), APPLE_LOOKUP, common)
+    assert row['rejected'] == []
+    row = pop.classify(_line('t1_h', 'I think Apple had a good quarter'),
+                       APPLE_LOOKUP, common)
+    assert {c['symbol'] for c in row['rejected']} == {'AAPL', 'APLE'}
+
+
+def test_a_misspelled_name_is_a_candidate():
+    lookup = annotate_distinctive({'NVDA': {'name': 'NVIDIA Corporation', 'exchange': 'NASDAQ'}})
+    row = pop.classify(_line('t1_h', 'nvdia to the moon'), lookup, NOT_COMMON)
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('NVDA', 'name_only')]

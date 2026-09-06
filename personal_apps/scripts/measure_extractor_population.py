@@ -25,8 +25,11 @@ REJECTION CAUSES (one row per post x symbol in rejected-candidates.jsonl)
                                and not reprieved by its company name
     lowercase_symbol           `nvda`, `soxl`: a universe symbol written in
                                lowercase, and NOT an ordinary word of the corpus
-    name_only                  the company named, Capitalised as written
-                               (Nvidia, GoPro), with no symbol anywhere
+    name_only                  the company named -- its own name, a brand its
+                               listing never carries (Google, Facebook), or a
+                               common misspelling -- with no symbol anywhere
+    metonym                    a person who stands for the company (Zuck,
+                               Bezos, Jensen), with no symbol anywhere
     cashtag_not_in_universe    `$SKHY`, `$BTC`: explicit notation for a symbol
                                the universe does not hold
     single_letter_cashtag      `$F` on a source that refuses one-letter cashtags
@@ -66,10 +69,40 @@ DEFAULT_MIN_POSTS = 10          # below this a token's casing proves nothing
 DEFAULT_LOWER_SHARE = 0.5       # written lowercase at least this often = an ordinary word
 TEXT_MAX = 2000                 # what the label harness shows a labeller
 
+# A name may be claimed by a few listings and still mean something -- `apple`
+# is Apple Inc and Apple Hospitality REIT, `alphabet` four Google share
+# classes -- so the index keeps a small set and lets the judge settle it.
+# Requiring exactly one claimant deleted the largest companies on the board
+# from the candidate set entirely. Above the ceiling a token is boilerplate.
+MAX_NAME_CLAIMANTS = 4
+
+# Names no listing carries, and misspellings the archive is full of. Written
+# out rather than derived: an issuer's brand is not in its legal name, and
+# nothing in the universe knows that Meta was Facebook. A person stands for a
+# company only where the chatter genuinely uses them that way; each of these
+# was counted in the posts the loose pass produced nothing for.
+NAME_ALIASES = {
+    'google': 'GOOGL', 'facebook': 'META', 'berkshire': 'BRK/B',
+    'nvdia': 'NVDA', 'nvidea': 'NVDA', 'teslas': 'TSLA',
+    'mcdonalds': 'MCD', "mcdonald's": 'MCD',
+}
+METONYMS = {
+    'zuck': 'META', 'zuckerberg': 'META', 'bezos': 'AMZN', 'musk': 'TSLA',
+    'jensen': 'NVDA', 'buffett': 'BRK/B', 'cook': None, 'huang': 'NVDA',
+}
+
 _CASHTAG_RE = re.compile(CASHTAG_PATTERN)
 _BARE_RE = re.compile(BARE_PATTERN)
 _LOWER_RE = re.compile(r'(?<![$A-Za-z0-9])([a-z]{3,5})\b')
 _WRITTEN_RE = re.compile(r"(?<![A-Za-z])([A-Z][A-Za-z']{3,})(?![A-Za-z])")
+_SENTENCE_START_RE = re.compile(r'(?:^\s*[-*>]?\s*|[.!?\n]["\')\]]?\s*)$')
+
+
+def _opens_a_sentence(text, index):
+    """Whether the token at `index` sits where a capital is merely grammar."""
+    return bool(_SENTENCE_START_RE.search(text[:index]))
+
+
 _TOKEN_RE = re.compile(r"(?<![A-Za-z])([A-Za-z][A-Za-z']{1,14})(?![A-Za-z])")
 
 
@@ -144,8 +177,12 @@ def _name_index(lookup):
             if token.upper() in lookup:
                 continue
             index[token].add(symbol)
-    return {token: next(iter(symbols)) for token, symbols in index.items()
-            if len(symbols) == 1}
+    resolved = {token: sorted(symbols) for token, symbols in index.items()
+                if len(symbols) <= MAX_NAME_CLAIMANTS}
+    for token, symbol in NAME_ALIASES.items():
+        if symbol in lookup:
+            resolved.setdefault(token, [symbol])
+    return resolved
 
 
 _NAME_INDEX_CACHE = []      # [lookup, index]: one lookup per process in practice
@@ -194,15 +231,42 @@ def classify(line, lookup, is_common):
         seen.add(symbol)
         row['rejected'].append({'symbol': symbol, 'cause': cause, 'evidence': evidence})
 
-    # Names as written: Capitalised distinctive tokens. Collected first so a
-    # lowercase-symbol candidate can carry the name evidence with it.
+    # Names, in whatever case the author typed. The capital used to be
+    # required and cost `do not buy moderna today`; what it was really
+    # guarding against is a name that is also an ordinary word, and the
+    # corpus's own casing already knows which those are -- so `apple` the
+    # fruit stays out while `Apple` the company comes in, and `moderna`,
+    # which nobody writes as a word, comes in either way. Collected first so
+    # a lowercase-symbol candidate can carry the name evidence with it.
     names = _names_for(lookup)
+    lowered = text.lower()
     named = {}
-    for written in _WRITTEN_RE.findall(text):
-        token = written.lower()
-        symbol = names.get(token)
-        if symbol and not is_common(token):
-            named.setdefault(symbol, written)
+    for match in _WRITTEN_RE.finditer(text):
+        token = match.group(1).lower()
+        # A capital at a sentence start is grammar, not evidence: `People`
+        # opening a sentence named PPLI 93 times in one captured day. Only
+        # word-shaped names need the distinction -- `Nvidia` is a name
+        # wherever it sits.
+        if is_common(token) and _opens_a_sentence(text, match.start()):
+            continue
+        for symbol in names.get(token, ()):
+            named.setdefault(symbol, match.group(1))
+    for token, symbols in names.items():
+        # Lowercase only where the token is not an ordinary word: `moderna`
+        # and `gopro` mean the company in any case, `apple` does not.
+        if is_common(token) or token not in lowered:
+            continue
+        if not re.search(r"(?<![A-Za-z])%s(?![A-Za-z])" % re.escape(token), lowered):
+            continue
+        for symbol in symbols:
+            named.setdefault(symbol, token)
+
+    metonyms = {}
+    for token, symbol in METONYMS.items():
+        if symbol is None or symbol not in lookup or symbol in named:
+            continue
+        if re.search(r"(?<![A-Za-z])%s(?![A-Za-z])" % re.escape(token), lowered):
+            metonyms.setdefault(symbol, token)
 
     for tag in _CASHTAG_RE.findall(text):
         if len(tag) == 1:
@@ -233,6 +297,9 @@ def classify(line, lookup, is_common):
 
     for symbol, written in named.items():
         reject(symbol, 'name_only', written)
+
+    for symbol, written in metonyms.items():
+        reject(symbol, 'metonym', written)
 
     return row
 
