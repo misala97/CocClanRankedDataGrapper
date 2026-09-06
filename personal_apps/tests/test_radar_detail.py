@@ -21,7 +21,7 @@ from extensions import db
 from features.radar import detail, detail_panel
 from features.radar.config import source_config_version
 from models import (RadarBucketSource, RadarDailyClose, RadarInstrument,
-                    RadarQuote, TickerUniverse)
+                    RadarMention, RadarQuote, TickerUniverse)
 
 NOW = dt.datetime(2026, 3, 12, 15, 0, 0)
 PREFIX = 'DT'
@@ -268,13 +268,44 @@ def test_the_panel_exposes_how_concentrated_the_talk_is(panel_ticker):
     assert abs(built.breakdown.top_author_share - 2 / 3) < 0.01
 
 
+def test_the_serialized_payload_carries_who_owns_each_tone(panel_ticker):
+    """serialize_detail unpacks the panel's post tuples positionally, and
+    nothing else in the suite exercises that unpacking -- widening them
+    without it would have reached the browser as a 500, not a red test.
+    """
+    from features.radar.routes import api
+
+    # One post whose tone belongs to something that is NOT Claude. Without
+    # it every label in this fixture is 'Claude' or None, and a serializer
+    # that recomputed the name from a literal would look identical to one
+    # that passed the panel's answer through.
+    mention = (RadarMention.query
+               .filter_by(ticker=f'{PREFIX}A')
+               .order_by(RadarMention.id).first())
+    mention.sentiment_attitude = 'positive'
+    mention.sentiment_tone_model = 'zz-some-other-backend'
+    db.session.commit()
+
+    built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
+    posts = api.serialize_detail(built)['posts']
+
+    assert len(posts) == built.post_total
+    # Pass-through, position by position: the panel decides the name, the
+    # serializer carries it.
+    assert [post['judged_label'] for post in posts] ==         [label for _post, _tone, _judged_by, label in built.posts]
+    assert 'model' in [post['judged_label'] for post in posts]
+    for post in posts:
+        # And the name is present exactly when a model decided the tone.
+        assert (post['judged_label'] is not None) ==             (post['judged_by'] == 'model'), post
+
+
 def test_the_panel_returns_the_posts_themselves(panel_ticker):
     """Newest first, with the link out. This is the zone that lets a reader
     form their own view instead of trusting the score."""
     built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
 
     assert built.post_total == 3
-    post, tone, _judged_by = built.posts[0]
+    post, tone, _judged_by, _label = built.posts[0]
     assert post.body == 'to the moon'
     assert post.url
     # The fixture's newest post carries a locally-bullish float and no
@@ -290,7 +321,8 @@ def test_each_post_carries_the_tone_the_tallies_use(panel_ticker):
     db.session.commit()
 
     built = detail_panel.build(f'{PREFIX}A', ['bluesky'], NOW)
-    tones = {post.external_id: tone for post, tone, _judged_by in built.posts}
+    tones = {post.external_id: tone
+             for post, tone, _judged_by, _label in built.posts}
 
     assert tones[f'{PREFIX}-tone-neg'] == 'bearish'    # attitude beats local
     assert tones[f'{PREFIX}-tone-none'] == 'neutral'   # decided, undirected
@@ -380,7 +412,7 @@ def test_confirmed_non_chatter_leaves_the_breakdown_and_the_post_list(
     # keep + uncertain count while the two excluded rows vanish.
     assert b.mentions == 5
     assert b.bullish == 3
-    posts = {p.external_id for p, _tone, _judged_by in panel.posts}
+    posts = {p.external_id for p, _tone, _judged_by, _label in panel.posts}
     assert f'{PREFIX}-elig-keep' in posts
     assert f'{PREFIX}-elig-uncertain' in posts
     assert f'{PREFIX}-elig-irrelevant' not in posts
@@ -1242,7 +1274,8 @@ def test_each_post_says_who_judged_it(judged_posts):
     posts, total = detail_panel._posts(ticker, ['bluesky'], NOW - dt.timedelta(hours=2), NOW)
 
     assert total == 5
-    by_author = {post.author: (tone, judged_by) for post, tone, judged_by in posts}
+    by_author = {post.author: (tone, judged_by)
+                 for post, tone, judged_by, _label in posts}
     assert by_author['ann'] == ('bullish', 'model')
     assert by_author['bob'] == ('neutral', 'model')
     assert by_author['cy'] == ('bearish', 'model')

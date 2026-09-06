@@ -495,3 +495,209 @@ def test_the_pass_takes_its_tone_policy_from_the_backend(clean_posts,
         history = RadarSentimentJudgment.query.filter_by(
             mention_id=mention_id).one()
         assert history.attitude == 'negative'
+
+
+# ---- 12. tone provenance ----------------------------------------------------
+#
+# `sentiment_model` answers "who judged this mention". Once a backend can
+# judge relevance without writing tone, that stops answering "whose tone is
+# on screen" -- and the post card was printing a hardcoded 'Claude' for
+# both. These pin the second question apart from the first.
+
+def test_a_suppressed_write_leaves_tone_provenance_alone(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-prov-fresh')
+        judge_as([mention_id], {mention_id: ja()})
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_model == ENCODER
+        assert m.sentiment_tone_model is None
+
+
+def test_tone_provenance_is_written_with_the_tone(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-prov-haiku')
+        judge_as([mention_id], {mention_id: ja()}, model=HAIKU,
+                 write_tone=True)
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_tone_model == HAIKU
+
+
+def test_a_suppressed_write_preserves_an_existing_tone_owner(clean_posts):
+    """The board is still showing Haiku's tone, so the row must still say
+    Haiku owns it -- even though the encoder judged the mention last."""
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-prov-keep')
+        judge_as([mention_id], {mention_id: ja()}, model=HAIKU,
+                 write_tone=True)
+        judge_as([mention_id], {mention_id: ja(attitude='negative')})
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_model == ENCODER
+        assert m.sentiment_tone_model == HAIKU
+        assert m.sentiment_attitude == 'positive'
+
+
+def test_a_review_takes_over_tone_ownership(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-prov-review')
+        judge_as([mention_id], {mention_id: ja()}, model=HAIKU,
+                 write_tone=True)
+        judge_as([mention_id], {mention_id: ja(attitude='negative')},
+                 model=SONNET, stage='review', write_tone=True)
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_tone_model == SONNET
+
+
+def test_a_blocked_primary_does_not_touch_tone_ownership(clean_posts):
+    """The standing-review guard covers provenance too."""
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-prov-blocked')
+        judge_as([mention_id], {mention_id: ja()}, model=SONNET,
+                 stage='review', write_tone=True)
+        judge_as([mention_id], {mention_id: ja(attitude='negative')},
+                 model=HAIKU, write_tone=True)
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_tone_model == SONNET
+        assert m.sentiment_model == SONNET
+
+
+# ---- 13. what production was showing when the encoder answered --------------
+
+def test_a_suppressed_history_row_records_the_displayed_tone(clean_posts):
+    """The five fields are what the encoder SAID; these three are what
+    production DID. The trial's tone comparison needs both halves."""
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-diag', lexicon=0.8)
+        judge_as([mention_id], {mention_id: ja(attitude='negative',
+                                               move='down')})
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).one()
+        assert history.attitude == 'negative'          # what it said
+        assert history.displayed_tone == 'bullish'     # what was on screen
+        assert history.displayed_judged_by == 'lexicon'
+        assert history.displayed_tone_model is None
+
+
+def test_the_diagnostics_record_a_preserved_model_tone(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-diag-model', lexicon=0.8)
+        judge_as([mention_id], {mention_id: ja(attitude='positive')},
+                 model=HAIKU, write_tone=True)
+        judge_as([mention_id], {mention_id: ja(attitude='negative',
+                                               move='down')})
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id, model=ENCODER).one()
+        assert history.displayed_tone == 'bullish'
+        assert history.displayed_judged_by == 'model'
+        assert history.displayed_tone_model == HAIKU
+
+
+def test_an_unscored_mention_records_neutral_not_null(clean_posts):
+    """'neutral' is what the card shows for a mention nothing has scored,
+    so that is what production was displaying."""
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-diag-none')
+        m = db.session.get(RadarMention, mention_id)
+        m.lexicon_sentiment = None
+        db.session.commit()
+        judge_as([mention_id], {mention_id: ja()})
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).one()
+        assert history.displayed_tone == 'neutral'
+        assert history.displayed_judged_by is None
+
+
+def test_a_tone_writing_backend_records_no_display_diagnostics(clean_posts):
+    """They exist to compare a suppressed answer against what was shown.
+    When the answer IS what is shown there is nothing to compare."""
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-diag-haiku')
+        judge_as([mention_id], {mention_id: ja()}, model=HAIKU,
+                 write_tone=True)
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).one()
+        assert history.displayed_tone is None
+        assert history.displayed_tone_model is None
+        assert history.displayed_judged_by is None
+
+
+# ---- 14. the label on the post card -----------------------------------------
+
+def test_the_card_names_the_model_that_owns_the_tone(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-label', ticker='ZZL')
+        judge_as([mention_id], {mention_id: ja()}, model=HAIKU,
+                 write_tone=True)
+        posts, _total = detail_panel._posts(
+            'ZZL', ['bluesky'], NOW - dt.timedelta(hours=1),
+            NOW + dt.timedelta(hours=1))
+        assert [(tone, judged_by, label)
+                for _p, tone, judged_by, label in posts] == \
+            [('bullish', 'model', 'Claude')]
+
+
+def test_a_lexicon_tone_carries_no_model_name(clean_posts):
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-label-lex', ticker='ZZM', lexicon=0.8)
+        judge_as([mention_id], {mention_id: ja()})
+        posts, _total = detail_panel._posts(
+            'ZZM', ['bluesky'], NOW - dt.timedelta(hours=1),
+            NOW + dt.timedelta(hours=1))
+        assert [(judged_by, label) for _p, _t, judged_by, label in posts] == \
+            [('lexicon', None)]
+
+
+def test_an_unidentifiable_owner_is_labelled_generically(clean_posts):
+    """A legacy row whose tone ownership was never recorded, or a future
+    backend this build has never heard of. 'model' is true of both and
+    claims nothing further."""
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-label-legacy', ticker='ZZN')
+        m = db.session.get(RadarMention, mention_id)
+        m.llm_sentiment = 'bullish'
+        db.session.commit()
+        posts, _total = detail_panel._posts(
+            'ZZN', ['bluesky'], NOW - dt.timedelta(hours=1),
+            NOW + dt.timedelta(hours=1))
+        assert [(judged_by, label) for _p, _t, judged_by, label in posts] == \
+            [('model', 'model')]
+
+
+def test_the_label_never_speaks_for_a_tone_the_encoder_did_not_write(
+        clean_posts):
+    """The trap this whole column exists for: the encoder judged the
+    mention last, so sentiment_model is the encoder -- but the tone on
+    screen is still Haiku's and must still say so."""
+    with flask_app.app_context():
+        mention_id = make_post('zztrial-label-trap', ticker='ZZO')
+        judge_as([mention_id], {mention_id: ja()}, model=HAIKU,
+                 write_tone=True)
+        judge_as([mention_id], {mention_id: ja(attitude='negative')})
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_model == ENCODER
+        posts, _total = detail_panel._posts(
+            'ZZO', ['bluesky'], NOW - dt.timedelta(hours=1),
+            NOW + dt.timedelta(hours=1))
+        assert [label for _p, _t, _j, label in posts] == ['Claude']
+
+
+# ---- 15. spend --------------------------------------------------------------
+
+def test_every_backend_this_build_can_run_is_priced():
+    """A missing rate is not a small thing: cost_micros returns None and
+    the board reports those tokens as `unpriced` forever."""
+    from features.radar import spend
+    for model_id in (HAIKU, SONNET, ENCODER):
+        assert model_id in spend.MODEL_RATES, model_id
+        assert len(model_id) <= 40, model_id
+
+
+def test_a_free_backend_costs_zero_not_unknown():
+    from features.radar import spend
+    assert spend.cost_micros(ENCODER, 10000, 2000) == 0
+    assert spend.cost_micros('claude-not-a-real-model', 10000, 2000) is None
+
+
+def test_the_sonnet_rate_is_list_price():
+    from features.radar import spend
+    assert spend.MODEL_RATES[SONNET] == (2.00, 10.00)
+

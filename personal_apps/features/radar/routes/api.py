@@ -640,7 +640,11 @@ def serialize_detail(d):
             'tone': tone,
             # Who decided that tone: the model, or the local wording score.
             'judged_by': judged_by,
-        } for p, tone, judged_by in d.posts],
+            # ...and WHICH model, when it was one. Resolved server-side from
+            # the recorded id, because the component cannot know and used to
+            # print a literal 'Claude' for every model-decided tone.
+            'judged_label': judged_label,
+        } for p, tone, judged_by, judged_label in d.posts],
         'post_total': d.post_total,
     }
 

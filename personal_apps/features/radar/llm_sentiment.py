@@ -400,6 +400,31 @@ def reviewed_at_this_version(mention_ids):
     return {mention_id for (mention_id,) in rows}
 
 
+def _displayed_tone(mention):
+    """What a reader is being shown for this mention right now.
+
+    Captured BEFORE materialization, and only for a tone-suppressed write:
+    the five judgment fields beside it are what the backend SAID, and these
+    three are what production DID. The tone comparison the trial owes needs
+    both halves recorded together, after the fact, on the same row.
+
+    `_tone_of` and `_judged_by` are the panel's own pure helpers, so this
+    cannot drift from what the post card renders. Imported locally because
+    detail_panel pulls in the chart, history and quote modules, and the
+    judging pass has no business loading those at import time.
+    """
+    from . import detail_panel
+    return {
+        'displayed_tone': detail_panel._tone_of(
+            mention.lexicon_sentiment, mention.llm_sentiment,
+            mention.sentiment_attitude) or 'neutral',
+        'displayed_tone_model': mention.sentiment_tone_model,
+        'displayed_judged_by': detail_panel._judged_by(
+            mention.lexicon_sentiment, mention.llm_sentiment,
+            mention.sentiment_attitude),
+    }
+
+
 def apply_judgments(rows, judgments, stage, model, *, write_tone):
     """Write the answers that arrived, and only those. Returns how many.
 
@@ -449,7 +474,8 @@ def apply_judgments(rows, judgments, stage, model, *, write_tone):
             attitude=j.attitude, expected_move=j.expected_move,
             confidence=j.confidence,
             input_tokens=answer.input_tokens,
-            output_tokens=answer.output_tokens, created_utc=now))
+            output_tokens=answer.output_tokens, created_utc=now,
+            **({} if write_tone else _displayed_tone(mention))))
         review_stands = stage == 'primary' and mention.id in reviewed_ids
         if not review_stands:
             mention.sentiment_relevance = j.relevance
@@ -462,6 +488,11 @@ def apply_judgments(rows, judgments, stage, model, *, write_tone):
                 mention.sentiment_expected_move = j.expected_move
                 mention.sentiment_confidence = j.confidence
                 mention.llm_sentiment = legacy_projection(j)
+                # Written with the tone and only with the tone: this column
+                # says whose attitude is on screen, which stops being the
+                # same question as sentiment_model the moment a backend can
+                # judge relevance without writing tone.
+                mention.sentiment_tone_model = model
         written += 1
     if written:
         db.session.flush()

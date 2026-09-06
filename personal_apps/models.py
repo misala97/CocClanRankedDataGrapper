@@ -697,6 +697,13 @@ class RadarMention(db.Model):
     # 'radar-sentiment-v2-attitude-origin-candidate-1' (46 chars).
     sentiment_prompt_version = db.Column(db.String(64), nullable=True)
     sentiment_judged_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    # Who produced the DISPLAYED TONE, which is not always who produced the
+    # relevance verdict beside it. A tone-suppressed backend writes
+    # sentiment_model without touching attitude, so sentiment_model answers
+    # "who judged this mention" and this answers "whose tone is on screen".
+    # Written only when tone itself is written; NULL where a legacy row's
+    # tone ownership cannot be established.
+    sentiment_tone_model     = db.Column(db.String(40), nullable=True)
     local_sentiment_model_version = db.Column(db.String(24), nullable=True)
     # First time the review triggers selected this mention. The dedupe
     # anchor for the review meter: demanded/capped increment only when
@@ -1339,6 +1346,17 @@ class RadarSentimentJudgment(db.Model):
     input_tokens   = db.Column(db.Integer, nullable=False, default=0)
     output_tokens  = db.Column(db.Integer, nullable=False, default=0)
     created_utc    = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+
+    # What a reader was actually being shown at the moment this judgment was
+    # recorded. Diagnostics, not model heads: during a tone-suppressed trial
+    # the five fields above are what the encoder SAID and these three are
+    # what production DID, and the tone comparison the trial owes needs both
+    # halves side by side afterwards. Nullable because rows written before
+    # this column, and any write that does not consult a display, have
+    # nothing truthful to put here.
+    displayed_tone       = db.Column(db.String(8), nullable=True)
+    displayed_tone_model = db.Column(db.String(40), nullable=True)
+    displayed_judged_by  = db.Column(db.String(8), nullable=True)
 
 
 class RadarReviewMeter(db.Model):

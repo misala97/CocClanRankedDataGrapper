@@ -82,8 +82,14 @@ export function Posts({ posts, total, retentionNote }: {
                 <span className={`ptone ${post.tone}`}>{post.tone}</span>
                 {post.judged_by && (
                   // A fact, not a badge: who read this post -- the model, or
-                  // the wording score that stands in until it does.
-                  <span className="pby">{post.judged_by === 'model' ? 'Claude' : 'wording'}</span>
+                  // the wording score that stands in until it does. The
+                  // model's NAME comes from the server, which is the only
+                  // place that knows which backend wrote this tone.
+                  <span className="pby">
+                    {post.judged_by === 'model'
+                      ? (post.judged_label ?? 'model')
+                      : 'wording'}
+                  </span>
                 )}
                 {/* Handles have no length limit anywhere upstream, and a long
                     one used to push the outbound link off the row. It
