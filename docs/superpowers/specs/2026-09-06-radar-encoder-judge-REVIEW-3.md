@@ -101,6 +101,32 @@ evidence still pinned, and needing a separate reviewed change to be
 promoted. **Is that the right reading?** The alternative is that the trial
 always ends at day 10 and a pass merely authorises a new one.
 
+### 3.3b Only harm stops the trial now (changed after this brief was drafted)
+
+The audit had four gating criteria, two measured relative to Haiku. Michi
+pointed out what should have been obvious: there is no Haiku to fall back
+to. The paid judge stopped on 2026-09-03 when the credits ran out, paying
+again is not on the table, and radar has run with NO judge since. So the
+alternative to this judge is nothing, and switching a working one off for
+losing to a model that cannot run leaves the board strictly worse.
+
+Changed in `5f3d877`, before any encoder has judged a production row:
+
+- **One criterion stops the trial**: removal precision Wilson lower bound
+  >= 0.93 absolute. Deleting real chatter is the only failure that leaves
+  the board worse than no judging.
+- The floor no longer moves with the incumbent.
+- The Haiku comparisons are still computed and reported, and now feed
+  `expansion_ready` — the separate later decision to turn the judge gate off
+  and to display tone.
+
+Spec §7.1 and §7.2c are amended to match, with the timing argument written
+in: legitimate now, not on day 10.
+
+**Please check**: is `passed` vs `expansion_ready` a clean split, and is
+there anywhere else in the code or docs still asserting the old
+beat-Haiku-or-stop rule?
+
 ### 3.4 Recovery selects only on model id, not on review history
 
 I originally wrote `~reviewed.exists()` into the selection, reasoning from
