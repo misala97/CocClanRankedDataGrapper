@@ -1022,14 +1022,112 @@ def test_an_unevaluated_trial_still_expires_on_day_ten(no_trial):
             judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=10))
 
 
-def test_the_clock_starts_once_and_is_never_restarted(no_trial):
+
+
+# ---- the write boundary: what the pass locks, and what it may not undo -----
+
+def as_another_process(sql, *params):
+    """One committed statement on a connection of its own -- the CLI or the
+    timer, whose commits this session's open snapshot cannot see."""
+    with db.engine.connect() as other:
+        other.exec_driver_sql(sql, params)
+        other.commit()
+
+
+@pytest.mark.parametrize('moved', ['prompt', 'model'])
+def test_the_guard_refuses_when_the_code_no_longer_matches_the_armed_trial(
+        no_trial, monkeypatch, moved):
+    """The row froze WHAT was tried. If the prompt version or model id in
+    the code has moved since, writes would be stamped with the new one and
+    recovery -- which selects by the frozen one -- would never find them.
+    That is a different trial, and it needs its own arming."""
+    from features.radar import judge_backends, llm_sentiment
     with flask_app.app_context():
         arm()
-        judge_trial.note_first_judgment(NOW)
-        db.session.commit()
-        first = judge_trial.current().first_judged_at
-        assert judge_trial.current().status == judge_trial.RUNNING
+        if moved == 'prompt':
+            monkeypatch.setattr(llm_sentiment, 'PROMPT_VERSION', 'zz-moved')
+        else:
+            monkeypatch.setattr(judge_backends, 'ENCODER_MODEL_ID',
+                                'radar-encoder-v2')
+        with pytest.raises(judge_trial.TrialError) as caught:
+            judge_trial.guard_encoder_trial(NOW)
+        assert 'armed' in str(caught.value)
 
-        judge_trial.note_first_judgment(NOW + dt.timedelta(days=3))
+
+@pytest.mark.parametrize('status', [judge_trial.RECOVERING,
+                                    judge_trial.RECOVERED])
+def test_a_first_judgment_cannot_resurrect_a_stopped_trial(no_trial, status):
+    """`recovered` -> `running` would re-pin evidence that may already be
+    pruned and restart a trial nobody armed."""
+    with flask_app.app_context():
+        row = arm()
+        row.status = status
+        db.session.commit()
+        with pytest.raises(judge_trial.TrialError):
+            judge_trial.lock_for_write(NOW)
+        db.session.rollback()
+        assert judge_trial.current().status == status
+        assert judge_trial.current().first_judged_at is None
+
+
+@pytest.mark.parametrize('status', [judge_trial.RECOVERING,
+                                    judge_trial.RECOVERED])
+def test_the_clock_itself_refuses_to_start_a_stopped_trial(no_trial, status):
+    """The boundary refuses first; this is the second line, tested on its
+    own so that a caller who reached the clock some other way cannot turn
+    `recovered` back into `running`."""
+    with flask_app.app_context():
+        row = arm()
+        row.status = status
+        db.session.commit()
+        with pytest.raises(judge_trial.TrialError):
+            judge_trial.note_first_judgment(row, NOW)
+        assert row.status == status
+        assert row.first_judged_at is None
+
+
+def test_the_write_lock_reads_the_row_as_it_is_now_not_as_it_was(no_trial):
+    """The session has the row in memory as `armed`. Another process stops
+    the trial. A re-read that answers from the identity map -- or from the
+    transaction's repeatable-read snapshot -- still says `armed`; only a
+    locking read says what is true."""
+    with flask_app.app_context():
+        arm()
+        assert judge_trial.current().status == judge_trial.ARMED   # cached
+        as_another_process('UPDATE radar_judge_trial SET status = %s '
+                           'WHERE id = 1', judge_trial.RECOVERING)
+        with pytest.raises(judge_trial.TrialError):
+            judge_trial.lock_for_write(NOW)
+        db.session.rollback()
+
+
+def test_the_write_lock_starts_the_clock_once_and_only_from_armed(no_trial):
+    with flask_app.app_context():
+        arm()
+        row = judge_trial.lock_for_write(NOW)
+        judge_trial.note_first_judgment(row, NOW)
+        db.session.commit()
+        assert judge_trial.current().status == judge_trial.RUNNING
+        first = judge_trial.current().first_judged_at
+        assert first == NOW
+
+        row = judge_trial.lock_for_write(NOW + dt.timedelta(days=3))
+        judge_trial.note_first_judgment(row, NOW + dt.timedelta(days=3))
         db.session.commit()
         assert judge_trial.current().first_judged_at == first
+
+
+def test_the_write_side_refuses_a_post_outside_the_retained_interval(
+        no_trial):
+    """Selection keeps such posts out; this is the check that holds even if
+    selection did not (spec §7.2a: batches outside the retained interval
+    are refused)."""
+    from types import SimpleNamespace
+    with flask_app.app_context():
+        row = arm()
+        inside = SimpleNamespace(created_utc=row.retain_from)
+        outside = SimpleNamespace(
+            created_utc=row.retain_from - dt.timedelta(minutes=1))
+        judge_trial.refuse_outside_retention(row, [inside])
+        with pytest.raises(judge_trial.TrialError):
+            judge_trial.refuse_outside_retention(row, [inside, outside])

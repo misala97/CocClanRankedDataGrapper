@@ -283,7 +283,7 @@ def _enums_valid(judgment):
                for field, allowed in _FIELD_ENUMS.items())
 
 
-def judge(items, backend, on_usage=None, preamble=None):
+def judge(items, backend, on_usage=None, preamble=None, before_batch=None):
     """Judge every item in the backend's batches. Returns {key: JudgedAnswer}.
 
     A key absent from the result was NOT judged and must stay NULL. Batch
@@ -294,12 +294,19 @@ def judge(items, backend, on_usage=None, preamble=None):
     The split runs over the items that SURVIVED validation, so a batch
     where the model answered ten items and botched one attributes its
     tokens to the ten that were stored.
+
+    `before_batch` is asked before EVERY batch is sent, and whatever it
+    raises ends the pass. A pass can run for minutes; a trial's deadline
+    or stop can land inside it, and a check made once at the start would
+    carry a stale clock through every batch after.
     """
     if not items:
         return {}
     got = {}
     for start in range(0, len(items), backend.batch_size):
         batch = items[start:start + backend.batch_size]
+        if before_batch is not None:
+            before_batch()
         try:
             judgments, usage = backend.judge_batch(batch, preamble=preamble)
         except SentimentUnavailable as exc:
@@ -731,7 +738,7 @@ def default_review_backend():
     return judge_config.active_review()
 
 
-def _trial_guard(backend, now):
+def _trial_module_for(backend):
     """The trial module, when this backend is one a trial governs.
 
     None for Anthropic: a hosted judge has no trial, no deadline and no
@@ -742,11 +749,10 @@ def _trial_guard(backend, now):
     if getattr(backend, 'id', None) != judge_backends.ENCODER_MODEL_ID:
         return None
     from . import judge_trial
-    judge_trial.guard_encoder_trial(now)
     return judge_trial
 
 
-def run_pass(backend=None, limit=None, now=None):
+def run_pass(backend=None, limit=None, now=None, clock=None):
     """Judge the pending mentions with the v2 prompt. Returns how many.
 
     Reads only what the judge gate admits (judge_gate.py): watched
@@ -758,23 +764,50 @@ def run_pass(backend=None, limit=None, now=None):
     keeps the figure exact for radar specifically. The backend's own id is
     what gets booked and stored, so provenance and spend follow whoever
     actually answered.
+
+    `now` is the pass's reference time for the gate window. `clock` is
+    asked for the time again before every batch and at the write boundary,
+    because a pass can run for minutes and a trial's deadline does not
+    wait for it. A fixed `now` with no clock keeps a fixed clock, which is
+    what the pass tests rely on; production passes neither and gets the
+    wall clock at every check.
+
+    Under a trial, the write is one locked transaction: the trial row is
+    locked and re-validated AFTER inference, and the spend, the verdicts,
+    the history, the journal flags and the first-judgment clock all land
+    at one commit or none of them do (spec §7.2a). No lock is held across
+    the model call itself.
     """
     from . import judge_backends
     backend = backend or default_primary_backend()
     if backend is None:
         return 0
     limit = backend.pass_limit if limit is None else limit
-    now = now or dt.datetime.utcnow()
+    if clock is None:
+        clock = (lambda: now) if now is not None else dt.datetime.utcnow
+    now = now or clock()
+    trial = _trial_module_for(backend)
+    # Pre-flight, unlocked: a stopped or expired trial is not sent a batch.
+    armed = trial.guard_encoder_trial(clock()) if trial is not None else None
+
     gate = judge_gate.judgeable_tickers(now)
+    since = now - dt.timedelta(hours=gate.hours) if gate.enabled else None
+    if armed is not None:
+        # Never pick what recovery could not give back: a window before the
+        # pin has no journal left to rebuild from (spec §7.2a). The gate's
+        # own 24-hour window is always inside the pin; this matters when
+        # the gate is off and the pass would otherwise reach into the
+        # 30-day backlog.
+        since = armed.retain_from if since is None else max(since,
+                                                            armed.retain_from)
     if gate.enabled:
-        rows = pending(limit, tickers=gate.tickers,
-                       since=now - dt.timedelta(hours=gate.hours))
+        rows = pending(limit, tickers=gate.tickers, since=since)
         logger.info('radar judge gate: %d judgeable (%d watched, %d reachable, '
                     '%d skipped by segment); %d mentions picked',
                     len(gate.tickers), gate.watched, gate.reachable,
                     gate.skipped_segment, len(rows))
     else:
-        rows = pending(limit)
+        rows = pending(limit, since=since)
     if not rows:
         return 0
 
@@ -785,30 +818,59 @@ def run_pass(backend=None, limit=None, now=None):
         meter['input'] += getattr(usage, 'input_tokens', 0) or 0
         meter['output'] += getattr(usage, 'output_tokens', 0) or 0
 
-    trial = _trial_guard(backend, now)
-    judgments = judge(items_for(rows), backend, on_usage=count)
-    if trial is not None and judgments:
-        # Checked AGAIN, after the answers came back. A batch can outlive
-        # the trial it belongs to -- a stop, a failed audit or the deadline
-        # can land while it is in flight -- and a late answer must be
-        # discarded rather than stored under a trial that has ended.
+    try:
+        judgments = judge(
+            items_for(rows), backend, on_usage=count,
+            before_batch=((lambda: trial.guard_encoder_trial(clock()))
+                          if trial is not None else None))
+    except (trial.TrialError if trial is not None else ()) as ended:
+        # The trial ended between two batches. What was already answered
+        # belongs to a trial that no longer exists, and is not stored.
+        logger.warning('radar encoder: the trial ended mid-pass, discarding '
+                       'its answers: %s', ended)
+        db.session.rollback()
+        return 0
+    if not judgments:
+        spend.record(backend.id, calls=meter['calls'],
+                     input_tokens=meter['input'], output_tokens=meter['output'])
+        return 0
+
+    if trial is not None:
+        # The write boundary. Locked and re-read from the database -- not
+        # from this session's memory of it -- with a fresh clock, after the
+        # answers came back: a stop, a failed audit, the deadline or a
+        # recovery can land while a batch is in flight, and a late answer
+        # must be discarded rather than stored under a trial that has
+        # ended. The lock is held until the commit below.
+        when = clock()
         try:
-            trial.guard_encoder_trial(now)
+            locked = trial.lock_for_write(when)
+            trial.refuse_outside_retention(
+                locked, [post for mention, post in rows
+                         if mention.id in judgments])
         except trial.TrialError as ended:
             logger.warning('radar encoder: discarding %d in-flight answers, '
                            '%s', len(judgments), ended)
+            db.session.rollback()
             return 0
-    spend.record(backend.id, calls=meter['calls'],
-                 input_tokens=meter['input'], output_tokens=meter['output'])
-    written = apply_judgments(rows, judgments, stage='primary',
-                              model=backend.id,
-                              write_tone=judge_backends.writes_tone(backend))
-    if trial is not None and written:
-        # In the SAME transaction as the first materialized verdict. The
-        # deadline measures live traffic being changed, so it starts when a
-        # verdict is actually written -- never at startup, and never from a
-        # call that failed.
-        trial.note_first_judgment(now)
+        spend.record(backend.id, calls=meter['calls'],
+                     input_tokens=meter['input'],
+                     output_tokens=meter['output'], commit=False)
+        written = apply_judgments(rows, judgments, stage='primary',
+                                  model=backend.id,
+                                  write_tone=judge_backends.writes_tone(backend))
+        if written:
+            # In the SAME transaction as the first materialized verdict. The
+            # deadline measures live traffic being changed, so it starts when
+            # a verdict is actually written -- never at startup, and never
+            # from a call that failed.
+            trial.note_first_judgment(locked, when)
+    else:
+        spend.record(backend.id, calls=meter['calls'],
+                     input_tokens=meter['input'], output_tokens=meter['output'])
+        written = apply_judgments(rows, judgments, stage='primary',
+                                  model=backend.id,
+                                  write_tone=judge_backends.writes_tone(backend))
     changed = _sync_eligibility(rows, judgments)
     db.session.commit()
     _rebuild_corrected(changed)

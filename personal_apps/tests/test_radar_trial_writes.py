@@ -777,3 +777,252 @@ def test_answers_that_outlive_their_trial_are_discarded(clean_posts,
         finally:
             RadarJudgeTrial.query.delete(synchronize_session=False)
             db.session.commit()
+
+
+# ---- 14. the write boundary: a stop from ANOTHER process --------------------
+#
+# The stop, the deadline and recovery all happen in other processes -- the
+# CLI, the watchdog timer -- and a daemon session cannot see their commits
+# through its identity map or its repeatable-read snapshot. A plain re-read
+# of the trial row after inference therefore proves nothing: it answers from
+# memory. Only a LOCKING read sees what the database holds now, and only a
+# lock held until the verdicts commit keeps that answer true while writing.
+# These drive the pass with a trial row changed on a separate connection,
+# the way every other process changes it.
+
+import sqlalchemy.exc
+
+LOCK_REFUSED = 3572          # MySQL: NOWAIT could not acquire the row lock
+
+
+def arm_now(**overrides):
+    from features.radar import judge_trial
+    from models import RadarJudgeTrial
+    RadarJudgeTrial.query.delete(synchronize_session=False)
+    db.session.commit()
+    row = judge_trial.arm_trial(overrides.pop('now', dt.datetime.utcnow()),
+                                artifact_sha256='a' * 64,
+                                baseline_report='reports/baseline.json',
+                                baseline_removal_rate=0.3, seed=1)
+    for field, value in overrides.items():
+        setattr(row, field, value)
+    db.session.commit()
+    return row
+
+
+def drop_trial():
+    from models import RadarJudgeTrial
+    db.session.rollback()
+    RadarJudgeTrial.query.delete(synchronize_session=False)
+    db.session.commit()
+
+
+def from_another_process(sql, *params):
+    """Run one statement the way the CLI or the timer would: on its own
+    connection, committed, invisible to this session's open snapshot."""
+    with db.engine.connect() as other:
+        result = other.exec_driver_sql(sql, params)
+        rows = result.fetchall() if result.returns_rows else None
+        other.commit()
+        return rows
+
+
+def trial_as_stored():
+    (status, first_judged_at), = from_another_process(
+        'SELECT status, first_judged_at FROM radar_judge_trial WHERE id = 1')
+    return status, first_judged_at
+
+
+def test_a_stop_from_another_process_is_seen_before_anything_is_written(
+        clean_posts, monkeypatch):
+    """The operator stops the trial from the CLI while a batch is out. The
+    daemon session has already read the row as `armed`; only a locking
+    read sees the stop, and a stopped trial must not be resurrected by the
+    first-judgment clock either."""
+    from features.radar import judge_gate, judge_trial
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    with flask_app.app_context():
+        arm_now()
+        try:
+            mention_id = make_post('zztrial-cross-stop')
+
+            class StoppedElsewhere(ToneFreeBackend):
+                def judge_batch(self, batch, *, preamble=None):
+                    answers = super().judge_batch(batch, preamble=preamble)
+                    from_another_process(
+                        'UPDATE radar_judge_trial SET status = %s, '
+                        'stop_reason = %s WHERE id = 1',
+                        judge_trial.RECOVERING, 'stopped from the CLI')
+                    return answers
+
+            backend = StoppedElsewhere({mention_id: ja()})
+            assert llm_sentiment.run_pass(backend=backend, limit=5) == 0
+
+            m = db.session.get(RadarMention, mention_id)
+            assert m.sentiment_judged_at is None
+            assert RadarSentimentJudgment.query.filter_by(
+                mention_id=mention_id).count() == 0
+            # Still stopped, and its clock never started.
+            assert trial_as_stored() == (judge_trial.RECOVERING, None)
+        finally:
+            drop_trial()
+
+
+def test_the_trial_row_stays_locked_while_the_verdicts_are_written(
+        clean_posts, monkeypatch):
+    """Validating the trial and then writing without holding it is a gap a
+    stop can land in. The row lock must be held from the check through the
+    commit -- another process asking for it meanwhile must be refused."""
+    from features.radar import judge_gate
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    def probe():
+        with db.engine.connect() as other:
+            try:
+                other.exec_driver_sql('SELECT status FROM radar_judge_trial '
+                                      'WHERE id = 1 FOR UPDATE NOWAIT')
+                return 'free'
+            except sqlalchemy.exc.OperationalError as error:
+                code = getattr(error.orig, 'args', (None,))[0]
+                return 'locked' if code == LOCK_REFUSED else 'error'
+            finally:
+                other.rollback()
+
+    with flask_app.app_context():
+        arm_now()
+        try:
+            mention_id = make_post('zztrial-held-lock')
+            real_apply = llm_sentiment.apply_judgments
+            observed = []
+
+            def apply_and_probe(*args, **kwargs):
+                observed.append(probe())
+                return real_apply(*args, **kwargs)
+
+            monkeypatch.setattr(llm_sentiment, 'apply_judgments',
+                                apply_and_probe)
+            backend = ToneFreeBackend({mention_id: ja()})
+            assert llm_sentiment.run_pass(backend=backend, limit=5) == 1
+
+            assert observed == ['locked']
+            assert probe() == 'free', 'the commit must release the row'
+        finally:
+            drop_trial()
+
+
+def test_a_batch_after_the_deadline_is_not_even_sent(clean_posts,
+                                                     monkeypatch):
+    """A pass that starts one second before expiry and runs for minutes
+    must not carry its starting clock through every batch. Each batch asks
+    the time again, and a batch past the deadline is never judged."""
+    import itertools
+    from features.radar import judge_gate, judge_trial
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    with flask_app.app_context():
+        started = dt.datetime.utcnow() - dt.timedelta(days=10) \
+            + dt.timedelta(minutes=5)
+        arm_now(now=started - dt.timedelta(hours=1), first_judged_at=started,
+                status=judge_trial.RUNNING)
+        ends = started + dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS)
+        try:
+            # Recent posts: the pass only reads mentions after the v2
+            # activation cutoff, and the trial's tenth day is today.
+            first = make_post('zztrial-clock-a',
+                              when=dt.datetime.utcnow() - dt.timedelta(hours=2))
+            second = make_post('zztrial-clock-b',
+                               when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+            calls = []
+
+            class OneAtATime(ToneFreeBackend):
+                batch_size = 1
+
+                def judge_batch(self, batch, *, preamble=None):
+                    calls.append([item.key for item in batch])
+                    return super().judge_batch(batch, preamble=preamble)
+
+            # Pre-flight and the first batch see a live trial; the clock
+            # then crosses the deadline before the second batch is sent.
+            readings = itertools.chain(
+                [ends - dt.timedelta(seconds=1)] * 2,
+                itertools.repeat(ends + dt.timedelta(seconds=1)))
+            backend = OneAtATime({first: ja(), second: ja()})
+
+            judged = llm_sentiment.run_pass(
+                backend=backend, limit=5, now=ends - dt.timedelta(seconds=1),
+                clock=lambda: next(readings))
+
+            assert judged == 0
+            assert len(calls) == 1, calls
+            for mention_id in (first, second):
+                assert db.session.get(
+                    RadarMention, mention_id).sentiment_judged_at is None
+        finally:
+            drop_trial()
+
+
+def test_answers_judged_before_the_deadline_are_not_written_after_it(
+        clean_posts, monkeypatch):
+    """Every batch was sent in time; the deadline lands before the write.
+    The write boundary reads the clock again, and a late answer is
+    discarded rather than stored under a trial that has ended."""
+    import itertools
+    from features.radar import judge_gate, judge_trial
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    with flask_app.app_context():
+        started = dt.datetime.utcnow() - dt.timedelta(days=10) \
+            + dt.timedelta(minutes=5)
+        arm_now(now=started - dt.timedelta(hours=1), first_judged_at=started,
+                status=judge_trial.RUNNING)
+        ends = started + dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS)
+        try:
+            mention_id = make_post('zztrial-clock-late',
+                                   when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+            # Pre-flight and the single batch are in time; the boundary is
+            # not.
+            readings = itertools.chain(
+                [ends - dt.timedelta(seconds=1)] * 2,
+                itertools.repeat(ends + dt.timedelta(seconds=1)))
+            backend = ToneFreeBackend({mention_id: ja()})
+
+            judged = llm_sentiment.run_pass(
+                backend=backend, limit=5, now=ends - dt.timedelta(seconds=1),
+                clock=lambda: next(readings))
+
+            assert judged == 0
+            assert db.session.get(
+                RadarMention, mention_id).sentiment_judged_at is None
+        finally:
+            drop_trial()
+
+
+def test_a_mention_older_than_the_retained_interval_is_never_picked(
+        clean_posts, monkeypatch):
+    """With the judge gate off, the pass would otherwise reach back into a
+    30-day backlog -- and recovery refuses any window that starts before
+    the pin, because its journal is gone. So the pass must not take what
+    recovery could not give back (spec §7.2a)."""
+    from features.radar import judge_gate
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
+
+    with flask_app.app_context():
+        now = dt.datetime.utcnow()
+        arm_now(now=now)
+        try:
+            old = make_post('zztrial-retain-old',
+                            when=now - dt.timedelta(days=3))
+            fresh = make_post('zztrial-retain-fresh',
+                              when=now - dt.timedelta(hours=1))
+            backend = ToneFreeBackend({old: ja(), fresh: ja()})
+
+            assert llm_sentiment.run_pass(backend=backend, limit=5,
+                                          now=now) == 1
+
+            assert db.session.get(RadarMention,
+                                  old).sentiment_judged_at is None
+            assert db.session.get(RadarMention,
+                                  fresh).sentiment_judged_at is not None
+        finally:
+            drop_trial()

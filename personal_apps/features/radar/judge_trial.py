@@ -525,45 +525,111 @@ def accept_audit(report, report_sha256, now, *, passed):
     return row
 
 
-def guard_encoder_trial(now):
-    """May the encoder judge right now? Fails closed.
+def _may_judge(row, now):
+    """The one set of rules, applied to whichever read of the row the
+    caller holds. Raises; returns nothing.
 
-    Consulted at startup, before every batch, and again before a verdict is
-    written -- the last one because an answer can come back after the trial
-    it belongs to has ended, and a late answer must be discarded rather
-    than stored.
-
-    Returns the row when judging is allowed and raises otherwise, so a
-    caller cannot mistake "no opinion" for permission.
+    The identity check is what makes the trial recoverable at all: the row
+    froze the model id and prompt version the trial IS, and recovery
+    selects by those. If the code's constants have moved since arming, a
+    write would be stamped with the new ones and recovery would never find
+    it -- so that is a different trial, and it needs its own arming.
     """
-    row = current()
+    from . import judge_backends, llm_sentiment
     if row is None:
         raise TrialError('the encoder is configured but no trial is armed; '
                          'without one there is no pin holding the evidence '
                          'its recovery would need')
+    if row.model_id != judge_backends.ENCODER_MODEL_ID:
+        raise TrialError('the code serves %r but the armed trial is %r; a '
+                         'different model is a different trial'
+                         % (judge_backends.ENCODER_MODEL_ID, row.model_id))
+    if row.prompt_version != llm_sentiment.PROMPT_VERSION:
+        raise TrialError('the code writes prompt version %r but the armed '
+                         'trial froze %r; recovery selects by the frozen one '
+                         'and would never find these writes'
+                         % (llm_sentiment.PROMPT_VERSION, row.prompt_version))
     if row.status in (RECOVERING, RECOVERED):
         raise TrialError('the trial is %s and must not judge' % row.status)
     ends = deadline(row)
     if ends is not None and now >= ends:
         raise TrialError('the trial reached its %d-day deadline at %s'
                          % (TRIAL_DEADLINE_DAYS, ends))
+
+
+def guard_encoder_trial(now):
+    """May the encoder judge right now? Fails closed. An UNLOCKED read.
+
+    Consulted at startup and before every batch. It is the cheap check
+    that keeps a stopped or expired trial from being sent another batch;
+    it is NOT the check that protects a write, because a plain read
+    answers from this session's identity map and repeatable-read snapshot
+    and cannot see a stop committed by another process. Writes go through
+    lock_for_write.
+
+    Returns the row when judging is allowed and raises otherwise, so a
+    caller cannot mistake "no opinion" for permission.
+    """
+    row = current()
+    _may_judge(row, now)
     return row
 
 
-def note_first_judgment(now):
-    """Start the clock, in the transaction that writes the first verdict.
+def lock_for_write(now):
+    """The write boundary: the row, LOCKED, as the database holds it now.
+
+    `SELECT ... FOR UPDATE` reads the latest committed version regardless
+    of the transaction's snapshot, and `populate_existing` makes the ORM
+    overwrite whatever stale copy the session already holds -- without it
+    the lock would be taken and the old attributes kept. The lock is held
+    until the caller's commit, which is what stops a stop, an expiry or a
+    recovery from landing between "the trial may judge" and the verdicts
+    becoming durable. Recovery locks the same row the same way, so the two
+    cannot interleave.
+
+    Validated with the caller's fresh clock, not the pass's starting time.
+    Raises when judging is not allowed; the caller discards its answers.
+    """
+    row = (db.session.query(RadarJudgeTrial).filter_by(id=TRIAL_ID)
+           .populate_existing().with_for_update().one_or_none())
+    _may_judge(row, now)
+    return row
+
+
+def refuse_outside_retention(row, posts):
+    """Spec §7.2a: batches outside the retained interval are refused.
+
+    A judged mention whose window starts before the pin could never be
+    recovered -- its journal is already gone -- so the write side refuses
+    it outright. Selection keeps such posts out in the first place; this
+    holds even if it did not.
+    """
+    outside = [post for post in posts if post.created_utc < row.retain_from]
+    if outside:
+        raise TrialError('%d of %d posts in this batch are older than the '
+                         'retained interval (%s); their windows could not be '
+                         'rebuilt, so their verdicts must not be written'
+                         % (len(outside), len(posts), row.retain_from))
+
+
+def note_first_judgment(row, now):
+    """Start the clock, on the LOCKED row, in the transaction that writes
+    the first verdict.
 
     Not at startup and not on a failed call: the deadline measures live
     traffic being changed, so it begins when a verdict is actually
-    materialized and never before.
+    materialized and never before. Only `armed` becomes `running`. A
+    stopped or recovered trial is never revived here -- `_may_judge` has
+    already refused it, and this guards the same line a second time
+    because the alternative is a first judgment quietly restarting a trial
+    nobody armed.
     """
-    row = (db.session.query(RadarJudgeTrial).filter_by(id=TRIAL_ID)
-           .with_for_update().one_or_none())
-    if row is None:
-        raise TrialError('no trial record')
-    if row.first_judged_at is None:
+    if row.status == ARMED:
         row.first_judged_at = now
         row.status = RUNNING
+    elif row.status != RUNNING:
+        raise TrialError('the trial is %s; a judgment cannot start it'
+                         % row.status)
     return row
 
 
