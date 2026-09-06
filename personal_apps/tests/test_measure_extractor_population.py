@@ -116,12 +116,18 @@ def test_the_report_counts_the_population(tmp_path):
     assert all('author_text' in r and 'stored_today' in r for r in rows)
 
 
-def test_common_words_come_from_the_corpus_itself(tmp_path):
+def test_common_words_are_the_tokens_the_corpus_writes_lowercase(tmp_path):
     raw = _raw_dir(tmp_path, [_line('t1_%d' % i, 'the app broke') for i in range(10)]
-                   + [_line('t1_x', 'gme fine')])
-    common = pop.common_words(raw, min_share=0.5)
+                   + [_line('t1_x', 'gme fine')]
+                   + [_line('t1_y%d' % i, 'GME ripping') for i in range(5)])
+    common = pop.common_words(raw, min_posts=1)
     assert 'app' in common and 'the' in common
-    assert 'gme' not in common
+    assert 'gme' not in common          # 1 of 6 posts lowercase: a symbol
+
+
+def test_a_token_seen_too_rarely_is_not_called_ordinary(tmp_path):
+    raw = _raw_dir(tmp_path, [_line('t1_x', 'gme fine')])
+    assert pop.common_words(raw, min_posts=2) == set()
 
 
 def test_labelled_rows_join_the_capture_by_external_id():
@@ -149,6 +155,7 @@ def test_a_long_ordinary_word_written_capitalised_is_not_a_company_name():
 
 
 def test_common_words_cover_name_length_words(tmp_path):
-    raw = _raw_dir(tmp_path, [_line('t1_%d' % i, 'People love money') for i in range(10)])
-    common = pop.common_words(raw, min_share=0.5)
+    raw = _raw_dir(tmp_path, [_line('t1_%d' % i, 'people love money') for i in range(10)]
+                   + [_line('t1_c%d' % i, 'People love Money') for i in range(2)])
+    common = pop.common_words(raw, min_posts=1)
     assert 'people' in common and 'money' in common

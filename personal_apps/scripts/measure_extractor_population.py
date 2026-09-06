@@ -28,10 +28,13 @@ REJECTION CAUSES (one row per post x symbol in rejected-candidates.jsonl)
     bare_other / cashtag_other anything else the extractor dropped (coin
                                collisions, single-letter bare tokens)
 
-ORDINARY WORDS come from the corpus itself, not a dictionary: a lowercase
-word appearing in at least `min_share` of the captured posts is a word
-(`time`, `lot`, `app`), so `app` never becomes an AppLovin candidate while
-`nvda` and `soxl` do. Calibrated on the same stream it is applied to.
+ORDINARY WORDS come from the corpus itself, not a dictionary: a token the
+stream writes mostly in lowercase (`app`, `time`, `people`) is a word, one
+it writes mostly Capitalised or in caps (`nvda`, `Nvidia`, `soxl`) is a
+name. Frequency alone cannot do this -- `nvidia` is as frequent as many
+words -- and a dictionary would call Apple, Meta and Snap words. Measured
+on the same stream it is applied to, with a floor of `min_posts` so a
+token seen twice proves nothing either way.
 
 Gated posts -- AutoModerator, bot feeds -- are counted and carry no
 candidates: the gate dropped the whole post, and a candidate inside it is
@@ -53,14 +56,15 @@ from features.radar.config import (  # noqa: E402
     BARE_PATTERN, CASHTAG_PATTERN, STOPWORDS, bare_tokens_allowed,
     is_automated_author, looks_like_bot_feed, single_letter_cashtags_allowed)
 
-DEFAULT_MIN_SHARE = 0.0005      # 0.05% of posts: nvda 0.05%, amd 0.04%; app 0.69%, gold 0.63%
+DEFAULT_MIN_POSTS = 10          # below this a token's casing proves nothing
+DEFAULT_LOWER_SHARE = 0.5       # written lowercase at least this often = an ordinary word
 TEXT_MAX = 2000                 # what the label harness shows a labeller
 
 _CASHTAG_RE = re.compile(CASHTAG_PATTERN)
 _BARE_RE = re.compile(BARE_PATTERN)
 _LOWER_RE = re.compile(r'(?<![$A-Za-z0-9])([a-z]{3,5})\b')
 _WRITTEN_RE = re.compile(r"(?<![A-Za-z])([A-Z][A-Za-z']{3,})(?![A-Za-z])")
-_WORD_RE = re.compile(r'(?<![A-Za-z])([a-z]{2,15})(?![A-Za-z])')
+_TOKEN_RE = re.compile(r"(?<![A-Za-z])([A-Za-z][A-Za-z']{1,14})(?![A-Za-z])")
 
 
 # ---- reading -----------------------------------------------------------------
@@ -82,20 +86,29 @@ def _raw_post(line):
         body=line.get('body') or '')
 
 
-def common_words(raw_dir, min_share=DEFAULT_MIN_SHARE):
-    """Lowercase words (symbol- and name-length alike) present in at least `min_share` of the
-    captured posts' author text."""
-    df = collections.Counter()
-    posts = 0
+def common_words(raw_dir, min_posts=DEFAULT_MIN_POSTS, lower_share=DEFAULT_LOWER_SHARE):
+    """Tokens the captured stream writes mostly in lowercase.
+
+    Per token (case-folded): the posts writing it lowercase over the posts
+    writing it at all. `app` and `people` are near 1.0; `nvda`, `Nvidia`
+    and `soxl` are well under 0.5. Tokens seen in fewer than `min_posts`
+    posts are left out -- unknown, not ordinary."""
+    lower = collections.Counter()
+    total = collections.Counter()
     for line in iter_raw(raw_dir):
         prepared = extraction.prepare_extraction_input(
             line['source'], line.get('title'), line.get('body'),
             author=line.get('author'), channel=line.get('channel'))
-        posts += 1
-        df.update(set(_WORD_RE.findall(prepared.author_text)))
-    if not posts:
-        return set()
-    return {word for word, n in df.items() if n / posts >= min_share}
+        seen_lower, seen_any = set(), set()
+        for written in _TOKEN_RE.findall(prepared.author_text):
+            folded = written.lower()
+            seen_any.add(folded)
+            if written == folded:
+                seen_lower.add(folded)
+        lower.update(seen_lower)
+        total.update(seen_any)
+    return {token for token, n in total.items()
+            if n >= min_posts and lower[token] / n >= lower_share}
 
 
 # ---- one post ----------------------------------------------------------------
@@ -286,7 +299,8 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     parser.add_argument('--labels', default=None)
     parser.add_argument('--export', default=None)
-    parser.add_argument('--min-share', type=float, default=DEFAULT_MIN_SHARE)
+    parser.add_argument('--min-posts', type=int, default=DEFAULT_MIN_POSTS)
+    parser.add_argument('--lower-share', type=float, default=DEFAULT_LOWER_SHARE)
     args = parser.parse_args(argv)
 
     from app import app
@@ -294,8 +308,9 @@ def main(argv=None):
     with app.app_context():
         lookup = universe.load_lookup()
 
-    words = common_words(args.raw, args.min_share)
-    print('ordinary words: %d (min_share %.4f)' % (len(words), args.min_share), flush=True)
+    words = common_words(args.raw, args.min_posts, args.lower_share)
+    print('ordinary words: %d (min_posts %d, lower_share %.2f)'
+          % (len(words), args.min_posts, args.lower_share), flush=True)
     summary = run(args.raw, lookup, args.out, common_words=words)
     print(json.dumps({k: v for k, v in summary.items() if k != 'top_rejected'}, indent=1))
     for cause, top in summary['top_rejected'].items():
