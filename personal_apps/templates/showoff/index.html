@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b13">
+  <title>Showoff · Personal Apps</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='showoff/showoff.css') }}">
+  <script defer src="{{ url_for('static', filename='showoff/showoff.js') }}"></script>
+</head>
+<body>
+  <main class="observatory">
+    <canvas id="universe" aria-label="Interactive three-dimensional particle sculpture. Use the shape buttons and Supernova to transform it."></canvas>
+    <div class="vignette" aria-hidden="true"></div>
+    <header>
+      <a class="home" href="/" aria-label="Back to Personal Apps">↖ <span>Personal Apps</span></a>
+      <a class="wordmark" href="/showoff/">showoff<span>✳</span></a>
+      <button id="pause" class="quiet" aria-pressed="false">Pause motion</button>
+    </header>
+    <section class="intro">
+      <p class="edition">A small experiment in wonder</p>
+      <h1>A universe.<br>Your rules.</h1>
+      <p class="description">Nothing here is a video.<br>Every speck is yours to move.</p>
+    </section>
+    <aside class="scene-label" aria-live="polite">
+      <span id="scene-number">01 / 04</span>
+      <h2 id="scene-title">Spiral galaxy</h2>
+      <p id="scene-description">A little order. A lot of beautiful chaos.</p>
+    </aside>
+    <div class="interaction-hint"><span class="orbit-icon" aria-hidden="true">◎</span><span>Drag to orbit <i>·</i> Hold to scatter <i>·</i> Scroll to zoom</span></div>
+    <footer class="controls">
+      <div class="toolbar">
+        <div class="shapes" role="group" aria-label="Particle shape">
+          <button data-shape="galaxy" aria-pressed="true"><span aria-hidden="true">✺</span> Galaxy</button>
+          <button data-shape="saturn" aria-pressed="false"><span aria-hidden="true">◉</span> Saturn</button>
+          <button data-shape="helix" aria-pressed="false"><span aria-hidden="true">∿</span> Helix</button>
+          <button data-shape="text" aria-pressed="false"><span aria-hidden="true">Aa</span> Your words</button>
+        </div>
+        <button id="explode" class="supernova"><span aria-hidden="true">✷</span> Supernova</button>
+      </div>
+      <div class="bottom-row">
+        <form id="text-form">
+          <label for="words">Made of stardust</label>
+          <div class="text-entry"><input id="words" maxlength="18" value="MICHI" aria-label="Text to turn into particles" autocomplete="off" spellcheck="false"><button type="submit" aria-label="Turn your words into particles">↗</button></div>
+        </form>
+        <p class="signature"><span class="live-dot"></span><span id="particle-count">Thousands of particles</span><span class="credit">Built by Astra. Played by you.</span></p>
+      </div>
+    </footer>
+    <p id="notice" class="notice" role="status" hidden></p>
+    <noscript><p class="notice">Enable JavaScript to bring the particles to life.</p></noscript>
+  </main>
+</body>
+</html>

@@ -55,6 +55,7 @@ from features.tips.routes import tips_bp
 from features.quizbank.routes import quizbank_bp
 from features.gym.routes import gym_bp
 from features.radar.routes import radar_bp
+from features.showoff.routes import showoff_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(pubquiz_bp)
@@ -62,6 +63,7 @@ app.register_blueprint(tips_bp)
 app.register_blueprint(quizbank_bp)
 app.register_blueprint(gym_bp)
 app.register_blueprint(radar_bp)
+app.register_blueprint(showoff_bp)
 
 # Gym templates call {{ vite_asset('exercise') }} for the content-hashed bundle
 # built by `npm run build`. Raises rather than returning an empty src when the
@@ -100,9 +102,8 @@ FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net")
 
 
 # Blueprints a non-admin may reach. Everything else on the full-access host is
-# the author's: the other three apps hold no per-user data and are not
-# partitioned (see the multi-user design spec, decision 1).
-_MEMBER_BLUEPRINTS = {'gym', 'auth'}
+# the author's. Gym scopes member data; Showoff is a shared browser experience.
+_MEMBER_BLUEPRINTS = {'gym', 'auth', 'showoff'}
 
 
 @app.before_request
@@ -122,6 +123,12 @@ def _require_login_on_full_access_host():
 
 
 APPS = [
+    {
+        'name': 'Showoff',
+        'description': 'A little universe at your fingertips. Shape it. Break it. Make it yours.',
+        'icon': '✺',
+        'url': '/showoff/',
+    },
     {
         'name': 'Pub Quiz',
         'description': 'Ergebnisse und Verwaltung der Pub Quiz Abende.',
@@ -161,9 +168,8 @@ APPS = [
 @app.route('/')
 @login_required
 def index():
-    # A non-admin's landing page lists the one app they can open, rather than
-    # four tiles of which three would 403.
-    visible = APPS if is_admin() else [a for a in APPS if a['url'] == '/gym']
+    # Members see only apps they can open.
+    visible = APPS if is_admin() else [a for a in APPS if a['url'] in ('/gym', '/showoff/')]
     return render_template('overview.html', apps=visible)
 
 
