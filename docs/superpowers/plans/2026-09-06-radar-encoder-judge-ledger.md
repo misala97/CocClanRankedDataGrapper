@@ -100,8 +100,8 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 
 | Task | State | Commit(s) | Focused tests | Review | Notes |
 |---|---|---|---|---|---|
-| 1 stage fix | in progress | — | — | — | lands alone, first |
-| 2 spec v2.1 amendment | not started | — | — | — | text only |
+| 1 stage fix | **COMPLETE** | `fbbd774` | 63 v2+llm, 220 neighbours | inline, diff read | 3 mutations bit and were restored |
+| 2 spec v2.1 amendment | **COMPLETE** | `af11dfa` | n/a (docs) | inline, diff read | six passages; §9 added beyond the plan's four |
 | 3 seam refactor | not started | — | — | — | pure refactor |
 | 4 encoder adapter | not started | — | — | — | needs onnxruntime install |
 | 5 trial writes | not started | — | — | — | |
@@ -112,6 +112,79 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 7c configuration/expiry | not started | — | — | — | |
 | 8 full verification | not started | — | — | — | |
 | 9 package + runbook | not started | — | — | — | no deploy without Michi |
+
+## Task 1 record
+
+Baseline before any change: 55 passed
+(`test_radar_sentiment_v2.py` 45, `test_radar_llm_sentiment.py` 10).
+
+Eight tests were written first and four of them failed against the unfixed
+code, each for the bug's own reason:
+
+- `…standing_review_survives_a_later_primary_from_the_same_id` —
+  `assert 'positive' == 'negative'`: the missed-protection direction, a review
+  verdict overwritten by a later primary sharing its id.
+- `…two_primaries_under_the_review_id_do_not_protect_each_other` —
+  `assert 'positive' == 'negative'`: the false-protection direction, a primary
+  answer protecting itself because it was written by the review model.
+- `…stage_lookup_is_one_query_for_the_whole_batch` — `assert 0 == 1`: no
+  history lookup existed.
+- `…previous_primary_id_stays_eligible_for_review` — `assert 58997 in []`: the
+  review pool emptied by the primary-model filter.
+
+The other four (neighbour's review, older prompt generation, uncommitted
+review, standing review leaves the pool) passed both before and after; they
+pin the new implementation's scoping rather than the old bug.
+
+Implementation: `reviewed_at_this_version(mention_ids)` asks the history once
+per `apply_judgments` call, scoped to the batch's judged mention ids, stage
+`review`, and the current `PROMPT_VERSION`; `review_stands` reads that set.
+`review_candidates` drops `sentiment_model == PRIMARY_MODEL` and keeps
+`V2_ACTIVATION_CUTOFF`, the prompt-version fence and the reviewed
+`NOT EXISTS`.
+
+**Codex's blocker 1 is still closed.** The dropped filter never contributed to
+it: `rejudge_radar_sentiment` books its work under `PRIMARY_MODEL` and
+`apply_judgments` stamps the current `PROMPT_VERSION`, so what actually keeps
+rejudged history out of live review spend is `RadarPost.created_utc >=
+V2_ACTIVATION_CUTOFF` — untouched — with the prompt-version fence covering
+rows never rejudged.
+
+Mutations, each applied to the fixed code, observed, then restored:
+
+| mutation | result |
+|---|---|
+| restore the `sentiment_model == REVIEW_MODEL` predicate | 2 failed, 51 passed |
+| restore the `sentiment_model == PRIMARY_MODEL` candidate filter | 1 failed, 52 passed |
+| make the lookup per-row instead of one bulk query | `assert 3 == 1` on the query-count test |
+
+After restoring: 63 passed on the two suites; 220 passed across
+`chatter_eligibility`, `detail`, `board`, `judge_gate`, `daemon`,
+`diagnose_extractor_feedback`, `train_radar_sentiment`, `spend`.
+
+## Task 2 record
+
+The plan named §13, §10.2 and §5.1/§5.3. A fourth contradiction was found
+while checking the document for them and is amended too: **§9's rollback
+paragraph** ("Rollback disables Sonnet routing and/or reverts board reads to
+the legacy projection. Additive fields and judgment history remain harmless")
+is true of a change that only rescores and false of one that removes mentions
+from the counting population — exactly the claim the new design's §7.2 exists
+to correct. Leaving it would have left the spec asserting that switching the
+backend off is a rollback.
+
+§5.2 was amended as well, because §5.1's "the local arm now describes
+backends" is only half the sentence: the encoder fills the *primary judgment*
+role, and that is where "primary is a role, not a model name" belongs.
+
+§14 was checked and deliberately left alone: "Shipping only the distilled
+classifier, or only changing the prompt, is an experiment—not the completed
+v2" already describes this trial correctly and needs no weakening.
+
+Six amendment anchors, all marked *Amended 2026-09-06 (v2.1)* in place, plus
+a summary in the document header. No acceptance gate was relaxed: §10.2's
+five absolute gates stand unchanged as the bar for an unconditional
+replacement, and the encoder still fails all five.
 
 ## Carried minor findings
 
