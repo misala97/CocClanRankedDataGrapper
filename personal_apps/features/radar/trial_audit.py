@@ -1,0 +1,283 @@
+# personal_apps/features/radar/trial_audit.py
+"""What the trial has to demonstrate, and the arithmetic that decides it.
+
+Pure: no database, no model, no files. It takes labelled rows and two sets
+of predictions and returns a verdict, so the rules can be read and tested
+without arranging a trial.
+
+Two things here are deliberate and easy to get wrong the other way.
+
+**Bounds, not point estimates.** A trial that cannot demonstrate its bound
+with the sample it drew fails. It does not get to pass on a favourable
+point estimate with a wide interval around it -- that is how 3-versus-1
+wrong deletions out of 200 became an argument for shipping once already.
+
+**Tone is reported and never gates.** The trial's whole design is that
+encoder tone is not written, so tone cannot pass or fail it. The tone
+section exists to say whether a LATER, separately reviewed change could be
+considered, and meeting it authorises nothing on its own.
+"""
+import math
+
+# The two-sided 95% normal quantile, written out rather than imported from
+# scipy: this number decides whether a trial passes, and it should be
+# readable in the diff that changes it.
+Z = 1.959963984540054
+
+# Absolute floor on removal precision, and the tolerated loss against the
+# incumbent. Both fixed in the design before the evaluation existed.
+REMOVAL_PRECISION_FLOOR = 0.93
+REMOVAL_PRECISION_TOLERANCE = 0.03
+AGREEMENT_TOLERANCE = 0.02
+
+# Tone qualification only. Never part of the trial's own verdict.
+REVERSAL_CEILING = 0.05
+TONE_AGREEMENT_TOLERANCE = 0.02
+SHADOW_DAYS_REQUIRED = 7
+
+REMOVING_RELEVANCE = 'irrelevant'
+REMOVING_ORIGIN = 'broadcast_or_automated'
+DIRECTIONAL = ('positive', 'negative')
+UNDIRECTED = ('mixed', 'none')
+
+
+class AuditError(Exception):
+    """The audit cannot be evaluated as presented."""
+
+
+def wilson_interval(successes, total):
+    """The Wilson score interval for a proportion, at 95%.
+
+    Wilson rather than the normal approximation because these proportions
+    live near 1 with denominators in the hundreds, where the normal
+    interval runs past 1 and stops meaning anything.
+
+    A zero denominator raises. It is not a proportion of anything, and
+    every gate that could reach one treats it as a failure rather than
+    quietly reading it as perfect.
+    """
+    if total is None or total <= 0:
+        raise AuditError('no denominator: there is nothing to be a '
+                         'proportion of')
+    if successes is None or successes < 0 or successes > total:
+        raise AuditError('%r successes out of %r is not possible'
+                         % (successes, total))
+    proportion = successes / total
+    z2 = Z * Z
+    denominator = 1 + z2 / total
+    centre = (proportion + z2 / (2 * total)) / denominator
+    radius = (Z / denominator) * math.sqrt(
+        proportion * (1 - proportion) / total + z2 / (4 * total * total))
+    return {'point': proportion, 'successes': successes, 'total': total,
+            'lower': centre - radius, 'upper': centre + radius}
+
+
+def removes(verdict):
+    """Whether a verdict takes the mention out of the counts.
+
+    Either field alone is enough, which is why removal precision has to be
+    measured on the union rather than on relevance by itself.
+    """
+    return (verdict.get('relevance') == REMOVING_RELEVANCE
+            or verdict.get('content_origin') == REMOVING_ORIGIN)
+
+
+def removal_precision(predictions, reference):
+    """Of what this backend chose to remove, how much really was junk.
+
+    The denominator is its OWN predicted removals -- not the reference's,
+    and not the sample. A backend that removes nothing has no precision to
+    report, and that is a failed criterion rather than a perfect score.
+    """
+    predicted = [key for key, verdict in predictions.items()
+                 if removes(verdict)]
+    confirmed = [key for key in predicted if removes(reference[key])]
+    return wilson_interval(len(confirmed), len(predicted))
+
+
+def field_agreement(predictions, reference, field):
+    """Exact agreement on one field, over the COMPLETE sampled set.
+
+    The denominator is every row, including ones this backend failed to
+    answer: a missing prediction is a disagreement, not an excused absence.
+    Shrinking the denominator to what a backend managed to answer is how a
+    coverage problem disappears into a quality number.
+    """
+    agreed = sum(1 for key, truth in reference.items()
+                 if predictions.get(key, {}).get(field) == truth.get(field))
+    return wilson_interval(agreed, len(reference))
+
+
+def reversal_rate(predictions, reference):
+    """Predicting the opposite polarity of a directional reference row.
+
+    Denominator: reference rows that are positive or negative. `mixed` and
+    `none` cannot be reversed, so counting them would dilute the rate that
+    matters -- this is the error a reader sees as the wrong colour.
+    """
+    directional = {key: truth for key, truth in reference.items()
+                   if truth.get('attitude') in DIRECTIONAL}
+    reversed_count = 0
+    for key, truth in directional.items():
+        predicted = predictions.get(key, {}).get('attitude')
+        if predicted in DIRECTIONAL and predicted != truth['attitude']:
+            reversed_count += 1
+    return wilson_interval(reversed_count, len(directional))
+
+
+def mixed_none_confusion(predictions, reference):
+    """Reference `mixed` called `none`, or the reverse.
+
+    Its own criterion because the two mean opposite things to a reader:
+    `mixed` is a room arguing, `none` is a room saying nothing about the
+    company at all, and the board's phrasing leans on the difference.
+    """
+    slice_ = {key: truth for key, truth in reference.items()
+              if truth.get('attitude') in UNDIRECTED}
+    confused = 0
+    for key, truth in slice_.items():
+        predicted = predictions.get(key, {}).get('attitude')
+        if predicted in UNDIRECTED and predicted != truth['attitude']:
+            confused += 1
+    return wilson_interval(confused, len(slice_))
+
+
+def _criterion(name, passed, detail):
+    return {'criterion': name, 'passed': bool(passed), **detail}
+
+
+def evaluate_trial_audit(bundle):
+    """The verdict, and every number behind it.
+
+    `bundle` carries `reference`, `encoder`, `haiku` -- each {key: verdict}
+    -- plus the trial identity and provenance the acceptance step checks.
+
+    Returns a report. The trial's own gates are relevance/origin agreement
+    and removal precision, all on the encoder's Wilson LOWER bound against
+    the incumbent's point estimate on this same sample. Tone is computed
+    and reported and takes no part in `passed`.
+    """
+    reference = bundle.get('reference') or {}
+    encoder = bundle.get('encoder') or {}
+    haiku = bundle.get('haiku') or {}
+    if not reference:
+        raise AuditError('the audit has no reference labels')
+
+    missing = [key for key in reference
+               if key not in encoder or key not in haiku]
+    coverage_ok = not missing
+
+    # A backend that removed NOTHING has no precision to report, and that
+    # fails the criterion rather than aborting the audit or reading as a
+    # perfect score. The same is true of a sample that gave it nothing to
+    # remove: the question went unanswered, and an unanswered question is
+    # not a pass.
+    try:
+        encoder_removal = removal_precision(encoder, reference)
+        haiku_removal = removal_precision(haiku, reference)
+        removal_threshold = max(
+            REMOVAL_PRECISION_FLOOR,
+            haiku_removal['point'] - REMOVAL_PRECISION_TOLERANCE)
+        removal_detail = {'encoder': encoder_removal,
+                          'incumbent': haiku_removal,
+                          'threshold': removal_threshold}
+        removal_passed = (coverage_ok
+                          and encoder_removal['lower'] >= removal_threshold)
+    except AuditError as why:
+        removal_detail = {'unavailable': str(why)}
+        removal_passed = False
+    removal_detail['rule'] = (
+        'encoder Wilson lower bound >= max(%.2f, incumbent point - %.2f)'
+        % (REMOVAL_PRECISION_FLOOR, REMOVAL_PRECISION_TOLERANCE))
+
+    criteria = [_criterion('removal_precision', removal_passed,
+                           removal_detail)]
+
+    for field in ('relevance', 'content_origin'):
+        encoder_field = field_agreement(encoder, reference, field)
+        haiku_field = field_agreement(haiku, reference, field)
+        threshold = haiku_field['point'] - AGREEMENT_TOLERANCE
+        criteria.append(_criterion(
+            '%s_agreement' % field,
+            coverage_ok and encoder_field['lower'] >= threshold,
+            {'encoder': encoder_field, 'incumbent': haiku_field,
+             'threshold': threshold,
+             'rule': 'encoder Wilson lower bound >= incumbent point - %.2f'
+                     % AGREEMENT_TOLERANCE}))
+
+    report = {
+        'schema': 'radar-encoder-trial-audit-1',
+        'sample_size': len(reference),
+        'coverage': {'complete': coverage_ok, 'missing': sorted(missing)[:20],
+                     'missing_count': len(missing)},
+        'criteria': criteria,
+        'passed': coverage_ok and all(c['passed'] for c in criteria),
+        'tone': _tone_section(bundle, encoder, haiku, reference, coverage_ok),
+    }
+    if not coverage_ok:
+        report['failure'] = (
+            '%d of %d sampled rows lack a prediction from one or both '
+            'backends; a denominator is never quietly shrunk to what was '
+            'answered' % (len(missing), len(reference)))
+    return report
+
+
+def _tone_section(bundle, encoder, haiku, reference, coverage_ok):
+    """Reported, never gating. Says whether tone COULD later be considered.
+
+    A missing mixed/none slice fails tone qualification rather than being
+    skipped: it is a question this sample cannot answer, and an unanswered
+    question is not a pass.
+    """
+    section = {'gates_the_trial': False, 'qualified': False, 'criteria': []}
+    try:
+        encoder_reversal = reversal_rate(encoder, reference)
+        haiku_reversal = reversal_rate(haiku, reference)
+    except AuditError as why:
+        section['unavailable'] = str(why)
+        return section
+
+    section['criteria'].append(_criterion(
+        'polarity_reversals',
+        (encoder_reversal['point'] <= haiku_reversal['point']
+         and encoder_reversal['upper'] < REVERSAL_CEILING),
+        {'encoder': encoder_reversal, 'incumbent': haiku_reversal,
+         'rule': 'encoder point <= incumbent point AND encoder Wilson upper '
+                 'bound < %.2f' % REVERSAL_CEILING}))
+
+    encoder_attitude = field_agreement(encoder, reference, 'attitude')
+    haiku_attitude = field_agreement(haiku, reference, 'attitude')
+    section['criteria'].append(_criterion(
+        'attitude_agreement',
+        encoder_attitude['lower'] >= haiku_attitude['point']
+        - TONE_AGREEMENT_TOLERANCE,
+        {'encoder': encoder_attitude, 'incumbent': haiku_attitude,
+         'rule': 'encoder Wilson lower bound >= incumbent point - %.2f'
+                 % TONE_AGREEMENT_TOLERANCE}))
+
+    try:
+        encoder_confusion = mixed_none_confusion(encoder, reference)
+        haiku_confusion = mixed_none_confusion(haiku, reference)
+        section['criteria'].append(_criterion(
+            'mixed_none_confusion',
+            encoder_confusion['point'] <= haiku_confusion['point'],
+            {'encoder': encoder_confusion, 'incumbent': haiku_confusion,
+             'rule': 'encoder point <= incumbent point'}))
+    except AuditError as why:
+        section['criteria'].append(_criterion(
+            'mixed_none_confusion', False,
+            {'rule': 'the sample must contain reference mixed/none rows',
+             'unavailable': str(why)}))
+
+    shadow_days = bundle.get('shadow_days')
+    section['criteria'].append(_criterion(
+        'shadow_period',
+        isinstance(shadow_days, (int, float))
+        and shadow_days >= SHADOW_DAYS_REQUIRED,
+        {'shadow_days': shadow_days, 'required': SHADOW_DAYS_REQUIRED,
+         'rule': 'at least %d days of trial-mode history to compare against '
+                 'the tone actually displayed' % SHADOW_DAYS_REQUIRED}))
+
+    section['qualified'] = coverage_ok and all(c['passed']
+                                               for c in section['criteria'])
+    return section

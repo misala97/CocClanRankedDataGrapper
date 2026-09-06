@@ -171,7 +171,7 @@ def score_source(source, now, lookback_days=30, excluded=None):
     # Committed on its own: the bulk UPDATE takes row locks the moment it
     # runs, and carrying them through the reads below held them for the
     # whole source (~25 s) against every cycle's roll_up.
-    with buckets.BUCKET_WRITE_LOCK:
+    with buckets.bucket_write_guard():
         invalidate_incompatible_scores(version, since, source=source)
         db.session.commit()
 
@@ -204,7 +204,7 @@ def score_source(source, now, lookback_days=30, excluded=None):
 
     # Decide every write first, in Python, with no lock held; then take the
     # table's write lock only for the flush. The lock is what keeps this
-    # pass from deadlocking a cycle's roll_up (buckets.BUCKET_WRITE_LOCK),
+    # pass from deadlocking a cycle's roll_up (buckets.bucket_write_guard),
     # and holding it across the arithmetic would make every cycle wait on
     # a pass instead of on a flush.
     pending = []
@@ -259,7 +259,7 @@ def score_source(source, now, lookback_days=30, excluded=None):
                              variance=sa.bindparam('variance'),
                              mention_z=sa.bindparam('mention_z'),
                              baseline_days=sa.bindparam('baseline_days')))
-        with buckets.BUCKET_WRITE_LOCK:
+        with buckets.bucket_write_guard():
             db.session.execute(statement, pending)
             db.session.commit()
     return len(pending)

@@ -167,13 +167,20 @@ def events_for(keys):
             for row in rows]
 
 
-def mark_promoted(rows):
+def mark_promoted(rows, commit=True):
     """Replace the promotion verdict for every recomputed bare mention.
 
     Promotion is not monotonic: one voucher may carry four bare mentions,
     then a fifth makes the entire group incredible and revokes all four.
     Reset every low/medium row in the recomputed windows before marking the
     current mediums true.
+
+    `commit=False` makes this flush into the CALLER's transaction instead.
+    It committed unconditionally, in the middle of a bucket rebuild that
+    then committed again at its end -- so a failure between the two left
+    promotion flags applied and the totals they belong to unwritten. Live
+    callers keep the old default; recovery, which must be able to roll a
+    whole window back, does not.
     """
     decisions = [(row.source, row.external_id, row.ticker,
                   row.confidence == 'medium')
@@ -198,7 +205,10 @@ def mark_promoted(rows):
                                 for source, external_id, ticker in promoted]
             (RadarMentionEvent.query.filter(sa.or_(*promoted_clauses))
              .update({'promoted': True}, synchronize_session=False))
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
 
 
 def sync_chatter_eligibility(pairs):

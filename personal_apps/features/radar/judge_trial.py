@@ -21,16 +21,15 @@ This module is what makes recovery possible at all:
 The row is the enforcement boundary. Not the configuration, not the
 service, not anybody's memory of what they set last week.
 """
+import collections
 import contextlib
 import datetime as dt
 import logging
 import math
 import threading
 
-import sqlalchemy as sa
-
 from extensions import db
-from models import RadarJudgeTrial
+from models import RadarJudgeTrial, RadarMention, RadarPost
 
 logger = logging.getLogger('radar.judge_trial')
 
@@ -257,4 +256,304 @@ def request_stop(reason):
         row.stop_reason = str(reason).strip()
         db.session.commit()
     logger.warning('radar encoder trial stopping: %s', reason)
+    return row
+
+
+# ---- recovery ---------------------------------------------------------------
+#
+# Undoing the trial means returning every mention it judged to the unjudged
+# state that counts PROVISIONALLY, putting its journal eligibility back, and
+# rebuilding the buckets that were computed without it. All three have to
+# land together per window, or a crash leaves the counts disagreeing with
+# the verdicts that produced them -- which is the exact failure the judging
+# path already takes care to avoid.
+#
+# It is bounded and resumable because it may have to undo ten days of
+# judgments on a 2 GB box, and because an incident is a bad time to
+# discover that the recovery script is a single unbounded transaction.
+
+
+def _recoverable(row):
+    """Mentions this trial materialized, newest window first.
+
+    Selected by the trial's OWN frozen model id and prompt version, not by
+    whatever the code currently calls itself: a trial is recovered as the
+    thing it was, even if the constants moved afterwards.
+
+    Independent Anthropic review winners are excluded by exactly this
+    filter and nothing more: if a review won, the mention's model IS the
+    review's, so it does not match. A mention whose materialized verdict is
+    the ENCODER'S is recovered even where a review history row also exists
+    -- the review did not win there, the encoder's decision is the one in
+    the counts, and skipping it would leave that decision in force forever
+    while `remaining` never reached zero and the pin never released.
+    """
+    return (db.session.query(RadarMention, RadarPost)
+            .join(RadarPost, RadarPost.id == RadarMention.post_id)
+            .filter(RadarMention.sentiment_model == row.model_id,
+                    RadarMention.sentiment_prompt_version
+                    == row.prompt_version))
+
+
+def _window_of(post_created):
+    return post_created.replace(minute=(post_created.minute // 15) * 15,
+                                second=0, microsecond=0)
+
+
+def recover_trial(*, apply=False, limit=2000, now=None):
+    """Undo the trial's decisions, in bounded, whole-window transactions.
+
+    Returns counts, and by default changes nothing at all: `apply=False` is
+    a report, and it is the default because the alternative is a script
+    that undoes ten days of production judgments if somebody forgets a
+    flag.
+
+    With `apply`, each window is one transaction: take the bucket guard,
+    re-check the trial is still the one that was armed, clear the five
+    non-tone fields, sync journal eligibility, rebuild the window from ALL
+    its retained events, commit. A failure rolls that window back whole and
+    leaves every earlier window recovered -- resumable, because a cleared
+    mention no longer matches the selection.
+
+    Tone and its provenance are NOT cleared. The trial never wrote them;
+    what is there belongs to whoever did, and clearing it would delete a
+    real verdict the board is showing.
+    """
+    if limit is not None and limit <= 0:
+        raise TrialError('limit must be a positive number of mentions')
+    now = now or dt.datetime.utcnow()
+    row = current()
+    if row is None:
+        raise TrialError('no trial record: nothing to recover, and no pin '
+                         'proving the evidence is still here')
+    if row.retain_from is None:
+        raise TrialError('the trial has no retention floor')
+
+    rows = _recoverable(row).order_by(RadarPost.created_utc.desc(),
+                                     RadarMention.id.desc()).all()
+    total = len(rows)
+    # Keyed by (ticker, quarter-hour) -- the identity of a BUCKET, which is
+    # what gets rebuilt. Two tickers in the same quarter-hour are two
+    # separate windows and must not be merged.
+    by_window = collections.OrderedDict()
+    for mention, post in rows:
+        key = (mention.ticker, _window_of(post.created_utc))
+        by_window.setdefault(key, []).append((mention, post))
+
+    # Bounded by MENTIONS, and the bound is exact: the last window may be
+    # recovered only in part. That is safe because the window is rebuilt
+    # from ALL of its retained events either way -- the mentions still
+    # judged stay excluded, the cleared ones count provisionally again, and
+    # the next run finishes the job.
+    selected, windows, taken = [], [], 0
+    for key, members in by_window.items():
+        if limit is not None and taken >= limit:
+            break
+        room = len(members) if limit is None else min(len(members),
+                                                      limit - taken)
+        selected.extend(members[:room])
+        windows.append(key)
+        taken += room
+
+    outside = [start for _ticker, start in windows if start < row.retain_from]
+    if outside:
+        raise TrialError(
+            '%d window(s) start before the retained interval (%s); their '
+            'events are gone and rebuilding from what is left would write '
+            'counts that never happened'
+            % (len(outside), row.retain_from))
+
+    report = {'total_mentions': total, 'total_windows': len(by_window),
+              'selected_mentions': len(selected), 'selected_windows':
+              len(windows), 'recovered': 0, 'remaining': total,
+              'applied': bool(apply)}
+    if not apply:
+        return report
+    if not selected:
+        # Nothing matched. That is a successful, idempotent recovery -- a
+        # second --apply after a complete one must not error, and must not
+        # leave the pin held forever either.
+        _mark_recovered()
+        report.update(remaining=0, status=RECOVERED)
+        return report
+
+    recovered = 0
+    taken_by_window = {}
+    for key in windows:
+        taken_by_window[key] = [entry for entry in selected
+                                if (entry[0].ticker,
+                                    _window_of(entry[1].created_utc)) == key]
+    for key in windows:
+        members = taken_by_window[key]
+        # One window, one transaction. Bucket guard first, then the trial
+        # row: every writer takes them in this order, which is what stops
+        # two of them each holding one.
+        with buckets_module().bucket_write_guard():
+            state = (db.session.query(RadarJudgeTrial)
+                     .filter_by(id=TRIAL_ID).with_for_update().one())
+            if state.status == RECOVERED:
+                break
+            if (state.model_id != row.model_id
+                    or state.prompt_version != row.prompt_version
+                    or state.retain_from != row.retain_from):
+                raise TrialError('the trial record changed while recovering')
+            pairs = []
+            for mention, post in members:
+                mention.sentiment_relevance = None
+                mention.sentiment_content_origin = None
+                mention.sentiment_model = None
+                mention.sentiment_prompt_version = None
+                mention.sentiment_judged_at = None
+                pairs.append(((post.source, post.external_id, mention.ticker),
+                              None))
+            journal_module().sync_chatter_eligibility(pairs)
+            # NOT journal.rebuild_windows: that one refuses anything past
+            # the 48-hour horizon, which is every window this is here for.
+            # The pin is what makes the older ones safe, and it was checked
+            # above.
+            buckets_module().rebuild_windows([key], commit=False)
+            db.session.commit()
+        recovered += len(members)
+
+    remaining = _recoverable(row).count()
+    report.update(recovered=recovered, remaining=remaining)
+    if remaining == 0:
+        _mark_recovered()
+        report['status'] = RECOVERED
+    return report
+
+
+def _mark_recovered():
+    """Only after a FRESH count found nothing left.
+
+    Marking recovered releases the retention pin, so claiming it early
+    would let the pruner delete the evidence for whatever was still
+    outstanding.
+    """
+    with advisory_lock(RETENTION_LOCK):
+        row = current()
+        if row is not None:
+            row.status = RECOVERED
+            db.session.commit()
+    logger.info('radar encoder trial recovered; the retention pin is released')
+
+
+def buckets_module():
+    from . import buckets
+    return buckets
+
+
+def journal_module():
+    from . import journal
+    return journal
+
+
+# ---- the audit's verdict, recorded ------------------------------------------
+
+AUDIT_DRAW_DAY = 3
+AUDIT_LABEL_DAY = 7
+TRIAL_DEADLINE_DAYS = 10
+
+
+def deadline(row):
+    """When an unevaluated trial ends by itself, or None before it starts.
+
+    Measured from the FIRST JUDGED MENTION, not from arming or from a
+    restart: the clock belongs to the live traffic the trial is changing,
+    and a trial that was armed but never judged anything has nothing to
+    expire.
+    """
+    if row is None or row.first_judged_at is None:
+        return None
+    return row.first_judged_at + dt.timedelta(days=TRIAL_DEADLINE_DAYS)
+
+
+def accept_audit(report, report_sha256, now, *, passed):
+    """Record the audit's result against the trial. The only writer of it.
+
+    Refuses a report that does not belong to THIS trial, and refuses one
+    that arrives after the deadline: a late report cannot postpone an
+    expiry it already missed. A valid FAILING report is accepted and
+    requests recovery -- failing is a result, not an error.
+
+    Idempotent for the same report. A DIFFERENT report cannot replace a
+    recorded result, because that is how a second opinion quietly becomes
+    the first one.
+    """
+    if not report_sha256 or len(report_sha256) != 64:
+        raise TrialError('an audit result needs its report hash')
+    with advisory_lock(RETENTION_LOCK):
+        row = current()
+        if row is None:
+            raise TrialError('no trial to accept an audit for')
+        if row.audit_report_sha256 == report_sha256:
+            return row                       # already recorded, same report
+        if row.audit_evaluated_at is not None:
+            raise TrialError(
+                'this trial already has a recorded audit (%s); a different '
+                'report cannot replace it'
+                % row.audit_report_sha256[:12])
+        if report.get('trial', {}).get('artifact_sha256') != row.artifact_sha256:
+            raise TrialError('the report describes a different artifact')
+        if report.get('trial', {}).get('prompt_version') != row.prompt_version:
+            raise TrialError('the report describes a different prompt version')
+        ends = deadline(row)
+        if ends is not None and now > ends:
+            raise TrialError(
+                'the trial expired at %s; a report accepted afterwards would '
+                'be postponing an expiry that already happened' % ends)
+
+        row.audit_evaluated_at = now
+        row.audit_passed = bool(passed)
+        row.audit_report_sha256 = report_sha256
+        if not passed:
+            # A failing audit is the trial's own stop condition. It does
+            # not wait for anyone to notice.
+            row.status = RECOVERING
+            row.stop_reason = 'audit failed (report %s)' % report_sha256[:12]
+        db.session.commit()
+    logger.info('radar encoder trial audit recorded: %s (report %s)',
+                'PASSED' if passed else 'FAILED', report_sha256[:12])
+    return row
+
+
+def guard_encoder_trial(now):
+    """May the encoder judge right now? Fails closed.
+
+    Consulted at startup, before every batch, and again before a verdict is
+    written -- the last one because an answer can come back after the trial
+    it belongs to has ended, and a late answer must be discarded rather
+    than stored.
+
+    Returns the row when judging is allowed and raises otherwise, so a
+    caller cannot mistake "no opinion" for permission.
+    """
+    row = current()
+    if row is None:
+        raise TrialError('the encoder is configured but no trial is armed; '
+                         'without one there is no pin holding the evidence '
+                         'its recovery would need')
+    if row.status in (RECOVERING, RECOVERED):
+        raise TrialError('the trial is %s and must not judge' % row.status)
+    ends = deadline(row)
+    if ends is not None and now >= ends:
+        raise TrialError('the trial reached its %d-day deadline at %s'
+                         % (TRIAL_DEADLINE_DAYS, ends))
+    return row
+
+
+def note_first_judgment(now):
+    """Start the clock, in the transaction that writes the first verdict.
+
+    Not at startup and not on a failed call: the deadline measures live
+    traffic being changed, so it begins when a verdict is actually
+    materialized and never before.
+    """
+    row = (db.session.query(RadarJudgeTrial).filter_by(id=TRIAL_ID)
+           .with_for_update().one_or_none())
+    if row is None:
+        raise TrialError('no trial record')
+    if row.first_judged_at is None:
+        row.first_judged_at = now
+        row.status = RUNNING
     return row

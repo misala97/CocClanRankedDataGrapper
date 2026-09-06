@@ -472,8 +472,9 @@ def test_a_non_deadlock_database_error_is_not_retried(monkeypatch):
     monkeypatch.setattr(buckets_module, '_roll_up_once', broken)
     monkeypatch.setattr(buckets_module.time, 'sleep', lambda _s: None)
 
-    with pytest.raises(sqlalchemy.exc.OperationalError):
-        buckets_module.roll_up([], {}, set())
+    with flask_app.app_context():
+        with pytest.raises(sqlalchemy.exc.OperationalError):
+            buckets_module.roll_up([], {}, set())
     assert len(calls) == 1
 
 
@@ -500,10 +501,16 @@ def test_two_rollups_never_write_at_the_same_time(monkeypatch):
 
     monkeypatch.setattr(buckets_module, '_roll_up_once', slow)
 
-    first = threading.Thread(target=buckets_module.roll_up, args=([], {}, set()))
+    def roll_up_in_context():
+        # Its own app context: the guard now takes a database lock too, and
+        # a thread does not inherit one.
+        with flask_app.app_context():
+            buckets_module.roll_up([], {}, set())
+
+    first = threading.Thread(target=roll_up_in_context)
     first.start()
     assert started.wait(timeout=5)
-    second = threading.Thread(target=buckets_module.roll_up, args=([], {}, set()))
+    second = threading.Thread(target=roll_up_in_context)
     second.start()
     second.join(timeout=0.5)
     assert second.is_alive(), 'the second rollup wrote while the first held the lock'
@@ -523,11 +530,12 @@ def test_the_chatter_rebuild_takes_the_same_lock(monkeypatch):
 
     held = []
 
-    def record(windows):
+    def record(windows, commit=True):
         held.append(buckets_module.BUCKET_WRITE_LOCK.locked())
         return 0
 
     monkeypatch.setattr(buckets_module, '_rebuild_windows_locked', record)
-    buckets_module.rebuild_windows({('ZZLOCK', dt.datetime(2027, 1, 4, 12, 0))})
+    with flask_app.app_context():
+        buckets_module.rebuild_windows({('ZZLOCK', dt.datetime(2027, 1, 4, 12, 0))})
     assert held == [True]
     assert not buckets_module.BUCKET_WRITE_LOCK.locked()
