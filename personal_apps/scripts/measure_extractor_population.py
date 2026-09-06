@@ -60,7 +60,7 @@ _CASHTAG_RE = re.compile(CASHTAG_PATTERN)
 _BARE_RE = re.compile(BARE_PATTERN)
 _LOWER_RE = re.compile(r'(?<![$A-Za-z0-9])([a-z]{3,5})\b')
 _WRITTEN_RE = re.compile(r"(?<![A-Za-z])([A-Z][A-Za-z']{3,})(?![A-Za-z])")
-_WORD_RE = re.compile(r'(?<![A-Za-z])([a-z]{2,5})(?![A-Za-z])')
+_WORD_RE = re.compile(r'(?<![A-Za-z])([a-z]{2,15})(?![A-Za-z])')
 
 
 # ---- reading -----------------------------------------------------------------
@@ -83,7 +83,7 @@ def _raw_post(line):
 
 
 def common_words(raw_dir, min_share=DEFAULT_MIN_SHARE):
-    """Lowercase 2-5 letter words present in at least `min_share` of the
+    """Lowercase words (symbol- and name-length alike) present in at least `min_share` of the
     captured posts' author text."""
     df = collections.Counter()
     posts = 0

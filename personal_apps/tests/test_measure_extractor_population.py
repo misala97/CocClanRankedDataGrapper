@@ -134,3 +134,21 @@ def test_labelled_rows_join_the_capture_by_external_id():
     joined, missing = pop.join_labels({'t1_a', 't3_c'}, labels, export)
     assert [(j['mention_id'], j['external_id']) for j in joined] == [(1, 't1_a'), (2, 't3_c')]
     assert missing == 1
+
+
+def test_a_long_ordinary_word_written_capitalised_is_not_a_company_name():
+    """`People` at a sentence start named PPLI 93 times in one day. The
+    ordinary-word set has to cover name-length words, not just symbols."""
+    lookup = annotate_distinctive({
+        'PPLI': {'name': 'People Inc', 'exchange': 'NASDAQ'},
+        'NVDA': {'name': 'NVIDIA Corporation - Common Stock', 'exchange': 'NASDAQ'},
+    })
+    common = lambda word: word in {'people'}   # noqa: E731
+    row = pop.classify(_line('t1_p', 'People love Nvidia'), lookup, common)
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('NVDA', 'name_only')]
+
+
+def test_common_words_cover_name_length_words(tmp_path):
+    raw = _raw_dir(tmp_path, [_line('t1_%d' % i, 'People love money') for i in range(10)])
+    common = pop.common_words(raw, min_share=0.5)
+    assert 'people' in common and 'money' in common
