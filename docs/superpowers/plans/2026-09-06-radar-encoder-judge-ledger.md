@@ -109,7 +109,7 @@ Order: 1 → 2 → 3 → 4 → 5 → 6 → 7a → 7 → 7b → 7c → 8 → 9.
 | 7a durable state + pin | **COMPLETE** | `f320f6d` | 154 across 5 suites | inline, diff read | 7 mutations bit; found a lock self-deadlock |
 | 7 bounded recovery | **COMPLETE** | `3fcfc0f` | 98 trial+audit, 44 scoring | inline, diff read | 7 mutations bit; 2 real defects found |
 | 7b audit evaluator | **COMPLETE** | `3fcfc0f` | 32 audit | inline, diff read | landed with 7; 7 mutations bit |
-| 7c configuration/expiry | not started | — | — | — | |
+| 7c configuration/expiry | **COMPLETE** | `769f66c` | 365 across 8 suites | inline, diff read | 5 mutations bit; corrected the deadline rule |
 | 8 full verification | not started | — | — | — | |
 | 9 package + runbook | not started | — | — | — | no deploy without Michi |
 
@@ -399,6 +399,55 @@ producing them. The spec's four commands are all present, but generating
 the two prediction sets means paid Haiku calls, and Michi's standing rule
 is that quota is never spent unasked. The runbook documents that step as an
 explicitly authorised one.
+
+## Task 7c record
+
+**A correction to my own earlier work.** `guard_encoder_trial` expired the
+trial unconditionally at day 10. Spec §7.2b says "at expiry **without a
+timely passing audit**": a trial that has tested its acceptance rules and
+passed has answered the question the deadline exists to force, and keeps
+running suppressed with its evidence pinned. The deadline is now lifted by
+a passing audit and by nothing else, and the test that encoded the wrong
+rule was replaced by three that encode the right one.
+
+Mutations: construction moved into the caught scheduled pass (proved by
+running `main()` with an invalid spec — it starts and schedules jobs, where
+correctly placed it aborts with `unknown judge backend spec`), bypassing
+the pre-pass guard (1 failed), never starting the deadline clock (1), and
+not discarding late in-flight answers (needed a new test first — nothing
+covered a batch outliving its trial).
+
+**Two incidents during this task, both mine, both recorded:**
+
+1. The startup teeth check called `main()` with a *valid* configuration
+   under mutation, which **started the real ingest daemon**. It ran a cycle
+   before I killed it (PID 18084), ingesting 476 posts and 614 mentions and
+   writing 42 Reddit cursors, 3 source cursors and 203 poll-state rows. The
+   cursor and poll-state rows made two tests fail; they were cleared. The
+   posts and mentions were left — they are legitimate dev data and closer
+   to a populated database than the empty one the earlier wipe left.
+2. Stray `ZZT` buckets dated 2027, left by the trial fixtures *before* they
+   were moved to 2020, tripped the daemon's rollup-bootstrap guard at
+   startup. Buckets are never pruned by anything, so a fixture's residue
+   outlives the run that made it. The wipe now removes every `ZZT` bucket
+   regardless of date.
+
+## Task 8 record — environmental failures, named
+
+One test fails for a data reason and not a code one, and it is named here
+rather than left for a reader to rediscover:
+
+- `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet`
+  asserts the report contains a `LEGACY-POLICY cohort`, meaning mentions
+  with `first_seen < 2026-09-01`. The dev database has none: the Task 7a
+  wipe removed them, and the only mentions since are from the accidental
+  daemon run, all dated today. It passed before the wipe (13/13 during the
+  Task 3 teeth check). It is not a regression and was not "fixed" by
+  planting an old row, which would be doctoring the environment to make a
+  test green.
+
+Frontend gates: vitest 403 + 269 passed, `tsc --noEmit` and both Vite
+builds clean.
 
 ## Carried minor findings
 
