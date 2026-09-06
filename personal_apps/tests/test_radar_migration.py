@@ -44,6 +44,64 @@ def test_plan_migrations_use_one_atomic_ddl_per_direction(
     assert len(recorder.calls) == 1
 
 
+def test_the_tone_provenance_migration_is_atomic_per_table():
+    """One DDL statement per table per direction. MariaDB commits DDL even
+    when a later statement in the same migration fails, so a
+    multi-statement upgrade can strand a half-migrated table that neither
+    direction will touch again."""
+    migration = _load_plan_migration(
+        'a1c4f7b2e6d8_add_radar_tone_provenance.py', 'plan_tone_provenance')
+    recorder = _DdlRecorder()
+    migration.op = recorder
+
+    migration.upgrade()
+    assert len(recorder.calls) == 3          # two ALTERs and the backfill
+    assert 'ADD COLUMN sentiment_tone_model' in recorder.calls[0]
+    assert 'radar_mentions' in recorder.calls[0]
+    assert recorder.calls[1].count('ADD COLUMN') == 3
+    assert 'radar_sentiment_judgments' in recorder.calls[1]
+
+    backfill = recorder.calls[2]
+    assert backfill.startswith('UPDATE radar_mentions')
+    # Only rows that actually carry a v2 attitude: a legacy projection with
+    # no attitude has no established tone owner, and naming one would be
+    # inventing evidence.
+    assert 'sentiment_attitude IS NOT NULL' in backfill
+
+    recorder.calls.clear()
+    migration.downgrade()
+    assert len(recorder.calls) == 2
+    assert 'DROP COLUMN' in recorder.calls[0]
+    assert 'DROP COLUMN sentiment_tone_model' in recorder.calls[1]
+
+
+def test_the_trial_migration_is_one_statement_per_direction():
+    migration = _load_plan_migration(
+        'b3d9e1f5a274_add_radar_judge_trial.py', 'plan_judge_trial')
+    recorder = _DdlRecorder()
+    migration.op = recorder
+
+    migration.upgrade()
+    assert len(recorder.calls) == 1
+    created = recorder.calls[0]
+    assert 'CREATE TABLE radar_judge_trial' in created
+    # Singleton by construction, not by convention: nothing can insert a
+    # second trial even by mistake.
+    assert 'ck_radar_judge_trial_singleton' in created
+    assert 'CHECK (id = 1)' in created
+    # The four states recovery reasons about, enforced by the server.
+    for state in ('armed', 'recovering', 'recovered', 'running'):
+        assert "'%s'" % state in created
+    # Microsecond precision, matching every other radar timestamp.
+    assert 'armed_at DATETIME(6) NOT NULL' in created
+    assert 'retain_from DATETIME(6) NOT NULL' in created
+
+    recorder.calls.clear()
+    migration.downgrade()
+    assert len(recorder.calls) == 1
+    assert 'DROP TABLE radar_judge_trial' in recorder.calls[0]
+
+
 def _load_source_width_migration():
     path = (Path(__file__).parents[1] / 'migrations' / 'versions' /
             '08316d3e4d77_widen_radar_source_columns.py')

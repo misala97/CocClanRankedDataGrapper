@@ -126,11 +126,15 @@ def _posts(ticker, sources, since, now):
     covers both a decided even-handed read and a mention nothing has
     scored yet; the tallies make the same collapse. `judged_by` says who
     decided that tone: 'model', 'lexicon', or None when nothing has.
+    `label` NAMES that model when there is one -- 'Claude' for an Anthropic
+    id, 'model' for anything this build cannot identify, and None whenever
+    judged_by is not 'model'.
     """
     sources = expand_sources_for_history(sources)
     base = (db.session.query(RadarPost, RadarMention.lexicon_sentiment,
                              RadarMention.llm_sentiment,
-                             RadarMention.sentiment_attitude)
+                             RadarMention.sentiment_attitude,
+                             RadarMention.sentiment_tone_model)
             .join(RadarMention, RadarMention.post_id == RadarPost.id)
             .filter(RadarMention.ticker == ticker,
                     RadarPost.source.in_(list(sources)),
@@ -140,8 +144,9 @@ def _posts(ticker, sources, since, now):
                     *_eligibility_filter()))
     rows = base.order_by(RadarPost.created_utc.desc()).limit(POST_LIMIT).all()
     posts = [(post, _tone_of(local, legacy, attitude) or 'neutral',
-              _judged_by(local, legacy, attitude))
-             for post, local, legacy, attitude in rows]
+              _judged_by(local, legacy, attitude),
+              _judged_label(_judged_by(local, legacy, attitude), tone_model))
+             for post, local, legacy, attitude, tone_model in rows]
     return posts, base.count()
 
 
@@ -203,6 +208,22 @@ def _judged_by(local, legacy, attitude):
     if local is not None:
         return 'lexicon'
     return None
+
+
+def _judged_label(judged_by, tone_model):
+    """The name to print beside a model-decided tone.
+
+    Resolved from the recorded id through pure registry metadata -- the
+    payload used to carry no information about WHO at all and the component
+    printed the literal 'Claude', which stops being true the moment a
+    second backend can write tone. None unless judged_by is 'model', so the
+    three-valued judged_by contract that drives tone precedence is
+    untouched.
+    """
+    if judged_by != 'model':
+        return None
+    from . import judge_backends
+    return judge_backends.backend_label(tone_model)
 
 
 def breakdown_for(ticker, sources, since, now):

@@ -43,8 +43,19 @@ def berlin_day(when=None):
 # read does not change which mentions are counted.
 MODEL_RATES = {
     'claude-haiku-4-5': (1.00, 5.00),
-    'claude-sonnet-5': (3.00, 15.00),
+    # Corrected 2026-09-06 from (3.00, 15.00). No Sonnet spend has ever been
+    # booked -- the review tier has never run live -- so nothing is restated
+    # by this; it would simply have overstated the review tier by 50% the
+    # first time it did.
+    'claude-sonnet-5': (2.00, 10.00),
     'claude-opus-5': (5.00, 25.00),
+    # An EXPLICIT zero, and load-bearing. cost_micros returns None for an
+    # unknown rate and the board then reports those tokens as `unpriced`,
+    # which is the honest reading of "we do not know what this cost". A
+    # local encoder is not unknown: it is free, and saying so is the
+    # difference between a meter that reads zero and a meter that reads
+    # "unpriced" forever.
+    'radar-encoder-v1': (0.0, 0.0),
 }
 
 MICROS_PER_USD = 1_000_000
@@ -64,12 +75,16 @@ def cost_micros(model, input_tokens, output_tokens):
                  * MICROS_PER_USD / 1_000_000)
 
 
-def record(model, calls, input_tokens, output_tokens, day=None):
+def record(model, calls, input_tokens, output_tokens, day=None, commit=True):
     """Add one pass's usage to its day. Returns nothing.
 
     A call that used nothing writes nothing. A zero row would make an outage
     look like a quiet day, which is the confusion the bucket statuses exist to
     prevent everywhere else in this pipeline.
+
+    `commit=False` lets the caller land the booking in ITS transaction --
+    the trial write path holds a row lock from its validation through its
+    commit, and a commit here in the middle would release it.
     """
     if not calls and not input_tokens and not output_tokens:
         return
@@ -90,7 +105,10 @@ def record(model, calls, input_tokens, output_tokens, day=None):
         # Added at the rate that applies NOW, so a later price change cannot
         # reach backwards into a day that was already paid for.
         row.cost_micros += cost
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
 
 
 def _usd(micros):

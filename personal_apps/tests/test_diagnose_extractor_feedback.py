@@ -117,14 +117,20 @@ def test_the_read_guard_has_teeth():
 
 
 def test_no_model_call_is_possible(monkeypatch, capsys):
-    """Spec §11.3: the diagnostic never talks to a model. Poison the
-    client factory and run the whole thing."""
-    from features.radar import llm_sentiment
+    """Spec §11.3: the diagnostic never talks to a model. Poison the way a
+    judge is built and run the whole thing.
 
-    def boom():
-        raise AssertionError('the diagnostic constructed a model client')
+    The poison used to sit on llm_sentiment._get_client, which was the only
+    door to a model. It is construct_backend now -- every backend is built
+    there and nothing else can reach one -- so poisoning the old name would
+    have kept passing while guarding a function that no longer exists.
+    """
+    from features.radar import judge_backends
 
-    monkeypatch.setattr(llm_sentiment, '_get_client', boom)
+    def boom(*args, **kwargs):
+        raise AssertionError('the diagnostic constructed a judge backend')
+
+    monkeypatch.setattr(judge_backends, 'construct_backend', boom)
     assert diag.main([]) == 0
 
 

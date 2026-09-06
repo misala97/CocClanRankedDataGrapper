@@ -154,6 +154,9 @@ export interface Post {
   /** Who decided `tone`: the model (a decided neutral included), the local
    *  wording score, or nothing yet. */
   judged_by: 'model' | 'lexicon' | null
+  /** WHICH model decided it, resolved server-side from the recorded id.
+   *  Null whenever `judged_by` is not 'model'. */
+  judged_label: string | null
 }
 
 export interface Venue {

@@ -12,6 +12,7 @@ Cycles overlap by design, since catch-up re-reads the boundary, and additive
 rollup would inflate every bucket that spans two cycles.
 """
 import collections
+import contextlib
 import dataclasses
 import datetime as dt
 import statistics
@@ -167,6 +168,53 @@ _DEADLOCK_CODES = (1213, 1205)          # deadlock, lock wait timeout
 # outside it, so a cycle waits for a flush -- seconds -- not for a pass.
 BUCKET_WRITE_LOCK = threading.Lock()
 
+# How deep THIS thread is inside bucket_write_guard. Recovery takes the
+# guard for a whole window and then calls rebuild_windows, which takes it
+# again; without this the plain Lock above deadlocks the thread against
+# itself, permanently and silently. A reentrant lock would fix that too,
+# but RLock has no `locked()`, and `locked()` is how the tests that pin
+# "every bucket writer holds the lock while it writes" ask the question.
+_guard_depth = threading.local()
+
+# The name the whole DATABASE serializes bucket writes on. The lock above
+# only holds within one process, which was enough while every writer was a
+# job in the daemon. Recovery is not: it runs from a CLI, it rewrites the
+# same windows a live cycle may be rolling up, and the two must exclude each
+# other or a rebuild lands on top of a half-written rollup.
+BUCKET_WRITE_GUARD = 'radar_bucket_write'
+
+
+@contextlib.contextmanager
+def bucket_write_guard(timeout=30):
+    """Both locks, in one place, in a fixed order.
+
+    In-process first, then the database. Every bucket writer takes them the
+    same way round, which is what stops two processes each holding one and
+    waiting for the other. Recovery takes this before it touches the trial
+    row, and holds both through its commit.
+
+    A timeout RAISES. Running unlocked because the lock was busy is the one
+    outcome worth avoiding: it is exactly the interleaving that lost 11 of
+    11 Reddit cycles their counts on 2026-09-03.
+    """
+    from . import judge_trial
+    depth = getattr(_guard_depth, 'value', 0)
+    if depth:
+        # Already ours, further in. Re-entering is not contention.
+        _guard_depth.value = depth + 1
+        try:
+            yield
+        finally:
+            _guard_depth.value = depth
+        return
+    with BUCKET_WRITE_LOCK:
+        with judge_trial.advisory_lock(BUCKET_WRITE_GUARD, timeout=timeout):
+            _guard_depth.value = 1
+            try:
+                yield
+            finally:
+                _guard_depth.value = 0
+
 
 def _is_deadlock(error):
     code = getattr(getattr(error, 'orig', None), 'args', (None,))[0]
@@ -181,7 +229,7 @@ def roll_up(rows, statuses, touched, *, preserve_parent=False):
     advances its cursors BEFORE this runs, so giving up here would leave
     those mentions journalled and never counted.
     """
-    with BUCKET_WRITE_LOCK:
+    with bucket_write_guard():
         for attempt in range(DEADLOCK_RETRIES + 1):
             try:
                 return _roll_up_once(rows, statuses, touched,
@@ -321,7 +369,7 @@ def _roll_up_once(rows, statuses, touched, *, preserve_parent=False):
     return written
 
 
-def rebuild_windows(windows):
+def rebuild_windows(windows, commit=True):
     """Status-preserving re-rollup of specific windows from the journal.
 
     The chatter-eligibility correction path (spec §7.2): after a final
@@ -347,19 +395,25 @@ def rebuild_windows(windows):
 
     Idempotent: rebuilding twice from the same journal writes the same
     numbers.
+
+    `commit=False` leaves the transaction open for the caller. Recovery
+    needs the mention clears, the journal flags, the promotion flags and
+    the bucket totals to land or roll back TOGETHER -- one window at a
+    time, all or nothing -- and this function committing on its own (with
+    mark_promoted committing again inside it) made that impossible.
     """
     windows = set(windows)
     if not windows:
         return 0
-    with BUCKET_WRITE_LOCK:
-        return _rebuild_windows_locked(windows)
+    with bucket_write_guard():
+        return _rebuild_windows_locked(windows, commit=commit)
 
 
-def _rebuild_windows_locked(windows):
+def _rebuild_windows_locked(windows, commit=True):
     version = source_config_version()
     complete = journal.events_for(windows)
     promoted_rows = _promote(complete)
-    journal.mark_promoted(promoted_rows)
+    journal.mark_promoted(promoted_rows, commit=commit)
 
     grouped = collections.defaultdict(list)
     for row in promoted_rows:
@@ -409,5 +463,8 @@ def _rebuild_windows_locked(windows):
 
         written += 1
 
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
     return written

@@ -38,11 +38,9 @@ something upstream changed.
 """
 import dataclasses
 import datetime as dt
-import json
 import logging
 import os
 
-import anthropic
 import sqlalchemy as sa
 
 from extensions import db
@@ -56,6 +54,12 @@ logger = logging.getLogger('radar.llm_sentiment')
 # Posts per call. Large enough that the instructions amortize, small enough
 # that one failure costs little and the model is not asked to track a hundred
 # indices at once.
+#
+# Both of these are the HOSTED backend's sizes: AnthropicBackend reads them,
+# and a backend with different economics carries its own. They stay defined
+# here, rather than beside that adapter, only because the imports run this
+# way round -- an adapter may import the pipeline's canonical names, never
+# the reverse.
 BATCH_SIZE = 20
 
 # How many mentions one scheduled pass will judge. A ceiling on the bill if
@@ -229,16 +233,6 @@ class SentimentUnavailable(Exception):
     """The judgement did not arrive. Never becomes a verdict."""
 
 
-_client = None
-
-
-def _get_client():
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic()
-    return _client
-
-
 def legacy_projection(judgment):
     """The spec §6 compatibility table, in precedence order."""
     if judgment.relevance != 'relevant':
@@ -277,75 +271,58 @@ def _prompt_v2(batch, preamble=None):
     return '\n\n'.join(lines)
 
 
-def _judge_batch_v2(batch, client, model, effort, preamble=None):
-    output_config = {'format': {'type': 'json_schema', 'schema': V2_SCHEMA}}
-    if effort is not None:
-        # Sonnet-tier only. Haiku 4.5 rejects `effort` with a 400.
-        output_config['effort'] = effort
-    response = client.messages.create(
-        model=model, max_tokens=2048, output_config=output_config,
-        messages=[{'role': 'user',
-                   'content': _prompt_v2(batch, preamble=preamble)}])
-    if getattr(response, 'stop_reason', None) == 'refusal':
-        raise SentimentUnavailable('the model declined to classify this batch')
-    try:
-        text = next(block.text for block in response.content
-                    if block.type == 'text')
-        verdicts = json.loads(text)['verdicts']
-    except (StopIteration, ValueError, KeyError, TypeError) as exc:
-        raise SentimentUnavailable('unparseable response: %s' % exc)
-    # Well-formed JSON with the wrong SHAPE ({"verdicts": {"n": 1}}) must
-    # cost only this batch, exactly like malformed JSON -- iterating a
-    # dict here yielded strings and an AttributeError escaped the whole
-    # pass (Codex review, finding 8).
-    if not isinstance(verdicts, list):
-        raise SentimentUnavailable('verdicts is %s, not a list'
-                                   % type(verdicts).__name__)
+def _enums_valid(judgment):
+    """Every field one of its allowed values.
 
-    got = {}
-    for entry in verdicts:
-        if not isinstance(entry, dict):
-            continue
-        number = entry.get('n')
-        if not isinstance(number, int) or not 1 <= number <= len(batch):
-            continue
-        values = {}
-        for field, allowed in _FIELD_ENUMS.items():
-            value = entry.get(field)
-            if value not in allowed:
-                values = None
-                break
-            values[field] = value
-        if values is None:
-            continue        # partial or out-of-enum: discarded, never defaulted
-        got[batch[number - 1].key] = Judgment(**values)
-    return got, getattr(response, 'usage', None)
+    THE boundary (spec §5.2.2). It runs here, once, over whatever any
+    backend returned, so no adapter can turn a missing or invented field
+    into a stored verdict. A judgment that fails is discarded whole --
+    never partially written, never defaulted to a plausible value.
+    """
+    return all(getattr(judgment, field, None) in allowed
+               for field, allowed in _FIELD_ENUMS.items())
 
 
-def judge(items, client=None, model=PRIMARY_MODEL, on_usage=None,
-          effort=None, preamble=None):
-    """Judge every item in batches. Returns {key: JudgedAnswer}.
+def judge(items, backend, on_usage=None, preamble=None, before_batch=None):
+    """Judge every item in the backend's batches. Returns {key: JudgedAnswer}.
 
-    A key absent from the result was NOT judged and must stay NULL.
-    Batch usage is split evenly over the batch's answered items -- the
-    API reports usage per call, not per item, and an even split is the
-    only attribution that sums back to the truth.
+    A key absent from the result was NOT judged and must stay NULL. Batch
+    usage is split evenly over the batch's answered items -- the API
+    reports usage per call, not per item, and an even split is the only
+    attribution that sums back to the truth.
+
+    The split runs over the items that SURVIVED validation, so a batch
+    where the model answered ten items and botched one attributes its
+    tokens to the ten that were stored.
+
+    `before_batch` is asked before EVERY batch is sent, and whatever it
+    raises ends the pass. A pass can run for minutes; a trial's deadline
+    or stop can land inside it, and a check made once at the start would
+    carry a stale clock through every batch after.
     """
     if not items:
         return {}
-    client = client or _get_client()
     got = {}
-    for start in range(0, len(items), BATCH_SIZE):
-        batch = items[start:start + BATCH_SIZE]
+    for start in range(0, len(items), backend.batch_size):
+        batch = items[start:start + backend.batch_size]
+        if before_batch is not None:
+            before_batch()
         try:
-            judgments, usage = _judge_batch_v2(batch, client, model, effort,
-                                               preamble=preamble)
-        except (SentimentUnavailable, anthropic.APIError) as exc:
-            logger.warning('radar sentiment v2 batch of %d failed: %s',
-                           len(batch), exc)
+            judgments, usage = backend.judge_batch(batch, preamble=preamble)
+        except SentimentUnavailable as exc:
+            # A backend may say it has already reported this failure. A
+            # hosted batch failing is news every time -- it is usually
+            # transient -- but a missing or corrupt local artifact is one
+            # standing fact, and repeating it every ten minutes forever
+            # buries the log entry that matters.
+            if not getattr(exc, 'already_reported', False):
+                logger.warning('radar sentiment v2 batch of %d failed: %s',
+                               len(batch), exc)
             continue
-        in_tok = getattr(usage, 'input_tokens', 0) or 0
-        out_tok = getattr(usage, 'output_tokens', 0) or 0
+        judgments = {key: judgment for key, judgment in judgments.items()
+                     if _enums_valid(judgment)}
+        in_tok = usage.input_tokens or 0
+        out_tok = usage.output_tokens or 0
         count = len(judgments) or 1
         share_in, share_out = in_tok // count, out_tok // count
         rest_in = in_tok - share_in * (count - 1)
@@ -356,7 +333,7 @@ def judge(items, client=None, model=PRIMARY_MODEL, on_usage=None,
                 judgment=judgment,
                 input_tokens=rest_in if last else share_in,
                 output_tokens=rest_out if last else share_out)
-        if on_usage is not None and usage is not None:
+        if on_usage is not None:
             on_usage(usage)
     return got
 
@@ -398,7 +375,64 @@ def pending(limit=PASS_LIMIT, tickers=None, since=None):
 pending_v2 = pending
 
 
-def apply_judgments(rows, judgments, stage, model):
+def reviewed_at_this_version(mention_ids):
+    """Which of these mentions already carry a review verdict, now.
+
+    Stage is a fact recorded in radar_sentiment_judgments, not something
+    to infer from the mention's model column. The id proxy this replaces
+    was only ever right while the primary and review roles were filled by
+    two DIFFERENT models -- an accident of configuration, not a property
+    of the pipeline -- and it failed silently in both directions when they
+    were not: one backend serving both roles either lost a review verdict
+    to the next primary pass, or let a primary answer protect itself.
+
+    Scoped to the mention AND the current prompt version: an older
+    generation's review answers a question about text this prompt no
+    longer asks. Deliberately not "the latest history row", which answers
+    a third question again.
+
+    ONE query for the batch. The session autoflushes before it, so a
+    review written earlier in this still-open transaction already counts
+    -- which is the case production actually runs, both passes landing in
+    one commit.
+    """
+    mention_ids = list(mention_ids)
+    if not mention_ids:
+        return set()
+    rows = (db.session.query(RadarSentimentJudgment.mention_id)
+            .filter(RadarSentimentJudgment.mention_id.in_(mention_ids),
+                    RadarSentimentJudgment.stage == 'review',
+                    RadarSentimentJudgment.prompt_version == PROMPT_VERSION)
+            .distinct().all())
+    return {mention_id for (mention_id,) in rows}
+
+
+def _displayed_tone(mention):
+    """What a reader is being shown for this mention right now.
+
+    Captured BEFORE materialization, and only for a tone-suppressed write:
+    the five judgment fields beside it are what the backend SAID, and these
+    three are what production DID. The tone comparison the trial owes needs
+    both halves recorded together, after the fact, on the same row.
+
+    `_tone_of` and `_judged_by` are the panel's own pure helpers, so this
+    cannot drift from what the post card renders. Imported locally because
+    detail_panel pulls in the chart, history and quote modules, and the
+    judging pass has no business loading those at import time.
+    """
+    from . import detail_panel
+    return {
+        'displayed_tone': detail_panel._tone_of(
+            mention.lexicon_sentiment, mention.llm_sentiment,
+            mention.sentiment_attitude) or 'neutral',
+        'displayed_tone_model': mention.sentiment_tone_model,
+        'displayed_judged_by': detail_panel._judged_by(
+            mention.lexicon_sentiment, mention.llm_sentiment,
+            mention.sentiment_attitude),
+    }
+
+
+def apply_judgments(rows, judgments, stage, model, *, write_tone):
     """Write the answers that arrived, and only those. Returns how many.
 
     History is append-only. Final fields: review always wins; a primary
@@ -410,9 +444,30 @@ def apply_judgments(rows, judgments, stage, model):
     from the materialized fields and commits both together -- one
     transaction, so a crash can never leave the mention saying
     'irrelevant' while the journal still counts it.
+
+    `write_tone` is REQUIRED and comes from the backend's declared policy,
+    never from a literal at the call site. False means: write relevance,
+    content_origin and the provenance stamps, append the COMPLETE five-field
+    history row, and leave `sentiment_attitude`, `sentiment_expected_move`,
+    `sentiment_confidence` and `llm_sentiment` exactly as they were.
+
+    Four surfaces read attitude -- the post cards, the detail breakdown,
+    board.py's bull/bear CASE, and the legacy projection column -- so
+    excluding a backend's tone by relabelling any one of them would leave
+    the other three showing it. Not writing the column is the only exclusion
+    that holds everywhere at once, and it makes the absence a fact about the
+    database rather than a rule somebody has to remember. Suppression
+    PRESERVES what is already there; it never clears it.
     """
     now = dt.datetime.utcnow()
     by_id = {mention.id: mention for mention, _post in rows}
+    # Asked once, before this call appends anything, so a primary pass can
+    # never see its own answers. A review pass needs no lookup at all:
+    # review always wins.
+    reviewed_ids = set()
+    if stage == 'primary':
+        reviewed_ids = reviewed_at_this_version(
+            [mention_id for mention_id in by_id if mention_id in judgments])
     written = 0
     for key, answer in judgments.items():
         mention = by_id.get(key)
@@ -426,20 +481,25 @@ def apply_judgments(rows, judgments, stage, model):
             attitude=j.attitude, expected_move=j.expected_move,
             confidence=j.confidence,
             input_tokens=answer.input_tokens,
-            output_tokens=answer.output_tokens, created_utc=now))
-        review_stands = (stage == 'primary'
-                         and mention.sentiment_model == REVIEW_MODEL
-                         and mention.sentiment_prompt_version == PROMPT_VERSION)
+            output_tokens=answer.output_tokens, created_utc=now,
+            **({} if write_tone else _displayed_tone(mention))))
+        review_stands = stage == 'primary' and mention.id in reviewed_ids
         if not review_stands:
             mention.sentiment_relevance = j.relevance
             mention.sentiment_content_origin = j.content_origin
-            mention.sentiment_attitude = j.attitude
-            mention.sentiment_expected_move = j.expected_move
-            mention.sentiment_confidence = j.confidence
             mention.sentiment_model = model
             mention.sentiment_prompt_version = PROMPT_VERSION
             mention.sentiment_judged_at = now
-            mention.llm_sentiment = legacy_projection(j)
+            if write_tone:
+                mention.sentiment_attitude = j.attitude
+                mention.sentiment_expected_move = j.expected_move
+                mention.sentiment_confidence = j.confidence
+                mention.llm_sentiment = legacy_projection(j)
+                # Written with the tone and only with the tone: this column
+                # says whose attitude is on screen, which stops being the
+                # same question as sentiment_model the moment a backend can
+                # judge relevance without writing tone.
+                mention.sentiment_tone_model = model
         written += 1
     if written:
         db.session.flush()
@@ -508,16 +568,66 @@ def review_priority(judgment, local_score):
     return 3
 
 
-def _judgment_of(mention):
-    return Judgment(relevance=mention.sentiment_relevance,
-                    content_origin=mention.sentiment_content_origin,
-                    attitude=mention.sentiment_attitude,
-                    expected_move=mention.sentiment_expected_move,
-                    confidence=mention.sentiment_confidence)
+def latest_primary_history(mention_ids):
+    """The newest primary judgment per mention at the current prompt version.
+
+    One query for the whole candidate set. Ordered by
+    (created_utc DESC, id DESC) because the timestamp alone does not break
+    ties -- apply_judgments stamps an entire batch with one `now`, so
+    "latest" would otherwise be whichever row the database happened to
+    return first.
+    """
+    mention_ids = list(mention_ids)
+    if not mention_ids:
+        return {}
+    rows = (db.session.query(RadarSentimentJudgment)
+            .filter(RadarSentimentJudgment.mention_id.in_(mention_ids),
+                    RadarSentimentJudgment.stage == 'primary',
+                    RadarSentimentJudgment.prompt_version == PROMPT_VERSION)
+            .order_by(RadarSentimentJudgment.mention_id,
+                      RadarSentimentJudgment.created_utc.desc(),
+                      RadarSentimentJudgment.id.desc()).all())
+    latest = {}
+    for row in rows:
+        latest.setdefault(row.mention_id, row)
+    return latest
+
+
+def _judgment_of(mention, primary_history=None):
+    """The primary answer the review triggers should read, or None.
+
+    From the HISTORY row, all five fields together. The mention's own
+    columns are not a substitute while a tone-suppressed backend is
+    judging: its attitude columns then hold an OLDER answer, or nothing at
+    all, and taking relevance from one judgment and attitude from another
+    produces a judgment nobody ever made -- which would then route review
+    spend at a contradiction that does not exist.
+
+    The mention is used only when there is no history row for this prompt
+    generation AND its own stored judgment can be trusted whole: written by
+    a backend whose tone belongs with its relevance, and complete. That is
+    the pre-history-table row, and it is a real case. Anything else returns
+    None and the caller skips it visibly rather than inventing an answer.
+    """
+    if primary_history is not None:
+        return Judgment(relevance=primary_history.relevance,
+                        content_origin=primary_history.content_origin,
+                        attitude=primary_history.attitude,
+                        expected_move=primary_history.expected_move,
+                        confidence=primary_history.confidence)
+    from . import judge_backends
+    if not judge_backends.writes_tone_for_model(mention.sentiment_model):
+        return None
+    judgment = Judgment(relevance=mention.sentiment_relevance,
+                        content_origin=mention.sentiment_content_origin,
+                        attitude=mention.sentiment_attitude,
+                        expected_move=mention.sentiment_expected_move,
+                        confidence=mention.sentiment_confidence)
+    return judgment if _enums_valid(judgment) else None
 
 
 def review_candidates(now, limit=PASS_LIMIT):
-    """Judged-by-primary mentions the triggers select, best-first.
+    """Judged, not yet reviewed at this prompt version, triggers selected.
 
     Read-only: stamping and metering are run_review_pass's job, so shadow
     mode measures the same demand the live mode would serve. Excludes
@@ -525,6 +635,12 @@ def review_candidates(now, limit=PASS_LIMIT):
     history). Priority is applied to the full trigger-selected set before
     any ceiling slice; the recency pre-scan bound below exists only to
     keep the query finite.
+
+    WHICH backend produced the primary answer is not part of the question.
+    A `sentiment_model == PRIMARY_MODEL` filter used to stand here as a
+    second, wrong way of asking "has this been reviewed" -- and it emptied
+    the pool silently the moment the primary backend changed. The NOT
+    EXISTS above already says it, in terms of the recorded stage.
     """
     reviewed = (db.session.query(RadarSentimentJudgment.id)
                 .filter(RadarSentimentJudgment.mention_id == RadarMention.id,
@@ -534,24 +650,36 @@ def review_candidates(now, limit=PASS_LIMIT):
     rows = (db.session.query(RadarMention, RadarPost)
             .join(RadarPost, RadarPost.id == RadarMention.post_id)
             .filter(RadarMention.sentiment_judged_at.isnot(None),
-                    RadarMention.sentiment_model == PRIMARY_MODEL,
                     # The review budget serves the LIVE flow only: the
                     # activation fence and the current prompt generation
                     # both apply, so historical rows rejudged through the
                     # bounded script cannot leak into ongoing Sonnet spend
-                    # (Codex final review, blocker 1).
+                    # (Codex final review, blocker 1). Both fences stay.
                     RadarMention.sentiment_prompt_version == PROMPT_VERSION,
                     RadarPost.created_utc >= V2_ACTIVATION_CUTOFF,
                     ~reviewed.exists())
             .order_by(RadarPost.created_utc.desc())
             .limit(limit * 5).all())
+    history = latest_primary_history([mention.id for mention, _post in rows])
     selected = []
+    unreadable = []
     for mention, post in rows:
-        judgment = _judgment_of(mention)
+        judgment = _judgment_of(mention, history.get(mention.id))
+        if judgment is None:
+            unreadable.append(mention.id)
+            continue
         if needs_review(judgment, mention.lexicon_sentiment):
             selected.append((review_priority(judgment,
                                              mention.lexicon_sentiment),
                              mention, post))
+    if unreadable:
+        # Loud, and once per pass rather than once per row: a candidate the
+        # router cannot read is a gap in the evidence, not a routine skip.
+        logger.warning('radar review: %d candidates have no readable primary '
+                       'judgment at %s and were skipped (%s%s)',
+                       len(unreadable), PROMPT_VERSION,
+                       ', '.join(str(i) for i in unreadable[:5]),
+                       ' ...' if len(unreadable) > 5 else '')
     selected.sort(key=lambda entry: entry[0])
     return [(mention, post) for _p, mention, post in selected[:limit]]
 
@@ -587,7 +715,44 @@ def items_for(rows):
     return out
 
 
-def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL, now=None):
+def default_primary_backend():
+    """Whatever startup resolved, or None.
+
+    None means judge nothing. That is the DEFAULT (spec §2.3): a deploy
+    that forgets RADAR_JUDGE_PRIMARY judges nothing rather than judging
+    with whichever backend the code happens to name first, because the
+    wrong answers get stored and counted under the wrong provenance.
+    """
+    from . import judge_config
+    return judge_config.active_primary()
+
+
+def default_review_backend():
+    """The configured review backend, or None if either half is missing.
+
+    Reviewing needs a backend AND a mode. A backend with no mode is a
+    rollout that was prepared and not started; a mode with no backend is
+    one that was started without a judge.
+    """
+    from . import judge_config
+    return judge_config.active_review()
+
+
+def _trial_module_for(backend):
+    """The trial module, when this backend is one a trial governs.
+
+    None for Anthropic: a hosted judge has no trial, no deadline and no
+    evidence pin. The encoder has all three, and may not judge without
+    them -- there would be nothing holding the journal its recovery needs.
+    """
+    from . import judge_backends
+    if getattr(backend, 'id', None) != judge_backends.ENCODER_MODEL_ID:
+        return None
+    from . import judge_trial
+    return judge_trial
+
+
+def run_pass(backend=None, limit=None, now=None, clock=None):
     """Judge the pending mentions with the v2 prompt. Returns how many.
 
     Reads only what the judge gate admits (judge_gate.py): watched
@@ -596,19 +761,53 @@ def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL, now=None):
     stays unjudged; it keeps counting provisionally and nothing shows it.
 
     Books what it cost off the responses rather than estimating, which
-    keeps the figure exact for radar specifically.
+    keeps the figure exact for radar specifically. The backend's own id is
+    what gets booked and stored, so provenance and spend follow whoever
+    actually answered.
+
+    `now` is the pass's reference time for the gate window. `clock` is
+    asked for the time again before every batch and at the write boundary,
+    because a pass can run for minutes and a trial's deadline does not
+    wait for it. A fixed `now` with no clock keeps a fixed clock, which is
+    what the pass tests rely on; production passes neither and gets the
+    wall clock at every check.
+
+    Under a trial, the write is one locked transaction: the trial row is
+    locked and re-validated AFTER inference, and the spend, the verdicts,
+    the history, the journal flags and the first-judgment clock all land
+    at one commit or none of them do (spec §7.2a). No lock is held across
+    the model call itself.
     """
-    now = now or dt.datetime.utcnow()
+    from . import judge_backends
+    backend = backend or default_primary_backend()
+    if backend is None:
+        return 0
+    limit = backend.pass_limit if limit is None else limit
+    if clock is None:
+        clock = (lambda: now) if now is not None else dt.datetime.utcnow
+    now = now or clock()
+    trial = _trial_module_for(backend)
+    # Pre-flight, unlocked: a stopped or expired trial is not sent a batch.
+    armed = trial.guard_encoder_trial(clock()) if trial is not None else None
+
     gate = judge_gate.judgeable_tickers(now)
+    since = now - dt.timedelta(hours=gate.hours) if gate.enabled else None
+    if armed is not None:
+        # Never pick what recovery could not give back: a window before the
+        # pin has no journal left to rebuild from (spec §7.2a). The gate's
+        # own 24-hour window is always inside the pin; this matters when
+        # the gate is off and the pass would otherwise reach into the
+        # 30-day backlog.
+        since = armed.retain_from if since is None else max(since,
+                                                            armed.retain_from)
     if gate.enabled:
-        rows = pending(limit, tickers=gate.tickers,
-                       since=now - dt.timedelta(hours=gate.hours))
+        rows = pending(limit, tickers=gate.tickers, since=since)
         logger.info('radar judge gate: %d judgeable (%d watched, %d reachable, '
                     '%d skipped by segment); %d mentions picked',
                     len(gate.tickers), gate.watched, gate.reachable,
                     gate.skipped_segment, len(rows))
     else:
-        rows = pending(limit)
+        rows = pending(limit, since=since)
     if not rows:
         return 0
 
@@ -619,11 +818,60 @@ def run_pass(client=None, limit=PASS_LIMIT, model=PRIMARY_MODEL, now=None):
         meter['input'] += getattr(usage, 'input_tokens', 0) or 0
         meter['output'] += getattr(usage, 'output_tokens', 0) or 0
 
-    judgments = judge(items_for(rows), client=client, model=model,
-                      on_usage=count)
-    spend.record(model, calls=meter['calls'], input_tokens=meter['input'],
-                 output_tokens=meter['output'])
-    written = apply_judgments(rows, judgments, stage='primary', model=model)
+    try:
+        judgments = judge(
+            items_for(rows), backend, on_usage=count,
+            before_batch=((lambda: trial.guard_encoder_trial(clock()))
+                          if trial is not None else None))
+    except (trial.TrialError if trial is not None else ()) as ended:
+        # The trial ended between two batches. What was already answered
+        # belongs to a trial that no longer exists, and is not stored.
+        logger.warning('radar encoder: the trial ended mid-pass, discarding '
+                       'its answers: %s', ended)
+        db.session.rollback()
+        return 0
+    if not judgments:
+        spend.record(backend.id, calls=meter['calls'],
+                     input_tokens=meter['input'], output_tokens=meter['output'])
+        return 0
+
+    if trial is not None:
+        # The write boundary. Locked and re-read from the database -- not
+        # from this session's memory of it -- with a fresh clock, after the
+        # answers came back: a stop, a failed audit, the deadline or a
+        # recovery can land while a batch is in flight, and a late answer
+        # must be discarded rather than stored under a trial that has
+        # ended. The lock is held until the commit below, and the clock is
+        # read once the lock is held: a reading taken before the wait
+        # would carry a lock wait past the deadline.
+        try:
+            locked, when = trial.lock_for_write(clock)
+            trial.refuse_outside_retention(
+                locked, [post for mention, post in rows
+                         if mention.id in judgments])
+        except trial.TrialError as ended:
+            logger.warning('radar encoder: discarding %d in-flight answers, '
+                           '%s', len(judgments), ended)
+            db.session.rollback()
+            return 0
+        spend.record(backend.id, calls=meter['calls'],
+                     input_tokens=meter['input'],
+                     output_tokens=meter['output'], commit=False)
+        written = apply_judgments(rows, judgments, stage='primary',
+                                  model=backend.id,
+                                  write_tone=judge_backends.writes_tone(backend))
+        if written:
+            # In the SAME transaction as the first materialized verdict. The
+            # deadline measures live traffic being changed, so it starts when
+            # a verdict is actually written -- never at startup, and never
+            # from a call that failed.
+            trial.note_first_judgment(locked, when)
+    else:
+        spend.record(backend.id, calls=meter['calls'],
+                     input_tokens=meter['input'], output_tokens=meter['output'])
+        written = apply_judgments(rows, judgments, stage='primary',
+                                  model=backend.id,
+                                  write_tone=judge_backends.writes_tone(backend))
     changed = _sync_eligibility(rows, judgments)
     db.session.commit()
     _rebuild_corrected(changed)
@@ -676,8 +924,8 @@ def _primary_count(today):
         .scalar() or 0)
 
 
-def run_review_pass(client=None, now=None):
-    """The selective Sonnet tier (spec §5.3). Returns mentions reviewed.
+def run_review_pass(backend=None, now=None):
+    """The selective review tier (spec §5.3). Returns mentions reviewed.
 
     Gated by RADAR_SONNET_REVIEW following the house flag idiom
     (RADAR_FORCE_IPV4): off by default, 'shadow' measures routing share
@@ -689,9 +937,15 @@ def run_review_pass(client=None, now=None):
     mention, anchored on review_requested_at, so a candidate waiting
     across 10-minute passes is counted once.
     """
-    mode = os.getenv('RADAR_SONNET_REVIEW', '').strip()
-    if mode not in ('shadow', '1', 'true', 'True'):
+    from . import judge_backends, judge_config
+    mode = judge_config.review_mode()
+    if mode == judge_config.OFF:
         return 0
+    backend = backend or default_review_backend()
+    if backend is None:
+        return 0
+    if not backend.supports_review:
+        raise ValueError('%r cannot serve the review role' % backend.id)
     now = now or dt.datetime.utcnow()
     # UTC day from the pass's own clock, not the machine's local calendar
     # (Codex review, finding 7).
@@ -701,7 +955,7 @@ def run_review_pass(client=None, now=None):
     # head gets stamped and counted instead of hiding behind the same
     # unserved top rows forever (finding 7). Serving still takes the
     # priority-ordered head, capped by PASS_LIMIT.
-    candidates = review_candidates(now, limit=PASS_LIMIT * 5)
+    candidates = review_candidates(now, limit=backend.pass_limit * 5)
     if not candidates:
         return 0
 
@@ -710,7 +964,7 @@ def run_review_pass(client=None, now=None):
     attempted_today = meter_row.attempted if meter_row else 0
     allowed = max(0, int(config.REVIEW_DAILY_SHARE * primary_today)
                   - attempted_today)
-    take = candidates[:min(allowed, PASS_LIMIT)]
+    take = candidates[:min(allowed, backend.pass_limit)]
 
     # Unique-demand accounting: only FIRST-time candidates move the meter,
     # and the stamps land in the SAME commit as their meter increments --
@@ -727,7 +981,7 @@ def run_review_pass(client=None, now=None):
                    commit=False)
     db.session.commit()
 
-    if mode == 'shadow':
+    if mode == judge_config.SHADOW:
         logger.info('radar review shadow: %d candidates (%d new), %d over '
                     'ceiling, vs %d primary today',
                     len(candidates), new_demand,
@@ -746,13 +1000,17 @@ def run_review_pass(client=None, now=None):
         meter['input'] += getattr(usage, 'input_tokens', 0) or 0
         meter['output'] += getattr(usage, 'output_tokens', 0) or 0
 
-    judgments = judge(items_for(take), client=client, model=REVIEW_MODEL,
-                      on_usage=count, effort='low',
+    judgments = judge(items_for(take), backend, on_usage=count,
                       preamble=REVIEW_PREAMBLE)
-    spend.record(REVIEW_MODEL, calls=meter['calls'],
+    spend.record(backend.id, calls=meter['calls'],
                  input_tokens=meter['input'], output_tokens=meter['output'])
+    # The review backend's OWN policy. An enabled Anthropic review judges
+    # the prepared text independently and writes its own five fields; it
+    # never inherits a suppression that belongs to the primary, and never
+    # promotes a stored encoder answer into a review verdict.
     written = apply_judgments(take, judgments, stage='review',
-                              model=REVIEW_MODEL)
+                              model=backend.id,
+                              write_tone=judge_backends.writes_tone(backend))
     # A review REVERSAL must restore counting in the same transaction the
     # verdict lands in.
     changed = _sync_eligibility(take, judgments)
@@ -862,8 +1120,16 @@ def _over_ceiling_gauge(now, attempted_today):
     enabled and is cached for a minute -- the board polls far more often
     than this number can change (Codex review, finding 12).
     """
-    if os.getenv('RADAR_SONNET_REVIEW', '').strip() not in ('shadow', '1',
-                                                            'true', 'True'):
+    from . import judge_config
+    try:
+        mode = judge_config.review_mode()
+    except judge_config.ConfigError:
+        # This runs inside a WEB REQUEST, on every board build. A bad flag
+        # value must fail the daemon's startup, where an operator sees it;
+        # here it means review is certainly not running, and turning the
+        # board into a 500 over it would be the worse answer.
+        return 0
+    if mode == judge_config.OFF:
         return 0
     cached_at = _gauge_cache['at']
     if cached_at is not None and (now - cached_at).total_seconds() < 60:

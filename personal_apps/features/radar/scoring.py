@@ -13,6 +13,7 @@ viewer selected (spec 8.6).
 import collections
 import dataclasses
 import datetime as dt
+import logging
 
 import sqlalchemy as sa
 
@@ -27,6 +28,8 @@ from .config import (ELEVATED_Z, MIN_DISTINCT_AUTHORS, MIN_DISTINCT_CHANNELS,
                      SCORE_WRITE_TOLERANCE_Z,
                      SUSTAINED_HOURS_CONSIDERED, SUSTAINED_HOURS_REQUIRED,
                      VARIANCE_FLOOR, expand_sources, source_config_version)
+
+logger = logging.getLogger('radar.scoring')
 
 # Weight of the cold-start prior, in units of observed mass. 0.05 of a week is
 # about eight hours: enough to dominate on day one and vanish by week two.
@@ -171,7 +174,7 @@ def score_source(source, now, lookback_days=30, excluded=None):
     # Committed on its own: the bulk UPDATE takes row locks the moment it
     # runs, and carrying them through the reads below held them for the
     # whole source (~25 s) against every cycle's roll_up.
-    with buckets.BUCKET_WRITE_LOCK:
+    with buckets.bucket_write_guard():
         invalidate_incompatible_scores(version, since, source=source)
         db.session.commit()
 
@@ -204,7 +207,7 @@ def score_source(source, now, lookback_days=30, excluded=None):
 
     # Decide every write first, in Python, with no lock held; then take the
     # table's write lock only for the flush. The lock is what keeps this
-    # pass from deadlocking a cycle's roll_up (buckets.BUCKET_WRITE_LOCK),
+    # pass from deadlocking a cycle's roll_up (buckets.bucket_write_guard),
     # and holding it across the arithmetic would make every cycle wait on
     # a pass instead of on a flush.
     pending = []
@@ -237,6 +240,7 @@ def score_source(source, now, lookback_days=30, excluded=None):
                 continue
             pending.append({'b_ticker': row.ticker,
                             'b_bucket_start': row.bucket_start,
+                            'b_mention_count': row.mention_count,
                             'expected': expected, 'variance': variance,
                             'mention_z': mention_z,
                             'baseline_days': baseline_days})
@@ -250,18 +254,31 @@ def score_source(source, now, lookback_days=30, excluded=None):
         # The Core table, not the mapped class: this is a plain executemany
         # and asking the ORM to interpret it turns it into a bulk-update-by-
         # primary-key that wants attribute keys instead of these bindparams.
+        #
+        # Conditional on the count the z was computed FROM. The arithmetic
+        # above ran outside the guard, and a recovery can correct a window's
+        # count -- and write the z that count implies -- in between; a z
+        # from the old count landing on top of that would undo the
+        # correction. A row whose count moved is left alone, and the next
+        # pass scores it from the count it has then.
         table = RadarBucketSource.__table__
         statement = (sa.update(table)
                      .where(table.c.source == source,
                             table.c.ticker == sa.bindparam('b_ticker'),
-                            table.c.bucket_start == sa.bindparam('b_bucket_start'))
+                            table.c.bucket_start == sa.bindparam('b_bucket_start'),
+                            table.c.mention_count == sa.bindparam('b_mention_count'))
                      .values(expected=sa.bindparam('expected'),
                              variance=sa.bindparam('variance'),
                              mention_z=sa.bindparam('mention_z'),
                              baseline_days=sa.bindparam('baseline_days')))
-        with buckets.BUCKET_WRITE_LOCK:
-            db.session.execute(statement, pending)
+        with buckets.bucket_write_guard():
+            result = db.session.execute(statement, pending)
             db.session.commit()
+        matched = result.rowcount
+        if matched is not None and 0 <= matched < len(pending):
+            logger.info('radar scoring %s: %d of %d rows changed count since '
+                        'they were read and were left for the next pass',
+                        source, len(pending) - matched, len(pending))
     return len(pending)
 
 

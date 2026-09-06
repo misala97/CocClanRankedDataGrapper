@@ -697,6 +697,13 @@ class RadarMention(db.Model):
     # 'radar-sentiment-v2-attitude-origin-candidate-1' (46 chars).
     sentiment_prompt_version = db.Column(db.String(64), nullable=True)
     sentiment_judged_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    # Who produced the DISPLAYED TONE, which is not always who produced the
+    # relevance verdict beside it. A tone-suppressed backend writes
+    # sentiment_model without touching attitude, so sentiment_model answers
+    # "who judged this mention" and this answers "whose tone is on screen".
+    # Written only when tone itself is written; NULL where a legacy row's
+    # tone ownership cannot be established.
+    sentiment_tone_model     = db.Column(db.String(40), nullable=True)
     local_sentiment_model_version = db.Column(db.String(24), nullable=True)
     # First time the review triggers selected this mention. The dedupe
     # anchor for the review meter: demanded/capped increment only when
@@ -1340,6 +1347,17 @@ class RadarSentimentJudgment(db.Model):
     output_tokens  = db.Column(db.Integer, nullable=False, default=0)
     created_utc    = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
 
+    # What a reader was actually being shown at the moment this judgment was
+    # recorded. Diagnostics, not model heads: during a tone-suppressed trial
+    # the five fields above are what the encoder SAID and these three are
+    # what production DID, and the tone comparison the trial owes needs both
+    # halves side by side afterwards. Nullable because rows written before
+    # this column, and any write that does not consult a display, have
+    # nothing truthful to put here.
+    displayed_tone       = db.Column(db.String(8), nullable=True)
+    displayed_tone_model = db.Column(db.String(40), nullable=True)
+    displayed_judged_by  = db.Column(db.String(8), nullable=True)
+
 
 class RadarReviewMeter(db.Model):
     """Review-tier demand accounting, one row per UTC day.
@@ -1359,6 +1377,65 @@ class RadarReviewMeter(db.Model):
     attempted = db.Column(db.Integer, nullable=False, default=0)
     served    = db.Column(db.Integer, nullable=False, default=0)
     capped    = db.Column(db.Integer, nullable=False, default=0)
+
+
+class RadarJudgeTrial(db.Model):
+    """One encoder trial: what is running, and until when its evidence is kept.
+
+    A SINGLETON, id == 1. This build runs one trial and arming refuses to
+    overwrite an existing row, because two trials sharing one record cannot
+    both be recovered.
+
+    It exists because switching a removing judge off is not a rollback. Its
+    relevance verdicts have already taken mentions out of bucket counts and
+    journal eligibility by then, and undoing that means clearing those
+    mentions and rebuilding their windows from the journal -- which keeps 48
+    hours. So the ability to undo expires long before anyone would finish
+    arguing about whether to, unless something pins the evidence first.
+
+    That is `retain_from`: the pruners read it and stop forgetting. And the
+    status here, not an environment file, is the stop switch -- an
+    environment file loses to a stale unit definition, an un-exported
+    variable, or a restart that reads the old one.
+    """
+    __tablename__ = 'radar_judge_trial'
+    __table_args__ = (
+        db.CheckConstraint(
+            "status IN ('armed','running','recovering','recovered')",
+            name='ck_radar_judge_trial_status'),
+        db.CheckConstraint('id = 1', name='ck_radar_judge_trial_singleton'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id                  = db.Column(db.Integer, primary_key=True,
+                                    autoincrement=False)
+    # What was tried. Frozen at arming from the code that is about to run,
+    # so a later code change cannot retroactively describe the trial as
+    # having been something else.
+    model_id            = db.Column(db.String(40), nullable=False)
+    prompt_version      = db.Column(db.String(64), nullable=False)
+    # SHA256 over the three artifact files in a fixed order (spec §2.2).
+    # Startup verifies the deployed bundle against this; replacing any one
+    # file is a different trial and needs its own review.
+    artifact_sha256     = db.Column(db.String(64), nullable=False)
+    status              = db.Column(db.String(10), nullable=False)
+    armed_at            = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    # Retention must not prune past this while the trial is pinning.
+    retain_from         = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    # Set in the SAME transaction as the first materialized encoder verdict,
+    # never at startup and never from a failed call: it starts the deadline
+    # clock, and a clock that starts when nothing was judged would expire a
+    # trial that never ran.
+    first_judged_at     = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    audit_evaluated_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    audit_passed        = db.Column(db.Boolean, nullable=True)
+    audit_report_sha256 = db.Column(db.String(64), nullable=True)
+    # The sampling parameters fixed BEFORE any prediction was made: seed,
+    # baseline report and its hash, the measured removal rate, and the
+    # sample size that rate implies. Choosing these after seeing predictions
+    # is how a trial passes itself.
+    recipe              = db.Column(db.JSON, nullable=False)
+    stop_reason         = db.Column(db.Text, nullable=True)
 
 
 class RadarMentionEvent(db.Model):

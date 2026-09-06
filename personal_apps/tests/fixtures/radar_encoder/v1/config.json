@@ -1,0 +1,37 @@
+{
+ "base": "tests/fixtures/radar_encoder (not a real model)",
+ "heads": {
+  "relevance": [
+   "relevant",
+   "irrelevant",
+   "uncertain"
+  ],
+  "content_origin": [
+   "human_chatter",
+   "broadcast_or_automated",
+   "uncertain"
+  ],
+  "attitude": [
+   "positive",
+   "negative",
+   "mixed",
+   "none"
+  ],
+  "expected_move": [
+   "up",
+   "down",
+   "flat",
+   "unknown"
+  ],
+  "confidence": [
+   "high",
+   "medium",
+   "low"
+  ]
+ },
+ "max_len": 256,
+ "manifest": {
+  "fixture": true,
+  "generated_by": "make_fixture.py"
+ }
+}

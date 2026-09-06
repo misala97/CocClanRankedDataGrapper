@@ -1327,3 +1327,27 @@ def test_the_arctic_fetcher_stages_cursors_for_the_cycles_commit(monkeypatch):
         finally:
             RadarRedditCursor.query.filter_by(sub='zzarc').delete()
             db.session.commit()
+
+
+def test_startup_invalidation_writes_only_under_the_bucket_write_guard(
+        monkeypatch):
+    """The startup pass clears scores off bucket rows -- a bucket write
+    like any other. Recovery may be running from the CLI at the same
+    moment, so it has to take the same database-wide guard the live
+    writers take, not just run early."""
+    from features.radar import buckets as buckets_module
+
+    held = []
+    monkeypatch.setattr(daemon.journal, 'bootstrap_from_mentions',
+                        lambda since: 1)
+
+    def invalidate_and_record(version, since):
+        held.append(buckets_module.BUCKET_WRITE_LOCK.locked())
+        return 0
+
+    monkeypatch.setattr(daemon.scoring, 'invalidate_incompatible_scores',
+                        invalidate_and_record)
+    daemon._prepare_rollup_generation(_utc(2026, 4, 15, 15, 0))
+
+    assert held == [True]
+    assert not buckets_module.BUCKET_WRITE_LOCK.locked()

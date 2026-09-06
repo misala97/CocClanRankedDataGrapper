@@ -714,3 +714,53 @@ def test_scoring_writes_only_under_the_bucket_write_lock(rows, monkeypatch):
 
     assert written > 0
     assert entries == ['enter', 'exit', 'enter', 'exit'], entries
+
+
+def test_a_score_computed_from_a_count_that_has_since_moved_is_not_written(
+        rows, monkeypatch):
+    """Scoring reads counts and computes z outside the guard, then flushes
+    under it. Recovery can correct a window's count -- and its z -- in
+    between. The flush must not land a z computed from the old count over
+    the corrected one; a row whose count moved is left for the next pass,
+    which will read the corrected count."""
+    import contextlib
+
+    from features.radar import buckets as buckets_module
+    steady_history(source=REDDIT)
+    loud = MONDAY + dt.timedelta(days=20)
+    db.session.commit()
+    RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud,
+                                      source=REDDIT).update(
+        {'mention_count': 60})
+    db.session.commit()
+
+    real = buckets_module.bucket_write_guard
+    entries = []
+
+    @contextlib.contextmanager
+    def recovery_corrects_the_count_first(*args, **kwargs):
+        with real(*args, **kwargs):
+            entries.append(True)
+            # The FIRST guard is the invalidation before the reads; the
+            # second is the flush. By then the pass has computed z from
+            # 60. Recovery puts the count back to 2 and writes the z that
+            # count implies -- on its own connection, committed.
+            if len(entries) == 2:
+                with db.engine.connect() as other:
+                    other.exec_driver_sql(
+                        'UPDATE radar_bucket_sources SET mention_count = 2, '
+                        'mention_z = -0.5 WHERE ticker = %s AND source = %s '
+                        'AND bucket_start = %s', ('SSA', REDDIT, loud))
+                    other.commit()
+            yield
+
+    monkeypatch.setattr(scoring.buckets, 'bucket_write_guard',
+                        recovery_corrects_the_count_first)
+    scoring.score_source(REDDIT, NOW)
+
+    db.session.rollback()
+    db.session.expire_all()
+    row = RadarBucketSource.query.filter_by(ticker='SSA', bucket_start=loud,
+                                            source=REDDIT).one()
+    assert row.mention_count == 2
+    assert row.mention_z == -0.5, 'the stale z from 60 overwrote the correction'

@@ -3,7 +3,7 @@
 import hashlib
 import json
 
-from features.radar import llm_sentiment, sentiment_input
+from features.radar import judge_backends, llm_sentiment, sentiment_input
 from features.radar.llm_sentiment import (
     ATTITUDE, CONFIDENCE, CONTENT_ORIGIN, EXPECTED_MOVE, RELEVANCE,
     JudgeItem, Judgment, legacy_projection)
@@ -60,33 +60,126 @@ def full(n, relevance='relevant', origin='human_chatter', attitude='positive',
             'confidence': confidence}
 
 
-def test_a_full_judgment_comes_back_typed():
-    client = FakeClient([answer([full(1)])])
-    got = judge([jitem(7)], client=client)
-    j = got[7].judgment
-    assert j.relevance == 'relevant' and j.attitude == 'positive'
-    assert j.expected_move == 'up' and j.confidence == 'high'
+class FakeBackend:
+    """A backend with no vendor inside it.
+
+    What the pipeline does with an answer -- validate it, split the batch's
+    tokens over it, store it, let review outrank primary -- is the same
+    whoever answered. These tests answer directly, so a change to the
+    Anthropic request shape can never make them pass or fail.
+
+    `answers` is one entry per batch: {item.key: Judgment} for what came
+    back, or an exception to raise instead.
+    """
+
+    supports_review = True
+
+    def __init__(self, answers, id='zz-fake-backend', batch_size=20,
+                 pass_limit=400, usage=None, writes_tone=True):
+        self.id = id
+        # Declared, never defaulted: judge_backends.writes_tone refuses a
+        # backend that has no policy, so a fake without one would be a fake
+        # the production code would reject.
+        self.writes_tone = writes_tone
+        self.batch_size = batch_size
+        self.pass_limit = pass_limit
+        self.answers = list(answers)
+        self.usage = usage if usage is not None else judge_backends.Usage(0, 0)
+        self.batches = []
+
+    def judge_batch(self, batch, *, preamble=None):
+        self.batches.append((list(batch), preamble))
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return dict(answer), self.usage
 
 
-def test_the_item_serialization_matches_the_spec_shape():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1, text='body & text', ticker='ZZA',
-                 source='reddit:options')], client=client)
-    prompt = client.messages.requests[0]['messages'][0]['content']
-    assert '<item n="1">' in prompt
-    assert '<target_ticker>ZZA</target_ticker>' in prompt
-    assert '<content_type>submission</content_type>' in prompt
-    assert '<post>body &amp; text</post>' in prompt
+def jm(relevance='relevant', origin='human_chatter', attitude='positive',
+       move='up', confidence='high'):
+    return Judgment(relevance, origin, attitude, move, confidence)
 
 
-def test_a_reddit_comment_serializes_as_comment_without_parent_title():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1, text='my own words', ticker='ZZA',
-                 source='reddit:options', title='/u/parent on Big Thread')],
-          client=client)
-    prompt = client.messages.requests[0]['messages'][0]['content']
-    assert '<content_type>comment</content_type>' in prompt
-    assert 'Big Thread' not in prompt
+def test_judge_returns_what_the_backend_answered():
+    backend = FakeBackend([{7: jm()}])
+    got = judge([jitem(7)], backend)
+    assert set(got) == {7}
+    assert got[7].judgment.attitude == 'positive'
+
+
+def test_a_value_outside_the_enums_is_discarded_whoever_said_it():
+    """Validation is the pipeline's boundary, not the adapter's -- so it
+    holds for a backend that never saw the schema at all."""
+    backend = FakeBackend([{1: jm(attitude='bullish')}])
+    assert judge([jitem(1)], backend) == {}
+
+
+def test_a_partial_answer_is_discarded_not_defaulted():
+    backend = FakeBackend([{1: Judgment('relevant', None, 'positive',
+                                        'up', 'high')}])
+    assert judge([jitem(1)], backend) == {}
+
+
+def test_an_unavailable_batch_leaves_its_items_unjudged():
+    backend = FakeBackend([llm_sentiment.SentimentUnavailable('nope')])
+    assert judge([jitem(1), jitem(2)], backend) == {}
+
+
+def test_one_failed_batch_does_not_cost_the_others():
+    backend = FakeBackend([llm_sentiment.SentimentUnavailable('nope'),
+                           {2: jm()}], batch_size=1)
+    got = judge([jitem(1), jitem(2)], backend)
+    assert set(got) == {2}
+
+
+def test_items_are_batched_at_the_backends_size():
+    backend = FakeBackend([{1: jm()}, {2: jm()}, {3: jm()}], batch_size=1)
+    judge([jitem(1), jitem(2), jitem(3)], backend)
+    assert [len(batch) for batch, _preamble in backend.batches] == [1, 1, 1]
+
+    backend = FakeBackend([{1: jm(), 2: jm(), 3: jm()}], batch_size=20)
+    judge([jitem(1), jitem(2), jitem(3)], backend)
+    assert [len(batch) for batch, _preamble in backend.batches] == [3]
+
+
+def test_batch_usage_is_split_across_its_answers():
+    backend = FakeBackend([{1: jm(), 2: jm()}],
+                          usage=judge_backends.Usage(100, 21))
+    got = judge([jitem(1), jitem(2)], backend)
+    assert got[1].input_tokens + got[2].input_tokens == 100
+    assert got[1].output_tokens + got[2].output_tokens == 21
+
+
+def test_usage_is_split_over_what_survived_validation():
+    """A batch where the model answered one item and botched another must
+    attribute all of its tokens to the item that was stored."""
+    backend = FakeBackend([{1: jm(), 2: jm(confidence='very')}],
+                          usage=judge_backends.Usage(100, 20))
+    got = judge([jitem(1), jitem(2)], backend)
+    assert set(got) == {1}
+    assert (got[1].input_tokens, got[1].output_tokens) == (100, 20)
+
+
+def test_a_tokenless_backend_costs_nothing_and_still_answers():
+    backend = FakeBackend([{1: jm()}], id='radar-encoder-v1')
+    got = judge([jitem(1)], backend)
+    assert (got[1].input_tokens, got[1].output_tokens) == (0, 0)
+
+
+def test_the_preamble_reaches_the_backend_only_when_given():
+    backend = FakeBackend([{1: jm()}, {1: jm()}], batch_size=20)
+    judge([jitem(1)], backend)
+    judge([jitem(1)], backend, preamble=llm_sentiment.REVIEW_PREAMBLE)
+    assert [preamble for _batch, preamble in backend.batches] ==         [None, llm_sentiment.REVIEW_PREAMBLE]
+
+
+def test_no_items_asks_the_backend_nothing():
+    backend = FakeBackend([])
+    assert judge([], backend) == {}
+    assert backend.batches == []
+
+
+
 
 
 def test_the_binding_prompt_is_byte_exact():
@@ -119,67 +212,12 @@ def test_the_schema_is_the_binding_enum_set():
     assert props.keys() >= {'n'}
 
 
-def test_the_review_preamble_is_present_only_on_review_calls():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client)
-    assert llm_sentiment.REVIEW_PREAMBLE not in \
-        client.messages.requests[0]['messages'][0]['content']
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client, model=llm_sentiment.REVIEW_MODEL,
-          effort='low', preamble=llm_sentiment.REVIEW_PREAMBLE)
-    prompt = client.messages.requests[0]['messages'][0]['content']
-    assert prompt.startswith(llm_sentiment.REVIEW_PREAMBLE)
-    assert llm_sentiment._INSTRUCTIONS_V2 in prompt
 
 
-def test_an_entry_with_a_value_outside_the_enums_is_discarded():
-    bad = full(1)
-    bad['attitude'] = 'bullish'
-    client = FakeClient([answer([bad])])
-    assert judge([jitem(1)], client=client) == {}
 
 
-def test_a_partial_entry_is_discarded_not_defaulted():
-    entry = full(1)
-    del entry['content_origin']
-    client = FakeClient([answer([entry])])
-    assert judge([jitem(1)], client=client) == {}
 
 
-def test_malformed_json_leaves_the_batch_unjudged():
-    client = FakeClient([FakeResponse('this is not json')])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_a_missing_item_number_is_discarded():
-    entry = full(1)
-    del entry['n']
-    client = FakeClient([answer([entry])])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_a_refusal_leaves_the_batch_unjudged():
-    client = FakeClient([FakeResponse('no', stop_reason='refusal')])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_batch_usage_is_split_across_its_answers():
-    usage = type('U', (), {'input_tokens': 100, 'output_tokens': 21})()
-    client = FakeClient([answer([full(1), full(2)], usage=usage)])
-    got = judge([jitem(1), jitem(2)], client=client)
-    assert got[1].input_tokens + got[2].input_tokens == 100
-    assert got[1].output_tokens + got[2].output_tokens == 21
-
-
-def test_no_effort_is_sent_by_default_and_effort_reaches_sonnet():
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client)
-    assert 'effort' not in client.messages.requests[0]['output_config']
-    client = FakeClient([answer([full(1)])])
-    judge([jitem(1)], client=client, model=llm_sentiment.REVIEW_MODEL,
-          effort='low')
-    assert client.messages.requests[0]['output_config']['effort'] == 'low'
-    assert client.messages.requests[0]['model'] == 'claude-sonnet-5'
 
 
 def test_legacy_projection_matches_the_spec_table():
@@ -258,7 +296,7 @@ def test_apply_writes_history_final_fields_and_projection(clean_posts):
         mention_id = make_post('zztest-v2-a', body='love it, calls')
         written = llm_sentiment.apply_judgments(
             rows_for([mention_id]), {mention_id: ja()},
-            stage='primary', model='claude-haiku-4-5')
+            stage='primary', model='claude-haiku-4-5', write_tone=True)
         db.session.commit()      # apply never commits; the caller owns it
         assert written == 1
         m = db.session.get(RadarMention, mention_id)
@@ -280,13 +318,13 @@ def test_review_overwrites_primary_but_not_vice_versa(clean_posts):
         rows = rows_for([mention_id])
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='negative', move='down')},
-            stage='review', model=llm_sentiment.REVIEW_MODEL)
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(attitude='positive')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         m = db.session.get(RadarMention, mention_id)
         assert m.sentiment_attitude == 'negative'    # review still stands
@@ -297,12 +335,231 @@ def test_review_overwrites_primary_but_not_vice_versa(clean_posts):
         assert [h.stage for h in history] == ['primary', 'review', 'primary']
 
 
+# --- Stage is a fact in the history, not an inference from the model id ----
+#
+# apply_judgments and review_candidates both used to read STAGE off the
+# mention's model column: `sentiment_model == REVIEW_MODEL` meant "a review
+# stands here", `== PRIMARY_MODEL` meant "this was judged by the primary".
+# That is only right while the two backends happen to carry different ids,
+# which is a fact about today's configuration and not about the pipeline.
+# It fails silently in both directions -- a standing review overwritten by a
+# later primary pass, or rows judged by a previous primary id dropping out of
+# the review pool -- and the suite stayed green because every existing test
+# uses two different fake ids. radar_sentiment_judgments.stage already holds
+# the truth; these tests ask it.
+
+import contextlib
+
+import sqlalchemy as sa
+
+# Deliberately neither PRIMARY_MODEL nor REVIEW_MODEL: one backend serving
+# both roles is exactly the configuration the model-id proxy cannot express.
+SAME_BACKEND = 'zz-same-backend'
+
+
+@contextlib.contextmanager
+def history_selects():
+    """Collect SELECTs issued against radar_sentiment_judgments in the block.
+
+    The stage lookup must be ONE query for the whole batch. A per-row
+    version would pass every correctness test here and quietly turn a
+    400-mention pass into 400 extra round trips.
+    """
+    seen = []
+
+    def before(conn, cursor, statement, parameters, context, executemany):
+        text = ' '.join(statement.split()).lower()
+        if text.startswith('select') and 'radar_sentiment_judgments' in text:
+            seen.append(text)
+
+    sa.event.listen(db.engine, 'before_cursor_execute', before)
+    try:
+        yield seen
+    finally:
+        sa.event.remove(db.engine, 'before_cursor_execute', before)
+
+
+def test_a_standing_review_survives_a_later_primary_from_the_same_id(
+        clean_posts):
+    """The identical-id case the old predicate could not express."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-same')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=SAME_BACKEND, write_tone=True)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='negative', move='down')},
+            stage='review', model=SAME_BACKEND, write_tone=True)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=SAME_BACKEND, write_tone=True)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'    # the review still stands
+        assert m.sentiment_expected_move == 'down'
+        assert m.llm_sentiment == 'bearish'
+        # History is append-only and records the blocked pass too: the
+        # guard governs materialization, never the evidence.
+        history = RadarSentimentJudgment.query.filter_by(
+            mention_id=mention_id).order_by(RadarSentimentJudgment.id).all()
+        assert [h.stage for h in history] == ['primary', 'review', 'primary']
+        assert [h.model for h in history] == [SAME_BACKEND] * 3
+
+
+def test_two_primaries_under_the_review_id_do_not_protect_each_other(
+        clean_posts):
+    """The opposite false positive: a primary must never protect itself
+    just because it was written by the model that usually reviews."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-selfprot')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='negative', move='down')},
+            stage='primary', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'    # the second one won
+        assert m.llm_sentiment == 'bearish'
+
+
+def test_another_mentions_review_cannot_protect_this_one(clean_posts):
+    """Scoped to the mention. A batch lookup that answered 'some row in
+    this batch has been reviewed' would pass every single-row test."""
+    with flask_app.app_context():
+        reviewed_id = make_post('zztest-stage-neighbour-r')
+        plain_id = make_post('zztest-stage-neighbour-p')
+        llm_sentiment.apply_judgments(
+            rows_for([reviewed_id]), {reviewed_id: ja(attitude='negative',
+                                                      move='down')},
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
+        db.session.commit()
+
+        both = rows_for([reviewed_id, plain_id])
+        llm_sentiment.apply_judgments(
+            both, {reviewed_id: ja(attitude='positive'),
+                   plain_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
+        db.session.commit()
+
+        assert db.session.get(
+            RadarMention, reviewed_id).sentiment_attitude == 'negative'
+        assert db.session.get(
+            RadarMention, plain_id).sentiment_attitude == 'positive'
+
+
+def test_an_older_prompt_generations_review_does_not_protect(clean_posts):
+    """Scoped to the CURRENT prompt version, not to 'the latest history
+    row', which answers a different question."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-oldprompt')
+        db.session.add(RadarSentimentJudgment(
+            mention_id=mention_id, stage='review',
+            model=llm_sentiment.REVIEW_MODEL,
+            prompt_version='radar-sentiment-v2-retired-generation',
+            relevance='relevant', content_origin='human_chatter',
+            attitude='negative', expected_move='down', confidence='high',
+            input_tokens=0, output_tokens=0, created_utc=NOW))
+        db.session.commit()
+
+        llm_sentiment.apply_judgments(
+            rows_for([mention_id]), {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'positive'
+        assert m.sentiment_prompt_version == llm_sentiment.PROMPT_VERSION
+
+
+def test_the_review_lookup_sees_an_uncommitted_review(clean_posts):
+    """Both passes run inside one open transaction in production. A review
+    written but not yet committed must already protect its mention."""
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-uncommitted')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='negative', move='down')},
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
+        # No commit here, deliberately.
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(attitude='positive')},
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
+        db.session.commit()
+
+        m = db.session.get(RadarMention, mention_id)
+        assert m.sentiment_attitude == 'negative'
+
+
+def test_the_stage_lookup_is_one_query_for_the_whole_batch(clean_posts):
+    with flask_app.app_context():
+        ids = [make_post('zztest-stage-bulk-%d' % n) for n in range(3)]
+        rows = rows_for(ids)
+        answers = {mention_id: ja() for mention_id in ids}
+        with history_selects() as seen:
+            llm_sentiment.apply_judgments(
+                rows, answers, stage='primary',
+                model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
+        db.session.commit()
+        assert len(seen) == 1, seen
+
+        # A review pass has no standing review to respect -- review always
+        # wins -- so it asks nothing at all.
+        with history_selects() as seen:
+            llm_sentiment.apply_judgments(
+                rows, answers, stage='review',
+                model=llm_sentiment.REVIEW_MODEL, write_tone=True)
+        db.session.commit()
+        assert seen == []
+
+
+def test_a_previous_primary_id_stays_eligible_for_review(clean_posts,
+                                                         own_candidates):
+    """The review pool is 'judged, not yet reviewed at this prompt
+    version'. Which backend produced the primary answer is irrelevant to
+    that question, and filtering on it silently emptied the pool after a
+    backend change."""
+    with flask_app.app_context():
+        old_id = make_post('zztest-stage-oldbackend')
+        llm_sentiment.apply_judgments(
+            rows_for([old_id]), {old_id: ja(confidence='low')},
+            stage='primary', model='claude-haiku-4-4-retired', write_tone=True)
+        db.session.commit()
+
+        got = [mention.id for mention, _post
+               in llm_sentiment.review_candidates(NOW)]
+        assert old_id in got
+
+
+def test_a_standing_review_leaves_the_pool_whatever_id_wrote_it(
+        clean_posts, own_candidates):
+    with flask_app.app_context():
+        mention_id = make_post('zztest-stage-reviewed-same')
+        rows = rows_for([mention_id])
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(confidence='low')},
+            stage='primary', model=SAME_BACKEND, write_tone=True)
+        llm_sentiment.apply_judgments(
+            rows, {mention_id: ja(confidence='low')},
+            stage='review', model=SAME_BACKEND, write_tone=True)
+        db.session.commit()
+
+        got = [mention.id for mention, _post
+               in llm_sentiment.review_candidates(NOW)]
+        assert mention_id not in got
+
+
 def test_an_unjudged_mention_stays_null(clean_posts):
     with flask_app.app_context():
         mention_id = make_post('zztest-v2-c')
         written = llm_sentiment.apply_judgments(
             rows_for([mention_id]), {}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         assert written == 0
         m = db.session.get(RadarMention, mention_id)
@@ -329,7 +586,7 @@ def test_final_eligibility_maps_the_materialized_fields(clean_posts):
         for answer_, expected in cases:
             llm_sentiment.apply_judgments(rows, {mention_id: answer_},
                                           stage='review',
-                                          model=llm_sentiment.REVIEW_MODEL)
+                                          model=llm_sentiment.REVIEW_MODEL, write_tone=True)
             db.session.commit()
             assert llm_sentiment.final_eligibility(m) is expected, answer_
 
@@ -342,12 +599,12 @@ def test_a_sonnet_reversal_restores_eligibility(clean_posts):
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja(relevance='irrelevant', attitude='none',
                                   move='unknown')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         assert llm_sentiment.final_eligibility(m) is False
         llm_sentiment.apply_judgments(
             rows, {mention_id: ja()}, stage='review',
-            model=llm_sentiment.REVIEW_MODEL)
+            model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         db.session.commit()
         assert llm_sentiment.final_eligibility(m) is True
 
@@ -358,7 +615,7 @@ def test_pending_v2_targets_unjudged_v2_not_legacy(clean_posts):
         judged = make_post('zztest-v2-g')
         llm_sentiment.apply_judgments(
             rows_for([judged]), {judged: ja()}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         # pending() is the activated v2 selection (pending_v2 aliases it):
         # keyed on sentiment_judged_at, so a legacy verdict does not hide
@@ -436,19 +693,19 @@ def test_review_candidates_orders_by_priority_and_skips_reviewed(clean_posts):
         untriggered = make_post('zztest-rc-none')
         llm_sentiment.apply_judgments(
             rows_for([low_conf]), {low_conf: ja(confidence='low')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([uncertain]), {uncertain: ja(relevance='uncertain')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([reviewed]), {reviewed: ja(confidence='low')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([reviewed]), {reviewed: ja()},
-            stage='review', model=llm_sentiment.REVIEW_MODEL)
+            stage='review', model=llm_sentiment.REVIEW_MODEL, write_tone=True)
         llm_sentiment.apply_judgments(
             rows_for([untriggered]), {untriggered: ja()},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
 
         got = [mention.id for mention, _post
@@ -460,14 +717,26 @@ def test_review_candidates_orders_by_priority_and_skips_reviewed(clean_posts):
 
 # --- The Sonnet review pass (Task 8) ----------------------------------------
 
-def sentinel_client():
-    """A client whose any use fails the test: proves no call was made."""
-    class Boom:
-        def create(self, **kwargs):
-            raise AssertionError('the review pass must not call the API here')
-    client = type('C', (), {})()
-    client.messages = Boom()
-    return client
+def sentinel_backend():
+    """A backend whose every use fails the test: proves no call was made."""
+    class Boom(FakeBackend):
+        def judge_batch(self, batch, *, preamble=None):
+            raise AssertionError('the review pass must not judge here')
+    return Boom([], id=llm_sentiment.REVIEW_MODEL)
+
+
+def review_backend_over(answers):
+    """The real Sonnet adapter over a fake transport.
+
+    The review tests that survive here assert on stored fields, meters and
+    -- in one case -- the exact prompt bytes that prove the review is an
+    INDEPENDENT judgment. That last one needs the real request, so these
+    keep the adapter and fake only the HTTP client.
+    """
+    client = FakeClient(answers)
+    backend = judge_backends.AnthropicBackend(
+        llm_sentiment.REVIEW_MODEL, effort='low', client=client)
+    return backend, client
 
 
 @pytest.fixture()
@@ -514,7 +783,7 @@ def primary_judged(external_id, confidence='low'):
     mention_id = make_post(external_id)
     llm_sentiment.apply_judgments(
         rows_for([mention_id]), {mention_id: ja(confidence=confidence)},
-        stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+        stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
     db.session.commit()
     return mention_id
 
@@ -524,7 +793,7 @@ def test_review_pass_is_off_without_the_flag(clean_posts, clean_meter_all,
     monkeypatch.delenv('RADAR_SONNET_REVIEW', raising=False)
     with flask_app.app_context():
         primary_judged('zztest-rv-off')
-        assert llm_sentiment.run_review_pass(client=sentinel_client()) == 0
+        assert llm_sentiment.run_review_pass(backend=sentinel_backend()) == 0
         assert RadarReviewMeter.query.count() == 0
 
 
@@ -533,7 +802,7 @@ def test_shadow_mode_meters_but_never_calls(clean_posts, clean_meter_all,
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-shadow')
-        assert llm_sentiment.run_review_pass(client=sentinel_client()) == 0
+        assert llm_sentiment.run_review_pass(backend=sentinel_backend()) == 0
         row = RadarReviewMeter.query.one()
         assert row.demanded == 1 and row.attempted == 0 and row.served == 0
         m = db.session.get(RadarMention, mention_id)
@@ -545,8 +814,8 @@ def test_demand_is_counted_once_across_passes(clean_posts, clean_meter_all,
     monkeypatch.setenv('RADAR_SONNET_REVIEW', 'shadow')
     with flask_app.app_context():
         primary_judged('zztest-rv-once')
-        llm_sentiment.run_review_pass(client=sentinel_client())
-        llm_sentiment.run_review_pass(client=sentinel_client())
+        llm_sentiment.run_review_pass(backend=sentinel_backend())
+        llm_sentiment.run_review_pass(backend=sentinel_backend())
         row = RadarReviewMeter.query.one()
         assert row.demanded == 1
 
@@ -561,15 +830,15 @@ def test_the_ceiling_caps_on_attempted_and_priority_wins(
         uncertain = make_post('zztest-rv-cap-b')
         llm_sentiment.apply_judgments(
             rows_for([uncertain]), {uncertain: ja(relevance='uncertain')},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         # Pin the fixture arithmetic: 2 primary judgments, share 0.5 ->
         # budget for exactly one. _primary_count is the seam so the real
         # daemon's history cannot move `allowed`.
         monkeypatch.setattr(llm_sentiment, '_primary_count', lambda day: 2)
         monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 0.5)
-        client = FakeClient([answer([full(1)])])
-        served = llm_sentiment.run_review_pass(client=client)
+        backend, client = review_backend_over([answer([full(1)])])
+        served = llm_sentiment.run_review_pass(backend=backend)
         assert served == 1
         row = RadarReviewMeter.query.one()
         assert row.demanded == 2 and row.attempted == 1
@@ -589,8 +858,9 @@ def test_a_failed_sonnet_call_meters_attempted_but_not_served(
     monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-fail')
-        client = FakeClient([FakeResponse('not json at all')])
-        assert llm_sentiment.run_review_pass(client=client) == 0
+        backend, client = review_backend_over(
+            [FakeResponse('not json at all')])
+        assert llm_sentiment.run_review_pass(backend=backend) == 0
         row = RadarReviewMeter.query.one()
         assert row.attempted == 1 and row.served == 0
         # The invalid answer preserved the Haiku final result untouched.
@@ -607,9 +877,9 @@ def test_sonnet_result_overwrites_and_carries_the_preamble(
     monkeypatch.setattr(llm_sentiment.config, 'REVIEW_DAILY_SHARE', 1.0)
     with flask_app.app_context():
         mention_id = primary_judged('zztest-rv-serve')
-        client = FakeClient([answer([full(1, attitude='negative',
-                                          move='down')])])
-        assert llm_sentiment.run_review_pass(client=client) == 1
+        backend, client = review_backend_over(
+            [answer([full(1, attitude='negative', move='down')])])
+        assert llm_sentiment.run_review_pass(backend=backend) == 1
         m = db.session.get(RadarMention, mention_id)
         assert m.sentiment_attitude == 'negative'
         assert m.sentiment_model == llm_sentiment.REVIEW_MODEL
@@ -652,13 +922,13 @@ def test_rejudge_selects_exactly_the_non_current_versions(clean_posts):
         current = make_post('zztest-rj-cur')
         llm_sentiment.apply_judgments(
             rows_for([current]), {current: ja()}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         # A row judged under an older prompt version.
         stale = make_post('zztest-rj-stale')
         llm_sentiment.apply_judgments(
             rows_for([stale]), {stale: ja()}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         m = db.session.get(RadarMention, stale)
         m.sentiment_prompt_version = 'radar-sentiment-v1-retired'
@@ -692,7 +962,7 @@ def test_rejudge_keeps_history_and_overwrites_the_projection(clean_posts):
                 if mention.id == stale]
         written = llm_sentiment.apply_judgments(
             ours, {stale: ja(attitude='positive')}, stage='primary',
-            model=llm_sentiment.PRIMARY_MODEL)
+            model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         assert written == 1
         m = db.session.get(RadarMention, stale)
@@ -710,7 +980,7 @@ def test_cost_projection_uses_measured_history_when_present(clean_posts):
         llm_sentiment.apply_judgments(
             rows_for([mention_id]),
             {mention_id: ja(input_tokens=1000, output_tokens=100)},
-            stage='primary', model=llm_sentiment.PRIMARY_MODEL)
+            stage='primary', model=llm_sentiment.PRIMARY_MODEL, write_tone=True)
         db.session.commit()
         per = rejudge.measured_tokens_per_mention()
         assert per is not None
@@ -719,6 +989,52 @@ def test_cost_projection_uses_measured_history_when_present(clean_posts):
 
 
 # --- Locked reference tooling, pure pieces (Task 13) ------------------------
+
+def test_rejudge_judges_through_an_explicitly_constructed_haiku(
+        clean_posts, monkeypatch):
+    """The bounded history rewrite builds its own judge.
+
+    It must not inherit whatever the daemon is configured with: this script
+    rewrites the past, and the past must not quietly acquire a different
+    judge because a trial is running. What it constructs is what it books
+    and what it stores.
+    """
+    with flask_app.app_context():
+        stale = make_post('zztest-rj-backend')
+        m = db.session.get(RadarMention, stale)
+        m.sentiment_prompt_version = 'radar-sentiment-v1-retired'
+        m.sentiment_judged_at = NOW
+        db.session.commit()
+
+        built = []
+        backend = FakeBackend([{stale: jm(attitude='negative', move='down')}],
+                              id=llm_sentiment.PRIMARY_MODEL,
+                              usage=judge_backends.Usage(11, 3))
+
+        def fake_construct(spec, **kwargs):
+            built.append(spec)
+            return backend
+
+        monkeypatch.setattr(judge_backends, 'construct_backend', fake_construct)
+        monkeypatch.setattr(rejudge, 'rejudge_backlog',
+                            lambda limit: rows_for([stale]))
+
+        assert rejudge.run(apply=True, limit=1) == 1
+        assert built == ['anthropic:' + llm_sentiment.PRIMARY_MODEL]
+        m = db.session.get(RadarMention, stale)
+        assert m.sentiment_model == llm_sentiment.PRIMARY_MODEL
+        assert m.sentiment_attitude == 'negative'
+        assert m.sentiment_prompt_version == llm_sentiment.PROMPT_VERSION
+
+
+def test_a_dry_run_constructs_no_judge_at_all(monkeypatch):
+    def boom(*args, **kwargs):
+        raise AssertionError('a dry run built a judge')
+
+    monkeypatch.setattr(judge_backends, 'construct_backend', boom)
+    with flask_app.app_context():
+        assert rejudge.run(apply=False) == 0
+
 
 from scripts import build_sentiment_reference as reference
 from scripts import score_sentiment_reference as scorer
@@ -836,16 +1152,6 @@ def test_the_activation_cutoff_fences_the_legacy_backlog(clean_posts):
         assert legacy in backlog
 
 
-def test_a_dict_shaped_verdicts_value_costs_only_the_batch():
-    """Finding 8: {"verdicts": {"n": 1}} is well-formed JSON whose iteration
-    yielded strings and let an AttributeError kill the whole pass."""
-    client = FakeClient([FakeResponse(json.dumps({'verdicts': {'n': 1}}))])
-    assert judge([jitem(1)], client=client) == {}
-
-
-def test_a_non_dict_entry_is_skipped():
-    client = FakeClient([FakeResponse(json.dumps({'verdicts': ['what']}))])
-    assert judge([jitem(1)], client=client) == {}
 
 
 def test_the_meter_lands_on_the_utc_day_of_the_pass(clean_posts,
@@ -866,7 +1172,7 @@ def test_the_meter_lands_on_the_utc_day_of_the_pass(clean_posts,
                 synchronize_session=False)
         db.session.commit()
 
-        llm_sentiment.run_review_pass(client=sentinel_client(),
+        llm_sentiment.run_review_pass(backend=sentinel_backend(),
                                       now=target_day)
         row = RadarReviewMeter.query.one()
         assert row.day == target_day.date()

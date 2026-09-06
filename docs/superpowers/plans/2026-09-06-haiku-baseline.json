@@ -1,0 +1,45 @@
+{
+ "schema": "radar-encoder-trial-baseline-1",
+ "captured_at": "2026-09-06",
+ "captured_from": "production personal_apps.radar_sentiment_judgments, read-only",
+ "why": "The trial's gates in spec 7.1 are RELATIVE to the incumbent paid judge. This is the incumbent, measured over the only window it ever ran. The rows cascade with their posts under 30-day post retention and disappear from production around 2026-10-01, which is why this is captured to a file rather than queried at evaluation time.",
+ "backend": {
+  "model": "claude-haiku-4-5",
+  "stage": "primary",
+  "prompt_version": "radar-sentiment-v2-attitude-origin-candidate-1"
+ },
+ "window": {
+  "first_row_utc": "2026-08-31 11:49:51.770216",
+  "last_row_utc": "2026-09-03 16:37:37.709512"
+ },
+ "removal": {
+  "definition": "relevance = 'irrelevant' OR content_origin = 'broadcast_or_automated'",
+  "judged": 16297,
+  "removed": 8747,
+  "p": 0.5367,
+  "sample_size": 746,
+  "sample_size_rule": "ceil(400 / p); 400 removal decisions is what bounds removal precision at 0.93 with 95% confidence"
+ },
+ "composition": {
+  "note": "Two thirds of the incumbent's removals are broadcast/automated content rather than junk tickers. The queued extraction work targets the irrelevant third.",
+  "irrelevant_total": 3158,
+  "broadcast_total": 6238,
+  "both": 649,
+  "irrelevant_only": 2509,
+  "broadcast_only": 5589,
+  "uncertain_either_field_not_removed": 1868
+ },
+ "daily_share": {
+  "2026-08-31": 0.5517,
+  "2026-09-01": 0.6233,
+  "2026-09-02": 0.5402,
+  "2026-09-03": 0.4441
+ },
+ "rollback_trigger": {
+  "rule": "spec 7.2: the daily removal share moving more than +/-50% RELATIVE to this baseline stops the trial that day",
+  "baseline": 0.5367,
+  "band_low": 0.2684,
+  "band_high": 0.8051
+ },
+ "query": "SELECT COUNT(*) AS judged, SUM(relevance = 'irrelevant' OR content_origin = 'broadcast_or_automated') AS removed FROM radar_sentiment_judgments WHERE stage = 'primary' AND model = 'claude-haiku-4-5';"
+}
