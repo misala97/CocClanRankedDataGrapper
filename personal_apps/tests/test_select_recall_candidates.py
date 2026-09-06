@@ -1,6 +1,7 @@
 """The recall wave's sample: rejected candidates, stratified by cause, capped
 per symbol, written in the label harness's export shape with ids that can
 never collide with a production mention."""
+import collections
 import json
 
 from scripts import select_recall_candidates as sel
@@ -69,3 +70,39 @@ def test_rows_are_written_in_the_harness_shape_with_synthetic_ids(tmp_path):
     assert rows[0]['sentiment_judged_at'] is None
     assert rows[0]['candidate'] == {'cause': 'name_only', 'evidence': 'gpro',
                                     'stored_today': False, 'external_id': 't1_1'}
+
+
+def _c(i, symbol, cause, evidence):
+    row = _cand(i, symbol, cause)
+    row['evidence'] = evidence
+    return row
+
+
+def test_a_top_up_wave_skips_what_an_earlier_wave_already_drew():
+    pool = [_c(1, 'GPRO', 'name_only', 'gopro'), _c(2, 'NKE', 'name_only', 'nike')]
+    already = {('t1_1', 'GPRO', 'name_only')}
+    fresh = sel.without(pool, already)
+    assert [r['external_id'] for r in fresh] == ['t1_2']
+
+
+def test_the_cap_can_count_evidence_tokens_rather_than_symbols():
+    """`trump` produced 3,170 candidates across two listings, so capping
+    per symbol would still let one word take a fifth of the wave."""
+    pool = ([_c(i, 'DJT', 'name_only', 'trump') for i in range(50)]
+            + [_c(100 + i, 'DJTWW', 'name_only', 'trump') for i in range(50)]
+            + [_c(200 + i, 'GPRO', 'name_only', 'gopro') for i in range(50)])
+    picked = sel.pick(pool, n=40, quotas={'name_only': 1.0}, cap_share=0.25, seed=1,
+                      cap_key='evidence')
+    tokens = collections.Counter(r['evidence'] for r in picked)
+    assert tokens['trump'] == 10          # 25% of 40, across BOTH its symbols
+    assert tokens['gopro'] == 10
+    # Two tokens, ten each: the wave comes back SHORT rather than letting a
+    # cap slip, which is the honest outcome when a pool is that narrow.
+    assert len(picked) == 20
+
+
+def test_capping_by_symbol_stays_the_default():
+    pool = ([_c(i, 'DJT', 'name_only', 'trump') for i in range(50)]
+            + [_c(100 + i, 'DJTWW', 'name_only', 'trump') for i in range(50)])
+    picked = sel.pick(pool, n=20, quotas={'name_only': 1.0}, cap_share=0.25, seed=1)
+    assert collections.Counter(r['symbol'] for r in picked) == {'DJT': 5, 'DJTWW': 5}

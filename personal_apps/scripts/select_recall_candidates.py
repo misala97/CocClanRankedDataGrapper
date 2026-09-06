@@ -9,7 +9,15 @@ render --export <file>` renders them with the production prompt, unchanged.
         --candidates C:/Users/michi/Desktop/radar_labels/raw/population/rejected-candidates.jsonl \\
         --out C:/Users/michi/Desktop/radar_labels/candidates-2026-09-06.jsonl --n 3000
 
-STRATIFIED BY CAUSE, CAPPED PER SYMBOL. Half of all name-only candidates
+A TOP-UP WAVE draws only what an earlier wave could not see: pass
+--exclude with the earlier wave's candidate file and every (post, symbol,
+cause) it already holds is skipped, so a second wave spends entirely on
+what the loose pass learned to find.
+
+STRATIFIED BY CAUSE, CAPPED PER SYMBOL (or per evidence token, --cap-by
+evidence: `trump` produced 3,170 candidates across Trump Media and its
+warrant, so capping the symbol still lets one word take a fifth of a
+wave). Half of all name-only candidates
 are fourteen symbols (GoPro alone is a tenth), and AI is a third of the
 stopword class; an uncapped sample would measure those and nothing else.
 Each symbol may take at most `cap_share` of the wave. A cause whose pool
@@ -33,6 +41,7 @@ import json
 import random
 
 DEFAULT_QUOTAS = {
+    'metonym': 0.05,
     'name_only': 0.40,
     'lowercase_symbol': 0.30,
     'stopword': 0.20,
@@ -43,7 +52,17 @@ DEFAULT_QUOTAS = {
 DEFAULT_CAP_SHARE = 0.03        # 90 rows per symbol in a wave of 3,000
 
 
-def pick(candidates, n, quotas, cap_share, seed):
+def without(candidates, already):
+    """Candidates an earlier wave did not hold, by (post, symbol, cause)."""
+    return [c for c in candidates
+            if (c['external_id'], c['symbol'], c['cause']) not in already]
+
+
+def keys_of(candidates):
+    return {(c['external_id'], c['symbol'], c['cause']) for c in candidates}
+
+
+def pick(candidates, n, quotas, cap_share, seed, cap_key='symbol'):
     """Deterministic: per-cause quotas, invisible posts first, seeded
     order, a per-symbol cap over the whole wave, slack redistributed."""
     rng = random.Random(seed)
@@ -57,7 +76,7 @@ def pick(candidates, n, quotas, cap_share, seed):
         rows.sort(key=lambda c: bool(c['stored_today']))
         pools[cause] = collections.deque(rows)
 
-    per_symbol = collections.Counter()
+    per_key = collections.Counter()
     picked = []
 
     def take(cause, want):
@@ -66,10 +85,10 @@ def pick(candidates, n, quotas, cap_share, seed):
         skipped = []
         while pool and taken < want:
             row = pool.popleft()
-            if per_symbol[row['symbol']] >= cap:
+            if per_key[row[cap_key]] >= cap:
                 skipped.append(row)
                 continue
-            per_symbol[row['symbol']] += 1
+            per_key[row[cap_key]] += 1
             picked.append(row)
             taken += 1
         pool.extend(skipped)
@@ -135,11 +154,24 @@ def main(argv=None):
     parser.add_argument('--n', type=int, required=True)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--cap-share', type=float, default=DEFAULT_CAP_SHARE)
+    parser.add_argument('--cap-by', choices=['symbol', 'evidence'], default='symbol')
+    parser.add_argument('--exclude', default=None,
+                        help="an earlier wave's candidate file; its rows are skipped")
     args = parser.parse_args(argv)
 
     with open(args.candidates, encoding='utf-8') as handle:
         candidates = [json.loads(line) for line in handle if line.strip()]
-    picked = pick(candidates, args.n, DEFAULT_QUOTAS, args.cap_share, args.seed)
+    if args.exclude:
+        with open(args.exclude, encoding='utf-8') as handle:
+            already = {(r['candidate']['external_id'], r['ticker'],
+                        r['candidate']['cause'])
+                       for r in (json.loads(line) for line in handle if line.strip())}
+        before = len(candidates)
+        candidates = without(candidates, already)
+        print('excluded %d candidates an earlier wave already drew'
+              % (before - len(candidates)))
+    picked = pick(candidates, args.n, DEFAULT_QUOTAS, args.cap_share, args.seed,
+                  cap_key=args.cap_by)
     write_export(picked, args.out)
 
     by_cause = collections.Counter(c['cause'] for c in picked)
@@ -148,8 +180,11 @@ def main(argv=None):
     print('by cause:', dict(by_cause))
     print('invisible posts: %d (%.0f%%)' % (invisible, 100.0 * invisible / max(len(picked), 1)))
     for cause in by_cause:
-        top = collections.Counter(c['symbol'] for c in picked if c['cause'] == cause)
-        print('  %-24s distinct symbols %3d, top: %s' % (cause, len(top), top.most_common(8)))
+        rows = [c for c in picked if c['cause'] == cause]
+        top = collections.Counter(c['symbol'] for c in rows)
+        tokens = collections.Counter(c['evidence'].lower() for c in rows)
+        print('  %-24s distinct symbols %3d, top: %s' % (cause, len(top), top.most_common(6)))
+        print('  %-24s distinct tokens  %3d, top: %s' % ('', len(tokens), tokens.most_common(6)))
 
 
 if __name__ == '__main__':
