@@ -934,14 +934,14 @@ def test_a_batch_after_the_deadline_is_not_even_sent(clean_posts,
     monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
 
     with flask_app.app_context():
-        started = dt.datetime.utcnow() - dt.timedelta(days=10) \
+        started = dt.datetime.utcnow() - dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS) \
             + dt.timedelta(minutes=5)
         arm_now(now=started - dt.timedelta(hours=1), first_judged_at=started,
                 status=judge_trial.RUNNING)
         ends = started + dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS)
         try:
             # Recent posts: the pass only reads mentions after the v2
-            # activation cutoff, and the trial's tenth day is today.
+            # activation cutoff, and the trial's expiry day is today.
             first = make_post('zztrial-clock-a',
                               when=dt.datetime.utcnow() - dt.timedelta(hours=2))
             second = make_post('zztrial-clock-b',
@@ -985,7 +985,7 @@ def test_answers_judged_before_the_deadline_are_not_written_after_it(
     monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
 
     with flask_app.app_context():
-        started = dt.datetime.utcnow() - dt.timedelta(days=10) \
+        started = dt.datetime.utcnow() - dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS) \
             + dt.timedelta(minutes=5)
         arm_now(now=started - dt.timedelta(hours=1), first_judged_at=started,
                 status=judge_trial.RUNNING)
@@ -1070,7 +1070,7 @@ def test_the_boundary_asks_the_clock_after_the_lock_is_held(clean_posts,
     monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', False)
 
     with flask_app.app_context():
-        started = dt.datetime.utcnow() - dt.timedelta(days=10) \
+        started = dt.datetime.utcnow() - dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS) \
             + dt.timedelta(minutes=5)
         arm_now(now=started - dt.timedelta(hours=1), first_judged_at=started,
                 status=judge_trial.RUNNING)

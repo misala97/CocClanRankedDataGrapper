@@ -356,7 +356,7 @@ radius = (1.959963984540054 / denom) * (
 lower, upper = center - radius, center + radius
 ```
 
-- [ ] Implement day-3 uniform sampling from the full frozen high-confidence
+- [ ] Implement day-1 uniform sampling from the full frozen high-confidence
   traffic frame and armed recipe. Save frame/sample hashes and timestamps;
   reruns reuse ids. Insufficient traffic fails, not permission to shrink/change N.
 - [ ] Export canonical inputs and blinded human files. Preserve original labels,
@@ -370,7 +370,7 @@ lower, upper = center - radius, center + radius
 - [ ] Report original audit halves separately and unified reversal/truncated-post
   disagreements; require supplementary data and inspection acknowledgments for
   a complete accepted report. Evaluate writes JSON/Markdown only. Accept verifies
-  hashes/identity, draw/labels by day 7 and acceptance before day 10; a valid
+  hashes/identity, draw/labels by day 2 and acceptance before day 3; a valid
   failure requests recovery. Invalid/late reports cannot certify/postpone expiry.
   Same-report acceptance is idempotent; different reports cannot silently replace
   a recorded result.
@@ -410,7 +410,7 @@ and is excluded from concrete pricing/provenance enumeration.
   calls. Check before each encoder batch and before writing; discard late answers
   without history. No DB transaction spans inference. Anthropic materialization
   serializes with recovery while retaining its independent policy.
-- [ ] Tick at expiry (first_judged_at + 10 days without timely passing audit)
+- [ ] Tick at expiry (first_judged_at + 3 days without timely passing audit)
   persists recovering before draining at most 2000 mentions. Retry partial/errors
   next tick with pin intact; errors return nonzero/log visibly. Startup checks
   the same guard. Audit pass does not release pin, reset time or change tone.
@@ -476,14 +476,14 @@ implementation workspace; update ledger/handoff. Data artifacts stay outside git
   stopped. Arm singleton and verify pin before primary=encoder, tone=0, review
   backend none, review mode empty, gate ON; restart ingest.
 - [ ] Verify first cycle and persisted first_judged_at, tone/history diagnostics,
-  eligibility, RSS/backlog. Schedule actual day-3 sample/day-7 labels/day-10
+  eligibility, RSS/backlog. Schedule actual day-1 sample/day-2 labels/day-3
   acceptance from that timestamp that day, not from deploy/restart time.
 - [ ] Archive recovery dry-run; record stop/apply/resume/status/timer commands and
   retention storage cost. Check §7.2 operational triggers daily, RSS/backlog
   continuously during initial rollout; a trigger requests durable stop/recovery
   that day. Expiry enforcement is automatic.
-- [ ] Draw at day 3, finish blinded labels/adjudication by day 7, evaluate/accept
-  before day 10; preserve reports and inspection acknowledgments. Failure or
+- [ ] Draw at day 1, finish blinded labels/adjudication by day 2, evaluate/accept
+  before day 3; preserve reports and inspection acknowledgments. Failure or
   incompleteness invokes/allows recovery. Pass only continues suppressed trial
   with its recovery pin.
 - [ ] Handoff records deployed commits/schema/artifact, trial state, timer status,

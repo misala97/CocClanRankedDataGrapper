@@ -76,12 +76,12 @@ def _wipe():
 
 @pytest.fixture()
 def trial(monkeypatch):
-    """A running trial on its fourth day, with SIZE sampled-able mentions
+    """A running trial six hours after its day-one frame closes, with SIZE sampled-able mentions
     inside its frame and the audit sized to exactly SIZE rows."""
     monkeypatch.setattr(judge_trial, 'REMOVAL_DECISIONS_WANTED', SIZE)
     with flask_app.app_context():
         _wipe()
-        started = dt.datetime.utcnow() - dt.timedelta(days=4)
+        started = dt.datetime.utcnow() - dt.timedelta(days=1, hours=6)
         row = judge_trial.arm_trial(started - dt.timedelta(hours=1),
                                     artifact_sha256=fixture_sha(),
                                     baseline_report='reports/baseline.json',
@@ -161,7 +161,7 @@ def read_json(path):
 
 def write_labels(path, verdicts, *, labelled_at=None, adjudicate=None):
     """`adjudicate` maps key -> (original verdict, reason or None)."""
-    labelled_at = labelled_at or (started_at() + dt.timedelta(days=5))
+    labelled_at = labelled_at or (started_at() + dt.timedelta(days=1, hours=12))
     with open(path, 'w', encoding='utf-8') as out:
         for key, verdict in verdicts.items():
             row = dict(verdict, mention_id=key,
@@ -253,13 +253,12 @@ def chain(tmp_path, monkeypatch, *, encoder_answer=REMOVED,
 
 # ---- 1. the frozen frame and the reproducible draw --------------------------
 
-def test_sampling_refuses_before_day_three(trial):
-    """The frame is the first three days of the trial. Drawing on day
-    one draws from a frame that is not closed yet."""
+def test_sampling_refuses_before_day_one(trial):
+    """The frame is the first 24 hours. Drawing at hour 12 is too early."""
     with flask_app.app_context():
         # A nested context is a separate session; the fixture's object
         # would not be flushed by this commit.
-        judge_trial.current().first_judged_at =             dt.datetime.utcnow() - dt.timedelta(days=1)
+        judge_trial.current().first_judged_at =             dt.datetime.utcnow() - dt.timedelta(hours=12)
         db.session.commit()
     out = str(pytest_tmp())
     assert cli.main(['sample', '--out', out]) == 1
@@ -625,13 +624,13 @@ def test_accept_refuses_without_the_required_inspections(trial, tmp_path,
         assert judge_trial.current().audit_evaluated_at is None
 
 
-def test_accept_refuses_labels_finished_after_day_seven(trial, tmp_path,
+def test_accept_refuses_labels_finished_after_day_two(trial, tmp_path,
                                                         monkeypatch):
     out, _labels, report_path, _ = chain(tmp_path, monkeypatch)
     ids = sampled_ids(out)
     late = write_labels(tmp_path / 'late.jsonl',
                         {key: dict(REMOVED) for key in ids},
-                        labelled_at=started_at() + dt.timedelta(days=7, hours=1))
+                        labelled_at=started_at() + dt.timedelta(days=2, hours=1))
     assert cli.main(evaluate_args(out, late)) == 0
     ack = write_ack(out, report_path)
     assert cli.main(['accept', '--report', report_path,
@@ -897,3 +896,34 @@ def test_import_refuses_a_backend_that_is_not_an_incumbent(trial, tmp_path,
     assert cli.main(['import-predictions', '--out', out, '--backend', ENCODER,
                      '--answers', answers]) == 1
     assert not os.path.exists(predictions_path(out, ENCODER))
+
+
+@pytest.mark.parametrize('delay_hours', [0, 4, 23])
+def test_later_sampling_keeps_the_fixed_first_day_frame(trial, tmp_path, delay_hours):
+    """A late draw cannot widen the frame or move the label deadline."""
+    with flask_app.app_context():
+        first = started_at()
+        when = first + dt.timedelta(days=1, minutes=10)
+        post = RadarPost(source='bluesky', external_id='zzaudit-outside-day-one',
+                         channel='firehose', author='later-author',
+                         created_utc=when, title=None, body='ZZAU later post',
+                         first_seen=when, last_seen=when)
+        db.session.add(post)
+        db.session.flush()
+        db.session.add(RadarMention(post_id=post.id, ticker=TICKER,
+                                    confidence='high', lexicon_sentiment=0.2))
+        db.session.commit()
+    assert cli.cmd_sample(str(tmp_path), now=first + dt.timedelta(
+        days=1, hours=delay_hours)) == 0
+    frame = read_json(tmp_path / cli.FRAME)
+    assert frame['size'] == SIZE
+    assert dt.datetime.fromisoformat(frame['until']) == first + dt.timedelta(days=1)
+    assert len(read_json(tmp_path / cli.SAMPLE)['mention_ids']) == SIZE
+
+
+def test_sampling_after_day_two_is_refused(trial, tmp_path):
+    with flask_app.app_context():
+        first = started_at()
+    with pytest.raises(cli.AuditError, match='day 2 passed'):
+        cli.cmd_sample(str(tmp_path), now=first + dt.timedelta(days=2, seconds=1))
+    assert not (tmp_path / cli.SAMPLE).exists()

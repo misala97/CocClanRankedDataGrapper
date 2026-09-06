@@ -572,9 +572,10 @@ def journal_module():
 
 # ---- the audit's verdict, recorded ------------------------------------------
 
-AUDIT_DRAW_DAY = 3
-AUDIT_LABEL_DAY = 7
-TRIAL_DEADLINE_DAYS = 10
+# Schedule amended 2026-09-07: keep the original first-judgment clock.
+AUDIT_DRAW_DAY = 1
+AUDIT_LABEL_DAY = 2
+TRIAL_DEADLINE_DAYS = 3
 
 
 def deadline(row):

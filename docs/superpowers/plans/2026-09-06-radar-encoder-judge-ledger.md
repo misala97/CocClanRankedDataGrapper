@@ -629,3 +629,39 @@ halves, not hashes, so an incomplete report can say what is missing.
 - Any paid Anthropic call (audit labelling, prediction passes).
 - Re-exporting `model-train13000` to ONNX: it runs on his PC in the ML venv
   and costs GPU/RAM and minutes, so it is asked for, not assumed.
+
+
+## Timing amendment — Michi, 2026-09-07
+
+Michi approved changing the already-running trial from 3/7/10 to 1/2/3:
+first-day frame and sampling from day 1, labels by day 2, acceptance before
+day 3 or the existing watchdog stops and recovers it. Drawing hours late
+is allowed through day 2 but never widens the first-24-hour frame or moves
+the remaining deadlines. The original first-judgment timestamp, 746-row
+recipe, quality thresholds, evidence pin, supplemental memberships and
+seven-day tone qualification are unchanged; no rearming or database update.
+
+Implementation is isolated on `codex/radar-trial-123` from production base
+`d54c013`, excluding the newer training work on `dev_personal`. The runtime
+change is the three shared timing constants; CLI terminology, existing
+regression fixtures, spec, plan and runbook follow the same schedule.
+
+Verification: three targeted schedule tests failed under the old constants
+(deadline, guard, day-one sampling). After the update, **216 focused tests
+passed**, covering trial/recovery, write fencing, audit chain and quality
+gates, plus four explicit fixed-frame/late-draw cases. Tests used fresh
+disposable LOCAL MySQL databases with a connection guard refusing every
+other database; both temporary databases were removed. The first full run
+found one clock-once fixture at the new expiry; its second write now occurs
+on day 2, retaining the original test's purpose. No production tests or
+shared-development data writes were performed. Independent read-only
+review found no introduced blockers. Existing exact-deadline acceptance
+versus watchdog boundary wording is outside this timing-only change.
+
+Deployment carries: fast-forward the VPS checkout, preserving untracked
+artifacts/reports, and restart `radar_ingest` and `personal_apps_web` to load
+the constants. The watchdog is a fresh process on each minute's tick. No
+dependency, migration, artifact, frontend or trial-row change is required.
+Verify the live row remains running with first judgment
+`2026-09-06 19:38:24.047717 UTC`; its new milestones are September 7/8/9
+at **21:38:24 Berlin time**.
