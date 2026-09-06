@@ -126,3 +126,26 @@ def test_restricting_to_an_unknown_cause_is_refused():
         assert 'not_a_cause' in str(exc)
     else:
         raise AssertionError('an unknown cause must not silently select nothing')
+
+
+def test_a_second_wave_gets_its_own_id_block():
+    """Wave ids are negative so they cannot collide with a production
+    mention -- but each wave counted from -1, so wave two's ids collided
+    with wave one's and the harness skipped all 1,500 rows as already
+    labelled."""
+    picked = [_cand(1, 'GPRO', 'name_only'), _cand(2, 'NKE', 'name_only')]
+    first = sel.export_rows(picked, wave=1)
+    second = sel.export_rows(picked, wave=2)
+    assert [r['mention_id'] for r in first] == [-1, -2]
+    assert [r['mention_id'] for r in second] == [-1000001, -1000002]
+    assert not ({r['mention_id'] for r in first} & {r['mention_id'] for r in second})
+
+
+def test_a_wave_larger_than_its_block_is_refused():
+    picked = [_cand(i, 'GPRO', 'name_only') for i in range(3)]
+    try:
+        sel.export_rows(picked, wave=1, block=2)
+    except ValueError as exc:
+        assert 'block' in str(exc)
+    else:
+        raise AssertionError('ids must never run into the next wave\'s block')

@@ -27,10 +27,14 @@ INVISIBLE FIRST. A candidate in a post the pipeline never stored is the
 recall question; one beside an accepted ticker is the same question with a
 bias, and is taken only when the invisible pool runs dry.
 
-IDS ARE NEGATIVE. -1, -2, ... can never collide with a production
-mention_id, so the wave's labels can sit in the same JSONL shape as the
-15,200 without any row being mistaken for a stored mention; `stratum`
-carries `cand:<cause>` and `candidate` carries the provenance.
+IDS ARE NEGATIVE, ONE BLOCK PER WAVE. A negative id can never collide
+with a production mention_id, so a wave's labels sit in the same JSONL
+shape as the 15,200 without any row being mistaken for a stored mention.
+Each wave takes its own block of a million (-1.. for wave 1, -1000001..
+for wave 2), because counting every wave from -1 made wave two's ids
+collide with wave one's and the harness skipped all 1,500 rows as
+already labelled. `stratum` carries `cand:<cause>` and `candidate`
+carries the provenance.
 
 No model is called here. The wave itself runs only when its size has been
 named and the go given.
@@ -155,10 +159,23 @@ def to_export_row(candidate, mention_id):
     }
 
 
-def write_export(picked, path):
+ID_BLOCK = 1_000_000
+
+
+def export_rows(picked, wave=1, block=ID_BLOCK):
+    """Export-shaped rows carrying wave `wave`'s own block of ids."""
+    if len(picked) > block:
+        raise ValueError('a wave of %d rows does not fit its id block of %d'
+                         % (len(picked), block))
+    base = (wave - 1) * block
+    return [to_export_row(candidate, -(base + index))
+            for index, candidate in enumerate(picked, start=1)]
+
+
+def write_export(picked, path, wave=1):
     with open(str(path), 'w', encoding='utf-8') as handle:
-        for index, candidate in enumerate(picked, start=1):
-            handle.write(json.dumps(to_export_row(candidate, -index), ensure_ascii=False) + '\n')
+        for row in export_rows(picked, wave=wave):
+            handle.write(json.dumps(row, ensure_ascii=False) + '\n')
 
 
 def main(argv=None):
@@ -169,6 +186,8 @@ def main(argv=None):
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--cap-share', type=float, default=DEFAULT_CAP_SHARE)
     parser.add_argument('--cap-by', choices=['symbol', 'evidence'], default='symbol')
+    parser.add_argument('--wave', type=int, default=1,
+                        help='which id block to use; every wave needs its own')
     parser.add_argument('--causes', default=None,
                         help='comma-separated causes to restrict the wave to')
     parser.add_argument('--exclude', default=None,
@@ -190,7 +209,7 @@ def main(argv=None):
               if args.causes else DEFAULT_QUOTAS)
     picked = pick(candidates, args.n, quotas, args.cap_share, args.seed,
                   cap_key=args.cap_by)
-    write_export(picked, args.out)
+    write_export(picked, args.out, wave=args.wave)
 
     by_cause = collections.Counter(c['cause'] for c in picked)
     invisible = sum(1 for c in picked if not c['stored_today'])
