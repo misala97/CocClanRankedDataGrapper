@@ -187,14 +187,27 @@ class EncoderBackend:
     """
 
     supports_review = False       # it has no independent second opinion to give
-    # Its relevance and content_origin verdicts take effect -- they are what
-    # the evidence supports -- but its attitude never reaches a column any
-    # reader sees. Tone is the one field a post card shows, the encoder
-    # reversed polarity on 3 of 54 directional rows where Haiku reversed
-    # none, and the trial's own gates deliberately do not test attitude. It
-    # is judged and stored in history for evaluation, and is absent from
-    # production by construction rather than by a display rule.
-    writes_tone = False
+    # Tone PUBLISHES, changed 2026-09-07. It was False on the reasoning
+    # that a wrong arrow is worse than no arrow -- which had the wrong
+    # comparison, because blank was never the alternative. With no model
+    # writing tone since Haiku's credits ran out on 09-03, the board falls
+    # back to the lexicon and publishes that. Measured over the 5,583
+    # labelled rows where the author clearly took a side:
+    #
+    #   lexicon, shipping today   silent on 59.7%; of the calls it DOES
+    #                             make, 29.8% are the wrong side
+    #   this encoder              11.8% of directional rows reversed
+    #
+    # And a board aggregates, which the original note never weighed. At a
+    # 12% per-mention reversal rate a ticker showing 7 bullish against 1
+    # bearish reads the wrong net direction 3.6% of the time; under the
+    # lexicon's rate, 28%. Errors have to gang up to flip a majority, and
+    # mostly they do not.
+    #
+    # The 2% reversal gate stays as the TARGET it always was. It is a bar
+    # the incumbent misses by a factor of fifteen, so it was never a
+    # precondition for shipping something better.
+    writes_tone = True
     batch_size = ENCODER_BATCH_SIZE
     pass_limit = ENCODER_PASS_LIMIT
 
@@ -415,15 +428,17 @@ def writes_tone(backend):
                          % getattr(backend, 'id', backend))
 
 
-def writes_tone_for_model(model_id):
-    """The same question about a STORED id, for rows already on disk.
+def stored_row_carries_tone(mention):
+    """Whether a row already on disk holds a tone judgment of its own.
 
-    PURE -- it constructs nothing. Review routing needs it to decide
-    whether a mention's own tone columns belong to the same judgment as its
-    relevance columns, which is false for anything the encoder wrote during
-    a suppressed-tone trial.
+    Asks the ROW, not its model id. The encoder wrote tone-less rows until
+    2026-09-07 and tone-bearing rows after, under one id, so an id cannot
+    tell them apart -- and the question review routing actually has is
+    whether this row's tone columns belong with its relevance columns.
     """
-    return model_id != ENCODER_MODEL_ID
+    return (mention.sentiment_attitude is not None
+            and mention.sentiment_expected_move is not None
+            and mention.sentiment_confidence is not None)
 
 
 def backend_label(model_id):
@@ -437,4 +452,10 @@ def backend_label(model_id):
     """
     if isinstance(model_id, str) and model_id.startswith('claude-'):
         return 'Claude'
+    # Named once tone started publishing (2026-09-07): a reader seeing an
+    # arrow should know a LOCAL encoder decided it. 'model' was true but
+    # told them nothing, and the difference matters -- the encoder reverses
+    # polarity where Claude did not.
+    if isinstance(model_id, str) and model_id.startswith('radar-encoder'):
+        return 'Encoder'
     return 'model'

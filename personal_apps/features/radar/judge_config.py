@@ -134,8 +134,14 @@ def initialize_judges(settings, now=None):
     if settings.primary:
         primary = judge_backends.construct_backend(
             settings.primary, artifact_dir=settings.artifact_dir)
-        if getattr(primary, 'writes_tone', False) is False \
-                and primary.id == judge_backends.ENCODER_MODEL_ID:
+        # Keyed on the encoder's IDENTITY, not on its tone policy. It was
+        # `writes_tone is False and id == ENCODER`, which only read as "the
+        # encoder" while the encoder happened to suppress tone -- turning
+        # tone on (2026-09-07) made the condition false and silently
+        # skipped the armed-trial requirement and the artifact check with
+        # it. The trial gate exists because this is an unproven LOCAL
+        # model, which has nothing to do with which columns it fills.
+        if primary.id == judge_backends.ENCODER_MODEL_ID:
             primary = _encoder_or_none(primary, now)
 
     if settings.review:

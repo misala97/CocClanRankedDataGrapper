@@ -378,9 +378,18 @@ def test_a_missing_history_row_falls_back_only_for_a_tone_writing_model(
         db.session.commit()
         assert llm_sentiment._judgment_of(m, None).confidence == 'low'
 
-        # The same row, but written by the encoder: its tone columns cannot
-        # be trusted to belong with its relevance, so there is no answer.
+        # The same row written by the encoder is now equally usable: since
+        # 2026-09-07 the encoder publishes tone, so a COMPLETE encoder row
+        # owns its tone as much as a Haiku one. What is refused is a row
+        # missing it -- which is exactly the shape the encoder wrote during
+        # the suppressed-tone period, and the reason this asks the row
+        # rather than the model id.
         m.sentiment_model = ENCODER
+        db.session.commit()
+        assert llm_sentiment._judgment_of(m, None).confidence == 'low'
+
+        m.sentiment_attitude = None
+        m.sentiment_expected_move = None
         db.session.commit()
         assert llm_sentiment._judgment_of(m, None) is None
 
@@ -439,8 +448,14 @@ def test_a_later_suppressed_primary_cannot_undo_a_review(clean_posts):
 
 # ---- 10. the policy comes from the backend, not the call site ---------------
 
-def test_the_encoder_declares_that_it_does_not_write_tone():
-    assert judge_backends.EncoderBackend.writes_tone is False
+def test_the_encoder_declares_that_it_writes_tone():
+    """Reversed 2026-09-07. It was False on the reasoning that a wrong
+    arrow beats no arrow -- but blank was never the alternative: with no
+    model writing tone since Haiku's credits ran out, the board falls back
+    to the lexicon and publishes THAT. On the 5,583 labelled rows where the
+    author took a side, the lexicon is silent on 59.7% and wrong-side on
+    29.8% of the calls it makes, against the encoder's 11.8%."""
+    assert judge_backends.EncoderBackend.writes_tone is True
     assert judge_backends.AnthropicBackend.writes_tone is True
 
 
@@ -453,10 +468,28 @@ def test_a_backend_with_no_declared_policy_is_refused():
         judge_backends.writes_tone(Undeclared())
 
 
-def test_a_stored_encoder_id_is_known_not_to_own_its_tone():
-    assert judge_backends.writes_tone_for_model(ENCODER) is False
-    assert judge_backends.writes_tone_for_model(HAIKU) is True
-    assert judge_backends.writes_tone_for_model(SONNET) is True
+def test_a_stored_row_is_judged_by_what_it_carries_not_by_its_model_id():
+    """Was `writes_tone_for_model(ENCODER) is False`, until the encoder
+    started publishing tone on 2026-09-07. One id now covers both the
+    tone-less rows it wrote before and the tone-bearing rows after, so the
+    question has to be asked of the ROW."""
+    import types
+
+    def row(model, attitude=None, move=None, confidence=None):
+        return types.SimpleNamespace(
+            sentiment_model=model, sentiment_relevance='relevant',
+            sentiment_content_origin='human_chatter',
+            sentiment_attitude=attitude, sentiment_expected_move=move,
+            sentiment_confidence=confidence)
+
+    assert judge_backends.stored_row_carries_tone(row(ENCODER)) is False
+    assert judge_backends.stored_row_carries_tone(
+        row(ENCODER, 'positive', 'up', 'high')) is True
+    assert judge_backends.stored_row_carries_tone(
+        row(HAIKU, 'negative', 'down', 'medium')) is True
+    # A half-written row is not trustworthy whole either.
+    assert judge_backends.stored_row_carries_tone(
+        row(SONNET, 'positive', None, 'high')) is False
 
 
 # ---- 11. the wiring, not just the writer ------------------------------------
