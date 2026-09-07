@@ -220,6 +220,12 @@ def evaluate(model, loader, device):
     with torch.no_grad():
         for batch in loader:
             ys = {h: batch.pop('y_' + h) for h in HEADS}
+            # The dataset also carries a per-head trainability mask. It is
+            # for the LOSS only; the model has never seen it as an input,
+            # and leaving it in the batch made forward() raise after a
+            # full six-epoch run had already finished.
+            for h in HEADS:
+                batch.pop('m_' + h, None)
             batch = {k: v.to(device) for k, v in batch.items()}
             logits = model(**batch)
             for h in HEADS:
