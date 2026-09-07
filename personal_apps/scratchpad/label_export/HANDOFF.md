@@ -40,9 +40,69 @@ Complete inventory of what has to move (verified on the box, nothing else):
 
 Plan Michi agreed to: build the new box completely and run both apps on its
 IP, tested, nothing switched. Then a final dump and a short cutover, keeping
-the old box as fallback for a few days. He needs to supply the new IP, the SSH
-key, the chosen OS, and where DNS is managed; the DNS change and the cutover
+the old box as fallback for a few days. The DNS change and the cutover
 go-ahead stay his.
+
+### Migration progress, 2026-09-07 (new box 194.164.29.97, Ubuntu 24.04.4)
+
+DONE on the new box, all verified:
+- root SSH by key only (`/etc/ssh/sshd_config.d/10-keys-only.conf`); ufw
+  allows 22/80/443 only; timezone Europe/Berlin
+- apt: mariadb-server 10.11, nginx 1.24, certbot + nginx plugin, python3.12
+  venv/dev, libmariadb-dev, rclone, git, build-essential; Node 24 from
+  nodesource (old box has 24.19, new 24.20). google-chrome-stable NOT
+  installed: nothing in the repo uses it.
+- `/root/coc-stats` cloned from GitHub at main 13c9fce (same as the old box),
+  using the OLD box's deploy key copied to `/root/.ssh` (GitHub auth verified
+  as misala97). venv built from requirements.txt: 79 packages, onnxruntime
+  1.29.0, Flask 3.1.3; PyMySQL is the driver both apps use (`mysql+pymysql://`),
+  the old box's mysqlclient was an unused manual extra.
+- `.env` copied to `/root/coc-stats/.env` (DB_HOST=localhost, coc_user,
+  RADAR_JUDGE_PRIMARY=encoder). rclone.conf copied and verified read-only
+  (`rclone ls gdrive:vps-backups/` lists the dumps).
+- Non-git state copied: `personal_apps/artifacts/judge/` (active.json + v1/
+  model.onnx 540 MB + tokenizer + config -- loads in 3.4 s on this CPU),
+  `nasdaqlisted.txt`, `otherlisted.txt`, `scratchpad/arctic_backfill_resume.json`,
+  `coc_stats/locks/`, `reports/`; `coc_stats/logs/` created empty.
+- Frontend built (`npm ci && npm run build`): static/gym/dist, static/radar/dist.
+- MariaDB: old `50-server.cnf` applied (bind 0.0.0.0, utf8mb4, Europe/Berlin,
+  16M packet) -- it FAILED to start until the timezone tables were loaded
+  (`mysql_tzinfo_to_sql /usr/share/zoneinfo | mariadb mysql`); remember that
+  on any fresh MariaDB. Users `coc_user@localhost` (ALL on both DBs) and
+  `mgemmel@%` (ALL on *.*) recreated with the old password hashes via
+  SHOW CREATE USER; the staged file was shredded. 3306 is NOT reachable from
+  outside (ufw) -- open it for Michi's IP only if he uses Workbench remotely.
+- The seven unit files copied verbatim; the five services ENABLED but not
+  started; `radar-encoder-trial.timer` left DISABLED (this is a copy of the
+  DB, the trial runs on the old box).
+- `/etc/letsencrypt` copied whole (three certs, renewal confs, account);
+  nginx site copied verbatim, stock default site removed; TLS verifies on all
+  three hostnames via `curl --resolve`; raw IP drops the connection (444)
+  like the old box. certbot.timer state: see the check below.
+- `/root/backup_db.sh`, `update_coc.sh`, `check_logs.sh` copied. Root crontab
+  STAGED at `/root/stage/crontab.txt`, NOT installed (it would push dumps of
+  the copy to Drive).
+- Dump `db_2026-09-07_0315.sql.gz` (184 MB, gzip-verified) copied to
+  `/root/db_backups/`; restore was RUNNING at the time of writing
+  (`gunzip < dump | mariadb`, `radar_bucket_sources` is the slow table).
+
+STILL TO DO, in order:
+1. Restore finishes -> table counts and sizes vs the old box.
+2. `systemctl start coc_web personal_apps_web` -> curl each hostname with
+   `--resolve host:443:194.164.29.97`, expect 200 and DB-backed pages;
+   journal clean.
+3. Smoke-start `coc_scheduler`, `personal_apps_gym_notifier`, `radar_ingest`
+   (the last loads the encoder), confirm clean startup, then STOP them: they
+   would ingest into the copy and share the CoC API token with the old box.
+4. Cutover, after the trial ends (deadline 2026-09-09 19:38 UTC) and on
+   Michi's go: stop daemons on OLD box; fresh `backup_db.sh` there; copy the
+   dump; on NEW box `DROP DATABASE coc_stats; DROP DATABASE personal_apps;`
+   then restore; start all five services; install the crontab; enable
+   `radar-encoder-trial.timer` ONLY if the trial is still meant to run.
+5. DNS: all three hosts are `*.viewdns.net` (dynamic-DNS provider). Michi
+   changes the A records to 194.164.29.97. Then `certbot renew --dry-run` on
+   the new box to prove renewal works from the new IP.
+6. Keep the old box up as fallback for a few days; then cancel.
 
 ## The 6-epoch experiment: ANSWERED, more epochs is not the lever
 
