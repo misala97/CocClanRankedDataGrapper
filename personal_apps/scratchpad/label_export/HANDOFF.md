@@ -770,3 +770,48 @@ not to page loads.
 
 Cosmetic, not fixed: mariadb logs "Aborted connection ... user coc_user" once
 a minute -- the trial tick exits without closing its connection.
+
+## Tone-head fixes: PARTIAL WIN, measured 2026-09-07 evening
+
+Recipe: tone heads masked to `relevance == relevant` (11,057 of 17,090
+rows) + a loss term charging the probability given to the polarity
+opposite. 6 epochs, small model, log `encoder/tonefix3-2026-09-07.log`,
+weights `encoder/model-train17090-<stamp>`.
+
+**Reversals improved, and this comparison IS fair** -- the metric counts
+only rows whose gold is positive/negative, which are relevant rows by
+construction, so the mask did not change its denominator:
+
+| set | before | after |
+|---|---|---|
+| natural | 16.5% | 11.8% |
+| recall | 13.1% | 8.7% |
+| hard | 7.8% | 8.7% |
+
+`expected_move` reversals measured separately for the first time: 4.8%
+natural, 7.4% hard, 6.4% recall.
+
+**Attitude accuracy 0.72 -> 0.59 is NOT a fair comparison** and must not
+be quoted as a regression. The old model was scored on rows whose label
+the PROMPT forced to `none`, so it earned free credit for a shortcut the
+masked model was deliberately not taught. Scored as trained and served
+(relevant rows only, `scratchpad/score_tone.py` in the session scratch):
+natural attitude acc 0.648 / macroF1 0.546, hard 0.638 / 0.566, recall
+0.689 / 0.634.
+
+**One genuine regression:** removal precision on natural 0.886 -> 0.846
+(hard 0.944 -> 0.958, recall 0.902 -> 0.905). The relevance head was NOT
+masked, so this is the reversal penalty moving the shared backbone. Worth
+watching on the base run; if it persists, try the penalty at 0.5.
+
+**Process fault, now fixed:** `--save` wrote `model-<tag>`, so this run
+overwrote the weights it was meant to be compared against and the
+attitude A/B can never be completed. Saves are stamped from commit
+5d4d15d. Also fixed: `evaluate()` did not drop the new per-head loss
+masks before the forward pass, which raised AFTER a full six-epoch run
+had finished -- the per-epoch checkpoint turned that into a 2-minute
+rerun instead of 38.
+
+VERDICT: keep the recipe for the base run. Reversals were the target and
+they moved 28-34% on two of three sets; nothing else moved outside noise
+except the natural removal precision, which the base run should re-check.
