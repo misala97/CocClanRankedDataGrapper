@@ -334,7 +334,7 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
     1cfede7  assemble training rows across waves, lock a recall test set
     7121ba0  train on the recall waves, score them on their own locked set
 
-## Codex migration takeover audit — 2026-09-07, PAUSED on timestamp discrepancy
+## Codex migration takeover audit — 2026-09-07, initial pause (superseded below)
 
 Read this entire handoff before inspection. Local branch and HEAD verified as
 `dev_personal`, `071913ed09496276ccc23bb5333689877b3d9510`. The workspace
@@ -422,3 +422,62 @@ pgrep -af '[g]unzip|[g]zip|[m]ariadb' | sed -E 's/^([0-9]+) .*/pid=\1/'
 ps -eo pid,ppid,comm | awk '$3 ~ /^(gzip|gunzip|mariadb|mysql|bash|sshd)$/ {print}'
 mariadb -N -e "SELECT ID,USER,DB,COMMAND,TIME,STATE FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID();"
 ```
+
+## Resumed Codex audit — PAUSED on missing database grant option
+
+Michi clarified that the handoff time is local and server readings are UTC.
+Resumed verification on that clarification; timestamp no longer blocks migration.
+NEW reports Timezone=Europe/Berlin and NTPSynchronized=yes. No clock changed.
+Cutover is NOT authorized; trial-chat notification of NEW's IP remains unconfirmed.
+
+Verified (exact commands in
+[MIGRATION-VERIFICATION-2026-09-07.md](MIGRATION-VERIFICATION-2026-09-07.md)):
+- NEW: six CPUs; root key authentication enabled, password/keyboard interactive
+  disabled; UFW active with only OpenSSH/80/443 on IPv4 and IPv6.
+- Expected nginx/Python/Node/certbot/rclone/build packages installed. Venv has
+  79 dependencies plus pip (80 distributions): onnxruntime 1.29.0, Flask 3.1.3,
+  PyMySQL 1.2.0. Count matches the handoff when pip is excluded.
+- Built dist directories exist (gym 20 files, radar 2); judge 4 files; reports
+  6; locks/logs empty. Presence alone is not functional validation.
+- Byte equality confirmed for .env, all seven units, nginx site, 50-server.cnf,
+  three root scripts, all judge artifacts and enumerated Let's Encrypt files.
+  Digests compared privately; only equality booleans displayed.
+- Database authentication definitions match. coc_user has ALL on both DBs on
+  both boxes, without grant option.
+- NEW has 498 timezone names; bind=0.0.0.0, utf8mb4, Europe/Berlin, 16 MiB
+  packet. 99-tuning.cnf specifies a 1 GiB buffer pool only; runtime still 128 MiB.
+- NEW nginx configuration test passes; only coc_stats enabled. Web units bind
+  127.0.0.1:5000 and :5001 as expected.
+- NEW root crontab absent; staged cron has one active line and matches OLD's
+  installed cron exactly. Not installed during this audit.
+- Rclone differs only in access_token and expiry; refresh token, client secret,
+  client ID and other fields match. Consistent with normal token refresh.
+  No rclone values displayed; remote Drive listing not yet repeated.
+- At 10:12:39 UTC NEW restore still active: gzip 15439, mariadb 15440,
+  connection 36 updating personal_apps, 23 + 20 tables. Five apps inactive,
+  trial timer disabled/inactive. Restore neither killed nor restarted.
+
+**Actual discrepancy:** mgemmel@% has ALL PRIVILEGES ON *.* on both boxes,
+but OLD additionally has WITH GRANT OPTION and NEW does not. Confirmed via
+a separate boolean check after credential redaction of SHOW GRANTS initially
+hid that suffix. It affects delegating database permissions, not app access.
+No permissions changed. Paused startup/verification and reported to Michi under
+his stop-on-discrepancy rule. Matching repair, if requested:
+
+```sql
+GRANT ALL PRIVILEGES ON *.* TO 'mgemmel'@'%' WITH GRANT OPTION;
+```
+
+The final cold copy carries OLD's mysql grant tables as well. Either repair
+the rehearsal user now or explicitly accept this rehearsal-only difference.
+Neither choice authorizes cutover.
+
+Startup code inspection: coc_scheduler immediately runs sync tasks; notifier
+can send due pushes after 10 seconds. Smoke tests must avoid unapproved messages
+and model APIs. Radar must never start concurrently with OLD. Trial untouched.
+
+Next: resolve grant difference, complete restore and rehearsal validation, then
+explicit cutover go plus trial-chat notification confirmation. DNS and renewal
+remain later steps. OLD live/untouched; NEW rehearsal/no apps started. Only
+documentation changed on dev_personal, unrelated dirty work preserved; no merge,
+deployment or cancellation.
