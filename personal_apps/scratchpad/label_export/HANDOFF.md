@@ -423,7 +423,7 @@ ps -eo pid,ppid,comm | awk '$3 ~ /^(gzip|gunzip|mariadb|mysql|bash|sshd)$/ {prin
 mariadb -N -e "SELECT ID,USER,DB,COMMAND,TIME,STATE FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID();"
 ```
 
-## Resumed Codex audit — PAUSED on missing database grant option
+## Resumed Codex audit — grant-option pause (accepted for rehearsal below)
 
 Michi clarified that the handoff time is local and server readings are UTC.
 Resumed verification on that clarification; timestamp no longer blocks migration.
@@ -481,3 +481,79 @@ explicit cutover go plus trial-chat notification confirmation. DNS and renewal
 remain later steps. OLD live/untouched; NEW rehearsal/no apps started. Only
 documentation changed on dev_personal, unrelated dirty work preserved; no merge,
 deployment or cancellation.
+
+## Rehearsal continued — grant difference accepted, waiting on restore
+
+Michi explicitly instructed continuing rehearsal without repairing mgemmel's
+missing grant option because the restore is still running. That difference is
+accepted for rehearsal and is NOT a blocker. No GRANT was executed.
+
+Additional successful checks on NEW:
+- Local EncoderBackend construction and _load() succeeded in 4.94 seconds;
+  peak RSS 1052 MiB. No daemon, trial write, inference or model API call.
+- curl --resolve verified TLS on all three names (ssl_verify_result=0).
+  With web services stopped, misala and mgemmel returned 502; pubquiz root
+  returned its nginx 301. These are TLS checks, NOT web acceptance tests.
+- rclone lsf gdrive:vps-backups/ --max-depth 1 succeeded, 30 entries.
+- The 184151809-byte dump passed a full gzip read/CRC check in 24.4 seconds;
+  contains 66 CREATE TABLE statements (23 CoC + 43 personal_apps).
+- App credentials from .env connected through PyMySQL and read already restored
+  tables: coc_stats.alembic_version 1, app_user 3, quiz_rounds 4, gym_exercises 34.
+  Only counts and configuration-match booleans were displayed.
+- Built manifests parse and every referenced file exists: gym 19 entries/files,
+  radar 1 entry/file. No rebuild performed.
+
+Restore observation: at 10:19:17 UTC input offset was 15990784 bytes; at
+10:23:02 UTC it was 16515072 (about 9% of the compressed input), with gzip
+15439 / mariadb 15440 still running and connection 36 in Update. Twenty
+personal_apps tables exist; radar_bucket_sources is still being restored.
+This table spans approximately compressed offsets 3.28–54.13 MB. Remaining
+time is uncertain and likely substantial; compressed percentages do not map
+uniformly to import time. No completion or database-integrity claim is made.
+
+The runtime innodb_buffer_pool_size_max is also 134217728 bytes, so a live
+resize cannot reach the staged 1 GiB. No restart, SET GLOBAL or import restart
+was attempted. Asked Michi whether to leave the current restore running or
+restart NEW and redo the rehearsal with the larger pool; no choice received
+at time of this note. Default remains leaving the existing restore running.
+
+All five NEW apps and its trial timer remain inactive. OLD untouched and
+production remains there. Web/scheduler/notifier smoke tests are pending restore
+completion; radar daemon startup additionally needs exclusive execution with
+OLD. Encoder-load validation alone does not satisfy radar-daemon acceptance.
+Cutover permission and trial-chat notification remain pending; DNS belongs to
+Michi. Exact additional commands are in MIGRATION-VERIFICATION-2026-09-07.md.
+
+## Approved rehearsal restart — IN PROGRESS on NEW only
+
+Michi asked whether restarting made sense. Live measurements showed low CPU
+use and 14–26% aggregate I/O wait. MariaDB documentation confirms that in this
+build the buffer-pool maximum is fixed at startup. Recommended redoing NEW's
+rehearsal; Michi explicitly answered "Yes, restart and redo the rehearsal".
+
+Executed the guarded restart script recorded in the verification document:
+verified NEW's assigned IP and inactive app/trial units; stopped MariaDB cleanly;
+started it with the existing 99-tuning.cnf; verified a 1073741824-byte buffer;
+verified old gzip/mariadb import clients were gone; dropped ONLY coc_stats and
+personal_apps on NEW; set temporary restore durability globals to 2/0; started
+vps-rehearsal-restore.service (oneshot) using /root/stage/rehearsal-restore.sh.
+No files were copied from a live datadir. No grant changes or OLD commands.
+
+At 10:26:55 UTC the new service was activating/start (expected for a running
+oneshot). Both buffer size and maximum verified as 1073741824 bytes. Import
+client connection 34, gzip PID 18546 and mariadb client PID 18547. At 10:28:45
+it had read 12582912 compressed bytes after 2m20s, versus 16515072 after 28m43s
+on the previous attempt. This is promising progress, not a completion estimate.
+
+The job persists independently of SSH. Its EXIT trap restores
+innodb_flush_log_at_trx_commit=1 and sync_binlog=1 and records the result in
+/root/stage/rehearsal-restore.exit plus start/finish timestamps. On a failure,
+client diagnostics are in root-only rehearsal-mariadb.stderr and gzip stderr;
+NEVER print these files unfiltered because a client error may include SQL rows.
+ExecMainStatus=0 while activating is not proof of success; require the exit file
+0 and completed service plus 23/43 tables, then run structural and web checks.
+
+Progress ledger: configuration/TLS/model-load/credentials/manifests verified;
+fresh logical restore RUNNING; table checks/web HTTP/journals/scheduler/notifier
+OPEN; radar daemon check waits for exclusive execution; cutover/DNS OPEN.
+NEW web and background app units and trial timer remain stopped.

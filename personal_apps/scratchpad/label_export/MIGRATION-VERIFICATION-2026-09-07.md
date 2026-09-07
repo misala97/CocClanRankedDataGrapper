@@ -141,3 +141,166 @@ Used the same grants Python block, replacing its output loop with:
 The initial digest query contains a typo in the coc_user global-privilege filter.
 Direct SHOW GRANTS and the separate flag check independently verified both users;
 no conclusion relies on that digest alone.
+
+## Continued rehearsal commands
+
+### Restore progress (run twice)
+
+```bash
+date -u
+ps -eo pid,ppid,etime,comm | awk '$4 ~ /^(gzip|gunzip|mariadb)$/ {print}'
+mariadb -N -e "SELECT ID,USER,DB,COMMAND,TIME,STATE FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID(); SELECT TABLE_SCHEMA,COUNT(*),ROUND(SUM(DATA_LENGTH+INDEX_LENGTH)/1024/1024) FROM information_schema.TABLES WHERE TABLE_SCHEMA IN ('coc_stats','personal_apps') GROUP BY TABLE_SCHEMA;"
+python3 - <<'PY'
+from pathlib import Path
+import os
+p=Path("/root/db_backups/db_2026-09-07_0315.sql.gz")
+print("dump_bytes",p.stat().st_size)
+for proc in Path("/proc").iterdir():
+ if not proc.name.isdigit():continue
+ try:
+  if (proc/"comm").read_text().strip() not in ("gzip","gunzip"):continue
+  for fd in (proc/"fd").iterdir():
+   target=os.readlink(fd)
+   if target==str(p):
+    print("restore_pid",proc.name,"input_fd",fd.name)
+    print((proc/"fdinfo"/fd.name).read_text())
+ except (FileNotFoundError,PermissionError,ProcessLookupError):pass
+PY
+systemctl is-active coc_web personal_apps_web radar_ingest radar-encoder-trial.timer
+```
+
+### Encoder load, TLS, Drive listing and buffer pool
+
+```bash
+set -e
+cd /root/coc-stats/personal_apps
+/root/coc-stats/venv/bin/python - <<'PY'
+import time,resource
+from features.radar.judge_backends import EncoderBackend
+t=time.monotonic()
+backend=EncoderBackend(artifact_dir="/root/coc-stats/personal_apps/artifacts/judge")
+backend._load()
+print("encoder_load_seconds",round(time.monotonic()-t,2))
+print("peak_rss_mib",round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024))
+print("encoder_load_ok",True)
+PY
+for host in misala.viewdns.net pubquizmainz.viewdns.net mgemmel.viewdns.net; do
+ curl --silent --show-error --max-time 15 --resolve "$host:443:194.164.29.97" -o /dev/null -w "$host tls_verify=%{ssl_verify_result} http=%{http_code}\n" "https://$host/"
+done
+rclone lsf gdrive:vps-backups/ --max-depth 1 | wc -l
+mariadb -N -e "SHOW GLOBAL VARIABLES WHERE Variable_name IN ('innodb_buffer_pool_size','innodb_buffer_pool_chunk_size','innodb_buffer_pool_size_max'); SHOW GLOBAL STATUS WHERE Variable_name IN ('Innodb_buffer_pool_resize_status','Innodb_buffer_pool_reads','Innodb_buffer_pool_read_requests');"
+```
+
+### Dump integrity and table boundaries
+
+```bash
+python3 - <<'PY'
+import gzip,re,json,time
+from pathlib import Path
+p=Path("/root/db_backups/db_2026-09-07_0315.sql.gz")
+db=None;tables=[];current=None;last=0;t=time.monotonic()
+with p.open("rb") as raw:
+ with gzip.GzipFile(fileobj=raw) as f:
+  for line in f:
+   if line.startswith(b"USE "):
+    m=re.search(rb"`([^`]+)`",line)
+    if m:db=m.group(1).decode()
+   if line.startswith(b"CREATE TABLE "):
+    m=re.search(rb"`([^`]+)`",line)
+    if m:
+     if current:current["compressed_end_approx"]=raw.tell()
+     current={"db":db,"table":m.group(1).decode(),"compressed_start_approx":raw.tell()}
+     tables.append(current)
+  if current:current["compressed_end_approx"]=raw.tell()
+print("gzip_integrity_ok",True,"seconds",round(time.monotonic()-t,1))
+print("tables",len(tables))
+for x in tables:
+ if x["table"]=="radar_bucket_sources" or x["db"]=="personal_apps":
+  print(json.dumps(x))
+PY
+```
+
+### Application DB reads and frontend manifests
+
+```bash
+set -e
+cd /root/coc-stats
+venv/bin/python - <<'PY'
+import json,os
+from pathlib import Path
+from dotenv import dotenv_values
+import pymysql
+e=dotenv_values("/root/coc-stats/.env")
+print("env_expected_db_host",e.get("DB_HOST")=="localhost")
+print("env_expected_db_user",e.get("DB_USER")=="coc_user")
+print("env_encoder_primary",e.get("RADAR_JUDGE_PRIMARY")=="encoder")
+conn=pymysql.connect(host=e.get("DB_HOST","localhost"),user=e.get("DB_USER"),password=e.get("DB_PASS"),read_timeout=15)
+with conn.cursor() as c:
+ for schema,table in [("coc_stats","alembic_version"),("personal_apps","app_user"),("personal_apps","quiz_rounds"),("personal_apps","gym_exercises")]:
+  c.execute("SELECT COUNT(*) FROM "+schema+"."+table)
+  print("db_read_ok",schema+"."+table,"count",c.fetchone()[0])
+conn.close()
+for feature in ("gym","radar"):
+ root=Path("/root/coc-stats/personal_apps/static")/feature/"dist"
+ manifests=list(root.rglob("manifest.json"))
+ if not manifests:
+  print("manifest_missing",feature)
+  continue
+ for p in manifests:
+  m=json.loads(p.read_text())
+  files=[v[k] for v in m.values() for k in ("file",) if k in v]
+  files += [x for v in m.values() for k in ("css","assets") for x in v.get(k,[])]
+  print("manifest",feature,"entries",len(m),"referenced_files",len(files),"all_exist",all((root/x).is_file() for x in files))
+PY
+```
+
+## Approved NEW-only restart (executed)
+
+```bash
+set -euo pipefail
+test "$(id -u)" = 0
+ip -4 -o addr show | grep -q '194[.]164[.]29[.]97/'
+for unit in coc_web personal_apps_web coc_scheduler personal_apps_gym_notifier radar_ingest radar-encoder-trial.timer; do
+    if systemctl is-active --quiet "$unit"; then
+        echo "Refusing: $unit is active" >&2
+        exit 1
+    fi
+done
+test -f /root/db_backups/db_2026-09-07_0315.sql.gz
+test -f /etc/mysql/mariadb.conf.d/99-tuning.cnf
+systemctl stop mariadb
+test "$(systemctl show mariadb -p ActiveState --value)" = inactive
+systemctl start mariadb
+test "$(mariadb -N -e 'SELECT @@GLOBAL.innodb_buffer_pool_size;')" = 1073741824
+if pgrep -x gzip >/dev/null || pgrep -x mariadb >/dev/null; then
+    echo "Refusing to clear databases: an old import client is still running" >&2
+    exit 1
+fi
+mariadb -e "DROP DATABASE IF EXISTS coc_stats; DROP DATABASE IF EXISTS personal_apps;"
+mariadb -e "SET GLOBAL innodb_flush_log_at_trx_commit=2; SET GLOBAL sync_binlog=0;"
+install -d -m 700 /root/stage
+umask 077
+cat > /root/stage/rehearsal-restore.sh <<'RESTORE'
+#!/bin/bash
+set -euo pipefail
+umask 077
+finish() {
+    result=$?
+    trap - EXIT
+    mariadb -e "SET GLOBAL innodb_flush_log_at_trx_commit=1; SET GLOBAL sync_binlog=1;" >/dev/null 2>&1 || result=90
+    printf '%s\n' "$result" > /root/stage/rehearsal-restore.exit
+    date -u +%FT%TZ > /root/stage/rehearsal-restore.finished
+    exit "$result"
+}
+trap finish EXIT
+date -u +%FT%TZ > /root/stage/rehearsal-restore.started
+gzip -dc /root/db_backups/db_2026-09-07_0315.sql.gz 2>/root/stage/rehearsal-gzip.stderr |
+    mariadb > /root/stage/rehearsal-mariadb.stdout 2>/root/stage/rehearsal-mariadb.stderr
+RESTORE
+chmod 700 /root/stage/rehearsal-restore.sh
+systemd-run --unit=vps-rehearsal-restore --property=Type=oneshot /bin/bash /root/stage/rehearsal-restore.sh
+systemctl show vps-rehearsal-restore -p ActiveState -p SubState -p ExecMainStatus
+mariadb -N -e "SELECT @@GLOBAL.innodb_buffer_pool_size,@@GLOBAL.innodb_buffer_pool_size_max;"
+```
+
+MariaDB buffer sizing reference: https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-buffer-pool
