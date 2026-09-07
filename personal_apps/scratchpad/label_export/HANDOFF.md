@@ -5,35 +5,33 @@ to main and nothing deployed. The encoder-judge trial is LIVE on the VPS until
 16 Sept and MUST NOT be disturbed: an extractor change moves the mention
 population and would move the trial's removal-share alarm.
 
-## Running right now
+## The 6-epoch experiment: ANSWERED, more epochs is not the lever
 
-A 6-epoch retrain, started ~01:35 local, unbuffered:
+Ran to completion 2026-09-07 (~47 min), log
+`encoder/retrain-6ep-2026-09-07.log`, results in the newest
+`encoder/run-*.json`. Training loss fell hard throughout (4.712, 3.455,
+2.794, 2.254, 1.854, 1.666) while the locked sets did NOT follow -- the
+signature of overfitting beginning.
 
-    cd personal_apps
-    PYTHONUNBUFFERED=1 C:\Users\michi\Desktop\radar_encoder_venv\Scripts\python.exe \
-        scratchpad/label_export/train_encoder.py --epochs 6 --save
+| set | relevance macro-F1 @4 | @6 | removal P @4 | @6 |
+|---|---|---|---|---|
+| natural | 0.740 | 0.756 | 0.878 | 0.886 |
+| hard | 0.752 | 0.729 | 0.957 | 0.944 |
+| recall | 0.625 | 0.614 | 0.903 | 0.902 |
 
-    log: C:\Users\michi\Desktop\radar_labels\encoder\retrain-6ep-2026-09-07.log
+Up on one, down on two, all inside noise. **So the tone heads are
+data-starved, not undertrained** -- which the class counts already implied
+(127 `flat` and 424 `mixed` in the whole corpus). Do not re-run this
+experiment.
 
-Expect ~50 minutes (the 4-epoch run took 34). It writes
-`encoder/model-train17090` (OVERWRITING the 4-epoch model of the same name —
-the 4-epoch numbers survive in `encoder/run-20260906-225937.json`), appends to
-`encoder/results.json`, and writes a fresh `encoder/run-<stamp>.json`.
+Two things DID improve consistently and are worth keeping:
+- precision on the keep decision: natural 0.913 -> 0.934, hard 0.873 ->
+  0.877, recall 0.883 -> 0.896;
+- polarity reversals: 17.4 -> 16.5, 8.7 -> 7.8, 16.2 -> 13.1 per cent.
+  Still nowhere near the 2% gate.
 
-**The question it answers.** The 4-epoch run's training loss was still falling
-hard at the end (4.615, 3.407, 2.750, 2.339 — 15% in the last epoch, where a
-converged run moves 1-2%). So the model was UNDERFITTING, not out of things to
-learn. If the three locked sets improve at 6 epochs, we were undertraining and
-the weak heads may not be as data-starved as they look. If they flatten or fall
-while training loss keeps dropping, that is overfitting and 4 was right.
-
-Compare against the 4-epoch baseline on the SAME locked sets:
-
-| set | n | relevance macro-F1 | removal precision |
-|---|---|---|---|
-| natural | 900 | 0.740 | 0.878 |
-| hard | 500 | 0.752 | 0.957 |
-| recall | 902 | 0.625 | 0.903 |
+NOTE: `encoder/model-train17090` now holds the 6-epoch weights. The
+4-epoch numbers survive in `encoder/run-20260906-225937.json`.
 
 ## What this session did
 
@@ -97,8 +95,7 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
 
 ## Open, in the order agreed
 
-1. **Read the 6-epoch result** against the table above.
-2. **The free fixes for the tone heads**, neither needing new labels:
+1. **The free fixes for the tone heads**, neither needing new labels:
    - train the directional heads only on rows that HAVE a direction (6,019 of
      10,323 relevant rows say `unknown`, plus 4,890 irrelevant rows forced to
      none/unknown — so two thirds of what that head sees is a non-answer);
@@ -109,11 +106,13 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
      predicting one thing can disagree, which is itself a source of reversals.
      Merging them into one direction head with an explicit "no direction" class
      would remove that failure mode.
-3. **A directional labelling wave** (~3,000) IF the above is not enough. flat has
+2. **A directional labelling wave** (~3,000) IF the above is not enough. flat has
    127 examples in the whole corpus, mixed 424. Michi must name the size.
-4. **deberta-v3-base** as a capacity experiment, ~2 hours GPU, only worth it to
-   settle whether the weak heads are capacity-starved or data-starved.
-5. **The precision round was never implemented** — it was designed, costed
+3. **deberta-v3-base** as a capacity experiment, ~2 hours GPU. Weaker
+   motivation now that the 6-epoch run has shown the limit is data rather
+   than training length, but it is the one remaining way to separate
+   capacity from data.
+4. **The precision round was never implemented** — it was designed, costed
    against a real week, and then deprioritised when Michi reframed the work as
    loose-extractor-plus-encoder. If the encoder ships as the gate, most of it is
    moot. Two findings are NOT moot and are real universe bugs, currently
@@ -122,7 +121,7 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
      single-stock fund inherits its underlying's SYMBOL as a name token;
    - debt listings get their due MONTH as a distinctive token ("Senior Notes due
      June 2070" makes `june` name T-Mobile's listing).
-6. **Replace the FINDING half of the extractor with a trained model (NER).**
+5. **Replace the FINDING half of the extractor with a trained model (NER).**
    Michi's own long-standing goal, confirmed 2026-09-07: the encoder answers
    "is this text about ticker X" but cannot find X itself, so a second trained
    model should do the finding. Shape: a token-classification head on the same
@@ -137,6 +136,21 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
    4,474 of 4,500 rows (99%), 2,198 of them labelled relevant. Span supervision
    without a new labelling round; the production set adds more.
 
+   **GLiNER probe run 2026-09-07, zero-shot, no training** (`gliner_small-v2.1`,
+   CPU, ~5 min): over 300 random zero-candidate posts with >=40 chars of body
+   (a pool of 70,381 for the week), 42 (14%) carried something it called a
+   company or ticker. Reading them, roughly a third are genuine misses --
+   Xiaomi, Baidu, Bank of America, Dell, SpaceX, Anthropic, Starcloud -- and
+   the rest are indices and the Fed (S&P, FOMC, 10Y), options notation (420C,
+   330P), usernames, YouTube channels and one "they". So call it 4-5% of that
+   pool, ~3,000 posts a week holding a company reference nothing currently
+   sees. Full output with scores: `radar_labels/raw/gliner-probe.json`.
+   GLiNER is an INSTRUMENT here, not a component: it is built to accept any
+   entity type at runtime, which costs speed and precision. What would ship is
+   DeBERTa-v3-small with a token-classification head trained on our own spans,
+   through the existing ONNX path. GLiNER's second temporary use is
+   pre-filtering a labelling wave, so rows carry signal instead of 95% blanks.
+
    **Measure the headroom BEFORE building.** After the loose-pass fixes, 132,164
    of 198,586 posts (66.6%) still produce no candidate at all -- that is the
    pool NER would search. Sampled BEFORE the fixes, ~1.5% of that pool held a
@@ -146,7 +160,7 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
    hundred mentions a week and is not worth a second model; at ~10% it is.
    Michi must name the size.
 
-7. **Bluesky and 4chan have no raw capture.** Bluesky has no archive — a raw
+6. **Bluesky and 4chan have no raw capture.** Bluesky has no archive — a raw
    slice means draining Jetstream live for a few hours. Everything above is
    Reddit-only.
 
