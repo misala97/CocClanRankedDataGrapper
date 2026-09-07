@@ -431,7 +431,7 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
 
 
 def main():
-    global MAX_LEN
+    global MAX_LEN, BASE
     ap = argparse.ArgumentParser()
     ap.add_argument('--subset', type=int, default=0, help='cap on labelled rows')
     ap.add_argument('--curve', default='', help='comma list of train sizes')
@@ -444,6 +444,8 @@ def main():
     # 512 tokens at batch 16 overflows the 3080's 10 GB and spills into
     # system RAM (froze the PC, 2026-09-05). Batch 8 x accumulate 2 is the
     # same effective batch at roughly half the VRAM.
+    ap.add_argument('--base', default=BASE,
+                    help='backbone; base needs batch 4 x accumulate 4 to fit 10 GB')
     ap.add_argument('--no-resume', dest='resume', action='store_false',
                     help='ignore any checkpoint and do not write one')
     ap.set_defaults(resume=True)
@@ -454,6 +456,7 @@ def main():
                     help='gradient accumulation steps; effective batch = batch * this')
     args = ap.parse_args()
     MAX_LEN = args.max_len
+    BASE = args.base
     seed_everything(args.seed)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     rows = load_rows()
