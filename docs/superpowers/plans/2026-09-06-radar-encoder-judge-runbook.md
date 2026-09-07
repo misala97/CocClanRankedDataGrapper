@@ -24,7 +24,7 @@ them cannot be supplied, the answer is not to arm the trial.
 | Haiku-era removal proportion `p` | fixes the audit sample size as `ceil(400/p)` | **captured, below** |
 | Baseline report file + its sha256 | `arm` takes a path and records its hash | write it from the figures below |
 | Sampling seed | fixed before predictions exist, or the trial can pass itself | choose at arming |
-| Named human labeller and their dates | 746 blind labels between day 3 and day 7 | **owed** |
+| Named human labeller and their dates | 746 blind labels between day 1 and day 2 | **owed** |
 | Supplemental files (four) | `arm` freezes WHICH rows the two supplementary sets are; `evaluate` needs their data | one command, §7 (`build_supplemental_sets.py`) |
 | Free disk for the retention pin | the pin stops the pruners; the tables grow | measure in §5 |
 
@@ -239,7 +239,8 @@ mysql -e "SELECT table_name, ROUND(data_length/1048576) AS mb
 ```
 
 Record the before figure here when it is measured. A trial that runs its
-full ten days holds roughly five days of journal beyond the normal horizon.
+three-day unevaluated period keeps the pin held throughout; a passing audit
+continues pinning evidence until recovery, so storage still needs monitoring.
 
 ---
 
@@ -358,7 +359,7 @@ Expect `radar judge: primary=radar-encoder-v1 review=none mode=''`.
 venv/bin/python -m scripts.manage_encoder_trial status | grep 'first judged'
 ```
 
-Write that timestamp down. Day 3, day 7 and day 10 are all counted from it.
+Write that timestamp down. Day 1, day 2 and day 3 are all counted from it.
 
 ```sql
 -- Tone must be absent by construction, not by a display rule.
@@ -431,20 +432,27 @@ journalctl -u radar-encoder-trial --since '1 hour ago'
 
 ## 10. The audit, on the clock
 
+Schedule amended by Michi on 2026-09-07 to **1 / 2 / 3**. For the current
+trial, the original first judgment was 2026-09-06 19:38:24 UTC. In Berlin
+time: sampling opens **7 September 21:38:24**, labels are due **8 September
+21:38:24**, and acceptance is due before **9 September 21:38:24**. Sampling
+a few hours late does not widen the fixed first-24-hour frame or move either
+deadline. The independent seven-day tone requirement is unchanged.
+
 From `first_judged_at`:
 
 | day | action | who |
 |---|---|---|
-| 3 | `sample --out DIR`, then `export-labels`, then `predict` twice | operator |
-| 3–7 | label `ceil(400/p)` blind rows, with `labelled_at` on every row | **named human, owed** |
-| 7 | labels and adjudication complete; supplemental sets ready | labeller + operator |
-| ≤10 | `evaluate`, inspect the disagreement lists, acknowledge, `accept` | operator |
+| 1 | `sample --out DIR`, then `export-labels`, then `predict` twice | operator |
+| 1–2 | label `ceil(400/p)` blind rows, with `labelled_at` on every row | **named human, owed** |
+| 2 | labels and adjudication complete; supplemental sets ready | labeller + operator |
+| <3 | `evaluate`, inspect the disagreement lists, acknowledge, `accept` | operator |
 
 The commands are a **chain**: each reads what the one before it wrote and
 refuses what it did not. Run them in order, in the same directory.
 
 ```bash
-D=/root/audit-day3
+D=/root/audit-day1
 venv/bin/python -m scripts.audit_encoder_trial sample         --out $D
 venv/bin/python -m scripts.audit_encoder_trial export-labels  --out $D
 venv/bin/python -m scripts.audit_encoder_trial predict        --out $D --backend encoder
@@ -465,7 +473,7 @@ venv/bin/python -m scripts.audit_encoder_trial accept --report $D/report.json \
     --acknowledgments $D/acknowledgments.json
 ```
 
-**`sample`** refuses before day 3 (the frame is not closed), after day 7
+**`sample`** refuses before day 1 (the frame is not closed), after day 2
 (a draw then could never be accepted), and never redraws: a rerun reuses
 the recorded draw. Its `frame.json` and `sample.json` carry the trial's
 artifact hash, prompt version and model id.
@@ -509,7 +517,7 @@ The comparison it feeds is reported only; it cannot stop the trial.
 ```
 
 `labelled_at` is required on every row; the latest one is when labelling
-finished, and it must be on or before day 7. A row that was adjudicated
+finished, and it must be on or before day 2. A row that was adjudicated
 keeps its first label under `original` and says why:
 
 ```json
@@ -563,11 +571,11 @@ report from them -- every interval, every disagreement list, every
 supplemental figure, not just the pass flag -- and refuses one that does
 not reproduce, checks the
 acknowledgments against this report's hash, checks the draw was between day
-3 and day 7 and the labels finished by day 7, and only then records the
+1 and day 2 and the labels finished by day 2, and only then records the
 result. A failing report is accepted too: it stops the trial and starts
 recovery. That is a result, not an error.
 
-If day 10 arrives without a recorded passing audit, the watchdog stops the
+If day 3 arrives without a recorded passing audit, the watchdog stops the
 trial and drains recovery on its own. That is the design, not a failure of
 process -- but it is a worse outcome than evaluating on time.
 

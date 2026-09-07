@@ -539,16 +539,23 @@ state intact, while earlier committed windows remain recovered.
 
 ### 7.2b Trial deadline
 
+**Timing amendment, 2026-09-07 (Michi):** sample from the first 24 hours,
+finish labels by day 2, and accept by day 3. All times remain anchored to
+the original first judgment; this changes the already-running trial without
+rearming it. A draw a few hours after day 1 still uses the fixed first-day
+frame and must occur by day 2. Sample size, precision gates, retention and
+the separate seven-day tone qualification remain unchanged.
+
 An open-ended trial that changes live counts without ever testing its own
 acceptance rules is not a trial. Therefore:
 
-- The fresh random audit (§7.3) is drawn and labelled **within 7 days of the
+- The fresh random audit (§7.3) is drawn and labelled **within 2 days of the
   trial's first judged mention**. It is scheduled as part of starting the
   trial, not after it.
-- If the audit has not been evaluated by **day 10**, the trial ends
+- If the audit has not been evaluated by **day 3**, the trial ends
   automatically through the durable stop override plus the §7.2 recovery
   script. “Evaluated” means a valid passing report; a failed report stops the
-  trial immediately. Both sampling and completed labels must meet day 7.
+  trial immediately. Both sampling and completed labels must meet day 2.
 - **Uncertainty, not point estimates, decides the trial gates.** The removal
   and relevance/origin thresholds in §7.1 apply to the **Wilson 95% lower
   bound** of the encoder proportion. Separate tone criteria use the explicitly
@@ -560,7 +567,7 @@ acceptance rules is not a trial. Therefore:
   sample size rather than leaving it to convenience.
 
 **Enforcement deliverable.** `judge_trial.tick(now, limit=2000)` reads the row
-without constructing a backend. At expiry (`now >= first_judged_at + 10 days`)
+without constructing a backend. At expiry (`now >= first_judged_at + 3 days`)
 without a timely passing audit, or after a failed audit, it persists recovering
 and calls the bounded recovery operation. Further ticks drain the remainder;
 exceptions leave recovering/pinning intact and are logged for operator action.
@@ -596,8 +603,8 @@ outside git; `accept` is the only evaluation command that writes trial state.
   proportion `p` (0 < p <= 1), and `sample_size = ceil(400 / p)`. These are
   inputs fixed before new predictions, not constants chosen after seeing them.
   Freeze a frame of all retained extracted high-confidence mentions with post
-  time in `[first_judged_at, first_judged_at + 3 days)`, across all sources and
-  tickers, without gate/removal/confidence-of-judge enrichment. At day 3, choose
+  time in `[first_judged_at, first_judged_at + 1 day)`, across all sources and
+  tickers, without gate/removal/confidence-of-judge enrichment. At day 1, choose
   `sample_size` ids uniformly without replacement using the recorded seed;
   insufficient traffic is a failed audit, not permission to change the frame.
   Persist the frame hash, sampled ids and draw timestamp; reruns reuse them.
@@ -642,8 +649,8 @@ outside git; `accept` is the only evaluation command that writes trial state.
   inspection. These supplementary sets never enter fresh-audit gate totals.
   Missing required supplemental files or label provenance makes the report
   incomplete. `accept` verifies all file hashes, trial/artifact/prompt identity,
-  completed inspection acknowledgments, day-7 draw/label timestamps and the
-  day-10 deadline before persisting result/time/report SHA. An invalid or late
+  completed inspection acknowledgments, day-2 draw/label timestamps and the
+  day-3 deadline before persisting result/time/report SHA. An invalid or late
   report cannot postpone expiry; a valid failing report requests recovery.
 
 The baseline's actual report path and proportion are recorded at deployment;
@@ -700,8 +707,8 @@ readiness but this build does not expose a tone-enabling switch.
    encoder activation. Confirm recovery storage capacity and a successful dry-run.
 5. Set `RADAR_JUDGE_PRIMARY=encoder`, `RADAR_JUDGE_TONE=0`, review backend none,
    review mode empty, gate ON; restart `radar_ingest`. Verify first_judged_at is
-   persisted with the first successful write; record and schedule the day-3,
-   day-7 and day-10 actions from that clock the same day.
+   persisted with the first successful write; record and schedule the day-1,
+   day-2 and day-3 actions from that clock the same day.
 6. Watch the first cycle, RSS, p95 backlog and daily removal share against §7.2;
    record exact monitoring/stop/recover commands in the deployment runbook.
    Collect/evaluate the fresh audit on schedule. Deployment alone does not

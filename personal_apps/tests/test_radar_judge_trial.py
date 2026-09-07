@@ -886,7 +886,7 @@ def test_a_passing_audit_is_recorded_and_changes_nothing_else(no_trial):
     with flask_app.app_context():
         row = started(arm())
         judge_trial.accept_audit(report_for(row), REPORT_SHA,
-                                 NOW + dt.timedelta(days=8), passed=True)
+                                 NOW + dt.timedelta(days=2, hours=1), passed=True)
         row = judge_trial.current()
         assert row.audit_passed is True
         assert row.audit_report_sha256 == REPORT_SHA
@@ -899,7 +899,7 @@ def test_a_failing_audit_stops_the_trial_without_waiting_to_be_noticed(
     with flask_app.app_context():
         row = started(arm())
         judge_trial.accept_audit(report_for(row, passed=False), REPORT_SHA,
-                                 NOW + dt.timedelta(days=8), passed=False)
+                                 NOW + dt.timedelta(days=2, hours=1), passed=False)
         row = judge_trial.current()
         assert row.audit_passed is False
         assert row.status == judge_trial.RECOVERING
@@ -909,7 +909,7 @@ def test_a_failing_audit_stops_the_trial_without_waiting_to_be_noticed(
 def test_the_same_report_may_be_accepted_twice(no_trial):
     with flask_app.app_context():
         row = started(arm())
-        when = NOW + dt.timedelta(days=8)
+        when = NOW + dt.timedelta(days=2, hours=1)
         judge_trial.accept_audit(report_for(row), REPORT_SHA, when, passed=True)
         judge_trial.accept_audit(report_for(row), REPORT_SHA, when, passed=True)
         assert judge_trial.current().audit_report_sha256 == REPORT_SHA
@@ -919,7 +919,7 @@ def test_a_different_report_cannot_replace_a_recorded_result(no_trial):
     """That is how a second opinion quietly becomes the first one."""
     with flask_app.app_context():
         row = started(arm())
-        when = NOW + dt.timedelta(days=8)
+        when = NOW + dt.timedelta(days=2, hours=1)
         judge_trial.accept_audit(report_for(row, passed=False), REPORT_SHA,
                                  when, passed=False)
         with pytest.raises(judge_trial.TrialError):
@@ -936,7 +936,7 @@ def test_a_report_about_another_trial_is_refused(no_trial, wrong):
         report['trial'][wrong] = 'something-else'
         with pytest.raises(judge_trial.TrialError):
             judge_trial.accept_audit(report, REPORT_SHA,
-                                     NOW + dt.timedelta(days=8), passed=True)
+                                     NOW + dt.timedelta(days=2, hours=1), passed=True)
         assert judge_trial.current().audit_evaluated_at is None
 
 
@@ -945,7 +945,7 @@ def test_a_late_report_cannot_postpone_an_expiry_it_already_missed(no_trial):
         row = started(arm())
         with pytest.raises(judge_trial.TrialError):
             judge_trial.accept_audit(report_for(row), REPORT_SHA,
-                                     NOW + dt.timedelta(days=11), passed=True)
+                                     NOW + dt.timedelta(days=4), passed=True)
         assert judge_trial.current().audit_evaluated_at is None
 
 
@@ -993,15 +993,15 @@ def test_the_deadline_runs_from_the_first_judgment_not_from_arming(no_trial):
 
         started(row, when=NOW)
         assert judge_trial.deadline(judge_trial.current()) == \
-            NOW + dt.timedelta(days=10)
+            NOW + dt.timedelta(days=3)
 
 
 def test_the_guard_refuses_on_the_deadline_itself(no_trial):
     with flask_app.app_context():
         started(arm())
-        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=9, hours=23))
+        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=2, hours=23))
         with pytest.raises(judge_trial.TrialError):
-            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=10))
+            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=3))
 
 
 def test_a_passing_audit_lifts_the_deadline_but_nothing_else(no_trial):
@@ -1012,9 +1012,9 @@ def test_a_passing_audit_lifts_the_deadline_but_nothing_else(no_trial):
     with flask_app.app_context():
         row = started(arm())
         judge_trial.accept_audit(report_for(row), REPORT_SHA,
-                                 NOW + dt.timedelta(days=5), passed=True)
+                                 NOW + dt.timedelta(days=2), passed=True)
 
-        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=11))
+        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=4))
         assert judge_trial.deadline(judge_trial.current()) is None
         assert judge_trial.retention_floor() is not None
         assert judge_trial.current().status == judge_trial.RUNNING
@@ -1024,18 +1024,18 @@ def test_a_failing_audit_does_not_lift_the_deadline(no_trial):
     with flask_app.app_context():
         row = started(arm())
         judge_trial.accept_audit(report_for(row, passed=False), REPORT_SHA,
-                                 NOW + dt.timedelta(days=5), passed=False)
+                                 NOW + dt.timedelta(days=2), passed=False)
         # ...and it is already recovering, so it may not judge at all.
         with pytest.raises(judge_trial.TrialError):
-            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=6))
+            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=2, hours=1))
 
 
-def test_an_unevaluated_trial_still_expires_on_day_ten(no_trial):
+def test_an_unevaluated_trial_still_expires_on_day_three(no_trial):
     with flask_app.app_context():
         started(arm())
-        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=9, hours=23))
+        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=2, hours=23))
         with pytest.raises(judge_trial.TrialError):
-            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=10))
+            judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=3))
 
 
 
@@ -1128,7 +1128,7 @@ def test_the_write_lock_starts_the_clock_once_and_only_from_armed(no_trial):
         assert first == NOW
 
         row, when = judge_trial.lock_for_write(
-            lambda: NOW + dt.timedelta(days=3))
+            lambda: NOW + dt.timedelta(days=2))
         judge_trial.note_first_judgment(row, when)
         db.session.commit()
         assert judge_trial.current().first_judged_at == first

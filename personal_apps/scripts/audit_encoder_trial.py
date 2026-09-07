@@ -21,7 +21,7 @@ It is a CHAIN, and every link reads what the one before it wrote and
 refuses what it did not:
 
 - `sample` freezes the frame and draws from it with the seed fixed at
-  arming, on day three and not before, once. The frame and the sample both
+  arming, on day one and not before, once. The frame and the sample both
   carry the trial's identity.
 - `predict` scores exactly the sampled ids through the canonical prepared
   inputs -- the same function the live pass uses -- against the frozen
@@ -35,7 +35,7 @@ refuses what it did not:
   that records the hash of every input it used and whether it is complete.
 - `accept` re-hashes those inputs, REPRODUCES the verdict from them,
   requires the inspections the spec asks for to be acknowledged against
-  this exact report, checks the day-3/day-7 timing, and only then records
+  this exact report, checks the day-1/day-2 timing, and only then records
   the result. It is the only command that writes trial state.
 """
 import argparse
@@ -153,13 +153,13 @@ def _current_trial():
 def cmd_sample(out_dir, now=None):
     """Freeze the frame, then draw from it with the seed fixed at arming.
 
-    The frame is EVERY retained high-confidence mention in the first three
-    days of the trial, across all sources and tickers, with no gate,
+    The frame is EVERY retained high-confidence mention in the first 24
+    hours of the trial, across all sources and tickers, with no gate,
     removal or confidence enrichment. Enriching it is what made the last
     audit unable to answer the question.
 
-    On day three and not before: a frame drawn earlier is not complete.
-    Not after day seven either -- a draw then could not be labelled in
+    On day one and not before: a frame drawn earlier is not complete.
+    Not after day two either -- a draw then could not be labelled in
     time and would never be accepted. Once: a rerun reuses the recorded
     draw, because the draw's timestamp is part of the record and a second
     draw is a second draw.
@@ -868,8 +868,8 @@ def cmd_accept(report_path, acknowledgments_path, now=None):
     report names, computes the verdict again from them, and refuses a
     report that does not reproduce. Then the acknowledgments: a human has
     looked at the disagreement lists, and says so against THIS report's
-    hash. Then the timing: drawn on or after day three, drawn and labelled
-    by day seven. Only then is the result persisted, as the primitive's
+    hash. Then the timing: drawn on or after day one, drawn and labelled
+    by day two. Only then is the result persisted, as the primitive's
     own checks -- identity, deadline, first judgment, idempotency -- allow.
     """
     now = now or _utcnow()
@@ -927,20 +927,20 @@ def cmd_accept(report_path, acknowledgments_path, now=None):
     first = assembled['first_judged_at']
     if first is None:
         raise AuditError('the trial has not judged anything')
-    day3 = first + dt.timedelta(days=judge_trial.AUDIT_DRAW_DAY)
-    day7 = first + dt.timedelta(days=judge_trial.AUDIT_LABEL_DAY)
+    draw_opens = first + dt.timedelta(days=judge_trial.AUDIT_DRAW_DAY)
+    labels_due = first + dt.timedelta(days=judge_trial.AUDIT_LABEL_DAY)
     drawn_at = _when(assembled['sample']['drawn_at'], 'drawn_at')
-    if not day3 <= drawn_at <= day7:
+    if not draw_opens <= drawn_at <= labels_due:
         raise AuditError('the sample was drawn at %s; it had to be drawn '
                          'between day %d (%s) and day %d (%s)'
-                         % (drawn_at, judge_trial.AUDIT_DRAW_DAY, day3,
-                            judge_trial.AUDIT_LABEL_DAY, day7))
+                         % (drawn_at, judge_trial.AUDIT_DRAW_DAY, draw_opens,
+                            judge_trial.AUDIT_LABEL_DAY, labels_due))
     completed = assembled['labels']['completed_at']
     if completed is None:
         raise AuditError('the labels carry no completion time')
-    if completed > day7:
+    if completed > labels_due:
         raise AuditError('labelling finished at %s, after day %d (%s)'
-                         % (completed, judge_trial.AUDIT_LABEL_DAY, day7))
+                         % (completed, judge_trial.AUDIT_LABEL_DAY, labels_due))
 
     with app.app_context():
         judge_trial.accept_audit(report, report_sha, now, passed=fresh['passed'])
