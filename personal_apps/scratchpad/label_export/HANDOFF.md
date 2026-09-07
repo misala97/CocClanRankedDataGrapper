@@ -698,3 +698,9 @@ installed). `certbot.timer` disabled there. No application process exists on
 OLD. Fallback = `systemctl start mariadb coc_web personal_apps_web
 coc_scheduler personal_apps_gym_notifier radar_ingest radar-encoder-trial.timer`
 on OLD after stopping the same on NEW, then repoint DNS.
+
+### 11:32 UTC — `certbot renew --dry-run` on NEW: all three simulated renewals succeeded
+
+MIGRATION COMPLETE. Nothing remains on the server side. Housekeeping in a few
+days, once stable: delete `/var/lib/mysql.rehearsal-*` on NEW (3.2 GB), remove
+the deploy-key line from OLD's `authorized_keys`, then cancel OLD.
