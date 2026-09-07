@@ -616,7 +616,7 @@ def _judgment_of(mention, primary_history=None):
                         expected_move=primary_history.expected_move,
                         confidence=primary_history.confidence)
     from . import judge_backends
-    if not judge_backends.writes_tone_for_model(mention.sentiment_model):
+    if not judge_backends.stored_row_carries_tone(mention):
         return None
     judgment = Judgment(relevance=mention.sentiment_relevance,
                         content_origin=mention.sentiment_content_origin,
