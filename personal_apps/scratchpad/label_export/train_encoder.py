@@ -43,6 +43,7 @@ from transformers import AutoModel, AutoTokenizer, logging as hf_logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import label_data  # noqa: E402
 import tone_training  # noqa: E402
+import checkpointing  # noqa: E402
 
 ROOT = r'C:\Users\michi\Desktop\radar_labels'
 LABELS = os.path.join(ROOT, 'labels-sonnet5.jsonl')
@@ -342,7 +343,28 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=args.lr, total_steps=steps,
                                                 pct_start=0.1)
     t0 = time.time()
-    for epoch in range(args.epochs):
+    # A crash costs one epoch, not the run: this machine throws 0x116 about
+    # every five days regardless of workload (see checkpointing.py).
+    ckpt_path = os.path.join(OUT_DIR, 'checkpoint-%s.pt' % tag)
+    settings = dict(vars(args))
+    settings.update({'base': BASE, 'max_len': MAX_LEN, 'train_rows': len(train_rows),
+                     'labels_sha': _sha(LABELS),
+                     'recall_labels_sha': (_sha(RECALL_LABELS)
+                                           if os.path.exists(RECALL_LABELS) else None)})
+    start_epoch = 0
+    if args.resume and os.path.exists(ckpt_path):
+        saved = torch.load(ckpt_path, map_location=device, weights_only=False)
+        if checkpointing.is_compatible(saved.get('settings'), settings):
+            model.load_state_dict(saved['model'])
+            opt.load_state_dict(saved['optimizer'])
+            sched.load_state_dict(saved['scheduler'])
+            start_epoch = saved['epochs_done']
+            print(' resuming from %s at epoch %d/%d'
+                  % (os.path.basename(ckpt_path), start_epoch, args.epochs))
+        else:
+            print(' checkpoint %s exists but its settings differ -- starting fresh'
+                  % os.path.basename(ckpt_path))
+    for epoch in range(start_epoch, args.epochs):
         model.train()
         total = 0.0
         opt.zero_grad()
@@ -381,6 +403,12 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
             total += float(loss)
         print(' epoch %d/%d loss %.3f (%.0fs)' % (epoch + 1, args.epochs,
                                                   total / len(train_loader), time.time() - t0))
+        if args.resume:
+            tmp = ckpt_path + '.tmp'
+            torch.save({'model': model.state_dict(), 'optimizer': opt.state_dict(),
+                        'scheduler': sched.state_dict(), 'epochs_done': epoch + 1,
+                        'settings': settings}, tmp)
+            os.replace(tmp, ckpt_path)   # atomic: a crash mid-write keeps the old one
     res = {'tag': tag, 'train_rows': len(train_rows), 'natural_rows': len(tune_rows),
            'hard_rows': len(test_rows), 'epochs': args.epochs,
            'train_seconds': round(time.time() - t0, 1)}
@@ -410,6 +438,9 @@ def main():
     # 512 tokens at batch 16 overflows the 3080's 10 GB and spills into
     # system RAM (froze the PC, 2026-09-05). Batch 8 x accumulate 2 is the
     # same effective batch at roughly half the VRAM.
+    ap.add_argument('--no-resume', dest='resume', action='store_false',
+                    help='ignore any checkpoint and do not write one')
+    ap.set_defaults(resume=True)
     ap.add_argument('--reversal-penalty', type=float, default=1.0,
                     help='extra loss on the probability given to the polarity '
                          'opposite of the gold class (0 disables)')
@@ -475,6 +506,9 @@ def main():
                        'manifest': manifest},
                       open(os.path.join(path, 'config.json'), 'w'), indent=1)
             print('saved to', path)
+        done_ckpt = os.path.join(OUT_DIR, 'checkpoint-%s.pt' % tag)
+        if os.path.exists(done_ckpt):
+            os.remove(done_ckpt)         # the run finished; its results are written
         del model
         torch.cuda.empty_cache()
     out = os.path.join(OUT_DIR, 'results.json')
