@@ -167,14 +167,53 @@ establish the exact semantics and a safe path. Its output is §8 below.**
 
 ## 8. The plan
 
-**PENDING** — the workflow (`retire-encoder-trial`, run
-`wf_6ecda851-1a5`) was still running when this document was written. Its output
-will be appended here as §8 with the exact ordered command sequence, the paths
-that look attractive but destroy data, and the questions that need Michi rather
-than a technical answer.
+`TRIAL-RETIREMENT-PLAN.md`, beside this file. Produced by a workflow of four
+code readers plus three adversarial verifiers (data-loss, deploy-correctness,
+rollback), then synthesised by an agent that re-derived every load-bearing
+claim against deployed `main` rather than against this worktree. The supporting
+evidence is in the seven `TRIAL-RETIREMENT-read-*.md` / `-verify-*.md` files.
 
-Do not execute anything until that section exists and you have verified its
-claims against the code yourself.
+Its headings: §0 facts verified first-hand, §1 the recommended path (Phase 0
+preserve / Phase 1 defuse deadline / Phase 2 ship base), §2 paths that look
+attractive and destroy data, §3 open questions that need Michi, §4 the 0.93
+threshold's provenance, §5 where the synthesiser disagrees with its own inputs.
+
+**Three findings from that run change what a verifier must check, and one of
+them invalidates part of what the reader agents themselves wrote:**
+
+1. **This checkout has the WRONG trial schedule.** Deployed `main` carries
+   `AUDIT_DRAW_DAY=1 / AUDIT_LABEL_DAY=2 / TRIAL_DEADLINE_DAYS=3`; `dev_personal`
+   still has 3/7/10. So **every trial command run from
+   `C:\Users\michi\Desktop\CodingStuff` against the production database computes
+   with the wrong clock and lies** — `tick` would report nothing due on an
+   expired trial, `accept` would refuse a valid day-1 draw. Trial commands must
+   be run on the VPS from `/root/coc-stats`. For the same reason, reader
+   citations into `judge_trial.py` past ~line 575 are a line or two off against
+   production; check the symbol, not the number.
+2. **Disabling the timer does not defuse the deadline.**
+   `run_radar_ingest.py:1272` calls `judge_trial.tick()` at daemon startup,
+   before the judges initialise. After 2026-09-09 19:38:24 UTC, any restart of
+   `radar_ingest` — including a routine `./update_coc.sh` — would itself drain
+   the judgments. This is the single most important thing to re-verify.
+3. **The rollback asset is unprotected and cannot be recreated.** The audited
+   small artifact exists only in a gitignored directory inside a stale worktree
+   (`CodingStuff-worktrees/radar-encoder-judge/.../artifacts/judge/v1/`). Its
+   bundle hash was re-derived and matches the armed trial's
+   `3bb32b5607a8a368...` exactly. It cannot be rebuilt: the packager stamps
+   `packaged_at_git_head` into `config.json`, and `config.json` is inside the
+   bundle hash, so any repackage yields a different hash and fails the artifact
+   check in §5. Copying it somewhere durable is step 0a of the plan.
+
+**Shape of the recommendation:** the trial is retired in CODE, not by data.
+Nothing writes to `radar_mentions`, `radar_mention_events` or `radar_buckets`.
+The trial row stays in the database, `running`, untouched, retention pin
+intact, and `recover_trial` stays available to an operator who later chooses
+it. Every step reverses with a `git revert`, a `systemctl enable`, or a `mv`.
+
+**Not executed.** It adds a retirement switch to a production safety mechanism,
+which is exactly the kind of change that should be read by someone who did not
+write it. Do not execute anything until you have verified its claims against
+the code yourself.
 
 ## 9. What to verify, concretely
 
