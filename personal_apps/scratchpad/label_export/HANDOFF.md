@@ -669,3 +669,21 @@ authorized_keys, cancel OLD.
 
 Migration is complete on the server side. Remaining for Michi: DNS, the CoC
 key; then `certbot renew --dry-run` on NEW once DNS resolves here.
+
+### 11:25 UTC — DNS and CoC key done by Michi, verified
+
+- Public DNS (8.8.8.8): all three viewdns.net names -> 194.164.29.97; public
+  HTTPS 200 with valid TLS on each, no --resolve.
+- CoC API key now allows the new IP: after `systemctl restart coc_scheduler`
+  zero `invalidIp` errors, clan_members updated=43, raid_weekend and clan_war
+  fetches succeed. The three 403s logged at 13:22:28 CEST were the OLD process
+  before the restart.
+- `certbot renew --dry-run` launched from the new IP; result recorded below
+  when it returns.
+- Michi's Termius could not connect because the new box is key-only and the
+  host entry had no key; fix is importing `C:\Users\michi\.ssh\id_ed25519`
+  into Termius, not re-enabling passwords.
+
+Remaining: certbot result; after a few stable days delete
+`/var/lib/mysql.rehearsal-*` on NEW, remove the deploy-key line from OLD's
+`authorized_keys`, cancel OLD.
