@@ -295,6 +295,25 @@ def coin_collision_dropped(source, symbol):
     return symbol in COIN_COLLISION_SYMBOLS
 
 
+# The shared ingest cycle's interval, and how long inside it the Bluesky
+# firehose may drain.
+#
+# Bluesky is LIVE: a minute not captured is gone. Reddit's archive resumes
+# from a cursor and 4chan's catalogue is a snapshot, so both survive a slow
+# cycle; Bluesky does not. Measured 2026-09-07, its coverage fell from 889
+# minutes of the day to 374 out of 1440 between 09-04 and 09-07, and its
+# posts with it, 2,069/day to 561/day, with NOTHING deployed in between.
+# The cause was arithmetic: the cycle stretched to roughly five minutes as
+# the tables grew, while the drain stayed at the 45 seconds it was given
+# when cycles were three minutes. A drain that cannot replay the gap falls
+# behind permanently and each cycle takes a thinner slice.
+#
+# 120 leaves room inside a 180-second cycle for every other source, and
+# replays four times what 45 could.
+CYCLE_SECONDS = 180
+BLUESKY_DRAIN_SECONDS = 120
+
+
 def bare_tokens_allowed(source):
     return BARE_TOKENS_ALLOWED.get(source_root(source), False)
 
