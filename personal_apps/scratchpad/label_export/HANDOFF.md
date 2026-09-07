@@ -704,3 +704,39 @@ on OLD after stopping the same on NEW, then repoint DNS.
 MIGRATION COMPLETE. Nothing remains on the server side. Housekeeping in a few
 days, once stable: delete `/var/lib/mysql.rehearsal-*` on NEW (3.2 GB), remove
 the deploy-key line from OLD's `authorized_keys`, then cancel OLD.
+
+## First live numbers from the encoder trial — read 2026-09-07 ~11:45 UTC
+
+Trial `running`, model radar-encoder-v1, artifact sha 3bb32b56..., armed
+09-06 19:32 UTC, first judgment 19:38, audit "not evaluated" (sampling opens
+09-07 19:38 UTC, 746 rows, seed 20260906, baseline removal rate 0.5367).
+
+1,164 mentions judged by the encoder so far (827 on 09-06, 337 on 09-07 to
+midday CEST, ~1,500/day gated). Encoder writes relevance + origin ONLY; the
+tone heads are NULL on every encoder row, so board tone falls back to the
+lexicon for these mentions.
+
+| | encoder (1,164) | Haiku, all rows (16,297) |
+|---|---|---|
+| relevant | 48.5% | 77.2% |
+| irrelevant | 35.6% | 19.4% |
+| uncertain | 16.0% | 3.4% |
+| broadcast | 11.0% | — |
+| removal share (irrelevant OR broadcast) | 0.437 (0.424 / 0.469 by day) | 0.537 baseline |
+
+The 10-point removal gap is almost exactly the extra `uncertain`: the encoder
+sends ~12 points of what Haiku decided into uncertain, which the board counts
+neither way. Spot-read uncertain rows are content-free ("So puts got it thanks
+OP", "Your current position?", bare "KEEL", "[removed]") -- conservative, not
+wrong. Spot-read removals on real tickers: 4 of 5 correct (Teradyne/Aerotyne
+under AEHR, FaradayFuture under USAR), 1 wrong ("Option heatmap ... for GPrO"
+called irrelevant) -- consistent with the locked-set removal precision ~0.9.
+
+Per ticker the encoder agrees with Haiku's historical behaviour: RSI 0.74 vs
+0.95 irrelevant, API 0.89 vs 0.98, DJT 0.86 vs 0.72; real names pass (SPCX
+0.00 vs 0.18, UUUU 0.00, AMC 0.03, XOM 0.03, GPRO 0.04 vs 0.18). Bluesky rows
+53% irrelevant vs Reddit 32%, the known junk profile. Jargon tickers (RSI,
+API) still reach the judged pool -- the extractor feeds them, the encoder
+removes them; that is the precision round's job, not the judge's.
+
+No API spend: review tier is `none`, the encoder is local.
