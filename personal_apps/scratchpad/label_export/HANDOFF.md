@@ -653,3 +653,19 @@ STILL OPEN: (1) Michi changes the three viewdns.net A records to
 trial ticks (see the verification below); (5) after a few stable days: delete
 the rehearsal datadir, remove OLD's deploy-key entry from OLD's
 authorized_keys, cancel OLD.
+
+### Post-cutover verification, 11:16 UTC — production is running on NEW
+
+- `radar_ingest`: started, "radar judge: primary=radar-encoder-v1 review=none"
+  (encoder only, no API tier, no spend), sources bluesky+fourchan+reddit,
+  first cycle landed 18 new posts within three minutes of start, latest post
+  11:16:15 UTC (cutover was 11:13), RSS growing as the model loads, zero
+  restarts, zero errors.
+- `radar-encoder-trial`: three successful ticks in the first eight minutes.
+  The trial continues here intact; sampling opens 19:38 UTC as scheduled.
+- `coc_scheduler`: runs, but every CoC fetch is 403 until the API key allows
+  194.164.29.97 (Michi, developer portal). `personal_apps_gym_notifier`: clean.
+- Web: 200 with live data on all three hostnames via `--resolve`.
+
+Migration is complete on the server side. Remaining for Michi: DNS, the CoC
+key; then `certbot renew --dry-run` on NEW once DNS resolves here.
