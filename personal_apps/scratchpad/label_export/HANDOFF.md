@@ -1,9 +1,48 @@
 # Radar extractor work — handoff, 2026-09-07
 
 Branch `dev_personal`, repo `C:\Users\michi\Desktop\CodingStuff`, nothing merged
-to main and nothing deployed. The encoder-judge trial is LIVE on the VPS until
-16 Sept and MUST NOT be disturbed: an extractor change moves the mention
-population and would move the trial's removal-share alarm.
+to main and nothing deployed. The encoder-judge trial is LIVE on the VPS and
+MUST NOT be disturbed: an extractor change moves the mention population and
+would move the trial's removal-share alarm. **Michi shortened the trial to 3
+DAYS (told me 2026-09-07); started 2026-09-06 19:38 UTC, so it ends ~09-09
+19:38 UTC.** Earlier notes saying 16 Sept are stale. Runs as
+`radar_ingest.service` plus `radar-encoder-trial.timer`, which fires every
+minute.
+
+## VPS migration, agreed 2026-09-07
+
+Michi bought an IONOS VPS L+ (6 vCores, 8 GB RAM, 240 GB NVMe, 5 EUR for 3
+months then a struck-through 18 EUR -- the month-four price is NOT stated on
+the tariff page and must be read at checkout). Reason, measured: the current
+box is 3.8 GB with 3.0 GB used, 633-759 MB available and 301 MB already in
+swap, while `radar_ingest` alone holds 1.4 GB resident. No leak -- that
+process's RSS was byte-identical across two readings 20 minutes apart, and
+load average is 0.06. The box is simply full, and 8 GB is what the NER +
+encoder pipeline needs.
+
+**Recommend Ubuntu 24.04 LTS on the new box, not 26.04**: the current one is
+24.04 / Python 3.12.3 / MariaDB 10.11 / nginx 1.24, and onnxruntime wheels
+routinely lag a brand-new Python by months -- that is what runs the encoder in
+production. Migrate first, upgrade the OS later as its own change.
+
+Complete inventory of what has to move (verified on the box, nothing else):
+- five services: `coc_web`, `coc_scheduler`, `personal_apps_web`,
+  `personal_apps_gym_notifier`, `radar_ingest`
+- two timers: `radar-encoder-trial.timer` (every minute), `certbot.timer`
+- one cron job: `backup_db.sh` at 03:15 into `/root/db_backups`
+- one nginx site: `coc_stats`
+- `/root` scripts: `backup_db.sh`, `update_coc.sh`, `check_logs.sh`
+- two databases, 3.8 GB of MariaDB files -- DUMP AND RESTORE, never copy
+  `/var/lib/mysql`
+- `/root/coc-stats` 1.4 GB checkout + venv -- REBUILD the venv, never copy it
+- the env/secrets files
+- certbot: the certificate follows the domain, so it is the step people forget
+
+Plan Michi agreed to: build the new box completely and run both apps on its
+IP, tested, nothing switched. Then a final dump and a short cutover, keeping
+the old box as fallback for a few days. He needs to supply the new IP, the SSH
+key, the chosen OS, and where DNS is managed; the DNS change and the cutover
+go-ahead stay his.
 
 ## The 6-epoch experiment: ANSWERED, more epochs is not the lever
 
