@@ -557,3 +557,33 @@ Progress ledger: configuration/TLS/model-load/credentials/manifests verified;
 fresh logical restore RUNNING; table checks/web HTTP/journals/scheduler/notifier
 OPEN; radar daemon check waits for exclusive execution; cutover/DNS OPEN.
 NEW web and background app units and trial timer remain stopped.
+
+## Claude takeover after Codex's session limit — 2026-09-07 ~11:00 UTC
+
+Verified before acting: `dev_personal` at b000417 (Codex's three commits), only
+the two pre-existing Telegram files dirty. OLD fully live (five services, trial
+timer, 655 MiB available at 10:50 UTC). NEW: rehearsal restore running as
+Codex's `vps-rehearsal-restore.service`, buffer pool 1 GiB confirmed, all app
+units inactive, trial timer inactive, no crontab.
+
+Codex was right on two points and both are adopted:
+- `mgemmel@%` lacked `WITH GRANT OPTION` on NEW. My redaction `sed` in the
+  original grants check truncated the line after the password hash, which hid
+  the suffix. Applied `GRANT ALL PRIVILEGES ON *.* TO 'mgemmel'@'%' WITH GRANT
+  OPTION` on NEW; verified. Moot after a cold copy (grant tables travel), real
+  if the dump fallback is used.
+- NO daemon smoke-starts on NEW while OLD is live. `coc_scheduler` calls the
+  CoC API immediately (shared token, shared rate limit); the gym notifier
+  sends real pushes to Michi's phone after 10 s (duplicates from a stale
+  copy); `radar_ingest` may reach the review tier with the Anthropic key and
+  must never run beside OLD's trial. My Codex prompt said to smoke-start
+  them; that instruction is WITHDRAWN. The daemons get their real first run
+  at cutover, when OLD is stopped and they are the only instances.
+  Substitutes done instead: `systemd-analyze verify` on all seven units
+  (clean), encoder model load (3.4 s), and after the restore an app-context
+  read-only load of the judge backend.
+
+Rehearsal acceptance, per Codex's criteria: `/root/stage/rehearsal-restore.exit`
+= 0 and the oneshot finished, 23 + 43 tables, alembic heads equal to OLD
+(personal_apps b3d9e1f5a274, coc_stats b4e7d2a91f56), then web units up and
+`curl --resolve` 200s on DB-backed pages with clean journals.
