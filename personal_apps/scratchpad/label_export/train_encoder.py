@@ -504,13 +504,20 @@ def main():
         results.append(res)
         res['manifest'] = manifest
         if args.save and size == sizes[-1]:
-            path = os.path.join(OUT_DIR, 'model-%s' % tag)
+            # Stamped, because a bare tag made every run overwrite the last
+            # one -- and once the previous weights are gone, no A/B against
+            # them is possible. `model-latest` is a convenience pointer.
+            stamp = time.strftime('%Y%m%d-%H%M%S', time.gmtime())
+            path = os.path.join(OUT_DIR, 'model-%s-%s' % (tag, stamp))
             os.makedirs(path, exist_ok=True)
             torch.save(model.state_dict(), os.path.join(path, 'weights.pt'))
             tok.save_pretrained(path)
             json.dump({'base': BASE, 'heads': HEADS, 'max_len': MAX_LEN,
                        'manifest': manifest},
                       open(os.path.join(path, 'config.json'), 'w'), indent=1)
+            pointer = os.path.join(OUT_DIR, 'model-latest.txt')
+            with open(pointer, 'w', encoding='utf-8') as handle:
+                handle.write(path)
             print('saved to', path)
         done_ckpt = os.path.join(OUT_DIR, 'checkpoint-%s.pt' % tag)
         if os.path.exists(done_ckpt):
