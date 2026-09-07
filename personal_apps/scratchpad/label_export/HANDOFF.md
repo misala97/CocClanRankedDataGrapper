@@ -587,3 +587,32 @@ Rehearsal acceptance, per Codex's criteria: `/root/stage/rehearsal-restore.exit`
 = 0 and the oneshot finished, 23 + 43 tables, alembic heads equal to OLD
 (personal_apps b3d9e1f5a274, coc_stats b4e7d2a91f56), then web units up and
 `curl --resolve` 200s on DB-backed pages with clean journals.
+
+## REHEARSAL ACCEPTED — 2026-09-07 ~11:35 UTC
+
+`vps-rehearsal-restore.service`: exit file 0, Result=success. Durability back to
+flush=1 / sync_binlog=1 by Codex's EXIT trap; buffer pool 1 GiB. 23 + 43
+tables, 3.2 GB on disk. Alembic heads equal OLD: personal_apps b3d9e1f5a274,
+coc_stats b4e7d2a91f56. Row counts consistent with a 03:15 snapshot: app_user
+3, gym sessions 52, radar_mentions 282,599, radar_posts 214,721,
+radar_bucket_sources 6,642,653, radar_daily_closes 5,548,881, judge_trial 1.
+Codex's restart with the larger pool restored in ~60 min against my aborted
+attempt's projected 2+ h; the cold copy at cutover stays the plan.
+
+`coc_web` and `personal_apps_web` STARTED on NEW and left running (nothing
+routes to them; harmless, and they let Michi test via a hosts-file entry).
+`curl --resolve <host>:443:194.164.29.97`: misala / 200 86 KB, /ranked 200
+980 KB 1.6 s, /war 200 310 KB; pubquizmainz / 200 127 KB; mgemmel / and
+/radar/ 200 4.6 KB (the login page, auth-gated as designed). Journals clean.
+`EncoderBackend()` constructs under the venv (id radar-encoder-v1; the model
+itself was loaded directly earlier in 3.4 s). All seven units pass
+`systemd-analyze verify`. The three daemons and the trial timer remain
+STOPPED on NEW by policy (see the takeover section) until cutover.
+
+WHAT REMAINS IS MICHI'S: (1) tell the other trial chat the new IP;
+(2) say go, and when -- before sampling opens 2026-09-07 19:38 UTC, or after
+the deadline 09-09 19:38 UTC; (3) after cutover, change the three
+`viewdns.net` A records to 194.164.29.97; then `certbot renew --dry-run` here.
+Cutover procedure is in "STILL TO DO", fast path = cold copy of
+/var/lib/mysql between the identical 10.11.14 builds with BOTH servers
+stopped.
