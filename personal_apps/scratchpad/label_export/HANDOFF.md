@@ -86,6 +86,33 @@ DONE on the new box, all verified:
   `/root/db_backups/`; restore was RUNNING at the time of writing
   (`gunzip < dump | mariadb`, `radar_bucket_sources` is the slow table).
 
+STATE AT HANDOVER TO CODEX (2026-09-07 ~13:40 CEST):
+- The logical restore of `db_2026-09-07_0315.sql.gz` was STILL RUNNING
+  (`pgrep -f gunzip`), in `radar_bucket_sources` at the F tickers, 502 MB in
+  `/var/lib/mysql`, 23 + 20 tables created. It is slow because MariaDB fsyncs
+  per INSERT batch; `innodb_flush_log_at_trx_commit=2` and `sync_binlog=0`
+  were SET GLOBAL for the duration -- put them back to 1 after (or just
+  restart mariadb, which also applies `99-tuning.cnf`). A runtime
+  `SET GLOBAL innodb_buffer_pool_size=1G` did NOT take (still 128 MB); the
+  persistent `/etc/mysql/mariadb.conf.d/99-tuning.cnf` applies at restart.
+- This restore is a REHEARSAL. It proves the procedure and lets the apps be
+  tested on the new IP. The cutover needs a FRESH dump (or the fast path
+  below), because everything since 03:15 is missing from it.
+- FAST PATH for the real cutover: both boxes run the identical MariaDB
+  10.11.14-0ubuntu0.24.04.1. A cold copy of `/var/lib/mysql` (old mariadb
+  STOPPED, rsync/tar over ssh, then start here, `chown -R mysql:mysql`) is
+  valid between identical builds and takes ~10 min for 3.8 GB, against 90+
+  min for the logical restore. Only do this with the old server stopped; a
+  copy of a running datadir is corrupt.
+- THE TRIAL CAN MOVE INTACT. It is DB state plus `radar-encoder-trial.timer`;
+  the model is already here. A cutover carries it across paused, not
+  restarted: stop old daemons -> copy DB -> start here WITH the timer
+  enabled -> ingest catches up from its Arctic Shift cursors. Best window is
+  BEFORE sampling opens at 2026-09-07 19:38 UTC (labels due 09-08 19:38,
+  deadline 09-09 19:38 UTC). Whoever operates the trial from another chat
+  must be told the new IP first, or their sampling/labelling steps hit a
+  frozen copy on the old box.
+
 STILL TO DO, in order:
 1. Restore finishes -> table counts and sizes vs the old box.
 2. `systemctl start coc_web personal_apps_web` -> curl each hostname with
