@@ -1,0 +1,90 @@
+"""Turning the relevance labels we already have into span supervision.
+
+The extraction model answers a question the judge cannot: WHICH words in a
+post name a company. Every labelled row already carries that, because the
+candidate files record the `evidence` token that produced the row, and it
+is locatable in the text for 4,474 of 4,500 wave rows.
+
+The labels give BOTH sides of the same surface form, which is what makes
+this worth doing without new labelling: `Apple` judged relevant is a
+company mention, `apple` judged irrelevant is not, and `internet` is never
+one. A tagger trained on positives alone would learn a word list; trained
+on both it learns context.
+"""
+from scratchpad.label_export import span_dataset as sd
+
+
+def _row(text, evidence, relevance='relevant', ticker='GPRO'):
+    return {'author_text': text, 'evidence': evidence, 'relevance': relevance,
+            'ticker': ticker, 'mention_id': -1}
+
+
+def test_a_relevant_candidate_marks_its_span():
+    spans = sd.spans_for(_row('my GoPro broke yesterday', 'GoPro'))
+    assert spans == [(3, 8, 'GPRO')]
+
+
+def test_an_irrelevant_candidate_marks_nothing_but_is_still_a_row():
+    """The post is a NEGATIVE example: the token is there and is not a
+    company. Dropping it would teach the tagger a word list."""
+    spans = sd.spans_for(_row('the internet is down', 'internet',
+                              relevance='irrelevant', ticker='INTZ'))
+    assert spans == []
+
+
+def test_an_uncertain_candidate_is_excluded_entirely():
+    """Neither a span nor a clean negative -- training on it as either
+    would be inventing an answer the teacher refused to give."""
+    assert sd.spans_for(_row('gme', 'gme', relevance='uncertain')) is None
+
+
+def test_the_match_is_case_insensitive_but_the_offsets_are_exact():
+    spans = sd.spans_for(_row('do not buy moderna today', 'Moderna', ticker='MRNA'))
+    assert spans == [(11, 18, 'MRNA')]
+
+
+def test_only_whole_words_count():
+    """`app` must not mark the first three letters of `apple`.
+
+    Unfindable means DROPPED (None), not an empty span list: an empty list
+    asserts "the token is here and names nothing", and we cannot claim that
+    about a token we could not locate."""
+    assert sd.spans_for(_row('i ate an apple', 'app', ticker='APP')) is None
+    assert sd.spans_for(_row('the app crashed', 'app', ticker='APP')) == [(4, 7, 'APP')]
+
+
+def test_every_occurrence_of_the_token_is_marked():
+    spans = sd.spans_for(_row('GoPro up, GoPro down', 'GoPro'))
+    assert spans == [(0, 5, 'GPRO'), (10, 15, 'GPRO')]
+
+
+def test_a_cashtag_span_includes_the_dollar_sign():
+    spans = sd.spans_for(_row('loading $GME calls', '$GME', ticker='GME'))
+    assert spans == [(8, 12, 'GME')]
+
+
+def test_a_row_whose_evidence_is_not_in_the_text_is_dropped_not_guessed():
+    assert sd.spans_for(_row('nothing here', 'GoPro')) is None
+
+
+def test_rows_for_one_post_are_merged_into_a_single_example():
+    """A post mentioning two companies is ONE training example with two
+    spans, not two examples that each call the other's span background."""
+    rows = [_row('NVDA and GoPro', 'NVDA', ticker='NVDA'),
+            _row('NVDA and GoPro', 'GoPro', ticker='GPRO')]
+    [example] = sd.examples_from(rows, key=lambda r: r['author_text'])
+    assert example['text'] == 'NVDA and GoPro'
+    assert sorted(example['spans']) == [(0, 4, 'NVDA'), (9, 14, 'GPRO')]
+
+
+def test_a_post_with_only_irrelevant_rows_is_kept_as_a_pure_negative():
+    rows = [_row('the internet is down', 'internet', relevance='irrelevant',
+                 ticker='INTZ')]
+    [example] = sd.examples_from(rows, key=lambda r: r['author_text'])
+    assert example['spans'] == []
+    assert example['negatives'] == ['internet']
+
+
+def test_a_post_whose_every_row_was_uncertain_is_dropped():
+    rows = [_row('gme', 'gme', relevance='uncertain')]
+    assert sd.examples_from(rows, key=lambda r: r['author_text']) == []
