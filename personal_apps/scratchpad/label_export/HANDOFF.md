@@ -740,3 +740,33 @@ API) still reach the judged pool -- the extractor feeds them, the encoder
 removes them; that is the precision round's job, not the judge's.
 
 No API spend: review tier is `none`, the encoder is local.
+
+### 12:35 UTC — MariaDB buffer pool 1G -> 2500M on NEW
+
+Michi reported the server feeling slower. Network was NOT the cause: TCP
+connect is 0.21 s to BOTH boxes (ICMP is dropped by ufw on both, so `ping`
+tells you nothing here). The cause was disk: 48% iowait, and mariadbd had
+read 8.8 GB in 74 minutes for a 3.19 GB dataset -- a 1 GiB pool against a
+3.2 GiB working set re-reads the same pages forever. The old box survived a
+128 MiB pool only because it had 32 hours of warm OS page cache.
+
+`/etc/mysql/mariadb.conf.d/99-tuning.cnf` now sets `innodb_buffer_pool_size
+= 2500M`. NOTE: `innodb_buffer_pool_instances` does NOT exist in MariaDB
+10.11 -- it was in the first draft, the server ignored it and started anyway;
+the line is removed. Restart was clean, all five services and the trial timer
+came back.
+
+Measured after: iowait 48% -> 16-17%, mariadbd reads 8.8 GB -> 1.3 GB since
+restart, buffer pool filled to 1,227 MiB of 2,500 and still warming, hit
+ratio 96% (2,190,893 requests / 83,925 disk reads). RAM 4.27 GB used of 7.88.
+
+HONEST LIMIT: `/ranked` is unchanged at ~1.5 s TTFB, and it measured 1.58 s
+before the cutover too -- it is query-bound, not I/O-bound, and is not a
+migration regression. What did improve is cold first hits (misala `/` 3.5 s
+cold -> 0.77 s warm). If Michi still feels slowness, the next thing to look
+at is the two batch queries seen at 46 s and 26 s (radar_bucket_sources scan,
+radar_daily_closes sort) which belong to the radar daemon's scheduled jobs,
+not to page loads.
+
+Cosmetic, not fixed: mariadb logs "Aborted connection ... user coc_user" once
+a minute -- the trial tick exits without closing its connection.
