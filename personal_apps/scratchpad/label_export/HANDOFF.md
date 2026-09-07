@@ -616,3 +616,40 @@ the deadline 09-09 19:38 UTC; (3) after cutover, change the three
 Cutover procedure is in "STILL TO DO", fast path = cold copy of
 /var/lib/mysql between the identical 10.11.14 builds with BOTH servers
 stopped.
+
+## CUTOVER DONE — 2026-09-07 11:12–11:13 UTC (13:12 CEST)
+
+`/root/stage/cutover.sh` on NEW, log in `/root/stage/cutover-*.log`. Ninety
+seconds of downtime. Cold copy of the datadir (3.9 GB, ~60 s direct
+server-to-server at ~88 MB/s, via OLD's own deploy key added to OLD's
+authorized_keys so NEW can pull). Verified after start: radar_mentions
+271,840 on both sides, alembic heads b3d9e1f5a274 / b4e7d2a91f56, grants
+travelled (WITH GRANT OPTION present), buffer pool 1 GiB, flush=1.
+`/etc/mysql/debian.cnf` copied so maintenance credentials match the copied
+grant tables. The rehearsal datadir is kept at `/var/lib/mysql.rehearsal-*`
+(3.2 GB) -- delete once the new box has been stable for a few days.
+
+NEW: five services + `radar-encoder-trial.timer` active, crontab installed
+(nightly backup to Drive resumes tonight 03:15). Web verified live via
+`--resolve`: /ranked 962 KB, /pubquiz 127 KB, /login 200. Memory 1.5 GB used
+of 7.9.
+
+OLD (82.165.240.212): all five services and the trial timer STOPPED AND
+DISABLED (a reboot cannot resurrect a second instance); mariadb stopped but
+left enabled and its datadir intact as the fallback; nginx still up, so
+old-DNS visitors get 502 until DNS moves. Rollback = start mariadb + services
+there. Do NOT cancel the old box yet.
+
+FOUND AT FIRST SCHEDULER RUN -- MICHI'S ACTION: the Clash of Clans developer
+API key is IP-bound; from 194.164.29.97 every fetch returns 403
+`accessDenied.invalidIp`. Fix at developer.clashofclans.com: add the new IP
+to the key, or create a key for it and set API_TOKEN in /root/coc-stats/.env,
+then `systemctl restart coc_scheduler`. Until then the CoC pages serve the
+database as it was at cutover; nothing breaks, nothing updates.
+
+STILL OPEN: (1) Michi changes the three viewdns.net A records to
+194.164.29.97 (TTL 60 s); (2) then on NEW `certbot renew --dry-run`;
+(3) the CoC API key above; (4) watch the first radar_ingest cycles and the
+trial ticks (see the verification below); (5) after a few stable days: delete
+the rehearsal datadir, remove OLD's deploy-key entry from OLD's
+authorized_keys, cancel OLD.
