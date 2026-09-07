@@ -446,8 +446,14 @@ def main():
         'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
     }
     for h in HEADS:
-        print(' %-15s train mix %s' % (h, dict(collections.Counter(
-            HEADS[h][r['y'][h]] for r in train_rows))))
+        # The mix the head actually SEES: printing all 17,090 rows here
+        # while the tone heads train on 11,057 of them misleads whoever
+        # reads the log later.
+        seen = [r for r in train_rows
+                if tone_training.is_trainable({'y': RAW_Y[r['mention_id']]}, h)]
+        print(' %-15s trains on %5d rows, mix %s'
+              % (h, len(seen), dict(collections.Counter(
+                  HEADS[h][r['y'][h]] for r in seen))))
     os.makedirs(OUT_DIR, exist_ok=True)
     results = []
     sizes = ([int(s) for s in args.curve.split(',')] if args.curve
