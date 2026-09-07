@@ -133,6 +133,8 @@ STILL TO DO, in order:
 
 ## The 6-epoch experiment: ANSWERED, more epochs is not the lever
 
+<!-- Migration takeover audit is appended at the end of this document. -->
+
 Ran to completion 2026-09-07 (~47 min), log
 `encoder/retrain-6ep-2026-09-07.log`, results in the newest
 `encoder/run-*.json`. Training loss fell hard throughout (4.712, 3.455,
@@ -331,3 +333,92 @@ extraction — do not conflate them again. attitude 0.71-0.75, expected_move
     751f0d3  each wave takes its own block of ids
     1cfede7  assemble training rows across waves, lock a recall test set
     7121ba0  train on the recall waves, score them on their own locked set
+
+## Codex migration takeover audit — 2026-09-07, PAUSED on timestamp discrepancy
+
+Read this entire handoff before inspection. Local branch and HEAD verified as
+`dev_personal`, `071913ed09496276ccc23bb5333689877b3d9510`. The workspace
+already contains unrelated modified/untracked files; none belong to this audit
+and none were changed or staged. Only this handoff is owned by this takeover.
+
+**Stop reason:** OLD returned `Mon Sep 7 10:08:47 UTC 2026`; NEW returned
+`Mon Sep 7 10:08:43 UTC 2026` and then `10:09:09 UTC`. This is earlier than
+the above handover timestamp of approximately 13:40 CEST / 11:40 UTC.
+Whether the handoff timestamp or server clocks are wrong is NOT established.
+The user explicitly requires stopping, recording and reporting any discrepancy
+before continuing. Server changes and further migration validation are paused
+pending resolution. Do not schedule the trial from an assumed correct clock.
+
+Verified directly, read-only:
+- Both servers: Ubuntu 24.04.4 LTS; mariadb-server AND mariadb-server-core
+  `1:10.11.14-0ubuntu0.24.04.1`; runtime
+  `10.11.14-MariaDB-0ubuntu0.24.04.1`. Both checkouts on main at
+  `13c9fce521bda2462772a7ad99a82497b85ccf49`; untracked files present.
+- OLD: all five application services enabled/running; trial timer
+  enabled/waiting, trial oneshot inactive at observation; MariaDB running;
+  certbot timer enabled/waiting. RAM 3846 MiB, available 684 MiB, swap used
+  907 MiB. Root disk 15% used (memory pressure, not disk fullness).
+- NEW: all five application services enabled/inactive; trial timer
+  disabled/inactive, trial oneshot inactive; MariaDB running; certbot timer
+  enabled/waiting. RAM 7884 MiB, available 6996 MiB; no swap; root disk 3% used.
+- information_schema table counts / estimated data+index MiB:
+  OLD coc_stats 23 / 25, personal_apps 43 / 3237;
+  NEW coc_stats 23 / 28, personal_apps 20 / 320. These are approximate sizes
+  during a running restore, NOT an integrity or freshness check.
+- Both buffer pools 134217728 bytes. OLD flush-at-commit=1, sync_binlog=0;
+  NEW flush-at-commit=2, sync_binlog=0. Persistent tuning not yet inspected.
+  Do not assume a restart sets sync_binlog=1: OLD currently has 0 too.
+- NEW restore remains running: gzip PID 15439 and mariadb client PID 15440,
+  same parent 15437; connection 36, root, personal_apps, Query, Update.
+  Initial `pgrep -x gunzip` returned nothing because the process is named
+  gzip; this was corrected by the process/connection checks below. Restore
+  was neither killed nor restarted. Its data remains a stale rehearsal.
+
+No remote state changed. No services started/stopped, no database modifications,
+no model/API calls, no DNS changes, no deployment, no merge or cancellation.
+SSH initially failed under the sandbox; authorized elevated read-only SSH worked.
+No secret contents, hashes, keys, query text or environment contents were printed.
+
+The current user instructions supersede stale migration text above: identical-build
+cold copy is permitted ONLY with source and destination MariaDB stopped; cutover
+can precede sampling but needs Michi's explicit go; OLD stays intact and is not
+cancelled. Never smoke-start NEW radar while OLD radar or its trial timer runs.
+The proposed radar smoke test needs a coordinated exclusive window or cutover.
+
+Remaining, all OPEN: resolve clock/handoff discrepancy; finish verification of
+SSH/UFW, configs, secret equality without disclosure, users/grants, packages,
+model/artifacts, unit/script equality, staged cron, nginx/certificates and builds;
+confirm restore completion; validate DB-backed web pages and service journals;
+safe scheduler/notifier smoke tests; exclusive radar encoder startup validation;
+confirm Michi told the other trial chat NEW's IP; obtain explicit cutover go;
+cold-copy cutover and trial/cursor checks; Michi changes DNS; renewal dry run.
+No rehearsal acceptance or cutover readiness is claimed.
+
+Exact successful remote inspection commands (PowerShell single-quoted here-string
+piped to `ssh -o BatchMode=yes -o ConnectTimeout=10 -i
+$env:USERPROFILE/.ssh/id_ed25519 root@<IP> bash -s`, once per box):
+
+```bash
+date -u
+hostname
+. /etc/os-release
+echo "OS=$PRETTY_NAME"
+free -m
+df -h / /var/lib/mysql
+dpkg-query -W mariadb-server mariadb-server-core
+git -C /root/coc-stats status --short
+git -C /root/coc-stats branch --show-current
+git -C /root/coc-stats rev-parse HEAD
+systemctl show coc_web coc_scheduler personal_apps_web personal_apps_gym_notifier radar_ingest radar-encoder-trial.timer radar-encoder-trial.service mariadb certbot.timer -p Id -p ActiveState -p SubState -p UnitFileState
+pgrep -x gunzip || true
+mariadb -N -e "SELECT VERSION(); SELECT TABLE_SCHEMA,COUNT(*),ROUND(SUM(DATA_LENGTH+INDEX_LENGTH)/1024/1024) FROM information_schema.TABLES WHERE TABLE_SCHEMA IN ('coc_stats','personal_apps') GROUP BY TABLE_SCHEMA; SHOW GLOBAL VARIABLES WHERE Variable_name IN ('innodb_buffer_pool_size','innodb_flush_log_at_trx_commit','sync_binlog');"
+```
+
+Additional NEW-only confirmation (same SSH transport):
+
+```bash
+date -u
+pgrep -af '[g]unzip|[g]zip|[m]ariadb' | sed -E 's/^([0-9]+) .*/pid=\1/'
+ps -eo pid,ppid,comm | awk '$3 ~ /^(gzip|gunzip|mariadb|mysql|bash|sshd)$/ {print}'
+mariadb -N -e "SELECT ID,USER,DB,COMMAND,TIME,STATE FROM information_schema.PROCESSLIST WHERE ID <> CONNECTION_ID();"
+```
