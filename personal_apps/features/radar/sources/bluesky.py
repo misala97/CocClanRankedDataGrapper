@@ -18,6 +18,7 @@ into a fake spike (spec 4.5).
 import datetime as dt
 
 from . import FetchResult, RawPost
+from ..config import BLUESKY_DRAIN_SECONDS
 
 JETSTREAM_URL = ('wss://jetstream2.us-east.bsky.network/subscribe'
                  '?wantedCollections=app.bsky.feed.post')
@@ -72,12 +73,16 @@ def _to_raw_post(event):
     )
 
 
-def fetch(since, drain, budget_seconds=45):
+def fetch(since, drain, budget_seconds=None):
     """Drain the firehose from `since` and normalize what comes back.
 
     `drain(cursor_us, budget)` is injected so the whole module is testable
     without a network, which spec 10 requires.
     """
+    # None means "whatever config says", so the budget is one value in one
+    # place; an explicit number still wins, for tests and backfills.
+    if budget_seconds is None:
+        budget_seconds = BLUESKY_DRAIN_SECONDS
     cursor_us = int(since.replace(tzinfo=dt.timezone.utc).timestamp() * 1_000_000)
 
     try:

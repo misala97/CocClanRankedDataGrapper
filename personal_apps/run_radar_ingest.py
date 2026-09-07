@@ -39,7 +39,8 @@ from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
 from features.radar.prices import normalize_snapshot
 from features.radar.config import (
-    ARCTIC_SHIFT_INTERVAL_SECONDS, MENTION_EVENT_RETENTION_HOURS,
+    ARCTIC_SHIFT_INTERVAL_SECONDS, CYCLE_SECONDS,
+    MENTION_EVENT_RETENTION_HOURS,
     REDDIT_FETCHER, REDDIT_INTERVAL_SECONDS, REDDIT_MAX_POLL,
     REDDIT_MIN_POLL, REDDIT_SUBS, REDDIT_SUBS_PER_CYCLE, SOURCES,
     expand_sources, prefer_ipv4_if_configured, source_config_version)
@@ -1296,7 +1297,7 @@ def main(argv=None):
     # cadence of its own, and the reason is in _scheduled_reddit.
     session_fetchers = {name: f for name, f in fetchers.items()
                         if name != 'reddit'}
-    scheduler.add_job(_scheduled_cycle, 'interval', seconds=180,
+    scheduler.add_job(_scheduled_cycle, 'interval', seconds=CYCLE_SECONDS,
                       id='radar_cycle', args=[scheduler, session_fetchers],
                       max_instances=1, coalesce=True,
                       next_run_time=dt.datetime.now(dt.timezone.utc))
