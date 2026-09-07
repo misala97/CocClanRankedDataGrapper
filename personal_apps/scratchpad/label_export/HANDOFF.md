@@ -687,3 +687,14 @@ key; then `certbot renew --dry-run` on NEW once DNS resolves here.
 Remaining: certbot result; after a few stable days delete
 `/var/lib/mysql.rehearsal-*` on NEW, remove the deploy-key line from OLD's
 `authorized_keys`, cancel OLD.
+
+### OLD box final state, 11:33 UTC
+
+All five app services and `radar-encoder-trial.timer`: inactive AND disabled.
+`mariadb`: stopped, left enabled, datadir intact (the fallback). `nginx`:
+still running, harmless (DNS no longer points there). Root crontab REMOVED
+(copy at `/root/crontab.retired.txt` on OLD; NEW has the same line
+installed). `certbot.timer` disabled there. No application process exists on
+OLD. Fallback = `systemctl start mariadb coc_web personal_apps_web
+coc_scheduler personal_apps_gym_notifier radar_ingest radar-encoder-trial.timer`
+on OLD after stopping the same on NEW, then repoint DNS.
