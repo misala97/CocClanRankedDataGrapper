@@ -42,6 +42,7 @@ from transformers import AutoModel, AutoTokenizer, logging as hf_logging
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import label_data  # noqa: E402
+import tone_training  # noqa: E402
 
 ROOT = r'C:\Users\michi\Desktop\radar_labels'
 LABELS = os.path.join(ROOT, 'labels-sonnet5.jsonl')
@@ -83,6 +84,9 @@ HEADS = {
     'confidence': ['high', 'medium', 'low'],
 }
 IDX = {h: {v: i for i, v in enumerate(vs)} for h, vs in HEADS.items()}
+# mention_id -> the label VALUES, so the mask can ask about relevance
+# by name rather than by an index the head order could change.
+RAW_Y = {}
 
 
 def load_rows():
@@ -99,6 +103,7 @@ def load_rows():
             if row['mention_id'] in seen:
                 continue
             seen.add(row['mention_id'])
+            RAW_Y[row['mention_id']] = dict(row['y'])
             row['y'] = {h: IDX[h][row['y'][h]] for h in HEADS}
             rows.append(row)
     return rows
@@ -179,6 +184,13 @@ class Rows(Dataset):
         item = {k: v.squeeze(0) for k, v in enc.items()}
         for h in HEADS:
             item['y_' + h] = torch.tensor(r['y'][h])
+            # 1.0 where this row may teach this head. See tone_training:
+            # a non-relevant row's attitude/expected_move is a label the
+            # PROMPT forced, not a judgement, and training on it taught the
+            # tone heads to answer `none`.
+            item['m_' + h] = torch.tensor(
+                1.0 if tone_training.is_trainable({'y': RAW_Y[r['mention_id']]}, h)
+                else 0.0)
         return item
 
 
@@ -300,12 +312,30 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
     # class weights: rare classes (mixed, uncertain, 4chan-ish) must not vanish
     weights = {}
     for h, classes in HEADS.items():
-        counts = collections.Counter(r['y'][h] for r in train_rows)
+        # Counted over the rows that will actually reach this head's loss,
+        # or the tone heads would be balanced against a distribution the
+        # mask removes.
+        counted = [r for r in train_rows
+                   if tone_training.is_trainable({'y': RAW_Y[r['mention_id']]}, h)]
+        counts = collections.Counter(r['y'][h] for r in counted)
         w = torch.tensor([1.0 / max(1, counts.get(i, 0)) ** 0.5
                           for i in range(len(classes))], dtype=torch.float, device=device)
         w = w / w.mean()
         weights[h] = w.clamp(max=4.0)
-    losses = {h: nn.CrossEntropyLoss(weight=weights[h]) for h in HEADS}
+    losses = {h: nn.CrossEntropyLoss(weight=weights[h], reduction='none')
+              for h in HEADS}
+    # gold index -> the index it must not be confused with (positive/negative,
+    # up/down). A reversal puts a mention on the WRONG side of the board;
+    # cross-entropy alone charges it like any other miss.
+    opposite = {}
+    for h, classes in HEADS.items():
+        mapping = tone_training.opposite_index_map(h, classes)
+        if not mapping:
+            continue
+        table = torch.full((len(classes),), -1, dtype=torch.long)
+        for gold, other in mapping.items():
+            table[gold] = other
+        opposite[h] = table.to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     accum = max(1, args.accumulate)
     steps = (len(train_loader) + accum - 1) // accum * args.epochs
@@ -318,9 +348,27 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
         opt.zero_grad()
         for i, batch in enumerate(train_loader, start=1):
             ys = {h: batch.pop('y_' + h).to(device) for h in HEADS}
+            ms = {h: batch.pop('m_' + h).to(device) for h in HEADS}
             batch = {k: v.to(device) for k, v in batch.items()}
             logits = model(**batch)
-            loss = sum(losses[h](logits[h].float(), ys[h]) for h in HEADS)
+            loss = 0.0
+            for h in HEADS:
+                per_row = losses[h](logits[h].float(), ys[h])
+                mask = ms[h]
+                # Mean over the rows that count, not over the batch: a batch
+                # that happens to hold few relevant rows must not quietly
+                # shrink the tone heads' gradient.
+                loss = loss + (per_row * mask).sum() / mask.sum().clamp(min=1.0)
+                if h in opposite and args.reversal_penalty > 0:
+                    other = opposite[h][ys[h]]
+                    charge = (other >= 0) & (mask > 0)
+                    if bool(charge.any()):
+                        probs = logits[h].float().softmax(-1)
+                        p_opp = probs.gather(
+                            1, other.clamp(min=0).unsqueeze(1)).squeeze(1)
+                        loss = loss + args.reversal_penalty * (
+                            (p_opp * charge.float()).sum()
+                            / charge.float().sum().clamp(min=1.0))
             if not torch.isfinite(loss):
                 raise SystemExit('non-finite loss at epoch %d -- aborting, '
                                  'numbers from a diverged run are worthless' % (epoch + 1))
@@ -362,6 +410,9 @@ def main():
     # 512 tokens at batch 16 overflows the 3080's 10 GB and spills into
     # system RAM (froze the PC, 2026-09-05). Batch 8 x accumulate 2 is the
     # same effective batch at roughly half the VRAM.
+    ap.add_argument('--reversal-penalty', type=float, default=1.0,
+                    help='extra loss on the probability given to the polarity '
+                         'opposite of the gold class (0 disables)')
     ap.add_argument('--accumulate', type=int, default=2,
                     help='gradient accumulation steps; effective batch = batch * this')
     args = ap.parse_args()
@@ -382,6 +433,8 @@ def main():
     manifest = {
         'seed': args.seed, 'max_len': MAX_LEN, 'epochs': args.epochs,
         'lr': args.lr, 'batch_size': args.batch_size, 'base': BASE,
+        'tone_mask': 'relevance==relevant for %s' % (tone_training.TONE_HEADS,),
+        'reversal_penalty': args.reversal_penalty,
         'labels_sha': _sha(LABELS), 'export_sha': _sha(EXPORT),
         'test_natural_sha': _sha(TEST_NATURAL), 'test_hard_sha': _sha(TEST_HARD),
         'git_head': _git_head(), 'labelled_rows': len(rows),
