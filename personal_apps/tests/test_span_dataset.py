@@ -129,3 +129,15 @@ def test_augment_ignore_never_overlaps_silver():
     ex = {'text': 'GOOGL Google', 'spans': [], 'negatives': []}
     got = sd.augment(ex, {'google'}, {'GOOGL'})
     assert got['silver'] == [(6, 12)] and got['ignore'] == [(0, 5)]
+
+
+def test_vouching_counts_only_the_examples_it_is_given():
+    # A name gold-confirmed only in a held-out row must not be vouched when
+    # vouching runs over the training rows alone.
+    from scratchpad.label_export import build_spans_v2 as b2
+    train = [{'text': 'nvidia rocks', 'spans': [[0, 6, 'NVDA']]}] * 3
+    held = [{'text': 'korea power', 'spans': [[0, 5, 'KEP']]}] * 3
+    candidates = {'nvidia', 'korea'}
+    assert b2.vouched_names(train, candidates, {}, 3) == {'nvidia'}
+    assert b2.vouched_names(train + held, candidates, {}, 3) == {'nvidia', 'korea'}
+    assert b2.vouched_names(train, candidates, {'google': 'GOOGL'}, 3) == {'nvidia', 'google'}

@@ -88,3 +88,13 @@ def test_prf_does_not_charge_predictions_on_undecided_regions():
     assert (got['tp'], got['fp'], got['fn']) == (1, 0, 0)
     got = nt.span_prf(examples, [[(0, 6), (7, 9)]])
     assert (got['tp'], got['fp'], got['fn']) == (0, 0, 1)
+
+
+# ---- after the audit: no text on both sides of the split -------------------
+
+def test_drop_shared_texts_removes_held_out_rows_whose_text_trains():
+    train = [{'text': 'same words', 'spans': []}, {'text': 'other', 'spans': []}]
+    held = [{'text': 'same words', 'spans': [[0, 4, 'X']]}, {'text': 'unique', 'spans': []}]
+    kept, dropped = nt.drop_shared_texts(train, held)
+    assert [e['text'] for e in kept] == ['unique']
+    assert dropped == 1

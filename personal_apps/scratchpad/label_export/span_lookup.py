@@ -41,30 +41,44 @@ SUFFIX_WORDS = frozenset((
 ))
 
 _NON_ALNUM_RE = re.compile(r'[^a-z0-9]+')
+_APOSTROPHE_RE = re.compile(r"['\u2019]")
+
+# Index and market names that are ALSO a listed company's name token. A
+# post writing 'Nasdaq' or 'Dow' means the index; the audit found both
+# resolving to NDAQ and DOW and the judge waving them through. Written as
+# a symbol (DOW, $DOW) they still resolve: that is how the ticker is written.
+INDEX_STOPLIST = frozenset((
+    'nasdaq', 'dow', 'russell', 'nyse', 'sp', 'spx', 'ndx', 'dax', 'nikkei',
+    'kospi', 'ftse', 'vix',
+))
 
 
 class Index:
     """The three tables one lookup needs. Built once, read many."""
 
-    def __init__(self, symbols, by_name, by_token, aliases):
+    def __init__(self, symbols, by_name, by_token, aliases, ordinary=frozenset()):
         self.symbols = symbols        # set of universe symbols, uppercase
         self.by_name = by_name        # normalised name -> sorted symbols
         self.by_token = by_token      # distinctive token -> sorted symbols
         self.aliases = aliases        # lowercase word -> symbol
+        self.ordinary = ordinary      # words the corpus writes in lowercase
 
 
 def normalise_name(text):
     """Lowercase, punctuation to spaces, corporate suffixes and single
     letters dropped. 'Bank of America Corporation' and a post's 'bank of
     america' meet in the middle; 'S&P' becomes nothing at all."""
-    words = _NON_ALNUM_RE.sub(' ', (text or '').lower()).split()
+    # Apostrophes vanish rather than split: "Wendy's" and "Wendys" and
+    # "Wendy\u2019s" must all meet at 'wendys', not at 'wendy'.
+    words = _NON_ALNUM_RE.sub(' ', _APOSTROPHE_RE.sub('', (text or '').lower())).split()
     kept = [w for w in words if w not in SUFFIX_WORDS and len(w) > 1]
     return ' '.join(kept)
 
 
-def build_index(lookup, aliases):
+def build_index(lookup, aliases, ordinary=()):
     """`lookup` is {symbol: {'name': ..., 'distinctive': [...]}} as stage 1
-    dumps it; `aliases` is {word: symbol-or-None}."""
+    dumps it; `aliases` is {word: symbol-or-None}; `ordinary` the words the
+    corpus writes in lowercase most of the time (ordinary-words.json)."""
     symbols = set(lookup)
     by_name = collections.defaultdict(set)
     by_token = collections.defaultdict(set)
@@ -89,7 +103,17 @@ def build_index(lookup, aliases):
         # An alias to a symbol this universe does not hold is not an alias.
         aliases={word: symbol for word, symbol in (aliases or {}).items()
                  if symbol and symbol in symbols},
+        ordinary=frozenset(ordinary or ()),
     )
+
+
+def is_whole_word(text, start, end):
+    """Whether text[start:end] is bounded by non-word characters. A finder
+    that cut 'go' out of 'Avgo' or 'MT' out of 'LQMT' produced a span the
+    lookup must refuse, whatever it would resolve to."""
+    before = text[start - 1] if start > 0 else ''
+    after = text[end] if end < len(text) else ''
+    return not before.isalnum() and not after.isalnum()
 
 
 def resolve(span, index):
@@ -98,15 +122,26 @@ def resolve(span, index):
     if not text:
         return None, 'unresolved'
 
-    # symbol: '$nvda', 'lyft', 'ai'. One token only -- 'The fux' is a phrase.
     bare = text.lstrip('$').rstrip('.,;:!?')
+    written_as_symbol = text.startswith('$') or (bare.isupper() and bare.isalpha())
+    normalised = normalise_name(text)
+
+    # A word the corpus writes in lowercase -- corn, gold, go, be, twin --
+    # names a company only when written as its symbol. The audit's worst
+    # false accepts were exactly these, waved through by the judge at 0.99.
+    if not written_as_symbol and normalised in index.ordinary:
+        return None, 'unresolved'
+    # An index written as an index is never the company sharing its name.
+    if not written_as_symbol and normalised in INDEX_STOPLIST:
+        return None, 'unresolved'
+
+    # symbol: '$nvda', 'lyft', 'ai'. One token only -- 'The fux' is a phrase.
     if bare and not any(ch.isspace() for ch in bare) and bare.upper() in index.symbols:
         return bare.upper(), 'symbol'
 
     # name: the whole span is a listing's name once both are normalised.
     # Several symbols under one normalised name are share classes of one
     # issuer, not an ambiguity; the first sorted symbol stands for it.
-    normalised = normalise_name(text)
     if normalised and normalised in index.by_name:
         return index.by_name[normalised][0], 'name'
 

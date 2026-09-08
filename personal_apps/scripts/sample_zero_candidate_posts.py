@@ -79,6 +79,14 @@ def sample(lines, n, seed, classify_fn, stats=None):
     return out
 
 
+def without_symbols(lookup, excluded):
+    """The lookup minus `excluded`, as a new dict. Reproduces a sample drawn
+    under an older universe: the dev universe was 88 symbols short of
+    production until 2026-09-08 and the benchmark sample was drawn then."""
+    excluded = set(excluded)
+    return {symbol: entry for symbol, entry in lookup.items() if symbol not in excluded}
+
+
 def dump_lookup(lookup, aliases):
     """The universe as stage 2 reads it: names and distinctive tokens only,
     tokens sorted so the file is stable across runs."""
@@ -96,6 +104,12 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     parser.add_argument('--n', type=int, default=3000)
     parser.add_argument('--seed', type=int, default=DEFAULT_SEED)
+    parser.add_argument('--exclude-symbols', default=None,
+                        help='JSON list of symbols to remove from the universe before classifying')
+    parser.add_argument('--exclude-aliases', default=None,
+                        help='JSON list of alias keys to remove for this run (reproduces an older table)')
+    parser.add_argument('--lookup-only', action='store_true',
+                        help='write lookup.json and nothing else')
     args = parser.parse_args(argv)
 
     from scripts import measure_extractor_population as pop
@@ -105,6 +119,26 @@ def main(argv=None):
     started = time.perf_counter()
     with app.app_context():
         lookup = universe.load_lookup()
+    if args.exclude_aliases:
+        with open(args.exclude_aliases, encoding='utf-8') as handle:
+            for key in json.load(handle):
+                # The loose pass reads the module table; the sample must be
+                # drawn under the table that existed when the benchmark was.
+                pop.NAME_ALIASES.pop(key, None)
+        pop._NAME_INDEX_CACHE[:] = []
+    aliases = dict(pop.NAME_ALIASES)
+    aliases.update(pop.METONYMS)
+    os.makedirs(args.out, exist_ok=True)
+    if args.lookup_only:
+        with open(os.path.join(args.out, 'lookup.json'), 'w', encoding='utf-8') as handle:
+            json.dump(dump_lookup(lookup, aliases), handle, ensure_ascii=False)
+        print('lookup.json: %d symbols, %d aliases' % (len(lookup), len(aliases)))
+        return
+    if args.exclude_symbols:
+        with open(args.exclude_symbols, encoding='utf-8') as handle:
+            excluded = json.load(handle)
+        lookup = without_symbols(lookup, excluded)
+        print('universe minus %d excluded symbols: %d' % (len(excluded), len(lookup)), flush=True)
     words = pop.common_words(args.raw)
     shapes = pop.name_shapes(args.raw)
     lines = list(pop.iter_raw(args.raw))
@@ -119,15 +153,13 @@ def main(argv=None):
     rows = sample(lines, args.n, args.seed, classify_fn, stats)
     elapsed = time.perf_counter() - started
 
-    os.makedirs(args.out, exist_ok=True)
     sample_path = os.path.join(args.out, 'sample-%d.jsonl' % args.n)
     with open(sample_path, 'w', encoding='utf-8') as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + '\n')
-    aliases = dict(pop.NAME_ALIASES)
-    aliases.update(pop.METONYMS)
-    with open(os.path.join(args.out, 'lookup.json'), 'w', encoding='utf-8') as handle:
-        json.dump(dump_lookup(lookup, aliases), handle, ensure_ascii=False)
+    if not args.exclude_symbols:
+        with open(os.path.join(args.out, 'lookup.json'), 'w', encoding='utf-8') as handle:
+            json.dump(dump_lookup(lookup, aliases), handle, ensure_ascii=False)
 
     print('sampled %d zero-candidate posts from %d classified (%.1f%% of the '
           'shuffled prefix), seed %d, %.0fs -> %s'

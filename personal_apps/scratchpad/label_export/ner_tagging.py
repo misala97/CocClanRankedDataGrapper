@@ -86,6 +86,15 @@ def split_holdout(examples, test_mention_ids):
     return train, out
 
 
+def drop_shared_texts(train, held):
+    """(held minus rows whose text also trains, how many were dropped).
+    The audit found 14 such rows: a post that is in both halves is a leak
+    however it got there."""
+    seen = {e['text'] for e in train}
+    kept = [e for e in held if e['text'] not in seen]
+    return kept, len(held) - len(kept)
+
+
 def span_prf(examples, predicted):
     """Span-level precision / recall / F1 by overlap, plus recall by the
     gold span's surface kind. `predicted` is one list of (start, end) per

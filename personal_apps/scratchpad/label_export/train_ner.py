@@ -213,10 +213,12 @@ def main(argv=None):
         with open(os.path.join(LABELS_DIR, name), encoding='utf-8') as handle:
             test_ids.update(json.load(handle))
     train_rows, held_rows = ner_tagging.split_holdout(examples, test_ids)
-    print('examples %d -> train %d (%d with spans), held out %d (%d with spans, %d spans)'
+    held_rows, shared = ner_tagging.drop_shared_texts(train_rows, held_rows)
+    print('examples %d -> train %d (%d with spans), held out %d (%d with spans, %d spans; '
+          '%d dropped for sharing a text with training)'
           % (len(examples), len(train_rows), sum(1 for e in train_rows if e['spans']),
              len(held_rows), sum(1 for e in held_rows if e['spans']),
-             sum(len(e['spans']) for e in held_rows)), flush=True)
+             sum(len(e['spans']) for e in held_rows), shared), flush=True)
 
     tok = AutoTokenizer.from_pretrained(args.base)
     t0 = time.time()

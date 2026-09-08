@@ -22,6 +22,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ner_tagging                                         # noqa: E402
 import span_dataset                                        # noqa: E402
 import span_lookup                                         # noqa: E402
 
@@ -41,6 +42,16 @@ NAME_STOPLIST = frozenset((
 ))
 
 
+def vouched_names(examples, candidates, aliases, min_count):
+    """The candidates gold has confirmed at least `min_count` times in
+    THESE examples, plus the aliases. Pass the training half only: the
+    audit found eight names vouched solely by held-out gold, which then
+    seeded 126 silver spans into training -- a leak."""
+    vouched = collections.Counter(example['text'][s:e].lower()
+                                  for example in examples for s, e, _ in example['spans'])
+    return {token for token in candidates if vouched[token] >= min_count} | set(aliases)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--spans', default=LABELS_DIR + '/spans-2026-09-07.jsonl')
@@ -48,6 +59,8 @@ def main(argv=None):
     ap.add_argument('--instruments', default=LABELS_DIR + '/promotion-instruments.json')
     ap.add_argument('--ordinary', default=LABELS_DIR + '/ordinary-words.json')
     ap.add_argument('--out', default=LABELS_DIR + '/spans-v2-2026-09-08.jsonl')
+    ap.add_argument('--vouch-on', choices=('train', 'all'), default='train',
+                    help="which examples' gold may vouch a name; 'all' reproduces the leaky v2")
     args = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -75,10 +88,15 @@ def main(argv=None):
     # only extends what gold vouches for into the posts that went
     # unlabelled. Aliases (google, facebook) are added whole: they are not
     # listing tokens and would never pass the distinctive test.
-    vouched = collections.Counter(example['text'][s:e].lower()
-                                  for example in examples for s, e, _ in example['spans'])
-    name_tokens = ({token for token in candidates if vouched[token] >= VOUCHED_MIN}
-                   | set(index.aliases))
+    if args.vouch_on == 'train':
+        test_ids = set()
+        for name in ('test-natural.json', 'test-hard.json', 'test-recall.json'):
+            with open(os.path.join(LABELS_DIR, name), encoding='utf-8') as handle:
+                test_ids.update(json.load(handle))
+        vouch_from, _held = ner_tagging.split_holdout(examples, test_ids)
+    else:
+        vouch_from = examples
+    name_tokens = vouched_names(vouch_from, candidates, index.aliases, VOUCHED_MIN)
     filled = collections.Counter()
     masked = collections.Counter()
     out = []
@@ -94,8 +112,8 @@ def main(argv=None):
             handle.write(json.dumps(example, ensure_ascii=False) + '\n')
 
     print('name tokens: %d = (distinctive ∩ name-shaped − ordinary − stoplist = %d) '
-          'vouched >= %d by gold, + %d aliases'
-          % (len(name_tokens), len(candidates), VOUCHED_MIN, len(index.aliases)))
+          'vouched >= %d by %s gold, + %d aliases'
+          % (len(name_tokens), len(candidates), VOUCHED_MIN, args.vouch_on, len(index.aliases)))
     print('name tokens: ' + ', '.join(sorted(name_tokens)))
     print('examples %d; gold spans %d; silver added %d in %d posts; masked %d in %d posts'
           % (len(out), sum(len(e['spans']) for e in out), sum(filled.values()),

@@ -271,6 +271,8 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     parser.add_argument('--artifact-dir', default=None,
                         help='defaults to the toy loader\'s artifact')
+    parser.add_argument('--ordinary', default='C:/Users/michi/Desktop/radar_labels/ordinary-words.json',
+                        help='words the corpus writes in lowercase; they resolve only when written as a symbol')
     parser.add_argument('--finder', choices=('gliner', 'trained'), default='gliner')
     parser.add_argument('--model-dir', default=None,
                         help='trained finder; defaults to model-ner-latest.txt beside the sample')
@@ -287,7 +289,9 @@ def main(argv=None):
         rows = [json.loads(line) for line in handle if line.strip()]
     with open(args.lookup, encoding='utf-8') as handle:
         dumped = json.load(handle)
-    index = span_lookup.build_index(dumped['symbols'], dumped['aliases'])
+    with open(args.ordinary, encoding='utf-8') as handle:
+        ordinary = set(json.load(handle)['words'])
+    index = span_lookup.build_index(dumped['symbols'], dumped['aliases'], ordinary=ordinary)
     rows_by_id = {row['external_id']: row for row in rows}
     print('%d posts, %d symbols, %d name tokens, %d aliases'
           % (len(rows), len(index.symbols), len(index.by_token), len(index.aliases)),
@@ -310,6 +314,13 @@ def main(argv=None):
 
     started = time.perf_counter()
     for finding in findings:
+        text = rows_by_id[finding['external_id']]['author_text']
+        start, end = finding.get('start'), finding.get('end')
+        if (start is not None and end is not None
+                and not span_lookup.is_whole_word(text, start, end)):
+            # 'go' cut out of 'Avgo', 'MT' out of 'LQMT': not a mention.
+            finding['symbol'], finding['tier'] = None, 'unresolved'
+            continue
         finding['symbol'], finding['tier'] = span_lookup.resolve(finding['span'], index)
     timings['lookup'] = time.perf_counter() - started
 

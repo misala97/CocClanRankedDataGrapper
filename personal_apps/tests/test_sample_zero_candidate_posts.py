@@ -92,3 +92,11 @@ def test_lookup_dump_is_plain_json_with_sorted_tokens():
                                          'distinctive': ['corporation', 'nvidia']}
     assert dumped['aliases'] == {'google': 'GOOGL', 'cook': None}
     json.dumps(dumped)
+
+
+def test_exclusions_leave_the_lookup_dump_and_are_reported():
+    lookup = {'QQQ': {'name': 'Invesco QQQ Trust', 'distinctive': set()},
+              'NVDA': {'name': 'NVIDIA Corporation', 'distinctive': {'nvidia'}}}
+    kept = szc.without_symbols(lookup, {'QQQ'})
+    assert set(kept) == {'NVDA'}
+    assert set(lookup) == {'QQQ', 'NVDA'}          # the caller's dict is untouched

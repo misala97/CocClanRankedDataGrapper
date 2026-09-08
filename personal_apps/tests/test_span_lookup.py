@@ -167,3 +167,70 @@ def test_a_short_generic_symbol_still_resolves_through_the_symbol_tier(index):
     # about C3.ai is the encoder's question, and the tier is recorded so the
     # funnel can show that tier's precision separately.
     assert sl.resolve('ai', index) == ('AI', 'symbol')
+
+
+# ---- after the audit: possessives, indices, ordinary words, whole words ------
+
+def _audit_lookup():
+    return {
+        'WEN':  {'name': "Wendy's Company (The) - Common Stock", 'distinctive': ["wendy's"]},
+        'NDAQ': {'name': 'Nasdaq, Inc. - Common Stock', 'distinctive': ['nasdaq']},
+        'DOW':  {'name': 'Dow Inc. Common Stock', 'distinctive': []},
+        'CORN': {'name': 'Teucrium Corn Fund', 'distinctive': ['teucrium', 'corn']},
+        'GOLD': {'name': 'Barrick Gold Corporation', 'distinctive': ['barrick']},
+        'DELL': {'name': 'Dell Technologies Inc. Class C', 'distinctive': ['dell']},
+        'GPRO': {'name': 'GoPro, Inc. - Class A Common Stock', 'distinctive': ['gopro']},
+        'DASH': {'name': 'DoorDash, Inc. - Common Stock', 'distinctive': ['doordash']},
+        'GO':   {'name': 'Grocery Outlet Holding Corp. - Common Stock', 'distinctive': ['grocery', 'outlet']},
+    }
+
+
+ORDINARY = {'corn', 'gold', 'go', 'be', 'twin', 'target'}
+
+
+@pytest.fixture
+def audit_index():
+    return sl.build_index(_audit_lookup(), {'go pro': 'GPRO', 'door dash': 'DASH'}, ordinary=ORDINARY)
+
+
+def test_possessives_meet_in_the_middle(audit_index):
+    assert sl.normalise_name("Wendy's Company (The) - Common Stock") == 'wendys'
+    assert sl.resolve('Wendys', audit_index) == ('WEN', 'name')
+    assert sl.resolve('Wendy’s', audit_index) == ('WEN', 'name')
+    assert sl.resolve("wendy's", audit_index) == ('WEN', 'name')
+
+
+def test_an_index_name_never_resolves_to_the_company_that_shares_it(audit_index):
+    assert sl.resolve('Nasdaq', audit_index) == (None, 'unresolved')
+    assert sl.resolve('Dow', audit_index) == (None, 'unresolved')
+    assert sl.resolve('Russell', audit_index) == (None, 'unresolved')
+
+
+def test_an_ordinary_word_resolves_only_when_written_as_a_symbol(audit_index):
+    # 'corn' is a listed fund and a vegetable; the text decides which.
+    assert sl.resolve('corn', audit_index) == (None, 'unresolved')
+    assert sl.resolve('Corn', audit_index) == (None, 'unresolved')
+    assert sl.resolve('CORN', audit_index) == ('CORN', 'symbol')
+    assert sl.resolve('$corn', audit_index) == ('CORN', 'symbol')
+    assert sl.resolve('gold', audit_index) == (None, 'unresolved')
+    # A name that is not an ordinary word is unaffected.
+    assert sl.resolve('Dell', audit_index) == ('DELL', 'symbol')
+
+
+def test_two_word_brands_resolve_through_the_alias_table(audit_index):
+    assert sl.resolve('go pro', audit_index) == ('GPRO', 'alias')
+    assert sl.resolve('Door dash', audit_index) == ('DASH', 'alias')
+    # ...and 'go' alone, an ordinary word, never lands on Grocery Outlet.
+    assert sl.resolve('go', audit_index) == (None, 'unresolved')
+
+
+@pytest.mark.parametrize('text, start, end, expected', [
+    ('Avgo down', 2, 4, False),          # 'go' cut out of Avgo
+    ('go pro calls', 0, 2, True),
+    ('wsb is wild', 0, 2, False),        # 'ws' cut out of wsb
+    ('$spy drops', 1, 4, True),          # '$' is not a word character
+    ('LQMT diluted', 2, 4, False),       # 'MT' inside LQMT
+    ('buy Dell.', 4, 8, True),
+])
+def test_whole_word_rejects_a_span_cut_inside_a_word(text, start, end, expected):
+    assert sl.is_whole_word(text, start, end) is expected

@@ -99,6 +99,14 @@ NAME_ALIASES = {
     'google': 'GOOGL', 'facebook': 'META', 'berkshire': 'BRK/B',
     'nvdia': 'NVDA', 'nvidea': 'NVDA', 'teslas': 'TSLA',
     'mcdonalds': 'MCD', "mcdonald's": 'MCD',
+    # Found by the NER headroom audit 2026-09-08: brands and spacings the
+    # listing name does not carry. Multi-word keys are for the span lookup;
+    # the loose pass reads single tokens and simply never matches them.
+    'go pro': 'GPRO', 'gopro': 'GPRO', 'door dash': 'DASH', 'doordash': 'DASH',
+    'jp morgan': 'JPM', 'jpmorgan': 'JPM', 'amex': 'AXP', 'pepsi': 'PEP',
+    'fox news': 'FOX', 'microstrategy': 'MSTR', 'tim hortons': 'QSR',
+    "chili's": 'EAT', 'chilis': 'EAT', 'ntflx': 'NFLX', 'planet labs': 'PL',
+    'wendys': 'WEN',
 }
 METONYMS = {
     'zuck': 'META', 'zuckerberg': 'META', 'bezos': 'AMZN', 'musk': 'TSLA',
