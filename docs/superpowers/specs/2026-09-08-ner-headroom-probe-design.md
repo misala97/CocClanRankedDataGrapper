@@ -436,3 +436,58 @@ out-of-distribution pairs second, the finder last.
   Michi; the 31/33 and 17/44 are one reader's calls.
 - The +25-30 from resolution is counted from surface forms, not re-run
   through the judge.
+
+---
+
+## Repairs — run 2026-09-08 (evening), after the audit
+
+Commits `c05b19d`, `d3db162`. Benchmark reconstructed EXACTLY under the
+universe and alias table it was drawn with (`--exclude-symbols`,
+`--exclude-aliases`: 8,688 classified, all 514 posts any probe ever flagged
+present). Resolution now uses production's universe (12,426 symbols; the dev
+DB had been 88 short, `QQQ` among them -- a measurement artifact, not a
+production gap) plus 16 aliases, apostrophe-insensitive names, an index
+stoplist, a whole-word check on the finder's (trimmed) offsets, and an
+ordinary-word gate on spans written entirely in lowercase.
+
+**v3, leak-free** (train-only vouching, 14 shared texts dropped; 1,842 held
+out): **P 0.826  R 0.882  F1 0.853** against v2's 0.828 / 0.889 / 0.857. The
+leak was worth the ~0.7 recall points the bound said. v3 is the model to
+quote. `model-ner-deberta-v3-small-20260908-163214/`.
+
+**The probe, repaired lookup, same 3,000 posts:**
+
+    finder                    GLiNER(old)  GLiNER   v1    v2    v3
+    (post, symbol) pairs           78        90     61    56    57
+    relevant posts                 55        69     58    54    57
+    unresolved spans              440       429    191   156   156
+    union 81 posts (2.70%); in every run 33
+
+Gained, all read: `QQQ x9` (universe), `go pro` x2 -> GPRO, `Door dash` ->
+DASH, `jp morgan` -> JPM, `AMEX` -> AXP, `Pepsi` -> PEP, `NTFLX` -> NFLX
+(aliases), `$soxl`, `$spy`, `mu` (lowercase symbols the gate now passes
+because they are not ordinary words). Lost, all correct: `Dow`, `Nasdaq` x2
+(index stoplist). Residue: `QQQs` -> QQQS (a plural onto a real symbol),
+three Wendy's memes, `Abt`, `Michael Dell's wife` -- and GLiNER's own junk
+(`Oshkosh Bigosh`, `V`, `Na`, `CSP`, `MMs`, `Stablecoin ... companies`)
+which the lowercase gate does not touch because it is written capitalised.
+
+**Of the audit's 27 known-false pairs**: GLiNER still passes 7, v1 4, v2 2,
+v3 3. The lookup repairs removed 20-25 of them without touching the judge.
+
+**Measured true yield with the repaired lookup**: ~67-69 of the 81 union
+posts, **~2.25% of the pool, ~1,580 a week** (was ~1,100). Ceiling with the
+detection misses the 200-blank read bounded (+13 point, +70 at the Wilson
+edge): **~2.7-4.6%, ~1,900-3,200 a week**. The audit's 2,100-2,700 sits
+inside that. Prize A (~8,000) is still two to four times larger.
+
+**What the trained finders still miss that GLiNER finds**: `Avgo`, `Goog`,
+`Nvda` (one of three), `Dell` (one of eight), `Klaviyo`, `Endovia`,
+`Scilex`, `Vnq`, and every two-word brand (`go pro`, `Door dash`, `jp
+morgan`). Title-case SYMBOLS are the pool's largest prize and the span
+dataset barely contains them -- its Title-case spans are names (Nvidia,
+Apple), not symbols written as names (Nvda) -- so a tagger trained on it
+under-finds exactly the shape that matters here. Zero-shot GLiNER, which
+treats `Avgo` as ticker-like on sight, is the better finder for this pool
+today. Either finder needs the Title-case symbol RULE beside it, and that
+rule alone recovers most of this without a model.

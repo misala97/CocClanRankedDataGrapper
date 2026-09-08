@@ -39,6 +39,29 @@ last section "Audit"). What changes:
   dozen aliases (`go pro`, `Door dash`, `jp morgan`, `AMEX`, `Pepsi`) are
   ~35 spans, roughly +50% on today's yield.
 
+### 0.1 Repairs executed (evening, `c05b19d`, `d3db162`) -- read with §0
+
+- **Leak-free v3 trained**: P 0.826 R 0.882 F1 0.853. Quote this, not v2.
+  `model-ner-latest.txt` points at it.
+- **Lookup repaired** (apostrophes, index stoplist, lowercase-only
+  ordinary-word gate, whole-word check on trimmed offsets, 16 aliases in
+  `NAME_ALIASES`) and the **dev universe reseeded from production's
+  directory files** (+88 symbols, `QQQ` among them). The "QQQ not in the
+  universe" finding was the DEV database, not production.
+- **Benchmark reconstructed exactly** under the old universe and alias
+  table; stage 1 has `--exclude-symbols` / `--exclude-aliases` for it.
+- **Probe, repaired lookup**: GLiNER 69 relevant posts (was 55), v1 58,
+  v2 54, v3 57; union 81 (2.70%). Of the 27 known-false pairs, 20-25 are
+  gone per run without touching the judge. Measured true yield ~2.25%
+  (~1,580/week); ceiling ~2.7-4.6%.
+- **New finding**: the trained taggers under-find Title-case SYMBOLS
+  (`Avgo`, `Goog`, `Nvda`) because the span dataset barely contains that
+  shape; GLiNER finds them on sight. For this pool GLiNER is the better
+  finder today, and the Title-case symbol rule beats both.
+- `QQQs` -> QQQS is a new mis-resolution (a plural landing on a real
+  symbol); three Wendy's memes and `Abt` survive the gates. Judge hard
+  negatives (§6 0c) remain the fix for those.
+
 ## 1. Why this work exists
 
 The radar board counts company mentions in Reddit/Bluesky/4chan posts. Two
