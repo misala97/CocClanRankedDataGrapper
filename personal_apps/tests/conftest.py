@@ -185,6 +185,24 @@ def unretired(monkeypatch):
     yield
 
 
+@pytest.fixture()
+def gated(monkeypatch):
+    """Run this test with the judge gate ON.
+
+    The suite's default is what production runs, and since 2026-09-08 that is
+    JUDGE_GATE_ENABLED = False: the encoder judges every mention, because the
+    gate existed to cut spend on a metered API and the judge is now a local
+    model priced at zero. A test asking for this fixture is pinning the
+    SELECTION logic -- which tickers the gate would admit -- which still has
+    to be correct for the day someone turns it back on.
+
+    Patched on judge_gate, which imports the name into its own namespace.
+    """
+    from features.radar import judge_gate
+    monkeypatch.setattr(judge_gate, 'JUDGE_GATE_ENABLED', True)
+    yield
+
+
 @pytest.fixture(autouse=True)
 def _fresh_radar_coverage():
     """The coverage memo (features/radar/coverage.py) caches for 60s, which

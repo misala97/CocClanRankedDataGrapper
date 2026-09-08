@@ -64,7 +64,7 @@ def gate():
 # Reachability is relative to NOW (2027), so real mentions contribute none.
 
 
-def test_a_watched_ticker_is_judgeable_whatever_its_segment_or_volume(clean):
+def test_a_watched_ticker_is_judgeable_whatever_its_segment_or_volume(clean, gated):
     with flask_app.app_context():
         baseline = gate()
         profile('ZGLARGE', cap='50000000000')
@@ -77,7 +77,7 @@ def test_a_watched_ticker_is_judgeable_whatever_its_segment_or_volume(clean):
         assert g.watched == baseline.watched + 1
 
 
-def test_large_and_fund_tickers_are_skipped_even_with_plenty_of_chatter(clean):
+def test_large_and_fund_tickers_are_skipped_even_with_plenty_of_chatter(clean, gated):
     with flask_app.app_context():
         baseline = gate()
         profile('ZGLARGE', cap='50000000000')
@@ -93,7 +93,7 @@ def test_large_and_fund_tickers_are_skipped_even_with_plenty_of_chatter(clean):
         assert g.skipped_segment == baseline.skipped_segment + 2
 
 
-def test_the_floor_needs_five_mentions_from_three_voices(clean):
+def test_the_floor_needs_five_mentions_from_three_voices(clean, gated):
     with flask_app.app_context():
         for ticker in ('ZGFEW', 'ZGVOICE', 'ZGOK'):
             profile(ticker, cap='4000000')
@@ -117,7 +117,7 @@ def test_a_mention_outside_the_window_does_not_count(clean):
         assert 'ZGOLD' not in gate().tickers
 
 
-def test_a_ticker_without_a_universe_row_is_judged_when_reachable(clean):
+def test_a_ticker_without_a_universe_row_is_judged_when_reachable(clean, gated):
     with flask_app.app_context():
         chatter('ZGNOCAP', 5, 3)
 

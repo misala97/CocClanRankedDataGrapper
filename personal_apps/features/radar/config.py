@@ -935,7 +935,15 @@ MIN_DISTINCT_AUTHORS = 3
 # gate over-admits, never under-admits. 24h because the board's widest
 # window is 24h. Not part of source_config_version: the gate changes what is
 # judged, not what a mention means.
-JUDGE_GATE_ENABLED = True            # False = judge everything, as before
+# OFF since 2026-09-08. Every line of the note above is about SPEND, and the
+# spend is gone: the judge is a local encoder priced at (0.0, 0.0) in
+# spend.py, not a metered API. A gate that exists to buy 80.9% off a bill of
+# zero only buys a board whose direction is mostly still the lexicon -- 90%
+# of the last 24h of mentions were never judged at all, and the lexicon calls
+# the wrong side 29.8% of the time against the encoder's 6.2%.
+#
+# The encoder judges everything from here.
+JUDGE_GATE_ENABLED = False           # False = judge everything, as before
 JUDGE_SKIP_SEGMENTS = ('large', 'fund')
 JUDGE_FLOOR_HOURS = 24
 
