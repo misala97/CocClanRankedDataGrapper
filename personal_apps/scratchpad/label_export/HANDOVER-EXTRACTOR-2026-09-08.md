@@ -62,6 +62,20 @@ last section "Audit"). What changes:
   symbol); three Wendy's memes and `Abt` survive the gates. Judge hard
   negatives (§6 0c) remain the fix for those.
 
+### 0.2 Shipped (17:35 CEST, `b7d8adf`) -- §6 items 1 and 2 are DONE
+
+The Title-case shape, the lowercase shape, names alone and the alias table
+are in production (`a40eb4e`, `617917c`), measured on the raw week at
+74,820 mentions/week against 46,527 (+61%), stamp moved to
+`f782308bdcb9366c`, board warming up. Two corpus word lists ship as data
+files under `features/radar/data/` and are hashed into the stamp;
+`scripts/refresh_corpus_instruments.py` regenerates them from a raw week.
+Names and aliases count on the author's own text only (the LVLU / "The
+Lounge" defect); a name shared by listings names nobody unless the alias
+table settles it (the APLE defect). Full write-up: design doc, last
+section "Shipped". Still open from §6: 0c judge hard negatives, and a
+`USD` stopword.
+
 ## 1. Why this work exists
 
 The radar board counts company mentions in Reddit/Bluesky/4chan posts. Two
