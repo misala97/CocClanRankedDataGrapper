@@ -172,23 +172,44 @@ one post, median text 85 chars, no empty texts. Ids -4,000,001 ..
 Prompts: `radar_labels/newshape-01/batch-0001..0040.prompt.txt`, the
 production prompt bytes, 40 rows each.
 
-**LABELLING RUNNING** (his session limit reset; 40 Sonnet subagent
-batches of 40, ~95k tokens and ~4-6 minutes each, 20 concurrent is the
-harness cap). The pipeline was validated on the first ten before the rest
-were spent: `collect` booked 400 labels, all 400 validated through the
-production enum boundary, no partial or failed batch.
+**LABELLED, FROZEN, RETRAINING** (his session limit reset). 40 Sonnet
+subagent batches of 40, ~95k tokens and ~4-6 min each, 20 concurrent (the
+harness cap); the pipeline was validated on the first ten before the rest
+were spent. All 40 batches came back `done` -- no partial, no failed, 1,600
+of 1,600 rows through the production enum boundary.
 
-First 400 rows, relevant share by shape -- the extractor shapes' own
-precision, measured for the first time:
+**THE NEW SHAPES' OWN PRECISION, measured for the first time** (1,600
+rows; this is what the extractor now counts, before any judge sees it):
 
-    alias              55 of 68   0.81
-    name_only          96 of 135  0.71
-    lowercase_symbol   61 of 105  0.58
-    titlecase_symbol   51 of 92   0.55
+    shape              rows   relevant   share
+    alias               279     225      0.81
+    name_only           547     409      0.75
+    lowercase_symbol    435     273      0.63
+    titlecase_symbol    339     179      0.53
+    total             1,600   1,086      0.68
 
-Overall 263 relevant / 126 irrelevant / 11 uncertain. So roughly a third
-of what the new rules count is junk, and the judge is what has to catch
-it -- which is the whole reason for the hard negatives.
+Overall 1,086 relevant / 481 irrelevant / 33 uncertain, origin almost
+entirely human_chatter (1,549), attitude none 1,003 / positive 286 /
+negative 285 / mixed 26. So **roughly a third of what the new rules count
+is junk**, and the judge is the only thing standing between that and the
+board -- which is the whole reason for the hard negatives. Title-case, the
+shape the NER probe called the largest prize, is also the dirtiest at 0.53.
+
+**Locked set frozen** (`test-newshape.json`, 320 rows over 312 posts):
+name_only 109, lowercase 87, titlecase 68, alias 56; relevant 224 /
+irrelevant 89 / uncertain 7. Trainable remainder 1,280.
+
+**Training set, verified before the GPU was committed:** five waves,
+22,853 labelled rows -> 19,877 training rows, four locked sets
+(900/500/902/320), 188 rows dropped for sharing a locked post and 166 as
+near-duplicates. Leak checks both zero: no locked id in training, no
+training row sharing a locked post. Heads see relevance 19,877, origin and
+confidence 18,400, tone 11,933.
+
+**Retrain started 2026-09-08 ~20:10 UTC** on Michi's explicit "now":
+`--base microsoft/deberta-v3-base --max-len 512 --epochs 6 --batch-size 4
+--save` (accumulate 2 by default = the live recipe), log at
+`radar_labels/encoder/retrain-hardneg-newshape-2026-09-08.log`.
 
 Remaining, in order:
 
