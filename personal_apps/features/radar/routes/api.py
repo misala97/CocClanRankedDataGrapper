@@ -303,7 +303,7 @@ def parse_query(args, now=None):
         raise BadQuery('unknown segment')
 
     try:
-        window = int(args.get('window', 4))
+        window = int(args.get('window', 12))
     except ValueError:
         raise BadQuery('bad window')
     if window not in WINDOWS:

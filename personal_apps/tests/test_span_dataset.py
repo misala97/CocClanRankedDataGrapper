@@ -88,3 +88,56 @@ def test_a_post_with_only_irrelevant_rows_is_kept_as_a_pure_negative():
 def test_a_post_whose_every_row_was_uncertain_is_dropped():
     rows = [_row('gme', 'gme', relevance='uncertain')]
     assert sd.examples_from(rows, key=lambda r: r['author_text']) == []
+
+
+# ---- v2: filling what a mention-sampled wave never labelled ------------------
+
+NAMES = {'nvidia', 'google', 'nike'}
+SYMBOLS = {'NVDA', 'AI', 'SPY', 'GOOGL'}
+
+
+def test_augment_fills_unlabelled_names_as_silver_and_masks_symbols():
+    ex = {'text': 'NVDA up, Google flat, AI hype, $spy down', 'spans': [[0, 4, 'NVDA']],
+          'negatives': []}
+    got = sd.augment(ex, NAMES, SYMBOLS)
+    assert got['silver'] == [(9, 15)]            # Google, a name -> positive
+    assert got['ignore'] == [(22, 24), (31, 35)]  # AI and $spy -> masked
+    assert got['spans'] == ex['spans']            # gold untouched
+
+
+def test_augment_never_touches_gold_or_judged_negatives():
+    # 'nvidia' is gold here and 'google' was judged irrelevant: both stay as
+    # they are, silver fills nothing on top of them.
+    ex = {'text': 'nvidia and google and nike', 'spans': [[0, 6, 'NVDA']],
+          'negatives': ['google']}
+    got = sd.augment(ex, NAMES, SYMBOLS)
+    assert got['silver'] == [(22, 26)]           # only nike
+
+
+def test_augment_is_whole_word_and_case_insensitive():
+    ex = {'text': 'Nikes and NIKE and snike', 'spans': [], 'negatives': []}
+    assert sd.augment(ex, NAMES, SYMBOLS)['silver'] == [(10, 14)]
+
+
+def test_augment_masks_only_symbols_written_as_symbols():
+    # 'spy' lowercase is not a symbol mention; 'SPY' and '$SPY' are.
+    ex = {'text': 'spy SPY $SPY', 'spans': [], 'negatives': []}
+    assert sd.augment(ex, NAMES, SYMBOLS)['ignore'] == [(4, 7), (8, 12)]
+
+
+def test_augment_ignore_never_overlaps_silver():
+    ex = {'text': 'GOOGL Google', 'spans': [], 'negatives': []}
+    got = sd.augment(ex, {'google'}, {'GOOGL'})
+    assert got['silver'] == [(6, 12)] and got['ignore'] == [(0, 5)]
+
+
+def test_vouching_counts_only_the_examples_it_is_given():
+    # A name gold-confirmed only in a held-out row must not be vouched when
+    # vouching runs over the training rows alone.
+    from scratchpad.label_export import build_spans_v2 as b2
+    train = [{'text': 'nvidia rocks', 'spans': [[0, 6, 'NVDA']]}] * 3
+    held = [{'text': 'korea power', 'spans': [[0, 5, 'KEP']]}] * 3
+    candidates = {'nvidia', 'korea'}
+    assert b2.vouched_names(train, candidates, {}, 3) == {'nvidia'}
+    assert b2.vouched_names(train + held, candidates, {}, 3) == {'nvidia', 'korea'}
+    assert b2.vouched_names(train, candidates, {'google': 'GOOGL'}, 3) == {'nvidia', 'google'}
