@@ -16,13 +16,22 @@ Verification stamp for everything below:
 All line numbers below are deployed `main` and were read out of
 `git show main:<path>`, not out of this checkout.
 
-> **EXECUTION LOG — Phase 1, 2026-09-07/08.** §2.1 (artifact preserved, bundle
-> re-derived as `3bb32b5607a8a368…dccb5`) and §2.3-§2.4 (the three hunks, the
-> doc fixes, the tests) are **done in the working tree and committed**.
-> **§2.2 (mask the timer) and §2.5 (deploy) are the operator's, and have NOT
-> been run.** Production is still untouched: at 2026-09-07 23:41 UTC the row
-> read `running`, audit columns NULL, 1,600 judgments, timer enabled and
-> active. Everything in §3 (Phase 2) is untouched.
+> **EXECUTION LOG — Phase 1, 2026-09-07/08. SHIPPED to `main` as `45a7e39`.**
+> §2.1 (artifact preserved at `radar_labels/artifact-small-v1`, bundle
+> re-derived as `3bb32b5607a8a368…dccb5`), §2.3 (the three hunks plus the two
+> stale tone docstrings) and §2.4 (tests) are done, committed, merged to `main`
+> and pushed. Full suite: 2,462 passed, 1 pre-existing unrelated failure
+> (`test_diagnose_extractor_feedback.py` wants a legacy-policy cohort the dev
+> DB has no rows for — reproduced identically on unmodified `main` in a
+> separate worktree against the same database).
+>
+> **Not run, and not mine:** §2.5 (deploy) and §2.6 (verify on the box).
+> §2.2's timer mask is now **unnecessary** rather than pending: pre-deadline
+> the timer already returns `{'action': 'none'}`, and once this commit is
+> deployed Hunks A and B make it harmless permanently. It stays in this
+> document as the fallback if the deploy slips past 2026-09-09 19:38:24 UTC.
+> Production at 2026-09-07 23:41 UTC: `running`, audit columns NULL, 1,600
+> judgments, timer enabled and active. Everything in §3 (Phase 2) is untouched.
 >
 > Two things the execution found that this document did not predict:
 > - **8 tests went red, not 5.** The extra three are in
