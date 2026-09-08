@@ -119,3 +119,73 @@ for ~4,500 pairs. Michi approved the run.
 
 Fuzzy name matching; the full-week run; any change to production extraction;
 training anything.
+
+---
+
+## Result — run 2026-09-08, 3,000 posts
+
+Files: `C:\Users\michi\Desktop\radar_labels\ner\` (sample, lookup) and
+`probe-3000\` (findings, verdicts, summary, spotcheck). Finder GLiNER
+small-v2.1 on the RTX 3080; judge the **base@512 artifact production runs**.
+
+    posts sampled                     3000
+      with >=1 span                    419  (14.0%)
+    spans                              527   symbol 65 / name 10 / tokens 12 / unresolved 440
+    (post, symbol) pairs                78
+      encoder relevant                  55   (kept 57)
+    posts with a relevant pair          55   (1.83%)
+    extrapolated                     1,290 relevant posts / week   (of 70,381)
+    timings                          gliner 34 s (GPU)   encoder 53 s (CPU, 78 pairs)
+
+**The extrapolation base is 70,381, not 132,164.** Stage 1 qualified 34.5% of
+shuffled posts, not 66.6%: the 40-char floor removes the short comments, and
+a rate measured on posts that clear it must not be scaled to the ones that do
+not.
+
+**Spot-check, all 50 read.** 9 clearly wrong, 2 borderline: ~80% precision on
+"relevant". The wrong ones cluster: short generic symbols (`Na`, `V`, `MMs`,
+`CSP`), index names resolving to a company (`Nasdaq` -> NDAQ, `Dow` -> DOW),
+a generic phrase intersecting to one symbol (`Stablecoin infrastructure
+companies` -> SDEV), a brand collision (`Oshkosh Bigosh` -> OSK). Corrected
+prize: **~1,000 relevant posts a week**.
+
+**The decisive table** — relevant / judged, by how the span resolved:
+
+    symbol, Title-case span   35 / 38    Nvda, Avgo, Dell, Tsla, Goog, Htz, Sndk ...
+    name                       8 / 10    Wendy's, Nasdaq(x), Scilex, Funko, etoro
+    tokens                     7 / 10    Klaviyo, Colgate, Equinox, Endovia, SDEV(x), Oshkosh(x)
+    symbol, lowercase span     1 / 11    na, hp ...
+    symbol, one letter         2 /  4    L (Loews, genuinely), V(x), O
+    symbol, other              2 /  5
+
+**64% of the whole prize is one regex.** `BARE_PATTERN` is `[A-Z]{2,5}` --
+all caps only -- so `Nvda`, `Avgo`, `Dell` are invisible to production AND to
+the loose pass (these posts are zero-candidate: nothing caught them).
+`$Duot` is invisible too: `CASHTAG_PATTERN` also demands upper case. A
+Title-case candidate shape, gated by the existing ordinary-word and
+name-shape instruments and judged by the encoder, recovers ~800 posts a week
+without a model.
+
+**The NER-only remainder** -- what a span model finds that no symbol shape
+can -- is the `name` + `tokens` rows: 15 relevant pairs in 3,000 posts, two
+of them false resolutions, **~350 posts a week**, 0.75% of counted volume.
+
+**Unresolved (440 spans, 326 distinct, 267 once):** indices and futures
+(`QQQ` x10 -- NOT in the universe, `VIX`, `SPX`, `S&P 500`, `NQ`, `KOSPI`),
+jargon and memes (`WSB`, `DCA`, `ATH`, `gamma`, `shrek`, `pepetrump`),
+private companies (`New Balance`, `Jane Street`, `Bloomberg`, `Axios`),
+people (`Bessent`, `Warsh`, `Hock Tan`). Real misses in the tail: `Wendys`
+(possessive form), `LQMT` (OTC, not in universe). A better lookup would add
+little.
+
+## Decision
+
+Do not build the span model now. Measured NER-only headroom is ~350 posts a
+week against ~8,000 real mentions a week sitting in the extractor's rejects
+(prize A) and ~800 in Title-case symbols (a rule). Build those two; revisit
+NER when the corpus grows or the sources change. The probe stays: any future
+finder is scored against the same 3,000 posts.
+
+Two lookup lessons for whenever the name tier ships: an index stoplist
+(Nasdaq, Dow, Russell), and no `tokens`-tier resolution of multi-word
+generic phrases.

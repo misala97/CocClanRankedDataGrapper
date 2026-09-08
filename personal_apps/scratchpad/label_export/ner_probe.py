@@ -253,6 +253,9 @@ def main(argv=None):
     parser.add_argument('--threshold', type=float, default=THRESHOLD)
     parser.add_argument('--seed', type=int, default=20260908)
     args = parser.parse_args(argv)
+    # The unresolved list is whatever GLiNER found, and on 2026-09-08 that
+    # included a peace sign; a cp1252 console must not lose the run on it.
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
     with open(args.sample, encoding='utf-8') as handle:
         rows = [json.loads(line) for line in handle if line.strip()]
