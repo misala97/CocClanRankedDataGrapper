@@ -35,6 +35,7 @@ SETTINGS_THAT_MUST_MATCH = (
     'labels_sha',
     'recall_labels_sha',
     'hardneg_labels_sha',   # the constructed hard-negative wave (2026-09-08)
+    'newshape_labels_sha',  # the new-shape wave (2026-09-08)
 )
 
 

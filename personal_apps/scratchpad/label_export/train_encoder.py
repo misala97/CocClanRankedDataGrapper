@@ -61,14 +61,37 @@ RECALL_EXPORTS = [os.path.join(ROOT, 'candidates-2026-09-06.jsonl'),
 # "buttcorn", `Abt` 0.99 for "about") because no wave had ever shown it one.
 HARDNEG_LABELS = os.path.join(ROOT, 'labels-hardneg.jsonl')
 HARDNEG_EXPORT = os.path.join(ROOT, 'candidates-hardneg.jsonl')
+# The new-shape wave (2026-09-08): mentions the extractor started counting
+# at 15:35 UTC -- a Title-case symbol, a lowercase symbol, a name alone, an
+# alias -- drawn from the raw week replayed through the shipped rules and
+# labelled by the same teacher with the same prompt. The judge had never
+# seen these shapes in these proportions.
+NEWSHAPE_LABELS = os.path.join(ROOT, 'labels-newshape.jsonl')
+NEWSHAPE_EXPORT = os.path.join(ROOT, 'candidates-newshape-2026-09-08.jsonl')
 PAIRS = ([(LABELS, EXPORT)]
          + [(RECALL_LABELS, export) for export in RECALL_EXPORTS]
          + ([(HARDNEG_LABELS, HARDNEG_EXPORT)]
-            if os.path.exists(HARDNEG_LABELS) else []))
+            if os.path.exists(HARDNEG_LABELS) else [])
+         + ([(NEWSHAPE_LABELS, NEWSHAPE_EXPORT)]
+            if os.path.exists(NEWSHAPE_LABELS) else []))
 OUT_DIR = os.path.join(ROOT, 'encoder')
 TEST_NATURAL = os.path.join(ROOT, 'test-natural.json')
 TEST_HARD = os.path.join(ROOT, 'test-hard.json')
 TEST_RECALL = os.path.join(ROOT, 'test-recall.json')
+TEST_NEWSHAPE = os.path.join(ROOT, 'test-newshape.json')
+# Every locked set, in the order the reports print them. `newshape` is the
+# only one that can speak about a Title-case symbol or an alias: natural
+# and hard come from the production export, which holds what the OLD rules
+# accepted, and recall from the loose pass, which had neither tier.
+LOCKED_SETS = collections.OrderedDict((
+    ('natural', TEST_NATURAL), ('hard', TEST_HARD),
+    ('recall', TEST_RECALL), ('newshape', TEST_NEWSHAPE),
+))
+LOCKED_BLURBS = {
+    'natural': 'board traffic', 'hard': 'rare classes',
+    'recall': 'what the rules never accepted',
+    'newshape': 'cased symbols, names alone, aliases',
+}
 hf_logging.set_verbosity_error()
 BASE = 'microsoft/deberta-v3-small'
 # Tokens the model reads. Labels were made on the first 2,000 chars of a
@@ -135,24 +158,28 @@ def _near(hash_a, hash_b):
 def split(rows):
     """FROZEN evaluation sets (by mention id, on disk) + everything else.
 
-    The two locked sets never change and are never trained on, so numbers
-    from different runs are comparable -- the whole point of a locked set.
+    The locked sets never change and are never trained on, so numbers from
+    different runs are comparable -- the whole point of a locked set.
     Training drops rows sharing a POST with a locked row, and rows whose
     post simhash is within HAMMING_LIMIT of any locked row's: a repost of a
     test post is the test post as far as the model is concerned. Returns
     the exclusion counts too, for the manifest.
+
+    Returns (train, {name: rows}, exclusions). The sets are a mapping and
+    not four positionals because there is now a fourth -- `newshape`, the
+    shapes the extractor gained on 2026-09-08, which none of the older
+    three can measure.
     """
-    natural_ids = set(json.load(open(TEST_NATURAL, encoding='utf-8')))
-    hard_ids = set(json.load(open(TEST_HARD, encoding='utf-8')))
-    recall_ids = (set(json.load(open(TEST_RECALL, encoding='utf-8')))
-                  if os.path.exists(TEST_RECALL) else set())
-    locked = natural_ids | hard_ids | recall_ids
+    ids = {}
+    for name, path in LOCKED_SETS.items():
+        ids[name] = (set(json.load(open(path, encoding='utf-8')))
+                     if os.path.exists(path) else set())
+    locked = set().union(*ids.values()) if ids else set()
     locked_rows = [r for r in rows if r['mention_id'] in locked]
     locked_posts = {r['post_id'] for r in locked_rows}
     locked_hashes = {r['simhash'] for r in locked_rows if r['simhash'] is not None}
-    natural = [r for r in rows if r['mention_id'] in natural_ids]
-    hard = [r for r in rows if r['mention_id'] in hard_ids]
-    recall = [r for r in rows if r['mention_id'] in recall_ids]
+    sets = {name: [r for r in rows if r['mention_id'] in members]
+            for name, members in ids.items()}
 
     candidates = [r for r in rows if r['post_id'] not in locked_posts]
     dropped_post = len(rows) - len(locked_rows) - len(candidates)
@@ -166,7 +193,7 @@ def split(rows):
     train.sort(key=lambda r: r['created'])
     exclusions = {'shared_post': dropped_post, 'near_duplicate': dropped_near,
                   'near_duplicate_hashes': len(near_hashes)}
-    return train, natural, hard, recall, exclusions
+    return train, sets, exclusions
 
 
 def seed_everything(seed):
@@ -323,7 +350,7 @@ def gate_report(res, title):
     return passed
 
 
-def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
+def train_one(train_rows, locked, args, device, tag):
     tok = AutoTokenizer.from_pretrained(BASE)
     model = MultiHead(BASE).to(device)
     gen = torch.Generator()
@@ -331,9 +358,8 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
     dl = lambda rows, shuffle: DataLoader(Rows(rows, tok), batch_size=args.batch_size,
                                           shuffle=shuffle, num_workers=0,
                                           generator=gen if shuffle else None)
-    train_loader, tune_loader, test_loader = (dl(train_rows, True), dl(tune_rows, False),
-                                              dl(test_rows, False))  # tune=natural, test=hard
-    recall_loader = dl(recall_rows, False) if recall_rows else None
+    train_loader = dl(train_rows, True)
+    loaders = {name: dl(rows, False) for name, rows in locked.items() if rows}
     # class weights: rare classes (mixed, uncertain, 4chan-ish) must not vanish
     weights = {}
     for h, classes in HEADS.items():
@@ -435,18 +461,14 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
                         'scheduler': sched.state_dict(), 'epochs_done': epoch + 1,
                         'settings': settings}, tmp)
             os.replace(tmp, ckpt_path)   # atomic: a crash mid-write keeps the old one
-    res = {'tag': tag, 'train_rows': len(train_rows), 'natural_rows': len(tune_rows),
-           'hard_rows': len(test_rows), 'epochs': args.epochs,
+    res = {'tag': tag, 'train_rows': len(train_rows), 'epochs': args.epochs,
            'train_seconds': round(time.time() - t0, 1)}
-    p, g = evaluate(model, tune_loader, device)
-    res['natural'] = report(p, g, tune_rows, '%s LOCKED NATURAL (board traffic)' % tag)
-    p, g = evaluate(model, test_loader, device)
-    res['hard'] = report(p, g, test_rows, '%s LOCKED HARD (rare classes)' % tag)
-    if recall_loader is not None:
-        p, g = evaluate(model, recall_loader, device)
-        res['recall_rows'] = len(recall_rows)
-        res['recall'] = report(p, g, recall_rows,
-                               '%s LOCKED RECALL (what the rules never accepted)' % tag)
+    for name, loader in loaders.items():
+        p, g = evaluate(model, loader, device)
+        res['%s_rows' % name] = len(locked[name])
+        res[name] = report(p, g, locked[name],
+                           '%s LOCKED %s (%s)' % (tag, name.upper(),
+                                                  LOCKED_BLURBS.get(name, '')))
     return model, tok, res
 
 
@@ -482,10 +504,11 @@ def main():
     rows = load_rows()
     if args.subset:
         rows = rows[:args.subset]
-    train_rows, natural_rows, hard_rows, recall_rows, exclusions = split(rows)
-    print('rows %d -> train %d / locked natural %d / hard %d / recall %d on %s'
-          % (len(rows), len(train_rows), len(natural_rows), len(hard_rows),
-             len(recall_rows), device))
+    train_rows, locked, exclusions = split(rows)
+    print('rows %d -> train %d / %s on %s'
+          % (len(rows), len(train_rows),
+             ' / '.join('locked %s %d' % (name, len(rows_))
+                        for name, rows_ in locked.items()), device))
     print('excluded from training: %d share a locked post, %d near-duplicates '
           '(%d distinct hashes within Hamming %d of a locked row)'
           % (exclusions['shared_post'], exclusions['near_duplicate'],
@@ -498,12 +521,16 @@ def main():
         'labels_sha': _sha(LABELS), 'export_sha': _sha(EXPORT),
         'test_natural_sha': _sha(TEST_NATURAL), 'test_hard_sha': _sha(TEST_HARD),
         'git_head': _git_head(), 'labelled_rows': len(rows),
-        'train_rows': len(train_rows), 'natural_rows': len(natural_rows),
-        'hard_rows': len(hard_rows), 'recall_rows': len(recall_rows),
+        'train_rows': len(train_rows),
         'recall_labels_sha': _sha(RECALL_LABELS) if os.path.exists(RECALL_LABELS) else None,
         'hardneg_labels_sha': _sha(HARDNEG_LABELS) if os.path.exists(HARDNEG_LABELS) else None,
         'hardneg_rows': sum(1 for r in rows if str(r['stratum']).startswith('hardneg:')),
-        'test_recall_sha': _sha(TEST_RECALL) if os.path.exists(TEST_RECALL) else None,
+        'newshape_labels_sha': (_sha(NEWSHAPE_LABELS)
+                                if os.path.exists(NEWSHAPE_LABELS) else None),
+        'newshape_rows': sum(1 for r in rows if str(r['stratum']).startswith('new:')),
+        'locked_rows': {name: len(rows_) for name, rows_ in locked.items()},
+        'locked_shas': {name: (_sha(path) if os.path.exists(path) else None)
+                        for name, path in LOCKED_SETS.items()},
         'exclusions': exclusions,
         'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
     }
@@ -524,8 +551,7 @@ def main():
         subset = train_rows[:size]
         tag = 'train%d' % len(subset)
         print('\n' + '=' * 70 + '\n' + tag)
-        model, tok, res = train_one(subset, natural_rows, hard_rows, recall_rows,
-                                    args, device, tag)
+        model, tok, res = train_one(subset, locked, args, device, tag)
         results.append(res)
         res['manifest'] = manifest
         if args.save and size == sizes[-1]:
@@ -556,7 +582,7 @@ def main():
     json.dump({'manifest': manifest, 'results': results},
               open(os.path.join(OUT_DIR, 'run-%s.json' % run_id), 'w'), indent=1)
     print('\ncurve on the LOCKED sets (macro-F1 where the gate says F1):')
-    for which in ('natural', 'hard', 'recall'):
+    for which in LOCKED_SETS:
         if not all(which in r for r in results):
             continue
         print(' -- %s' % which)
