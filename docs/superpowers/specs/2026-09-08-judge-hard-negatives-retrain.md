@@ -351,20 +351,49 @@ nothing about 2 vCPU; RSS is the number that transfers.) The validator
 needs `anthropic`, which the torch venv lacks -- run it with the main
 interpreter, not `radar_encoder_venv`.
 
-**The swap, for Michi to run when he decides.** Copy the bundle to the
-box, put it beside the live one as `v2/`, and move the pointer:
+### DEPLOYED 2026-09-08 22:35 UTC, on Michi's "lets deploy"
 
-    scp -r C:/Users/michi/Desktop/radar_labels/artifact-hardneg/v1 \
-        root@194.164.29.97:/root/coc-stats/personal_apps/artifacts/judge/v2
+**The swap command written above was WRONG and was not run.** Checking the
+box first is what caught it. Production's directory names do not mean what
+this document assumed:
+
+    v1/   deberta-v3-small, 548 MB   the ORIGINAL small model
+    v2/   deberta-v3-base @512       the model that was serving
+    v3/   deberta-v3-base @512       the retrain, serving since 22:35 UTC
+
+`active.json` was already pointing at `v2/`, so the drafted command would
+have overwritten the live artifact with the new one and destroyed the
+rollback in the same move. **A pointer file's name is a slot, not a
+version.**
+
+Second trap avoided: the `id` field stays `"radar-encoder-v1"` in every
+pointer. It is the BACKEND id, and `review_stands` / `review_candidates`
+use it as a stage proxy (see [[radar-local-judge-research]]), so changing
+it to `radar-encoder-v3` would have broken them silently.
+
+What was actually run, each step verified before the next:
+
+    scp -r artifact-hardneg/v1 root@194.164.29.97:.../judge/v3.partial   # staged name
+    # bundle_sha256 on the box == 04512d72b37d99d0...  MATCH
+    mv v3.partial v3
+    printf '{\n "path": "v3/",\n "id": "radar-encoder-v1"\n}\n' > pointer-v3.json
+    cp active.json active.json.bak-20260909-003421
+    cp pointer-v3.json active.json
+    systemctl restart radar_ingest
+
+**Verified live:**
+
+- `radar judge: encoder artifact 04512d72b37d serving` -- the new bundle.
+- `primary=radar-encoder-v1 review=none` -- backend id unchanged.
+- `radar sentiment judged 63 mentions, 0 still waiting` at 22:41 UTC, a
+  full pass on the new model with no error.
+- Daemon RSS 1,793 MB against the old model's ~1,860; box available memory
+  3,024 MB, up from 834 before the restart.
+
+**Rollback, one command** (v2 is untouched on disk):
+
     ssh root@194.164.29.97 'cd /root/coc-stats/personal_apps/artifacts/judge \
-        && cp active.json pointer-v1.json \
-        && printf "{\n \"path\": \"v2/\",\n \"id\": \"radar-encoder-v2\"\n}\n" > active.json \
-        && systemctl restart radar_ingest'
-
-Rollback is the same move backwards: `cp pointer-v1.json active.json &&
-systemctl restart radar_ingest`. The runtime reads the window off the
-artifact, so v1@512 and v2@512 are both valid and the rollback needs no
-code change.
+        && cp pointer-v2.json active.json && systemctl restart radar_ingest'
 
 ## Phase 2 (not now)
 
