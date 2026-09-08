@@ -20,15 +20,27 @@ IGNORE = -100          # what torch's cross-entropy skips
 LABELS = span_tagging.LABELS
 
 
-def label_ids_for(offsets, spans):
+def label_ids_for(offsets, spans, silver=(), ignore=()):
     """One label id per piece, IGNORE on specials and padding.
 
     align() gives specials 'O', which is a label the loss would learn
-    from; CLS and SEP must teach nothing.
+    from; CLS and SEP must teach nothing. `silver` regions are labelled
+    like spans; `ignore` regions (an unlabelled symbol-shaped token) are
+    masked so a piece the labels never decided teaches nothing either --
+    unless a gold span covers it, gold wins.
     """
-    names = span_tagging.align(offsets, spans)
-    return [IGNORE if end <= start else span_tagging.LABEL_ID[name]
-            for (start, end), name in zip(offsets, names)]
+    names = span_tagging.align(offsets, list(spans) + [(s, e, None) for s, e in silver])
+    gold = [(s, e) for s, e, _ in spans]
+    ids = []
+    for (start, end), name in zip(offsets, names):
+        if end <= start:
+            ids.append(IGNORE)
+        elif (any(start < e and end > s for s, e in ignore)
+              and not any(start < e and end > s for s, e in gold)):
+            ids.append(IGNORE)
+        else:
+            ids.append(span_tagging.LABEL_ID[name])
+    return ids
 
 
 def bio_decode(label_ids, offsets):
@@ -88,6 +100,10 @@ def span_prf(examples, predicted):
     by_kind = collections.defaultdict(lambda: [0, 0])
     for example, preds in zip(examples, predicted):
         gold = [(s, e) for s, e, _ in example['spans']]
+        # A prediction on a region the labels never decided -- a filled
+        # name or a masked symbol -- is neither a hit nor a false positive.
+        undecided = ([tuple(r) for r in example.get('silver', ())]
+                     + [tuple(r) for r in example.get('ignore', ())])
         pred_dicts = [{'start': s, 'end': e} for s, e in preds]
         for start, end in gold:
             kind = kind_of(example['text'][start:end])
@@ -98,8 +114,11 @@ def span_prf(examples, predicted):
             else:
                 fn += 1
         for start, end in preds:
-            if not any(start < ge and end > gs for gs, ge in gold):
-                fp += 1
+            if any(start < ge and end > gs for gs, ge in gold):
+                continue
+            if any(start < ue and end > us for us, ue in undecided):
+                continue
+            fp += 1
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0

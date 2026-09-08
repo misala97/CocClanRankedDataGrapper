@@ -98,3 +98,58 @@ def examples_from(rows, key):
             'key': group_key,
         })
     return examples
+
+
+# ---- v2: the labels a mention-sampled wave never wrote ---------------------
+#
+# Waves sampled MENTIONS, not posts. A post labelled for NVDA that also
+# names Google has no row for Google, and examples_from() -- correctly, from
+# what it was given -- leaves Google as background. Measured 2026-09-08 over
+# the 14,323 examples: Google appears unlabelled in 244 posts against 29
+# gold spans, Nvidia 198 against 82, Nike 87 against 126. A tagger trained
+# on that learns the names are usually NOT spans, and the held-out misses
+# were exactly those names. Not label noise from the teacher; labels that
+# were never asked for.
+#
+# Two repairs, both from instruments that already exist:
+#   silver  -- an unlabelled occurrence of a universe NAME token the corpus
+#              writes like a name (distinctive listing token AND name-shaped)
+#              becomes a positive span. Nike, Google, Microsoft: a company
+#              reference whatever the post is about, which is the finder's
+#              question; relevance stays the encoder's.
+#   ignore  -- an unlabelled occurrence of a universe SYMBOL written as one
+#              (ALLCAPS or cashtag) is masked: AI, SPY, RSI, FCF are listed
+#              symbols and ordinary words at once, and nothing in the labels
+#              says which this post meant. Masked pieces carry no loss.
+# Gold and judged negatives are never touched; silver and ignore fill only
+# the gaps between them.
+
+_BARE_SYMBOL_RE = re.compile(r'(?<![$A-Za-z0-9])([A-Z]{2,5})\b')
+_CASHTAG_RE = re.compile(r'(?<![A-Za-z0-9])\$([A-Za-z]{1,5})\b')
+
+
+def _overlaps(start, end, regions):
+    return any(start < e and end > s for s, e in regions)
+
+
+def augment(example, name_tokens, symbols):
+    """The example plus `silver` and `ignore` regions. Pure."""
+    text = example['text'] or ''
+    taken = [(s, e) for s, e, _ in example['spans']]
+    for token in example.get('negatives') or ():
+        taken.extend(_occurrences(text, token))
+
+    silver = []
+    for match in re.finditer(r"[A-Za-z][A-Za-z']*", text):
+        word = match.group(0).lower()
+        if word in name_tokens and not _overlaps(match.start(), match.end(), taken):
+            silver.append((match.start(), match.end()))
+    taken_now = taken + silver
+
+    ignore = []
+    for pattern in (_BARE_SYMBOL_RE, _CASHTAG_RE):
+        for match in pattern.finditer(text):
+            if (match.group(1).upper() in symbols
+                    and not _overlaps(match.start(), match.end(), taken_now)):
+                ignore.append((match.start(), match.end()))
+    return {**example, 'silver': sorted(set(silver)), 'ignore': sorted(set(ignore))}

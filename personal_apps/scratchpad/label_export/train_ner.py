@@ -75,7 +75,9 @@ class Pieces(Dataset):
             offsets = [tuple(o) for o in enc['offset_mapping']]
             item = {'input_ids': enc['input_ids'],
                     'attention_mask': enc['attention_mask'],
-                    'labels': ner_tagging.label_ids_for(offsets, example['spans'])}
+                    'labels': ner_tagging.label_ids_for(
+                        offsets, example['spans'],
+                        silver=example.get('silver', ()), ignore=example.get('ignore', ()))}
             if 'token_type_ids' in enc:
                 item['token_type_ids'] = enc['token_type_ids']
             self.items.append(item)

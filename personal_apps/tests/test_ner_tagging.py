@@ -70,3 +70,21 @@ def test_prf_counts_hits_misses_and_false_positives_including_on_empty_posts():
 def test_prf_is_zero_not_an_error_when_nothing_is_predicted():
     got = nt.span_prf([{'text': 'NVDA', 'spans': [[0, 4, 'NVDA']]}], [[]])
     assert (got['precision'], got['recall'], got['f1']) == (0.0, 0.0, 0.0)
+
+
+# ---- v2: silver and ignore regions ------------------------------------------
+
+def test_silver_is_labelled_like_gold_and_ignore_is_masked_unless_gold_covers_it():
+    #          CLS     Goo     gle     AI      NVDA    SEP
+    offsets = [(0, 0), (0, 3), (3, 6), (7, 9), (10, 14), (0, 0)]
+    got = nt.label_ids_for(offsets, [(10, 14, 'NVDA')], silver=[(0, 6)], ignore=[(7, 9), (10, 14)])
+    assert got == [IGN, B, I, IGN, B, IGN]
+
+
+def test_prf_does_not_charge_predictions_on_undecided_regions():
+    examples = [{'text': 'Google AI NVDA', 'spans': [[10, 14, 'NVDA']],
+                 'silver': [[0, 6]], 'ignore': [[7, 9]]}]
+    got = nt.span_prf(examples, [[(0, 6), (7, 9), (10, 14)]])
+    assert (got['tp'], got['fp'], got['fn']) == (1, 0, 0)
+    got = nt.span_prf(examples, [[(0, 6), (7, 9)]])
+    assert (got['tp'], got['fp'], got['fn']) == (0, 0, 1)
