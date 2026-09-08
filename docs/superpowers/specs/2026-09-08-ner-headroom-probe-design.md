@@ -250,3 +250,52 @@ read found one such leak in 200 (`mu`).
 GLiNER also produced 33,718 entities of which 23,375 (69%) cover no
 confirmed span -- the same 84% unresolved rate the probe saw. Negatives are
 not exhaustive, so that is an upper bound on its junk rate, not a measure.
+
+## Our own tagger — DeBERTa-v3-small, 4 epochs, 2026-09-08
+
+`scratchpad/label_export/train_ner.py`. 12,467 train examples, 1,856 held
+out (every example touching a locked test set, 1,629 spans). bf16, batch 16,
+lr 3e-5, max_len 256. **391 s on the RTX 3080** — bf16 and dynamic padding
+made it 5x faster than the encoder's fp32 batch-8 recipe. Saved
+`radar_labels/ner/model-ner-deberta-v3-small-20260908-133610/`.
+
+    held-out   epoch 1  P 0.714  R 0.707  F1 0.711
+               epoch 4  P 0.754  R 0.743  F1 0.749
+    recall by kind, epoch 4: ALLCAPS 75.2%  Titlecase 65.8%  lowercase 78.2%  cashtag 61.9%  other 90.0%
+
+### The same 3,000 posts, same lookup, same base@512 judge
+
+    finder                    GLiNER small zero-shot    ours, small, 4 epochs
+    posts with >=1 span             419  (14.0%)             240  (8.0%)
+    spans / unresolved              527 / 440                255 / 187
+    (post, symbol) pairs             78                       66
+    relevant pairs                   55  (71% of pairs)       56  (85% of pairs)
+    posts with a relevant pair       55  (1.83%)              56  (1.87%)
+    extrapolated / week           1,290                    1,314
+    finder time                      34 s                     20 s
+
+**Two independent finders land on the same number.** The headroom in the
+zero-candidate pool is ~1,300 relevant posts a week by the encoder's count,
+~1,000 after the spot-check's precision. Ours produces less than half the
+junk (187 unresolved vs 440) and its resolved pairs are judged relevant 85%
+of the time against GLiNER's 71%. The decision does not move.
+
+### What the held-out misses say: the labels teach the wrong job
+
+Titlecase misses: `Nike x7, Nvidia x5, Google x5, Oracle x4, Amazon x4,
+Microsoft x4`. False positives: `Nike x15, GOOG x8, Microsoft x7, Oracle x6`.
+**The same names on both lists.** The span dataset's positives are RELEVANT
+mentions and its negatives include posts where the company was named but
+judged irrelevant, so the tagger is being asked to predict relevance -- the
+encoder's job -- from surface form. It cannot, so it lands near 50/50 on
+`Nike`. That is most of the 26% it misses and most of the 394 false
+positives, and it is why the held-out recall is 74% on spans a teacher
+confirmed.
+
+The fix for a v2 is in the data, not the model: a row judged irrelevant
+should stay a NEGATIVE only when its evidence token is an ordinary word
+(`apple`, `spy`, `meta`, `snow`, `ai` -- the `common_words` instrument
+already decides this); when the token is name-shaped or a distinctive
+listing token, the mention is still a company reference and becomes a
+POSITIVE span. The finder then learns "names a company", the encoder keeps
+"is the post about it". Not run.
