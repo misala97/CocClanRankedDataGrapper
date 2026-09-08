@@ -158,21 +158,34 @@ locked, audited, probed and hard-negative post, author text only:
 
     name_only 8,569 (34%)  lowercase 6,798 (27%)  titlecase 5,298 (21%)  alias 4,367 (17%)  = 25,032
 
-Paused by Michi (session limit). Resume, in order, once he names N:
+**Michi chose C = 1,600** (2026-09-08 19:40 UTC), for the per-shape locked
+slice: 20% of 1,600 gives ~55-110 rows per shape instead of B's ~40-90,
+and a Wilson interval at n=50 is +-12 points, too coarse to read a
+per-shape number from.
 
+**DRAWN AND RENDERED** (both free, no quota):
+`radar_labels/candidates-newshape-2026-09-08.jsonl`, seed 1, proportional
+quotas -- name_only 547, lowercase 435, titlecase 339, alias 279. 353
+distinct symbols, cap 48 (3%), 1,579 distinct posts, at most 3 rows from
+one post, median text 85 chars, no empty texts. Ids -4,000,001 ..
+-4,001,600: zero collisions with any existing label id or locked set.
+Prompts: `radar_labels/newshape-01/batch-0001..0040.prompt.txt`, the
+production prompt bytes, 40 rows each.
+
+Remaining, in order (paused at Michi's 90% session limit):
+
+    # 1. the spend: 40 Sonnet subagent batches answer newshape-01/batch-*.prompt.txt
+    #    into batch-*.verdict.json, the same way the recall waves were labelled
     cd personal_apps
-    PYTHONPATH=. python -m scripts.sample_new_shape_mentions --since x \
-        --raw-accepted C:/Users/michi/Desktop/radar_labels/raw/population4/accepted-mentions.jsonl \
-        --n <N> --proportional --seed 1 \
-        --out C:/Users/michi/Desktop/radar_labels/candidates-newshape-2026-09-08.jsonl
-    PYTHONPATH=. python scratchpad/label_export/label_harness.py render --n <N> --batch 40 \
-        --run newshape-01 --export C:/Users/michi/Desktop/radar_labels/candidates-newshape-2026-09-08.jsonl \
-        --labels labels-newshape.jsonl
-    # Sonnet subagents answer radar_labels/newshape-01/batch-*.prompt.txt (quota: N/40 batches)
-    PYTHONPATH=. python scratchpad/label_export/label_harness.py collect --run newshape-01 --labels labels-newshape.jsonl
-    # freeze 20% as test-newshape.json BEFORE training (new freeze script needed, by post),
-    # add (labels-newshape, candidates-newshape) to train_encoder.PAIRS + a newshape_labels_sha
-    # setting, then the retrain below.
+    PYTHONPATH=. python scratchpad/label_export/label_harness.py collect \
+        --run newshape-01 --labels labels-newshape.jsonl
+    # 2. freeze 20% (320 rows) as test-newshape.json BEFORE training, grouped by
+    #    post and stratified by shape -- a fourth locked set, because no locked
+    #    set today holds a Title-case symbol or an alias. freeze_test_sets.py is
+    #    hardcoded to the production export; this needs its own small script.
+    # 3. add (labels-newshape, candidates-newshape) to train_encoder.PAIRS and a
+    #    newshape_labels_sha to the manifest + checkpointing.SETTINGS_THAT_MUST_MATCH
+    # 4. the retrain below, then deliverable 4.
 
 ## Deliverable 3 -- the retrain (NOT STARTED, needs a "when")
 
