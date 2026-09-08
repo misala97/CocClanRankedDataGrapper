@@ -175,8 +175,9 @@ def find_spans_trained(rows, model_dir, batch_size):
     for row, spans in zip(rows, per_row):
         for start, end, score in spans:
             # A piece that owns its leading space hands it on; the lookup
-            # must see the word, not the space.
-            surface = row['author_text'][start:end].strip()
+            # and the whole-word check must see the word, not the space.
+            start, end = span_lookup.trim_offsets(row['author_text'], start, end)
+            surface = row['author_text'][start:end]
             if not surface:
                 continue
             findings.append({'external_id': row['external_id'], 'span': surface,

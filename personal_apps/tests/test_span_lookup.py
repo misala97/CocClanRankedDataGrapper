@@ -185,7 +185,7 @@ def _audit_lookup():
     }
 
 
-ORDINARY = {'corn', 'gold', 'go', 'be', 'twin', 'target'}
+ORDINARY = {'corn', 'gold', 'go', 'be', 'twin', 'target', 'wendys'}
 
 
 @pytest.fixture
@@ -197,7 +197,9 @@ def test_possessives_meet_in_the_middle(audit_index):
     assert sl.normalise_name("Wendy's Company (The) - Common Stock") == 'wendys'
     assert sl.resolve('Wendys', audit_index) == ('WEN', 'name')
     assert sl.resolve('Wendy’s', audit_index) == ('WEN', 'name')
-    assert sl.resolve("wendy's", audit_index) == ('WEN', 'name')
+    # 'wendys' is an ordinary word in this corpus (the WSB dumpster meme);
+    # written all in lowercase it is the meme, not the company.
+    assert sl.resolve("wendy's", audit_index) == (None, 'unresolved')
 
 
 def test_an_index_name_never_resolves_to_the_company_that_shares_it(audit_index):
@@ -209,8 +211,9 @@ def test_an_index_name_never_resolves_to_the_company_that_shares_it(audit_index)
 def test_an_ordinary_word_resolves_only_when_written_as_a_symbol(audit_index):
     # 'corn' is a listed fund and a vegetable; the text decides which.
     assert sl.resolve('corn', audit_index) == (None, 'unresolved')
-    assert sl.resolve('Corn', audit_index) == (None, 'unresolved')
     assert sl.resolve('CORN', audit_index) == ('CORN', 'symbol')
+    # Written with a capital, the text treats it as a name and the tiers decide.
+    assert sl.resolve('Corn', audit_index)[0] == 'CORN'
     assert sl.resolve('$corn', audit_index) == ('CORN', 'symbol')
     assert sl.resolve('gold', audit_index) == (None, 'unresolved')
     # A name that is not an ordinary word is unaffected.
@@ -234,3 +237,12 @@ def test_two_word_brands_resolve_through_the_alias_table(audit_index):
 ])
 def test_whole_word_rejects_a_span_cut_inside_a_word(text, start, end, expected):
     assert sl.is_whole_word(text, start, end) is expected
+
+
+def test_trim_offsets_drops_the_space_a_piece_owns():
+    text = 'buys Dell today'
+    assert sl.trim_offsets(text, 4, 9) == (5, 9)          # ' Dell' -> 'Dell'
+    assert sl.trim_offsets(text, 5, 9) == (5, 9)
+    assert sl.trim_offsets(text, 4, 10) == (5, 9)         # ' Dell ' -> 'Dell'
+    assert sl.is_whole_word(text, *sl.trim_offsets(text, 4, 9))
+    assert not sl.is_whole_word(text, 4, 9)               # the bug, pinned

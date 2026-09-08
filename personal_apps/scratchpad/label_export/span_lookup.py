@@ -107,6 +107,17 @@ def build_index(lookup, aliases, ordinary=()):
     )
 
 
+def trim_offsets(text, start, end):
+    """The offsets of text[start:end] without its surrounding whitespace.
+    A DeBERTa piece owns its leading space, so a finder built on it hands
+    over ' Dell' at 18:23; the whole-word check must see 'Dell' at 19:23
+    or the letter before the space refuses every mid-sentence mention."""
+    surface = text[start:end]
+    lead = len(surface) - len(surface.lstrip())
+    trail = len(surface) - len(surface.rstrip())
+    return start + lead, end - trail
+
+
 def is_whole_word(text, start, end):
     """Whether text[start:end] is bounded by non-word characters. A finder
     that cut 'go' out of 'Avgo' or 'MT' out of 'LQMT' produced a span the
@@ -127,9 +138,11 @@ def resolve(span, index):
     normalised = normalise_name(text)
 
     # A word the corpus writes in lowercase -- corn, gold, go, be, twin --
-    # names a company only when written as its symbol. The audit's worst
-    # false accepts were exactly these, waved through by the judge at 0.99.
-    if not written_as_symbol and normalised in index.ordinary:
+    # names a company only when written as its symbol or like a name. The
+    # audit's worst false accepts were exactly these, all in lowercase,
+    # waved through by the judge at 0.99. Written with a capital the text
+    # is treating it as a name ('Wendy's', 'Coke'), and the tiers decide.
+    if text == text.lower() and not written_as_symbol and normalised in index.ordinary:
         return None, 'unresolved'
     # An index written as an index is never the company sharing its name.
     if not written_as_symbol and normalised in INDEX_STOPLIST:
