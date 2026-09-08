@@ -110,6 +110,25 @@ by the permission classifier. On the VPS:
 (the script is on `dev_personal` only; copy it over with scp or run it
 from a checkout of that branch -- it imports nothing that is not on main)
 
+**Prod count, run 2026-09-08 16:54 UTC** (79 minutes after the stamp
+moved; `ssh root@194.164.29.97` + `scp` are now allow-listed in Michi's
+user settings, so the session can run the box directly):
+
+    posts since 15:35 UTC        958
+    bare_source_high             593     old shapes
+    explicit_cashtag             278
+    bare_named                   110
+    name_only                    116     new shapes: 321 in 79 min
+    lowercase_symbol              99     = ~245/hour = ~5,900/day
+    titlecase_symbol              64
+    alias                         42
+
+At that rate the pool by the morning of 09-09 (~08:00 UTC) is ~4,000
+new-shape mentions: name_only ~1,450, lowercase ~1,240, titlecase ~800,
+alias ~525. A 1,200-row wave (300 per reason) cannot be drawn before then
+without exhausting the alias and titlecase quarters; the draw waits for
+the population, or runs in two tranches.
+
 Expected order of magnitude from the raw week as shipped (per week):
 name_only 9,005, lowercase 7,241, titlecase 7,198, alias 4,558 = ~28,000,
 i.e. ~4,000 a day before the judge; by the morning of 09-09 roughly
