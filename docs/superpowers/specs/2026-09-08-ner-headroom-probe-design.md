@@ -332,3 +332,107 @@ relevance is the encoder's call. True precision is above 0.83.
 ~7). Three finders, one answer: **~1.2k posts a week, ~1.7% of the pool.**
 v2 is the finder to keep -- best held-out F1, least junk -- and the pool it
 would search is confirmed small. Decision unchanged.
+
+---
+
+## Audit — Codex's four problems, verified independently 2026-09-08 (later)
+
+`scratchpad/label_export/audit_ner_evidence.py`; outputs in
+`radar_labels/ner/audit-2026-09-08/` (report.md, disagreements.md,
+rejected-pairs-gliner.md, unresolved-gliner.txt). Every number below is from
+the artifacts, not from the sections above. Where a section above is wrong,
+this section wins.
+
+### 1. Leakage — real, bounded, must still be repaired
+
+`build_spans_v2.py` counted gold surfaces over ALL examples before the
+hold-out split. With training-only gold, 8 names drop out of the vouched set:
+`chevron, korea, marvell, mongodb, pfizer, qualcomm, starbucks, zscaler`. They
+contributed **126 silver spans to training** (korea 57). In the HELD-OUT
+gold those surfaces appear **12 times of 1,629** -- the most the leak could
+have bought is 0.7 of the 14.8 recall points. **14 held-out rows share an
+identical text with a training row** (3 gold spans); removing them moves P/R
+by <= 0.001. Neither explains the improvement; both are defects. Repair: vouch
+on training gold only, drop held-out rows whose text appears in training,
+retrain. **Not done** (GPU job, ~7 min, needs Michi's go).
+
+### 2. Scoring — not permissive in a way that matters
+
+    rule                                 v1 P    v1 R    v2 P    v2 R
+    any overlap                          0.862   0.742   0.828   0.890
+    IoU >= 0.5                           0.848   0.732   0.823   0.886
+    exact boundaries                     0.496   0.428   0.469   0.505
+
+The exact collapse is the tokenizer: DeBERTa's offsets give a piece its
+leading space, so 590 of v2's 1,449 overlapping predictions differ from
+gold by whitespace only; 823 are exact; 26 narrower (`GPROI` for `$GPROI`,
+the `$` convention); 6 wider; **4 genuinely partial** (`wendy` for
+`wendy's`, ` d` for `dks`). Boundary-correct after strip: 97.5%.
+Predictions covering two gold spans: 1. Predictions escaping FP by merely
+touching a silver/ignore region: **0** for both models (the "Google garbage"
+case does not occur; requiring >= 50% coverage changes nothing). End to end:
+of the gold spans v2 overlaps, the predicted surface **resolves to the gold
+ticker 1,404 times, to a different symbol 9, to nothing 36**.
+
+### 4. Disagreement — read, all 44 posts
+
+Codex's overlaps reproduce exactly (posts and pairs coincide: no post has
+two relevant symbols). 33 pairs in all three finders: **31 true**, 2 the WSB
+"Wendy's" meme. 44 posts in the union but not in all three: **17 true**
+(3 of them borderline: `target` for an icee, `Musk`, `etoro`), **3 right
+company / wrong ticker** (`go pro` -> GO, Grocery Outlet, three times; the
+company is GPRO), **24 false**. So the union of 77 encoder-approved posts
+holds **~48-50 true ones, 1.6% of the sample** -- and agreement between
+finders is the strongest precision signal available (94% where all three
+agree, 39% where they disagree).
+
+**The judge is the weak stage on finder-proposed pairs.** False accepts, with
+the encoder's own confidence: `corn` 1.00 ("buttcorn"), `Abt` 0.99 ("Abt to
+full port" = about), `gold` 1.00 (the metal), `nat` 0.97 (nat gas), `twin`
+0.96, `be` 0.93 ("bers"), `Dive` 1.00 ("Divedens"), `MT` 0.92 (inside
+LQMT), `ws` 0.98 (inside wsb), `Alaska` 0.84 (the state). False rejects: 2 of
+78 (`O` in "Vnq or O", Realty Income, 0.99 irrelevant; `Msft is guaranteed to
+hit ath`, 0.71 irrelevant). The encoder was trained on pairs where the ticker
+was always a plausible rule candidate; a pair like (CORN, "buttcorn took a
+hit") is out of distribution and it reads the bearish text as relevant. Its
+0.85 trial precision **does not transfer** to this population. Any finder
+that ships needs either hard-negative pairs in the judge's training set
+(finder junk labelled irrelevant) or a shape gate before the judge.
+
+### 3. The recall-ceiling inference — wrong, and by about 2x
+
+The "~1,200 ceiling" above treated one pipeline's yield as headroom. Split
+by stage on the 3,000 posts:
+
+- **Yield, human-validated**: ~48-50 true relevant posts (union of three
+  finders, read), not 55.
+- **Resolution losses**: of 440 unresolved GLiNER spans, **~35 are US-listed
+  and resolvable in principle** -- `QQQ x10` (not in the universe), `Wendys
+  x3` (possessive), `go pro x2`, `Door dash`, `jp morgan`, `AMEX`, `Pepsi`,
+  `Fox News`, `planet labs`, `NTFLX`, `Microstrategy`, `Chili's`, `Tim
+  Hortons`, `BRK`, `BLD` -- plus the 3 GoPro mis-resolutions. Roughly +25-30
+  posts, half the current yield again, for a universe fix, possessive
+  normalisation and a dozen aliases. ~30 more are foreign / OTC / private
+  (LQMT, Porsche, Samsung, SpaceX, Stripe, Subway) and unresolvable by
+  design. The remaining ~375 are indices, jargon, people, memes, crypto.
+- **Detection losses**: the 200-blank read found 1 explicit miss (`mu`);
+  scaled to the 2,581 blank posts that is ~13, up to ~70 at the Wilson upper
+  bound. Two implicit references (unnamed yoga-pants company, `Winzigweich`)
+  are not recoverable by any of this.
+- **Judge losses**: 2 false rejects of 78 pairs.
+
+Ceiling with everything repaired: ~90-115 relevant posts in 3,000 = **3.0-3.8%
+= ~2,100-2,700 a week**, against the ~1,200 written above. Measured true
+yield today: ~1.6% = ~1,100 a week. The order of the three prizes does not
+change (prize A ~8,000, the Title-case shape ~800, this 1,100-2,700), but
+what to fix INSIDE this pipeline does: the lookup first, the judge's
+out-of-distribution pairs second, the finder last.
+
+### What remains unverified
+
+- A leak-free retrain (train-only vouching, text dedup). Until it runs, v2's
+  0.857 is an upper estimate; the bound says the true number is >= 0.85.
+- The 33 all-three pairs and 44 disagreements were read by Claude, not by
+  Michi; the 31/33 and 17/44 are one reader's calls.
+- The +25-30 from resolution is counted from surface forms, not re-run
+  through the judge.

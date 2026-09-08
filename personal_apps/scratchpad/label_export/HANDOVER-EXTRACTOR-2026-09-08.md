@@ -8,6 +8,37 @@ evidence disagree, the evidence wins and the discrepancy gets written down.
 
 ---
 
+## 0. Corrections after Codex's audit (read first)
+
+Codex audited this document and found four problems; the session then
+verified each against the artifacts (`audit_ner_evidence.py`, outputs in
+`radar_labels/ner/audit-2026-09-08/`, full write-up in the design doc's
+last section "Audit"). What changes:
+
+- **§4.6 leakage**: `build_spans_v2.py` vouched names on ALL gold, not
+  training gold. 8 names leaked (126 training silver spans, 57 of them
+  `korea`); 14 held-out rows duplicate training texts. Effect on the held-out
+  number: at most 0.7 recall points and <= 0.001 respectively -- the v2 gain
+  is real, but v2's 0.857 is an upper estimate until a leak-free retrain runs.
+  **Not yet retrained.**
+- **§4.6 scoring**: holds. IoU >= 0.5 moves nothing; 0 FP escapes; 97.5% of
+  overlapping predictions are boundary-correct after whitespace; 97% resolve
+  to the gold ticker.
+- **§4.7 "~1.2k ceiling" is wrong by ~2x.** It was one pipeline's yield.
+  Human-validated true yield is ~48-50 of 3,000 (1.6%, ~1,100/week); the
+  ceiling with the lookup repaired and detection misses counted is
+  ~3.0-3.8% (~2,100-2,700/week). Still a third of prize A.
+- **New, and the most important finding of the audit**: the encoder
+  rubber-stamps out-of-distribution pairs a finder proposes (`corn` 1.00,
+  `Abt` 0.99, `gold` 1.00, `nat` 0.97, `twin` 0.96). Its trial precision
+  does not transfer. **No finder can ship in front of this judge without
+  hard-negative pairs in the judge's training or a shape gate.** Section 6
+  is re-ordered accordingly.
+- The lookup, not the finder, is the largest recoverable loss inside the
+  pipeline: `QQQ` is absent from the universe (10 posts), possessives and a
+  dozen aliases (`go pro`, `Door dash`, `jp morgan`, `AMEX`, `Pepsi`) are
+  ~35 spans, roughly +50% on today's yield.
+
 ## 1. Why this work exists
 
 The radar board counts company mentions in Reddit/Bluesky/4chan posts. Two
@@ -254,7 +285,25 @@ pool it would search is small.** Both true at once.
   Title-case symbol shape, (2) prize A, (3) NER only if sources or corpus
   change.
 
-## 6. What comes next, in order (none started)
+## 6. What comes next, in order (none started) -- re-ordered after the audit
+
+0. **Leak-free retrain of v2** (vouch on training gold only; drop held-out
+   rows whose text is in training). ~7 min GPU; ask Michi for the when. This
+   is a repair of evidence, not a new experiment.
+0b. **Lookup and universe**: add `QQQ` (and check `DIA`/`GLD`-class ETFs are
+   present), possessive normalisation (`Wendys`, `Wendy's`), aliases for
+   `go pro`->GPRO, `door dash`->DASH, `jp morgan`->JPM, `amex`->AXP,
+   `pepsi`->PEP, `fox news`->FOX, `microstrategy`->MSTR, an index stoplist
+   (`Nasdaq`, `Dow`, `Russell`) so those never resolve to NDAQ/DOW, and no
+   `tokens`-tier resolution of a span the finder cut inside a word (`go` from
+   `Avgo`, `MT` from `LQMT`, `ws` from `wsb`: require the span to be
+   whole-word in the text). Re-run the fixed 3,000 sample; expect ~+25 posts.
+0c. **The judge's junk pairs**: before any finder goes in front of the
+   encoder, train the encoder with hard negatives -- (symbol, text) pairs a
+   finder proposed and a reader rejected (the 24 false ones from
+   disagreements.md are the seed) -- or gate short generic symbols before
+   the judge. Without this every finder's precision is capped by the judge's
+   worst habit.
 
 1. **Title-case candidate shape** in `features/radar/extraction.py`: a
    `[A-Z][a-z]{2,4}` token whose uppercase is a universe symbol, gated by the
