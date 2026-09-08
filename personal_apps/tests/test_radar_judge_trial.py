@@ -236,7 +236,7 @@ def test_nothing_is_pinned_without_a_trial(no_trial):
     (judge_trial.RECOVERING, True),
     (judge_trial.RECOVERED, False),
 ])
-def test_only_a_completed_recovery_releases_the_pin(no_trial, status, pins):
+def test_only_a_completed_recovery_releases_the_pin(no_trial, status, pins, unretired):
     with flask_app.app_context():
         row = arm()
         row.status = status
@@ -244,7 +244,7 @@ def test_only_a_completed_recovery_releases_the_pin(no_trial, status, pins):
         assert (judge_trial.retention_floor() is not None) is pins
 
 
-def test_a_passing_audit_does_not_release_the_pin(no_trial):
+def test_a_passing_audit_does_not_release_the_pin(no_trial, unretired):
     """Passing authorises CONTINUING, and continuing still has to be
     undoable. Only recovery has used the evidence up."""
     with flask_app.app_context():
@@ -268,7 +268,7 @@ def test_the_journal_forgets_the_trials_windows_without_a_pin(no_trial):
         assert surviving_events() == set()
 
 
-def test_an_armed_trial_keeps_the_journal_it_would_rebuild_from(no_trial):
+def test_an_armed_trial_keeps_the_journal_it_would_rebuild_from(no_trial, unretired):
     with flask_app.app_context():
         arm(now=NOW)
         # Inside the pin (armed_at - 48h) and far outside the ordinary
@@ -283,7 +283,7 @@ def test_an_armed_trial_keeps_the_journal_it_would_rebuild_from(no_trial):
         assert PREFIX + '-older' not in surviving_events()
 
 
-def test_the_pin_keeps_low_confidence_events_with_no_mention_at_all(no_trial):
+def test_the_pin_keeps_low_confidence_events_with_no_mention_at_all(no_trial, unretired):
     """A post whose tickers were all `low` never becomes a mention, so the
     journal row is the ONLY record of it -- and a rebuild that cannot see
     it silently writes a smaller low_count than really happened."""
@@ -297,7 +297,7 @@ def test_the_pin_keeps_low_confidence_events_with_no_mention_at_all(no_trial):
         assert PREFIX + '-low' in surviving_events()
 
 
-def test_the_pin_keeps_the_posts_and_their_judgment_history(no_trial):
+def test_the_pin_keeps_the_posts_and_their_judgment_history(no_trial, unretired):
     """Posts cascade to mentions and mentions to history, so losing a post
     loses the evidence of what the trial decided about it."""
     with flask_app.app_context():
@@ -339,7 +339,7 @@ def test_a_recovered_trial_stops_holding_evidence(no_trial):
 
 # ---- stopping ---------------------------------------------------------------
 
-def test_a_stop_is_durable_and_carries_its_reason(no_trial):
+def test_a_stop_is_durable_and_carries_its_reason(no_trial, unretired):
     """In the database, not in an environment file -- an environment file
     loses to a stale unit definition or a restart that reads the old one."""
     with flask_app.app_context():
@@ -412,7 +412,7 @@ def test_the_lock_is_released_even_when_the_body_raises(no_trial):
             pass
 
 
-def test_pruning_cannot_cross_a_pin_installed_while_it_runs(no_trial):
+def test_pruning_cannot_cross_a_pin_installed_while_it_runs(no_trial, unretired):
     """The race the lock exists for: a long prune computes a cutoff, a
     trial is armed, and the next chunk must see the new floor."""
     with flask_app.app_context():
@@ -706,7 +706,7 @@ def test_recovery_is_bounded_and_resumable(counted_window):
         assert second['recovered'] == 2 and second['remaining'] == 0
 
 
-def test_the_pin_is_released_only_when_nothing_is_left(counted_window):
+def test_the_pin_is_released_only_when_nothing_is_left(counted_window, unretired):
     with flask_app.app_context():
         stopped(now=NOW)
         for index, (mention, post) in enumerate(_pairs()):
@@ -880,7 +880,7 @@ def started(row, when=None):
     return row
 
 
-def test_a_passing_audit_is_recorded_and_changes_nothing_else(no_trial):
+def test_a_passing_audit_is_recorded_and_changes_nothing_else(no_trial, unretired):
     """Passing authorises CONTINUING. It does not release the pin, promote
     the backend, or enable tone."""
     with flask_app.app_context():
@@ -1249,8 +1249,7 @@ def test_the_write_lock_starts_the_clock_once_and_only_from_armed(no_trial):
         assert judge_trial.current().first_judged_at == first
 
 
-def test_the_write_side_refuses_a_post_outside_the_retained_interval(
-        no_trial):
+def test_the_write_side_refuses_a_post_outside_the_retained_interval(no_trial, unretired):
     """Selection keeps such posts out; this is the check that holds even if
     selection did not (spec §7.2a: batches outside the retained interval
     are refused)."""
@@ -1394,8 +1393,7 @@ def test_a_window_is_rebuilt_from_the_journal_as_it_is_under_the_guard(
         assert (mention_count, high, authors, low) ==             (before[0] + 1, before[1] + 1, before[2], before[3])
 
 
-def test_the_pin_is_not_released_while_a_matching_mention_remains(
-        counted_window, monkeypatch):
+def test_the_pin_is_not_released_while_a_matching_mention_remains(counted_window, monkeypatch, unretired):
     """`recovered` is what releases the retention pin. It may only be
     written after a count taken UNDER THE LOCK finds nothing left -- a
     count taken before it is a count of a moment that has passed."""
@@ -1520,3 +1518,71 @@ def test_arming_refuses_a_supplemental_membership_it_cannot_trust(no_trial,
                                   baseline_removal_rate=0.31, seed=1,
                                   supplemental=broken)
         assert judge_trial.current() is None
+
+
+# ---- what retirement releases ----------------------------------------------
+
+def test_a_retired_trial_stops_pinning_and_the_pruners_move_again(no_trial):
+    """The pin buys the ability to undo, and retirement decided against it.
+
+    Left in place it would freeze BOTH pruners permanently: `_pinned` takes
+    min(horizon, retain_from), so once `now - 30d` passes the pin the cutoff
+    stops advancing and nothing is ever deleted again. On production that
+    date was 2026-10-04, with the journal taking 142,110 rows a day.
+    """
+    with flask_app.app_context():
+        row = started(arm())
+        assert row.status in judge_trial.PINNING
+        assert judge_trial.retention_floor() is None
+
+
+def test_an_unretired_trial_still_pins(no_trial, unretired):
+    """The teeth: the release is caused by the switch, not by the row."""
+    with flask_app.app_context():
+        row = started(arm())
+        assert judge_trial.retention_floor() == row.retain_from
+
+
+def test_what_can_be_rebuilt_is_the_journal_not_the_stale_column(no_trial):
+    """`rebuildable_from` is the invariant selection and the write boundary
+    share: never judge a mention whose window has no journal, because the
+    verdict REBUILDS that window's count from it.
+
+    At arming the two agree -- retain_from is the quarter-hour after the
+    journal horizon, by design. They diverge as the clock runs: the journal
+    horizon moves forward, retain_from is frozen. Days later the row still
+    names a floor two days older than any surviving journal row, and reading
+    the column would wave through exactly the writes this stops.
+    """
+    from features.radar.config import MENTION_EVENT_RETENTION_HOURS
+
+    with flask_app.app_context():
+        row = started(arm())
+        later = NOW + dt.timedelta(days=5)
+        journal_start = later - dt.timedelta(hours=MENTION_EVENT_RETENTION_HOURS)
+
+        # Retired: no pin, so the journal's own horizon is the line -- and by
+        # now it is far LATER than the row's frozen retain_from.
+        assert judge_trial.rebuildable_from(later) == journal_start
+        assert row.retain_from < journal_start
+
+        # At arming they agreed, which is why the drift is easy to miss.
+        assert abs((judge_trial.rebuildable_from(NOW)
+                    - row.retain_from).total_seconds()) <= 15 * 60
+
+
+def test_the_write_side_measures_against_the_journal_not_retain_from(no_trial):
+    """A post inside the frozen retain_from but outside the journal must be
+    refused once the pin is released."""
+    with flask_app.app_context():
+        row = started(arm())
+        later = NOW + dt.timedelta(days=5)
+
+        stale_but_pinned = row.retain_from + dt.timedelta(minutes=5)
+        post = type('P', (), {'created_utc': stale_but_pinned})()
+        with pytest.raises(judge_trial.TrialError) as caught:
+            judge_trial.refuse_outside_retention(row, [post], now=later)
+        assert 'journal reaches' in str(caught.value)
+
+        fresh = type('P', (), {'created_utc': later - dt.timedelta(hours=1)})()
+        judge_trial.refuse_outside_retention(row, [fresh], now=later)

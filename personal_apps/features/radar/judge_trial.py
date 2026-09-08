@@ -163,11 +163,45 @@ def retention_floor():
     evidence has been used. A trial that merely PASSED its audit does not
     -- passing authorises continuing, and continuing still needs to be
     undoable.
+
+    A RETIRED trial does not pin either, and for the same reason the
+    deadline and the automatic recovery went: the pin buys the ability to
+    undo, and that has been decided against. Left in place it would freeze
+    both pruners forever -- `_pinned` takes min(horizon, floor), so once
+    `now - 30d` passes `retain_from` the cutoff stops moving and nothing is
+    ever deleted again. On this deployment that date was 2026-10-04, after
+    which the journal grew without any horizon at all.
+
+    What this forecloses is the MANUAL recovery, `rollback_encoder_judge.py
+    --apply`, for anything older than the ordinary journal horizon. That is
+    the price of retiring, stated plainly rather than discovered later.
     """
     row = current()
-    if row is None or row.status not in PINNING:
+    if row is None or row.status not in PINNING or TRIAL_RETIRED:
         return None
     return row.retain_from
+
+
+def rebuildable_from(now):
+    """The oldest post whose bucket window can still be rebuilt.
+
+    Judging a mention rewrites its window's count FROM THE JOURNAL
+    (llm_sentiment._sync_eligibility then _rebuild_corrected), so a mention
+    whose journal is gone must never be judged -- the rebuild would write a
+    count that never happened rather than merely lose an undo.
+
+    That line is the journal's real start: its ordinary horizon, or the
+    trial's pin while one is held, since the pin is precisely what extends
+    the journal further back. Selection and the write boundary both read
+    this, so they cannot drift apart -- which they nearly did, because the
+    pass floored on `retain_from` directly and would have had NO lower
+    bound at all once the pin was released.
+    """
+    floor = retention_floor()
+    if floor is not None:
+        return floor
+    from .config import MENTION_EVENT_RETENTION_HOURS
+    return now - dt.timedelta(hours=MENTION_EVENT_RETENTION_HOURS)
 
 
 def frozen_supplemental(supplemental):
@@ -776,20 +810,28 @@ def lock_for_write(clock):
     return row, when
 
 
-def refuse_outside_retention(row, posts):
+def refuse_outside_retention(row, posts, now=None):
     """Spec §7.2a: batches outside the retained interval are refused.
 
-    A judged mention whose window starts before the pin could never be
-    recovered -- its journal is already gone -- so the write side refuses
-    it outright. Selection keeps such posts out in the first place; this
-    holds even if it did not.
+    A judged mention whose window has no journal left cannot be rebuilt --
+    the verdict would rewrite its bucket count out of nothing -- so the
+    write side refuses it outright. Selection keeps such posts out in the
+    first place; this holds even if it did not.
+
+    Measured against `rebuildable_from`, not against `row.retain_from`.
+    They are the same number while the pin is held, and they diverge the
+    moment it is not: the pin can be released (a retired trial) while the
+    row keeps a `retain_from` far older than the journal actually reaches,
+    and testing the stale column would have waved through exactly the
+    writes this exists to stop.
     """
-    outside = [post for post in posts if post.created_utc < row.retain_from]
+    floor = rebuildable_from(now or dt.datetime.utcnow())
+    outside = [post for post in posts if post.created_utc < floor]
     if outside:
         raise TrialError('%d of %d posts in this batch are older than the '
-                         'retained interval (%s); their windows could not be '
+                         'journal reaches (%s); their windows could not be '
                          'rebuilt, so their verdicts must not be written'
-                         % (len(outside), len(posts), row.retain_from))
+                         % (len(outside), len(posts), floor))
 
 
 def note_first_judgment(row, now):

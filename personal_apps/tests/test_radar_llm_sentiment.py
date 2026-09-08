@@ -293,12 +293,17 @@ def test_ops_summary_counts_the_gated_backlog_apart_from_the_pending_one(clean_p
 
 # ---- the floor the pass reads, and the one it reports -----------------------
 
-def test_the_pass_floor_is_the_later_of_the_gate_window_and_the_pin():
-    """Regression: `since` used to be computed in run_pass and AGAIN in
-    ops_summary, and only the first raised it to the trial's retain_from.
-    The daemon then reported 37,017 mentions waiting on 2026-09-08 while
-    the pass could select 146 -- an operator reads that as a day of
-    catch-up that is in fact already finished.
+def test_the_pass_floor_is_the_later_of_the_gate_window_and_the_journal():
+    """Regression, two of them.
+
+    `since` used to be computed in run_pass and AGAIN in ops_summary, and
+    only the first applied the trial's floor -- the daemon then reported
+    37,017 mentions waiting on 2026-09-08 while the pass could select 146.
+
+    And the floor it applied was `retain_from` read off the row, which is
+    the journal's start only while the pin is held. Released, the row keeps
+    a retain_from far older than the journal reaches, and with the gate off
+    there would have been no lower bound at all.
     """
     from features.radar import judge_gate
 
@@ -307,17 +312,26 @@ def test_the_pass_floor_is_the_later_of_the_gate_window_and_the_pin():
                          skipped_segment=0, hours=24, enabled=True)
     off = judge_gate.Gate(tickers=frozenset(), watched=0, reachable=0,
                           skipped_segment=0, hours=24, enabled=False)
-    pinned = type('Row', (), {'retain_from': dt.datetime(2026, 9, 4, 19, 45)})()
-    recent = type('Row', (), {'retain_from': dt.datetime(2026, 9, 8, 11, 0)})()
 
-    # No trial: the gate's window, or nothing at all when it is off.
+    class Trial:
+        def __init__(self, floor):
+            self._floor = floor
+
+        def rebuildable_from(self, when):
+            return self._floor
+
+    pinned = Trial(dt.datetime(2026, 9, 4, 19, 45))
+    journal_only = Trial(now - dt.timedelta(hours=48))
+
+    # No trial governs this backend (Anthropic): the gate's window, or none.
     assert llm_sentiment.pass_floor(now, on, None) == now - dt.timedelta(hours=24)
     assert llm_sentiment.pass_floor(now, off, None) is None
 
-    # Gate OFF is exactly the case that was wrong: with no gate window there
-    # is nothing to take a max against, and the pin must still apply.
-    assert llm_sentiment.pass_floor(now, off, pinned) == pinned.retain_from
+    # Gate OFF is the case that was wrong: nothing to take a max against,
+    # and the journal floor must still apply.
+    assert llm_sentiment.pass_floor(now, off, pinned) == pinned.rebuildable_from(now)
+    assert llm_sentiment.pass_floor(now, off, journal_only) == now - dt.timedelta(hours=48)
 
-    # Gate ON: whichever floor is LATER wins, in both directions.
+    # Gate ON: the LATER floor wins, in both directions.
     assert llm_sentiment.pass_floor(now, on, pinned) == now - dt.timedelta(hours=24)
-    assert llm_sentiment.pass_floor(now, on, recent) == recent.retain_from
+    assert llm_sentiment.pass_floor(now, on, journal_only) == now - dt.timedelta(hours=24)

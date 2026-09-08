@@ -343,7 +343,7 @@ def judge(items, backend, on_usage=None, preamble=None, before_batch=None):
 judge_v2 = judge
 
 
-def pass_floor(now, gate, armed):
+def pass_floor(now, gate, trial):
     """The oldest post the pass may take, or None for no floor.
 
     ONE definition, because there used to be two. `run_pass` raised its
@@ -353,20 +353,26 @@ def pass_floor(now, gate, armed):
     2026-09-08. A number an operator reads as lag has to be the number the
     pass is working from.
 
-    Two independent floors, whichever is later:
+    Two floors, whichever is later:
 
-    - the gate's own trailing window, when the gate is on;
-    - the armed trial's `retain_from`, always. A window that starts before
-      the pin has NO JOURNAL LEFT (spec §7.2a), and judging a mention
-      rewrites its window's bucket count from that journal -- so reaching
-      past the pin does not merely forfeit the undo, it writes counts that
-      never happened. On 2026-09-08, 25,203 of the 36,871 mentions behind
-      the pin had no journal at all. The floor stays whatever else changes.
+    - the gate's trailing window, when the gate is on;
+    - the journal's real start, `judge_trial.rebuildable_from`, whenever a
+      trial governs this backend. Judging a mention rewrites its window's
+      bucket count from the journal, so a mention older than the journal
+      does not merely forfeit its undo -- it writes a count that never
+      happened.
+
+    That second floor used to be `retain_from` read straight off the row,
+    which was the same number only while the pin was held. With the gate
+    off and the pin released there would have been no lower bound at all,
+    and the pass would have reached thirty days back into windows with no
+    journal.
     """
     since = now - dt.timedelta(hours=gate.hours) if gate.enabled else None
-    if armed is None:
+    if trial is None:
         return since
-    return armed.retain_from if since is None else max(since, armed.retain_from)
+    floor = trial.rebuildable_from(now)
+    return floor if since is None else max(since, floor)
 
 
 def pending(limit=PASS_LIMIT, tickers=None, since=None):
@@ -817,7 +823,7 @@ def run_pass(backend=None, limit=None, now=None, clock=None):
     armed = trial.guard_encoder_trial(clock()) if trial is not None else None
 
     gate = judge_gate.judgeable_tickers(now)
-    since = pass_floor(now, gate, armed)
+    since = pass_floor(now, gate, trial)
     if gate.enabled:
         rows = pending(limit, tickers=gate.tickers, since=since)
         logger.info('radar judge gate: %d judgeable (%d watched, %d reachable, '
@@ -1055,8 +1061,8 @@ def live_pending_count(now=None):
     """What the pass will actually take next, under today's floors.
 
     The daemon's "still waiting" line used bare pending_count(), which
-    applies neither the gate nor the trial's retention pin -- so on
-    2026-09-08 it reported 37,017 waiting while the pass could select 146.
+    applies neither the gate nor the journal floor -- so on 2026-09-08 it
+    reported 37,017 waiting while the pass could select 146.
     An operator reading that plans a day of catch-up that is already done.
     """
     now = now or dt.datetime.utcnow()
@@ -1064,24 +1070,26 @@ def live_pending_count(now=None):
     trial = _trial_module_for(default_primary_backend())
     return pending_count(
         tickers=gate.tickers if gate.enabled else None,
-        since=pass_floor(now, gate, trial.current() if trial is not None else None))
+        since=pass_floor(now, gate, trial))
 
 
 def unreachable_count(now=None):
-    """Unjudged mentions the pass can never reach, behind the trial's pin.
+    """Unjudged mentions the pass can never reach: older than the journal.
 
     Reported apart from the backlog, the way gated_pending is, so a tail
     that is held back BY DESIGN never reads as lag. It is not lag: those
     windows have no journal left, and judging them would rebuild their
     bucket counts out of nothing (spec §7.2a).
+
+    They are not permanent either -- posts age out at POST_RETENTION_DAYS
+    and their mentions cascade, so this number drains on its own.
     """
     now = now or dt.datetime.utcnow()
     trial = _trial_module_for(default_primary_backend())
-    row = trial.current() if trial is not None else None
-    if row is None or row.retain_from is None:
+    if trial is None:
         return 0
     return (_unjudged(None)
-            .filter(RadarPost.created_utc < row.retain_from).count())
+            .filter(RadarPost.created_utc < trial.rebuildable_from(now)).count())
 
 
 def pending_count(tickers=None, since=None):
@@ -1131,7 +1139,7 @@ def ops_summary(now=None):
     # trial module, same floor. Asking a different question here is what
     # produced the 37,017-against-146 report in the first place.
     trial = _trial_module_for(default_primary_backend())
-    since = pass_floor(now, gate, trial.current() if trial is not None else None)
+    since = pass_floor(now, gate, trial)
     waiting = pending_count(tickers=tickers, since=since)
     p95 = None
     if waiting:
