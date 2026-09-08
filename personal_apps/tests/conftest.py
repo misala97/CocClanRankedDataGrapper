@@ -165,6 +165,26 @@ def acting_as(user_id):
         yield
 
 
+@pytest.fixture()
+def unretired(monkeypatch):
+    """Run this test against the trial as it behaved before retirement.
+
+    The suite's default is what production runs, and since 2026-09-08 that is
+    `judge_trial.TRIAL_RETIRED = True`: the deadline never ends the trial and
+    nothing recovers automatically. A test that asks for this fixture is
+    pinning the OTHER semantics -- the ones the switch restores when it is
+    flipped back -- which is the whole reason retiring by a named constant was
+    preferred to deleting the machinery.
+
+    Patched on judge_trial, which is where every reader looks it up at call
+    time (judge_config._encoder_or_none included), so one patch covers all of
+    them.
+    """
+    from features.radar import judge_trial
+    monkeypatch.setattr(judge_trial, 'TRIAL_RETIRED', False)
+    yield
+
+
 @pytest.fixture(autouse=True)
 def _fresh_radar_coverage():
     """The coverage memo (features/radar/coverage.py) caches for 60s, which

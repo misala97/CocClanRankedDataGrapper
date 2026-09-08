@@ -957,8 +957,8 @@ def test_the_trial_row_stays_locked_while_the_verdicts_are_written(
             drop_trial()
 
 
-def test_a_batch_after_the_deadline_is_not_even_sent(clean_posts,
-                                                     monkeypatch):
+def test_a_batch_after_the_deadline_is_not_even_sent(clean_posts, monkeypatch,
+                                                     unretired):
     """A pass that starts one second before expiry and runs for minutes
     must not carry its starting clock through every batch. Each batch asks
     the time again, and a batch past the deadline is never judged."""
@@ -1009,7 +1009,7 @@ def test_a_batch_after_the_deadline_is_not_even_sent(clean_posts,
 
 
 def test_answers_judged_before_the_deadline_are_not_written_after_it(
-        clean_posts, monkeypatch):
+        clean_posts, monkeypatch, unretired):
     """Every batch was sent in time; the deadline lands before the write.
     The write boundary reads the clock again, and a late answer is
     discarded rather than stored under a trial that has ended."""
@@ -1092,7 +1092,8 @@ def row_lock_probe():
 
 
 def test_the_boundary_asks_the_clock_after_the_lock_is_held(clean_posts,
-                                                             monkeypatch):
+                                                             monkeypatch,
+                                                             unretired):
     """A lock wait can carry the boundary past expiry: the answers came
     back in time, another process held the row for two seconds, and the
     deadline passed while this pass waited. The reading that is validated

@@ -440,9 +440,19 @@ def recover_trial(*, apply=False, limit=2000, now=None):
     -- resumable, because a cleared mention no longer matches the
     selection.
 
-    Tone and its provenance are NOT cleared. The trial never wrote them;
-    what is there belongs to whoever did, and clearing it would delete a
-    real verdict the board is showing.
+    Tone and its provenance are NOT cleared -- and since 2026-09-07 that is
+    no longer because the trial never wrote them. It does: `writes_tone` is
+    True on the encoder backend, so `sentiment_attitude`,
+    `sentiment_expected_move`, `sentiment_confidence`, `llm_sentiment` and
+    `sentiment_tone_model` are the trial's own writes now.
+
+    Recovery still leaves them, which means a "complete" recovery undoes the
+    encoder's effect on VOLUME counts and not on DIRECTION counts: the rows
+    come back claiming to be unjudged while still carrying
+    sentiment_tone_model='radar-encoder-v1', and the board reads those tone
+    columns first for bull/bear. That is a real gap, recorded here rather
+    than papered over, and it is one more reason recovery is a deliberate
+    operator decision rather than an automatic one.
     """
     if limit is not None and limit <= 0:
         raise TrialError('limit must be a positive number of mentions')
@@ -577,6 +587,23 @@ AUDIT_DRAW_DAY = 1
 AUDIT_LABEL_DAY = 2
 TRIAL_DEADLINE_DAYS = 3
 
+# Retired 2026-09-08, by DECISION and not by verdict. The gate below was
+# written to answer "is the encoder safe enough to replace Haiku". Haiku has
+# had no API credits since 2026-09-03, so the question has no live alternative
+# left in it: what the deadline would restore is not the incumbent judge, it is
+# no judge at all, and ~46% junk counting on the board.
+#
+# Retired means two things and only two. The deadline no longer ends the trial,
+# and nothing recovers automatically. Everything else is deliberately left
+# standing: the row stays, its retention pin stays, `recover_trial` is
+# untouched, and an operator who decides to undo the encoder's judgments still
+# can -- explicitly, with scripts/rollback_encoder_judge.py --apply, rather
+# than by a timer at 2000 rows a minute with nobody watching.
+#
+# Flip to False to restore the original behaviour exactly. The tests keep both
+# semantics covered, which is what makes that flip trustworthy.
+TRIAL_RETIRED = True
+
 
 def deadline(row):
     """When an unevaluated trial ends by itself, or None if it cannot.
@@ -591,8 +618,14 @@ def deadline(row):
     rules is not a trial (spec §7.2b) -- and a trial that has tested them
     and passed has answered that. It keeps running suppressed, with its
     evidence still pinned; promoting it is a separate change.
+
+    None as well once the trial is RETIRED, which is the same answer for a
+    different reason: the trial has no automatic end any more because someone
+    decided it should not have one. See TRIAL_RETIRED.
     """
     if row is None or row.first_judged_at is None:
+        return None
+    if TRIAL_RETIRED:
         return None
     if row.audit_evaluated_at is not None and row.audit_passed:
         return None
@@ -797,6 +830,14 @@ def tick(now, limit=2000):
     if row is None or row.status == RECOVERED:
         return {'action': 'none'}
     if row.status == RECOVERING:
+        if TRIAL_RETIRED:
+            # Retired: a stop halts judging and nothing more. Undoing the
+            # judgments is an operator decision taken deliberately, with
+            # scripts/rollback_encoder_judge.py --apply -- never something a
+            # watchdog does at 2000 rows a minute because a status column
+            # changed. The row is left RECOVERING so that decision is still
+            # available and still visible.
+            return {'action': 'none', 'status': row.status}
         # Already stopped, by an operator or a failed audit. Drain it.
         report = recover_trial(apply=True, limit=limit, now=now)
         report['action'] = 'recovering'

@@ -35,7 +35,15 @@ def cmd_status():
     if state is None:
         print('no trial record: nothing armed, nothing pinned')
         return 0
-    print('status            %s' % state['status'])
+    print('status            %s%s' % (state['status'],
+                                      '  (RETIRED)' if judge_trial.TRIAL_RETIRED
+                                      else ''))
+    if judge_trial.TRIAL_RETIRED:
+        # The single most important thing an operator can be told here, and
+        # the one thing no column in the row records.
+        print('                  no deadline, and nothing recovers by itself;')
+        print('                  undoing the judgments is '
+              'scripts/rollback_encoder_judge.py --apply')
     print('model / prompt    %s / %s' % (state['model_id'],
                                          state['prompt_version']))
     print('artifact sha256   %s' % state['artifact_sha256'])
@@ -116,10 +124,26 @@ def cmd_arm(args):
 
 def cmd_stop(args):
     with app.app_context():
-        row = judge_trial.request_stop(args.reason)
-    print('trial status is now %s. This stops NEW judgments; the decisions '
-          'already made are still in the counts until recovery runs.'
-          % row.status)
+        # Read the status INSIDE the context. `request_stop` commits, which
+        # expires every attribute on the instance, and the context's teardown
+        # removes the session -- so touching row.status afterwards raised
+        # DetachedInstanceError. The stop was already durable at that point,
+        # so the operator saw a traceback for a command that had in fact
+        # worked, on the one command where believing it had failed is worst.
+        status = judge_trial.request_stop(args.reason).status
+    if judge_trial.TRIAL_RETIRED:
+        print('trial status is now %s. This stops NEW judgments and nothing '
+              'else: the decisions already made stay in the counts until '
+              'somebody runs scripts/rollback_encoder_judge.py --apply, and '
+              'nothing runs it for you.' % status)
+    else:
+        # Read this sentence next to the installed watchdog timer before
+        # believing it: `tick` treats RECOVERING as an instruction to drain,
+        # so with the timer enabled this state lasts under a minute.
+        print('trial status is now %s. This stops NEW judgments; the decisions '
+              'already made are still in the counts until recovery runs -- '
+              'which the watchdog timer will do, within a minute, at '
+              '2000 mentions a run.' % status)
     return 0
 
 

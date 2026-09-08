@@ -176,12 +176,22 @@ def _encoder_or_none(backend, now):
                            'ingestion continues', state.status, why)
             return None
         raise ConfigError('the encoder cannot start: %s' % why)
-    if row.artifact_sha256 and getattr(backend, 'bundle_sha256', None) \
-            and row.artifact_sha256 != backend.bundle_sha256():
+    deployed = (backend.bundle_sha256()
+                if getattr(backend, 'bundle_sha256', None) else None)
+    if judge_trial.TRIAL_RETIRED:
+        # The armed hash stops gating the deploy, because the thing it was
+        # protecting -- the trial's claim that these verdicts came from the
+        # audited files -- ended when the trial was retired. What it must not
+        # stop doing is SAYING which files are serving: this line is the only
+        # forensic record of that, and it is written every startup.
+        logger.info('radar judge: encoder artifact %s serving (trial retired; '
+                    'the armed hash %s no longer gates the deploy)',
+                    (deployed or 'unknown')[:12], (row.artifact_sha256 or '')[:12])
+    elif row.artifact_sha256 and deployed and row.artifact_sha256 != deployed:
         raise ConfigError(
             'the deployed artifact does not match the armed trial '
             '(%s armed, %s deployed); replacing a file is a different trial'
-            % (row.artifact_sha256[:12], backend.bundle_sha256()[:12]))
+            % (row.artifact_sha256[:12], deployed[:12]))
     return backend
 
 

@@ -181,7 +181,7 @@ def test_the_encoder_starts_against_its_own_armed_trial(no_trial):
         assert judge_config.active_primary().id == 'radar-encoder-v1'
 
 
-def test_a_different_artifact_than_the_one_armed_is_refused(no_trial):
+def test_a_different_artifact_than_the_one_armed_is_refused(no_trial, unretired):
     """Replacing any one of the three files is a different trial: swapping
     the tokenizer alone changes every verdict and leaves the weights
     untouched."""
@@ -192,6 +192,59 @@ def test_a_different_artifact_than_the_one_armed_is_refused(no_trial):
                 {'RADAR_JUDGE_PRIMARY': 'encoder',
                  'RADAR_JUDGE_ARTIFACT_DIR': FIXTURE}))
         assert 'does not match' in str(caught.value)
+
+
+def test_a_retired_trial_serves_an_artifact_it_never_armed(no_trial, caplog):
+    """What lets a better model be deployed at all. The armed hash was the
+    trial's claim that these verdicts came from the audited files; retiring
+    the trial ends that claim, so the hash stops gating.
+
+    It must not stop being RECORDED: the startup line naming the live bundle
+    is the only forensic trace of which model is serving, and nothing else
+    distinguishes them -- both write sentiment_model='radar-encoder-v1'."""
+    with flask_app.app_context():
+        armed(artifact_sha256='b' * 64)
+        with caplog.at_level('INFO'):
+            judge_config.initialize_judges(judge_config.resolve_settings(
+                {'RADAR_JUDGE_PRIMARY': 'encoder',
+                 'RADAR_JUDGE_ARTIFACT_DIR': FIXTURE}))
+        assert judge_config.active_primary().id == 'radar-encoder-v1'
+        served = judge_backends.EncoderBackend(FIXTURE).bundle_sha256()[:12]
+        assert any(served in record.getMessage() and 'retired' in record.getMessage()
+                   for record in caplog.records), \
+            'the serving bundle must still be named in the log'
+
+
+def test_retirement_does_not_lift_the_requirement_for_a_trial_row(no_trial):
+    """Retiring the trial removes the DEADLINE and the hash gate. It does not
+    remove the row, and `_may_judge` still refuses without one -- which comes
+    out here as a ConfigError, i.e. the ingest daemon does not start.
+
+    Pinned because the tempting next step after retiring a trial is to delete
+    its row and free the retention pin. That is still a dead daemon."""
+    with flask_app.app_context():
+        assert judge_trial.current() is None
+        with pytest.raises(ConfigError) as caught:
+            judge_config.initialize_judges(judge_config.resolve_settings(
+                {'RADAR_JUDGE_PRIMARY': 'encoder',
+                 'RADAR_JUDGE_ARTIFACT_DIR': FIXTURE}))
+        assert 'no trial is armed' in str(caught.value)
+
+
+@pytest.mark.parametrize('moved', ['model_id', 'prompt_version'])
+def test_retirement_does_not_lift_the_identity_checks(no_trial, moved):
+    """The other two guards Hunk C keeps. Recovery selects by the frozen
+    model id and prompt version, so if the code's constants move, a write
+    would be stamped with the new ones and recovery would never find it --
+    retired or not, that is a different trial and it must not start."""
+    with flask_app.app_context():
+        row = armed()
+        setattr(row, moved, 'something-else')
+        db.session.commit()
+        with pytest.raises(ConfigError):
+            judge_config.initialize_judges(judge_config.resolve_settings(
+                {'RADAR_JUDGE_PRIMARY': 'encoder',
+                 'RADAR_JUDGE_ARTIFACT_DIR': FIXTURE}))
 
 
 @pytest.mark.parametrize('status', [judge_trial.RECOVERING,

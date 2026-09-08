@@ -940,7 +940,8 @@ def test_a_report_about_another_trial_is_refused(no_trial, wrong):
         assert judge_trial.current().audit_evaluated_at is None
 
 
-def test_a_late_report_cannot_postpone_an_expiry_it_already_missed(no_trial):
+def test_a_late_report_cannot_postpone_an_expiry_it_already_missed(
+        no_trial, unretired):
     with flask_app.app_context():
         row = started(arm())
         with pytest.raises(judge_trial.TrialError):
@@ -983,7 +984,8 @@ def test_a_stopped_trial_may_not_judge(no_trial, status):
             judge_trial.guard_encoder_trial(NOW)
 
 
-def test_the_deadline_runs_from_the_first_judgment_not_from_arming(no_trial):
+def test_the_deadline_runs_from_the_first_judgment_not_from_arming(
+        no_trial, unretired):
     """A trial armed and left idle has changed nothing, so it has nothing
     to expire."""
     with flask_app.app_context():
@@ -996,7 +998,7 @@ def test_the_deadline_runs_from_the_first_judgment_not_from_arming(no_trial):
             NOW + dt.timedelta(days=3)
 
 
-def test_the_guard_refuses_on_the_deadline_itself(no_trial):
+def test_the_guard_refuses_on_the_deadline_itself(no_trial, unretired):
     with flask_app.app_context():
         started(arm())
         judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=2, hours=23))
@@ -1004,7 +1006,7 @@ def test_the_guard_refuses_on_the_deadline_itself(no_trial):
             judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=3))
 
 
-def test_a_passing_audit_lifts_the_deadline_but_nothing_else(no_trial):
+def test_a_passing_audit_lifts_the_deadline_but_nothing_else(no_trial, unretired):
     """The deadline exists because a trial that never tests its own
     acceptance rules is not a trial. One that has tested them and passed
     has answered that, so it keeps running -- still suppressed, still
@@ -1030,12 +1032,125 @@ def test_a_failing_audit_does_not_lift_the_deadline(no_trial):
             judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=2, hours=1))
 
 
-def test_an_unevaluated_trial_still_expires_on_day_three(no_trial):
+def test_an_unevaluated_trial_still_expires_on_day_three(no_trial, unretired):
     with flask_app.app_context():
         started(arm())
         judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=2, hours=23))
         with pytest.raises(judge_trial.TrialError):
             judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=3))
+
+
+# ---- the retirement switch --------------------------------------------------
+#
+# Every test here comes in a pair: what a RETIRED trial does, and -- with the
+# `unretired` fixture -- that the same call still does the destructive thing
+# with the switch flipped back. The pairing is the point. Each of these
+# assertions passes by an ABSENCE (nothing expired, nothing drained), and an
+# absence also passes when the setup silently built nothing, so the partner
+# test is what proves the absence was caused by the switch.
+
+def test_a_retired_trial_has_no_deadline_and_keeps_judging(no_trial):
+    with flask_app.app_context():
+        started(arm())
+        assert judge_trial.deadline(judge_trial.current()) is None
+        # Long past the day-3 deadline this trial would otherwise have had.
+        judge_trial.guard_encoder_trial(NOW + dt.timedelta(days=30))
+
+
+def test_a_retired_trial_is_not_stopped_by_its_own_watchdog(no_trial):
+    """The timer keeps firing every minute; it just has nothing to do."""
+    with flask_app.app_context():
+        started(arm())
+        assert judge_trial.tick(NOW + dt.timedelta(days=30)) == {'action': 'none'}
+        row = judge_trial.current()
+        assert row.status == judge_trial.RUNNING
+        assert row.stop_reason is None
+
+
+def test_the_watchdog_still_expires_an_unretired_trial(no_trial, unretired):
+    """The teeth for the test above: flip the switch and the same call at the
+    same moment stops the trial.
+
+    And it runs the whole way: with nothing outstanding to drain the recovery
+    completes inside this one firing, so the row lands on RECOVERED and the
+    retention pin is released. One tick, not a drain anyone could catch."""
+    with flask_app.app_context():
+        started(arm())
+        assert judge_trial.tick(NOW + dt.timedelta(days=30))['action'] == 'expired'
+        assert judge_trial.current().status == judge_trial.RECOVERED
+        assert judge_trial.retention_floor() is None
+
+
+def test_a_retired_stop_halts_judging_and_undoes_nothing(counted_window):
+    """`stop` on a retired trial is what an operator reading the CLI's own
+    output already believes it is: new judgments stop, existing ones stay.
+    Undoing them is rollback_encoder_judge.py --apply, deliberately."""
+    with flask_app.app_context():
+        stopped(now=NOW)
+        for mention in _our_mentions():
+            judged_by_encoder(mention, NOW)
+        db.session.commit()
+        assert len(encoder_mentions()) == 3, 'the fixture must judge something'
+
+        report = judge_trial.tick(NOW + dt.timedelta(days=30))
+
+        assert report == {'action': 'none', 'status': judge_trial.RECOVERING}
+        assert len(encoder_mentions()) == 3
+        # Left RECOVERING, so the operator's decision is still available and
+        # still visible; `may_judge` already refuses on that status.
+        assert judge_trial.current().status == judge_trial.RECOVERING
+        with pytest.raises(judge_trial.TrialError):
+            judge_trial.guard_encoder_trial(NOW)
+
+
+def test_the_status_command_says_the_trial_is_retired(no_trial, capsys):
+    """The CLI is where an operator forms their model of what `stop` will do,
+    and no column in the row records the retirement. It has to be printed."""
+    from scripts import manage_encoder_trial as cli
+    with flask_app.app_context():
+        started(arm())
+    cli.cmd_status()
+    out = capsys.readouterr().out
+    assert 'RETIRED' in out
+    assert 'no deadline' in out
+    assert 'rollback_encoder_judge.py --apply' in out
+
+
+def test_the_stop_command_no_longer_promises_a_recovery(no_trial, capsys):
+    """The old wording -- "still in the counts until recovery runs" -- was
+    true for about 59 seconds, because the watchdog treated RECOVERING as an
+    instruction to drain. Retired, it is true indefinitely, and the CLI has to
+    say who would run the recovery: nobody, unless asked."""
+    from scripts import manage_encoder_trial as cli
+    with flask_app.app_context():
+        started(arm())
+    cli.cmd_stop(_args(reason='test: operator stopped it'))
+    out = capsys.readouterr().out
+    assert 'nothing runs it for you' in out
+    assert 'rollback_encoder_judge.py --apply' in out
+
+
+class _args:
+    def __init__(self, **fields):
+        self.__dict__.update(fields)
+
+
+def test_an_unretired_stop_is_drained_by_the_watchdog(counted_window, unretired):
+    """The teeth: the very same setup and the very same tick, with the switch
+    flipped back, deletes all three judgments inside one firing. This is the
+    behaviour the retirement exists to remove."""
+    with flask_app.app_context():
+        stopped(now=NOW)
+        for mention in _our_mentions():
+            judged_by_encoder(mention, NOW)
+        db.session.commit()
+        assert len(encoder_mentions()) == 3
+
+        report = judge_trial.tick(NOW)
+
+        assert report['action'] == 'recovering'
+        assert report['recovered'] == 3 and report['remaining'] == 0
+        assert encoder_mentions() == []
 
 
 

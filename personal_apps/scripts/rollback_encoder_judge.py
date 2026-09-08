@@ -19,8 +19,12 @@ transactions; run it again to continue. The trial is marked recovered only
 after a fresh count finds nothing left, because that is what releases the
 retention pin holding the evidence.
 
-Tone is never cleared. The trial did not write it, and what is there
-belongs to whoever did.
+Tone is never cleared -- but since 2026-09-07 the trial DOES write it
+(`writes_tone` is True on the encoder backend). So a completed recovery
+returns the relevance columns and leaves attitude, expected_move,
+confidence, llm_sentiment and sentiment_tone_model in place: the rows read
+as unjudged while still showing this model's direction on the board.
+Recovering is not a return to the pre-trial state, and this is why.
 """
 import argparse
 import os
