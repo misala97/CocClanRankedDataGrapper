@@ -150,9 +150,28 @@ ENCODER_MODEL_ID = 'radar-encoder-v1'
 
 # Measured on the VPS (onnxruntime 1.29, 2 vCPU): 7.0-7.5 rows/s at both 2
 # and 4 threads -- it is memory-bandwidth bound, so the extra threads buy
-# nothing. Resident stays flat at 1,081 MB for batch 1 and batch 4 and jumps
-# to 1,715 MB at batch 16, which is the whole reason the batch is 4.
-ENCODER_BATCH_SIZE = 4
+# nothing. Resident stayed flat at 1,081 MB for batch 1 and batch 4 and
+# jumped to 1,715 MB at batch 16, which is why the batch was 4.
+#
+# Lowered to 2 on 2026-09-08 for the 12-layer model at a 512-token window.
+# Measured with scratchpad/label_export/validate_encoder_artifact.py, whose
+# reading is calibrated: it reports 1,048 MB for the shipping small artifact
+# against the 1,081 MB measured on the box, so the delta transfers.
+#
+#     small @256  batch 4   1,048 MB   3.28 rows/s
+#     base  @512  batch 4   1,628 MB   0.84 rows/s
+#     base  @512  batch 2   1,307 MB   0.84 rows/s
+#
+# Batch 2 is 321 MB cheaper and EXACTLY as fast -- memory-bandwidth bound
+# again, so a wider batch buys nothing here either. That matters because the
+# box has 7,884 MB, mariadbd holds 3,214 MB, ~2,177 MB is available and
+# there is NO SWAP: an overrun is a kill, not a slowdown. Batch 4 would add
+# ~580 MB to radar_ingest's 1,351 MB; batch 2 adds ~259 MB.
+#
+# Throughput is not the constraint at any of these. Real demand is ~57
+# rows/hour (5-7 per ten-minute pass) against a 400-row cap, so a pass ends
+# in seconds and PASS_LIMIT stays where it is.
+ENCODER_BATCH_SIZE = 2
 ENCODER_PASS_LIMIT = 400
 ENCODER_INTRA_OP_THREADS = 2
 ENCODER_INTER_OP_THREADS = 1

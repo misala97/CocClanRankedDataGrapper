@@ -389,8 +389,12 @@ def test_every_verdict_lands_on_the_item_it_belongs_to(artifact):
 
 def test_a_partial_final_batch_is_judged_like_any_other(artifact):
     backend = EncoderBackend(artifact)
-    assert backend.batch_size == 4
     items = encoder_items([('zza', 'w%d' % n) for n in range(5)])
+    # The precondition this test needs is that the rows do NOT divide evenly
+    # into batches, which is what makes the last one partial. Asserting the
+    # batch size itself pinned an unrelated constant: tuning it for a bigger
+    # model would have failed this test for no reason.
+    assert len(items) % backend.batch_size != 0
     got = llm_sentiment.judge(items, backend)
     assert set(got) == {1, 2, 3, 4, 5}
 
@@ -409,7 +413,9 @@ def test_the_encoder_reads_no_prompt_and_ignores_a_preamble(artifact):
 def test_the_encoder_declares_what_the_measurements_decided(artifact):
     backend = EncoderBackend(artifact)
     assert backend.id == ENCODER_MODEL_ID == 'radar-encoder-v1'
-    assert backend.batch_size == 4          # batch 16 spiked RSS to 1,715 MB
+    # 2 since 2026-09-08: measured 321 MB cheaper than 4 for the 12-layer
+    # model at 512 and exactly as fast, on a box with no swap.
+    assert backend.batch_size == 2
     assert backend.pass_limit == 400
     # Not a build constant: this is the fixture artifact's own window. See
     # test_both_trained_windows_load_and_the_artifact_decides.
