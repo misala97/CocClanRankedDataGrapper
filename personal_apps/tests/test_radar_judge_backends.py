@@ -411,6 +411,8 @@ def test_the_encoder_declares_what_the_measurements_decided(artifact):
     assert backend.id == ENCODER_MODEL_ID == 'radar-encoder-v1'
     assert backend.batch_size == 4          # batch 16 spiked RSS to 1,715 MB
     assert backend.pass_limit == 400
+    # Not a build constant: this is the fixture artifact's own window. See
+    # test_both_trained_windows_load_and_the_artifact_decides.
     assert backend.max_len == 256
     # Review exists to be an INDEPENDENT second opinion; the student cannot
     # review the question its own teacher set.
@@ -467,14 +469,37 @@ def test_an_unexpected_head_is_named(artifact):
     assert 'sarcasm' in str(caught.value)
 
 
-def test_a_different_window_is_refused(artifact):
-    def widen(config):
-        config['max_len'] = 512
+@pytest.mark.parametrize('window', [128, 384, 1024, None])
+def test_an_untrained_window_is_refused(artifact, window):
+    """The set is closed on purpose. A window nobody trained at is a mistake
+    however plausible the number looks, and the sequence axis is baked into
+    the ONNX graph, so the artifact cannot be reinterpreted at another one."""
+    def rewrite(config):
+        config['max_len'] = window
 
-    rewrite_config(artifact, widen)
+    rewrite_config(artifact, rewrite)
     with pytest.raises(EncoderArtifactError) as caught:
         EncoderBackend(artifact)
-    assert '512' in str(caught.value)
+    assert str(window) in str(caught.value)
+
+
+@pytest.mark.parametrize('window', [256, 512])
+def test_both_trained_windows_load_and_the_artifact_decides(artifact, window):
+    """This is what keeps the model rollback alive.
+
+    Every checkpoint trained after 2026-09-07 uses 512 while the shipping
+    artifact uses 256, so a build that accepted only one of them could serve
+    only one of them -- and flipping `active.json` back to the other would be
+    a daemon that will not start, which is the entire safety net for swapping
+    a model. The window is a property of the ARTIFACT, and the tokenizer's
+    padding length follows it rather than a constant."""
+    def rewrite(config):
+        config['max_len'] = window
+
+    rewrite_config(artifact, rewrite)
+    backend = EncoderBackend(artifact)
+    assert backend.max_len == window
+    assert backend.config['max_len'] == window
 
 
 def test_an_artifact_for_another_id_is_refused(artifact):
@@ -564,3 +589,31 @@ def test_the_encoder_id_fits_the_provenance_column():
     from models import RadarMention
     assert len(ENCODER_MODEL_ID) <= \
         RadarMention.__table__.c.sentiment_model.type.length
+
+
+def test_the_packager_ships_only_windows_the_runtime_serves():
+    """The packager copies the allowed windows rather than importing them --
+    same reason it copies HEADS: it runs in the training environment, and a
+    check that reads from the thing it checks catches nothing.
+
+    The cost of copying is drift, and this drift has one direction that is
+    silent until it is expensive: an artifact the packager is willing to
+    WRITE but the daemon refuses to LOAD is not caught locally, not caught by
+    scp, and not caught until the ingest daemon fails to start on the box.
+
+    Importing the script is safe -- torch and transformers are imported
+    inside main(), not at module scope.
+    """
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'scripts', 'package_encoder_artifact.py')
+    spec = importlib.util.spec_from_file_location('_packager', path)
+    packager = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(packager)
+
+    assert tuple(packager.ALLOWED_MAX_LENS) == tuple(judge_backends.ENCODER_ALLOWED_MAX_LENS)
+    assert packager.MODEL_ID == judge_backends.ENCODER_MODEL_ID
+    # The heads the packager writes must be the ones _validate accepts, in
+    # order -- an argmax index means a different class in each otherwise.
+    assert {k: tuple(v) for k, v in packager.HEADS.items()} == \
+        {k: tuple(v) for k, v in llm_sentiment._FIELD_ENUMS.items()}

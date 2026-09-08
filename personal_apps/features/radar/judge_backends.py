@@ -157,10 +157,27 @@ ENCODER_PASS_LIMIT = 400
 ENCODER_INTRA_OP_THREADS = 2
 ENCODER_INTER_OP_THREADS = 1
 
-# The window the shipping artifact was trained at. 512 was measured too and
-# scored identically on both locked sets while doubling inference memory and
-# time, so 256 is a decision, not a default.
-ENCODER_MAX_LEN = 256
+# The token windows a deployed artifact may declare. NOT the window this
+# build runs at: that is `config['max_len']`, read off the artifact below and
+# used as the tokenizer's pad-and-truncate length, because the sequence axis
+# is baked into the ONNX graph at export time (only the batch axis is
+# dynamic) and the artifact is the only thing that knows which it is.
+#
+# This was a single 256, which made the constant an assertion that the
+# artifact matched what the build was written for. That was fine while one
+# model existed and became a wall the moment a second did: every checkpoint
+# trained after 2026-09-07 uses 512, so a bare bump to 512 would have made
+# the shipping 256 artifact fail validation -- and with it the `active.json`
+# rollback, which is the whole safety net for swapping a model.
+#
+# Closed set rather than "any integer": a window nobody chose is still a
+# mistake, and the two values here are the two that have been trained.
+#
+# On the trade -- measured over the 50,000-row label export, tokenized as the
+# pair the judge actually reads: median 50 tokens, p90 212, p95 397; 8.16%
+# exceed 256 and 3.94% exceed 512. Padding is fixed-length, so the window is
+# paid on every row, not only the long ones.
+ENCODER_ALLOWED_MAX_LENS = (256, 512)
 
 DEFAULT_ARTIFACT_DIR = os.path.join(os.path.dirname(__file__), '..', '..',
                                     'artifacts', 'judge')
@@ -276,10 +293,11 @@ class EncoderBackend:
             if not os.path.isfile(candidate):
                 raise EncoderArtifactError('%s: no %s' % (version_dir, what))
 
-        if config.get('max_len') != ENCODER_MAX_LEN:
+        if config.get('max_len') not in ENCODER_ALLOWED_MAX_LENS:
             raise EncoderArtifactError(
-                'artifact max_len is %r, this build reads %d tokens'
-                % (config.get('max_len'), ENCODER_MAX_LEN))
+                'artifact max_len is %r; this build serves %s'
+                % (config.get('max_len'),
+                   ' or '.join('%d' % n for n in ENCODER_ALLOWED_MAX_LENS)))
 
         heads = config.get('heads')
         if not isinstance(heads, dict):

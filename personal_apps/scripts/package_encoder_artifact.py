@@ -6,7 +6,14 @@ Run it with the TRAINING environment, not the application venv:
     /c/Users/michi/Desktop/radar_encoder_venv/Scripts/python.exe \
         personal_apps/scripts/package_encoder_artifact.py \
         --model C:/Users/michi/Desktop/radar_labels/encoder/model-train13000 \
-        --out   personal_apps/artifacts/judge
+        --out   C:/Users/michi/Desktop/radar_labels/artifact-<name>
+
+NEVER point --out at a root that already holds a shipping artifact. The
+version directory is hardcoded to `v1`, so a second run overwrites the first
+IN PLACE -- and `packaged_at_git_head` goes into config.json, which is inside
+the bundle hash, so what it overwrote cannot be rebuilt byte-for-byte. Package
+into a fresh root and place the files on the server yourself; `active.json` is
+outside the hash precisely so the pointer, not the files, is the switch.
 
 torch and onnx are needed here and are deliberately NOT runtime
 dependencies: the application only ever RUNS a graph, which onnxruntime
@@ -52,7 +59,11 @@ HEADS = {
     'expected_move': ['up', 'down', 'flat', 'unknown'],
     'confidence': ['high', 'medium', 'low'],
 }
-MAX_LEN = 256
+# Copied literally, for the same reason HEADS is: this must be able to
+# disagree with the runtime. Keep in step with
+# judge_backends.ENCODER_ALLOWED_MAX_LENS -- an artifact this build is willing
+# to write but the daemon refuses to load is a deploy that dies at startup.
+ALLOWED_MAX_LENS = (256, 512)
 MODEL_ID = 'radar-encoder-v1'
 
 
@@ -94,7 +105,9 @@ def main():
                              'and its config.json')
     parser.add_argument('--out', required=True,
                         help='artifact root; active.json and v1/ go here')
-    parser.add_argument('--base', default='microsoft/deberta-v3-small')
+    parser.add_argument('--base', default=None,
+                        help='backbone; defaults to the one the checkpoint '
+                             'records, which is the only one its weights fit')
     parser.add_argument(
         '--trainer',
         default='C:/Users/michi/Desktop/CodingStuff/personal_apps/'
@@ -119,9 +132,29 @@ def main():
 
     training = json.load(open(os.path.join(args.model, 'config.json'),
                               encoding='utf-8'))
-    if training.get('max_len') != MAX_LEN:
-        raise SystemExit('the trained model uses max_len %r; this build reads '
-                         '%d tokens' % (training.get('max_len'), MAX_LEN))
+    # Same argument as max_len below: the checkpoint knows which backbone its
+    # weights fit, so ask it rather than default to whichever shipped first.
+    # A wrong --base does fail -- load_state_dict rejects 12 layers of weights
+    # against 6 -- but only because those two happen to differ in depth, and
+    # only after minutes of loading. Deriving it means the question never
+    # arises.
+    base = args.base or training.get('base')
+    if not base:
+        raise SystemExit('the checkpoint records no base model and --base was '
+                         'not given; refusing to guess the backbone')
+    # The window comes from the CHECKPOINT, not from a constant here. It has
+    # to be one number in three places at once -- what the weights were
+    # trained at, the sequence axis baked into the exported graph (only the
+    # batch axis is dynamic below), and the `max_len` written into
+    # config.json that the runtime tokenizer pads to. Deriving it once makes
+    # those three agree by construction; two hardcoded numbers only agreed as
+    # long as somebody kept them in step, and they stopped being in step the
+    # first time a model was trained at a different window.
+    max_len = training.get('max_len')
+    if max_len not in ALLOWED_MAX_LENS:
+        raise SystemExit('the trained model uses max_len %r; this build ships '
+                         '%s' % (max_len,
+                                 ' or '.join('%d' % n for n in ALLOWED_MAX_LENS)))
     for field, classes in HEADS.items():
         if list(training.get('heads', {}).get(field, [])) != classes:
             raise SystemExit(
@@ -151,15 +184,15 @@ def main():
                              token_type_ids=token_type_ids)
             return tuple(out[name] for name in self.order)
 
-    model = MultiHead(args.base)
+    model = MultiHead(base)
     state = torch.load(os.path.join(args.model, 'weights.pt'),
                        map_location='cpu')
     model.load_state_dict(state)
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained(args.base)
+    tokenizer = AutoTokenizer.from_pretrained(base)
     example = tokenizer('AAPL', 'placeholder text', truncation=True,
-                        max_length=MAX_LEN, padding='max_length',
+                        max_length=max_len, padding='max_length',
                         return_tensors='pt')
     names = ['input_ids', 'attention_mask', 'token_type_ids']
     inputs = (example['input_ids'], example['attention_mask'],
@@ -192,17 +225,23 @@ def main():
                      'precision': 'fp32'})
     with open(os.path.join(version_dir, 'config.json'), 'w',
               encoding='utf-8') as out:
-        json.dump({'base': args.base, 'heads': HEADS, 'max_len': MAX_LEN,
+        json.dump({'base': base, 'heads': HEADS, 'max_len': max_len,
                    'manifest': manifest}, out, indent=1)
     with open(os.path.join(args.out, 'active.json'), 'w',
               encoding='utf-8') as out:
         json.dump({'path': 'v1/', 'id': MODEL_ID}, out, indent=1)
 
     size = os.path.getsize(model_path) / 1e6
-    print('wrote %s (%.1f MB, fp32, opset %d)' % (version_dir, size, OPSET))
+    print('wrote %s (%.1f MB, fp32, opset %d, max_len %d)'
+          % (version_dir, size, OPSET, max_len))
     if size < 400:
-        print('WARNING: an fp32 DeBERTa-v3-small export is ~566 MB. This '
-              'looks like a quantized file.', file=sys.stderr)
+        # INT8 was measured and rejected (relevance 0.848 -> 0.692, removal
+        # precision 0.861 -> 0.750), and a quantized file is the one way this
+        # export goes wrong without failing. fp32 references: deberta-v3-small
+        # ~566 MB, deberta-v3-base ~740 MB. Anything under 400 is neither.
+        print('WARNING: %.1f MB is far below an fp32 export (small ~566 MB, '
+              'base ~740 MB). This looks like a quantized file.' % size,
+              file=sys.stderr)
     print()
     print('bundle sha256: %s' % bundle_sha256(version_dir))
     print()
