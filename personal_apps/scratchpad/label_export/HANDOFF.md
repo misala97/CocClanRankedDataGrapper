@@ -1,5 +1,12 @@
 # Radar extractor work — handoff, 2026-09-07
 
+> **2026-09-08: the extractor / NER work has its own handover --
+> `HANDOVER-EXTRACTOR-2026-09-08.md` beside this file. Read that first for
+> anything about the span tagger, the headroom probe, or what comes next
+> for extraction. The trial retirement and base deploy are in
+> `TRIAL-RETIREMENT-HANDOVER.md` / `TRIAL-RETIREMENT-PLAN.md`. This file is
+> the older migration-era log and is kept for its traps and its history.**
+
 Branch `dev_personal`, repo `C:\Users\michi\Desktop\CodingStuff`, nothing merged
 to main and nothing deployed. The encoder-judge trial is LIVE on the VPS and
 MUST NOT be disturbed: an extractor change moves the mention population and
