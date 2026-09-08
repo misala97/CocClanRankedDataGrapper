@@ -491,3 +491,54 @@ under-finds exactly the shape that matters here. Zero-shot GLiNER, which
 treats `Avgo` as ticker-like on sight, is the better finder for this pool
 today. Either finder needs the Title-case symbol RULE beside it, and that
 rule alone recovers most of this without a model.
+
+---
+
+## Shipped 2026-09-08 17:35 CEST — the extractor counts cased symbols and names alone
+
+`a40eb4e`, `aabcb05`, `617917c`; deployed as `b7d8adf`. Stamp
+`3f96922d51fe4ef0 -> f782308bdcb9366c`; every baseline restarts.
+
+Four new candidate sources in `extraction._scan`, all at the source's bare
+confidence (high on finance-native Reddit, low elsewhere), all gated by
+two corpus-derived lists shipped as data files and hashed into the stamp
+(`features/radar/data/ordinary_words.txt`, `name_shapes.txt`, regenerated
+by `scripts/refresh_corpus_instruments.py`):
+
+- `titlecase_symbol` -- `Nvda`, `Avgo`, `Dell` (`[A-Z][a-z]{2,4}`, not an
+  ordinary word)
+- `lowercase_symbol` -- `lulu`, `soxl`, `mu` (`[a-z]{3,5}`, not an ordinary
+  word)
+- `name_only` -- a distinctive listing token the corpus writes like a name,
+  with exactly one claimant, not an ordinary word, not on the name stoplist,
+  on the author's own text only
+- `alias` -- NAME_ALIASES and METONYMS, moved into config, author text only
+
+**Measured on the raw week before shipping**, first as built and then after
+two defects the measurement itself exposed:
+
+    mentions / week           46,527 -> 93,628 (as built) -> 74,820 (as shipped)
+    posts with a mention      36,791 ->                      57,204
+    name_only                       29,861 (as built) ->      9,005
+    titlecase_symbol                                          7,198
+    lowercase_symbol                                          7,241
+    alias                                                     4,558
+
+The two defects: r/thetagang's daily thread "The Lounge" handed LVLU 1,208
+comments through the parent title (`lounge` is a listing token), so names
+and aliases count on the author's own text only; and 36% of name_only rode
+on tokens several listings share (`apple` -> APLE the REIT, `fidelity` ->
+three listings none of them Fidelity), so a shared token names nobody
+unless the alias table settles it (apple, alphabet, goldman, hertz, webull).
+
+First cycle under the new daemon (17:37): Reddit wallstreetbets intake
+`lowercase_symbol 7, bare_source_high 7, titlecase_symbol 2, name_only 1`;
+2,738 bucket rows on the new stamp in 20 minutes. The prize as measured
+today is ~28,000 real mentions a week, not the ~9,000 quoted earlier: the
+earlier figure counted only posts the board had never seen.
+
+Pre-existing, not fixed: `USD` draws ~2,000 bare mentions a week from
+"EUR/USD"; a stopword entry, separate change. Judge hard negatives (§6 0c
+of the handover) remain the open item; the ordinary-word gate keeps
+`Abt`, `Gold`, `Corn` out of the judge's reach, but any finder that ships
+later still needs them.
