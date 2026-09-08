@@ -227,15 +227,17 @@ def _load_tokens(name):
         return frozenset(line.strip() for line in handle if line.strip())
 
 
-def _file_sha(name):
-    with open(os.path.join(_DATA_DIR, name), 'rb') as handle:
-        return hashlib.sha256(handle.read()).hexdigest()[:16]
+def _tokens_sha(tokens):
+    # Over the sorted tokens, not the file's bytes: Git rewrites line
+    # endings per platform, and the stamp must not differ between the
+    # machine that ran the tests and the machine that counts.
+    return hashlib.sha256('\n'.join(sorted(tokens)).encode('utf-8')).hexdigest()[:16]
 
 
 ORDINARY_WORDS = _load_tokens('ordinary_words.txt')
-ORDINARY_WORDS_SHA = _file_sha('ordinary_words.txt')
+ORDINARY_WORDS_SHA = _tokens_sha(ORDINARY_WORDS)
 NAME_SHAPES = _load_tokens('name_shapes.txt')
-NAME_SHAPES_SHA = _file_sha('name_shapes.txt')
+NAME_SHAPES_SHA = _tokens_sha(NAME_SHAPES)
 
 # A company named without its symbol: a distinctive token from its listing
 # name, written like a name. The listing name is the universe's; whether
