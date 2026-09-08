@@ -172,20 +172,41 @@ one post, median text 85 chars, no empty texts. Ids -4,000,001 ..
 Prompts: `radar_labels/newshape-01/batch-0001..0040.prompt.txt`, the
 production prompt bytes, 40 rows each.
 
-Remaining, in order (paused at Michi's 90% session limit):
+**LABELLING RUNNING** (his session limit reset; 40 Sonnet subagent
+batches of 40, ~95k tokens and ~4-6 minutes each, 20 concurrent is the
+harness cap). The pipeline was validated on the first ten before the rest
+were spent: `collect` booked 400 labels, all 400 validated through the
+production enum boundary, no partial or failed batch.
+
+First 400 rows, relevant share by shape -- the extractor shapes' own
+precision, measured for the first time:
+
+    alias              55 of 68   0.81
+    name_only          96 of 135  0.71
+    lowercase_symbol   61 of 105  0.58
+    titlecase_symbol   51 of 92   0.55
+
+Overall 263 relevant / 126 irrelevant / 11 uncertain. So roughly a third
+of what the new rules count is junk, and the judge is what has to catch
+it -- which is the whole reason for the hard negatives.
+
+Remaining, in order:
 
     # 1. the spend: 40 Sonnet subagent batches answer newshape-01/batch-*.prompt.txt
     #    into batch-*.verdict.json, the same way the recall waves were labelled
     cd personal_apps
     PYTHONPATH=. python scratchpad/label_export/label_harness.py collect \
         --run newshape-01 --labels labels-newshape.jsonl
-    # 2. freeze 20% (320 rows) as test-newshape.json BEFORE training, grouped by
-    #    post and stratified by shape -- a fourth locked set, because no locked
-    #    set today holds a Title-case symbol or an alias. freeze_test_sets.py is
-    #    hardcoded to the production export; this needs its own small script.
-    # 3. add (labels-newshape, candidates-newshape) to train_encoder.PAIRS and a
-    #    newshape_labels_sha to the manifest + checkpointing.SETTINGS_THAT_MUST_MATCH
-    # 4. the retrain below, then deliverable 4.
+    # 2. freeze the fourth locked set (DONE as code, 7e57a1b)
+    PYTHONPATH=. python scratchpad/label_export/freeze_newshape.py \
+        --labels C:/Users/michi/Desktop/radar_labels/labels-newshape.jsonl \
+        --export C:/Users/michi/Desktop/radar_labels/candidates-newshape-2026-09-08.jsonl \
+        --out C:/Users/michi/Desktop/radar_labels/test-newshape.json --target 320
+    # 3. wiring: DONE (7e57a1b). PAIRS reads the wave when its labels exist,
+    #    newshape_labels_sha is a checkpoint setting, and split() returns the
+    #    locked sets as a mapping so `newshape` reports beside the other three.
+    # 4. the retrain below (needs a GPU "when"), then deliverable 4 via
+    #    scratchpad/label_export/compare_judges.py (DONE as code, 8ad7899).
 
 ## Deliverable 3 -- the retrain (NOT STARTED, needs a "when")
 
