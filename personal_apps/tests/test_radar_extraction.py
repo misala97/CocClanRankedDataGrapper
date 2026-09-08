@@ -148,10 +148,15 @@ def test_possessives_and_punctuation_do_not_break_matching():
     assert symbols(None, "GME's move, (AAPL) too.") == ['AAPL', 'GME']
 
 
-def test_lowercase_prose_is_not_a_ticker():
-    """Bare matching is uppercase-only. 'it is all gme' must yield nothing --
-    lowercase is prose, and treating it as symbols would match constantly."""
-    assert symbols(None, 'it is all gme to me') == []
+def test_lowercase_prose_is_not_a_ticker(corpus):
+    """`it` and `all` are prose and must never match; that was the reason
+    bare matching went uppercase-only. Since 2026-09-08 the corpus's own
+    word list carries that distinction instead of the case rule, so `gme`
+    -- which nobody writes as a word -- is a mention at the source's bare
+    confidence, `low` here where no source is named."""
+    assert symbols(None, 'it is all gme to me') == ['GME']
+    assert extract_tickers(None, 'it is all gme to me', LOOKUP) == [('GME', 'low')]
+    assert symbols(None, 'it is all to me') == []
 
 
 def test_empty_input_is_safe():
@@ -624,3 +629,140 @@ def test_bare_low_reason_on_a_general_source():
 def test_the_wrapper_is_byte_compatible():
     assert extract_tickers('title $GME', 'body', SCOPE_LOOKUP) == \
         [('GME', 'high')]
+
+
+# ---- cased symbols and names alone, 2026-09-08 --------------------------------
+#
+# Hermetic: the corpus word lists are monkeypatched to small sets, so these
+# pin the RULES, not the contents of a data file that is regenerated.
+
+from features.radar import extraction as ext
+from features.radar.extraction import extract, prepare_extraction_input
+
+CASED_LOOKUP = annotate_distinctive({
+    'NVDA': {'name': 'NVIDIA Corporation', 'exchange': 'NASDAQ'},
+    'DELL': {'name': 'Dell Technologies Inc', 'exchange': 'NYSE'},
+    'AVGO': {'name': 'Broadcom Inc', 'exchange': 'NASDAQ'},
+    'LULU': {'name': 'Lululemon Athletica Inc', 'exchange': 'NASDAQ'},
+    'GOLD': {'name': 'Barrick Gold Corporation', 'exchange': 'NYSE'},
+    'TGT': {'name': 'Target Corporation', 'exchange': 'NYSE'},
+    'IT': {'name': 'Gartner Inc', 'exchange': 'NYSE'},
+    'MRNA': {'name': 'Moderna Inc', 'exchange': 'NASDAQ'},
+    'DJCO': {'name': 'Daily Journal Corporation', 'exchange': 'NASDAQ'},
+    'MNDY': {'name': 'monday.com Ltd', 'exchange': 'NASDAQ'},
+    'GOOGL': {'name': 'Alphabet Inc', 'exchange': 'NASDAQ'},
+    'META': {'name': 'Meta Platforms Inc', 'exchange': 'NASDAQ'},
+    'NVDL': {'name': 'ProShares Ultra Long NVDA Daily ETF', 'exchange': 'NASDAQ'},
+    'AAPL': {'name': 'Apple Inc', 'exchange': 'NASDAQ'},
+    'APLE': {'name': 'Apple Hospitality REIT Inc', 'exchange': 'NYSE'},
+    'LVLU': {'name': "Lulu's Fashion Lounge Holdings Inc", 'exchange': 'NASDAQ'},
+})
+
+
+@pytest.fixture
+def corpus(monkeypatch):
+    monkeypatch.setattr(ext, 'ORDINARY_WORDS', frozenset({'gold', 'target', 'it', 'all', 'daily', 'go'}))
+    monkeypatch.setattr(ext, 'NAME_SHAPES', frozenset({'nvidia', 'moderna', 'daily', 'monday', 'dell', 'gartner', 'apple', 'lounge'}))
+    monkeypatch.setattr(ext, 'NAME_STOPWORDS', frozenset({'monday'}))
+    monkeypatch.setattr(ext, 'NAME_ALIASES', {'google': 'GOOGL', 'apple': 'AAPL'})
+    monkeypatch.setattr(ext, 'METONYMS', {'zuck': 'META', 'cook': None})
+    ext._NAME_INDEX_CACHE[:] = []
+
+
+def reddit(text, **kwargs):
+    """A finance-native source: bare tokens are worth `high` there."""
+    prepared = prepare_extraction_input('reddit:t', None, text)
+    return {m.ticker: (m.confidence, m.reason)
+            for m in extract(prepared, CASED_LOOKUP, bare_confidence='high', **kwargs)}
+
+
+def test_a_symbol_written_as_a_name_is_a_mention(corpus):
+    assert reddit('Nvda going to levels not seen since thursday') == {'NVDA': ('high', 'titlecase_symbol')}
+    assert reddit('Avgo looking like it will leg down')['AVGO'] == ('high', 'titlecase_symbol')
+
+
+def test_a_lowercase_symbol_is_a_mention(corpus):
+    assert reddit('bought 100k of yoga pants at lulu today') == {'LULU': ('high', 'lowercase_symbol')}
+
+
+def test_an_ordinary_word_is_not_a_symbol_however_it_is_capitalised(corpus):
+    assert reddit('Gold just had a run, gold is up') == {}
+    assert reddit('heading to Target for an icee') == {}
+    assert reddit('It is what it is') == {}
+
+
+def test_an_ordinary_word_still_matches_as_a_cashtag_or_in_caps(corpus):
+    assert reddit('$GOLD to the moon')['GOLD'] == ('high', 'explicit_cashtag')
+    assert reddit('GOLD to the moon')['GOLD'] == ('high', 'bare_source_high')
+
+
+def test_a_cased_symbol_corroborated_by_its_name_is_bare_named(corpus):
+    assert reddit('dell is a datacenter play now, Dell Technologies')['DELL'] == ('high', 'bare_named')
+
+
+def test_cased_symbols_follow_the_bare_confidence_of_the_source(corpus):
+    prepared = prepare_extraction_input('bluesky', None, 'Nvda is a king')
+    [match] = extract(prepared, CASED_LOOKUP, bare_confidence='low')
+    assert (match.ticker, match.confidence, match.reason) == ('NVDA', 'low', 'titlecase_symbol')
+    assert extract(prepared, CASED_LOOKUP, allow_bare=False) == []
+
+
+def test_a_company_named_without_its_symbol_is_a_mention(corpus):
+    assert reddit('do not buy moderna today') == {'MRNA': ('high', 'name_only')}
+    assert reddit('Nvidia will get much higher')['NVDA'] == ('high', 'name_only')
+
+
+def test_a_listing_token_that_is_an_ordinary_word_or_a_stopword_names_nobody(corpus):
+    assert reddit('my daily routine is coffee') == {}          # Daily Journal
+    assert reddit('see you Monday') == {}                        # monday.com
+
+
+def test_a_listing_token_that_is_itself_a_symbol_names_nobody(corpus):
+    # `dell` is DELL's own symbol: the symbol rules own it, name_only does not
+    # get a second bite, and the case of the writing decides.
+    assert reddit('dell')['DELL'][1] != 'name_only'
+
+
+def test_aliases_and_metonyms_resolve_and_a_none_metonym_does_not(corpus):
+    assert reddit('google is cooked') == {'GOOGL': ('high', 'alias')}
+    assert reddit('zuck will be fine') == {'META': ('high', 'alias')}
+    assert reddit('cook is fine') == {}
+
+
+def test_a_leveraged_fund_does_not_own_its_underlyings_symbol_as_a_name(corpus):
+    # NVDL's name carries `nvda` as a token; a post writing `nvda` is NVDA.
+    got = reddit('nvda daily is a trap')
+    assert 'NVDL' not in got and got['NVDA'][1] == 'lowercase_symbol'
+
+
+def test_the_stamp_moves_with_the_corpus_lists(monkeypatch):
+    from features.radar import config
+    before = config.source_config_version()
+    monkeypatch.setattr(config, 'ORDINARY_WORDS_SHA', 'ffffffffffffffff')
+    assert config.source_config_version() != before
+
+
+def test_a_name_shared_by_listings_names_nobody_unless_the_alias_table_settles_it(corpus):
+    # `apple` claims AAPL and APLE; the alias says AAPL, and only AAPL.
+    assert reddit('Apple had a good quarter') == {'AAPL': ('high', 'alias')}
+    # Without an alias the same ambiguity names nobody.
+    ext.NAME_ALIASES.pop('apple')
+    assert reddit('Apple had a good quarter') == {}
+
+
+def test_a_name_in_the_parent_title_is_not_a_mention_by_the_commenter(corpus):
+    # r/thetagang's daily thread, "The Lounge", and a listing token `lounge`.
+    prepared = prepare_extraction_input('reddit:t', '/u/op on The Lounge', 'sold puts today',
+                                        author='/u/me')
+    assert extract(prepared, CASED_LOOKUP, bare_confidence='high') == []
+    prepared = prepare_extraction_input('reddit:t', '/u/op on The Lounge', 'lounge stock is up',
+                                        author='/u/me')
+    [match] = extract(prepared, CASED_LOOKUP, bare_confidence='high')
+    assert (match.ticker, match.reason, match.in_author_text) == ('LVLU', 'name_only', True)
+
+
+def test_a_symbol_in_the_parent_title_still_counts_like_a_bare_token(corpus):
+    prepared = prepare_extraction_input('reddit:t', '/u/op on NVDA earnings thread', 'lets go',
+                                        author='/u/me')
+    [match] = extract(prepared, CASED_LOOKUP, bare_confidence='high')
+    assert (match.ticker, match.in_thread_context, match.in_author_text) == ('NVDA', True, False)

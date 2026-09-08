@@ -37,44 +37,72 @@ def _raw_dir(tmp_path, lines):
 NOT_COMMON = lambda word: False   # noqa: E731
 
 
-def test_a_stored_post_and_an_invisible_post_are_told_apart():
+# Since 2026-09-08 production itself reads the corpus word lists, so the
+# loose pass has nothing to reject for a name alone, a lowercase symbol, an
+# alias or a metonym: those are ACCEPTED, with a reason. These tests pin the
+# division of labour as it is now. `_align` makes production's lists agree
+# with the small corpus a test describes, so a regenerated data file cannot
+# move a rule test.
+from features.radar import extraction as _ext   # noqa: E402
+
+
+def _align(monkeypatch, ordinary=(), shapes=('nvidia', 'gopro', 'moderna', 'apple')):
+    monkeypatch.setattr(_ext, 'ORDINARY_WORDS', frozenset(ordinary))
+    monkeypatch.setattr(_ext, 'NAME_SHAPES', frozenset(shapes))
+    _ext._NAME_INDEX_CACHE[:] = []
+
+
+def _accepted(row):
+    return [(m['ticker'], m['reason']) for m in row['accepted']]
+
+
+def test_a_stored_post_and_an_invisible_post_are_told_apart(monkeypatch):
+    _align(monkeypatch)
     stored = pop.classify(_line('t1_a', 'loading up on $GME'), LOOKUP, NOT_COMMON)
-    invisible = pop.classify(_line('t1_b', 'nvda is cooking'), LOOKUP, NOT_COMMON)
+    lowercase = pop.classify(_line('t1_b', 'nvda is cooking'), LOOKUP, NOT_COMMON)
+    invisible = pop.classify(_line('t1_c', 'nothing about anything here'), LOOKUP, NOT_COMMON)
     assert stored['stored_today'] is True
     assert [m['ticker'] for m in stored['accepted']] == ['GME']
+    # A lowercase symbol is stored since 2026-09-08 (high on a finance sub).
+    assert lowercase['stored_today'] is True
+    assert _accepted(lowercase) == [('NVDA', 'lowercase_symbol')]
     assert invisible['stored_today'] is False
-    assert invisible['accepted'] == []
+    assert invisible['accepted'] == [] and invisible['rejected'] == []
 
 
-def test_every_rejection_cause_is_named():
+def test_every_rejection_cause_is_named(monkeypatch):
+    _align(monkeypatch)
     row = pop.classify(_line(
         't1_c', 'nvda is cooking, AI names ripping, Nvidia and GoPro too, $ZZZZ and $F'),
         LOOKUP, NOT_COMMON)
     causes = {(c['symbol'], c['cause']) for c in row['rejected']}
-    assert ('NVDA', 'lowercase_symbol') in causes
     assert ('AI', 'stopword') in causes
-    assert ('GPRO', 'name_only') in causes            # 'GoPro' written, symbol absent
     assert ('ZZZZ', 'cashtag_not_in_universe') in causes
     assert ('F', 'single_letter_cashtag') in causes   # reddit does not allow $F
-    # Nvidia is named AND its symbol appears (lowercase): the lowercase
-    # candidate carries the name evidence, no second name_only row.
-    assert ('NVDA', 'name_only') not in causes
+    # What production now counts is not a rejection: `nvda` corroborated by
+    # `Nvidia` is bare_named, `GoPro` alone is name_only.
+    accepted = dict(_accepted(row))
+    assert accepted['NVDA'] == 'bare_named'
+    assert accepted['GPRO'] == 'alias'                 # `gopro` is an alias key; the alias speaks
+    assert ('NVDA', 'lowercase_symbol') not in causes and ('GPRO', 'name_only') not in causes
 
 
-def test_a_lowercase_word_that_is_common_is_not_a_candidate():
+def test_a_lowercase_word_that_is_common_is_not_a_candidate(monkeypatch):
+    _align(monkeypatch, ordinary={'app'})
     common = lambda word: word in {'app'}   # noqa: E731
     row = pop.classify(_line('t1_d', 'the app is broken, gme fine'), LOOKUP, common)
-    causes = {(c['symbol'], c['cause']) for c in row['rejected']}
-    assert ('GME', 'lowercase_symbol') in causes
-    assert ('APP', 'lowercase_symbol') not in causes
+    assert _accepted(row) == [('GME', 'lowercase_symbol')]
+    assert row['rejected'] == []                      # `app` is a word, nowhere
 
 
-def test_a_lowercase_name_nobody_writes_as_a_word_is_a_candidate():
+def test_a_lowercase_name_nobody_writes_as_a_word_is_a_candidate(monkeypatch):
+    _align(monkeypatch)
     """Reversed on purpose: requiring the capital cost `my gopro broke` and
     `do not buy moderna today`, and the capital was never the evidence --
     being a word rather than a name is, and the corpus's casing says which."""
     row = pop.classify(_line('t1_e', 'my gopro broke'), LOOKUP, NOT_COMMON)
-    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('GPRO', 'name_only')]
+    assert row['rejected'] == []
+    assert _accepted(row) == [('GPRO', 'alias')]
 
 
 def test_an_accepted_ticker_is_never_also_a_rejected_candidate():
@@ -98,7 +126,8 @@ def test_stopword_candidates_come_from_author_text_only():
     assert row['rejected'] == []
 
 
-def test_the_report_counts_the_population(tmp_path):
+def test_the_report_counts_the_population(tmp_path, monkeypatch):
+    _align(monkeypatch)
     raw = _raw_dir(tmp_path, [
         _line('t1_a', 'loading up on $GME'),
         _line('t1_b', 'nvda is cooking'),
@@ -108,14 +137,14 @@ def test_the_report_counts_the_population(tmp_path):
     out = tmp_path / 'out'
     summary = pop.run(raw, LOOKUP, out, common_words=set())
     assert summary['posts'] == 4
-    assert summary['stored_today'] == 1
-    assert summary['invisible'] == 2
+    assert summary['stored_today'] == 2               # $GME, and `nvda` since 2026-09-08
+    assert summary['invisible'] == 1
     assert summary['gated'] == 1
-    assert summary['by_reason'] == {'explicit_cashtag': 1}
-    assert summary['rejected_by_cause'] == {'lowercase_symbol': 1, 'stopword': 1}
+    assert summary['by_reason'] == {'explicit_cashtag': 1, 'lowercase_symbol': 1}
+    assert summary['rejected_by_cause'] == {'stopword': 1}
     with open(out / 'rejected-candidates.jsonl', encoding='utf-8') as handle:
         rows = [json.loads(line) for line in handle]
-    assert {r['external_id'] for r in rows} == {'t1_b', 't3_c'}
+    assert {r['external_id'] for r in rows} == {'t3_c'}
     assert all('author_text' in r and 'stored_today' in r for r in rows)
 
 
@@ -145,15 +174,17 @@ def test_labelled_rows_join_the_capture_by_external_id():
     assert missing == 1
 
 
-def test_a_long_ordinary_word_written_capitalised_is_not_a_company_name():
+def test_a_long_ordinary_word_written_capitalised_is_not_a_company_name(monkeypatch):
     """`People` at a sentence start named PPLI 93 times in one day."""
     lookup = annotate_distinctive({
         'PPLI': {'name': 'People Inc', 'exchange': 'NASDAQ'},
         'NVDA': {'name': 'NVIDIA Corporation - Common Stock', 'exchange': 'NASDAQ'},
     })
+    _align(monkeypatch, ordinary={'people'}, shapes={'nvidia'})
     row = pop.classify(_line('t1_p', 'People love Nvidia'), lookup, NOT_COMMON,
                        name_shapes=pop.NameShapes({'nvidia'}))
-    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('NVDA', 'name_only')]
+    assert row['rejected'] == []
+    assert _accepted(row) == [('NVDA', 'name_only')]
 
 
 def test_common_words_cover_name_length_words(tmp_path):
@@ -224,16 +255,18 @@ APPLE_LOOKUP = annotate_distinctive({
 })
 
 
-def test_a_name_shared_by_a_few_symbols_still_names_them():
+def test_a_name_shared_by_a_few_symbols_still_names_them(monkeypatch):
     """`apple` is Apple Inc and Apple Hospitality REIT, so requiring exactly
     one symbol deleted the largest company on the board. A handful of
     claimants is an ambiguity for the judge to settle, not a reason to see
     nothing."""
+    _align(monkeypatch)
     row = pop.classify(_line('t1_a', 'I think Apple had a good quarter'),
                        APPLE_LOOKUP, NOT_COMMON)
-    causes = {(c['symbol'], c['cause']) for c in row['rejected']}
-    assert ('AAPL', 'name_only') in causes
-    assert ('APLE', 'name_only') in causes
+    # Since 2026-09-08 production counts the one people mean, through the
+    # alias table; the loose pass still reports the REIT it did not count.
+    assert _accepted(row) == [('AAPL', 'alias')]
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('APLE', 'name_only')]
 
 
 def test_a_name_claimed_by_too_many_symbols_still_names_nobody():
@@ -243,29 +276,34 @@ def test_a_name_claimed_by_too_many_symbols_still_names_nobody():
     assert row['rejected'] == []
 
 
-def test_a_brand_the_legal_name_never_carries_is_still_a_candidate():
+def test_a_brand_the_legal_name_never_carries_is_still_a_candidate(monkeypatch):
     """Alphabet's listings never say Google; Meta's never say Facebook."""
+    _align(monkeypatch)
     row = pop.classify(_line('t1_c', 'Google is cheap and Facebook is not'),
                        APPLE_LOOKUP, NOT_COMMON)
-    causes = {(c['symbol'], c['cause']) for c in row['rejected']}
-    assert ('GOOGL', 'name_only') in causes
-    assert ('META', 'name_only') in causes
+    assert row['rejected'] == []
+    assert set(_accepted(row)) == {('GOOGL', 'alias'), ('META', 'alias')}
 
 
-def test_a_person_who_stands_for_a_company_is_a_candidate():
+def test_a_person_who_stands_for_a_company_is_a_candidate(monkeypatch):
+    _align(monkeypatch)
     row = pop.classify(_line('t1_d', 'I would buy if Zuck leaves for good'),
                        APPLE_LOOKUP, NOT_COMMON)
-    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('META', 'metonym')]
+    assert row['rejected'] == []
+    assert _accepted(row) == [('META', 'alias')]
 
 
-def test_a_distinctive_name_written_lowercase_is_a_candidate():
+def test_a_distinctive_name_written_lowercase_is_a_candidate(monkeypatch):
     """'do not buy moderna today' is unmistakably real; requiring the
     capital M was a rule about typing, not about meaning."""
+    _align(monkeypatch)
     row = pop.classify(_line('t1_e', 'do not buy moderna today'), APPLE_LOOKUP, NOT_COMMON)
-    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('MRNA', 'name_only')]
+    assert row['rejected'] == []
+    assert _accepted(row) == [('MRNA', 'name_only')]
 
 
-def test_a_function_word_never_names_a_company_however_it_is_written():
+def test_a_function_word_never_names_a_company_however_it_is_written(monkeypatch):
+    _align(monkeypatch, shapes={'moderna'})
     """`That` named HAVAR 171 times and `Your` named GYGY 158 in one week,
     because a capital mid-sentence can be emphasis or a list. Measured over
     the corpus the two are not close: function words are capitalised
@@ -282,7 +320,10 @@ def test_a_function_word_never_names_a_company_however_it_is_written():
     assert row['rejected'] == []
     row = pop.classify(_line('t1_g', 'do not buy moderna today'), lookup, NOT_COMMON,
                        name_shapes=names)
-    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('MRNA', 'name_only')]
+    # Since 2026-09-08 production itself counts a name alone, so the loose
+    # pass has nothing left to reject: the mention is ACCEPTED, as name_only.
+    assert row['rejected'] == []
+    assert [(m['ticker'], m['reason']) for m in row['accepted']] == [('MRNA', 'name_only')]
 
 
 def test_name_shapes_are_measured_from_the_corpus(tmp_path):
@@ -295,7 +336,10 @@ def test_name_shapes_are_measured_from_the_corpus(tmp_path):
     assert 'that' not in shapes       # capitalised only where a sentence opens
 
 
-def test_a_misspelled_name_is_a_candidate():
+def test_a_misspelled_name_is_a_candidate(monkeypatch):
+    _align(monkeypatch)
     lookup = annotate_distinctive({'NVDA': {'name': 'NVIDIA Corporation', 'exchange': 'NASDAQ'}})
     row = pop.classify(_line('t1_h', 'nvdia to the moon'), lookup, NOT_COMMON)
-    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('NVDA', 'name_only')]
+    # Production reads the alias table since 2026-09-08: accepted, not rejected.
+    assert row['rejected'] == []
+    assert [(m['ticker'], m['reason']) for m in row['accepted']] == [('NVDA', 'alias')]

@@ -10,7 +10,10 @@ is rejected. Bare matching is uppercase-only for the same reason -- lowercase
 import dataclasses
 import re
 
-from .config import BARE_PATTERN, CASHTAG_PATTERN, STOPWORDS
+from .config import (BARE_PATTERN, CASHTAG_PATTERN, LOWERCASE_PATTERN,
+                     MAX_NAME_CLAIMANTS, METONYMS, NAME_ALIASES, NAME_SHAPES,
+                     NAME_STOPWORDS, NAME_WORD_PATTERN, NOT_AN_ISSUER_PATTERN,
+                     ORDINARY_WORDS, STOPWORDS, TITLECASE_PATTERN)
 # One cleaner, one comment predicate -- sentiment_input owns both, and
 # extraction consuming them is what keeps the two preparations agreeing
 # about what a Reddit comment even is. sentiment_input imports only
@@ -42,8 +45,47 @@ _CASHTAG_RE = re.compile(CASHTAG_PATTERN)
 # pattern already rejected -- the AP in "A$AP" -- must not slip back in as
 # a bare match.
 _BARE_RE = re.compile(BARE_PATTERN)
+# A symbol written as a name (Nvda) or in lowercase (lulu). Same left guard.
+# What keeps `Gold` and `go` out is ORDINARY_WORDS, checked per match.
+_TITLECASE_RE = re.compile(TITLECASE_PATTERN)
+_LOWERCASE_RE = re.compile(LOWERCASE_PATTERN)
+_NAME_WORD_RE = re.compile(NAME_WORD_PATTERN)
+_NOT_AN_ISSUER_RE = re.compile(NOT_AN_ISSUER_PATTERN, re.IGNORECASE)
 
 _CONFIDENCE_RANK = {'low': 0, 'medium': 1, 'high': 2}
+
+# distinctive token -> symbols, for tokens naming at most MAX_NAME_CLAIMANTS
+# symbols. Built once per lookup: a lookup is loaded once per process and
+# the index over 12,600 names is not free. Compared by identity while
+# holding the lookup, so a reused id after garbage collection (the test
+# suite builds many small lookups) never hands back a stale index.
+_NAME_INDEX_CACHE = []
+
+
+def _name_index(lookup):
+    index = {}
+    for symbol, entry in lookup.items():
+        if _NOT_AN_ISSUER_RE.search(entry.get('name') or ''):
+            continue
+        for token in entry.get('distinctive') or ():
+            # A token that is itself a symbol names nobody: a post writing
+            # it is a symbol mention, handled by the symbol rules.
+            if token.upper() in lookup:
+                continue
+            index.setdefault(token, set()).add(symbol)
+    return {token: sorted(symbols) for token, symbols in index.items()
+            if len(symbols) <= MAX_NAME_CLAIMANTS}
+
+
+def _names_for(lookup):
+    if not _NAME_INDEX_CACHE or _NAME_INDEX_CACHE[0] is not lookup:
+        _NAME_INDEX_CACHE[:] = [lookup, _name_index(lookup)]
+    return _NAME_INDEX_CACHE[1]
+
+
+def _whole_word(token, lowered_text):
+    return re.search(r"(?<![A-Za-z])%s(?![A-Za-z])" % re.escape(token),
+                     lowered_text) is not None
 
 EXTRACTION_INPUT_VERSION = 1
 
@@ -86,7 +128,8 @@ def prepare_extraction_input(source, title, body, author=None, channel=None):
 # per code path below: explicit notation, name-corroborated bare token, a
 # source whose population makes an uncorroborated bare token high
 # (reddit), and the stored-but-never-scored low tier.
-REASONS = ('explicit_cashtag', 'bare_named', 'bare_source_high', 'bare_low')
+REASONS = ('explicit_cashtag', 'bare_named', 'bare_source_high', 'bare_low',
+           'titlecase_symbol', 'lowercase_symbol', 'name_only', 'alias')
 
 _REASON_RANK = {reason: index for index, reason in enumerate(REASONS)}
 
@@ -107,8 +150,15 @@ class Match:
 
 
 def _scan(text, lookup, allow_bare, allow_single_letter, bare_confidence,
-          lowered_words):
+          lowered_words, names_allowed=True):
     """(symbol -> (confidence, reason)) for ONE scope's text.
+
+    `names_allowed` is False for thread context: a company named in a
+    parent title is not a mention by the commenter. r/thetagang's daily
+    thread is called "The Lounge", and `lounge` is a listing token of
+    Lulu's Fashion Lounge -- every comment in it inherited LVLU until this
+    was measured (1,208 of 1,236 in one week). Symbols in a title still
+    vouch for and count like bare tokens always have.
 
     The rules are the pre-provenance extractor's, unchanged. See the long
     history in the comments below -- the asymmetry between cashtags and
@@ -164,6 +214,62 @@ def _scan(text, lookup, allow_bare, allow_single_letter, bare_confidence,
                    'bare_source_high' if bare_confidence == 'high'
                    else 'bare_low')
 
+    if not allow_bare:
+        # A source whose population makes bare tokens meaningless makes a
+        # symbol written as a name, a lowercase symbol and a name alone
+        # meaningless too; all four are the same bet on the same crowd.
+        return found
+
+    # Cased symbols (2026-09-08): `Nvda`, `Avgo`, `Dell`, `lulu`, `soxl`.
+    # An ordinary word -- one the corpus writes in lowercase most of the
+    # time -- is skipped whatever it is written like here: `Gold` at a
+    # sentence start is the metal, `go` is the verb. Corroborated by the
+    # company's own name it is `high` like any bare token; otherwise it is
+    # worth what a bare token is worth on this source.
+    for pattern, reason in ((_TITLECASE_RE, 'titlecase_symbol'),
+                            (_LOWERCASE_RE, 'lowercase_symbol')):
+        for raw in pattern.findall(text):
+            symbol = raw.upper()
+            if symbol not in lookup or raw.lower() in ORDINARY_WORDS:
+                continue
+            distinctive = lookup[symbol].get('distinctive') or set()
+            named = bool(distinctive & lowered_words)
+            if symbol in STOPWORDS and not named:
+                continue
+            if named:
+                record(symbol, 'high', 'bare_named')
+            else:
+                record(symbol, bare_confidence, reason)
+
+    if not names_allowed:
+        return found
+
+    # Names alone (2026-09-08): a distinctive listing token the corpus
+    # writes like a name -- `Nvidia`, `Moderna`, `Tesla` -- names its
+    # company without a symbol in sight. The recall waves put this at 72%
+    # real. `daily`, `total` and `local` are listing tokens too and are
+    # left alone as ordinary words; days, months, `trump` and `reddit` by
+    # the name stoplist. A token several listings share names nobody --
+    # `apple` is Apple Inc and Apple Hospitality REIT, and the judge cannot
+    # tell APLE from AAPL by the string -- unless the alias table settles
+    # it, in which case the alias speaks and this rule stays silent.
+    lowered_text = text.lower()
+    names = _names_for(lookup)
+    for token in set(_NAME_WORD_RE.findall(lowered_text)):
+        if (token not in names or token not in NAME_SHAPES
+                or token in ORDINARY_WORDS or token in NAME_STOPWORDS
+                or token in NAME_ALIASES or len(names[token]) != 1):
+            continue
+        record(names[token][0], bare_confidence, 'name_only')
+
+    # Brands, misspellings and metonyms no listing carries.
+    for table in (NAME_ALIASES, METONYMS):
+        for token, symbol in table.items():
+            if not symbol or symbol not in lookup or symbol in found:
+                continue
+            if _whole_word(token, lowered_text):
+                record(symbol, bare_confidence, 'alias')
+
     return found
 
 
@@ -193,7 +299,8 @@ def extract(prepared, lookup, allow_bare=True, allow_single_letter=True,
             continue
         for symbol, (confidence, reason) in _scan(
                 text, lookup, allow_bare, allow_single_letter,
-                bare_confidence, lowered_words).items():
+                bare_confidence, lowered_words,
+                names_allowed=(flag_name == 'in_author_text')).items():
             entry = merged.setdefault(symbol, {
                 'confidence': confidence, 'reason': reason,
                 'in_author_text': False, 'in_thread_context': False})
