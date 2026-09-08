@@ -653,15 +653,18 @@ CASED_LOOKUP = annotate_distinctive({
     'GOOGL': {'name': 'Alphabet Inc', 'exchange': 'NASDAQ'},
     'META': {'name': 'Meta Platforms Inc', 'exchange': 'NASDAQ'},
     'NVDL': {'name': 'ProShares Ultra Long NVDA Daily ETF', 'exchange': 'NASDAQ'},
+    'AAPL': {'name': 'Apple Inc', 'exchange': 'NASDAQ'},
+    'APLE': {'name': 'Apple Hospitality REIT Inc', 'exchange': 'NYSE'},
+    'LVLU': {'name': "Lulu's Fashion Lounge Holdings Inc", 'exchange': 'NASDAQ'},
 })
 
 
 @pytest.fixture
 def corpus(monkeypatch):
     monkeypatch.setattr(ext, 'ORDINARY_WORDS', frozenset({'gold', 'target', 'it', 'all', 'daily', 'go'}))
-    monkeypatch.setattr(ext, 'NAME_SHAPES', frozenset({'nvidia', 'moderna', 'daily', 'monday', 'dell', 'gartner'}))
+    monkeypatch.setattr(ext, 'NAME_SHAPES', frozenset({'nvidia', 'moderna', 'daily', 'monday', 'dell', 'gartner', 'apple', 'lounge'}))
     monkeypatch.setattr(ext, 'NAME_STOPWORDS', frozenset({'monday'}))
-    monkeypatch.setattr(ext, 'NAME_ALIASES', {'google': 'GOOGL'})
+    monkeypatch.setattr(ext, 'NAME_ALIASES', {'google': 'GOOGL', 'apple': 'AAPL'})
     monkeypatch.setattr(ext, 'METONYMS', {'zuck': 'META', 'cook': None})
     ext._NAME_INDEX_CACHE[:] = []
 
@@ -737,3 +740,29 @@ def test_the_stamp_moves_with_the_corpus_lists(monkeypatch):
     before = config.source_config_version()
     monkeypatch.setattr(config, 'ORDINARY_WORDS_SHA', 'ffffffffffffffff')
     assert config.source_config_version() != before
+
+
+def test_a_name_shared_by_listings_names_nobody_unless_the_alias_table_settles_it(corpus):
+    # `apple` claims AAPL and APLE; the alias says AAPL, and only AAPL.
+    assert reddit('Apple had a good quarter') == {'AAPL': ('high', 'alias')}
+    # Without an alias the same ambiguity names nobody.
+    ext.NAME_ALIASES.pop('apple')
+    assert reddit('Apple had a good quarter') == {}
+
+
+def test_a_name_in_the_parent_title_is_not_a_mention_by_the_commenter(corpus):
+    # r/thetagang's daily thread, "The Lounge", and a listing token `lounge`.
+    prepared = prepare_extraction_input('reddit:t', '/u/op on The Lounge', 'sold puts today',
+                                        author='/u/me')
+    assert extract(prepared, CASED_LOOKUP, bare_confidence='high') == []
+    prepared = prepare_extraction_input('reddit:t', '/u/op on The Lounge', 'lounge stock is up',
+                                        author='/u/me')
+    [match] = extract(prepared, CASED_LOOKUP, bare_confidence='high')
+    assert (match.ticker, match.reason, match.in_author_text) == ('LVLU', 'name_only', True)
+
+
+def test_a_symbol_in_the_parent_title_still_counts_like_a_bare_token(corpus):
+    prepared = prepare_extraction_input('reddit:t', '/u/op on NVDA earnings thread', 'lets go',
+                                        author='/u/me')
+    [match] = extract(prepared, CASED_LOOKUP, bare_confidence='high')
+    assert (match.ticker, match.in_thread_context, match.in_author_text) == ('NVDA', True, False)

@@ -249,6 +249,9 @@ NAME_SHAPES_SHA = _tokens_sha(NAME_SHAPES)
 MAX_NAME_CLAIMANTS = 4
 NAME_STOPWORDS = frozenset((
     'trump', 'reddit',
+    # Listing tokens the raw week showed naming nobody: Hello Group, Parent
+    # Co, a European or Israeli fund, Gemini Space Station.
+    'hello', 'parent', 'european', 'israel', 'gemini',
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
     'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
     'september', 'october', 'november', 'december',
@@ -274,6 +277,11 @@ NAME_ALIASES = {
     'fox news': 'FOX', 'microstrategy': 'MSTR', 'tim hortons': 'QSR',
     "chili's": 'EAT', 'chilis': 'EAT', 'ntflx': 'NFLX', 'planet labs': 'PL',
     'wendys': 'WEN',
+    # Names several listings share, settled by the one people mean. A name
+    # token with more than one claimant otherwise names nobody (2026-09-08:
+    # `apple` was handing Apple Hospitality REIT 778 mentions a week).
+    'apple': 'AAPL', 'alphabet': 'GOOGL', 'goldman': 'GS', 'goldman sachs': 'GS',
+    'hertz': 'HTZ', 'webull': 'BULL',
 }
 METONYMS = {
     'zuck': 'META', 'zuckerberg': 'META', 'bezos': 'AMZN', 'musk': 'TSLA',

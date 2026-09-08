@@ -150,8 +150,15 @@ class Match:
 
 
 def _scan(text, lookup, allow_bare, allow_single_letter, bare_confidence,
-          lowered_words):
+          lowered_words, names_allowed=True):
     """(symbol -> (confidence, reason)) for ONE scope's text.
+
+    `names_allowed` is False for thread context: a company named in a
+    parent title is not a mention by the commenter. r/thetagang's daily
+    thread is called "The Lounge", and `lounge` is a listing token of
+    Lulu's Fashion Lounge -- every comment in it inherited LVLU until this
+    was measured (1,208 of 1,236 in one week). Symbols in a title still
+    vouch for and count like bare tokens always have.
 
     The rules are the pre-provenance extractor's, unchanged. See the long
     history in the comments below -- the asymmetry between cashtags and
@@ -234,20 +241,26 @@ def _scan(text, lookup, allow_bare, allow_single_letter, bare_confidence,
             else:
                 record(symbol, bare_confidence, reason)
 
+    if not names_allowed:
+        return found
+
     # Names alone (2026-09-08): a distinctive listing token the corpus
     # writes like a name -- `Nvidia`, `Moderna`, `Tesla` -- names its
     # company without a symbol in sight. The recall waves put this at 72%
     # real. `daily`, `total` and `local` are listing tokens too and are
     # left alone as ordinary words; days, months, `trump` and `reddit` by
-    # the name stoplist.
+    # the name stoplist. A token several listings share names nobody --
+    # `apple` is Apple Inc and Apple Hospitality REIT, and the judge cannot
+    # tell APLE from AAPL by the string -- unless the alias table settles
+    # it, in which case the alias speaks and this rule stays silent.
     lowered_text = text.lower()
     names = _names_for(lookup)
     for token in set(_NAME_WORD_RE.findall(lowered_text)):
         if (token not in names or token not in NAME_SHAPES
-                or token in ORDINARY_WORDS or token in NAME_STOPWORDS):
+                or token in ORDINARY_WORDS or token in NAME_STOPWORDS
+                or token in NAME_ALIASES or len(names[token]) != 1):
             continue
-        for symbol in names[token]:
-            record(symbol, bare_confidence, 'name_only')
+        record(names[token][0], bare_confidence, 'name_only')
 
     # Brands, misspellings and metonyms no listing carries.
     for table in (NAME_ALIASES, METONYMS):
@@ -286,7 +299,8 @@ def extract(prepared, lookup, allow_bare=True, allow_single_letter=True,
             continue
         for symbol, (confidence, reason) in _scan(
                 text, lookup, allow_bare, allow_single_letter,
-                bare_confidence, lowered_words).items():
+                bare_confidence, lowered_words,
+                names_allowed=(flag_name == 'in_author_text')).items():
             entry = merged.setdefault(symbol, {
                 'confidence': confidence, 'reason': reason,
                 'in_author_text': False, 'in_thread_context': False})

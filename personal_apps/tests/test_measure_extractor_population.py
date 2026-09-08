@@ -83,7 +83,7 @@ def test_every_rejection_cause_is_named(monkeypatch):
     # `Nvidia` is bare_named, `GoPro` alone is name_only.
     accepted = dict(_accepted(row))
     assert accepted['NVDA'] == 'bare_named'
-    assert accepted['GPRO'] == 'name_only'
+    assert accepted['GPRO'] == 'alias'                 # `gopro` is an alias key; the alias speaks
     assert ('NVDA', 'lowercase_symbol') not in causes and ('GPRO', 'name_only') not in causes
 
 
@@ -102,7 +102,7 @@ def test_a_lowercase_name_nobody_writes_as_a_word_is_a_candidate(monkeypatch):
     being a word rather than a name is, and the corpus's casing says which."""
     row = pop.classify(_line('t1_e', 'my gopro broke'), LOOKUP, NOT_COMMON)
     assert row['rejected'] == []
-    assert _accepted(row) == [('GPRO', 'name_only')]
+    assert _accepted(row) == [('GPRO', 'alias')]
 
 
 def test_an_accepted_ticker_is_never_also_a_rejected_candidate():
@@ -263,8 +263,10 @@ def test_a_name_shared_by_a_few_symbols_still_names_them(monkeypatch):
     _align(monkeypatch)
     row = pop.classify(_line('t1_a', 'I think Apple had a good quarter'),
                        APPLE_LOOKUP, NOT_COMMON)
-    assert row['rejected'] == []
-    assert set(_accepted(row)) == {('AAPL', 'name_only'), ('APLE', 'name_only')}
+    # Since 2026-09-08 production counts the one people mean, through the
+    # alias table; the loose pass still reports the REIT it did not count.
+    assert _accepted(row) == [('AAPL', 'alias')]
+    assert [(c['symbol'], c['cause']) for c in row['rejected']] == [('APLE', 'name_only')]
 
 
 def test_a_name_claimed_by_too_many_symbols_still_names_nobody():
