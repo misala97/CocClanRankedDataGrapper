@@ -343,6 +343,32 @@ def judge(items, backend, on_usage=None, preamble=None, before_batch=None):
 judge_v2 = judge
 
 
+def pass_floor(now, gate, armed):
+    """The oldest post the pass may take, or None for no floor.
+
+    ONE definition, because there used to be two. `run_pass` raised its
+    window to the trial's `retain_from`; `ops_summary` and the daemon's
+    "still waiting" line did not, and reported a backlog the pass could
+    never select -- 37,017 waiting against 146 actually reachable on
+    2026-09-08. A number an operator reads as lag has to be the number the
+    pass is working from.
+
+    Two independent floors, whichever is later:
+
+    - the gate's own trailing window, when the gate is on;
+    - the armed trial's `retain_from`, always. A window that starts before
+      the pin has NO JOURNAL LEFT (spec §7.2a), and judging a mention
+      rewrites its window's bucket count from that journal -- so reaching
+      past the pin does not merely forfeit the undo, it writes counts that
+      never happened. On 2026-09-08, 25,203 of the 36,871 mentions behind
+      the pin had no journal at all. The floor stays whatever else changes.
+    """
+    since = now - dt.timedelta(hours=gate.hours) if gate.enabled else None
+    if armed is None:
+        return since
+    return armed.retain_from if since is None else max(since, armed.retain_from)
+
+
 def pending(limit=PASS_LIMIT, tickers=None, since=None):
     """[(mention, post)] for high-confidence mentions with no v2 judgment.
 
@@ -791,15 +817,7 @@ def run_pass(backend=None, limit=None, now=None, clock=None):
     armed = trial.guard_encoder_trial(clock()) if trial is not None else None
 
     gate = judge_gate.judgeable_tickers(now)
-    since = now - dt.timedelta(hours=gate.hours) if gate.enabled else None
-    if armed is not None:
-        # Never pick what recovery could not give back: a window before the
-        # pin has no journal left to rebuild from (spec §7.2a). The gate's
-        # own 24-hour window is always inside the pin; this matters when
-        # the gate is off and the pass would otherwise reach into the
-        # 30-day backlog.
-        since = armed.retain_from if since is None else max(since,
-                                                            armed.retain_from)
+    since = pass_floor(now, gate, armed)
     if gate.enabled:
         rows = pending(limit, tickers=gate.tickers, since=since)
         logger.info('radar judge gate: %d judgeable (%d watched, %d reachable, '
@@ -1033,13 +1051,47 @@ def _unjudged(since=None):
     return query
 
 
+def live_pending_count(now=None):
+    """What the pass will actually take next, under today's floors.
+
+    The daemon's "still waiting" line used bare pending_count(), which
+    applies neither the gate nor the trial's retention pin -- so on
+    2026-09-08 it reported 37,017 waiting while the pass could select 146.
+    An operator reading that plans a day of catch-up that is already done.
+    """
+    now = now or dt.datetime.utcnow()
+    gate = judge_gate.judgeable_tickers(now)
+    trial = _trial_module_for(default_primary_backend())
+    return pending_count(
+        tickers=gate.tickers if gate.enabled else None,
+        since=pass_floor(now, gate, trial.current() if trial is not None else None))
+
+
+def unreachable_count(now=None):
+    """Unjudged mentions the pass can never reach, behind the trial's pin.
+
+    Reported apart from the backlog, the way gated_pending is, so a tail
+    that is held back BY DESIGN never reads as lag. It is not lag: those
+    windows have no journal left, and judging them would rebuild their
+    bucket counts out of nothing (spec §7.2a).
+    """
+    now = now or dt.datetime.utcnow()
+    trial = _trial_module_for(default_primary_backend())
+    row = trial.current() if trial is not None else None
+    if row is None or row.retain_from is None:
+        return 0
+    return (_unjudged(None)
+            .filter(RadarPost.created_utc < row.retain_from).count())
+
+
 def pending_count(tickers=None, since=None):
     """How many mentions the LIVE pass still owes. For the daemon log.
 
     Same activation cutoff as pending(): the legacy backlog is the rejudge
     script's business and must not read as a live backlog here or in
     ops_summary's p95. With the gate's `tickers` and `since`, counts only
-    what the pass will actually take.
+    what the pass will actually take -- callers that want that answer
+    without assembling the floors themselves want live_pending_count().
     """
     if tickers is not None and not tickers:
         return 0
@@ -1075,7 +1127,11 @@ def ops_summary(now=None):
     # gated_pending, so a permanently gated tail never reads as lag.
     gate = judge_gate.judgeable_tickers(now)
     tickers = gate.tickers if gate.enabled else None
-    since = now - dt.timedelta(hours=gate.hours) if gate.enabled else None
+    # Resolved exactly as the live pass resolves it -- same backend, same
+    # trial module, same floor. Asking a different question here is what
+    # produced the 37,017-against-146 report in the first place.
+    trial = _trial_module_for(default_primary_backend())
+    since = pass_floor(now, gate, trial.current() if trial is not None else None)
     waiting = pending_count(tickers=tickers, since=since)
     p95 = None
     if waiting:
@@ -1107,6 +1163,7 @@ def ops_summary(now=None):
     }
     review['over_ceiling'] = _over_ceiling_gauge(now, review['attempted'])
     return {'pending': waiting, 'gated_pending': gated_count(gate, now),
+            'pinned_pending': unreachable_count(now),
             'p95_age_minutes': p95, 'review': review}
 
 

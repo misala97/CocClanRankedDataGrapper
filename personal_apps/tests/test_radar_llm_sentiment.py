@@ -289,3 +289,35 @@ def test_ops_summary_counts_the_gated_backlog_apart_from_the_pending_one(clean_p
         finally:
             RadarWatch.query.filter_by(ticker='ZZW').delete()
             db.session.commit()
+
+
+# ---- the floor the pass reads, and the one it reports -----------------------
+
+def test_the_pass_floor_is_the_later_of_the_gate_window_and_the_pin():
+    """Regression: `since` used to be computed in run_pass and AGAIN in
+    ops_summary, and only the first raised it to the trial's retain_from.
+    The daemon then reported 37,017 mentions waiting on 2026-09-08 while
+    the pass could select 146 -- an operator reads that as a day of
+    catch-up that is in fact already finished.
+    """
+    from features.radar import judge_gate
+
+    now = dt.datetime(2026, 9, 8, 12, 0)
+    on = judge_gate.Gate(tickers=frozenset({'ZZA'}), watched=0, reachable=1,
+                         skipped_segment=0, hours=24, enabled=True)
+    off = judge_gate.Gate(tickers=frozenset(), watched=0, reachable=0,
+                          skipped_segment=0, hours=24, enabled=False)
+    pinned = type('Row', (), {'retain_from': dt.datetime(2026, 9, 4, 19, 45)})()
+    recent = type('Row', (), {'retain_from': dt.datetime(2026, 9, 8, 11, 0)})()
+
+    # No trial: the gate's window, or nothing at all when it is off.
+    assert llm_sentiment.pass_floor(now, on, None) == now - dt.timedelta(hours=24)
+    assert llm_sentiment.pass_floor(now, off, None) is None
+
+    # Gate OFF is exactly the case that was wrong: with no gate window there
+    # is nothing to take a max against, and the pin must still apply.
+    assert llm_sentiment.pass_floor(now, off, pinned) == pinned.retain_from
+
+    # Gate ON: whichever floor is LATER wins, in both directions.
+    assert llm_sentiment.pass_floor(now, on, pinned) == now - dt.timedelta(hours=24)
+    assert llm_sentiment.pass_floor(now, on, recent) == recent.retain_from

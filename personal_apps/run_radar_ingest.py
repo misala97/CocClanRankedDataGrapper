@@ -1151,8 +1151,13 @@ def _scheduled_sentiment():
             logger.exception('radar sentiment pass failed')
             return
         if judged:
-            logger.info('radar sentiment judged %d mentions, %d still waiting',
-                        judged, llm_sentiment.pending_count())
+            # live_pending_count, not pending_count: the bare call applies
+            # neither the gate nor the trial's retention pin, and reported
+            # 37,017 waiting on 2026-09-08 while the pass could select 146.
+            logger.info('radar sentiment judged %d mentions, %d still waiting '
+                        '(%d behind the retention pin, unreachable)',
+                        judged, llm_sentiment.live_pending_count(),
+                        llm_sentiment.unreachable_count())
         try:
             reviewed = llm_sentiment.run_review_pass()
         except Exception:
