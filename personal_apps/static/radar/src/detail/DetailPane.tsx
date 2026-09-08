@@ -8,27 +8,9 @@ import type { Detail, DetailChart, PanelSpan, Selection } from '../types'
 
 const SPANS: PanelSpan[] = ['1D', '1W', '1M', '6M', '1Y', '3Y']
 
-/** The span to open on, from how long this ticker has actually been watched.
- *
- *  It was a constant, '1Y', and at 1Y the chatter bars occupy roughly the last
- *  7% of the plot: 93% of the hero chart is a price line above an empty violet
- *  lane. The CSS header says every chart here draws exactly two things and
- *  that the product IS where they disagree -- the default was hiding one of
- *  them, and on a phone the opening viewport showed price only.
- *
- *  Derived rather than moved to another constant, because chatter history
- *  GROWS. A hardcoded 1M is right this month and wrong once there is a year of
- *  it. `baseline_days` is how much history the scoring has for this ticker,
- *  which is the same thing as how long the chatter lane has anything in it.
- *
- *  Null means no baseline at all -- a ticker seen for the first time today.
- *  The shortest span is the only one with anything to show it in.
- */
-export function openingSpan(baselineDays: number | null): PanelSpan {
-  if (baselineDays === null) return '1W'
-  if (baselineDays <= 45) return '1M'
-  if (baselineDays <= 200) return '6M'
-  return '1Y'
+/** Open on one week regardless of how much history the ticker has. */
+export function openingSpan(_baselineDays: number | null): PanelSpan {
+  return '1W'
 }
 
 /** What the two lanes are made of, which is not the same on every span.

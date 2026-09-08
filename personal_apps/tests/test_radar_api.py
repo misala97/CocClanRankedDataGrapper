@@ -269,6 +269,7 @@ def test_defaults_are_every_source_and_the_small_segment(client):
     from features.radar.config import DEFAULT_SEGMENT, SOURCES
     assert set(payload['sources']) == set(SOURCES)
     assert payload['segments'] == DEFAULT_SEGMENT.split(',')
+    assert payload['window_hours'] == 12
 
 
 def test_an_empty_segment_still_asks_for_everything(client):
@@ -728,7 +729,7 @@ def test_the_board_carries_the_callers_watch_rows_and_nobody_elses(client, monke
         assert [r['ticker'] for r in mine['watch_rows']] == ['ZZWATCH']
         assert mine['watch_rows'][0]['eligible'] is False
         assert mine['watch_rows'][0]['clauses'][0] == {
-            'kind': 'warn', 'text': 'no mentions in 4h'}
+            'kind': 'warn', 'text': 'no mentions in 12h'}
         assert theirs['watching'] == [] and theirs['watch_rows'] == []
         assert theirs['rows'] == mine['rows']
         assert all('eligible' in r for r in mine['rows'])

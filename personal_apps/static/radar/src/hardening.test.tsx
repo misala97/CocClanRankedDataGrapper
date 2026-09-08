@@ -291,29 +291,10 @@ describe('the panel across a row change', () => {
 })
 
 describe('the span the chart opens on', () => {
-  // It was the constant '1Y', where the chatter bars occupy roughly the last
-  // 7% of the plot -- 93% of the hero chart was a price line over an empty
-  // violet lane, and on a phone the opening viewport showed price only.
-  it('opens where the ticker actually has chatter history', () => {
-    expect(openingSpan(5)).toBe('1M')
-    expect(openingSpan(45)).toBe('1M')
-    expect(openingSpan(46)).toBe('6M')
-    expect(openingSpan(200)).toBe('6M')
-    expect(openingSpan(400)).toBe('1Y')
-  })
-
-  it('opens shortest for a ticker with no baseline at all', () => {
-    // Seen for the first time today. The shortest span is the only one with
-    // anything to show it in.
-    expect(openingSpan(null)).toBe('1W')
-  })
-
-  it('is derived, not a second constant', () => {
-    // Chatter history GROWS. A hardcoded 1M is right this month and wrong
-    // once there is a year of it, which is the same mistake as the 1Y it
-    // replaced, just pointing the other way.
-    expect(new Set([openingSpan(10), openingSpan(100), openingSpan(900)]).size)
-      .toBe(3)
+  it('opens on one week regardless of available history', () => {
+    for (const days of [null, 5, 45, 46, 200, 400, 900]) {
+      expect(openingSpan(days)).toBe('1W')
+    }
   })
 })
 
@@ -659,7 +640,7 @@ describe('printing the chart', () => {
     render(<BoardPage initial={payload()} />)
     await screen.findByText(/AAA is being discussed/)
 
-    expect(document.querySelector('.print-span')).toHaveTextContent('1M')
+    expect(document.querySelector('.print-span')).toHaveTextContent('1W')
     await userEvent.click(screen.getByRole('button', { name: '6M' }))
     expect(document.querySelector('.print-span')).toHaveTextContent('6M')
   })
