@@ -245,7 +245,85 @@ Command (torch venv, from personal_apps/):
         scratchpad\label_export\train_encoder.py --base microsoft/deberta-v3-base \
         --max-len 512 --epochs 6 --batch-size 4 --save
 
-## Deliverable 4 -- measurement (NOT STARTED)
+## Deliverable 4 -- MEASURED 2026-09-08/09. The defect is fixed; the trial-audit number is not.
+
+Retrain finished in 7,067 s (118 min, longer than the 92 predicted), loss
+3.147 -> 0.765, saved as `model-train19877-20260908-221023`. VRAM was
+**9,489 MiB of 10,240**, not the ~5 GB predicted -- it fits and does not
+spill, but the estimate was wrong and is corrected here.
+
+### 1. The defect the hard negatives were built for: FIXED
+
+The three older locked sets and the 746-row audit all predate the
+extractor change and hold no out-of-distribution finder pair, so none of
+them can answer this. **The training wave could not answer it either: all
+1,553 rows went into training with nothing held out** -- a gap in how it
+was built, found afterwards and repaired with a held-out probe
+(`probe_hard_negatives.py`): fresh pairs, same construction rules, same
+raw week, every post any wave, locked set or audit has used excluded.
+
+    model   false accepts   of    rate (Wilson 95%)      by kind
+    live         33         440   0.075 (0.054-0.103)    subword 10, ordinary 6, index 17
+    new           8         440   0.018 (0.009-0.035)    subword 5, ordinary 3
+
+**A 4x reduction, and the intervals do not overlap** (live's lower bound
+0.054 is above new's upper bound 0.035). Index names -- `Dow` and
+`Nasdaq` read as DOW and NDAQ -- went from 17 to **zero**.
+
+Two honest caveats on the 8 that remain. At least one is the JUDGE being
+right and the construction being wrong: `MCD` cut from `McDonald` in a
+post about McDonald's is a real mention, so the true rate is below 0.018.
+And the packaged artifact's smoke test still calls "I ate an apple for
+breakfast" AAPL-relevant -- `apple` reaches the judge through the alias
+table, a path the constructed negatives do not cover.
+
+### 2. Removal precision on the trial audit: NOT improved
+
+`compare_judges.py`, 746 rows, reference external to both models:
+
+    metric              live                          new
+    removal_precision   0.815 (268/329, .769-.853)    0.801 (266/332, .755-.841)
+    relevance           0.764 (570/746)               0.745 (556/746)
+    content_origin      0.928 (692/746)               0.933 (696/746)
+    attitude            0.673 (502/746)               0.660 (492/746)
+    expected_move       0.779 (581/746)               0.777 (580/746)
+    polarity reversals  0.044 (6/136)                 0.037 (5/136)
+
+Intervals overlap everywhere. **By the ship rule written in this document
+-- the Wilson lower bound on removal precision -- the retrain does not
+qualify.** That rule was inherited from the trial, whose question was
+"may this model replace Haiku on the board's existing traffic". It is the
+wrong instrument for this change and is reported as failed rather than
+quietly restated.
+
+### 3. The locked sets: flat within noise, and a fourth one now exists
+
+                    live (train17090)            new (train19877)
+    natural         relF1 .733  removalP .881    relF1 .728  removalP .879  rev 5.0% (was 6.2%)
+    hard            relF1 .755  removalP .945    relF1 .730  removalP .943  rev 3.9% (was 6.8%)
+    recall          relF1 .616  removalP .909    relF1 .641  removalP .895  rev 8.7% (was 7.9%)
+    newshape        --                           relF1 .585  removalP .845
+
+Scored head to head on the new locked set (320 rows, both models):
+relevance agreement is **identical**, 285 of 320 each; origin .978 ->
+.981; attitude .606 -> .634; removal precision .864 -> .845 (overlapping).
+Per shape, relevance correct: alias 48->46 of 56, lowercase 75->77 of 87,
+name_only 97=97 of 109, titlecase 65=65 of 68.
+
+The absolute ship gates still read 0 of 5 on `natural`. They were written
+for a frontier sentiment judge and have never been met by any encoder;
+see the roadmap's documented exception.
+
+### What this adds up to
+
+The retrain does what it was built to do and nothing more. On the
+population the extractor now feeds the judge -- where a third of what is
+counted is junk -- it rejects constructed junk four times better than the
+serving model. On the old population it is unchanged within noise, and
+its point estimates are a hair lower. Whether that trade ships is Michi's
+call, not this document's.
+
+## Deliverable 4 -- method notes
 
 1. The three locked sets, printed by the trainer at the end of the run;
    compared against the live run's `encoder/run-20260907-192429.json`:
@@ -260,13 +338,33 @@ Command (torch venv, from personal_apps/):
    local re-score, written up beside the chain's day-1 report.
 3. The 24 known false pairs, re-judged: the direct check of defect 1.
 
-## Deliverable 5 -- packaging and the swap (NOT STARTED, write-up only)
+## Deliverable 5 -- PACKAGED. The swap is written up and NOT executed.
 
-`export_onnx.py` -> `scripts/package_encoder_artifact.py --model <dir>
---out <artifact dir>` (derives window and backbone from the checkpoint;
-512 allowed since `21afcba`) -> `validate_encoder_artifact.py`. Swap is a
-pointer change in the artifact dir (`active.json` -> `v2/`), rollback via
-`pointer-v1.json`; Michi executes.
+    C:/Users/michi/Desktop/radar_labels/artifact-hardneg/v1/
+    bundle sha256  04512d72b37d99d04181974393b30e233e0f21ccaf65f22b45179ba335dcc0f8
+    736.4 MB, fp32, opset 17, max_len 512, deberta-v3-base
+
+`validate_encoder_artifact.py` passes: **peak RSS 1,309 MB**, the same
+floor as the serving artifact's 1,307 MB, so it fits the 8 GB box beside
+MariaDB with no new memory question. (Local throughput 0.85 rows/s says
+nothing about 2 vCPU; RSS is the number that transfers.) The validator
+needs `anthropic`, which the torch venv lacks -- run it with the main
+interpreter, not `radar_encoder_venv`.
+
+**The swap, for Michi to run when he decides.** Copy the bundle to the
+box, put it beside the live one as `v2/`, and move the pointer:
+
+    scp -r C:/Users/michi/Desktop/radar_labels/artifact-hardneg/v1 \
+        root@194.164.29.97:/root/coc-stats/personal_apps/artifacts/judge/v2
+    ssh root@194.164.29.97 'cd /root/coc-stats/personal_apps/artifacts/judge \
+        && cp active.json pointer-v1.json \
+        && printf "{\n \"path\": \"v2/\",\n \"id\": \"radar-encoder-v2\"\n}\n" > active.json \
+        && systemctl restart radar_ingest'
+
+Rollback is the same move backwards: `cp pointer-v1.json active.json &&
+systemctl restart radar_ingest`. The runtime reads the window off the
+artifact, so v1@512 and v2@512 are both valid and the rollback needs no
+code change.
 
 ## Phase 2 (not now)
 
