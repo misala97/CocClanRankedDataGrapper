@@ -147,6 +147,33 @@ before training (a fourth locked set: today no locked set holds a
 Title-case symbol or an alias, so nothing measures those shapes
 out-of-sample). Wait for Michi's number.
 
+### The pool is on disk now -- the draw is one command (2026-09-08 19:30 UTC)
+
+Production held 344 new-shape mentions ninety minutes after the stamp
+moved, so the wave is drawn OFFLINE from the raw week replayed through
+the SHIPPED extractor instead: `radar_labels/raw/population4/
+accepted-mentions.jsonl` (74,988 mentions; the word lists came out
+identical to the shipped files, 11,022 / 2,543). After excluding every
+locked, audited, probed and hard-negative post, author text only:
+
+    name_only 8,569 (34%)  lowercase 6,798 (27%)  titlecase 5,298 (21%)  alias 4,367 (17%)  = 25,032
+
+Paused by Michi (session limit). Resume, in order, once he names N:
+
+    cd personal_apps
+    PYTHONPATH=. python -m scripts.sample_new_shape_mentions --since x \
+        --raw-accepted C:/Users/michi/Desktop/radar_labels/raw/population4/accepted-mentions.jsonl \
+        --n <N> --proportional --seed 1 \
+        --out C:/Users/michi/Desktop/radar_labels/candidates-newshape-2026-09-08.jsonl
+    PYTHONPATH=. python scratchpad/label_export/label_harness.py render --n <N> --batch 40 \
+        --run newshape-01 --export C:/Users/michi/Desktop/radar_labels/candidates-newshape-2026-09-08.jsonl \
+        --labels labels-newshape.jsonl
+    # Sonnet subagents answer radar_labels/newshape-01/batch-*.prompt.txt (quota: N/40 batches)
+    PYTHONPATH=. python scratchpad/label_export/label_harness.py collect --run newshape-01 --labels labels-newshape.jsonl
+    # freeze 20% as test-newshape.json BEFORE training (new freeze script needed, by post),
+    # add (labels-newshape, candidates-newshape) to train_encoder.PAIRS + a newshape_labels_sha
+    # setting, then the retrain below.
+
 ## Deliverable 3 -- the retrain (NOT STARTED, needs a "when")
 
 Recipe = the live artifact's manifest (`run-20260907-192429.json`): base,
