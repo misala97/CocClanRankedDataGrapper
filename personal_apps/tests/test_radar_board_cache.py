@@ -48,7 +48,8 @@ def test_a_different_selection_is_its_own_build(monkeypatch):
     calls = counting_build(monkeypatch)
     with flask_app.app_context():
         api.build_payload({'market': 'us'}, now=NOW)
-        api.build_payload({'market': 'us', 'window': '12'}, now=NOW)
+        # 12h is the default since 2026-09-08; 4h is the other selection now.
+        api.build_payload({'market': 'us', 'window': '4'}, now=NOW)
         api.build_payload({'market': 'de'}, now=NOW)
         api.build_payload({'market': 'us', 'sources': 'bluesky'}, now=NOW)
 
