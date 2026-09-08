@@ -299,3 +299,36 @@ already decides this); when the token is name-shaped or a distinctive
 listing token, the mention is still a company reference and becomes a
 POSITIVE span. The finder then learns "names a company", the encoder keeps
 "is the post about it". Not run.
+
+## v2 — fill and mask, 2026-09-08
+
+`build_spans_v2.py` -> `spans-v2-2026-09-08.jsonl`: 72 name tokens (distinctive
+∩ name-shaped − ordinary − stoplist, vouched ≥3 times by gold, + aliases),
+3,250 silver spans in 1,604 posts, 21,813 masked symbol pieces. Same recipe,
+391 s. Saved `model-ner-deberta-v3-small-20260908-135556/`.
+
+**Held-out, same gold, both models scored the same lenient way** (a
+prediction on a filled or masked region is neither hit nor miss):
+
+    v1   P 0.862   R 0.742   F1 0.798
+    v2   P 0.828   R 0.889   F1 0.857      Titlecase 65.8% -> 86.9%, ALLCAPS 75.2% -> 91.1%
+
+Recall +14.7 points for −3.4 precision. The remaining 302 "false positives"
+are led by `GOOG x14, meta x7, spy x6, BP x6, Musk x6, Lulu x5, nvda x4,
+apple x4` -- real company references in posts the teacher judged irrelevant,
+which the span dataset keeps as negatives. The finder is right to tag them;
+relevance is the encoder's call. True precision is above 0.83.
+
+**The probe, third finder in the same seat:**
+
+    finder                     GLiNER     v1        v2
+    posts with >=1 span          419       240       203
+    unresolved spans             440       187       154
+    (post, symbol) pairs          78        66        61
+    posts with a relevant pair    55        56        48
+    extrapolated / week        1,290     1,314     1,126
+
+48 / 56 / 55 relevant posts in 3,000 is one number with noise (binomial sd
+~7). Three finders, one answer: **~1.2k posts a week, ~1.7% of the pool.**
+v2 is the finder to keep -- best held-out F1, least junk -- and the pool it
+would search is confirmed small. Decision unchanged.
