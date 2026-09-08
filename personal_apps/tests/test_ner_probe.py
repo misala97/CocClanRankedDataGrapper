@@ -70,9 +70,11 @@ def test_funnel_counts_posts_spans_pairs_and_hits():
 
 
 def test_extrapolation_scales_the_relevant_post_rate_to_the_week():
-    # 30 of 3000 sampled posts relevant, over 132,164 zero-candidate posts a week.
-    assert np_.extrapolate(30, 3000, weekly_posts=132_164) == 1321.64
-    assert np_.extrapolate(0, 3000, weekly_posts=132_164) == 0.0
+    # 30 of 3000 sampled posts relevant, over the 70,381 zero-candidate posts
+    # a week that clear the same body floor the sample did.
+    assert np_.extrapolate(30, 3000, weekly_posts=70_381) == 703.81
+    assert np_.extrapolate(0, 3000, weekly_posts=70_381) == 0.0
+    assert np_.ZERO_CANDIDATE_POSTS_PER_WEEK == 70_381
 
 
 def test_funnel_survives_an_empty_run():

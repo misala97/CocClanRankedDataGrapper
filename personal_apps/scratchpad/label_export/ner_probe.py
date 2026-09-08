@@ -36,10 +36,12 @@ import span_lookup                                          # noqa: E402
 GLINER_MODEL = 'urchade/gliner_small-v2.1'
 LABELS = ['publicly traded company', 'company', 'stock ticker']   # the probe's
 THRESHOLD = 0.5
-# Zero-candidate posts in the measured week after the loose-pass fixes
-# (HANDOFF.md, "132,164 of 198,586"). The sample is drawn from that pool,
-# so its relevant-post rate scales to this.
-ZERO_CANDIDATE_POSTS_PER_WEEK = 132_164
+# Zero-candidate posts in the measured week that ALSO clear the 40-char
+# body floor stage 1 applies: 70,381 (HANDOFF.md). Not the 132,164 of all
+# zero-candidate posts -- the sample never sees a short comment, so a rate
+# measured on it must not be scaled to them. Stage 1 agrees from the other
+# direction: 3,000 of 8,688 shuffled posts qualified, 34.5% x 198,586 = 68,512.
+ZERO_CANDIDATE_POSTS_PER_WEEK = 70_381
 UNRESOLVED_TOP_N = 40
 SPOTCHECK_N = 50
 
