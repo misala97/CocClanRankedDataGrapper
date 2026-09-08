@@ -16,36 +16,49 @@ Verification stamp for everything below:
 All line numbers below are deployed `main` and were read out of
 `git show main:<path>`, not out of this checkout.
 
-> **EXECUTION LOG — Phase 1, 2026-09-07/08. SHIPPED to `main` as `45a7e39`.**
-> §2.1 (artifact preserved at `radar_labels/artifact-small-v1`, bundle
-> re-derived as `3bb32b5607a8a368…dccb5`), §2.3 (the three hunks plus the two
-> stale tone docstrings) and §2.4 (tests) are done, committed, merged to `main`
-> and pushed. Full suite: 2,462 passed, 1 pre-existing unrelated failure
-> (`test_diagnose_extractor_feedback.py` wants a legacy-policy cohort the dev
-> DB has no rows for — reproduced identically on unmodified `main` in a
-> separate worktree against the same database).
+> **EXECUTION LOG — COMPLETE 2026-09-08. Both phases shipped and verified.**
 >
-> **Not run, and not mine:** §2.5 (deploy) and §2.6 (verify on the box).
-> §2.2's timer mask is now **unnecessary** rather than pending: pre-deadline
-> the timer already returns `{'action': 'none'}`, and once this commit is
-> deployed Hunks A and B make it harmless permanently. It stays in this
-> document as the fallback if the deploy slips past 2026-09-09 19:38:24 UTC.
-> Production at 2026-09-07 23:41 UTC: `running`, audit columns NULL, 1,600
-> judgments, timer enabled and active. Everything in §3 (Phase 2) is untouched.
+> **Phase 1** — `45a7e39`, deployed and verified 00:19 UTC. `TRIAL_RETIRED = True`
+> on the box; the startup tick logged nothing (`action: none`); the trial row is
+> still `running` with `stop_reason` NULL, `audit_evaluated_at` NULL and its
+> retention pin intact; judgments went 1,600 -> 1,614, never down. The deadline
+> of 2026-09-09 19:38:24 UTC no longer means anything. The timer stays enabled
+> and is now harmless by code rather than by masking.
 >
-> Two things the execution found that this document did not predict:
-> - **8 tests went red, not 5.** The extra three are in
->   `test_radar_trial_writes.py` (the write-boundary deadline tests) and one
->   more in `test_radar_judge_trial.py`; `test_an_unevaluated_trial_still_expires_on_day_ten`
->   is really `…_on_day_three` after `d745e8e`. All 8 pinned the un-retired
->   semantics; none was a regression. They now take a shared `unretired`
->   fixture (`tests/conftest.py`) rather than a monkeypatch each.
-> - **`tick()` had no test at all**, and `scripts/manage_encoder_trial.py` had
->   none either. Writing the CLI test surfaced a **pre-existing bug**:
->   `cmd_stop` read `row.status` after its `app.app_context()` closed, so the
->   command committed the stop and then died with `DetachedInstanceError` — a
->   traceback for a command that had in fact worked, on the one command where
->   believing it failed is worst. Fixed in the same commit.
+> **Phase 2** — `21afcba` (the window becomes a property of the artifact),
+> `21718dc` (batch 2), deployed 00:48 UTC. Base swapped in at **2026-09-08
+> 00:50:07 UTC**, recorded in `/root/trial-audit/base-swap.txt`.
+>
+> ```
+> from  v1/  deberta-v3-small @256  bundle 3bb32b5607a8a368...dccb5
+> to    v2/  deberta-v3-base  @512  bundle c280b14a7075d248...24afd
+> ```
+>
+> Verified live: startup names `c280b14a7075`; two sentiment passes judged 8
+> then 1 mentions with no error; resident settled at 1,856 -> 1,861 MB with no
+> creep and 1,682 MB still available; no OOM kills; `source_config_version`
+> unchanged at `3f96922d51fe4ef0`; v1's three hashes byte-identical on the box.
+>
+> **Rollback is live and one command**, `pointer-v1.json` and `pointer-v2.json`
+> both present:
+>
+> ```
+> cd /root/coc-stats/personal_apps/artifacts/judge >   && cp -f pointer-v1.json active.json && systemctl restart radar_ingest
+> ```
+>
+> **Where the plan was wrong, measured:** it predicted radar_ingest at ~1,610 MB
+> under batch 2. Actual is ~1,860 MB. The local gate's calibration held for the
+> small model (1,048 vs 1,081 MB) but under-predicted the delta for base by
+> ~250 MB, so a local RSS reading is a floor for a like-for-like model and NOT a
+> reliable predictor across an architecture change. Headroom is adequate
+> (1,682 MB available, no swap) but thinner than planned; batch 4 would have
+> been ~320 MB worse and was rejected on the local measurement alone, which in
+> hindsight was the right call for the wrong confidence.
+>
+> **Still open:** §6.1 (the retention pin — leave it, per the disk measurement),
+> §6.2 (base and small rows are indistinguishable except by the swap timestamp),
+> §6.5 (the reference labeller), §6.6 (delete the trial machinery or leave it
+> dormant), §6.7 (the 44 wrongly-removed mentions).
 
 ---
 
