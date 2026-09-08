@@ -25,6 +25,25 @@ def test_only_relevance_and_origin_are_learned_from_every_row():
     assert tt.is_trainable(row, 'confidence') is True
 
 
+def test_a_constructed_hard_negative_teaches_relevance_and_nothing_else():
+    """A pair built by construction (`corn` inside "buttcorn") asserts one
+    thing: the symbol is not mentioned. Its origin, tone and confidence
+    fields are placeholders -- the post may well be a press release -- so
+    only the relevance head may learn from it. A READ pair carries a
+    reader's labels on every field and trains like any other row."""
+    constructed = _row(relevance='irrelevant', attitude='none', move='unknown')
+    constructed['stratum'] = 'hardneg:subword'
+    assert tt.is_trainable(constructed, 'relevance') is True
+    for head in ('content_origin', 'confidence', 'attitude', 'expected_move'):
+        assert tt.is_trainable(constructed, head) is False, head
+    assert tt.is_constructed(constructed) is True
+    read = _row(relevance='relevant')
+    read['stratum'] = 'hardneg:read'
+    assert tt.is_constructed(read) is False
+    assert all(tt.is_trainable(read, head) for head in
+               ('relevance', 'content_origin', 'confidence', 'attitude', 'expected_move'))
+
+
 def test_a_forced_label_on_an_irrelevant_row_teaches_the_tone_heads_nothing():
     row = _row(relevance='irrelevant', attitude='none', move='unknown')
     assert tt.is_trainable(row, 'attitude') is False

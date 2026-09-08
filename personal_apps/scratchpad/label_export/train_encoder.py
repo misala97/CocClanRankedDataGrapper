@@ -53,8 +53,18 @@ EXPORT = os.path.join(ROOT, 'export-2026-09-05.jsonl')
 RECALL_LABELS = os.path.join(ROOT, 'labels-recall.jsonl')
 RECALL_EXPORTS = [os.path.join(ROOT, 'candidates-2026-09-06.jsonl'),
                   os.path.join(ROOT, 'candidates-topup-2026-09-06.jsonl')]
+# The hard-negative wave (2026-09-08): pairs a finder would propose and no
+# reader accepts -- a symbol cut out of a longer word, an ordinary word
+# that happens to be a symbol, an index name -- built by construction from
+# the raw week (build_hard_negatives.py), plus the NER audit's read pairs.
+# The judge rubber-stamped exactly these shapes (`corn` 1.00 for
+# "buttcorn", `Abt` 0.99 for "about") because no wave had ever shown it one.
+HARDNEG_LABELS = os.path.join(ROOT, 'labels-hardneg.jsonl')
+HARDNEG_EXPORT = os.path.join(ROOT, 'candidates-hardneg.jsonl')
 PAIRS = ([(LABELS, EXPORT)]
-         + [(RECALL_LABELS, export) for export in RECALL_EXPORTS])
+         + [(RECALL_LABELS, export) for export in RECALL_EXPORTS]
+         + ([(HARDNEG_LABELS, HARDNEG_EXPORT)]
+            if os.path.exists(HARDNEG_LABELS) else []))
 OUT_DIR = os.path.join(ROOT, 'encoder')
 TEST_NATURAL = os.path.join(ROOT, 'test-natural.json')
 TEST_HARD = os.path.join(ROOT, 'test-hard.json')
@@ -86,8 +96,15 @@ HEADS = {
 }
 IDX = {h: {v: i for i, v in enumerate(vs)} for h, vs in HEADS.items()}
 # mention_id -> the label VALUES, so the mask can ask about relevance
-# by name rather than by an index the head order could change.
+# by name rather than by an index the head order could change; and the
+# stratum, so it can tell a constructed hard negative from a judged row.
 RAW_Y = {}
+RAW_STRATUM = {}
+
+
+def _mask_view(row):
+    """What tone_training.is_trainable reads about a training row."""
+    return {'y': RAW_Y[row['mention_id']], 'stratum': RAW_STRATUM[row['mention_id']]}
 
 
 def load_rows():
@@ -105,6 +122,7 @@ def load_rows():
                 continue
             seen.add(row['mention_id'])
             RAW_Y[row['mention_id']] = dict(row['y'])
+            RAW_STRATUM[row['mention_id']] = row['stratum']
             row['y'] = {h: IDX[h][row['y'][h]] for h in HEADS}
             rows.append(row)
     return rows
@@ -190,7 +208,7 @@ class Rows(Dataset):
             # PROMPT forced, not a judgement, and training on it taught the
             # tone heads to answer `none`.
             item['m_' + h] = torch.tensor(
-                1.0 if tone_training.is_trainable({'y': RAW_Y[r['mention_id']]}, h)
+                1.0 if tone_training.is_trainable(_mask_view(r), h)
                 else 0.0)
         return item
 
@@ -323,7 +341,7 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
         # or the tone heads would be balanced against a distribution the
         # mask removes.
         counted = [r for r in train_rows
-                   if tone_training.is_trainable({'y': RAW_Y[r['mention_id']]}, h)]
+                   if tone_training.is_trainable(_mask_view(r), h)]
         counts = collections.Counter(r['y'][h] for r in counted)
         w = torch.tensor([1.0 / max(1, counts.get(i, 0)) ** 0.5
                           for i in range(len(classes))], dtype=torch.float, device=device)
@@ -356,7 +374,9 @@ def train_one(train_rows, tune_rows, test_rows, recall_rows, args, device, tag):
     settings.update({'base': BASE, 'max_len': MAX_LEN, 'train_rows': len(train_rows),
                      'labels_sha': _sha(LABELS),
                      'recall_labels_sha': (_sha(RECALL_LABELS)
-                                           if os.path.exists(RECALL_LABELS) else None)})
+                                           if os.path.exists(RECALL_LABELS) else None),
+                     'hardneg_labels_sha': (_sha(HARDNEG_LABELS)
+                                            if os.path.exists(HARDNEG_LABELS) else None)})
     start_epoch = 0
     if args.resume and os.path.exists(ckpt_path):
         saved = torch.load(ckpt_path, map_location=device, weights_only=False)
@@ -481,6 +501,8 @@ def main():
         'train_rows': len(train_rows), 'natural_rows': len(natural_rows),
         'hard_rows': len(hard_rows), 'recall_rows': len(recall_rows),
         'recall_labels_sha': _sha(RECALL_LABELS) if os.path.exists(RECALL_LABELS) else None,
+        'hardneg_labels_sha': _sha(HARDNEG_LABELS) if os.path.exists(HARDNEG_LABELS) else None,
+        'hardneg_rows': sum(1 for r in rows if str(r['stratum']).startswith('hardneg:')),
         'test_recall_sha': _sha(TEST_RECALL) if os.path.exists(TEST_RECALL) else None,
         'exclusions': exclusions,
         'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
@@ -490,7 +512,7 @@ def main():
         # while the tone heads train on 11,057 of them misleads whoever
         # reads the log later.
         seen = [r for r in train_rows
-                if tone_training.is_trainable({'y': RAW_Y[r['mention_id']]}, h)]
+                if tone_training.is_trainable(_mask_view(r), h)]
         print(' %-15s trains on %5d rows, mix %s'
               % (h, len(seen), dict(collections.Counter(
                   HEADS[h][r['y'][h]] for r in seen))))

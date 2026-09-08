@@ -34,6 +34,7 @@ SETTINGS_THAT_MUST_MATCH = (
     'train_rows',           # the data changed if this moved
     'labels_sha',
     'recall_labels_sha',
+    'hardneg_labels_sha',   # the constructed hard-negative wave (2026-09-08)
 )
 
 

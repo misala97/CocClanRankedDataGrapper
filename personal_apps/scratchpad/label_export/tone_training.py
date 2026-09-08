@@ -40,6 +40,19 @@ OPPOSITES = {
 # A row may teach the tone heads only when its relevance is this.
 TONE_REQUIRES_RELEVANCE = 'relevant'
 
+# Hard negatives built by construction (build_hard_negatives.py, 2026-09-08):
+# a symbol cut out of a longer word, an ordinary word that is also a
+# symbol, an index name. Such a row asserts ONE thing -- the symbol is not
+# mentioned -- and its origin, tone and confidence fields are placeholders
+# (the post may be a press release). `hardneg:read` is a reader's verdict
+# on every field and is not in this set.
+CONSTRUCTED_STRATA = frozenset(('hardneg:subword', 'hardneg:ordinary', 'hardneg:index'))
+RELEVANCE_HEAD = 'relevance'
+
+
+def is_constructed(row):
+    return row.get('stratum') in CONSTRUCTED_STRATA
+
 
 def is_trainable(row, head):
     """Whether `row` may contribute to `head`'s loss.
@@ -47,8 +60,10 @@ def is_trainable(row, head):
     Every row teaches relevance, content_origin and confidence -- those are
     judged on their own terms. The tone heads see only rows whose relevance
     is `relevant`, because the others carry a label the prompt wrote rather
-    than the teacher.
+    than the teacher. A constructed hard negative teaches relevance only.
     """
+    if is_constructed(row):
+        return head == RELEVANCE_HEAD
     if head not in TONE_HEADS:
         return True
     return row['y']['relevance'] == TONE_REQUIRES_RELEVANCE

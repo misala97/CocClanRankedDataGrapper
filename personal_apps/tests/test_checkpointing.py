@@ -37,6 +37,9 @@ def test_different_training_data_never_resumes():
     assert cp.is_compatible(_meta(), _meta(train_rows=17091)) is False
     assert cp.is_compatible(_meta(), _meta(labels_sha='changed')) is False
     assert cp.is_compatible(_meta(), _meta(recall_labels_sha='changed')) is False
+    # the hard-negative wave is training data too (2026-09-08)
+    assert cp.is_compatible(_meta(hardneg_labels_sha='a'),
+                            _meta(hardneg_labels_sha='b')) is False
 
 
 def test_asking_for_more_epochs_still_resumes():
