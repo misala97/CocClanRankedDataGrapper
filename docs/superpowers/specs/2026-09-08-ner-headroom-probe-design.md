@@ -219,3 +219,34 @@ genuinely empty.
 
 Not run: GLiNER over the 14,323 labelled posts with known spans (recall on
 the easy kind). Would sharpen the bound; would not move the decision.
+
+## Cross-check — GLiNER over the 13,933 confirmed spans, 2026-09-08
+
+`scratchpad/label_export/gliner_recall_check.py`, 14,323 posts, 134 s on the
+GPU. Results in `radar_labels/ner/gliner-recall/`.
+
+    span recall      10,346 / 13,933 = 74.3%      post recall 77.0%
+      ALLCAPS         8,460 / 10,860 = 77.9%      never in the zero-candidate pool
+      Titlecase       1,144 /  1,388 = 82.4%      misses are mostly NOT companies: Jensen x25,
+                                                  Zuck x25, Musk x24, Bezos x10, Japanese, Reddit,
+                                                  Monday; real ones Robinhood x4, Bloom x4, Gopro x4
+      other             165 /    190 = 86.8%      Wendy's x10 -- possessives
+      cashtag           114 /    177 = 64.4%      production always catches these anyway
+      lowercase         463 /  1,318 = 35.1%      spy x87, rdw, meta, dell, sndk, snow, lulu, avgo
+
+**What it says about the bound.** The shapes that can exist in the
+zero-candidate pool (Title-case, multi-word names) GLiNER finds at 82-87%,
+and higher once the metonyms the span dataset counts (Jensen, Zuck, Musk are
+"spans" because the teacher judged those rows relevant) leave the
+denominator. Both methods now agree: **a trained span model's headroom over
+GLiNER is ~15-25%, ~1,000 -> ~1,200 relevant posts a week.**
+
+**The one shape training clearly wins:** lowercase symbols, 35% recall.
+But lowercase symbols are the loose pass's territory -- they land in the
+REJECT pool (prize A, 74% hit rate), not the zero-candidate pool -- except
+where the ordinary-word filter eats them (`spy`, `snow`, `aim`). The 200-post
+read found one such leak in 200 (`mu`).
+
+GLiNER also produced 33,718 entities of which 23,375 (69%) cover no
+confirmed span -- the same 84% unresolved rate the probe saw. Negatives are
+not exhaustive, so that is an upper bound on its junk rate, not a measure.
