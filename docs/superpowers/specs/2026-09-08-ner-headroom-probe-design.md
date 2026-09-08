@@ -189,3 +189,33 @@ finder is scored against the same 3,000 posts.
 Two lookup lessons for whenever the name tier ships: an index stoplist
 (Nasdaq, Dow, Russell), and no `tokens`-tier resolution of multi-word
 generic phrases.
+
+## GLiNER recall check — 200 posts it flagged nothing in, read 2026-09-08
+
+Michi's objection: an untrained zero-shot model's recall is unknown, so the
+probe is a floor, not the prize. Direct check: 200 random posts from the
+2,581 GLiNER-negative posts (ids in `probe-3000/miss-audit-ids.json`,
+seed 20260908), read in full by Claude.
+
+- **1 explicit miss** — #40 `puts or short on mu` (Micron, lowercase).
+- **2 implicit references** no lookup could resolve — #57 "a company that
+  makes yoga pants and 10 billion market cap" (Lululemon), #93 `Winzigweich`
+  (mauerstrassenwetten German for Microsoft).
+- Borderline, counted as no: #8 `farmmi` in a memecoin-trenches context,
+  #20 "Michael Dell's wife".
+- The other ~195: politics, options mechanics, jokes, links, sector words
+  (`oil stocks`, `memory`), indices (`spx`, `S&P futures`), people (`Warsh`).
+
+Miss rate 0.5% explicit, 1.5% counting the implicit two; Wilson 95% upper
+bounds 2.8% and 4.3%. Over the 86% of posts GLiNER left blank that lifts the
+14.0% flagged rate to at most ~16.4% (explicit) or ~17.6% (generous), i.e.
+**GLiNER's post-level recall on this pool is >= 80-85% even at the bound**.
+A trained span model's headroom over GLiNER is therefore at most ~20-25%:
+~1,000 -> ~1,200-1,250 relevant posts a week. The decision stands.
+
+The pool is ~98% posts that name no company at all. That is the finding
+under the finding: the 66.6% the extractor sees nothing in is mostly
+genuinely empty.
+
+Not run: GLiNER over the 14,323 labelled posts with known spans (recall on
+the easy kind). Would sharpen the bound; would not move the decision.
