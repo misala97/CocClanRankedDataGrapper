@@ -162,6 +162,29 @@ def find_spans(rows, batch_size, threshold=THRESHOLD):
     return findings, device
 
 
+def find_spans_trained(rows, model_dir, batch_size):
+    """Our own tagger in GLiNER's seat, over the same text. The score is
+    the mean max-class probability across the span's pieces."""
+    import train_ner
+
+    tok, model, config, device = train_ner.load_model(model_dir)
+    texts = [row['author_text'] for row in rows]
+    per_row = train_ner.predict_spans(model, tok, texts, device, config['max_len'],
+                                      batch_size, with_scores=True)
+    findings = []
+    for row, spans in zip(rows, per_row):
+        for start, end, score in spans:
+            # A piece that owns its leading space hands it on; the lookup
+            # must see the word, not the space.
+            surface = row['author_text'][start:end].strip()
+            if not surface:
+                continue
+            findings.append({'external_id': row['external_id'], 'span': surface,
+                             'label': 'trained', 'score': round(float(score), 3),
+                             'start': start, 'end': end})
+    return findings, device
+
+
 def judge_pairs(pairs, text_by_id, artifact_dir, batch_size):
     """The deployed artifact, through the toy's loader -- same (ticker,
     text) sentence pair production feeds it."""
@@ -238,7 +261,7 @@ def render(f, timings, device, config):
     print('timings                          %s'
           % '  '.join('%s %.0fs' % kv for kv in timings.items()))
     print('finder %s on %s; judge %s max_len %d'
-          % (GLINER_MODEL, device, config['base'], config['max_len']))
+          % (f['finder']['model'], device, config['base'], config['max_len']))
 
 
 def main(argv=None):
@@ -248,6 +271,9 @@ def main(argv=None):
     parser.add_argument('--out', required=True)
     parser.add_argument('--artifact-dir', default=None,
                         help='defaults to the toy loader\'s artifact')
+    parser.add_argument('--finder', choices=('gliner', 'trained'), default='gliner')
+    parser.add_argument('--model-dir', default=None,
+                        help='trained finder; defaults to model-ner-latest.txt beside the sample')
     parser.add_argument('--gliner-batch', type=int, default=32)
     parser.add_argument('--encoder-batch', type=int, default=16)
     parser.add_argument('--threshold', type=float, default=THRESHOLD)
@@ -269,8 +295,18 @@ def main(argv=None):
 
     timings = {}
     started = time.perf_counter()
-    findings, device = find_spans(rows, args.gliner_batch, args.threshold)
-    timings['gliner'] = time.perf_counter() - started
+    if args.finder == 'trained':
+        model_dir = args.model_dir
+        if not model_dir:
+            with open(os.path.join(os.path.dirname(args.sample), 'model-ner-latest.txt'),
+                      encoding='utf-8') as handle:
+                model_dir = handle.read().strip()
+        findings, device = find_spans_trained(rows, model_dir, args.gliner_batch)
+        finder_desc = {'model': model_dir, 'labels': ['trained BIO'], 'threshold': None}
+    else:
+        findings, device = find_spans(rows, args.gliner_batch, args.threshold)
+        finder_desc = {'model': GLINER_MODEL, 'labels': LABELS, 'threshold': args.threshold}
+    timings['finder'] = time.perf_counter() - started
 
     started = time.perf_counter()
     for finding in findings:
@@ -295,8 +331,7 @@ def main(argv=None):
                                     ensure_ascii=False) + '\n')
     result = funnel(findings, verdicts, len(rows))
     result['timings'] = {k: round(v, 1) for k, v in timings.items()}
-    result['finder'] = {'model': GLINER_MODEL, 'labels': LABELS,
-                        'threshold': args.threshold, 'device': device}
+    result['finder'] = dict(finder_desc, device=device)
     result['judge'] = {'artifact_dir': os.path.abspath(artifact_dir),
                        'base': config['base'], 'max_len': config['max_len'],
                        'source_model': config.get('manifest', {}).get('source_model')}
