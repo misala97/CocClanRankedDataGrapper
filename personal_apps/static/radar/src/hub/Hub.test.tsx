@@ -135,9 +135,51 @@ describe('the shell', () => {
     expect(screen.getByText(/US markets/)).toBeVisible()
   })
 
-  it('offers a skip link to the page body', () => {
+  it('offers a skip link that moves focus and keeps the page', async () => {
     mount()
-    expect(screen.getByRole('link', { name: /skip to the page/i }))
-      .toHaveAttribute('href', '#rh-main')
+    const skip = screen.getByRole('link', { name: /skip to the page/i })
+    expect(skip).toHaveAttribute('href', '#rh-main')
+
+    // Clicking it used to set the hash to an element id, which the router
+    // read as a route name -- so the first control a keyboard reader met
+    // replaced the page with "there is nothing at this address".
+    await userEvent.click(skip)
+    expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+    expect(screen.queryByText(/nothing at this address/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveFocus()
+  })
+
+  it('ignores an in-page anchor arriving as a hash change', () => {
+    mount()
+    window.location.hash = '#rh-main'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+  })
+
+  it('refuses the admin page to a reader who is not one', () => {
+    // The nav link is rendered for admins only, but a typed hash is not a
+    // link. The API enforces this too; saying so is the difference between a
+    // refusal and an empty page.
+    window.history.replaceState(null, '', '/radar/hub/#admin')
+    mount({ isAdmin: false })
+    expect(screen.getByText(/is for administrators/i)).toBeVisible()
+  })
+
+  it('lets an admin open the admin page', () => {
+    window.history.replaceState(null, '', '/radar/hub/#admin')
+    mount({ isAdmin: true })
+    expect(screen.queryByText(/is for administrators/i)).not.toBeInTheDocument()
+  })
+
+  it('closes the menu on Escape and returns focus to its toggle', async () => {
+    const { container } = mount()
+    const menu = container.querySelector<HTMLButtonElement>('.rh-menu')!
+    menu.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(menu).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.keyboard('{Escape}')
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
+    expect(menu).toHaveFocus()
   })
 })

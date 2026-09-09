@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { payload } from '../fixtures'
 import type { Selection } from '../types'
-import { boardKey, detailKey, searchKey } from './queries'
+import { boardKey, detailKey, searchKey, selectionOf } from './queries'
 
 const initial = payload()
 const selection: Selection = {
@@ -66,5 +66,19 @@ describe('cache identity', () => {
                        searchKey('AA')]) {
       expect(key[0]).toBe('radar-hub')
     }
+  })
+
+  it('does not spend two requests on the same search', () => {
+    expect(searchKey('AAPL ')).toEqual(searchKey('AAPL'))
+  })
+
+  it('reads a payload’s own selection back out of it', () => {
+    // This is what decides whether the embedded board may seed a cache key.
+    // A payload built under one filter presented as the answer to another
+    // would arrive as real data with a fresh timestamp.
+    expect(selectionOf(initial)).toEqual(selection)
+    expect(boardKey(selectionOf(initial))).toEqual(boardKey(selection))
+    expect(boardKey(selectionOf(payload({ market: 'de' }))))
+      .not.toEqual(boardKey(selection))
   })
 })

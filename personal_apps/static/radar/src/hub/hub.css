@@ -55,13 +55,20 @@
 .rh textarea { font: inherit; color: inherit; }
 
 .rh button { cursor: pointer; background: none; border: 0; }
+.rh button, .rh a, .rh input, .rh select, .rh textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
 .rh button:disabled { opacity: 0.55; cursor: not-allowed; }
 .rh a { color: inherit; text-decoration: none; }
 
 .rh :focus-visible {
-  outline: 3px solid var(--sage);
+  outline: 3px solid var(--green);
   outline-offset: 3px;
 }
+/* Green disappears into pine; sage is the legible ring on the dark ground. */
+.rh-nav :focus-visible,
+.rh-skip:focus-visible { outline-color: var(--sage); }
 
 .rh h1, .rh h2, .rh h3, .rh p { margin: 0; }
 .rh h1 {
@@ -107,7 +114,7 @@
   padding: 12px;
   border-radius: 0 0 8px 0;
 }
-.rh-skip:focus { top: 0; }
+.rh-skip:focus { top: 10px; }
 
 /* --- navigation --------------------------------------------------------- */
 
@@ -119,7 +126,7 @@
   color: var(--nav-ink);
   display: flex;
   flex-direction: column;
-  padding: 28px 16px 18px;
+  padding: 29px 16px 18px;
   z-index: 20;
   overflow-y: auto;
 }
@@ -129,14 +136,14 @@
   align-items: center;
   gap: 11px;
   padding: 0 12px;
-  margin-bottom: 34px;
-  font-size: 22px;
+  margin-bottom: 37px;
+  font-size: 23px;
   font-weight: 600;
   letter-spacing: 0.07em;
 }
-.rh-brand svg { width: 28px; height: 28px; flex: none; }
+.rh-brand svg { width: 29px; height: 29px; flex: none; }
 
-.rh-navgroup { margin-bottom: 24px; }
+.rh-navgroup { margin-bottom: 26px; }
 .rh-navlabel {
   color: oklch(78% 0.025 165);
   font-size: 11px;
@@ -146,6 +153,7 @@
   display: flex;
   gap: 12px;
   align-items: center;
+  min-height: 44px;
   width: 100%;
   text-align: left;
   padding: 11px 13px;
@@ -163,7 +171,7 @@
 }
 .rh-navbottom {
   margin-top: auto;
-  padding-top: 24px;
+  padding-top: 25px;
   border-top: 1px solid oklch(47% 0.035 165);
 }
 
@@ -209,7 +217,7 @@
 .rh-main {
   width: 100%;
   max-width: 1680px;
-  padding: 34px 36px 52px;
+  padding: 35px 36px 52px;
   margin: 0 auto;
   flex: 1;
   outline: none;
@@ -220,7 +228,7 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
-  margin-bottom: 28px;
+  margin-bottom: 30px;
 }
 .rh-heading p { margin-top: 9px; color: var(--muted); }
 .rh-datestamp { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
@@ -241,7 +249,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 15px;
-  margin-bottom: 18px;
+  margin-bottom: 19px;
 }
 
 .rh-button {
@@ -315,24 +323,440 @@
 
 .rh-caption { font-size: 11px; color: var(--muted); margin-top: 12px; }
 
+/* --- filters ------------------------------------------------------------ */
+
+.rh-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.rh-filters-note { margin-left: auto; }
+
+.rh-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rh-field input,
+.rh-field select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  padding: 9px 11px;
+  color: var(--ink);
+  font-size: 13px;
+  min-height: 40px;
+  min-width: 220px;
+}
+
+/* --- the ranked table --------------------------------------------------- */
+
+/* Scrolls inside its own labelled region. The document itself never scrolls
+   sideways -- a page that does hides the right-hand columns from anyone who
+   does not think to drag it. */
+.rh-tablewrap { overflow-x: auto; padding: 20px 23px 0; }
+.rh-tablewrap:focus-visible { outline-offset: -3px; }
+
+.rh-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.rh-table th[scope='col'] {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 0 12px 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.rh-table td,
+.rh-table th[scope='row'] {
+  padding: 15px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  vertical-align: top;
+  font-weight: 400;
+}
+.rh-table tbody tr:first-child td,
+.rh-table tbody tr:first-child th { border-top: 0; }
+.rh-table th:first-child,
+.rh-table td:first-child { padding-left: 0; }
+.rh-table th:last-child,
+.rh-table td:last-child { padding-right: 0; }
+.rh-table .right { text-align: right; }
+.rh-table strong { display: block; font-size: 13px; font-weight: 600; }
+
+.rh-sub { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+.rh-company { min-width: 210px; }
+
+/* The whole company cell is the control. 44px tall at every width, because a
+   row is the primary thing a reader taps on this page. */
+.rh-open {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  padding: 2px 0;
+  min-height: 44px;
+  width: 100%;
+}
+.rh-open:hover .rh-ticker { color: var(--green); text-decoration: underline; }
+.rh-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--wash);
+  color: var(--green);
+  font-weight: 600;
+  font-size: 12px;
+}
+.rh-ticker { display: block; font-size: 13px; font-weight: 600; letter-spacing: 0.015em; }
+.rh-name { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.rh-clauses { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; }
+.rh-clause { font-size: 11px; color: var(--muted); }
+.rh-clause.ratio, .rh-clause.people, .rh-clause.venues { color: var(--ink); }
+.rh-clause.price-up { color: var(--green); }
+.rh-clause.price-down { color: var(--red); }
+.rh-clause.warn { color: var(--amber); }
+.rh-clause.new { color: var(--muted); font-style: italic; }
+
+.rh-marks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+
+/* Proportion as a bar, under a figure that already reads as words. Green and
+   red never carry the meaning alone. */
+.rh-tonebar {
+  display: flex;
+  gap: 2px;
+  width: 84px;
+  height: 5px;
+  margin-top: 7px;
+}
+.rh-tonebar span { border-radius: 2px; }
+.rh-tonebar .bull { background: var(--sage); }
+.rh-tonebar .flat { background: var(--line); }
+.rh-tonebar .bear { background: oklch(72% 0.09 25); }
+
+.rh-tablefoot {
+  margin: 0;
+  padding: 15px 23px 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* --- search ------------------------------------------------------------- */
+
+.rh-search { position: relative; flex: 1; max-width: 380px; }
+.rh-search input {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--canvas);
+  padding: 9px 12px;
+  font-size: 13px;
+  min-height: 40px;
+  color: var(--ink);
+}
+.rh-search input:hover { border-color: var(--line); }
+.rh-search input:focus { background: var(--white); border-color: var(--line); }
+
+.rh-matches {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 18px 44px oklch(23% 0.018 165 / 0.14);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.rh-matches li { border-radius: 7px; }
+.rh-matches li.active { background: var(--wash); }
+.rh-matches button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 11px;
+  min-height: 44px;
+}
+.rh-matches b { font-size: 13px; }
+.rh-nomatch { padding: 12px 11px; font-size: 12px; color: var(--muted); }
+
+/* --- research ----------------------------------------------------------- */
+
+.rh-crumb { margin-bottom: 14px; }
+
+.rh-researchhead {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.rh-identity { display: flex; gap: 14px; align-items: center; }
+.rh-identity h1 { font-size: 27px; }
+.rh-mark.large { width: 46px; height: 46px; font-size: 16px; border-radius: 11px; }
+
+.rh-researchcols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: start;
+}
+
+.rh-bigprice {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin-bottom: 4px;
+}
+.rh-move { font-size: 13px; font-weight: 500; letter-spacing: 0; }
+
+.rh-facts {
+  display: flex;
+  gap: 26px;
+  margin: 16px 0 0;
+  flex-wrap: wrap;
+}
+.rh-facts dt { font-size: 11px; color: var(--muted); }
+.rh-facts dd { margin: 3px 0 0; font-size: 12px; font-weight: 600; }
+
+.rh-spans { display: flex; gap: 4px; flex-wrap: wrap; }
+.rh-spans button {
+  border-radius: 5px;
+  padding: 7px 11px;
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 36px;
+}
+.rh-spans button[aria-pressed='true'] {
+  background: var(--wash);
+  color: var(--green);
+  font-weight: 600;
+}
+
+.rh-chartwrap { overflow-x: auto; margin-top: 14px; }
+.rh-chartwrap:focus-visible { outline-offset: -3px; }
+
+.rh-summary {
+  background: var(--wash);
+  border-radius: var(--radius);
+  padding: 21px;
+  align-self: start;
+}
+.rh-summary h2 { font-size: 17px; margin-bottom: 12px; }
+.rh-summary h3 { margin: 20px 0 8px; font-size: 12px; }
+.rh-summary p { font-size: 12px; line-height: 1.7; }
+.rh-read { color: var(--ink); }
+.rh-facts-list { list-style: none; margin: 0; padding: 0; }
+.rh-facts-list li {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 9px;
+  padding-left: 15px;
+  position: relative;
+  color: var(--muted);
+}
+.rh-facts-list li::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  color: var(--green);
+  font-size: 17px;
+  line-height: 1.1;
+}
+.rh-facts-list strong { color: var(--ink); font-weight: 600; }
+
+.rh-empty-actions { display: flex; gap: 10px; justify-content: center; }
+
+/* --- the panels ported from the board's detail components ---------------- */
+/* PriceChart, Breakdown and Posts are reused for their tested behaviour --
+   null handling, session bands, converted basis, keyboard and text
+   equivalents. Their markup carries radar.css's short class names, and
+   radar.css is not loaded here, so the rules they need are restated in the
+   hub's own tokens. Scoped under .rh, so nothing here can reach /radar/. */
+
+/* The chart and the session bands paint from CSS variables rather than from
+   literals, which is what lets one renderer serve two visual systems. Those
+   names are radar.css's; undefined here, every `fill` and `stroke` fell back
+   to black and the chart rendered as a solid block. Mapped to the hub's own
+   palette -- sage is the chatter mark, green and red keep their one sanctioned
+   meaning, and a shut market is furniture rather than a caution. */
+.rh {
+  --rule: var(--line);
+  --rule-soft: oklch(94% 0.006 165);
+  --dim: var(--muted);
+  --ink-2: var(--muted);
+  --bg: var(--white);
+  --raise: var(--white);
+  --mark: var(--sage);
+  --mark-soft: oklch(71% 0.055 165 / 0.18);
+  --up: var(--green);
+  --down: var(--red);
+  --warn: var(--amber);
+  --session-pre: var(--muted);
+  --session-pre-soft: oklch(96.5% 0.008 165);
+  --session-after: var(--muted);
+  --session-after-soft: oklch(96.5% 0.008 165);
+}
+
+.rh .pxchart { display: block; width: 100%; height: 300px; }
+.rh .pxchart .ax {
+  font-size: 11px;
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.rh .pxchart .ax.peak { fill: var(--green); font-weight: 600; }
+.rh .pxchart .gridline { stroke: var(--line); }
+.rh .pxchart .hover-hit { cursor: crosshair; }
+.rh .pxchart .hover-line {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.8;
+}
+.rh .pxchart .hover-dot { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.rh .pxchart .hover-dot.px { fill: var(--white); stroke: var(--ink); }
+.rh .pxchart .hover-dot.talk { fill: var(--sage); stroke: var(--white); }
+.rh .pxchart .hover-card {
+  fill: var(--white);
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.rh .pxchart .hover-text { fill: var(--muted); }
+.rh .pxchart .hover-text.l0 { fill: var(--ink); font-weight: 600; }
+.rh .pxchart .hover-text.l2 { fill: var(--green); font-weight: 600; }
+.rh .pxchart .watch-edge { stroke: var(--line); stroke-dasharray: 3 3; }
+.rh .history-proxy-note { font-size: 11px; color: var(--amber); margin-top: 8px; }
+
+.rh .bd {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+.rh .bd .sub { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.rh .bd table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rh .bd thead th {
+  text-align: left;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rh .bd td,
+.rh .bd tbody th {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.rh .bd tbody th.venue {
+  text-align: left;
+  font-weight: 400;
+  color: var(--ink);
+}
+.rh .bd th.r, .rh .bd td.r { text-align: right; }
+.rh .stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.rh .stat .k { color: var(--muted); }
+.rh .stat .v { font-weight: 600; color: var(--ink); }
+.rh .stat.hot .v { color: var(--amber); }
+.rh .zone { margin: 0; }
+.rh .note { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+.rh .posts { list-style: none; margin: 0; padding: 0; max-width: 660px; }
+.rh .post { padding: 14px 0 15px; border-bottom: 1px solid var(--line); }
+.rh .post.bull { background: oklch(97% 0.02 165); padding-inline: 10px; }
+.rh .post.bear { background: var(--red-wash); padding-inline: 10px; }
+.rh .phead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+.rh .phead .src {
+  min-width: 66px;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--wash);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.rh .phead .ptone { font-weight: 650; text-transform: uppercase; color: var(--muted); }
+.rh .post.bull .ptone { color: var(--green); }
+.rh .post.bear .ptone { color: var(--red); }
+.rh .phead .pby { color: var(--muted); }
+.rh .phead .who {
+  color: var(--ink);
+  font-weight: 500;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rh .phead .when { color: var(--muted); }
+.rh .phead .out { margin-left: auto; color: var(--green); }
+.rh .phead .out:hover { text-decoration: underline; }
+.rh .post p {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rh .post .more { font-size: 11px; color: var(--green); margin-top: 6px; }
+.rh .below { font-size: 11px; color: var(--muted); margin-top: 12px; }
+
 /* --- page states -------------------------------------------------------- */
 
 .rh-empty {
-  padding: 60px 25px;
+  padding: 65px 25px;
   text-align: center;
   border: 1px dashed var(--line);
   border-radius: var(--radius);
   max-width: 850px;
   margin: 15px auto;
 }
-.rh-empty h2 { font-size: 21px; margin-bottom: 9px; }
-.rh-empty p { font-size: 13px; color: var(--muted); max-width: 46ch; margin: 0 auto 20px; }
+.rh-empty h2 { font-size: 22px; margin-bottom: 9px; }
+.rh-empty p { font-size: 13px; color: var(--muted); max-width: 46ch; margin: 0 auto 23px; }
 
 .rh-skeleton {
   height: 17px;
   border-radius: 5px;
   background: var(--wash);
-  margin-bottom: 16px;
+  margin-bottom: 17px;
 }
 .rh-skeleton.large { height: 180px; }
 .rh-skeleton.half { width: 48%; }
@@ -349,6 +773,11 @@
 
 @media (max-width: 1100px) {
   .rh-twocol { grid-template-columns: 1fr; }
+  /* The summary follows the evidence rather than sitting beside it. Below
+     this width a 280px rail makes the chart unreadable, and the chart is the
+     reason the page exists. */
+  .rh-researchcols { grid-template-columns: minmax(0, 1fr); }
+  .rh .bd { grid-template-columns: minmax(0, 1fr); gap: 22px; }
 }
 
 @media (max-width: 1000px) {
@@ -362,17 +791,18 @@
   .rh-nav {
     width: 240px;
     transform: translateX(-100%);
-    transition: transform 180ms;
+    visibility: hidden;
+    transition: transform 180ms, visibility 180ms;
     box-shadow: 8px 0 30px oklch(23% 0.018 165 / 0.22);
   }
-  .rh-nav.open { transform: translateX(0); }
+  .rh-nav.open { transform: translateX(0); visibility: visible; }
   .rh-workspace { margin-left: 0; }
   .rh-menu {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border: 1px solid var(--line);
     border-radius: 7px;
   }
@@ -383,9 +813,60 @@
   .rh-heading h1 { font-size: 27px; }
   .rh-pad { padding: 19px; }
   .rh-button { min-height: 44px; }
-  .rh-textbutton { min-height: 36px; }
+  .rh-textbutton { min-height: 44px; }
   .rh-skip { left: 16px; }
   .rh-session { display: none; }
+  .rh-tablewrap { padding: 16px 18px 0; }
+  .rh-tablefoot { padding: 13px 18px 16px; }
+
+  /* Stacked, not scrolled sideways. A six-column table on a phone puts the
+     price and the tone past the right edge, and the spec is explicit that a
+     scrolling region may not hide the company, the price or the evidence
+     quality. Each cell keeps its column's name beside it instead. */
+  .rh-table thead { display: none; }
+  .rh-table,
+  .rh-table tbody,
+  .rh-table tr,
+  .rh-table td,
+  .rh-table th[scope='row'] { display: block; }
+  .rh-table tr { border-top: 1px solid var(--line); padding: 6px 0 14px; }
+  .rh-table tbody tr:first-child { border-top: 0; }
+  .rh-table th[scope='row'] { padding: 0; border: 0; }
+  .rh-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 5px 0 0;
+    border: 0;
+    text-align: left;
+  }
+  .rh-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 11px;
+    flex: none;
+  }
+  .rh-table td.right { text-align: right; }
+  .rh-table td > strong { display: inline; }
+  .rh-table .rh-sub { display: inline; margin: 0 0 0 6px; }
+  .rh-table td > * { text-align: right; }
+  .rh-tonebar { margin-left: auto; }
+  .rh-field input, .rh-field select { min-width: 0; width: 100%; font-size: 16px; }
+  .rh-field { width: 100%; }
+  .rh-filters-note { margin-left: 0; }
+  .rh-search { max-width: none; }
+  .rh-search input { font-size: 16px; }
+  .rh-identity h1 { font-size: 23px; }
+  .rh-mark.large { width: 41px; height: 41px; }
+  .rh-researchhead { gap: 18px; }
+  .rh-summary { padding: 18px; }
+  .rh-spans button { min-height: 40px; }
+  /* Panning, not scaling: a chart squeezed into 390px has an axis nobody can
+     read. The region scrolls; the document does not. */
+  .rh .pxchart { min-width: 620px; height: auto; }
+  .rh .pxchart .ax { font-size: 14px; }
+  .rh .phead .who { max-width: 12ch; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -31,31 +31,46 @@ from pathlib import Path
 
 _STATIC = Path(__file__).parent / 'static'
 _DIST = _STATIC / 'gym' / 'dist'
-_cache: dict[tuple[str, float], str] = {}
+_manifests: dict[tuple[str, float], dict] = {}
 
 
 class ViteManifestError(RuntimeError):
     """The bundle for an entry could not be resolved."""
 
 
-def _record(entry: str, dist_dir: Path | None, feature: str) -> tuple[dict, Path]:
-    dist = dist_dir or (_STATIC / feature / 'dist')
+def _manifest(dist: Path) -> dict:
+    """The parsed manifest, memoised on its own mtime.
+
+    The read and the JSON parse happen on a miss and not on every call. That
+    is the whole point of the memo: in production the file never changes while
+    the process lives, and re-reading it per template tag would put a stat, a
+    read and a parse on every page render of both features.
+    """
     manifest_path = dist / '.vite' / 'manifest.json'
     if not manifest_path.exists():
         raise ViteManifestError(
             f'No Vite manifest at {manifest_path}. Run `npm run build` in '
             f'personal_apps/ -- on the VPS this runs after `git reset --hard`, '
             f'which deletes the untracked dist/ directory.')
+    cache_key = (f'{dist}:manifest', manifest_path.stat().st_mtime)
+    cached = _manifests.get(cache_key)
+    if cached is None:
+        cached = json.loads(manifest_path.read_text(encoding='utf-8'))
+        _manifests.clear()          # only ever one build per dist is current
+        _manifests[cache_key] = cached
+    return cached
 
-    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+
+def _record(entry: str, dist_dir: Path | None, feature: str) -> dict:
+    dist = dist_dir or (_STATIC / feature / 'dist')
     key = f'static/{feature}/src/entries/{entry}.tsx'
-    record = manifest.get(key)
+    record = _manifest(dist).get(key)
     if record is None:
         raise ViteManifestError(
             f'Entry {entry!r} (looked for {key!r}) is not in the Vite '
             f'manifest. Add it to rollupOptions.input in the Vite config '
             f'for feature {feature!r}.')
-    return record, manifest_path
+    return record
 
 
 def resolve_asset(entry: str, dist_dir: Path | None = None,
@@ -66,14 +81,7 @@ def resolve_asset(entry: str, dist_dir: Path | None = None,
     extension. `feature` defaults to gym because it was the only one when this
     was written and every gym template calls it unqualified.
     """
-    dist = dist_dir or (_STATIC / feature / 'dist')
-    record, manifest_path = _record(entry, dist_dir, feature)
-    cache_key = (f'{dist}:{entry}', manifest_path.stat().st_mtime)
-    if cache_key in _cache:
-        return _cache[cache_key]
-    url = f'/static/{feature}/dist/{record["file"]}'
-    _cache[cache_key] = url
-    return url
+    return f'/static/{feature}/dist/{_record(entry, dist_dir, feature)["file"]}'
 
 
 def resolve_asset_css(entry: str, dist_dir: Path | None = None,
@@ -87,6 +95,29 @@ def resolve_asset_css(entry: str, dist_dir: Path | None = None,
 
     Empty for an entry that imports no CSS, which is every gym entry and the
     radar board: their stylesheets are plain <link> tags on unhashed files.
+
+    Imported chunks are followed too. Rollup may move a shared stylesheet onto
+    a chunk the entry imports rather than onto the entry itself, and reading
+    only the entry's own `css` would then return nothing and render the page
+    unstyled -- the exact failure this exists to prevent.
     """
-    record, _ = _record(entry, dist_dir, feature)
-    return [f'/static/{feature}/dist/{href}' for href in record.get('css', [])]
+    dist = dist_dir or (_STATIC / feature / 'dist')
+    manifest = _manifest(dist)
+    seen: list[str] = []
+    pending = [f'static/{feature}/src/entries/{entry}.tsx']
+    visited: set[str] = set()
+    # Raises for an unknown entry, with the message that names the config.
+    _record(entry, dist_dir, feature)
+    while pending:
+        key = pending.pop()
+        if key in visited:
+            continue
+        visited.add(key)
+        record = manifest.get(key)
+        if record is None:
+            continue
+        for href in record.get('css', []):
+            if href not in seen:
+                seen.append(href)
+        pending.extend(record.get('imports', []))
+    return [f'/static/{feature}/dist/{href}' for href in seen]

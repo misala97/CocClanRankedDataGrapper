@@ -24,6 +24,10 @@ const REASON_TEXT = {
   timeout: 'The board did not answer in time.',
   network: 'Could not reach the board.',
   missing: 'Nothing here for that ticker.',
+  // Signed in, and not allowed. Kept apart from `session` because the two
+  // have opposite advice: reloading fixes an expired session and will never
+  // fix a permission. Reachable since the admin operations endpoint exists.
+  forbidden: 'This account is not allowed to read that.',
   server: 'The board answered with an error.',
   busy: 'The board is rate-limiting requests. Give it a moment.',
 } as const
@@ -112,12 +116,14 @@ async function getJson<T>(url: string, signal?: AbortSignal,
 
 /** Which sentence a status code earns.
  *
- *  401 and 403 join `session` rather than getting a permission line of their
- *  own: the routes are behind @login_required, everyone who can open the page
- *  can read every row, and the only way to see one is a session that stopped
- *  being valid. Reloading is the fix in all three cases. */
+ *  401 is a session that stopped being valid; reloading is the fix. 403 is
+ *  not, and used to be folded in with it -- true while every reader of this
+ *  feature could read every row, and false since /radar/api/ops began
+ *  answering 403 to a signed-in non-admin. Telling that reader to reload is
+ *  advice that cannot work. */
 function statusReason(status: number): keyof typeof REASON_TEXT {
-  if (status === 401 || status === 403) return 'session'
+  if (status === 401) return 'session'
+  if (status === 403) return 'forbidden'
   if (status === 404) return 'missing'
   if (status === 429) return 'busy'
   if (status >= 500) return 'server'

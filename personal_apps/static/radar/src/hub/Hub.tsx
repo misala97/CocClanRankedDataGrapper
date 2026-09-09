@@ -10,10 +10,21 @@
 // company lands on the list the reader left, not a reset one.
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useQueryClient } from '@tanstack/react-query'
+
+import { BoardUnavailable } from '../api'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
-import { Missing } from './PageState'
-import { hashFor, readRoute, readSelection, readSpan, urlFor } from './navigation'
+import { Chatter } from './Chatter'
+import {
+  Forbidden, Loading, Missing, SignedOut, StaleNotice, Unavailable,
+} from './PageState'
+import { Research } from './Research'
+import { Search } from './Search'
+import {
+  hashFor, isInPageAnchor, readRoute, readSelection, readSpan, urlFor,
+} from './navigation'
 import type { HubRoute } from './navigation'
+import { selectionOf, useBoard } from './queries'
 import './hub.css'
 
 /** Only destinations this release actually renders. An empty page behind a
@@ -33,6 +44,13 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   const [span, setSpan] = useState<PanelSpan>(() => readSpan(window.location.search))
   const [menuOpen, setMenuOpen] = useState(false)
   const main = useRef<HTMLElement>(null)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const visible = useVisible()
+  const client = useQueryClient()
+
+  // useBoard decides for itself whether this payload matches the key it would
+  // seed; passing it unconditionally is safe.
+  const board = useBoard(selection, initial, visible)
 
   // Both events, because they are not the same event. A hash typed into the
   // address bar fires hashchange; Back across a pushState that changed only
@@ -40,7 +58,13 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   // truth instead of two half-synchronised copies.
   useEffect(() => {
     const resync = () => {
-      setRoute(readRoute(window.location.hash))
+      // An in-page anchor is not a destination. The skip link points at
+      // #rh-main, which is an element id, and reading it as a route name
+      // replaced the page with the recovery view -- on the first control a
+      // keyboard reader meets.
+      if (!isInPageAnchor(window.location.hash)) {
+        setRoute(readRoute(window.location.hash))
+      }
       setSelection(readSelection(window.location.search, seedSelection(initial),
                                  initial.all_sources))
       setSpan(readSpan(window.location.search))
@@ -52,6 +76,26 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
       window.removeEventListener('hashchange', resync)
     }
   }, [initial])
+
+  // An expired session invalidates everything cached under this account. The
+  // board is shared, but watch marks are not, and a cache surviving a sign-out
+  // is how one reader sees another's.
+  const expired = board.error instanceof BoardUnavailable
+    && board.error.reason === 'session'
+  useEffect(() => {
+    if (expired) client.clear()
+  }, [expired, client])
+
+  // Escape closes the menu wherever focus is; without it the only way out of
+  // an opened off-canvas nav is to find the toggle again.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') { setMenuOpen(false); menuButton.current?.focus() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   const go = useCallback((next: HubRoute, nextSelection = selection,
                           nextSpan = span) => {
@@ -69,7 +113,16 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
 
   return (
     <div className="rh">
-      <a className="rh-skip" href="#rh-main">Skip to the page</a>
+      {/* A real anchor for the semantics a screen reader announces, but it
+          moves focus itself rather than letting the fragment land in the
+          address bar: the hash is this hub's route, and #rh-main is not one. */}
+      <a
+        className="rh-skip"
+        href="#rh-main"
+        onClick={(event) => { event.preventDefault(); main.current?.focus() }}
+      >
+        Skip to the page
+      </a>
 
       <nav id="rh-nav" className={`rh-nav${menuOpen ? ' open' : ''}`}
            aria-label="Radar">
@@ -120,6 +173,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
       <div className="rh-workspace">
         <header className="rh-topbar">
           <button
+            ref={menuButton}
             type="button"
             className="rh-menu"
             aria-expanded={menuOpen}
@@ -129,26 +183,115 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
           >
             <span aria-hidden="true">☰</span>
           </button>
+          <Search onOpen={(ticker) => go({ page: 'research', ticker })} />
           <p className="rh-session">
-            <span className={`rh-dot${initial.session === 'closed' ? ' closed' : ''}`} />
-            {marketLabel(initial)}
+            <span className={`rh-dot${(board.data ?? initial).session === 'closed' ? ' closed' : ''}`} />
+            {marketLabel(board.data ?? initial)}
           </p>
         </header>
 
         <main id="rh-main" className="rh-main" ref={main} tabIndex={-1}
               aria-label={title}>
-          {route.page === 'missing'
-            ? <Missing onHome={() => go({ page: 'overview' })} />
-            : <Placeholder title={title} />}
+          {/* Data that was true a minute ago beats a blank page, as long as
+              the surface says the refresh failed and when it last succeeded. */}
+          {board.data && board.isError
+            ? <StaleNotice error={board.error}
+                           since={berlinStamp(board.data.generated_at)} />
+            : null}
+          {expired
+            ? <SignedOut />
+            : <Page route={route} board={board} selection={selection}
+                    span={span} title={title} visible={visible}
+                    isAdmin={isAdmin} go={go} />}
         </main>
       </div>
     </div>
   )
 }
 
-/** H1 ships the shell. Each page arrives in H2-H4 and replaces this; until
- *  then the area says what it is waiting for rather than rendering an empty
- *  panel that could be mistaken for a measured emptiness. */
+/** Which page, and what it needs.
+ *
+ *  Overview, Watching, Activity and Admin arrive in H3 and H4; until then they
+ *  say so rather than rendering an empty panel, which a reader could not tell
+ *  from a measured emptiness.
+ */
+function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
+  route: HubRoute
+  board: ReturnType<typeof useBoard>
+  selection: Selection
+  span: PanelSpan
+  title: string
+  visible: boolean
+  isAdmin: boolean
+  go: (route: HubRoute, selection?: Selection, span?: PanelSpan) => void
+}) {
+  if (route.page === 'missing') {
+    return <Missing onHome={() => go({ page: 'overview' })} />
+  }
+
+  // The nav link is rendered for admins only, but a typed hash is not a link.
+  // /radar/api/ops enforces this itself; saying so here is the difference
+  // between a refusal and an empty page.
+  if (route.page === 'admin' && !isAdmin) {
+    return <Forbidden what="Administration" />
+  }
+
+  if (route.page === 'research') {
+    return (
+      <Research
+        ticker={route.ticker}
+        selection={selection}
+        span={span}
+        visible={visible}
+        onSpan={(next) => go(route, selection, next)}
+        onBack={() => go({ page: 'chatter' })}
+        onSearch={() => document.getElementById('rh-search-input')?.focus()}
+      />
+    )
+  }
+
+  if (route.page === 'chatter') {
+    if (!board.data) {
+      return board.isError
+        ? <Unavailable error={board.error} retry={() => void board.refetch()} />
+        : <Loading label="Loading the ranked list…" />
+    }
+    return (
+      <Chatter
+        board={board.data}
+        selection={selection}
+        onOpen={(ticker) => go({ page: 'research', ticker })}
+      />
+    )
+  }
+
+  return <Placeholder title={title} />
+}
+
+/** Refreshes run while the page is being looked at, and only then. A hidden
+ *  tab polling a dashboard nobody is reading is a request the reader did not
+ *  ask for -- and on a metered pipeline it is not free. */
+function useVisible(): boolean {
+  const [visible, setVisible] = useState(
+    () => (typeof document === 'undefined' ? true
+      : document.visibilityState !== 'hidden'))
+  useEffect(() => {
+    const update = () => setVisible(document.visibilityState !== 'hidden')
+    document.addEventListener('visibilitychange', update)
+    return () => document.removeEventListener('visibilitychange', update)
+  }, [])
+  return visible
+}
+
+function berlinStamp(iso: string): string | null {
+  try {
+    return `${new Date(iso).toLocaleTimeString('en-GB',
+      { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Berlin`
+  } catch {
+    return null
+  }
+}
+
 function Placeholder({ title }: { title: string }) {
   return (
     <>
@@ -160,8 +303,9 @@ function Placeholder({ title }: { title: string }) {
       </div>
       <div className="rh-empty">
         <h2>Nothing here yet.</h2>
-        <p>The navigation, the address bar and the shared board state are in
-           place. This page arrives with the next task.</p>
+        <p>Human chatter and Research are built. This page is not, and is
+           showing you that rather than an empty panel you could mistake for a
+           quiet day.</p>
       </div>
     </>
   )
@@ -179,20 +323,13 @@ function titleFor(route: HubRoute): string {
   }
 }
 
-/** The Selection the server itself parsed, echoed back in the payload. Read
- *  from the echo rather than from the URL: the server has already validated
- *  it, and a second parser would be free to disagree. */
-export function seedSelection(payload: BoardPayload): Selection {
-  return {
-    market: payload.market,
-    sources: payload.sources,
-    segments: payload.segments,
-    minVenues: payload.min_venues,
-    window: payload.window_hours,
-    sort: payload.sort,
-    dir: payload.dir,
-  }
-}
+/** The Selection the server itself parsed, echoed back in the payload.
+ *
+ *  One implementation, in queries.ts, because the cache uses it to decide
+ *  whether the embedded board may seed a key -- and two copies of that
+ *  judgement would eventually disagree about which board is on screen.
+ */
+export const seedSelection = selectionOf
 
 function marketLabel(payload: BoardPayload): string {
   const state = payload.session === 'regular' ? 'open' : payload.session

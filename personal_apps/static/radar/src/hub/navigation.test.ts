@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { payload } from '../fixtures'
 import type { Selection } from '../types'
-import { hashFor, readRoute, readSelection, readSpan, urlFor } from './navigation'
+import { queryFor } from '../api'
+import {
+  hashFor, isInPageAnchor, readRoute, readSelection, readSpan, urlFor,
+} from './navigation'
 
 const initial = payload()
 const selection: Selection = {
@@ -51,6 +54,26 @@ describe('reading the address bar', () => {
   it('has no research route without a ticker', () => {
     expect(readRoute('#research')).toEqual({ page: 'missing' })
     expect(readRoute('#research/')).toEqual({ page: 'missing' })
+  })
+
+  it('is case-insensitive about page names', () => {
+    // A hash typed or pasted with a capital is the same destination.
+    expect(readRoute('#Overview')).toEqual({ page: 'overview' })
+    expect(readRoute('#ACTIVITY')).toEqual({ page: 'activity' })
+  })
+
+  it('knows an element id from a destination', () => {
+    // The skip link points at #rh-main, which is an element. Reading it as a
+    // route name replaced the page with the recovery view -- on the first
+    // control a keyboard reader meets.
+    const doc = document.implementation.createHTMLDocument()
+    const main = doc.createElement('main')
+    main.id = 'rh-main'
+    doc.body.append(main)
+
+    expect(isInPageAnchor('#rh-main', doc)).toBe(true)
+    expect(isInPageAnchor('#portfolio', doc)).toBe(false)
+    expect(isInPageAnchor('', doc)).toBe(false)
   })
 
   it('round-trips every route through its hash', () => {
@@ -114,6 +137,47 @@ describe('reading the filters out of the query', () => {
 
   it('never yields an empty source list', () => {
     expect(readSelection('?sources=', selection).sources).toEqual(selection.sources)
+  })
+
+  it('is the inverse of the query the client writes', () => {
+    // The property that keeps a URL meaning one thing. queryFor omits venues
+    // at 1 and omits sort/dir without a sort, so their absence has to read as
+    // the default -- resolving them to the page's opening echo instead made
+    // the same address render one board after Back and another when opened
+    // fresh.
+    const opened: Selection = { ...selection, minVenues: 2, sort: 'mentions',
+                                dir: 'asc' }
+    const cleared: Selection = { ...selection, minVenues: 1, sort: null,
+                                 dir: 'desc' }
+    for (const state of [opened, cleared, selection]) {
+      expect(readSelection(`?${queryFor(state)}`, opened, initial.all_sources))
+        .toEqual(state)
+    }
+  })
+
+  it('keeps a legacy segment spelling the server still accepts', () => {
+    // `?segment=small` builds the discover board on the server and is echoed
+    // back verbatim. Dropping it here made the controls say All while the
+    // board on screen said Discover.
+    expect(readSelection('?segment=small', selection).segments).toEqual(['small'])
+  })
+
+  it('does not widen the board for a garbled segment', () => {
+    // Entirely unrecognisable is a mangled bookmark, not a request for All.
+    expect(readSelection('?segment=bogus', selection).segments)
+      .toEqual(selection.segments)
+  })
+
+  it('deduplicates and bounds the source list', () => {
+    // Past the server's ceiling the request is a 400, which reaches the
+    // reader as an unexplained network error.
+    const many = Array.from({ length: 80 }, (_, i) => `reddit:sub${i}`)
+    const read = readSelection(`?sources=${many.join(',')}`, selection,
+                               initial.all_sources)
+    expect(read.sources.length).toBeLessThanOrEqual(64)
+
+    expect(readSelection('?sources=bluesky,bluesky', selection,
+                         initial.all_sources).sources).toEqual(['bluesky'])
   })
 })
 

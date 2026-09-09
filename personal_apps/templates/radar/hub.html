@@ -41,8 +41,21 @@
   {% for href in vite_asset_css('hub', feature='radar') %}
   <link rel="stylesheet" href="{{ href }}">
   {% endfor %}
+
+  {# The two views that render when the bundle is the thing that failed. They
+     cannot come from the bundle, and radar.css -- where .broken lives for the
+     old board -- is deliberately not loaded here. Small enough to inline. #}
+  <style>
+    body { margin: 0; font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+           color: oklch(23% .018 165); background: oklch(98.5% .002 165); }
+    .broken { max-width: 46rem; margin: 12vh auto; padding: 0 1.5rem;
+              line-height: 1.6; }
+    .broken h1 { font-size: 1.4rem; letter-spacing: .07em; }
+    .broken h2 { font-size: 1.1rem; margin: .6rem 0; }
+    .broken a { color: oklch(42% .095 161); }
+  </style>
 </head>
-<body style="margin:0">
+<body>
 
 <div id="radar-hub-root">
   <noscript>
