@@ -476,3 +476,80 @@ and confirm arrows/controls do not break accepted density/column widths.
 
 Return this with the same VC1-close preview and independent review. No merge,
 push, deployment, capture enablement or root promotion authorized.
+
+## Ninth return — VC1-close and sorting accepted for owner review, 2026-09-10
+
+Verified candidate 31ae58a on codex/radar-release-candidate; no changes reported
+by Git status before this documentation edit (ignore/cache permission warnings).
+Read the new closure/review ledger sections and current handoff; inspected the
+sorting comparator and desktop/mobile sorted captures. Fresh focused verification:
+chatterSort.test.ts plus Chatter.test.tsx, 78 passed, 2 files. The broader 527/403
+suite results and 128 browser checks are Claude's recorded evidence, not freshly
+rerun here. No backend or production operations performed by Codex.
+
+Accept VC1-close and sortable Chatter. No further implementation gate is raised
+by A-D below. Next action is the owner's visual review of the corrected sortable
+preview, then a separate deployment decision if accepted. Do not redispatch
+completed work or create another closure loop for discretionary refinements.
+
+A. Accept the documented currency/price tuple ordering in both directions for
+this release. Currency groups reverse too; price remains sorted within each
+currency, with unknowns last. This is a reasonable disclosed interpretation of
+the contract, not currency conversion. No comparator change required. Stable
+collator-equivalent ticker ties likewise comply with the tie contract.
+
+B. Accept the remaining 860px control sizing/padding as harmless responsive
+adaptation for this delivery. The requested table breakpoint isolation is met.
+Inert generic flex alignment declarations are not a runtime defect while the
+Chatter cells remain block layout. Clean them when that CSS is next edited;
+do not change tested styles solely to eliminate inert declarations now.
+
+C. Keep Activity/Watching duplicate desktop labels as a named accessibility
+follow-up for those pages' next UI pass, with real populated table/stacked checks.
+No need to hold the corrected Chatter for an unchanged out-of-scope issue.
+
+D. Keep sort in view memory for now, as explicitly scoped. Shareable ordering
+can accompany future saved views; use a separate validated client view parameter
+then, never overload backend ranking selection. No URL work in this release.
+
+The screenshots show the core correction and sorting in place. The explanatory
+sorting block could become more compact in a later polish pass; this is not a
+new blocker. Owner visual acceptance is still open. This near-term milestone
+does not replace the original A/B ambition or authorize deployment.
+
+After owner acceptance: prepare a concise current-SHA deployment delta using the
+existing operational procedure, not the old first-migration assumptions. This
+update adds no migration beyond the already deployed a7c31f0b52d4. Check remote
+and target drift, matching build, additive activity_sources compatibility and
+current migration head; retain capture off and the original /radar/ route.
+Owner authorization to merge/push/deploy is separate; none is granted here.
+
+## Owner approval — VC1 deployment, 2026-09-10
+
+The owner visually accepted the sortable preview ('Looks good just like I
+imagined'), then authorized proceeding with the proposed merge/push/deployment
+('lets go ahead') after confirming historical snapshot capture is for later.
+
+Claude is authorized to merge/push the reviewed VC1 candidate 31ae58a plus
+reviewed documentation-only ruling updates and deploy the updated hub in the
+next suitable window. Preserve /radar/ as the original page and keep observation
+capture off. Include the established fresh backup, temporary service stops,
+matching build, restart/smoke verification and code-only rollback if needed.
+No capture enablement, root promotion, OT1 cleanup, schema downgrade or live
+restore is bundled into this authorization.
+
+Execution must use current facts: production was reported at ba1c381 and already
+at migration head a7c31f0b52d4. This update introduces no new migration. Do not
+reuse the first release's 'both tables absent' preflight or drop/stamp anything
+to recreate it. Verify remote/target drift before merging and deploying, record
+the exact merge/deployed SHA, and assess unexpected code/schema changes before
+continuing. Retain the existing migration chain for routine upgrades/rollback.
+
+Claude should prepare the concise deployment delta and execute within this
+approval without asking for the same approval again. Announce the actual window,
+follow the accepted service ordering and backup procedure, then verify old Radar,
+hub assets/sorting, current activity_sources and tone on real data, service health,
+unchanged migration head and capture off. Do not mint an owner login session;
+use existing authorized verification methods. Report any authenticated checks
+that need the owner's session honestly. Record results in RELEASE-RECORD.md and
+HANDOFF.md. Production has not changed merely because this approval is recorded.

@@ -394,3 +394,36 @@ edits are intentional and uncommitted. Fresh focused Vitest: 56 passed/2 files.
 
 2026-09-10 owner addition: sortable Chatter is OPEN within VC1-close. Read the appended binding sorting contract in VISUAL-CORRECTION-PLAN.md. Preserve completed tasks; return sorting with the same closure review/preview. No deployment authorized.
 
+
+2026-09-10 Codex Ninth return: VC1-close/sorting accepted for owner visual review at 31ae58a. A-D settled with no new implementation gate. Fresh focused tests: 78 passed/2 files. Next: owner reviews sortable preview; deployment is a separate decision. See CODEX-DECISIONS.md. These Codex documentation edits are intentional.
+
+
+## Owner approval — VC1 deployment, 2026-09-10
+
+The owner visually accepted the sortable preview ('Looks good just like I
+imagined'), then authorized proceeding with the proposed merge/push/deployment
+('lets go ahead') after confirming historical snapshot capture is for later.
+
+Claude is authorized to merge/push the reviewed VC1 candidate 31ae58a plus
+reviewed documentation-only ruling updates and deploy the updated hub in the
+next suitable window. Preserve /radar/ as the original page and keep observation
+capture off. Include the established fresh backup, temporary service stops,
+matching build, restart/smoke verification and code-only rollback if needed.
+No capture enablement, root promotion, OT1 cleanup, schema downgrade or live
+restore is bundled into this authorization.
+
+Execution must use current facts: production was reported at ba1c381 and already
+at migration head a7c31f0b52d4. This update introduces no new migration. Do not
+reuse the first release's 'both tables absent' preflight or drop/stamp anything
+to recreate it. Verify remote/target drift before merging and deploying, record
+the exact merge/deployed SHA, and assess unexpected code/schema changes before
+continuing. Retain the existing migration chain for routine upgrades/rollback.
+
+Claude should prepare the concise deployment delta and execute within this
+approval without asking for the same approval again. Announce the actual window,
+follow the accepted service ordering and backup procedure, then verify old Radar,
+hub assets/sorting, current activity_sources and tone on real data, service health,
+unchanged migration head and capture off. Do not mint an owner login session;
+use existing authorized verification methods. Report any authenticated checks
+that need the owner's session honestly. Record results in RELEASE-RECORD.md and
+HANDOFF.md. Production has not changed merely because this approval is recorded.
