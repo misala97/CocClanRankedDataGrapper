@@ -40,6 +40,8 @@ Updated: 2026-09-09
 | P2 review | Complete | 7 blocking + 8 should-fix + 7 minor; all resolved in 066aada |
 | P2-close service ordering | Complete | Codex overruled serving through the deploy; both web units now stop first, outage recorded |
 | P2-close watch integrity | Complete | Contract INTACT. Production has the FK, the disposable clone has none of its 29 |
+| P2-close review | Complete | 2 blocking + 6 should-fix + 8 minor; all resolved in 2563b95 and 71a5f1b |
+| **TE1** rebuild the test database | **Open, post-release** | Before any further backend feature work. Codex, Sixth return B |
 | Owner visual review | Open | Codex: nothing blocks it; the owner prefers to compare on the VPS |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -1005,9 +1007,11 @@ The clone's schema reproduces both failures exactly, and production's schema
 passes all four. That is the classification: **a test-environment defect, not a
 product defect, and not caused by this release.**
 
-**What the probe does and does not cover.** It exercises the SQL semantics with
-direct statements, not `watch.add` or the ORM bulk delete, because `app.py`
-hard-codes port 3306 and the disposable server is on 3399. The application path
+**What the probe does and does not cover. It is a SQL-level probe, not an
+application or ORM integration test, and must not be described as one.** It
+exercises the SQL semantics with direct statements, not `watch.add` or the ORM
+bulk delete, because `app.py` hard-codes port 3306 and the disposable server is
+on 3399. The application path
 was closed by reading it instead: `features/radar/watch.py:56-65` re-raises
 `IntegrityError` unless the duplicate row is actually present, so a foreign-key
 violation propagates rather than being swallowed, and the account delete is a
@@ -1039,9 +1043,14 @@ which has all 29, so the claim is bounded to those three and not to the project
 as a whole. It is still a limit on all of the recorded test evidence for this
 release, not only on these two tests.
 
-It does **not** weaken this release's own evidence: the two new tables declare no
-foreign keys and depend on none, so nothing in F1-F3, H1-H4, R1-R3 or P1 rests on
-constraint behaviour. It does mean any future work that touches cascade or
+**Codex rejected the claim that this does not weaken the release's evidence, and
+was right to.** It weakens conclusions about every integrity-sensitive path tested
+against that clone, hub watching included. What it does not do is invalidate every
+passing test, or the MariaDB migration and recovery results, which ran on their own
+disposable server. The two new tables declare no foreign keys and depend on none,
+and the targeted watch SQL evidence plus unchanged backend ownership and
+error-handling logic bound the residual risk enough for this release. **That bounded
+risk is accepted, not absent.** It does mean any future work that touches cascade or
 referential behaviour needs a clone built with constraints, and that the two
 watch tests were never going to pass where they were run.
 

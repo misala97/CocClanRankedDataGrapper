@@ -42,7 +42,7 @@ the unit definitions are in TARGET-FACTS.md section 1. Verdict:
 | # | requirement | verdict |
 | --- | --- | --- |
 | 1.1 | stops **`personal_apps_web`** | **NO** — never stopped, only restarted at the end |
-| 1.2 | exits without restarting on failure | **YES** — `set -e` aborts before the restart block |
+| 1.2 | exits without restarting on failure | **PARTLY** — `set -e` aborts, but the restarts are the script's own last statements, so a tail failure exits non-zero *after* some of them. See 4.3. |
 | 1.3 | runs `flask db upgrade` once, right interpreter and directory | **YES**, inside the venv |
 | 1.4 | resets to `origin/main` | **YES** |
 | 1.5 | builds the frontend | **YES**, `npm ci && npm run build` |

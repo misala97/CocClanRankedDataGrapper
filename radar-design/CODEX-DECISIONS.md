@@ -234,3 +234,46 @@ Provisionally accept the candidate for a side-by-side release. Execution is NO-G
 After closure, what remains is explicit owner authorization naming the final candidate/release SHA and window to (1) merge/push the reviewed release into main and (2) run the VPS deployment with both migrations and the documented temporary stops/restarts. No authorization to enable capture or promote /radar/ is bundled into that. If unexpected drift or target state appears, stop and report rather than improvising. Claude remains the operator after authorization; Codex owns the go/no-go ruling.
 
 No application or infrastructure modification is requested in this ruling turn. Claude's next dispatch is P2-close as defined above. Preserve completed ledgers; append these two outstanding closure items, do not relabel all of P2 incomplete.
+
+## Sixth return: P2-close accepted; GO for scheduling — 2026-09-09
+
+Verified candidate 71a5f1b2936648f192e3bf12399430ce445047a9 on codex/radar-release-candidate. Working tree clean before this documentation edit, apart from Git ignore/cache access warnings. Read the return's P2-close section, runbook sections 1/4/6/7, corrected target interpretation, watch-integrity ledger and probe, and watch.add/remove source. Recorded test/probe/target evidence was not freshly rerun by Codex; no production access, database operation or application change occurred in this turn.
+
+### A. P2-close accepted
+
+Accept the service orchestration and failure/rollback ordering. Both web units stop before checkout; the trial timer is inhibited and any active trial service stopped; the existing script owns migrations and restarts. A nonzero script exit requires identifying the completed stage and actual service/schema state, not assuming everything remains down. Preserve original unit states and keep the backup job outside the window.
+
+One stale summary cell remains in RELEASE-RUNBOOK.md requirement 1.2: it still says YES even though the detailed path and TARGET-FACTS.md correctly say PARTLY. This ruling supersedes that cell: a tail failure can occur after some restarts. Correct the cell when carrying this documentation forward; no new implementation/review cycle is required for that editorial correction.
+
+Accept the watch investigation's classification: the two failures are caused by the disposable schema's absent FK, not a demonstrated product regression. The production-DDL SQL probe plus source inspection supports the expected cascade/orphan behavior; do not describe the probe as an application/ORM integration test. Production read evidence and backup DDL are snapshots; refresh pertinent target facts during the usual preflight.
+
+The historical 24–27 second ingest-stop/start intervals are useful planning evidence, not measured downtime for THIS release. The roughly 60-second budget is an estimate, not a kill timeout or guarantee. If exceeded, inspect progress and report; do not interrupt a progressing migration solely to meet that estimate.
+
+### B. Missing 29 constraints: material evidence limitation, accepted for this release
+
+Reject the assertion that this finding 'does not weaken this release's evidence'. It weakens conclusions about integrity-sensitive paths tested against that clone, including hub watching. It does not invalidate every passing test or the separate MariaDB migration/recovery results. The new archive/run tables themselves have no FKs, and the targeted watch SQL evidence plus unchanged backend ownership/error-handling logic limits the residual risk sufficiently for this release. Accept that bounded risk; no requirement to rerun the entire backend suite before scheduling.
+
+Create a post-release test-environment task TE1, to be completed BEFORE further backend feature implementation (including historical capture/analysis): build a NEW disposable database from a proper schema-preserving dump/restore, rather than destroying the current clone in place. Verify the expected FK definitions/delete rules (29 at the recorded base), unique keys, engine/settings and migration stamp; apply accepted migrations in the disposable environment. Run actual watch service/API/account-integrity tests with constraints enabled, plus affected migration/recorder tests. Keep existing evidence labelled as constraint-free and record replacement evidence separately. If the restored data needs sanitization, do not silently remove constraints to make fixtures pass. No live change or clone rebuild is authorized in this ruling-writing turn.
+
+The remaining unrelated baseline failures stay disclosed; they are not a green full-suite result. Do not reopen F1–F3, H1–H4, R1–R3, P1 or completed P2 work.
+
+### C. Go/no-go and precise authorization boundary
+
+GO for scheduling the side-by-side release of candidate 71a5f1b. No unresolved implementation or investigation gate remains for this bounded release. Normal execution preconditions still apply: fresh consistent verified backup, final target/remote/schema/capture/service-state checks, no competing deploy, and a window clear of the 03:15 backup. Changed facts require assessment; they are not permission to improvise.
+
+NO-GO for execution until the OWNER explicitly authorizes the release window and these actions together:
+
+- merge the reviewed candidate into main with --no-ff, push main and record the resulting merge SHA;
+- create the fresh pre-window backup using the verified mechanism;
+- temporarily stop the named web/background units and inhibit/restore the trial timer as documented;
+- run /root/update_coc.sh to deploy that exact approved merge result, apply both migrations and restart;
+- perform the documented authenticated comparison and health checks, restoring temporary watch changes;
+- if required, perform the documented code-only rollback retaining both migration files and recorded data.
+
+Authorization may name 'the next suitable window' rather than requiring the owner to choose a timestamp. Claude must announce the actual window and record the candidate/merge SHA before taking services down. A docs-only commit carrying this ruling does not reopen code review, but record its SHA and verify it changes documentation only. Any application change or unexpected integration diff returns for review.
+
+Do not bundle capture enablement, root-route promotion, schema downgrade or full live backup restoration into this authorization. Those remain separate decisions. /radar/ remains the existing board and /radar/hub/ the opt-in live-data comparison.
+
+Suggested owner authorization, if desired: 'Authorize Claude to merge/push the reviewed 71a5f1b release (plus documentation-only ruling updates) and deploy it side by side in the next suitable window under the accepted runbook, including the fresh backup, temporary service stops and code-only rollback if needed. Keep capture off and /radar/ unchanged.' This is a proposed authorization, not a statement that it has been granted.
+
+Next action is owner release authorization, then Claude executes the accepted runbook. No further planning handoff loop is required. Record TE1 as post-release work and preserve historical-analysis-first as the next feature priority.
