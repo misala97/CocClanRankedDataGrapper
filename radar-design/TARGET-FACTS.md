@@ -38,31 +38,33 @@ Against the runbook's five requirements:
 | # | requirement | verdict |
 | --- | --- | --- |
 | 1.1 | stops `personal_apps_web` | **NO.** It is never stopped, only restarted at the end |
-| 1.2 | exits without restarting on failure | **YES.** `set -e` aborts before the restart block |
+| 1.2 | exits without restarting on failure | **PARTLY.** `set -e` aborts, but the restarts are the script's own last statements: a failure *in* them exits non-zero with the web apps already up |
 | 1.3 | runs `flask db upgrade` once, right interpreter and directory | **YES**, inside the venv, `WorkingDirectory` correct |
 | 1.4 | resets to `origin/main` | **YES**, `git reset --hard origin/main` |
 | 1.5 | builds the frontend | **YES**, `npm ci && npm run build` after `deactivate` |
 
-### 1.1 is unmet, and here is the honest assessment
+### 1.1 is unmet — and my reading of what that meant was overruled
 
-The web process serves throughout the migration. **For this release that is not
-dangerous**, and the reason is specific rather than general: the deployed code
-declares no `RadarIngestRun` or `RadarBoardObservation` model at all, and this
-migration only creates those two tables and alters one of them. The running
-process cannot touch what it has no model for, and `radar_ingest` — the actual
-writer — *is* stopped.
+The web process serves throughout the migration, because the script never stops
+it.
 
-**It would be dangerous for a different migration.** Any future revision that
-alters a table the web app reads must not use this script unmodified.
+I argued this was acceptable for this release: the deployed code declares no
+`RadarIngestRun` or `RadarBoardObservation` model, so it cannot touch what the
+migration creates, and `radar_ingest` — the actual writer — *is* stopped.
+**Codex overruled that** (CODEX-DECISIONS.md, Fifth return, section B) and the
+runbook now stops both web units before the checkout. The argument is a narrow
+schema one and says nothing about what else moves underneath a running worker.
 
-There is a second, smaller window worth knowing about: between
-`git reset --hard` and `systemctl restart personal_apps_web`, the running
-gunicorn holds the **old Python in memory** while **new files are on disk**.
-Templates are read per request, so `/radar/` can render a new template against
-old code for the length of the pip install, two migrations, `npm ci` and the
-build — minutes, not seconds. Neither the old board nor the hub is broken by
-this in practice, but it is the reason 1.1 exists as a requirement and it should
-be stated rather than discovered.
+That second effect is the concrete reason. Between `git reset --hard` and the
+restart, the running gunicorn holds **old Python in memory** while **new files
+sit on disk**: templates are read per request, static assets are served from the
+new tree, and Python dependencies have already been reinstalled. That window
+lasts a pip install, two migrations, an `npm ci` and a Vite build. I had no
+mixed-version test to support the claim that nothing breaks across it, which is
+why the claim does not belong here.
+
+**The read facts above are unchanged.** What changed is the conclusion drawn
+from them.
 
 ### It also does not stop the encoder-trial timer
 

@@ -29,7 +29,7 @@ ingest daemon. Capture stays off. Root-route promotion is a separate decision.
 **Do not describe the old board as untouched code.** `static/radar/src/api.ts`
 (403 handling) and `vite_assets.py` (asset resolution) are shared and did change.
 Their required behaviour is preserved and is covered by the regression checks in
-step 5; returning to the old page is a UI fallback, not a rollback of shared
+section 5; returning to the old page is a UI fallback, not a rollback of shared
 services or of the schema.
 
 ---
@@ -61,7 +61,8 @@ because `update_coc.sh` updates the shared checkout and restarts `coc_web` too,
 **stop `coc_web` as well** for the window.
 
 **This is a real, recorded outage.** Both web applications are down from step 4.2
-until the script's own restarts in 4.4 — the length of a pip install, two
+until the script's own restarts inside step 10 of 4.3 — the length of a pip
+install, two
 migrations, `npm ci` and a Vite build. Minutes, not seconds. That is the cost of
 the ruling and it is stated here rather than discovered on the night.
 
@@ -140,7 +141,12 @@ daily at 03:15. Acceptable for this release, which adds two empty tables and
 changes nothing existing; weigh it again before any migration that alters existing
 data.
 
-Re-verify before the window if the release is far from this date. What that needs:
+**A fresh backup is required before the window**, not merely a re-verification of
+this one. Codex's ruling: the restored snapshot proves that snapshot is
+recoverable, and does not authorize deploying against a nearly-24-hour-old one.
+Take one through the same verified mechanism, record its checksum and timestamp,
+and confirm `gzip -t` — the full restore rehearsal does **not** need repeating,
+because the mechanism is the one already proven here. What that needs:
 
 - [ ] A **consistent** backup of `personal_apps`, with its **timestamp, the engine
       version that produced it, a checksum, and its scope** (which schemas, whether
@@ -191,9 +197,28 @@ and it was a false promise. **All schema and API checks below are POST-restart
 verification.** What protects the migration is that the units are stopped
 *before* the script runs, not that anything is inspected between its steps.
 
-The script carries `set -e`. A non-zero exit means it stopped somewhere in the
-middle and **did not reach its restarts**. That is not a case for starting things
-by hand: go to section 7, identify which migration was in flight, and recover.
+The script carries `set -e`, so a non-zero exit means it stopped **somewhere** —
+not necessarily before its restarts. Its last three statements are
+`systemctl restart coc_web`, `systemctl restart personal_apps_web` and
+`systemctl start coc_scheduler personal_apps_gym_notifier radar_ingest`, followed
+by a `cp`/`chmod`. A failure in any of those exits non-zero with the migrations
+**complete** and one or both web applications **already serving the new code
+against the new schema**.
+
+So the first question on a non-zero exit is never "which migration was in flight"
+— it is **where did it stop**. Establish that before choosing anything:
+
+```
+systemctl is-active coc_web personal_apps_web radar_ingest \
+                    coc_scheduler personal_apps_gym_notifier
+cd /root/coc-stats/personal_apps && flask db current
+```
+
+- **Migrations complete and services up** → the failure was in the tail. The
+  release is effectively deployed; verify (section 5) and decide, and use
+  section 6 if it must come out.
+- **Migrations incomplete** → section 7, which identifies which of the two was in
+  flight and recovers it. Do not start services by hand into an unknown schema.
 
 ### 4.1 Reconcile the target (before the window)
 
@@ -222,6 +247,8 @@ systemctl is-enabled personal_apps_web coc_web radar_ingest coc_scheduler \
                     personal_apps_gym_notifier radar-encoder-trial.timer
 systemctl is-active  personal_apps_web coc_web radar_ingest coc_scheduler \
                     personal_apps_gym_notifier radar-encoder-trial.service
+systemctl list-timers radar-encoder-trial.timer   # its ACTIVE state, which is-active
+                                                  # does not report for a timer
 ps -eo pid,etime,cmd | grep -E 'radar|gunicorn' | grep -v grep
 ```
 
@@ -244,6 +271,7 @@ systemctl stop coc_web                  # shared checkout; the script restarts i
 systemctl stop radar_ingest
 systemctl stop radar-encoder-trial.timer
 systemctl stop radar-encoder-trial.service   # a timer stop does NOT kill a running invocation
+systemctl mask radar-encoder-trial.timer     # nothing may re-arm it during the window
 ```
 
    **`radar-encoder-trial` needs both.** The timer fires every minute and the
@@ -281,9 +309,12 @@ systemctl stop radar-encoder-trial.service   # a timer stop does NOT kill a runn
     - the projection line is missing or reports a non-zero count;
     - the build fails.
 
-    A non-zero exit means the restarts never happened. **Do not start services by
-    hand to "get back up"** — the schema state is unknown until section 7's
-    inspection says otherwise.
+    **A non-zero exit does not tell you whether the restarts happened** — the
+    script's own tail can fail after them. Run the two commands at the top of
+    this section first. If the migrations are incomplete, go to section 7 and do
+    not start services by hand into an unknown schema. If they are complete and
+    the services are up, the release is deployed and the choice is verify or
+    roll back, not recover.
 
 ### 4.4 Verify, after the script has restarted things
 
@@ -297,9 +328,12 @@ show columns from radar_ingest_runs;              -- expect the six projection c
 show tables like 'radar\_board\_observations';    -- expect present
 ```
 
-14. **If any of these is wrong the services are already serving**, so the
-    decision is immediate: go to section 6 and roll back rather than investigate
-    with traffic on the new schema.
+14. **If any of these is wrong the services are already serving**, which makes it
+    urgent but not automatic. Establish the actual state first — section 7's
+    opening inspection is three read-only queries — because section 6.1
+    deliberately *leaves the schema in place*, and that is the wrong response to
+    a schema that is not what it should be. Then choose: section 6 to take the
+    code out, section 7 to repair a half-applied migration.
 
 ### 4.5 Restore the inhibited trigger
 
@@ -377,11 +411,30 @@ upgrade cannot resolve the stamped revision and dies:
 CommandError: Can't locate revision identified by 'a7c31f0b52d4'
 ```
 
-Reproduced on the disposable MariaDB. Combined with requirement 1.2 — the script
-exits without restarting on a migration failure — a naive full revert leaves the
-site **down**, which is a worse outcome than the fault being rolled back.
+Reproduced on the disposable MariaDB. `set -e` then stops the script before its
+restarts, because this failure happens at the migration step rather than in the
+tail — so a naive full revert leaves the site **down**, which is a worse outcome
+than the fault being rolled back.
 
-1. Stop `personal_apps_web` and `radar_ingest`.
+**The rollback is a deployment too, and takes the same stops.** Step 3 below runs
+`update_coc.sh` again: another checkout, pip install, `npm ci` and Vite build. The
+ruling in section 1 applies here exactly as it does in section 4 — an earlier
+version of this section stopped only two units and then hand-started services the
+script restarts itself, which is the model 4.3 exists to correct.
+
+1. Stop, in this order, and record what was running first:
+
+```
+systemctl stop personal_apps_web        # OUTAGE BEGINS
+systemctl stop coc_web                  # the rollback deploy touches the shared checkout too
+systemctl stop radar_ingest
+systemctl stop radar-encoder-trial.timer
+systemctl stop radar-encoder-trial.service
+systemctl mask radar-encoder-trial.timer
+```
+
+   Do **not** mask anything `update_coc.sh` must restart.
+
 2. Revert the release merge on `main` **except** the two migration files. This is
    why 4.1 requires `--no-ff`: `-m 1` names the first parent of a merge commit, and a
    fast-forwarded release leaves no merge commit to revert as a unit.
@@ -390,21 +443,19 @@ site **down**, which is a worse outcome than the fault being rolled back.
 git revert -n -m 1 <release merge sha>
 git checkout <release merge sha> -- personal_apps/migrations/versions/d82f9afb5898_add_radar_observations.py
 git checkout <release merge sha> -- personal_apps/migrations/versions/a7c31f0b52d4_add_radar_run_counter_projection.py
-git commit
+git commit -m 'revert the radar hub release, keeping its migration files'
 git push
 ```
 
-3. Run `update_coc.sh`. `flask db upgrade` is now a **no-op** — the database is
-   already at `a7c31f0b52d4` and the files that define it are present.
-4. Verify the deployed SHA is the reverted one. Check it; do not assume.
-5. Start the previously running services.
+3. Run `update_coc.sh`. `flask db upgrade` is a **no-op** — the database is already
+   at `a7c31f0b52d4` and the files that define it are present — and the script
+   restarts `coc_web`, `personal_apps_web` and the three background units itself,
+   exactly as in 4.3. **Do not start them by hand.**
+4. Verify the deployed SHA is the reverted one, and that `/radar/` serves and
+   `/radar/hub/` 404s. Check it; do not assume.
+5. Unmask `radar-encoder-trial.timer` and restore it **only if it was enabled and
+   active before**. Record the end of the outage.
 
-**Leave the schema in place.** Both tables and all six columns are additive, and
-the rollback target declares no `RadarIngestRun` model
-(`git grep RadarIngestRun 7a9ffe4` is empty), so the application does not read
-them, write them, or know they exist, and nothing issues `SELECT *` on them.
-**Alembic is the exception**: it does know, through `alembic_version`, which is
-why the files stay even though the code that uses them does not.
 
 ### 6.2 Emergency: pinned artifact, routine deploy inhibited
 

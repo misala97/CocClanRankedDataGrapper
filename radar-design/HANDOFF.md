@@ -99,8 +99,14 @@ scratch scripts exist. **None of it was touched.** Nothing was staged there beyo
 
 ## The database
 
-`personal_apps_radar_wt` on the local MySQL 8.0.46: a full clone of the local `personal_apps` dev
+`personal_apps_radar_wt` on the local MySQL 8.0.46: a clone of the local `personal_apps` dev
 database (43 base tables, 0 views, 456 MB, every row count equal at clone time). It is disposable.
+
+**It is NOT schema-identical to production.** It carries **none** of the 29 foreign keys that
+production and local dev both have -- the likely signature of `CREATE TABLE ... LIKE`. Two
+`test_radar_watch` tests fail here for that reason alone and pass against production's schema;
+see FOUNDATIONS-LEDGER.md, "P2-close: the two watch-integrity failures". Any work that touches
+cascade or referential behaviour needs a clone rebuilt from the verified nightly backup.
 
 Assert it before any backend test or migration:
 

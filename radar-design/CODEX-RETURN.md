@@ -418,12 +418,15 @@ P1 rehearsed a failure inside `a7c31f0b52d4`. A failure inside `d82f9afb5898` le
 a different state and the projection-column recipe does not apply to it — assuming
 one procedure fixes both is how an operator drops something they should not.
 
-`scratchpad/rehearse_first_migration.py`, MariaDB 10.11.14, **25 checks**:
-interruption after each of the four DDL statements that migration issues, inspection
-reporting what is actually present, a blind re-run failing loudly, recovery dropping
-**only** the partial tables and rebuilding a schema **byte-identical** to a clean
+`scratchpad/rehearse_first_migration.py`, MariaDB 10.11.14, **33 checks** across
+**four** interruption points: after each of the DDL statements that migration issues,
+including the case where all four applied but the stamp was never written.
+Inspection reports what is actually present, a blind re-run fails loudly, recovery
+drops **only** the partial tables and rebuilds a schema **byte-identical** to a clean
 run — and two refusals: it will not drop a table that holds records, and it will not
-run at all when the stamp shows the first migration completed.
+run at all when the stamp shows the first migration completed. Each partial state is
+asserted to be one the migration could actually leave, checked before recovery drops
+it.
 
 ## P2: the gates, and what reading the target found
 
@@ -441,13 +444,9 @@ environment.
 written without the access:**
 
 1. **`update_coc.sh` does not stop `personal_apps_web`.** It only restarts it at the
-   end, so the web process serves throughout the migration. For *this* release that
-   is not dangerous, for a specific reason: the deployed code declares no model for
-   either new table, so it cannot touch what this migration creates, and
-   `radar_ingest` — the real writer — *is* stopped. **I am not proposing a wrapper
-   change**; it would be a production edit made during a release for no benefit. It
-   would be dangerous for any later migration that alters a table the web app reads,
-   and that is now recorded rather than left to be rediscovered.
+   end, so the web process serves throughout the migration. I argued this was
+   acceptable for this release; **you overruled that in the Fifth return and were
+   right to**. Both web units now stop before the checkout. See "P2-close" below.
 2. **My preflight SQL was wrong.** It asked for `@@transaction_isolation`, which does
    not exist on MariaDB 10.11 — `ERROR 1193 Unknown system variable`. MariaDB spells
    it `@@tx_isolation`. A MySQL-ism carried in from the development environment,
@@ -491,9 +490,116 @@ are daily, so worst case is just under 24 hours.
   the backup. No service state changed, no migration ran, nothing on the host was
   modified.
 
+## P2-close
+
+```
+candidate branch   codex/radar-release-candidate
+final SHA          P2CLOSE_SHA
+```
+
+### 1. Service ordering — you overruled me, and the runbook now says so
+
+Both `personal_apps_web` and `coc_web` stop **before** the checkout. The outage is
+declared in section 1, begun at step 7 and ended at step 17. No permanent edit to
+`update_coc.sh`; the stops are orchestration around it.
+
+`radar-encoder-trial` gets its **service** stopped as well as its timer, and the
+timer masked — stopping a timer does not kill a running invocation. Units the script
+must restart are explicitly not masked. The backup is avoided by choosing a window
+away from 03:15, not by inhibiting it.
+
+**The self-contradiction is gone, and the review found two more of the same kind
+that I had left in.** The script restarts `coc_web` and `personal_apps_web`
+*itself*, after a successful build and migration, so all schema and API checks are
+post-restart verification and there is no pre-start SQL gate to promise. Beyond
+that:
+
+- **I wrote that a non-zero exit means the restarts never happened. That is
+  false.** The script's last three statements *are* the restarts, under `set -e`, so
+  a failure in the tail exits non-zero with the migrations complete and the web apps
+  already serving. The runbook now says: establish **where** it stopped first, with
+  two read-only commands, then choose recovery or rollback.
+- **Section 6 still carried the contradictions section 4 had just lost.** The
+  rollback runs `update_coc.sh` again — another checkout, `npm ci` and build — so it
+  needs the same stops, including `coc_web`, and it must not hand-start services the
+  script restarts. Both fixed.
+
+Also corrected: `--no-ff` on the release merge so `git revert -m 1` has a merge
+parent, in both places it is needed; the first-migration figure is 33 checks across
+four interruption points, not 25 across three; and a fresh verified backup is
+required before the window, per your section A, rather than a re-verification of the
+one already restored.
+
+### 2. The two watch failures — the contract is intact
+
+The exact assertions were `assert 1 == 0` (no cascade) and
+`DID NOT RAISE IntegrityError` (no orphan rejection). Both are the signature of a
+missing foreign key.
+
+`models.py:1271` declares it. **Production has it** —
+`radar_watch_ibfk_1 FOREIGN KEY (user_id) REFERENCES app_user (id) ON DELETE
+CASCADE`, read read-only — and so does the nightly backup. **The disposable clone
+does not.**
+
+`scratchpad/probe_watch_integrity.py` builds production's exact DDL on a disposable
+MariaDB 10.11.14 and runs your four scenarios with temporary fixtures and no
+production rows:
+
+| scenario | production schema | clone schema |
+| --- | --- | --- |
+| normal add and remove | works | works |
+| per-account isolation | holds | holds |
+| orphan mark | **refused** | **accepted** |
+| deleting the account | **marks cascade away** | **marks survive** |
+
+**Classification: a test-environment defect, not a product defect, and not caused by
+this release.** I checked for a second cause the foreign key might be masking and
+found none: `watch.py:56-65` re-raises `IntegrityError` unless the duplicate row is
+really present, and the account delete is a bulk `DELETE` relying on the database
+cascade, so restoring the constraint is both necessary and sufficient.
+
+**The wider finding matters more than the two tests.** The clone is missing not one
+constraint but **all 29** — production and local dev both have 29, the clone has 0.
+Every backend test run against `personal_apps_radar_wt` has therefore run without
+referential integrity. That is bounded to three worktrees, not the whole project,
+and it does not weaken this release's evidence, because the two new tables declare
+no foreign keys and depend on none. The likely mechanism is `CREATE TABLE ... LIKE`,
+which copies indexes but not foreign keys.
+
+Worth stating because it is the more dangerous direction: a constraint-free test
+database produces false **passes**, not only false failures. `radar_watch` is
+written by the hub's watch surface and those tests have never run against the
+constraint. Low risk — a session-authenticated `user_id` always has a real parent
+row — but not a risk this clone could ever have surfaced.
+
+**Proposed, not carried out:** rebuild the clone from the verified nightly backup,
+which is now known to contain the constraints. That is a workspace change beyond
+P2-close, so it is a finding rather than an action. No live data touched, no broad
+schema cleanup.
+
+### 3. Go / no-go
+
+**GO for scheduling, NO-GO for execution until you authorize it.**
+
+Everything you blocked on is closed: the service ordering is corrected and internally
+consistent, and the watch failures are explained with schema and behavioural evidence
+rather than an assumption. Two independent reviews were run on this closure; the
+second found the two contradictions above, which are now fixed.
+
+What still stands between this and a deployment is **authorization, not work**:
+
+1. Your ruling on this closure.
+2. Owner authorization naming the final candidate SHA and the window.
+3. A fresh verified backup taken before that window.
+4. The drift re-check at 4.1, against the **deployed** SHA `b7d8adf` as well as
+   `origin/main`.
+
+Capture enablement and root-route promotion remain separate and untaken.
+
 ## Evidence, if you want to check rather than take my word
 
-All against `personal_apps_radar_wt`, a disposable full clone of the local dev database,
+All against `personal_apps_radar_wt`, a disposable clone of the local dev database
+(**not a full one** — see "P2-close": it is missing all 29 foreign keys),
 asserted before every backend run. Local is **MySQL 8.0.46**; production is MariaDB, and no
 result here establishes MariaDB behaviour — that is a rollout rehearsal, as your section C
 says.

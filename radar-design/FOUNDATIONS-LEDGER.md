@@ -32,7 +32,7 @@ Updated: 2026-09-09
 | P1 MariaDB rehearsal | Complete | 01b056d + review fixes; MariaDB 10.11.14, 39 checks, all passing. Both migrations, both downgrades, both interruption points, recovery, refusal, and the app's own path |
 | Release proposal | Approved by Codex | Architecture approved; the runbook was not release-ready. CODEX-DECISIONS.md "Fourth return" |
 | P2 candidate branch | Complete | `codex/radar-release-candidate` off origin/main 2a83905; 38 transplanted, 12 excluded, no leak, regressions match the source branch |
-| P2 first-migration recovery | Complete | rehearse_first_migration.py, MariaDB 10.11.14, 25 checks |
+| P2 first-migration recovery | Complete | rehearse_first_migration.py, MariaDB 10.11.14, 33 checks across four interruption points |
 | P2 single-path runbook | Complete | RELEASE-RUNBOOK.md; the proposal's second path removed |
 | P2 deploy-script inspection | Complete | TARGET-FACTS.md; 4 of 5 requirements met. It does NOT stop personal_apps_web |
 | P2 target preflight | Complete | TARGET-FACTS.md; every expectation confirmed. Found a MySQL-ism in the runbook's own SQL |
@@ -54,7 +54,7 @@ Database. The worktree had no `.env`, so `dotenv.find_dotenv()` returned empty a
 `root` with an empty password: `(1045, "Access denied for user 'root'@'localhost' (using password: NO)")`.
 The repository-root `.env` does carry DB_PASS; copying it into the worktree resolved the credentials.
 `PERSONAL_DB_NAME` in the worktree's untracked `.env` now names **personal_apps_radar_wt**, a disposable
-full clone of the local dev database (43 base tables, 0 views, 456 MB, every row count equal, alembic
+clone of the local dev database (43 base tables, 0 views, 456 MB, every row count equal, alembic
 version b3d9e1f5a274, one seeded admin, 557,604 radar_buckets). Asserted before any test:
 `resolved engine database: personal_apps_radar_wt` / `select database(): personal_apps_radar_wt`.
 Local server is MySQL 8.0.46; production is MariaDB, so DDL stays portable.
@@ -796,12 +796,16 @@ P1 covered a failure inside `a7c31f0b52d4`. It did **not** cover a failure insid
 `d82f9afb5898`, and the projection-column recovery does not apply there --
 assuming one recipe fixes both is how an operator drops something they should not.
 
-`scratchpad/rehearse_first_migration.py`, MariaDB 10.11.14, **25 checks, all
+`scratchpad/rehearse_first_migration.py`, MariaDB 10.11.14, **33 checks, all
 passing**:
 
-- Interruption after each of statements 1, 2 and 3 of the four that
-  `d82f9afb5898` issues (two `create_table`, two `create_index`, each
-  auto-committing).
+- Interruption after each of **all four** statements `d82f9afb5898` issues (two
+  `create_table`, two `create_index`, each auto-committing) — including the case
+  where every statement applied but the stamp was never written, which is where
+  stamping to skip is most tempting.
+- An assertion that each partial state is one the migration could actually leave,
+  compared against the real migration's own `SHOW CREATE TABLE` before recovery
+  drops it.
 - Inspection correctly reports which tables exist, which are absent, and whether the
   index was created -- the operator looks rather than assumes.
 - A blind re-run fails loudly with "already exists" in every case.
@@ -962,11 +966,17 @@ rejection of an orphan row.
 `models.py:1271` declares it correctly:
 `db.ForeignKey('app_user.id', ondelete='CASCADE')`.
 
-| database | `radar_watch` FK | engine | `foreign_key_checks` |
-| --- | --- | --- | --- |
-| **production** (MariaDB 10.11.14) | **present** | InnoDB | 1 |
-| local dev `personal_apps` (MySQL 8) | **present** | InnoDB | 1 |
-| disposable clone `personal_apps_radar_wt` | **ABSENT** | InnoDB | 1 |
+| database | `radar_watch` FK | engine | `foreign_key_checks` | re-checkable? |
+| --- | --- | --- | --- | --- |
+| **production** (MariaDB 10.11.14) | **present** | InnoDB | 1 | **no** — a one-off read-only read, recorded below |
+| local dev `personal_apps` (MySQL 8) | **present** | InnoDB | 1 | yes |
+| disposable clone `personal_apps_radar_wt` | **ABSENT** | InnoDB | 1 | yes |
+
+The production row rests on a single read-only inspection and the restored
+snapshot has since been dropped, so nobody can re-measure it from this workspace.
+It is corroborated rather than proven: local dev carries the identically named
+auto-generated `radar_watch_ibfk_1` from the same migration chain at the same
+stamp, and the constraint was also found in the nightly backup's DDL.
 
 Production's own DDL, read read-only from the target:
 
@@ -995,6 +1005,22 @@ The clone's schema reproduces both failures exactly, and production's schema
 passes all four. That is the classification: **a test-environment defect, not a
 product defect, and not caused by this release.**
 
+**What the probe does and does not cover.** It exercises the SQL semantics with
+direct statements, not `watch.add` or the ORM bulk delete, because `app.py`
+hard-codes port 3306 and the disposable server is on 3399. The application path
+was closed by reading it instead: `features/radar/watch.py:56-65` re-raises
+`IntegrityError` unless the duplicate row is actually present, so a foreign-key
+violation propagates rather than being swallowed, and the account delete is a
+bulk `DELETE` that relies on the database cascade. Restoring the constraint is
+therefore both necessary and sufficient for both tests.
+
+Worth stating plainly, because it is the more dangerous direction: a
+constraint-free test database produces false **passes**, not just false failures.
+`radar_watch` is written by the hub's watch surface, and those tests have never
+run against the constraint. The risk here is low -- a session-authenticated
+`user_id` always has a real parent row -- but it is a risk this clone could never
+have surfaced.
+
 ### The wider finding, which matters more than the two tests
 
 The clone is not missing one constraint. It is missing **all** of them.
@@ -1005,10 +1031,13 @@ The clone is not missing one constraint. It is missing **all** of them.
 | local dev `personal_apps` | 43 | **29** |
 | disposable clone `personal_apps_radar_wt` | 45 | **0** |
 
-All 29 were lost when the clone was made. **Every backend test in this project
-has therefore run against a database with no referential integrity at all**, and
-that is a limit on all of the recorded test evidence, not only on these two
-tests.
+All 29 were lost when the clone was made. **Every backend test run against
+`personal_apps_radar_wt` has therefore run against a database with no referential
+integrity at all** — which is this worktree, the foundations worktree and the
+baseline probe. Other worktrees and the main checkout point at `personal_apps`,
+which has all 29, so the claim is bounded to those three and not to the project
+as a whole. It is still a limit on all of the recorded test evidence for this
+release, not only on these two tests.
 
 It does **not** weaken this release's own evidence: the two new tables declare no
 foreign keys and depend on none, so nothing in F1-F3, H1-H4, R1-R3 or P1 rests on
@@ -1016,10 +1045,15 @@ constraint behaviour. It does mean any future work that touches cascade or
 referential behaviour needs a clone built with constraints, and that the two
 watch tests were never going to pass where they were run.
 
-**Proposed repair, not carried out here:** rebuild the disposable clone with a
-method that preserves constraints -- restore from the verified nightly backup,
-which is now known to contain them, rather than whatever schema copy produced
-this one. That is a workspace change beyond P2-close's scope, so it is recorded
+**The likely mechanism, worth naming so the next clone is not built the same
+way:** indexes and unique keys survived while all 29 foreign keys vanished. That
+is the signature of `CREATE TABLE ... LIKE`, which copies indexes but not foreign
+keys. A `mysqldump`-based clone would not have produced it -- the nightly dump
+carries the constraint definitions, as checked above.
+
+**Proposed repair, not carried out here:** rebuild the disposable clone by
+restoring the verified nightly backup, which is now known to contain the
+constraints, rather than by whatever schema copy produced this one. That is a workspace change beyond P2-close's scope, so it is recorded
 as a finding rather than actioned. No live data was changed and no broad schema
 cleanup was attempted.
 
