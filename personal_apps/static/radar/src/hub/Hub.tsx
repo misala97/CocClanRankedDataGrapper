@@ -14,6 +14,8 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { BoardUnavailable } from '../api'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
+import { Activity } from './Activity'
+import { Admin } from './Admin'
 import { Chatter } from './Chatter'
 import { Overview } from './Overview'
 import {
@@ -247,9 +249,14 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
   // The nav link is rendered for admins only, but a typed hash is not a link.
   // /radar/api/ops enforces this itself; saying so here is the difference
   // between a refusal and an empty page.
-  if (route.page === 'admin' && !isAdmin) {
-    return <Forbidden what="Administration" />
+  if (route.page === 'admin') {
+    // The nav link is rendered for admins only, but a typed hash is not a
+    // link. /radar/api/ops enforces this itself; refusing here is the
+    // difference between a refusal and an empty page.
+    return isAdmin ? <Admin /> : <Forbidden what="Administration" />
   }
+
+  if (route.page === 'activity') return <Activity />
 
   if (route.page === 'research') {
     return (

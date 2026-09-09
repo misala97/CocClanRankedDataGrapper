@@ -485,6 +485,28 @@
 .rh-marklink:hover .rh-ticker { color: var(--green); text-decoration: underline; }
 .rh-markprice { font-size: 12px; color: var(--muted); flex: none; text-align: right; }
 
+/* --- operations --------------------------------------------------------- */
+
+.rh-opsgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+.rh-opsgrid h2 { font-size: 16px; margin-bottom: 14px; }
+.rh-facts-rows { display: flex; flex-direction: column; }
+.rh-factrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.rh-factrow:last-child { border-bottom: 0; }
+.rh-factrow strong { font-weight: 600; text-align: right; }
+
 /* --- search ------------------------------------------------------------- */
 
 .rh-search { position: relative; flex: 1; max-width: 380px; }

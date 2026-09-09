@@ -1,5 +1,8 @@
 import { csrfToken } from './csrf'
-import type { BoardPayload, Detail, PanelSpan, SearchMatch, Selection, SortKey } from './types'
+import type {
+  ActivityPayload, BoardPayload, Detail, OpsPayload, PanelSpan, SearchMatch,
+  Selection, SortKey,
+} from './types'
 
 // `Accept: application/json` is explicit and not optional. A bare fetch() sends
 // `*/*`, a wildcard accepts HTML, and the login redirect this route sits behind
@@ -164,6 +167,22 @@ export async function fetchSearch(q: string, signal?: AbortSignal): Promise<Sear
   const found = await getJson<{ matches: SearchMatch[] }>(
     `/radar/api/search?q=${encodeURIComponent(q)}`, signal)
   return found.matches
+}
+
+/** Recorded ingest activity, by Berlin calendar day.
+ *
+ *  Only 1, 7 and 30 are accepted; the server validates rather than clamps, so
+ *  the type is the same three values here. */
+export async function fetchActivity(
+  days: 1 | 7 | 30, signal?: AbortSignal,
+): Promise<ActivityPayload> {
+  return getJson<ActivityPayload>(`/radar/api/activity?days=${days}`, signal)
+}
+
+/** The operational summaries, admin only. A 403 here is a permission and not
+ *  an expired session -- see statusReason. */
+export async function fetchOps(signal?: AbortSignal): Promise<OpsPayload> {
+  return getJson<OpsPayload>('/radar/api/ops', signal)
 }
 
 /** Mark or unmark a ticker. Answers the caller's whole list, so nothing is
