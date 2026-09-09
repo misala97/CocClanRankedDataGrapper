@@ -100,3 +100,43 @@ Leave the independently reproduced pre-existing ingest-test cleanup defect in it
 Next: Claude applies R1, corrects documentation and supplies R2 measurement evidence; owner can review the opt-in hub visually in parallel. No merge, deployment, root-route promotion or capture enablement is approved here. Codex has not yet performed a full independent implementation or visual audit.
 
 This ruling file is currently in the planning checkout. Carry it into the implementation worktree and update its canonical ledgers/handoff before continuing; do not rely on chat memory.
+
+## Third return: R3 acceptance and remaining release work — 2026-09-09
+
+This section supersedes the second-return instruction to implement R3. Verified worktree HEAD c6efdd5e06f2fff8603dff22fae0b9b75909f2e7, branch codex/radar-foundations. Git status is clean apart from ignore/cache access warnings before this ruling edit. Read CODEX-RETURN.md, R3 ledger evidence, HANDOFF.md, activity.py and migration a7c31f0b52d4. No tests or benchmark were rerun by Codex, no database inspected or changed, and no application code changed. Acceptance uses Claude's recorded verification plus source review; it is not MariaDB certification.
+
+### Decision: strict integers are correct
+
+Accept schema_version only as an integer excluding bool. Keep 1.0 and True uncountable; do not restore Python's incidental equality coercion. The supported format is the producer's explicitly versioned envelope, not every value Python happens to compare equal to 1. Keep tests that explicitly demonstrate divergence from the old reducer. Preserve original JSON unchanged.
+
+Accept the counter contract as implemented: a genuine nonnegative integer within signed BIGINT is countable; missing/null stays null; invalid values are never coerced or clamped. On the live projection path an invalid counter becomes null with a warning and makes that participating day's counter unavailable. This is an explicitly accepted change from the old reducer's accidental summing of negatives/bools/floats or TypeError on strings. It must not be described as exact parity for arbitrary JSON. The migration separately refuses invalid historical counters before DDL; that refusal remains required, rather than silently converting history.
+
+### A. Compatibility evidence: accepted within its measured scope
+
+Claude reports no accepted-domain violation in the disposable clone. No compatibility exception needs adjudication for that dataset. This does not establish the content of the eventual target database; retain the target preflight/domain scan with writers stopped. If it finds violations, preserve the source values and return their nonsecret shapes/counts for a ruling. Do not interpret the migration's phrase 'fix the data' as permission to rewrite source history automatically.
+
+### R3 acceptance
+
+R3 is accepted and complete. Recorded upper-bound results meet both specified targets: 0.8 MiB incremental Python heap and 390 ms median endpoint (414 ms maximum). Four concurrent requests returned without errors, with about two-second latency each and RSS 135 to 136 MiB. This supports the tested workload only; concurrency is slower and local MySQL timings do not establish VPS/MariaDB behavior. Keep the month view and 1/7/30-day contract.
+
+Do not redispatch F1–F3, H1–H4, R1, R2 or R3. No further application change is requested by this ruling.
+
+### B. Migration failure state: accept explicit recovery, rehearse before rollout
+
+Accept the pre-DDL domain refusal and the documented drop-derived-columns/re-upgrade strategy for an interrupted backfill. Atomic rollback of the DDL is not assumed. The original envelope remains the recovery source, and no source table or row should be dropped. A resumable migration framework is not required for this release.
+
+The literal six-column DROP in the docstring applies only when all six columns exist. A failure during the sequence of ALTER TABLE operations can leave fewer columns. Before recovery, the operator must verify the database identity, actual Alembic stamp, actual column inventory and stopped writers/readers; remove only projection columns confirmed to belong to this failed, unstamped revision. Never execute the full statement blindly or stamp the revision merely to bypass failure. For a successfully stamped revision use the tested downgrade procedure when appropriate, not the unstamped-failure recipe. Keep a verified backup and preserve summary_json, status, times and row counts throughout.
+
+Remaining release-preparation task P1 for Claude (documentation/rehearsal, not reopening R3): carry these prerequisites into the rollout runbook and demonstrate recovery on a disposable target-compatible MariaDB environment from (a) interruption after only some columns exist and (b) interruption partway through backfill. Verify recovery followed by upgrade produces the same projections and unchanged source envelopes/row counts as a clean upgrade. Also verify the normal upgrade/downgrade path on that engine. Record version, commands, results and any engine-specific findings. If no suitable disposable MariaDB environment is available, record that release gate as pending rather than substituting MySQL evidence. No production access or migration is authorized here.
+
+Correct the stale HANDOFF.md 'Deployment carries' paragraph when preparing that runbook: both d82f9afb5898 AND a7c31f0b52d4 must be applied before this code runs. Applying only the first is insufficient for the new writer/reader. Check migration heads again against the actual integration target; do not assume today's head remains current.
+
+### C. Visual review and next step
+
+Nothing known in this return blocks the owner's visual review of /radar/hub/. R3's memory blocker is resolved under its local acceptance criteria. Owner acceptance of the visuals remains separate from these backend rulings.
+
+The owner has expressed a preference to compare both interfaces on the VPS using the same live data. Therefore local visual approval is not a prerequisite to preparing a side-by-side VPS review deployment. Prepare that concrete release proposal next: existing /radar/ remains, new /radar/hub/ is opt-in, both use the same authenticated account/data and the same ingestion process. Do not start a duplicate ingest daemon. Shared watch changes are expected. The proposal includes target-branch drift review, both migrations, P1 rehearsal, service ordering, rollback and live-data comparison checks.
+
+The existing section C release sequence otherwise stands: deploy opt-in with capture off after the release checks and authorization; enable capture as a separate decision after healthy deployment; promote the root route only after owner acceptance. This turn expressly authorizes ruling/documentation only. No merge, deployment, target migration, capture enablement or root-route change is executed or newly authorized here.
+
+Claude's next return should be the concrete side-by-side release proposal and outstanding environment checks, not another implementation of completed work. Update ledgers/handoff to mark this decision resolved and P1/release preparation open. Keep owner visual review open until actually performed.
