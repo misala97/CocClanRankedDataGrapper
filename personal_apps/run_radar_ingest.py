@@ -31,8 +31,8 @@ from extensions import db
 from models import (RadarInstrument, RadarPollState, RadarQuote,
                     RadarRedditCursor)
 from features.radar import (
-    fx, history, ingest, instruments, journal, judge_config, judge_trial,
-    llm_sentiment,
+    activity, fx, history, ingest, instruments, journal, judge_config,
+    judge_trial, llm_sentiment,
     market_calendar, quotes, retention, scheduling, scoring, universe)
 from features.radar.markets import classify_quality
 from features.radar.prices import finnhub as finnhub_provider
@@ -359,20 +359,37 @@ def _format_operational_map(values):
 # pass, which then took a Reddit cycle down every thirty minutes.
 
 
+def _recorder_now():
+    """Actual wall time, not the cycle's `now`. A run that took four minutes
+    must not be recorded as having finished when it started."""
+    return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
+
 def tick(now_utc, fetchers):
     """One cycle across every source, with failures contained.
 
     APScheduler drops a job whose function raises, so an unhandled error here
     would silently end ingest until the next restart -- losing far more than
     the cycle that failed.
+
+    The run marker is written BEFORE the cycle, so a process that dies inside
+    run_cycle still leaves evidence that a cycle was attempted. The zeros in
+    the error return below are the caller's stable shape and are deliberately
+    not what gets recorded: `finish_run` stores a code and no counters.
     """
+    run_id = activity.start_run(now_utc.replace(tzinfo=None))
     try:
         summary = ingest.run_cycle(now_utc.replace(tzinfo=None), fetchers)
     except Exception:
         logger.exception('radar ingest cycle failed')
+        activity.finish_run(run_id, _recorder_now(),
+                            summary=None, error_code='ingest_failed')
         return {'status': 'error', 'posts_seen': 0, 'posts_new': 0,
                 'mentions': 0, 'buckets_written': 0, 'per_source': {},
                 'aggregate_status': {}, 'catchup_depth': {}}
+
+    activity.finish_run(run_id, _recorder_now(), summary=summary,
+                        error_code=None)
 
     logger.info('radar cycle posts=%d new=%d mentions=%d buckets=%d sources=%s '
                 'aggregate=%s catchup_depth=%s intake=%s',

@@ -1516,3 +1516,82 @@ class RadarMentionEvent(db.Model):
     # crash between the flag commit and the rebuild must be rediscovered
     # by the next pass regardless of the post's age.
     chatter_decided_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+
+
+class RadarIngestRun(db.Model):
+    """One ingest cycle and what became of it.
+
+    The counters live in `summary_json` exactly as `ingest.run_cycle` returned
+    them, wrapped in an envelope that names the schema version: the vocabulary
+    is what makes these numbers readable later, and it is allowed to change.
+
+    What this table is NOT is an exhaustive account of intake. `run_cycle`
+    commits internally, so a process can die after storing posts and before
+    reporting anything, leaving a row that says `running` for ever. Reads must
+    classify such a row as incomplete -- never as a cycle that measured zero.
+
+    Each counter keeps the meaning ingest gave it: `posts_seen` counts fetch
+    deliveries and repeats a post that two overlapping cycles returned,
+    `posts_new` counts newly stored posts, `mentions` counts returned mention
+    rows, and `buckets_written` counts work performed rather than distinct
+    quarter-hours. The per-source intake reasons are not mutually exclusive
+    categories and must not be summed into a discarded total.
+    """
+    __tablename__ = 'radar_ingest_runs'
+    __table_args__ = (
+        db.CheckConstraint("status IN ('running', 'ok', 'error')",
+                           name='ck_radar_ingest_run_status'),
+        # How the activity API finds one Berlin day's runs.
+        db.Index('ix_radar_ingest_runs_started', 'started_at'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id           = db.Column(db.String(36), primary_key=True)
+    started_at   = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    finished_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    status       = db.Column(db.String(8), nullable=False)
+    summary_json = db.Column(db.JSON, nullable=True)
+    # A stable code, never the exception text: a message can carry a URL, a
+    # row of source content or a credential, and this table is read by the
+    # admin surface.
+    error_code   = db.Column(db.String(48), nullable=True)
+
+
+class RadarBoardObservation(db.Model):
+    """What one fixed pair of board selections showed at a 15-minute slot.
+
+    A bounded observation history, not an event store. It records what two
+    viewer-independent boards -- US and DE, the sources configured at capture
+    time, all segments, a 24-hour window, one venue, default ordering --
+    presented when the capture ran, and nothing else. It cannot answer what an
+    unselected filter would have shown, cannot reproduce a post whose retention
+    has since expired, and is not evidence that an arbitrary historical
+    strategy can be replayed.
+
+    `slot_start` is unique, so the first capture of a quarter-hour is the one
+    that stands: a later pass over the same slot is dropped rather than
+    rewriting history. `observed_at` is when the capture actually ran, which is
+    not the payload's own `generated_at` -- the board is memoised for a minute
+    and keeps the stamp of the build it came from. Both are true, and they are
+    deliberately different facts.
+
+    Account state never enters here. Watching lists, watch rows, spend and the
+    operational summaries are stripped before storage, as are raw post bodies.
+    """
+    __tablename__ = 'radar_board_observations'
+    __table_args__ = (
+        db.UniqueConstraint('slot_start', name='uq_radar_board_observation_slot'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+
+    id                = db.Column(db.String(36), primary_key=True)
+    slot_start        = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    observed_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    schema_version    = db.Column(db.Integer, nullable=False, default=1)
+    # Supplied by configuration, not by shelling out to Git every cycle.
+    # NULL is honest when the deployment did not say which revision it is.
+    producer_revision = db.Column(db.String(64), nullable=True)
+    # The precise query each board was built from, stored beside the answer so
+    # a reader never has to assume which selection produced these rows.
+    selections_json   = db.Column(db.JSON, nullable=False)
+    payload_json      = db.Column(db.JSON, nullable=False)
