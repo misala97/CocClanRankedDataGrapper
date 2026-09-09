@@ -33,8 +33,18 @@ def app_context():
 
 @pytest.fixture(autouse=True)
 def only_test_slots(app_context):
-    """Remove every observation this module could have written."""
+    """Remove every observation this module could have written.
+
+    Before as well as after: a run killed mid-suite would otherwise leave a
+    slot behind, and the next run would fail at `capture(...) is True` with a
+    confusing "already recorded" instead of a clean start.
+    """
+    _clear_test_slots()
     yield
+    _clear_test_slots()
+
+
+def _clear_test_slots():
     db.session.rollback()
     RadarBoardObservation.query.filter(
         RadarBoardObservation.slot_start < dt.datetime(2020, 1, 1)).delete(
@@ -148,10 +158,25 @@ def test_the_captured_queries_are_the_fixed_pair(app_context, monkeypatch):
     observations.capture(BASE.replace(minute=4))
 
     selections = _stored(BASE).selections_json
-    assert set(selections) == {'us', 'de'}
-    for market, query in selections.items():
+    assert set(selections['queries']) == {'us', 'de'}
+    for market, query in selections['queries'].items():
         assert query == {'market': market, 'sources': ','.join(SOURCES),
-                         'segment': '', 'window': '24', 'venues': '1'}
+                         'segment': '', 'window': '24', 'venues': '1',
+                         'limit': '50'}
+
+
+def test_the_searched_subreddits_are_recoverable(app_context, monkeypatch):
+    """`reddit` expands to whatever REDDIT_SUBS held at capture time, and that
+    list changes. A row's own sources say which subs contributed, never which
+    were searched."""
+    from features.radar.config import expand_sources
+
+    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    observations.capture(BASE.replace(minute=9))
+
+    expanded = _stored(BASE).selections_json['sources_expanded']
+    assert expanded == sorted(expand_sources(SOURCES))
+    assert len(expanded) > len(SOURCES), 'the roots were stored unexpanded'
 
 
 def test_one_missing_market_records_nothing(app_context, monkeypatch):
@@ -181,6 +206,26 @@ def test_a_database_failure_that_is_not_the_slot_conflict_stays_an_error(
     monkeypatch.setattr(observations, '_session', explode)
     with pytest.raises(sa.exc.OperationalError):
         observations.capture(BASE.replace(minute=6))
+
+
+def test_an_integrity_error_that_left_no_slot_is_re_raised(
+        app_context, monkeypatch):
+    """An IntegrityError is not automatically a duplicate.
+
+    Production is MariaDB, which materialises a JSON column with its own
+    json_valid CHECK -- a payload that could not be serialised arrives in the
+    same except clause. Reported as a benign duplicate it would leave the slot
+    empty and say so at INFO. The branch asks what actually happened, and this
+    forces the answer to be no.
+    """
+    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    now = BASE.replace(minute=11)
+    assert observations.capture(now) is True
+
+    # A real conflict, with the existence check told the slot is not there.
+    monkeypatch.setattr(observations, '_slot_exists', lambda slot: False)
+    with pytest.raises(sa.exc.IntegrityError):
+        observations.capture(now)
 
 
 def test_an_unknown_producer_revision_is_recorded_as_unknown(
@@ -223,7 +268,14 @@ def test_latest_observed_at_reads_only_the_database(app_context, monkeypatch):
     observations.capture(BASE.replace(minute=8))
     monkeypatch.setattr(observations, 'build_payload', forbidden)
 
-    assert observations.latest_observed_at() >= BASE.replace(minute=8)
+    # Compared against this module's own rows. A plain `>= BASE` would be
+    # satisfied by any genuine 2026 observation the database happens to hold,
+    # whether or not the capture above wrote anything.
+    db.session.rollback()
+    ours = db.session.query(sa.func.max(RadarBoardObservation.observed_at)).filter(
+        RadarBoardObservation.slot_start < dt.datetime(2020, 1, 1)).scalar()
+    assert ours == BASE.replace(minute=8)
+    assert observations.latest_observed_at() >= ours
 
 
 # --- the scheduled job -----------------------------------------------------
@@ -233,16 +285,22 @@ def test_the_scheduled_job_contains_its_own_failures(app_context, monkeypatch):
     it, and must leave no half-written row."""
     import run_radar_ingest as runner
 
-    def explode(now, **kwargs):
+    called = []
+
+    def explode_after_being_called(now, **kwargs):
+        called.append(now)
         raise RuntimeError('capture exploded')
 
     monkeypatch.setenv('RADAR_OBSERVATION_CAPTURE_ENABLED', 'true')
-    monkeypatch.setattr(runner.observations, 'capture', explode)
+    monkeypatch.setattr(runner.observations, 'capture', explode_after_being_called)
     runner._scheduled_observations()          # must not raise
 
+    assert len(called) == 1, 'the job never reached capture'
+    # The slot the job would really have written, not a 2019 one no
+    # implementation could have produced.
     db.session.rollback()
-    assert RadarBoardObservation.query.filter(
-        RadarBoardObservation.slot_start < dt.datetime(2020, 1, 1)).count() == 0
+    assert RadarBoardObservation.query.filter_by(
+        slot_start=observations._slot(called[0])).one_or_none() is None
 
 
 def test_the_scheduled_job_does_nothing_while_capture_is_disabled(
@@ -259,3 +317,100 @@ def test_the_scheduled_job_does_nothing_while_capture_is_disabled(
     monkeypatch.setattr(runner.observations, 'capture_enabled', lambda: True)
     runner._scheduled_observations()
     assert len(calls) == 1
+
+
+def test_the_job_is_registered_on_the_quarter_hour(monkeypatch):
+    """A job that ships unscheduled records nothing and says nothing.
+
+    The daemon suite added this shape of test after the profile job shipped
+    unregistered and no test noticed.
+    """
+    import datetime as _dt
+
+    from test_radar_daemon import _captured_jobs
+
+    job = _captured_jobs(monkeypatch)['radar_board_observations']
+    function, trigger, kwargs = job
+    assert function is not None
+    assert trigger == 'interval'
+    assert kwargs['minutes'] == 15
+    assert kwargs['max_instances'] == 1
+    assert kwargs['coalesce'] is True
+    # Aligned, so which part of a slot gets sampled is a property of the
+    # design rather than of the last restart.
+    first = kwargs['next_run_time']
+    assert first.minute in (0, 15, 30, 45)
+    assert first.second == 0 and first.microsecond == 0
+    assert first > _dt.datetime.now(_dt.timezone.utc)
+
+
+def test_a_failed_capture_does_not_stop_the_next_ingest_cycle(
+        app_context, monkeypatch):
+    """The two jobs are independent, and the archive is the one allowed to
+    have gaps."""
+    import run_radar_ingest as runner
+
+    monkeypatch.setenv('RADAR_OBSERVATION_CAPTURE_ENABLED', 'true')
+    monkeypatch.setattr(runner.observations, 'capture',
+                        lambda now, **kw: (_ for _ in ()).throw(
+                            RuntimeError('capture exploded')))
+    runner._scheduled_observations()
+
+    cycles = []
+    monkeypatch.setattr(runner.ingest, 'run_cycle',
+                        lambda now, fetchers: cycles.append(now) or {
+                            'posts_seen': 0, 'posts_new': 0, 'mentions': 0,
+                            'buckets_written': 0, 'per_source': {},
+                            'aggregate_status': {}, 'catchup_depth': {},
+                            'intake_reasons': {}})
+    try:
+        runner.tick(dt.datetime(2019, 3, 4, 12, tzinfo=dt.timezone.utc), {})
+        assert len(cycles) == 1
+    finally:
+        # tick records a real run. Remove the one this test caused, and only
+        # that one -- it is dated 2019 like every other row here.
+        from models import RadarIngestRun
+        db.session.rollback()
+        RadarIngestRun.query.filter(
+            RadarIngestRun.started_at < dt.datetime(2020, 1, 1)).delete(
+                synchronize_session=False)
+        db.session.commit()
+
+
+# --- against the real serializer -------------------------------------------
+
+def test_the_strip_list_still_matches_the_board_the_server_builds(app_context):
+    """Every other test here replaces build_payload with a fake, so nothing
+    else notices when the serializer changes underneath EXCLUDED.
+
+    If a new account-scoped or operational key appears, or one of the five is
+    renamed, this fails rather than letting the field into the archive.
+    """
+    built = observations.build_payload(
+        observations._queries()['us'],
+        now=dt.datetime.now(dt.timezone.utc).replace(tzinfo=None),
+        user_id=None)
+
+    assert observations.EXCLUDED <= set(built), (
+        'a field the archive strips no longer exists to be stripped: '
+        f'{observations.EXCLUDED - set(built)}')
+    kept = set(built) - observations.EXCLUDED
+    assert 'rows' in kept and 'excluded' in kept and 'generated_at' in kept
+    for private in ('watching', 'watch_rows', 'spend', 'sentiment_ops',
+                    'market_data_ops'):
+        assert private not in kept
+
+
+def test_a_real_board_row_carries_no_post_text(app_context):
+    """The board is rows and counts; the posts live behind the detail
+    endpoint. Nothing that would put source prose in the archive."""
+    built = observations.build_payload(
+        observations._queries()['us'],
+        now=dt.datetime.now(dt.timezone.utc).replace(tzinfo=None),
+        user_id=None)
+
+    for row in built['rows']:
+        assert 'posts' not in row and 'body' not in row and 'text' not in row
+        # The one prose-shaped field is the server's own phrasing, generated
+        # from counts. It never quotes a source.
+        assert all(set(clause) == {'kind', 'text'} for clause in row['clauses'])

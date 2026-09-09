@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session
 from extensions import db
 from models import RadarBoardObservation
 
-from .config import SOURCES
+from .config import SOURCES, expand_sources
 from .routes.api import build_payload
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,10 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION = 1
 SLOT_MINUTES = 15
 MARKETS = ('us', 'de')
+
+# Explicit rather than inherited from the API's default, so the archive keeps
+# comparing like with like if that default ever moves.
+LIMIT = 50
 
 # Read as a side effect of serializing any board, and none of it belongs in a
 # research archive: the first two are the caller's own marks, the rest are
@@ -86,10 +90,30 @@ def _slot(now: dt.datetime) -> dt.datetime:
 
 def _queries() -> dict[str, dict[str, str]]:
     """The fixed pair, spelled the way the API parses it. Stored with the
-    answer so no later reader has to assume which selection produced it."""
+    answer so no later reader has to assume which selection produced it.
+
+    `limit` is sent explicitly rather than left to the server's default. It
+    decides how many rows the board holds, so an archive that did not record
+    it would leave an analyst unable to see that the cap moved underneath a
+    comparison.
+    """
     return {market: {'market': market, 'sources': ','.join(SOURCES),
-                     'segment': '', 'window': '24', 'venues': '1'}
+                     'segment': '', 'window': '24', 'venues': '1',
+                     'limit': str(LIMIT)}
             for market in MARKETS}
+
+
+def _selections() -> dict:
+    """What was asked for, in both the vocabulary the API takes and the one it
+    expands to.
+
+    The roots alone are not enough to reconstruct the question later: `reddit`
+    expands to whatever REDDIT_SUBS held at capture time, and that list
+    changes. A row's own `sources` says which subs contributed, never which
+    were searched, so the expansion is recorded here.
+    """
+    return {'queries': _queries(),
+            'sources_expanded': sorted(expand_sources(SOURCES))}
 
 
 def capture(now: dt.datetime, *, producer_revision: str | None = None) -> bool:
@@ -100,25 +124,45 @@ def capture(now: dt.datetime, *, producer_revision: str | None = None) -> bool:
     failed is a gap, and a gap is the truth.
     """
     slot = _slot(now)
-    queries = _queries()
+    selections = _selections()
     payloads = {
+        # Top-level keys only, which is all the board payload puts them at.
+        # A future account-scoped field nested inside a row would need its own
+        # handling here rather than an entry in EXCLUDED.
         market: {key: value
                  for key, value in build_payload(query, now=now,
                                                  user_id=None).items()
                  if key not in EXCLUDED}
-        for market, query in queries.items()
+        for market, query in selections['queries'].items()
     }
     observation = RadarBoardObservation(
         id=str(uuid.uuid4()), slot_start=slot, observed_at=now,
         schema_version=SCHEMA_VERSION, producer_revision=producer_revision,
-        selections_json=queries, payload_json=payloads)
+        selections_json=selections, payload_json=payloads)
     try:
         with _session() as session, session.begin():
             session.add(observation)
     except sa.exc.IntegrityError:
+        # An IntegrityError is not automatically "already recorded". MariaDB
+        # materialises a JSON column with its own json_valid CHECK, so a
+        # payload this path could not serialise would arrive here too and be
+        # logged as a benign duplicate while the slot silently stayed empty.
+        # Ask what actually happened; only a slot that now exists is the
+        # idempotent case. watch.py:add takes the same precaution.
+        if not _slot_exists(slot):
+            raise
         logger.info('radar observation slot %s was already recorded', slot)
         return False
+    logger.info('radar observation stored for slot %s', slot)
     return True
+
+
+def _slot_exists(slot: dt.datetime) -> bool:
+    """Read in a session of its own -- the one that hit the conflict is dead."""
+    with _session() as session:
+        return session.query(
+            sa.exists().where(RadarBoardObservation.slot_start == slot)
+        ).scalar() is True
 
 
 def latest_observed_at() -> dt.datetime | None:

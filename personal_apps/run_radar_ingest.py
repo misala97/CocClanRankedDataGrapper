@@ -1129,6 +1129,12 @@ def _scheduled_reddit(fetcher):
     return run
 
 
+def _next_quarter_hour(now):
+    """The next :00, :15, :30 or :45 strictly after `now`."""
+    floor = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+    return floor + dt.timedelta(minutes=15)
+
+
 def _scheduled_observations():
     """Archive the fixed board pair for this quarter-hour.
 
@@ -1419,9 +1425,17 @@ def main(argv=None):
     # Registered whether or not capture is switched on, so turning it on is an
     # environment change and a restart rather than a code change. The job
     # itself reads the flag and returns; see _scheduled_observations.
+    #
+    # Started on the next quarter-hour boundary rather than fifteen minutes
+    # after this process happened to start. Which part of a slot gets sampled
+    # is then a property of the design instead of the last restart, and two
+    # firings cannot land in one slot -- the second would be refused as
+    # already recorded and its neighbour would read as an outage.
     scheduler.add_job(_scheduled_observations, 'interval', minutes=15,
                       id='radar_board_observations', max_instances=1,
-                      coalesce=True)
+                      coalesce=True,
+                      next_run_time=_next_quarter_hour(
+                          dt.datetime.now(dt.timezone.utc)))
     if not observations.capture_enabled():
         logger.info('radar board observation capture is disabled '
                     '(RADAR_OBSERVATION_CAPTURE_ENABLED)')
