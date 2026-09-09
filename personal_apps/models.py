@@ -1570,10 +1570,13 @@ class RadarBoardObservation(db.Model):
 
     `slot_start` is unique, so the first capture of a quarter-hour is the one
     that stands: a later pass over the same slot is dropped rather than
-    rewriting history. `observed_at` is when the capture actually ran, which is
-    not the payload's own `generated_at` -- the board is memoised for a minute
-    and keeps the stamp of the build it came from. Both are true, and they are
-    deliberately different facts.
+    rewriting history. `observed_at` is the instant the capturing caller was
+    given, which in production is the scheduler's wall clock and is not the
+    payload's own `generated_at` -- the board is memoised for a minute and keeps
+    the stamp of the build it came from. Both are true, and they are
+    deliberately different facts. The clock is injected rather than read here,
+    so it is the call path and not this table that makes `observed_at` real
+    time; there is no backfill writer.
 
     Account state never enters here. Watching lists, watch rows, spend and the
     operational summaries are stripped before storage, as are raw post bodies.

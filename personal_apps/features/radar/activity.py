@@ -207,13 +207,31 @@ def summary(now: dt.datetime, days: int) -> dict:
     window_from = _day_bounds(dates[0])[0]
     window_to = _day_bounds(dates[-1])[1]
 
-    # Three columns rather than whole ORM rows. The counters are four integers
-    # per run, and a summary carries a per-source map for every configured
-    # source; a 30-day window is ~2,880 runs, so the envelopes dominate both
-    # the transfer and the parse. Extracting the four values in SQL would
-    # remove the transfer as well, and was not taken: it needs JSON path
-    # functions whose behaviour on the production MariaDB cannot be verified
-    # from this environment, and a read-only page is not the place to find out.
+    # Three columns rather than whole ORM rows, and it is not enough at the
+    # widest window.
+    #
+    # MEASURED, 2026-09-09, against the disposable clone by
+    # scratchpad/bench_activity.py, which derives the run count from the two
+    # schedulers that actually call tick -- `radar_cycle` on the NYSE session
+    # (180s open, 600s after hours, 1800s overnight and weekends) and
+    # `radar_reddit` fixed at ARCTIC_SHIFT_INTERVAL_SECONDS:
+    #
+    #     days=1   568 runs    3.3 MiB   36 ms    (weekday; a weekend day is 336)
+    #     days=7   3,352 runs 19.2 MiB  406 ms
+    #     days=30  14,792 runs 84.7 MiB 2,706 ms
+    #
+    # An earlier note here guessed ~2,880 runs over 30 days by dividing the
+    # window by the board archive's 15-minute cadence. That is the wrong
+    # writer and it was five times low: one envelope is 6 KB because every
+    # per-source map is keyed by all 36 concrete sources, and two jobs write
+    # one row each per firing.
+    #
+    # So days=30 reads ~85 MiB to return four integers a day. Extracting the
+    # counters in SQL would remove the transfer and is NOT taken here: it needs
+    # JSON path functions whose behaviour on the production MariaDB cannot be
+    # verified from this environment. The portable fix -- typed counter columns
+    # written at finish_run, or a daily rollup -- is a schema change, and that
+    # decision belongs to the plan owner. The evidence is in HUB-LEDGER.md.
     runs = db.session.query(
         RadarIngestRun.started_at, RadarIngestRun.status,
         RadarIngestRun.summary_json,
