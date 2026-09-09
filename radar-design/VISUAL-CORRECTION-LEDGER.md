@@ -20,7 +20,9 @@ Implementation and verification by Claude, 2026-09-09, in
 | Deployment | Not authorized | Separate decision, after visual acceptance |
 
 Baseline: release-candidate branch `d3bc795`; production `ba1c381` per accepted
-RELEASE-RECORD.md. HEAD after this work is **`d94905e`**.
+RELEASE-RECORD.md. The work below ends at **`79235db`**, plus the one
+commit that carries this line -- verify with `git rev-parse --short HEAD`,
+because a document cannot name the commit that carries it.
 
 | commit | what |
 | --- | --- |
@@ -30,7 +32,7 @@ RELEASE-RECORD.md. HEAD after this work is **`d94905e`**.
 | `b1cf313` | the panel's company filter had taken the topbar search's class |
 | `43526e8` | the tone bar drew a rare share as nothing |
 | `fc578b8` | the loading state, and one test flake reported rather than hidden |
-| `d94905e` | the independent review's twelve findings |
+| `79235db` | the independent review's twelve findings |
 
 ---
 

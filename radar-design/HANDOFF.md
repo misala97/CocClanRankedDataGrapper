@@ -2,8 +2,8 @@
 
 This section supersedes historical status/next-action/deploy statements below.
 Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
-Branch codex/radar-release-candidate; **HEAD d94905e**, built on the verified
-base d3bc795. Production is ba1c381 per RELEASE-RECORD.md, migration head
+Branch codex/radar-release-candidate; **HEAD 79235db** or the commit after it -- verify
+with `git rev-parse --short HEAD` -- built on the verified base d3bc795. Production is ba1c381 per RELEASE-RECORD.md, migration head
 a7c31f0b52d4. Capture remains off and /radar/ remains the original route.
 **Nothing has been merged, pushed or deployed, and nothing here authorizes it.**
 The foundations worktree remains unchanged.
@@ -20,7 +20,7 @@ paths.
 | b1cf313 | the panel's company filter had taken the topbar search's class |
 | 43526e8 | the tone bar drew a rare share as nothing at all |
 | fc578b8 | the loading state, and one test flake reported rather than hidden |
-| d94905e | the independent review's twelve findings |
+| 79235db | the independent review's twelve findings |
 
 **The independent review has been performed.** Twelve findings, none blocking.
 Most were wrong with the RECORD rather than the code, and the ledger's
