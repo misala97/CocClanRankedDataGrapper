@@ -1,0 +1,1232 @@
+{
+  "real-1440": {
+    "tableWidth": 1096,
+    "head": [
+      {
+        "label": "Company",
+        "width": 285
+      },
+      {
+        "label": "Attention",
+        "width": 142
+      },
+      {
+        "label": "Voices",
+        "width": 110
+      },
+      {
+        "label": "Sources",
+        "width": 197
+      },
+      {
+        "label": "Tone",
+        "width": 186
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 132
+      },
+      {
+        "label": "Open research",
+        "width": 44
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 133,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 133,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 105,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 530,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "fixture-1440": {
+    "tableWidth": 1096,
+    "head": [
+      {
+        "label": "Company",
+        "width": 285
+      },
+      {
+        "label": "Attention",
+        "width": 142
+      },
+      {
+        "label": "Voices",
+        "width": 110
+      },
+      {
+        "label": "Sources",
+        "width": 197
+      },
+      {
+        "label": "Tone",
+        "width": 186
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 132
+      },
+      {
+        "label": "Open research",
+        "width": 44
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 106,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 90,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 105,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 474,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "real-1920": {
+    "tableWidth": 1560,
+    "head": [
+      {
+        "label": "Company",
+        "width": 406
+      },
+      {
+        "label": "Attention",
+        "width": 203
+      },
+      {
+        "label": "Voices",
+        "width": 156
+      },
+      {
+        "label": "Sources",
+        "width": 281
+      },
+      {
+        "label": "Tone",
+        "width": 265
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 187
+      },
+      {
+        "label": "Open research",
+        "width": 62
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 106,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 106,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 105,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 530,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "fixture-1920": {
+    "tableWidth": 1560,
+    "head": [
+      {
+        "label": "Company",
+        "width": 406
+      },
+      {
+        "label": "Attention",
+        "width": 203
+      },
+      {
+        "label": "Voices",
+        "width": 156
+      },
+      {
+        "label": "Sources",
+        "width": 281
+      },
+      {
+        "label": "Tone",
+        "width": 265
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 187
+      },
+      {
+        "label": "Open research",
+        "width": 62
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 106,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 77,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 105,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 461,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "real-1024": {
+    "tableWidth": 926,
+    "head": [
+      {
+        "label": "Company",
+        "width": 241
+      },
+      {
+        "label": "Attention",
+        "width": 120
+      },
+      {
+        "label": "Voices",
+        "width": 93
+      },
+      {
+        "label": "Sources",
+        "width": 167
+      },
+      {
+        "label": "Tone",
+        "width": 157
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 111
+      },
+      {
+        "label": "Open research",
+        "width": 37
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 133,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 133,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 105,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 530,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "fixture-1024": {
+    "tableWidth": 926,
+    "head": [
+      {
+        "label": "Company",
+        "width": 241
+      },
+      {
+        "label": "Attention",
+        "width": 120
+      },
+      {
+        "label": "Voices",
+        "width": 93
+      },
+      {
+        "label": "Sources",
+        "width": 167
+      },
+      {
+        "label": "Tone",
+        "width": 157
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 111
+      },
+      {
+        "label": "Open research",
+        "width": 37
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 92,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 106,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 106,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 90,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 86,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 105,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 480,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "real-768": {
+    "tableWidth": 694,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Sources",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 0
+      },
+      {
+        "label": "Open research",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 272,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 273,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 273,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 273,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 273,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 1364,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "fixture-768": {
+    "tableWidth": 694,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Sources",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 0
+      },
+      {
+        "label": "Open research",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 271,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 272,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 285,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 283,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 236,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 272,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 285,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 1347,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "real-390": {
+    "tableWidth": 316,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Sources",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 0
+      },
+      {
+        "label": "Open research",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 314,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 342,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 300,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 342,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 287,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 1574,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "fixture-390": {
+    "tableWidth": 316,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Sources",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 0
+      },
+      {
+        "label": "Open research",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 276,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 272,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 312,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 318,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 254,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 272,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 302,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 1432,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "real-320": {
+    "tableWidth": 246,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Sources",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 0
+      },
+      {
+        "label": "Open research",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 314,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 342,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 342,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 315,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 287,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 1574,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  },
+  "fixture-320": {
+    "tableWidth": 246,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Sources",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price \u00b7 Today",
+        "width": 0
+      },
+      {
+        "label": "Open research",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 288,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 289,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 344,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 351,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 254,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 289,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 316,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": 104,
+    "toneBarHeight": 6,
+    "fiveRows": 1526,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "12px",
+      "head": "12px"
+    }
+  }
+}

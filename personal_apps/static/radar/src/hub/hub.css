@@ -325,12 +325,27 @@
 
 /* --- tone ---------------------------------------------------------------- */
 
-/* Three counts in words. A green/red tone bar has been built and deleted twice
-   on this surface: green and red mean price direction here and nothing else,
-   and a single percentage over these counts is what board.py returns three
-   numbers to prevent. */
+/* A share of the DIRECTIONAL sample, a bar of the same proportion, and the
+   sample size under it.
+   ------------------------------------------------------------------------
+   An earlier comment here forbade both the percentage and the bar, on the
+   grounds that a single figure over board.py's three counts is noise wearing
+   a percentage sign. The objection was to the DENOMINATOR, and it was right
+   about that one: the residual holds balanced reads and unclassified ones
+   together, so a share computed over the total says more than it knows. The
+   correction keeps the objection and drops the ban -- the denominator is the
+   directional signals, and the sample line names it. See VC1 and
+   chatterPresentation.ts, which owns every rule. */
 .rh-tone { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .rh-tone strong { display: inline; font-weight: 600; }
+/* A reading that is not a share is a sentence, so it does not wear the figure
+   weight a percentage does. Written against `.rh-table strong` rather than
+   with !important, because that is the rule it has to outrank. */
+.rh-table strong.rh-tonequiet {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
 
 /* --- filters ------------------------------------------------------------ */
 
@@ -341,7 +356,6 @@
   margin-bottom: 20px;
   flex-wrap: wrap;
 }
-.rh-filters-note { margin-left: auto; }
 
 .rh-sources {
   border: 1px solid var(--line);
@@ -472,16 +486,29 @@
 
 .rh-marks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 
-/* Proportion as a bar, under a figure that already reads as words. Green and
-   red never carry the meaning alone. */
+/* Proportion as a bar, under a figure that already reads as words. Colour
+   never carries the meaning alone: the percentage above it is the reading.
+   Segments are flex-grown from unrounded ratios, so a 0.4% share draws 0.4%
+   of the track rather than the rounded label's width. */
 .rh-tonebar {
   display: flex;
   gap: 2px;
-  width: 84px;
-  height: 5px;
-  margin-top: 7px;
+  width: 104px;
+  max-width: 100%;
+  height: 6px;
+  margin: 6px 0 0;
+  border-radius: 3px;
+  overflow: hidden;
 }
-.rh-tonebar span { border-radius: 2px; }
+/* A segment that exists is drawn wide enough to be seen. Measured at 1440
+   before this rule: a 0.5% bullish share rendered 0.52px and a 0.1% bearish
+   one 0.02px, so the bar read 0% and 100% under labels that deliberately say
+   `0.5%` and `>99.9%` -- the bar reintroducing exactly the rounding lie the
+   wording exists to prevent. 2px of a 104px track slightly OVER-states a rare
+   share, which is the honest direction to err: the percentage above it is the
+   reading, and this only has to say "present, and very small". A zero share
+   still draws no segment at all, because that difference is the point. */
+.rh-tonebar span { border-radius: 2px; min-width: 2px; }
 .rh-tonebar .bull { background: var(--sage); }
 .rh-tonebar .flat { background: var(--line); }
 .rh-tonebar .bear { background: oklch(72% 0.09 25); }
@@ -490,6 +517,247 @@
   margin: 0;
   padding: 15px 23px 18px;
   border-top: 1px solid var(--line);
+}
+
+/* --- chatter ------------------------------------------------------------- */
+
+/* Everything in this block is scoped to `.rh-chatter` or to the chatter panel.
+   The Activity and Administration tables use `.rh-table` too, and their
+   columns are not these columns. */
+
+.rh-panelhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 21px 23px 0;
+}
+.rh-panelheadtext h2 { font-size: 18px; letter-spacing: -0.01em; }
+.rh-panelheadtext p { margin-top: 5px; }
+.rh-panelheadtools {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-left: auto;
+}
+.rh-panelcount { white-space: nowrap; padding-bottom: 10px; }
+/* Not `.rh-search` -- that class is the topbar's global search, and
+   sharing it made this box inherit the topbar's styling and, worse,
+   made a test that typed into `.rh-search input` type into the wrong
+   field entirely. */
+.rh-tablefilter input { min-width: 200px; }
+.rh-panelempty { padding: 4px 23px 0; }
+
+/* The column proportions come from the colgroup; `fixed` is what makes the
+   browser honour them instead of measuring the content. The rejected board
+   let automatic sizing hand most of the width to whichever row had the
+   longest feed list. */
+.rh-chatter { table-layout: fixed; }
+.rh-chatter td,
+.rh-chatter th[scope='row'] { padding: 16px 12px; }
+.rh-chatter th[scope='col'] { font-size: 12px; }
+/* 13px figures with a 12px secondary line under them. The contract's floor is
+   11px and nothing here goes near it. */
+.rh-chatter strong { font-size: 13px; }
+.rh-chatter .rh-sub { font-size: 12px; }
+.rh-chatter tbody tr:hover { background: var(--wash); }
+/* Out of BOTH trees on the desk layout. The column header already names the
+   figure; carrying a second name on all seven cells meant a screen reader
+   read the column twice per cell, seven times per row, every row. `display:
+   none` rather than `aria-hidden`, because the stacked layout below 860 needs
+   the very same element visible and announced -- one CSS switch, no JavaScript
+   watching the viewport. */
+.rh-chatter .rh-cell-label { display: none; }
+
+/* --- sorting ------------------------------------------------------------- */
+
+/* The header IS the control. It keeps the header's own type -- 12px, muted,
+   medium -- so turning the column names into buttons did not turn the header
+   row into a toolbar. */
+.rh-sortbutton {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+.rh-sortbutton:hover { color: var(--ink); text-decoration: underline; }
+.rh-sortbutton.active { color: var(--green); font-weight: 600; }
+.rh-sortarrow { font-size: 10px; line-height: 1; }
+/* `inline` drops the flex context, and with it `.rh-sortbutton`'s gap -- so
+   the arrow sat flush against the word: `Today↓` where every other column
+   reads `Tone ↓`. */
+.rh-pricehead .rh-sortbutton { display: inline; }
+.rh-pricehead .rh-sortarrow { margin-left: 4px; }
+
+/* Present on every width, and the only sort control that survives the header
+   row's `display: none` below 860. Hidden here rather than unmounted, so the
+   two are never both offering the same thing. */
+.rh-sortpicker { display: none; }
+.rh-sortpicker .rh-field { min-width: 0; }
+.rh-sortpicker select { min-width: 150px; }
+.rh-sortdir { min-height: 40px; white-space: nowrap; }
+
+/* What the sort did, and what it did not. Sits between the panel heading and
+   the table, where a reader looking at a reordered list is looking. */
+.rh-sortnote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: 12px 0 0;
+  padding: 0 23px;
+  max-width: none;
+}
+.rh-sortnote strong { color: var(--ink); font-weight: 600; }
+/* `.rh-textbutton { color: var(--green) }` is 0,1,0 and loses to
+   `.rh button { color: inherit }` at 0,1,1, so inside this muted paragraph
+   the reset inherited --muted and read as the tail of the sentence beside
+   it: same colour, no underline, nothing to suggest it was a control. */
+.rh-sortnote .rh-sortreset {
+  padding: 0;
+  font-size: 12px;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rh-sortnote .rh-sortreset:hover { color: var(--pine); }
+.rh-chatter .rh-col-company { min-width: 0; }
+/* Wraps rather than clipping: a warning that does not fit is a warning that
+   did not happen, and the row is allowed to grow for it. */
+.rh-chatter .rh-marks { margin-top: 6px; }
+
+.rh-openname { min-width: 0; }
+/* One line on the desk layout. The whole name stays in the DOM and in the
+   accessible name -- only its DISPLAY is clamped -- and `title` plus the
+   research page both carry it in full. */
+.rh-chatter .rh-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  color: var(--green);
+  margin-left: auto;
+}
+.rh-chevron:hover { background: var(--wash); }
+.rh-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* An in-place disclosure. Floating would be clipped by the table's own scroll
+   box, so it opens downward and the row grows while it is open. */
+.rh-detail { display: block; }
+/* The trigger IS the secondary line -- the figure the reader was going to
+   read anyway -- so opening the exact counts costs the row no height. The
+   dotted underline is what says it is a control; colour alone would not. */
+.rh-detailtoggle {
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  color: var(--muted);
+}
+.rh-detailtoggle .rh-sub {
+  text-decoration: underline dotted var(--line) from-font;
+  text-underline-offset: 3px;
+}
+.rh-detailtoggle:hover .rh-sub,
+.rh-detailtoggle[aria-expanded='true'] .rh-sub {
+  color: var(--green);
+  text-decoration-color: currentColor;
+}
+.rh-detailbody {
+  display: block;
+  margin-top: 7px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--wash);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* The [hidden] trap: a display rule above would otherwise keep an
+   attribute-hidden element on screen. */
+.rh-detailbody[hidden] { display: none; }
+.rh-detailnote { margin: 0; }
+.rh-detaillist { list-style: none; margin: 9px 0 0; padding: 0; }
+.rh-detaillist > li { margin-top: 7px; }
+.rh-detaillist strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rh-detaillist span { display: block; word-break: break-word; }
+
+.rh-footline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 0;
+}
+.rh-footline strong { color: var(--ink); font-weight: 600; }
+.rh-glossary { margin: 0; }
+.rh-glossary dt {
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 9px;
+}
+.rh-glossary dt:first-child { margin-top: 0; }
+.rh-glossary dd { margin: 3px 0 0; }
+
+/* The secondary filters, one press away rather than always on screen. */
+.rh-more { display: flex; align-items: flex-end; }
+.rh-morebutton {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  padding: 0 13px;
+  min-height: 40px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rh-morebutton:hover { background: var(--wash); }
+.rh-moresummary { color: var(--muted); font-weight: 400; }
+.rh-morepanel {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+.rh-morepanel[hidden] { display: none; }
+/* A definition next to the control it defines. Full width of the disclosure,
+   so it reads as a note under the row rather than as a fourth field. */
+.rh-fieldnote {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 78ch;
 }
 
 /* --- overview ----------------------------------------------------------- */
@@ -797,8 +1065,11 @@
 .rh .zone h3 .q { font-weight: 400; font-size: 12px; color: var(--muted); }
 .rh .note { font-size: 11px; color: var(--muted); margin-top: 10px; }
 
-/* Counts in words. A green/red tone bar has been built and deleted twice on
-   this surface: green and red mean price direction here and nothing else. */
+/* Counts in words on THIS surface, which is a different decision from the
+   Chatter column's. The comment here used to forbid a tone bar outright; VC1
+   supersedes that ban, and the bar now lives in `.rh-tonebar` with its own
+   stated denominator. Research keeps words because it has the room for them
+   and because green and red already carry price direction on this page. */
 .rh .wording {
   display: flex;
   gap: 18px;
@@ -935,7 +1206,15 @@
   .rh h1 { font-size: 28px; }
 }
 
-@media (max-width: 700px) {
+/* The navigation collapses at 1080, and the table stacks at 860. They used to
+   be one breakpoint at 700, and with seven chatter columns that was wrong in
+   both directions: at 1024 a 184px rail left 726px of table and EVERY column
+   shrank -- "its normal rate" on two lines, every tone sample wrapped -- while
+   at 768 the same rail left 580px, which no amount of proportion fixes.
+   The contract's instruction is to give the content the width first and stack
+   only where seven columns genuinely do not fit. So: 1024 keeps the table and
+   loses the rail; 768 loses both. Nothing changes across 700/701 any more. */
+@media (max-width: 1080px) {
   .rh-nav {
     width: 240px;
     transform: translateX(-100%);
@@ -955,6 +1234,15 @@
     border-radius: 7px;
   }
   .rh-menu[aria-expanded='true'] { background: var(--wash); }
+  /* With the rail hidden, `left: var(--nav-width)` would float the skip link
+     184px into a page that has no rail there -- so it moves with the
+     navigation, not with the table's breakpoint. It was left behind in the
+     860 block when the two were split, and between 861 and 1080 the first
+     thing a keyboard reader met was a link hanging in open space. */
+  .rh-skip { left: 16px; }
+}
+
+@media (max-width: 860px) {
   .rh-topbar { height: 62px; padding: 0 16px; gap: 12px; }
   .rh-main { padding: 24px 18px 38px; }
   .rh-heading { flex-wrap: wrap; gap: 16px; }
@@ -962,21 +1250,134 @@
   .rh-pad { padding: 19px; }
   .rh-button { min-height: 44px; }
   .rh-textbutton { min-height: 44px; }
-  .rh-skip { left: 16px; }
   .rh-session { display: none; }
   .rh-tablewrap { padding: 16px 18px 0; }
   .rh-tablefoot { padding: 13px 18px 16px; }
 
-  /* Stacked, not scrolled sideways. A six-column table on a phone puts the
-     price and the tone past the right edge, and the spec is explicit that a
-     scrolling region may not hide the company, the price or the evidence
-     quality. Each cell keeps its column's name beside it instead.
+  /* Chatter stacks HERE, at 860, and no other table does -- seven columns is
+     what makes 860 the right number for this one, and the Eighth return
+     scopes the change to it. Watching and Activity keep their own 700px table
+     breakpoint, further down.
+     ---------------------------------------------------------------------
+     Self-sufficient on purpose: it no longer leans on a generic stacking block
+     that now fires 160px later. Written as `.rh-table.rh-chatter` wherever it
+     has to outrank that generic block below 700, so the two do not depend on
+     which one the file happens to list last.
+     ---------------------------------------------------------------------
+     Company and price on the top line, attention and voices beneath, sources
+     and tone beneath that. Tone stays VISIBLE -- the prototype hid it on
+     mobile and the reading is half the point of the page. Qualifications stay
+     in the company block, where they belong.
      ---------------------------------------------------------------------
      `display: block` on table elements drops their implicit roles, so the
-     markup carries explicit ARIA roles that survive it -- otherwise a screen
-     reader below 700px gets undifferentiated blocks with no header
-     association. The visible label comes from a real element in the DOM, not
-     from generated content, for the same reason. */
+     markup carries explicit ARIA roles that survive it; and the cell labels
+     become real visible text here, because the header row is gone and they are
+     the only thing naming each figure. */
+  .rh-table.rh-chatter thead { display: none; }
+  .rh-table.rh-chatter,
+  .rh-table.rh-chatter tbody,
+  .rh-table.rh-chatter tr { display: block; }
+  .rh-table.rh-chatter tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'company  price'
+      'attention voices'
+      'sources  tone';
+    gap: 12px 16px;
+    align-items: start;
+    padding: 15px 0 17px;
+  }
+  .rh-table.rh-chatter tbody tr { border-top: 1px solid var(--line); }
+  .rh-table.rh-chatter tbody tr:first-child { border-top: 0; }
+  .rh-chatter .rh-col-company { grid-area: company; }
+  .rh-chatter .rh-col-price { grid-area: price; }
+  .rh-chatter .rh-col-attention { grid-area: attention; }
+  .rh-chatter .rh-col-voices { grid-area: voices; }
+  .rh-chatter .rh-col-sources { grid-area: sources; }
+  .rh-chatter .rh-col-tone { grid-area: tone; }
+  /* The chevron duplicates the company control, which is a 44px target and is
+     still here. One affordance is enough on a phone.
+     ---------------------------------------------------------------------
+     `.rh-table.rh-chatter`, not `.rh-chatter`: the cell rule below is
+     `.rh-table.rh-chatter td { display: block }` and outranked the plainer
+     selector, so the chevron came back on mobile as a block with no grid area
+     and sat alone at the bottom of every row. */
+  .rh-table.rh-chatter .rh-col-open { display: none; }
+
+  .rh-table.rh-chatter td,
+  .rh-table.rh-chatter th[scope='row'] {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .rh-table.rh-chatter td > *,
+  .rh-table.rh-chatter td.right,
+  .rh-table.rh-chatter td.right > * { text-align: left; }
+  /* Visible, and in the accessibility tree, ONLY here. On the desk layout the
+     column header already names the figure and this repeated it on all seven
+     cells of every row -- see the `display: none` beside `.rh-chatter`. */
+  .rh-table.rh-chatter .rh-cell-label {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .rh-table.rh-chatter td > strong { display: block; }
+  .rh-table.rh-chatter .rh-sub { display: block; margin: 3px 0 0; }
+  .rh-table.rh-chatter .rh-tonebar { margin: 6px 0 0; }
+  /* Two lines, not one and not five. A long legal name wrapped to four lines
+     on a phone and made its row twice as tall as its neighbours; `title` and
+     the research page still carry the whole thing. */
+  .rh-chatter .rh-name {
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  /* A 44px target for the two in-row disclosures. */
+  .rh-chatter .rh-detailtoggle { min-height: 44px; padding: 11px 0; }
+  .rh-field input, .rh-field select { min-width: 0; width: 100%; font-size: 16px; }
+  .rh-field { width: 100%; }
+  .rh-search { max-width: none; }
+  .rh-search input { font-size: 16px; }
+  .rh-tablefilter input { font-size: 16px; min-width: 0; }
+  .rh-panelhead { padding: 18px 18px 0; gap: 14px; }
+  .rh-panelheadtools { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .rh-panelcount { padding-bottom: 0; }
+  .rh-panelempty { padding: 4px 18px 0; }
+  .rh-morebutton { min-height: 44px; width: 100%; justify-content: space-between; }
+  .rh-more { width: 100%; }
+  /* The header row is gone from here down, so this becomes the sort control.
+     `flex`, not `block`: the direction button sits beside the selector. */
+  .rh-sortpicker {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    width: 100%;
+  }
+  .rh-sortpicker .rh-field { flex: 1; }
+  .rh-sortdir { min-height: 44px; flex: none; }
+  .rh-sortnote { padding: 0 18px; }
+  .rh-identity h1 { font-size: 23px; }
+  .rh-mark.large { width: 41px; height: 41px; }
+  .rh-researchhead { gap: 18px; }
+  .rh-summary { padding: 18px; }
+  .rh-spans button { min-height: 40px; }
+  .rh .pxchart .ax { font-size: 14px; }
+  .rh .phead .who { max-width: 12ch; }
+}
+
+/* Watching and Activity keep the 700px table breakpoint they always had.
+   Splitting Chatter out to 860 was about ITS seven columns; carrying the other
+   two tables along was an uncommanded change to pages this work was asked only
+   to CHECK, and the capture that seemed to justify it was of an empty table.
+   Chatter's own rules outrank these by specificity, so below 700 it keeps its
+   grid rather than reverting to these label-and-value rows. */
+@media (max-width: 700px) {
   .rh-table thead { display: none; }
   .rh-table,
   .rh-table tbody,
@@ -995,6 +1396,11 @@
     border: 0;
     text-align: left;
   }
+  /* Activity and Watching still mark these `rh-visually-hidden` in the markup,
+     so this is what brings them back into the layout. Chatter no longer does;
+     it toggles `display` instead. Their duplicate announcement on the DESK
+     layout is the same defect Chatter's fix addresses, and it is recorded as a
+     named follow-up rather than changed here. */
   .rh-table .rh-cell-label {
     position: static;
     width: auto;
@@ -1010,18 +1416,6 @@
   .rh-table .rh-sub { display: inline; margin: 0 0 0 6px; }
   .rh-table td > * { text-align: right; }
   .rh-tonebar { margin-left: auto; }
-  .rh-field input, .rh-field select { min-width: 0; width: 100%; font-size: 16px; }
-  .rh-field { width: 100%; }
-  .rh-filters-note { margin-left: 0; }
-  .rh-search { max-width: none; }
-  .rh-search input { font-size: 16px; }
-  .rh-identity h1 { font-size: 23px; }
-  .rh-mark.large { width: 41px; height: 41px; }
-  .rh-researchhead { gap: 18px; }
-  .rh-summary { padding: 18px; }
-  .rh-spans button { min-height: 40px; }
-  .rh .pxchart .ax { font-size: 14px; }
-  .rh .phead .who { max-width: 12ch; }
 }
 
 @media (prefers-reduced-motion: reduce) {

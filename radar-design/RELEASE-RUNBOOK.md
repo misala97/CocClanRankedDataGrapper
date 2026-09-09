@@ -279,12 +279,21 @@ systemctl stop coc_web                  # shared checkout; the script restarts i
 systemctl stop radar_ingest
 systemctl stop radar-encoder-trial.timer
 systemctl stop radar-encoder-trial.service   # a timer stop does NOT kill a running invocation
-systemctl mask radar-encoder-trial.timer     # nothing may re-arm it during the window
+systemctl disable --now radar-encoder-trial.timer   # NOT mask: see below
 ```
 
    **`radar-encoder-trial` needs both.** The timer fires every minute and the
    service writes to `personal_apps`; stopping only the timer leaves whatever is
    already running to finish against a migrating schema.
+
+   **Not `mask`.** Executing this on 2026-09-09 showed why: `systemctl mask`
+   fails on a unit whose file lives in `/etc/systemd/system`, because masking
+   wants to put a symlink at that exact path —
+   `Failed to mask unit: File /etc/systemd/system/radar-encoder-trial.timer
+   already exists.` Use `disable --now`, then **verify** the inhibition rather
+   than assume it: `systemctl show radar-encoder-trial.timer -p
+   NextElapseUSecRealtime -p ActiveState` must show an empty next elapse and
+   `inactive`.
 
 8. **Do not mask `coc_web`, `personal_apps_web`, `coc_scheduler`,
    `personal_apps_gym_notifier` or `radar_ingest`** — the script must be able to
@@ -345,9 +354,10 @@ show tables like 'radar\_board\_observations';    -- expect present
 
 ### 4.5 Restore the inhibited trigger
 
-15. `systemctl unmask radar-encoder-trial.timer` and start it **only if it was
-    enabled and active before** (4.2 step 6). Restore the original state, not a
-    tidier one.
+15. Re-enable and start `radar-encoder-trial.timer` **only if it was enabled and
+    active before** (4.2 step 6): `systemctl enable --now radar-encoder-trial.timer`.
+    Restore the original state, not a tidier one, and confirm with
+    `systemctl is-enabled` and `is-active`.
 16. `journalctl -u radar_ingest -n 50` must contain, verbatim:
     `radar board observation capture is disabled (RADAR_OBSERVATION_CAPTURE_ENABLED)`
 17. **Record the end of the outage.**
@@ -438,10 +448,10 @@ systemctl stop coc_web                  # the rollback deploy touches the shared
 systemctl stop radar_ingest
 systemctl stop radar-encoder-trial.timer
 systemctl stop radar-encoder-trial.service
-systemctl mask radar-encoder-trial.timer
+systemctl disable --now radar-encoder-trial.timer
 ```
 
-   Do **not** mask anything `update_coc.sh` must restart.
+   Do **not** inhibit anything `update_coc.sh` must restart.
 
 2. Revert the release merge on `main` **except** the two migration files. This is
    why 4.1 requires `--no-ff`: `-m 1` names the first parent of a merge commit, and a
@@ -461,7 +471,7 @@ git push
    exactly as in 4.3. **Do not start them by hand.**
 4. Verify the deployed SHA is the reverted one, and that `/radar/` serves and
    `/radar/hub/` 404s. Check it; do not assume.
-5. Unmask `radar-encoder-trial.timer` and restore it **only if it was enabled and
+5. Re-enable and start `radar-encoder-trial.timer` **only if it was enabled and
    active before**. Record the end of the outage.
 
 

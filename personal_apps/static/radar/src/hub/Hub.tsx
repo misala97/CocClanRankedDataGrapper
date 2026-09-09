@@ -17,6 +17,7 @@ import type { BoardPayload, PanelSpan, Selection } from '../types'
 import { Activity } from './Activity'
 import { Admin } from './Admin'
 import { Chatter } from './Chatter'
+import type { ChatterSort } from './chatterSort'
 import { Overview } from './Overview'
 import {
   Forbidden, Loading, Missing, SignedOut, StaleNotice, Unavailable,
@@ -46,6 +47,13 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
     () => readSelection(window.location.search, seedSelection(initial),
                         initial.all_sources))
   const [span, setSpan] = useState<PanelSpan>(() => readSpan(window.location.search))
+  // Chatter's ordering lives HERE, not in Chatter, because Chatter unmounts
+  // when the reader opens a company. Held in memory only: it is a view over
+  // whichever response is current, so it survives a refresh and a filter
+  // change without being stored anywhere or sent to the server. Not in the
+  // URL either -- the query string is the SELECTION, which decides what the
+  // server builds, and this decides nothing the server does.
+  const [sort, setSort] = useState<ChatterSort | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const main = useRef<HTMLElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
@@ -218,7 +226,8 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
             ? <SignedOut />
             : <Page route={route} board={board} selection={selection}
                     span={span} title={title} visible={visible}
-                    isAdmin={isAdmin} go={go} />}
+                    isAdmin={isAdmin} go={go}
+                    sort={sort} onSort={setSort} />}
         </main>
       </div>
     </div>
@@ -231,7 +240,8 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
  *  say so rather than rendering an empty panel, which a reader could not tell
  *  from a measured emptiness.
  */
-function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
+function Page({ route, board, selection, span, title, visible, isAdmin, go,
+                sort, onSort }: {
   route: HubRoute
   board: ReturnType<typeof useBoard>
   selection: Selection
@@ -241,6 +251,8 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
   isAdmin: boolean
   go: (route: HubRoute, selection?: Selection, span?: PanelSpan,
        options?: { keepFocus?: boolean }) => void
+  sort: ChatterSort | null
+  onSort: (next: ChatterSort | null) => void
 }) {
   // Declared before any early return, because hooks are.
   const watch = useWatchMutation()
@@ -322,7 +334,8 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
     }
     return (
       <Chatter board={board.data} selection={selection} onOpen={open}
-              onSelect={(next) => go(route, next)} />
+              onSelect={(next) => go(route, next)}
+              sort={sort} onSort={onSort} />
     )
   }
 

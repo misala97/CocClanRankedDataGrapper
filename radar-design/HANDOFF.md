@@ -1,3 +1,108 @@
+# Current dispatch — VC1-close delivered, awaiting the owner's eyes, 2026-09-10
+
+This section supersedes historical status/next-action/deploy statements below.
+Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
+Branch codex/radar-release-candidate; **HEAD db529eb** or the commit after it --
+verify with `git rev-parse --short HEAD` -- built on the verified base d3bc795.
+Production is ba1c381 per RELEASE-RECORD.md, migration head a7c31f0b52d4.
+Capture remains off and /radar/ remains the original route.
+**Nothing has been merged, pushed or deployed, and nothing here authorizes it.**
+The foundations worktree remains unchanged.
+
+**TE1, VC1a-c, VC1-close and sortable Chatter are complete.**
+VISUAL-CORRECTION-LEDGER.md is the full account, with the measurements, the
+browser checks and the screenshot paths.
+
+| commit | what |
+| --- | --- |
+| c90cf92 | additive `activity_sources`, and the pure tone/source presentation helpers |
+| db9f153 | the corrected Chatter, the More-filters disclosure, column proportions, responsive rules, and the screenshots |
+| ea98c50 | Codex's brief, dispatch and reference images carried in, plus the VC1 ledger |
+| b1cf313 | the panel's company filter had taken the topbar search's class |
+| 43526e8 | the tone bar drew a rare share as nothing at all |
+| fc578b8 | the loading state, and one test flake reported rather than hidden |
+| 79235db | the first independent review's twelve findings |
+| d66b52e | the documents name their commits |
+| **20dfc03** | **sortable Chatter, and the Eighth return's A, B and D** |
+| **fea864f** | the VC1-close ledger, and a fixture that showed an impossible state |
+| d21788e | the Eighth return and the sorting contract, carried in |
+| **e0ef136** | the second independent review's fourteen findings |
+
+**The Eighth return is closed.** A: the tone detail says the bar approximates,
+in the ruling's own words. B: the 860 table breakpoint is Chatter's alone --
+Watching and Activity keep their 700, verified on POPULATED fixtures at 861,
+860, 768, 701 and 700. D: Chatter's duplicate cell labels are gone from the
+desk layout entirely and visible in the stacked one. C needed no code and E is
+deferred by the ruling itself.
+
+**Sorting is in.** Owner-approved 2026-09-10. It is a view over the loaded
+candidates: no request, no server sort parameter, and the page says so. The
+ordering lives in the hub so Research -> Back restores it. Both layouts can
+sort -- headers on the desk, a labelled selector below 860 where the header row
+is `display: none`.
+
+**Two independent reviews have been performed** -- one on VC1, one on
+VC1-close and sorting -- and all twenty-six findings are resolved and recorded
+in the ledger. Neither found anything blocking.
+
+Two questions from the first went back to Codex and the Eighth return answered
+both: the 2px minimum bar segment is **ratified as an approximate indicator**,
+and the table breakpoints are **scoped back to Chatter**, which this delivery
+does.
+
+The second review's worst finding was in my evidence rather than the code:
+three of the sixty browser checks did not test what they claimed -- a hardcoded
+pass, a tautological `or`, and a loop that broke before its second assertion
+and mislabelled the one direction that ran. All three now assert the thing they
+name. It also found a real keyboard defect (pressing "Radar order" dropped
+focus to `<body>`), that Today's sort had inherited Price's currency
+requirement, and that sorting was silent to assistive technology beyond
+`aria-sort`.
+
+**Immediate next action: the owner looks at it.** The preview is runnable:
+
+```
+cd C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate/personal_apps
+PYTHONPATH=. py -3.12 scratchpad/vc1_serve.py 5071
+```
+
+then `http://127.0.0.1:5071/scratchpad/vc1/real.html#chatter` and
+`.../fixture.html#chatter`. Click a column header to sort; the stacked layout
+below 860px offers a **Sort by** selector instead. The annotated before/after
+is `radar-design/reports/vc1/comparison-1440.png`, and the sorted captures are
+`close-sorted-1440.png` and `close-sorted-390.png`.
+
+The fixture page also carries a five-row watch list and seven days of activity.
+Both are **labelled fictional fixtures**: the local database has no watch marks
+and records no ingest runs, and an empty table cannot verify a table layout.
+
+**The test database changed.** The worktree `.env` now names
+`personal_apps_radar_te1` — a schema-preserving rebuild carrying all 29 foreign
+keys, at migration head a7c31f0b52d4. The old constraint-free
+`personal_apps_radar_wt` is preserved and NOT dropped; every result recorded
+against it stays labelled constraint-free. Assert the name before any backend
+test or migration:
+
+```
+cd personal_apps && PYTHONPATH=. py -3.12 -c "from app import app; from extensions import db; app.app_context().push(); print(db.engine.url.database)"
+```
+
+Dirty ownership: nothing. Codex's Eighth return, the sortable-Chatter contract
+and the dispatch update are carried in as documentation, which the ruling asked
+for. `.gitignore` now
+excludes `personal_apps/scratchpad/vc1/`, which holds regenerable board
+payloads; the committed evidence is `radar-design/reports/vc1/`.
+
+Seventh-return documentation carry and OT1 remain separate supporting tasks and
+were not touched. Historical analysis remains the next NEW feature, after this
+correction is accepted. Use RELEASE-RECORD.md for executed facts, not the old
+deployment statements below.
+Protected: all .env/credentials/backups/private fixtures, unrelated planning
+checkout research changes, and the foundations worktree. No staging all files.
+
+---
+
+## Historical handoff preserved for evidence
 # Radar current handoff
 
 Updated 2026-09-09, by Claude, during implementation. Supersedes the planning-stage handoff.
@@ -257,3 +362,68 @@ Replace the sections above with the then-current worktree, branch, HEAD, dirty o
 and open tasks, review findings, exact tests and results, protected files and deployment carries.
 Verify this file against Git and the reports before trusting it; if they disagree, the evidence wins
 and the discrepancy belongs in the ledger.
+
+
+## Owner clarification — staged design ambition (2026-09-09)
+
+The interactive prototype is the near-term fidelity target for VC1 and the next
+iterations, NOT the desired final product or a permanent ceiling. The longer-term
+ambition remains the visual richness, sophistication and research depth of the
+original image concepts: A's welcoming overview and B's focused research workflow,
+unified in the selected light/green identity. C remains rejected.
+
+As history, portfolio and news capabilities mature, design their pages and revisit
+the hub's composition with richer charts, evidence interactions, hierarchy and
+polish, using fresh mockups before implementation. Aim for the original concepts'
+level of craft and complexity where it serves research; their fictional content
+is not a promise of available data. The current prototype's simplified layout and
+components do not bind future design. Do not freeze the product at VC1 fidelity.
+
+This does not expand VC1: deliver the current interactive-reference correction
+first, then evolve deliberately alongside the roadmap. No new implementation or
+deployment is authorized by this clarification alone.
+
+## Codex review update — 2026-09-10
+
+See CODEX-DECISIONS.md Eighth return. TE1 accepted with local-schema limits;
+principal VC1 accepted for owner preview. VC1-close remains before deployment:
+approximate-bar explanation, scope table breakpoint changes to Chatter, responsive
+accessible labels. Do not redispatch completed work. Owner may review now;
+no deployment authorized. Current reviewed HEAD d66b52e; Codex documentation
+edits are intentional and uncommitted. Fresh focused Vitest: 56 passed/2 files.
+
+2026-09-10 owner addition: sortable Chatter is OPEN within VC1-close. Read the appended binding sorting contract in VISUAL-CORRECTION-PLAN.md. Preserve completed tasks; return sorting with the same closure review/preview. No deployment authorized.
+
+
+2026-09-10 Codex Ninth return: VC1-close/sorting accepted for owner visual review at 31ae58a. A-D settled with no new implementation gate. Fresh focused tests: 78 passed/2 files. Next: owner reviews sortable preview; deployment is a separate decision. See CODEX-DECISIONS.md. These Codex documentation edits are intentional.
+
+
+## Owner approval — VC1 deployment, 2026-09-10
+
+The owner visually accepted the sortable preview ('Looks good just like I
+imagined'), then authorized proceeding with the proposed merge/push/deployment
+('lets go ahead') after confirming historical snapshot capture is for later.
+
+Claude is authorized to merge/push the reviewed VC1 candidate 31ae58a plus
+reviewed documentation-only ruling updates and deploy the updated hub in the
+next suitable window. Preserve /radar/ as the original page and keep observation
+capture off. Include the established fresh backup, temporary service stops,
+matching build, restart/smoke verification and code-only rollback if needed.
+No capture enablement, root promotion, OT1 cleanup, schema downgrade or live
+restore is bundled into this authorization.
+
+Execution must use current facts: production was reported at ba1c381 and already
+at migration head a7c31f0b52d4. This update introduces no new migration. Do not
+reuse the first release's 'both tables absent' preflight or drop/stamp anything
+to recreate it. Verify remote/target drift before merging and deploying, record
+the exact merge/deployed SHA, and assess unexpected code/schema changes before
+continuing. Retain the existing migration chain for routine upgrades/rollback.
+
+Claude should prepare the concise deployment delta and execute within this
+approval without asking for the same approval again. Announce the actual window,
+follow the accepted service ordering and backup procedure, then verify old Radar,
+hub assets/sorting, current activity_sources and tone on real data, service health,
+unchanged migration head and capture off. Do not mint an owner login session;
+use existing authorized verification methods. Report any authenticated checks
+that need the owner's session honestly. Record results in RELEASE-RECORD.md and
+HANDOFF.md. Production has not changed merely because this approval is recorded.

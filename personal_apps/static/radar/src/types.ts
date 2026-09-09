@@ -225,7 +225,18 @@ export interface Row {
   ratio: number | null
   authors: number
   text_ratio: number
+  /** Every scored feed this ticker has a bucket on in the window, including
+   *  the ones that counted nothing. `venues` and the breadth filter are built
+   *  on this, so it keeps meaning "looked at". */
   sources: string[]
+  /** The subset of `sources` whose summed mentions in this window are above
+   *  zero -- bucket-observed activity, not independence and not verification.
+   *
+   *  Optional only while a board cached before this field existed can still
+   *  be served. Absent means unavailable, which is NOT the same as `[]`: an
+   *  empty array is a measurement saying no feed counted anything. Never fall
+   *  back to `sources.length` -- that is the misleading count this replaces. */
+  activity_sources?: string[]
   price: number | null
   price_move: number | null
   direction: 'up' | 'down' | 'flat'

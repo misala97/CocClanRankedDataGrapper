@@ -401,6 +401,11 @@ def _row(entry):
         'authors': r.authors,
         'text_ratio': r.text_ratio,
         'sources': r.sources,
+        # The subset of `sources` that counted something in this window. Sent
+        # BESIDE the full list rather than replacing it: `sources` is what
+        # `venues` and the breadth filter are built on, and narrowing it here
+        # would change which companies the board admits. See Row.sources.
+        'activity_sources': r.activity_sources,
         'price': _decimal_or_none(r.price),
         'price_move': _decimal_or_none(r.price_move),
         'direction': r.direction,

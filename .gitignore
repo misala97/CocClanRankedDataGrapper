@@ -27,3 +27,10 @@ personal_apps/static/radar/dist/
 # Radar sentiment classifier artifacts: weights are data, not code.
 personal_apps/artifacts/
 !personal_apps/artifacts/.gitkeep
+
+# The VC1 preview's generated output: harness pages carrying a whole board
+# payload, the screenshots they produce, and the canned API answers. All of it
+# is rebuilt by scratchpad/vc1_preview.py from the disposable database, and the
+# payloads are megabytes of real rows that do not belong in history. The
+# CURATED comparison screenshots live in radar-design/reports/vc1/ instead.
+personal_apps/scratchpad/vc1/
