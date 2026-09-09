@@ -215,39 +215,57 @@ def summary(now: dt.datetime, days: int) -> dict:
     # from the two schedulers that actually call tick -- `radar_cycle` on the
     # NYSE session (180s open, 600s after hours, 1800s overnight and weekends)
     # and `radar_reddit` fixed at ARCTIC_SHIFT_INTERVAL_SECONDS. Rows and bytes
-    # are asked of the database over the same Berlin-day window queried below;
-    # milliseconds are the best of five on a warm buffer pool, so a lower bound:
+    # are asked of the database over the same Berlin-day window queried below.
     #
-    #     window  rows     JSON     summary()   without summary_json   peak heap
-    #     1 day     276    1.3 MiB    29 ms            5 ms              4 MiB
-    #     7 days  3,212   14.3 MiB   326 ms           42 ms             50 MiB
-    #     30 days 14,652  64.2 MiB 1,577 ms          183 ms            228 MiB
+    # Both scheduling models are seeded and measured, because APScheduler
+    # reschedules at FINISH + interval, not start + interval:
+    #
+    #   start + interval, the drift-free upper bound
+    #     window  rows     JSON     summary()   no summary_json   peak heap
+    #     1 day     276    1.3 MiB     27 ms          4 ms           4 MiB
+    #     7 days  3,212   14.3 MiB    307 ms         40 ms          50 MiB
+    #     30 days 14,652  64.2 MiB  1,609 ms        196 ms         228 MiB
+    #
+    #   finish + interval, 38s runs -- what the scheduler actually does
+    #     1 day     239    1.1 MiB     26 ms          4 ms           4 MiB
+    #     7 days  2,791   12.6 MiB    297 ms         35 ms          45 MiB
+    #     30 days 12,728  56.8 MiB  1,390 ms        160 ms         201 MiB
     #
     # An earlier note here guessed ~2,880 runs over 30 days by dividing the
     # window by the board archive's 15-minute cadence. That is the wrong writer:
-    # two jobs each write one row per firing, which is ~14,800 firings over 30
-    # days, five times the guess.
+    # two jobs each write one row per firing, which is ~12,700-14,800 firings
+    # over 30 days, five times the guess.
     #
     # The two jobs write different envelopes, and modelling one shape for both
     # overstated this table's first version by roughly half. `run_cycle` keys
     # aggregate_status and catchup_depth by the ROOT fetcher name and only
     # per_source by concrete names, and the schedulers pass disjoint fetcher
-    # sets. So a radar_cycle envelope is 631 bytes (bluesky and fourchan) and a
+    # sets. So a radar_cycle envelope is 632 bytes (bluesky and fourchan) and a
     # radar_reddit one is 7,447 (34 subs in per_source, one root elsewhere).
     #
     # The last two columns are the finding. Without summary_json the same rows
-    # take 183 ms, so the envelopes are ~88% of the cost -- and .all() holds
-    # every row and every decoded dict at once, which is 228 MiB of heap for one
-    # request on a login_required, uncached route. On a small host that is the
-    # number that ends the process, not the seconds.
+    # take 160 ms against 1,390, so the envelopes dominate -- that control is a
+    # bare two-column select rather than this query minus the column, so it also
+    # skips the grouping loop and somewhat overstates their share. And .all()
+    # holds every row and every decoded dict at once: ~201 MiB of PYTHON heap
+    # for one request on a login_required, uncached route. That is tracemalloc,
+    # so a floor on RSS rather than the figure. On a small host it is the number
+    # that ends the process, not the seconds.
+    #
+    # Bounds, in both directions. Milliseconds are best-of-five on a warm buffer
+    # pool: lower bounds. Bytes assume every run succeeded and every source
+    # reported all eight intake reasons; intake_reasons is 84% of the reddit
+    # envelope, so a quiet sub makes it markedly smaller. Upper bound.
     #
     # Nothing is changed here. Extracting the counters in SQL needs JSON path
     # functions whose behaviour on the production MariaDB cannot be verified
     # from this environment. The portable fixes -- typed counter columns written
     # at finish_run, a daily rollup, memoising completed days, or dropping 30
     # from ALLOWED_DAYS -- are product or schema decisions, and they belong to
-    # the plan owner. The evidence and the options are in FOUNDATIONS-LEDGER.md,
-    # "R2 evidence".
+    # the plan owner. Note for whoever takes them: a day is NOT immutable at
+    # Berlin midnight, because runs are grouped by started_at and finish_run
+    # closes them later. The evidence and the options are in
+    # FOUNDATIONS-LEDGER.md, "R2 evidence".
     runs = db.session.query(
         RadarIngestRun.started_at, RadarIngestRun.status,
         RadarIngestRun.summary_json,

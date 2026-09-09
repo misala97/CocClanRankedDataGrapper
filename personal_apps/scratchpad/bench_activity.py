@@ -131,7 +131,8 @@ def cycle_envelope():
         'buckets_written': 6,
         'per_source': {name: 'ok' for name in roots},
         'aggregate_status': {name: 'ok' for name in roots},
-        'catchup_depth': {name: 0 for name in roots},
+        # fourchan reports len(active[:thread_cap]), not 0 (fourchan.py:137).
+        'catchup_depth': {'bluesky': 0, 'fourchan': 40},
         'intake_reasons': {name: _reasons() for name in roots},
     })
 
@@ -139,7 +140,11 @@ def cycle_envelope():
 def reddit_envelope():
     """What `radar_reddit` writes: every configured sub in per_source, because
     arctic_shift.fetch iterates all of REDDIT_SUBS in one cycle -- but a single
-    'reddit' key in aggregate_status and catchup_depth."""
+    'reddit' key in aggregate_status and catchup_depth.
+
+    34 is a ceiling, not a constant: a 429 ends the cycle and the subs never
+    asked stay absent from per_source_status rather than appearing as failures.
+    """
     subs = ['reddit:%s' % sub for sub in REDDIT_SUBS]
     return _envelope({
         'posts_seen': 1287, 'posts_new': 143, 'mentions': 96,
@@ -234,6 +239,48 @@ def peak_mib(call):
     return peak / 1048576
 
 
+def pass_over(label, duration, admin, cycle_body, reddit_body):
+    """Seed one scheduling model and measure it. Clears first, so the two
+    passes cannot see each other's rows."""
+    clear()
+    # Two days wider than the widest window: summary() queries Berlin calendar
+    # days, whose start can precede ANCHOR - days.
+    widest = max(WINDOWS)
+    seed_from = ANCHOR - dt.timedelta(days=widest + 2)
+    cycles = cycle_starts(seed_from, ANCHOR, duration)
+    reddits = reddit_starts(seed_from, ANCHOR, duration)
+    total = seed(rows_for(cycles, cycle_body) + rows_for(reddits, reddit_body))
+    print(f'\n=== {label} ===')
+    print(f'seeded {total:,} runs over {widest + 2} days '
+          f'(cycle {len(cycles):,} + reddit {len(reddits):,})')
+
+    print(f'{"window":>7} {"runs":>8} {"MiB":>6} {"summary ms":>13} '
+          f'{"endpoint ms":>13} {"no-JSON ms":>11} {"peak MiB":>9}')
+    for days in WINDOWS:
+        window_from, window_to = window_bounds(days)
+        rows, byte_total = measured(window_from, window_to)
+
+        best, median = timed(lambda d=days: activity.summary(ANCHOR, d))
+        bare_best, _ = timed(lambda f=window_from, t=window_to: control(f, t))
+        peak = peak_mib(lambda d=days: activity.summary(ANCHOR, d))
+
+        with app.test_client() as client:
+            with client.session_transaction() as session:
+                session['user_id'] = admin.id
+
+            def call(d=days):
+                response = client.get(f'/radar/api/activity?days={d}')
+                assert response.status_code == 200, response.status_code
+                return response.get_data()
+
+            endpoint_best, endpoint_median = timed(call)
+
+        print(f'{days:>7} {rows:>8,} {byte_total / 1048576:>6.1f} '
+              f'{best:>9.0f}/{median:<3.0f} '
+              f'{endpoint_best:>9.0f}/{endpoint_median:<3.0f} '
+              f'{bare_best:>11.0f} {peak:>9.1f}')
+
+
 def main():
     with app.app_context():
         resolved = db.engine.url.database
@@ -258,24 +305,22 @@ def main():
                   f' aggregate_status={len(keys["aggregate_status"]):<3}'
                   f' catchup_depth={len(keys["catchup_depth"]):<3}'
                   f' intake_reasons={len(keys["intake_reasons"])}')
-        print()
+
+        import features.radar.routes.operations as operations
+        original_utcnow = operations._utcnow                  # noqa: SLF001
+        operations._utcnow = lambda: ANCHOR                   # noqa: SLF001
+        app.config['TESTING'] = True
 
         clear()
         try:
-            # Two days wider than the widest window: summary() queries Berlin
-            # calendar days, whose start can precede ANCHOR - days.
-            widest = max(WINDOWS)
-            seed_from = ANCHOR - dt.timedelta(days=widest + 2)
-            cycles = cycle_starts(seed_from, ANCHOR)
-            reddits = reddit_starts(seed_from, ANCHOR)
-            total = seed(rows_for(cycles, cycle_body)
-                         + rows_for(reddits, reddit_body))
-            print(f'seeded {total:,} runs over {widest + 2} days '
-                  f'(cycle {len(cycles):,} + reddit {len(reddits):,})')
+            admin = AppUser.query.filter_by(is_admin=True).order_by(
+                AppUser.id).first()
+            if admin is None:
+                raise SystemExit('no admin user in the disposable database')
+
             # As the server stores it, not as Python would re-serialize it.
-            # Exactly two distinct bodies are seeded, so the extremes name
-            # them -- and both walks start at the same instant, so probing by
-            # timestamp would read whichever row the server happened to return.
+            seed(rows_for([ANCHOR - dt.timedelta(days=200)], cycle_body)
+                 + rows_for([ANCHOR - dt.timedelta(days=199)], reddit_body))
             length = sa.func.length(RadarIngestRun.summary_json)
             smallest, largest = db.session.execute(
                 sa.select(sa.func.min(length), sa.func.max(length))
@@ -283,49 +328,35 @@ def main():
             ).one()
             print(f'  one radar_cycle envelope:  {smallest:,} bytes')
             print(f'  one radar_reddit envelope: {largest:,} bytes')
-            print()
 
-            import features.radar.routes.operations as operations
-            operations._utcnow = lambda: ANCHOR              # noqa: SLF001
-            app.config['TESTING'] = True
-            admin = AppUser.query.filter_by(is_admin=True).order_by(
-                AppUser.id).first()
-            if admin is None:
-                raise SystemExit('no admin user in the disposable database')
-
-            print(f'{"window":>7} {"runs":>8} {"MiB":>6} {"summary ms":>13} '
-                  f'{"endpoint ms":>13} {"no-JSON ms":>11} {"peak MiB":>9}')
-            for days in WINDOWS:
-                window_from, window_to = window_bounds(days)
-                rows, byte_total = measured(window_from, window_to)
-
-                best, median = timed(lambda d=days: activity.summary(ANCHOR, d))
-                bare_best, _ = timed(
-                    lambda f=window_from, t=window_to: control(f, t))
-                peak = peak_mib(lambda d=days: activity.summary(ANCHOR, d))
-
-                with app.test_client() as client:
-                    with client.session_transaction() as session:
-                        session['user_id'] = admin.id
-
-                    def call(d=days):
-                        response = client.get(f'/radar/api/activity?days={d}')
-                        assert response.status_code == 200, response.status_code
-                        return response.get_data()
-
-                    endpoint_best, endpoint_median = timed(call)
-
-                print(f'{days:>7} {rows:>8,} {byte_total / 1048576:>6.1f} '
-                      f'{best:>9.0f}/{median:<3.0f} '
-                      f'{endpoint_best:>9.0f}/{endpoint_median:<3.0f} '
-                      f'{bare_best:>11.0f} {peak:>9.1f}')
+            # BOTH scheduling models are seeded and measured, not one measured
+            # and the other asserted. The drift-free walk is the upper bound
+            # this file argues APScheduler does not actually produce, so
+            # publishing only it would be the same overstatement in a
+            # different place.
+            pass_over('start + interval (drift-free upper bound)', 0,
+                      admin, cycle_body, reddit_body)
+            pass_over(f'finish + interval ({CYCLE_DURATION}s runs, what '
+                      f'APScheduler does)', CYCLE_DURATION,
+                      admin, cycle_body, reddit_body)
 
             print('\nms columns are best/median of five on a warm buffer pool, '
-                  'after a warm-up.')
+                  'after a warm-up: LOWER bounds.')
+            print('the endpoint is timed last, over rows already read ~12 '
+                  'times, so it can read a few ms faster than the function it '
+                  'wraps. That gap is the noise floor, not a saving.')
+            print('the no-JSON column is a bare two-column select, not '
+                  'summary() minus the column: it also skips the grouping '
+                  'loop, so it slightly overstates the envelopes\' share.')
             print('"runs" and "MiB" are asked of the database over the same '
                   'Berlin-day window summary() queries.')
+            print('peak MiB is tracemalloc, so Python allocations only. The '
+                  'driver is pymysql -- pure Python, so its buffers ARE '
+                  'counted -- but allocator overhead is not: a floor on RSS.')
             print('every seeded row is status=ok with a full envelope, and '
-                  'every source reports all 8 intake reasons: an upper bound.')
+                  'every source reports all 8 intake reasons. That is an '
+                  'UPPER bound: intake_reasons is 84% of the reddit envelope, '
+                  'and a quiet sub contributes fewer reasons or no key.')
             print(f'the newest day is partial -- seeding stops at the anchor '
                   f'({ANCHOR:%H:%M}), as a reader opening it mid-day would '
                   f'find it.')
@@ -334,8 +365,9 @@ def main():
             # not have to agree. That column is what the endpoint READ: rows
             # inside a Berlin calendar window, from one walk seeded 32 days
             # back. This is what the schedulers would FIRE over a rolling
-            # 24h * days, each window walked from its own start, so the
-            # interval chain restarts at a different phase.
+            # 24h * days, each window walked from its own start. Two things
+            # separate them -- the run duration above all, and then phase,
+            # because each window restarts the interval chain.
             print('\nfirings per rolling window, by scheduling model:')
             print(f'{"window":>7} {"start+interval":>15} {"finish+interval":>16}')
             for days in WINDOWS:
@@ -352,6 +384,7 @@ def main():
             print(f'one Sunday, drift-free: {weekend:,}')
         finally:
             clear()
+            operations._utcnow = original_utcnow              # noqa: SLF001
             print('\nseeded rows removed.')
 
 

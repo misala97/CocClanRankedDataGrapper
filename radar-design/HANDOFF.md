@@ -53,6 +53,10 @@ Commits on this branch, oldest first:
 | e25f223 | R1: unchecking the last feed selected other feeds instead of refusing |
 | ffbdd37 / 08c5b47 | R2: the activity endpoint measured, then the review's findings |
 | 917cb15 | the R1 review's fixes |
+| 08c5b47 | the R2 review's blocking finding: the envelope shape was not production's |
+| 3c2eb77 | ledgers name 08c5b47 |
+| 78b17c6 | the jsdom navigation flake in Hub.test.tsx |
+| 8c50cda | hub ledger records R1 and the flake |
 
 Working tree is clean apart from this file's own edit.
 
@@ -93,13 +97,16 @@ Recorded at 08c5b47, all against the disposable database:
 - `npm test`: **403 passed** (root config, 32 files) and **438 passed** (radar config).
   The radar count rose from 419 by R1's 19 new tests.
 - `npm run build`: exit 0. Emits `hub-*.js` and `hub-*.css` beside `board-*.js`.
-- `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py tests/test_radar_daemon.py`: **194 passed**.
+- `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py tests/test_radar_daemon.py`: **195 passed**.
 - `pytest tests/test_radar_hub_page.py tests/test_vite_assets.py tests/test_radar_api.py`: **85 passed**.
 - `pytest tests/test_radar_hub_page.py tests/test_radar_api.py tests/test_radar_watch_api.py tests/test_gym_routes_smoke.py`: **135 passed**.
 - R1: `npx vitest run -c vite.radar.config.ts static/radar/src/hub/`: **171 passed**, 12 files.
   Mutation-checked -- reverting only the reducer fails 6 of them.
-- R2: `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py -q`: **124 passed**
-  (the observations suite went 65 -> 66 with the call-path test the R2 review found missing).
+- R2: `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py -q`: **66 passed**
+  (65 before the call-path test the R2 review found missing).
+- The radar frontend suite was FLAKY and is no longer: `Hub.test.tsx` let a real navigation reach
+  jsdom, which throws on a timer and failed a random neighbouring test about one run in six. Fixed
+  in 78b17c6; four consecutive clean `npm test` runs since.
 - R2 benchmark: `PYTHONPATH=. py -3.12 scratchpad/bench_activity.py`, which asserts the disposable
   database by name, seeds into 2019 and removes its rows afterwards. Results in FOUNDATIONS-LEDGER.md.
 - Browser: 13 captures across all six pages and the recovery view at 1440x1000, 768x1024 and
@@ -137,12 +144,18 @@ background task was raised for it.
   Codex prefers the enumerated shape.
 - **MEASURED under R2. F3's estimate was five times low on firings; the first measurement of it
   was then ~2x too high, caught by the R2 review.** The activity query still transfers each run's
-  `summary_json`. At `days=30` that is **14,652 rows / 64.2 MiB / ~1.6 s / 228 MiB of peak heap**
-  to return 120 integers -- not the ~2,880 envelopes F3 guessed, because runs are written by `tick`
-  and TWO scheduler jobs call it. The same rows without `summary_json` take 183 ms, so the
-  envelopes are ~88% of the cost. Repeatable via `scratchpad/bench_activity.py`. **The decision is
-  Codex's** -- five options, two needing no migration; see FOUNDATIONS-LEDGER.md, "R2 evidence".
-  Nothing was implemented.
+  `summary_json`. At `days=30` that is **12,728 rows / 56.8 MiB / ~1.4 s / ~201 MiB of peak Python
+  heap** on the scheduling model APScheduler actually uses, and 14,652 / 64.2 MiB / 1.6 s /
+  228 MiB on the drift-free upper bound -- both seeded and measured. Either way it is 120 integers
+  returned, not the ~2,880 envelopes F3 guessed: runs are written by `tick` and TWO scheduler jobs
+  call it. The same window without `summary_json` takes 160 ms against 1,390, so the envelopes
+  dominate. Repeatable via `scratchpad/bench_activity.py`. **The decision is Codex's** -- five
+  options, three needing no migration; see FOUNDATIONS-LEDGER.md, "R2 evidence". Nothing was
+  implemented.
+- **A day is not immutable at Berlin midnight**, which matters to anyone taking that decision:
+  runs are grouped by `started_at` but `finish_run` closes them later, so a run spanning midnight
+  changes the previous day. Roughly one day in five. Any memo needs a `no running rows` condition,
+  not just a date key.
 - **Accepted limit, wording corrected under R2:** `observations.capture()` will accept a backdated
   `now`. `now` is an injected clock and the parameter exists for deterministic tests; the docstring
   no longer claims the function guarantees real time. The guarantee is a property of the call path.

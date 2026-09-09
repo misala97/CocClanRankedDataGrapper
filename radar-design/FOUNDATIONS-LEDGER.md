@@ -16,6 +16,7 @@ Updated: 2026-09-09
 | F3 independent review | Complete | No blocking findings; 7 should-fix + 4 minor, resolved in a178ba6 |
 | R2 activity volume measured | Complete | ffbdd37, corrected in 08c5b47; ~2,880 was 5x low on firings. Measured 14,652 rows / 64.2 MiB / 1.6 s / 228 MiB peak heap at days=30 |
 | R2 independent review | Complete | 1 blocking + 9 should-fix + 8 minor + 2 nits; all 20 resolved in 08c5b47 |
+| R2 correction re-review | Complete | No blocking; every committed figure re-derived independently and reproduced exactly. 4 should-fix + 3 minor + 5 nits resolved below |
 | R2 activity cost decision | Open, Codex's | Five options below, two needing no migration. NOT implemented, per the owner's instruction |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -247,52 +248,99 @@ same Berlin-calendar-day window `summary()` queries, rather than counted over a 
 `24h * days` and multiplied by a Python re-serialization -- which is how the first table
 came to carry three numbers drawn from two different row sets.
 
-| window | rows | JSON | `summary()` | endpoint | same rows, no `summary_json` | peak heap |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 day | 276 | 1.3 MiB | 29 ms | 27 ms | 5 ms | 4 MiB |
-| 7 days | 3,212 | 14.3 MiB | 326 ms | 322 ms | 42 ms | 50 MiB |
-| 30 days | 14,652 | 64.2 MiB | 1,577 ms | 1,567 ms | 183 ms | **228 MiB** |
+**Both scheduling models are seeded and measured**, not one measured and the other
+asserted -- publishing only the drift-free walk this ledger calls an upper bound would have
+been the same overstatement in a different place.
 
-Milliseconds are best of five on a warm buffer pool -- a **lower** bound. Every seeded row
-is `status='ok'` carrying a full envelope with all eight intake reasons on every source, so
-the bytes are an upper bound. The newest day is partial, seeding stopping at the 12:00
-anchor exactly as a reader opening it mid-day would find it.
+Start + interval, the drift-free upper bound:
+
+| window | rows | JSON | `summary()` | endpoint | no `summary_json` | peak heap |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 day | 276 | 1.3 MiB | 27 ms | 31 ms | 4 ms | 4 MiB |
+| 7 days | 3,212 | 14.3 MiB | 307 ms | 320 ms | 40 ms | 50 MiB |
+| 30 days | 14,652 | 64.2 MiB | 1,609 ms | 1,586 ms | 196 ms | **228 MiB** |
+
+Finish + interval with 38 s runs -- what APScheduler actually does:
+
+| window | rows | JSON | `summary()` | endpoint | no `summary_json` | peak heap |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 day | 239 | 1.1 MiB | 26 ms | 25 ms | 4 ms | 4 MiB |
+| 7 days | 2,791 | 12.6 MiB | 297 ms | 262 ms | 35 ms | 45 MiB |
+| 30 days | 12,728 | 56.8 MiB | 1,390 ms | 1,413 ms | 160 ms | **201 MiB** |
 
 The last two columns are the finding, and neither existed in the first pass. **The envelopes
-are ~88% of the time** -- the same rows without `summary_json` take 183 ms against 1,577.
-And `summary()` ends in `.all()`, holding every row *and* every decoded dict at once:
-**228 MiB of Python heap for one request** on a `login_required`, uncached route that any
-signed-in reader can repeat. On a small host that is the number that ends the process, not
-the seconds.
+dominate** -- the same window without `summary_json` takes 160 ms against 1,390. That control
+is a bare two-column select rather than `summary()` minus the column, so it also skips the
+grouping loop and somewhat overstates their share; the direction is not in doubt. And
+`summary()` ends in `.all()`, holding every row *and* every decoded dict at once: **~201 MiB
+of Python heap for one request** on a `login_required`, uncached route any signed-in reader
+can repeat. On a small host that is the number that ends the process, not the seconds.
+
+Bounds, in both directions. Milliseconds are best-of-five on a warm buffer pool: **lower**
+bounds. The endpoint is timed last, over rows already read a dozen times, so it can come out
+a few ms under the function it wraps -- that gap is the noise floor, not a saving. Peak heap
+is `tracemalloc`, so Python allocations only; the driver is pymysql, pure Python, so its
+buffers *are* counted, but allocator overhead is not -- a **floor** on RSS. Every seeded row
+is `status='ok'` with a full envelope and all eight intake reasons on every source;
+`intake_reasons` is 84% of the reddit envelope, so that is an **upper** bound on bytes. The
+newest day is partial, seeding stopping at the 12:00 anchor exactly as a reader opening it
+mid-day would find it.
 
 ### Not implemented. This is Codex's decision.
 
 Recorded per the owner's instruction to bring evidence and a recommendation rather than act.
-Two of these need no migration at all:
+Three of the five need no migration; two of those are viable.
 
-1. **Memoise completed days.** Days 1..N-1 are immutable once Berlin midnight passes, so
-   `days=30` becomes one partial day's work. Portable, no schema change, and the largest
-   single win. Needs a cache keyed by the Berlin date and an eviction story.
+**First, a fact that constrains every option: a day is NOT immutable at Berlin midnight.**
+`summary()` groups runs by `_berlin_date(started_at)` (`activity.py:258`), but `finish_run`
+writes `status` and `summary_json` at *finish* time and never touches `started_at`
+(`activity.py:66-104`). A run that starts at 23:59:5x Berlin and closes after midnight moves
+the **previous** day's `incomplete_runs` into `completed_runs`/`counted_runs` and adds its
+counters, after that day looked complete. At ~38 s runs against a 300 s reddit interval and a
+600 s cycle interval at Berlin midnight, that is roughly **one day in five**, and more
+whenever an Arctic Shift pass overruns -- which is exactly what `coalesce=True,
+max_instances=1` on `radar_reddit` exists to absorb. Found by the R2 review; an earlier
+version of this section asserted the opposite, and a memo built on it would have frozen a
+wrong count into ~20% of days.
+
+Nothing else invalidates a past day: `retention.prune_*` covers posts, quotes, mention events
+and market data, and never `RadarIngestRun`, so rows are not deleted underneath a cache -- and
+the 30-day steady state really is unbounded.
+
+1. **Memoise completed days.** Days 1..N-1 become one partial day's work. Portable, no schema
+   change, largest single win -- **but the cache key cannot be the Berlin date alone.** A day
+   is only safe to freeze once it holds no `running` rows; a cheap
+   `COUNT(*) WHERE status='running'` per candidate day gives that, and a day left `running`
+   by a dead process is simply never memoised.
 2. **Drop 30 from `ALLOWED_DAYS`** until a real fix lands. One line in `activity.py:48`, and
    the only option that removes the exposure today. Costs the reader the month view.
 3. **Typed counter columns** written at `finish_run`, beside the envelope, which stays as
-   provenance. Portable -- no JSON functions. **But `SUM()` alone breaks the null contract**
-   the ruling requires: SQL `SUM` skips NULLs, so a day mixing a run that reported
-   `posts_seen` with one that did not would return a number where `_counters` deliberately
-   returns `None`. Equivalence needs, per counter,
-   `CASE WHEN COUNT(*) <> COUNT(col) THEN NULL ELSE SUM(col) END`, with `counted_runs`
-   counted separately. Costs a migration; there are no production rows yet, which makes now
-   the cheapest this will ever be.
+   provenance. Portable -- no JSON functions. Two traps, both load-bearing:
+   - `SUM()` skips NULLs, so a day mixing a run that reported `posts_seen` with one that did
+     not returns a number where `_counters` deliberately returns `None`. That needs
+     `CASE WHEN COUNT(*) <> COUNT(col) THEN NULL ELSE SUM(col) END` per counter.
+   - **That expression is still not equivalent over "the day's `status='ok'` rows"**, which is
+     the only population typed columns can name. `_counted` (`activity.py:150-158`) *drops* an
+     ok-run whose envelope is missing, malformed, or of another `schema_version`; `_counters`
+     then sums what remains. The CASE would read NULL columns for such a row and null the
+     whole day -- and, worse, an ok-run stored under an OLDER schema version would be silently
+     summed, which is the cross-version addition `SCHEMA_VERSION` exists to prevent. Typed
+     columns cannot distinguish "this run stored nothing countable" from "this run's summary
+     omitted this counter"; both are NULL. So the migration also needs a stored
+     `schema_version` column plus a countable marker, with the CASE filtered on it.
+   Costs a migration; there are no production rows yet, which makes now the cheapest this will
+   ever be.
 4. **A daily rollup table.** Smallest read, but a second writer to keep correct and a repair
-   path for when a run closes late.
-5. **JSON path extraction in SQL.** No migration, and still **rejected**: it needs
+   path for when a run closes late -- the same hazard as 1, made explicit.
+5. **JSON path extraction in SQL.** No migration either, and still **rejected**: it needs
    `JSON_EXTRACT`/`JSON_VALUE` behaviour that cannot be verified against the production
-   MariaDB from here, and the null-versus-zero contract turns on telling an absent key from
-   a zero -- exactly where the two engines' JSON functions are least alike.
+   MariaDB from here, and the null-versus-zero contract turns on telling an absent key from a
+   zero -- exactly where the two engines' JSON functions are least alike.
 
-**Recommendation: 2 now, 1 next, 3 when a migration is being cut anyway.** Note what is not
-urgent: at `days=1` and `days=7` the endpoint answers in 27 ms and 322 ms. Only `days=30` is
-bad, and it is bad in memory before it is bad in time.
+**Recommendation: 2 now, 1 next with the `running`-row condition, 3 when a migration is being
+cut anyway and only with the schema-version column.** What is not urgent: at `days=1` and
+`days=7` the endpoint answers in 26 ms and 297 ms. Only `days=30` is bad, and it is bad in
+memory before it is bad in time.
 
 ### Also corrected
 
@@ -336,6 +384,43 @@ blocking one is above; the rest, briefly:
   engine and version went unrecorded while the argument rests on MySQL and MariaDB
   differing; `reddit_interval()` re-implemented `_reddit_job_seconds()` instead of importing
   it; the seeded rows are all `status='ok'` with full envelopes, an upper bound now stated.
+
+### What the re-review of the correction found
+
+The corrected model was checked by a second reviewer who rebuilt both envelopes and both
+scheduler walks from `market_calendar`, `REDDIT_SUBS` and `extraction.REASONS` outside the
+repository, without running the benchmark. **Every committed figure reproduced exactly** --
+632/7,447 bytes, 276/3,212/14,652 rows, 64.199 MiB, 14,792 and 12,855 firings, 336 on a
+Sunday. No blocking finding. Four should-fix, three minor, five nits, all resolved:
+
+- **The table was seeded from the drift-free walk** -- the upper bound this very section
+  argues APScheduler does not produce -- and nothing said so. Both models are now seeded and
+  measured, and the difference is 13% of the rows, not the phase effect the previous note
+  blamed it on.
+- **`activity.py` labelled the milliseconds a lower bound but never the bytes an upper one.**
+  `intake_reasons` is 84% of the reddit envelope, so a quiet sub makes it markedly smaller.
+  The source comment carries the caveat the ledger already had.
+- **"Days 1..N-1 are immutable once Berlin midnight passes" was false**, and it was the
+  premise of the leading recommendation. Corrected above, with the condition a memo needs.
+- **The `CASE WHEN` expression was not equivalent** over the only population typed columns
+  can name. `_counted` drops an ok-run with a missing, malformed or off-version envelope;
+  the CASE would null the whole day for one and silently sum the other. Option 3 now names
+  the `schema_version` column and countable marker it actually needs.
+- Minor: the endpoint measured faster than the function it wraps in every row (warm-cache
+  ordering -- the noise floor, now stated); "~88% of the cost" over-attributed, because the
+  control is a bare select that also skips the grouping loop; "228 MiB of heap" now says
+  Python heap and floor, since `tracemalloc` sees pymysql's pure-Python buffers but not
+  allocator overhead.
+- Nits: "two of the five need no migration" contradicted option 5 four lines below (three
+  need none, two are viable); the new test's first docstring line overstated what it pins;
+  34 subs is a ceiling, not a constant, because a 429 ends the cycle; `operations._utcnow`
+  was mutated with no restore; `catchup_depth` for fourchan is a thread count, not 0.
+
+Confirmed correct and left alone: the window alignment, the 32-day seeding reach, the
+`SystemExit` guard ordering and `finally`, `LENGTH()` over a JSON column as a proxy for the
+bytes on the wire (MariaDB stores `JSON` as `LONGTEXT`, so the same), and the new call-path
+test -- including that `monkeypatch.setattr(runner, '_utcnow', ...)` reaches the name the
+caller looks up, and that the sentinel's microseconds defeat any rounding.
 
 ### Verification
 

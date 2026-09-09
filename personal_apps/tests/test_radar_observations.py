@@ -324,7 +324,7 @@ def test_the_scheduled_job_does_nothing_while_capture_is_disabled(
 
 
 def test_the_scheduled_job_captures_the_wall_clock(app_context, monkeypatch):
-    """The whole real-time guarantee lives here.
+    """The production caller reads the clock and passes it unrounded.
 
     `capture(now)` cannot enforce that its instant is the wall clock -- `now`
     is an injected clock and the parameter exists so the tests are

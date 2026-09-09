@@ -133,22 +133,37 @@ one **7,447**. Same class of error the task existed to remove, so I am flagging 
 than quietly restating the table.
 
 Measured again, against the disposable clone (MySQL 8.0.46; production is MariaDB), with
-rows and bytes asked of the **database** over the same Berlin-day window `summary()` queries:
+rows and bytes asked of the **database** over the same Berlin-day window `summary()` queries.
+Both scheduling models are seeded and measured, rather than one measured and the other
+asserted:
+
+start + interval, the drift-free upper bound:
 
 | window | rows | JSON | `summary()` | endpoint | no `summary_json` | peak heap |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 day | 276 | 1.3 MiB | 29 ms | 27 ms | 5 ms | 4 MiB |
-| 7 days | 3,212 | 14.3 MiB | 326 ms | 322 ms | 42 ms | 50 MiB |
-| 30 days | 14,652 | 64.2 MiB | 1,577 ms | 1,567 ms | 183 ms | **228 MiB** |
+| 1 day | 276 | 1.3 MiB | 27 ms | 31 ms | 4 ms | 4 MiB |
+| 7 days | 3,212 | 14.3 MiB | 307 ms | 320 ms | 40 ms | 50 MiB |
+| 30 days | 14,652 | 64.2 MiB | 1,609 ms | 1,586 ms | 196 ms | **228 MiB** |
+
+finish + interval with 38 s runs — what APScheduler actually does:
+
+| window | rows | JSON | `summary()` | endpoint | no `summary_json` | peak heap |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 day | 239 | 1.1 MiB | 26 ms | 25 ms | 4 ms | 4 MiB |
+| 7 days | 2,791 | 12.6 MiB | 297 ms | 262 ms | 35 ms | 45 MiB |
+| 30 days | 12,728 | 56.8 MiB | 1,390 ms | 1,413 ms | 160 ms | **201 MiB** |
 
 Anchored on a **Wednesday** on purpose: one Sunday is 336 firings against a weekday's 568.
-Milliseconds are best-of-five on a warm buffer pool — lower bounds. Bytes assume every run
-succeeded with all eight intake reasons on every source — an upper bound.
+Milliseconds are best-of-five on a warm buffer pool — lower bounds; the endpoint is timed
+last over already-warm rows, so where it reads under the function it wraps, that is the noise
+floor. Peak heap is `tracemalloc` — Python allocations, a floor on RSS. Bytes assume every run
+succeeded with all eight intake reasons on every source — an upper bound, and
+`intake_reasons` is 84% of the reddit envelope.
 
 **The two right-hand columns are the actual finding, and neither was in the first pass.**
-Without `summary_json` the same rows take 183 ms against 1,577, so the envelopes are ~88% of
-the time. And `summary()` ends in `.all()`, holding every row *and* every decoded dict at
-once: **228 MiB of heap for one request**, on a `login_required`, uncached route any
+Without `summary_json` the same window takes 160 ms against 1,390, so the envelopes dominate.
+And `summary()` ends in `.all()`, holding every row *and* every decoded dict at once:
+**~201 MiB of Python heap for one request**, on a `login_required`, uncached route any
 signed-in reader can repeat. On a small host that is what ends the process, not the seconds.
 
 Also corrected: `capture(now)`'s docstring claimed the function guarantees a real-time
@@ -168,30 +183,50 @@ only test that fails when the caller is changed.
 **The activity endpoint's schema.** Not implemented — the owner's instruction was to bring
 you the evidence and a recommendation rather than act on it, and it is a schema change.
 
-Two of these need no migration at all, which the first return did not say:
+Three of the five need no migration; two of those are viable.
 
-1. **Memoise completed days.** Days 1..N−1 are immutable once Berlin midnight passes, so
-   `days=30` becomes one partial day's work. Portable, no schema change, largest single win.
+**One fact constrains all of them, and my first version of this section got it backwards.**
+A day is **not** immutable at Berlin midnight. `summary()` groups runs by
+`_berlin_date(started_at)`, but `finish_run` writes `status` and `summary_json` at *finish*
+time and never touches `started_at`. A run starting at 23:59:5x Berlin and closing after
+midnight moves the **previous** day's `incomplete_runs` into `completed_runs` and adds its
+counters — after that day looked complete. At ~38 s runs against a 300 s reddit interval,
+that is roughly **one day in five**. A memo keyed on the Berlin date alone would freeze a
+wrong count into ~20% of days. (Nothing else invalidates a past day: `retention.prune_*`
+never touches `RadarIngestRun`.)
+
+1. **Memoise completed days.** Portable, no schema change, largest single win — **but a day
+   is only safe to freeze once it holds no `running` rows.** A cheap
+   `COUNT(*) WHERE status='running'` per candidate day gives that; a day left `running` by a
+   dead process is simply never memoised.
 2. **Drop 30 from `ALLOWED_DAYS`** until a real fix lands. One line, and the only option that
    removes the exposure today. Costs the reader the month view.
 3. **Typed counter columns** written at `finish_run`, the JSON staying as provenance.
-   Portable, no JSON functions. **But `SUM()` alone breaks the null semantics your ruling
-   requires** — SQL `SUM` skips NULLs, so a day mixing a run that reported `posts_seen` with
-   one that did not returns a number where `_counters` deliberately returns `None`.
-   Equivalence needs `CASE WHEN COUNT(*) <> COUNT(col) THEN NULL ELSE SUM(col) END` per
-   counter, with `counted_runs` counted separately. Costs a migration; there are **no
-   production rows yet**, which makes now the cheapest this will ever be.
+   Portable, no JSON functions. Two traps:
+   - `SUM()` skips NULLs, so a day mixing a run that reported `posts_seen` with one that did
+     not returns a number where `_counters` deliberately returns `None`. Needs
+     `CASE WHEN COUNT(*) <> COUNT(col) THEN NULL ELSE SUM(col) END` per counter.
+   - **Even that is not equivalent** over "the day's `status='ok'` rows", the only population
+     typed columns can name. `_counted` *drops* an ok-run whose envelope is missing,
+     malformed, or of another `schema_version`. The CASE would null the whole day for such a
+     row — and would silently *sum* an older-version run, the exact cross-version addition
+     `SCHEMA_VERSION` exists to prevent. Typed columns cannot tell "stored nothing countable"
+     from "omitted this counter"; both are NULL. So the migration also needs a stored
+     `schema_version` column and a countable marker, with the CASE filtered on it.
+   Costs a migration; there are **no production rows yet**, which makes now the cheapest this
+   will ever be.
 4. **A daily rollup table.** Smallest read, but a second writer to keep correct and a repair
-   path when a run closes late.
-5. **JSON path extraction in SQL.** No migration, but **rejected**: it needs
+   path when a run closes late — the same hazard as 1, made explicit.
+5. **JSON path extraction in SQL.** No migration either, but **rejected**: it needs
    `JSON_EXTRACT`/`JSON_VALUE` behaviour that cannot be verified against the production
    MariaDB from here, and the null-versus-zero contract turns on telling an absent key from a
    zero — exactly where the two engines' JSON functions are least alike.
 
-**Recommendation: 2 now, 1 next, 3 when a migration is being cut anyway.**
+**Recommendation: 2 now, 1 next with the `running`-row condition, 3 when a migration is being
+cut anyway and only with the schema-version column.**
 
 What is *not* urgent: at `days=1` and `days=7` — the windows a reader actually opens — the
-endpoint answers in 27 ms and 322 ms. Only `days=30` is bad, and it is bad in memory before
+endpoint answers in 26 ms and 297 ms. Only `days=30` is bad, and it is bad in memory before
 it is bad in time.
 
 ## What you already ruled on, now closed
@@ -213,9 +248,9 @@ a background task was raised for it.
 All against `personal_apps_radar_wt`, a disposable full clone of the local dev database,
 asserted before every backend run:
 
-- `npm test` → **403 passed** (root config) and **419 passed** (radar config)
+- `npm test` → **403 passed** (root config) and **438 passed** (radar config), four consecutive runs
 - `npm run build` → exit 0
-- `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py tests/test_radar_daemon.py -q` → **194 passed**
+- `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py tests/test_radar_daemon.py -q` → **195 passed**
 - `pytest tests/test_radar_hub_page.py tests/test_vite_assets.py tests/test_radar_api.py -q` → **85 passed**
 - Migration upgrade → downgrade → upgrade, with a column-shape fingerprint of all 43
   tables and a row count taken either side: exactly the two new tables move, nothing else
