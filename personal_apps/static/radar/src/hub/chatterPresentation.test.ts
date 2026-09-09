@@ -144,7 +144,7 @@ describe('sources, as platforms rather than a wall of labels', () => {
     expect(s.summary).toBe('Reddit')
     expect(s.feedCount).toBe(4)
     expect(s.platforms).toHaveLength(1)
-    expect(s.platforms[0].feeds).toEqual(
+    expect(s.platforms[0]!.feeds).toEqual(
       ['r/options', 'r/pennystocks', 'r/stocks', 'r/wallstreetbets'])
   })
 
@@ -168,8 +168,8 @@ describe('sources, as platforms rather than a wall of labels', () => {
     // Never silently rooted into Reddit, and never left as a storage key.
     const s = sourcePresentation(['mastodon:social', 'telegram'])
     expect(s.platforms.map((p) => p.label)).toEqual(['Mastodon', 'Telegram'])
-    expect(s.platforms[0].feeds).toEqual(['Mastodon · social'])
-    expect(s.platforms[1].feeds).toEqual(['Telegram'])
+    expect(s.platforms[0]!.feeds).toEqual(['Mastodon · social'])
+    expect(s.platforms[1]!.feeds).toEqual(['Telegram'])
   })
 
   it('distinguishes a measured empty list from a missing field', () => {

@@ -10,6 +10,14 @@
 // groups it can filter to. Nothing here invents an option the API would
 // refuse -- a control that produces a 400 is a control that strands the
 // reader.
+//
+// Market, window and size stay on the bar. Breadth and the feed checkboxes
+// moved behind a disclosure in the VC1 correction: four selects plus a
+// checkbox group wrapped onto two rows above the table and pushed the data
+// down the page. The disclosure carries a summary of what is selected, so
+// moving them does not hide a filter that is doing something.
+import { useState } from 'react'
+
 import type { BoardPayload, Market, SegmentFilter, Selection } from '../types'
 import { sourceLabel } from '../format'
 
@@ -46,6 +54,7 @@ export function Filters({ board, selection, onChange }: {
   selection: Selection
   onChange: (next: Selection) => void
 }) {
+  const [more, setMore] = useState(false)
   return (
     <div className="rh-filters">
       <label className="rh-field">
@@ -95,6 +104,24 @@ export function Filters({ board, selection, onChange }: {
         </select>
       </label>
 
+      {/* Everything past this point is still a server-side filter and still
+          reachable by keyboard; it is one press away instead of always on
+          screen. `hidden` rather than unmounted so aria-controls points at
+          something real, and so a test can open it and find the controls. */}
+      <div className="rh-more">
+        <button
+          type="button"
+          className="rh-morebutton"
+          aria-expanded={more}
+          aria-controls={MORE_ID}
+          onClick={() => setMore((was) => !was)}
+        >
+          More filters
+          <span className="rh-moresummary">{summarise(board, selection)}</span>
+        </button>
+      </div>
+
+      <div className="rh-morepanel" id={MORE_ID} hidden={!more}>
       <label className="rh-field">
         <span>Breadth</span>
         <select
@@ -150,11 +177,28 @@ export function Filters({ board, selection, onChange }: {
           </p>
         ) : null}
       </fieldset>
+      </div>
     </div>
   )
 }
 
 const FLOOR_ID = 'rh-feeds-floor'
+const MORE_ID = 'rh-more-filters'
+
+/** What the hidden controls are currently doing, in the summary line.
+ *
+ *  A filter behind a disclosure has to announce itself, or a reader wonders
+ *  why the board is short and has no way to see that breadth is set to two
+ *  venues or that a feed is switched off. */
+function summarise(board: BoardPayload, selection: Selection): string {
+  const venue = VENUES.find((v) => v.value === selection.minVenues)
+  const chosen = rootsOf(selection.sources).length
+  const offered = board.all_sources.length
+  const feeds = chosen >= offered
+    ? `all ${offered} ${offered === 1 ? 'feed' : 'feeds'}`
+    : `${chosen} of ${offered} feeds`
+  return `${venue ? venue.label : `${selection.minVenues}+ venues`} · ${feeds}`
+}
 
 /** The feeds a selection covers, each named once. `reddit:options` and
  *  `reddit:wallstreetbets` are two entries and one feed. */

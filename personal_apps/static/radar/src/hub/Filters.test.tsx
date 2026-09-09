@@ -7,7 +7,7 @@
 // board into Bluesky and 4chan. These tests assert what the selection IS after
 // the click, not merely that it is non-empty, which is the assertion that let
 // that through.
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -19,9 +19,16 @@ import { selectionOf } from './queries'
 const board = payload()
 const base: Selection = selectionOf(board)
 
+/** Renders the filters WITH the secondary disclosure already open.
+ *
+ *  Breadth and the feed checkboxes moved behind "More filters" in the VC1
+ *  correction. They are hidden, not removed, so these tests open the
+ *  disclosure and then assert exactly what they asserted before: every rule
+ *  about the last remaining feed is unchanged. */
 function show(sources: string[], onChange = vi.fn()) {
   render(<Filters board={board} selection={{ ...base, sources }}
                   onChange={onChange} />)
+  fireEvent.click(screen.getByRole('button', { name: /more filters/i }))
   return onChange
 }
 

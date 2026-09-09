@@ -246,6 +246,8 @@ describe('the shell', () => {
     window.history.replaceState(null, '', '/radar/hub/#chatter')
     mount({ initial: onlyReddit })
 
+    await userEvent.click(
+      screen.getByRole('button', { name: /more filters/i }))
     await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
 
     for (const call of fetchBoard.mock.calls) {
@@ -265,6 +267,8 @@ describe('the shell', () => {
     window.history.replaceState(null, '', '/radar/hub/#chatter')
     mount({ initial: both })
 
+    await userEvent.click(
+      screen.getByRole('button', { name: /more filters/i }))
     await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
     await waitFor(() => expect(fetchBoard).toHaveBeenCalled())
     expect(fetchBoard.mock.calls[0]![0].sources).toEqual(['bluesky'])

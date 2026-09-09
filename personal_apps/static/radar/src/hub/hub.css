@@ -325,12 +325,27 @@
 
 /* --- tone ---------------------------------------------------------------- */
 
-/* Three counts in words. A green/red tone bar has been built and deleted twice
-   on this surface: green and red mean price direction here and nothing else,
-   and a single percentage over these counts is what board.py returns three
-   numbers to prevent. */
+/* A share of the DIRECTIONAL sample, a bar of the same proportion, and the
+   sample size under it.
+   ------------------------------------------------------------------------
+   An earlier comment here forbade both the percentage and the bar, on the
+   grounds that a single figure over board.py's three counts is noise wearing
+   a percentage sign. The objection was to the DENOMINATOR, and it was right
+   about that one: the residual holds balanced reads and unclassified ones
+   together, so a share computed over the total says more than it knows. The
+   correction keeps the objection and drops the ban -- the denominator is the
+   directional signals, and the sample line names it. See VC1 and
+   chatterPresentation.ts, which owns every rule. */
 .rh-tone { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .rh-tone strong { display: inline; font-weight: 600; }
+/* A reading that is not a share is a sentence, so it does not wear the figure
+   weight a percentage does. Written against `.rh-table strong` rather than
+   with !important, because that is the rule it has to outrank. */
+.rh-table strong.rh-tonequiet {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
 
 /* --- filters ------------------------------------------------------------ */
 
@@ -472,16 +487,21 @@
 
 .rh-marks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 
-/* Proportion as a bar, under a figure that already reads as words. Green and
-   red never carry the meaning alone. */
+/* Proportion as a bar, under a figure that already reads as words. Colour
+   never carries the meaning alone: the percentage above it is the reading.
+   Segments are flex-grown from unrounded ratios, so a 0.4% share draws 0.4%
+   of the track rather than the rounded label's width. */
 .rh-tonebar {
   display: flex;
   gap: 2px;
-  width: 84px;
-  height: 5px;
-  margin-top: 7px;
+  width: 104px;
+  max-width: 100%;
+  height: 6px;
+  margin: 6px 0 0;
+  border-radius: 3px;
+  overflow: hidden;
 }
-.rh-tonebar span { border-radius: 2px; }
+.rh-tonebar span { border-radius: 2px; min-width: 0; }
 .rh-tonebar .bull { background: var(--sage); }
 .rh-tonebar .flat { background: var(--line); }
 .rh-tonebar .bear { background: oklch(72% 0.09 25); }
@@ -491,6 +511,171 @@
   padding: 15px 23px 18px;
   border-top: 1px solid var(--line);
 }
+
+/* --- chatter ------------------------------------------------------------- */
+
+/* Everything in this block is scoped to `.rh-chatter` or to the chatter panel.
+   The Activity and Administration tables use `.rh-table` too, and their
+   columns are not these columns. */
+
+.rh-panelhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 21px 23px 0;
+}
+.rh-panelheadtext h2 { font-size: 18px; letter-spacing: -0.01em; }
+.rh-panelheadtext p { margin-top: 5px; }
+.rh-panelheadtools {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-left: auto;
+}
+.rh-panelcount { white-space: nowrap; padding-bottom: 10px; }
+.rh-search input { min-width: 200px; }
+.rh-panelempty { padding: 4px 23px 0; }
+
+/* The column proportions come from the colgroup; `fixed` is what makes the
+   browser honour them instead of measuring the content. The rejected board
+   let automatic sizing hand most of the width to whichever row had the
+   longest feed list. */
+.rh-chatter { table-layout: fixed; }
+.rh-chatter td,
+.rh-chatter th[scope='row'] { padding: 16px 12px; }
+.rh-chatter th[scope='col'] { font-size: 12px; }
+/* 13px figures with a 12px secondary line under them. The contract's floor is
+   11px and nothing here goes near it. */
+.rh-chatter strong { font-size: 13px; }
+.rh-chatter .rh-sub { font-size: 12px; }
+.rh-chatter tbody tr:hover { background: var(--wash); }
+.rh-chatter .rh-col-company { min-width: 0; }
+/* Wraps rather than clipping: a warning that does not fit is a warning that
+   did not happen, and the row is allowed to grow for it. */
+.rh-chatter .rh-marks { margin-top: 6px; }
+
+.rh-openname { min-width: 0; }
+/* One line on the desk layout. The whole name stays in the DOM and in the
+   accessible name -- only its DISPLAY is clamped -- and `title` plus the
+   research page both carry it in full. */
+.rh-chatter .rh-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  color: var(--green);
+  margin-left: auto;
+}
+.rh-chevron:hover { background: var(--wash); }
+.rh-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* An in-place disclosure. Floating would be clipped by the table's own scroll
+   box, so it opens downward and the row grows while it is open. */
+.rh-detail { display: block; }
+/* The trigger IS the secondary line -- the figure the reader was going to
+   read anyway -- so opening the exact counts costs the row no height. The
+   dotted underline is what says it is a control; colour alone would not. */
+.rh-detailtoggle {
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  color: var(--muted);
+}
+.rh-detailtoggle .rh-sub {
+  text-decoration: underline dotted var(--line) from-font;
+  text-underline-offset: 3px;
+}
+.rh-detailtoggle:hover .rh-sub,
+.rh-detailtoggle[aria-expanded='true'] .rh-sub {
+  color: var(--green);
+  text-decoration-color: currentColor;
+}
+.rh-detailbody {
+  display: block;
+  margin-top: 7px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--wash);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* The [hidden] trap: a display rule above would otherwise keep an
+   attribute-hidden element on screen. */
+.rh-detailbody[hidden] { display: none; }
+.rh-detailnote { margin: 0; }
+.rh-detaillist { list-style: none; margin: 9px 0 0; padding: 0; }
+.rh-detaillist > li { margin-top: 7px; }
+.rh-detaillist strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rh-detaillist span { display: block; word-break: break-word; }
+
+.rh-footline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 0;
+}
+.rh-footline strong { color: var(--ink); font-weight: 600; }
+.rh-glossary { margin: 0; }
+.rh-glossary dt {
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 9px;
+}
+.rh-glossary dt:first-child { margin-top: 0; }
+.rh-glossary dd { margin: 3px 0 0; }
+
+/* The secondary filters, one press away rather than always on screen. */
+.rh-more { display: flex; align-items: flex-end; }
+.rh-morebutton {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  padding: 0 13px;
+  min-height: 40px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rh-morebutton:hover { background: var(--wash); }
+.rh-moresummary { color: var(--muted); font-weight: 400; }
+.rh-morepanel {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+.rh-morepanel[hidden] { display: none; }
 
 /* --- overview ----------------------------------------------------------- */
 
@@ -935,7 +1120,15 @@
   .rh h1 { font-size: 28px; }
 }
 
-@media (max-width: 700px) {
+/* The navigation collapses at 1080, and the table stacks at 860. They used to
+   be one breakpoint at 700, and with seven chatter columns that was wrong in
+   both directions: at 1024 a 184px rail left 726px of table and EVERY column
+   shrank -- "its normal rate" on two lines, every tone sample wrapped -- while
+   at 768 the same rail left 580px, which no amount of proportion fixes.
+   The contract's instruction is to give the content the width first and stack
+   only where seven columns genuinely do not fit. So: 1024 keeps the table and
+   loses the rail; 768 loses both. Nothing changes across 700/701 any more. */
+@media (max-width: 1080px) {
   .rh-nav {
     width: 240px;
     transform: translateX(-100%);
@@ -955,6 +1148,9 @@
     border-radius: 7px;
   }
   .rh-menu[aria-expanded='true'] { background: var(--wash); }
+}
+
+@media (max-width: 860px) {
   .rh-topbar { height: 62px; padding: 0 16px; gap: 12px; }
   .rh-main { padding: 24px 18px 38px; }
   .rh-heading { flex-wrap: wrap; gap: 16px; }
@@ -1010,11 +1206,70 @@
   .rh-table .rh-sub { display: inline; margin: 0 0 0 6px; }
   .rh-table td > * { text-align: right; }
   .rh-tonebar { margin-left: auto; }
+
+  /* Chatter stacks into a deliberate grid rather than the generic
+     label-and-value rows above: company and price on the top line, attention
+     and voices beneath, sources and tone beneath that. Tone stays VISIBLE --
+     the prototype hid it on mobile, and the reading is half the point of the
+     page. Qualifications stay in the company block, where they belong. */
+  .rh-chatter tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'company  price'
+      'attention voices'
+      'sources  tone';
+    gap: 12px 16px;
+    align-items: start;
+    padding: 15px 0 17px;
+  }
+  .rh-chatter .rh-col-company { grid-area: company; }
+  .rh-chatter .rh-col-price { grid-area: price; }
+  .rh-chatter .rh-col-attention { grid-area: attention; }
+  .rh-chatter .rh-col-voices { grid-area: voices; }
+  .rh-chatter .rh-col-sources { grid-area: sources; }
+  .rh-chatter .rh-col-tone { grid-area: tone; }
+  /* The chevron duplicates the company control, which is a 44px target and
+     is still here. One affordance is enough on a phone. */
+  .rh-chatter .rh-col-open { display: none; }
+
+  .rh-chatter td,
+  .rh-chatter th[scope='row'] {
+    display: block;
+    padding: 0;
+    text-align: left;
+  }
+  .rh-chatter td > *,
+  .rh-chatter td.right,
+  .rh-chatter td.right > * { text-align: left; }
+  .rh-chatter .rh-cell-label { display: block; margin-bottom: 3px; }
+  .rh-chatter td > strong { display: block; }
+  .rh-chatter .rh-sub { display: block; margin: 3px 0 0; }
+  .rh-chatter .rh-tonebar { margin: 6px 0 0; }
+  /* Two lines, not one and not five. A long legal name wrapped to four lines
+     on a phone and made its row twice as tall as its neighbours; `title` and
+     the research page still carry the whole thing. */
+  .rh-chatter .rh-name {
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  /* A 44px target for the two in-row disclosures. */
+  .rh-chatter .rh-detailtoggle { min-height: 44px; padding: 11px 0; }
   .rh-field input, .rh-field select { min-width: 0; width: 100%; font-size: 16px; }
   .rh-field { width: 100%; }
   .rh-filters-note { margin-left: 0; }
   .rh-search { max-width: none; }
-  .rh-search input { font-size: 16px; }
+  .rh-search input { font-size: 16px; min-width: 0; }
+  .rh-panelhead { padding: 18px 18px 0; gap: 14px; }
+  .rh-panelheadtools { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .rh-panelcount { padding-bottom: 0; }
+  .rh-panelempty { padding: 4px 18px 0; }
+  .rh-morebutton { min-height: 44px; width: 100%; justify-content: space-between; }
+  .rh-more { width: 100%; }
   .rh-identity h1 { font-size: 23px; }
   .rh-mark.large { width: 41px; height: 41px; }
   .rh-researchhead { gap: 18px; }
