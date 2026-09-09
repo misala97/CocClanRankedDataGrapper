@@ -277,3 +277,202 @@ Do not bundle capture enablement, root-route promotion, schema downgrade or full
 Suggested owner authorization, if desired: 'Authorize Claude to merge/push the reviewed 71a5f1b release (plus documentation-only ruling updates) and deploy it side by side in the next suitable window under the accepted runbook, including the fresh backup, temporary service stops and code-only rollback if needed. Keep capture off and /radar/ unchanged.' This is a proposed authorization, not a statement that it has been granted.
 
 Next action is owner release authorization, then Claude executes the accepted runbook. No further planning handoff loop is required. Record TE1 as post-release work and preserve historical-analysis-first as the next feature priority.
+
+## Seventh return: executed release accepted; visual acceptance outstanding — 2026-09-09
+
+Reviewed RELEASE-RECORD.md, the d3bc795 documentation diff, runbook and relevant judge_trial.py source. Verified candidate branch HEAD d3bc795 and no reported tracked changes (Git emitted ignore/cache permission warnings). Verified ba1c381 has parents 2a83905/745eb2c and the same tree as 745eb2c. Production execution, timings and checks below are Claude's recorded evidence, not fresh Codex target measurements. No application, database or deployment change is made by this ruling.
+
+### A. Accept the executed side-by-side release
+
+Accept ba1c381 as the completed operational release on the reported evidence: successful script, migration head a7c31f0b52d4, services restored, live projection smoke check and shared-surface checks. No repeat release rehearsal or new deployment gate. The 60-second recorded web outage is the release measurement; historical ingest restart intervals are not its downtime. One matching production row demonstrates a smoke check, not exhaustive counter parity. The 1/7/30-day timings use a newly populated dataset and do not replace R3's capacity measurements.
+
+Capture remains off; /radar/ remains the original route. Acceptance of deployment is NOT visual/product acceptance. The owner has now compared the live chatter table with the interactive mockup and rejected its fidelity: repeated source labels, oversized rows, poor column balance and missing tone bar/percentage. Record that review as performed with corrections required, not awaiting the owner's first look.
+
+### B. Carry the release documentation forward, with bounded editorial corrections
+
+Approve carrying d3bc795 into main as documentation, with this ruling and corrected current-state summaries, through Claude's next dispatch. No separate full implementation/review cycle or VPS deployment is needed for documentation. This ruling does not itself execute a push.
+
+Before carrying: label the runbook as the executed first-release procedure with RELEASE-RECORD.md as the outcome; its opening 'nothing executed' and pre-migration expectations must not masquerade as current target facts. Update HANDOFF.md's stale P2/access/authorization next action. Preserve historical evidence and exact deployed SHA separately from documentation HEAD.
+
+Accept disable --now plus inactive/empty-next-elapse verification for this recorded timer and window. It prevents the scheduled trigger, not all possible manual/dependency starts. In BOTH forward and rollback paths restore enabled and active states independently (enabled/inactive and disabled/active are valid combinations); the current 'only if enabled AND active' recipe is incomplete for reuse, although it restored the actual recorded enabled/active state correctly. Do not change the unit file to force masking. Check the final documentation diff only; no new feature testing is required.
+
+### C. Immediate priority and TE1
+
+TE1 remains the first implementation prerequisite for further backend feature work: a NEW disposable schema-preserving database, verified FK definitions/delete rules and unique constraints, appropriate engine/settings/stamp, then real watch/API/account-integrity and affected recorder/migration tests. Preserve the old clone and label its evidence accurately. The already accepted SQL probe is not a substitute for those application tests. Follow the Sixth return acceptance criteria; do not reopen completed F/H/R/P work.
+
+The immediate product priority is correcting the hub to the approved interactive mockup. Codex prepares the binding visual correction plan; Claude implements it. Design work can proceed while TE1 is completed; backend changes for that correction wait for TE1. Retain the compact tone bar AND percentage with an explicit valid denominator and unknown/unjudged handling. Inspect actual data semantics before choosing that denominator; never present tone as probability of a price rise. Investigate whether repeated feeds describe configured or contributing sources before defining their compact summary. Require visual comparison against the prototype using realistic long names, many sources, sparse/missing data and desktop/mobile widths, not only fictional tidy rows.
+
+Historical analysis remains the next NEW feature after this correction and prerequisite work, ahead of portfolio and news. Carry the newer ROADMAP.md and HISTORY-ANALYSIS-PLAN.md/HISTORY-ANALYSIS-LEDGER.md from the planning checkout without overwriting current execution ledgers. Capture enablement still requires a separate decision; no retrospective data is being captured while it remains off.
+
+### D. Retired watchdog: separate bounded cleanup task OT1
+
+Accept creating OT1, independent of visual acceptance and not a release blocker. Source confirms TRIAL_RETIRED suppresses the deadline and automatic recovery; it deliberately retains the trial row and operator recovery path. Therefore do NOT simply change running to recovered/completed/failed to tidy the UI. Such a state could falsely claim recovery or alter retention, judging or rollback behavior.
+
+Claude should prepare the exact operational retirement change: verify timer/service dependencies and restart/install paths; propose disabling/stopping only the retired watchdog with recorded prior state and a reversal command. Separately map every consumer of trial status, including retention pins, judging eligibility, audit and manual recovery. Keep the raw row unchanged until a truthful retirement representation preserving those contracts is designed and tested on the repaired disposable environment. A display of 'retired; automatic watchdog disabled' can be proposed with the stored lifecycle status distinguished explicitly. No fabricated audit success, deletion of evidence or automatic recovery.
+
+Acceptance: no scheduled watchdog invocations after the approved operational change, ingestion/judging unaffected, retained evidence and manual rollback behavior unchanged, accurate status presentation. Return the concrete commands and any required data/code change for authorization before live execution. This release authorization does not extend to OT1 or capture/root promotion.
+
+## Eighth return — TE1/VC1 reviewed, 2026-09-10
+
+Verified codex/radar-release-candidate at d66b52e (nine commits after d3bc795;
+836d232 is the documentation commit omitted from the return's short list).
+Only CODEX-DECISIONS.md was reported dirty before this ruling, with Git
+ignore/cache permission warnings. Read the VC1 ledger/current handoff, source
+projection diff, tone/source helpers and row/disclosure implementation. Inspected
+after-fixture-1440/390 and page-watching/activity-768 PNGs against the owner's
+prototype reference. Independently ran the two focused Chatter/presentation
+Vitest files: 56 passed, 2 files, after sandbox config-read denial was resolved
+with an approved escalation. Other suite/database measurements remain Claude's
+reported evidence, not fresh Codex runs. Production is still ba1c381 according
+to the return; no fresh target inspection or production mutation here.
+
+### TE1 and VC1 disposition
+
+Accept TE1 as closing the known constraint-free TEST ENVIRONMENT defect. A
+schema-preserving local-development restore and actual application integrity
+tests supply the previously missing evidence. Do not call it a production clone:
+MySQL 8 and utf8mb4_0900_ai_ci differ from target MariaDB and its collation;
+matching local FKs/unique indexes does not establish every production constraint.
+This limit does not require rebuilding again before this additive display change.
+Existing independent MariaDB migration evidence retains its original scope.
+
+Accept VC1a and the principal Chatter correction for owner visual review. The
+rendered result fixes the reported source dump, missing bar, excessive tone
+stacking and weak column hierarchy. Five measured fixture rows total 474px,
+including warning rows; 430px for five plain rows is arithmetic only. The 133px
+three-warning case remains explicitly disclosed and acceptable. The interactive
+prototype is the near-term reference, not the final visual ceiling; original A/B
+ambition remains binding for future design evolution.
+
+Do not call VC1 unconditionally release-ready: the small closure below is due
+before a deployment proposal. Owner can review the current preview immediately.
+No rerun of completed TE1/F/H/R/P work. No merge, push, deploy or capture/root
+change is authorized.
+
+### A. Ratify the 2px minimum as an approximate visual indicator
+
+Accept the minimum for a genuinely nonzero segment; true zero must remain absent.
+Exact percentage/counts remain authoritative. Do not describe the resulting
+geometry as strictly proportional or 'exact against every clause': tiny shares
+are exaggerated for visibility. Add one sentence to the existing tone explanation:
+'Tiny nonzero shares are drawn at a minimum width so they remain visible; use the
+percentage and counts for the exact balance.' Keep it out of the primary row.
+Retain rare-share geometry and percentage tests. No redesign of the bar required.
+
+### B. Navigation accepted; restore the unrelated table breakpoints
+
+Accept navigation collapse at 1080 and Chatter stacking at 860, including the
+skip-link correction. Scope the new TABLE stacking breakpoint to Chatter; keep
+Watching and Activity's previous 700px table breakpoint in this delivery. Their
+mobile styles must still apply below 700 and the shared navigation may collapse
+at 1080. The examined Watching capture is EMPTY, so it does not verify the changed
+populated table. More available width above 860 also does not establish usability
+of a newly stacked layout below it. This is a bounded scope correction, not a
+claim that 860 is inherently wrong for those pages.
+
+Verify populated Watching and populated Activity at 768 and near 700/701 and
+860/861, plus Chatter at 768/390. Use labelled representative fixtures if local
+rows are absent. No need for a whole new cross-page design cycle.
+
+### C. Accept the measured column proportions
+
+Ratify 26/13/10/18/17/12/4. Attention keeps its allocation and the screenshot
+supports the trade. Do not turn approximate design proportions into pixel dogma.
+Retain readable type, sample line, long-name access and wrapping warning badges.
+
+### D. Fix duplicate accessible cell labels in the same small closure
+
+Worth fixing now; do not defer a repeated announcement across every row. On
+Chatter's desktop table, use native headers and keep supplementary cell labels
+out of both visual and accessibility trees (display:none). In the stacked view,
+show the real labels and retain the explicit roles/associations. Avoid permanently
+aria-hiding the mobile labels or introducing JS viewport state for a CSS issue.
+Check desktop/table and mobile/stacked accessibility representation and keyboard
+behavior. Do not claim an actual screen-reader run if only DOM/AX checks ran.
+
+### E. Watching treatment is a later design slice
+
+Yes to eventual consistency of tone/source presentation where Watching shows
+those metrics. Reuse the helpers and new Row field then. Do not insert metrics
+into all pinned overview rows merely because their data shape permits it, or
+remove watching-specific status/actions. No Watching redesign in VC1-close.
+Record it as a future visual task with a populated mockup first. Historical
+analysis remains the next NEW feature; future visual improvement can accompany
+that roadmap without pretending the other hub pages are already accepted.
+
+### Claude dispatch: VC1-close only
+
+1. Apply A's explanation, B's scoped table breakpoints, D's responsive labels.
+2. Verify focused tests/build and the populated responsive cases named above;
+   inspect resulting PNGs. Keep all current tone/data/filter contracts intact.
+3. One independent read-only review of these narrow changes, resolve findings,
+   update VC1 ledger and HANDOFF with exact SHA, results and preview instructions.
+   Preserve the prior evidence and disclose that this is a small closure, not
+   redispatched VC1a-c. Carry this ruling as documentation when committing it.
+4. Return the corrected preview for owner visual acceptance. Deployment remains
+   a subsequent explicit decision. OT1/documentation carry are separate.
+
+## VC1-close addition — sortable Chatter, owner approved 2026-09-10
+
+The owner explicitly approved sorting after trying the preview. Add this to the
+current closure alongside the Eighth-return fixes; do not defer it to a future
+redesign or reopen completed TE1/VC1 work. Claude implements; Codex plans.
+
+### User interaction and scope
+
+- Default is Radar order: the exact order of the current board.rows response.
+- Desktop headers are real buttons: Company (ticker A–Z initially), Attention,
+  Voices, Sources, Tone, Price, and Today (numeric columns descending initially).
+  Price and Today are two distinct controls within the existing price/move area;
+  do not make one ambiguous combined sort. Repeated click toggles direction.
+- Visible active arrow plus accessible sort state/name. Apply aria-sort to the
+  active header, with a name distinguishing price from daily move when both
+  controls share a header. Keyboard Enter/Space behaves like click.
+- A compact 'Radar order' reset restores response order. On stacked/mobile rows,
+  show a labelled Sort by selector with the same keys and direction control;
+  do not leave sorting accessible only through hidden headers.
+- Show 'Sorts these N candidates' near the control/summary. This reorders the
+  loaded candidate set, not the whole market or the backend eligibility/ranking.
+  Do not fetch, alter server sort parameters, or widen the candidate set.
+- Filter companies and then sort; preserve the selected sort while typing and
+  while refreshing/changing server filters. Reset uses the newest response order.
+  Keep sort state in the hub's Chatter view state so Research -> Back restores
+  it. No new backend persistence or requirement for cross-session storage.
+
+### Comparator contract
+
+Use a pure stable helper on a copied array; never mutate board.rows or cached
+watch rows. Equal keys retain current response order. Missing/invalid values
+stay LAST in both directions, including when direction reverses.
+
+Company sorts by ticker using locale-aware numeric comparison, not truncated
+company text. Attention uses row.ratio, never recomputes a guarded ratio.
+Voices uses authors. Sources uses the number of unique platforms from validated
+activity_sources through the existing presentation helper: missing is unknown,
+empty is measured zero; never fall back to legacy sources. Tone uses raw
+bullish/(bullish+bearish) under the same validation as the display; zero directional
+sample is unknown, never 0% bullish. Do not compare formatted percentages or the
+minimum-width bar geometry. Price uses the displayed usable quote price; absent
+currency or unavailable quote is unknown. For multiple known currencies, group
+by currency code (label this in the sort explanation), then sort price within
+currency, rather than pretending USD and EUR are converted. Today uses the raw
+usable price_move fraction, with null unavailable and zero a valid value.
+
+### Files and acceptance
+
+Modify hub/Chatter.tsx, hub/Hub.tsx only as needed to retain Chatter sort state,
+hub/hub.css and their focused tests. Add hub/chatterSort.ts and
+hub/chatterSort.test.ts for comparator logic (or a comparably focused existing
+helper). Preserve selection/query contracts and row navigation/disclosures.
+
+Tests must demonstrate numeric ordering (2 vs 10), both directions, ties, nulls
+last in both directions, all-no-tone rows, two distinct raw tone fractions with
+the same rounded label, active platforms vs concrete feeds, mixed currencies,
+input array unchanged, filter+sort composition, refresh retains selection,
+Research/Back restores selection, and Radar-order reset. Check clicking a sort
+header produces no board request. Verify desktop keyboard/accessible state and
+mobile selector parity. Capture the sorted fixture at 1440 and 390, inspect it,
+and confirm arrows/controls do not break accepted density/column widths.
+
+Return this with the same VC1-close preview and independent review. No merge,
+push, deployment, capture enablement or root promotion authorized.

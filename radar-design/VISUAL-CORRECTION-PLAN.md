@@ -149,3 +149,68 @@ components do not bind future design. Do not freeze the product at VC1 fidelity.
 This does not expand VC1: deliver the current interactive-reference correction
 first, then evolve deliberately alongside the roadmap. No new implementation or
 deployment is authorized by this clarification alone.
+
+## VC1-close addition — sortable Chatter, owner approved 2026-09-10
+
+The owner explicitly approved sorting after trying the preview. Add this to the
+current closure alongside the Eighth-return fixes; do not defer it to a future
+redesign or reopen completed TE1/VC1 work. Claude implements; Codex plans.
+
+### User interaction and scope
+
+- Default is Radar order: the exact order of the current board.rows response.
+- Desktop headers are real buttons: Company (ticker A–Z initially), Attention,
+  Voices, Sources, Tone, Price, and Today (numeric columns descending initially).
+  Price and Today are two distinct controls within the existing price/move area;
+  do not make one ambiguous combined sort. Repeated click toggles direction.
+- Visible active arrow plus accessible sort state/name. Apply aria-sort to the
+  active header, with a name distinguishing price from daily move when both
+  controls share a header. Keyboard Enter/Space behaves like click.
+- A compact 'Radar order' reset restores response order. On stacked/mobile rows,
+  show a labelled Sort by selector with the same keys and direction control;
+  do not leave sorting accessible only through hidden headers.
+- Show 'Sorts these N candidates' near the control/summary. This reorders the
+  loaded candidate set, not the whole market or the backend eligibility/ranking.
+  Do not fetch, alter server sort parameters, or widen the candidate set.
+- Filter companies and then sort; preserve the selected sort while typing and
+  while refreshing/changing server filters. Reset uses the newest response order.
+  Keep sort state in the hub's Chatter view state so Research -> Back restores
+  it. No new backend persistence or requirement for cross-session storage.
+
+### Comparator contract
+
+Use a pure stable helper on a copied array; never mutate board.rows or cached
+watch rows. Equal keys retain current response order. Missing/invalid values
+stay LAST in both directions, including when direction reverses.
+
+Company sorts by ticker using locale-aware numeric comparison, not truncated
+company text. Attention uses row.ratio, never recomputes a guarded ratio.
+Voices uses authors. Sources uses the number of unique platforms from validated
+activity_sources through the existing presentation helper: missing is unknown,
+empty is measured zero; never fall back to legacy sources. Tone uses raw
+bullish/(bullish+bearish) under the same validation as the display; zero directional
+sample is unknown, never 0% bullish. Do not compare formatted percentages or the
+minimum-width bar geometry. Price uses the displayed usable quote price; absent
+currency or unavailable quote is unknown. For multiple known currencies, group
+by currency code (label this in the sort explanation), then sort price within
+currency, rather than pretending USD and EUR are converted. Today uses the raw
+usable price_move fraction, with null unavailable and zero a valid value.
+
+### Files and acceptance
+
+Modify hub/Chatter.tsx, hub/Hub.tsx only as needed to retain Chatter sort state,
+hub/hub.css and their focused tests. Add hub/chatterSort.ts and
+hub/chatterSort.test.ts for comparator logic (or a comparably focused existing
+helper). Preserve selection/query contracts and row navigation/disclosures.
+
+Tests must demonstrate numeric ordering (2 vs 10), both directions, ties, nulls
+last in both directions, all-no-tone rows, two distinct raw tone fractions with
+the same rounded label, active platforms vs concrete feeds, mixed currencies,
+input array unchanged, filter+sort composition, refresh retains selection,
+Research/Back restores selection, and Radar-order reset. Check clicking a sort
+header produces no board request. Verify desktop keyboard/accessible state and
+mobile selector parity. Capture the sorted fixture at 1440 and 390, inspect it,
+and confirm arrows/controls do not break accepted density/column widths.
+
+Return this with the same VC1-close preview and independent review. No merge,
+push, deployment, capture enablement or root promotion authorized.

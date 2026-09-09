@@ -1,16 +1,17 @@
-# Current dispatch — VC1 delivered, awaiting the owner's eyes, 2026-09-09
+# Current dispatch — VC1-close delivered, awaiting the owner's eyes, 2026-09-10
 
 This section supersedes historical status/next-action/deploy statements below.
 Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
-Branch codex/radar-release-candidate; **HEAD 79235db** or the commit after it -- verify
-with `git rev-parse --short HEAD` -- built on the verified base d3bc795. Production is ba1c381 per RELEASE-RECORD.md, migration head
-a7c31f0b52d4. Capture remains off and /radar/ remains the original route.
+Branch codex/radar-release-candidate; **HEAD fea864f** or the commit after it --
+verify with `git rev-parse --short HEAD` -- built on the verified base d3bc795.
+Production is ba1c381 per RELEASE-RECORD.md, migration head a7c31f0b52d4.
+Capture remains off and /radar/ remains the original route.
 **Nothing has been merged, pushed or deployed, and nothing here authorizes it.**
 The foundations worktree remains unchanged.
 
-**TE1, VC1a, VC1b and VC1c are complete.** VISUAL-CORRECTION-LEDGER.md is the
-full account, with the measurements, the browser checks and the screenshot
-paths.
+**TE1, VC1a-c, VC1-close and sortable Chatter are complete.**
+VISUAL-CORRECTION-LEDGER.md is the full account, with the measurements, the
+browser checks and the screenshot paths.
 
 | commit | what |
 | --- | --- |
@@ -20,16 +21,29 @@ paths.
 | b1cf313 | the panel's company filter had taken the topbar search's class |
 | 43526e8 | the tone bar drew a rare share as nothing at all |
 | fc578b8 | the loading state, and one test flake reported rather than hidden |
-| 79235db | the independent review's twelve findings |
+| 79235db | the first independent review's twelve findings |
+| d66b52e | the documents name their commits |
+| **20dfc03** | **sortable Chatter, and the Eighth return's A, B and D** |
+| **fea864f** | the VC1-close ledger, and a fixture that showed an impossible state |
 
-**The independent review has been performed.** Twelve findings, none blocking.
-Most were wrong with the RECORD rather than the code, and the ledger's
-"The independent review, and what it changed" section resolves each one. Two
-need Codex's attention rather than mine: the tone bar's 2px minimum on a drawn
-segment is a deliberate deviation from "segment widths use unrounded ratios"
-and should be **ratified or overruled**; and the table now stacks Activity and
-Watching at 860 rather than 700, which is an uncommanded change to pages VC1
-was only asked to check.
+**The Eighth return is closed.** A: the tone detail says the bar approximates,
+in the ruling's own words. B: the 860 table breakpoint is Chatter's alone --
+Watching and Activity keep their 700, verified on POPULATED fixtures at 861,
+860, 768, 701 and 700. D: Chatter's duplicate cell labels are gone from the
+desk layout entirely and visible in the stacked one. C needed no code and E is
+deferred by the ruling itself.
+
+**Sorting is in.** Owner-approved 2026-09-10. It is a view over the loaded
+candidates: no request, no server sort parameter, and the page says so. The
+ordering lives in the hub so Research -> Back restores it. Both layouts can
+sort -- headers on the desk, a labelled selector below 860 where the header row
+is `display: none`.
+
+**The first independent review's twelve findings are all resolved** and
+recorded in the ledger. Two of its questions went back to Codex and the Eighth
+return answered both: the 2px minimum bar segment is **ratified as an
+approximate indicator**, and the table breakpoints are **scoped back to
+Chatter**, which this delivery does.
 
 **Immediate next action: the owner looks at it.** The preview is runnable:
 
@@ -39,8 +53,14 @@ PYTHONPATH=. py -3.12 scratchpad/vc1_serve.py 5071
 ```
 
 then `http://127.0.0.1:5071/scratchpad/vc1/real.html#chatter` and
-`.../fixture.html#chatter`. The annotated before/after is
-`radar-design/reports/vc1/comparison-1440.png`.
+`.../fixture.html#chatter`. Click a column header to sort; the stacked layout
+below 860px offers a **Sort by** selector instead. The annotated before/after
+is `radar-design/reports/vc1/comparison-1440.png`, and the sorted captures are
+`close-sorted-1440.png` and `close-sorted-390.png`.
+
+The fixture page also carries a five-row watch list and seven days of activity.
+Both are **labelled fictional fixtures**: the local database has no watch marks
+and records no ingest runs, and an empty table cannot verify a table layout.
 
 **The test database changed.** The worktree `.env` now names
 `personal_apps_radar_te1` — a schema-preserving rebuild carrying all 29 foreign
@@ -53,8 +73,9 @@ test or migration:
 cd personal_apps && PYTHONPATH=. py -3.12 -c "from app import app; from extensions import db; app.app_context().push(); print(db.engine.url.database)"
 ```
 
-Dirty ownership: Codex's CODEX-DECISIONS.md edit is still uncommitted and is
-Codex's. Everything else in this worktree is committed. `.gitignore` now
+Dirty ownership: nothing. Codex's Eighth return, the sortable-Chatter contract
+and the dispatch update are carried in as documentation, which the ruling asked
+for. `.gitignore` now
 excludes `personal_apps/scratchpad/vc1/`, which holds regenerable board
 payloads; the committed evidence is `radar-design/reports/vc1/`.
 
@@ -347,3 +368,15 @@ components do not bind future design. Do not freeze the product at VC1 fidelity.
 This does not expand VC1: deliver the current interactive-reference correction
 first, then evolve deliberately alongside the roadmap. No new implementation or
 deployment is authorized by this clarification alone.
+
+## Codex review update — 2026-09-10
+
+See CODEX-DECISIONS.md Eighth return. TE1 accepted with local-schema limits;
+principal VC1 accepted for owner preview. VC1-close remains before deployment:
+approximate-bar explanation, scope table breakpoint changes to Chatter, responsive
+accessible labels. Do not redispatch completed work. Owner may review now;
+no deployment authorized. Current reviewed HEAD d66b52e; Codex documentation
+edits are intentional and uncommitted. Fresh focused Vitest: 56 passed/2 files.
+
+2026-09-10 owner addition: sortable Chatter is OPEN within VC1-close. Read the appended binding sorting contract in VISUAL-CORRECTION-PLAN.md. Preserve completed tasks; return sorting with the same closure review/preview. No deployment authorized.
+

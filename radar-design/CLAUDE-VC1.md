@@ -54,3 +54,6 @@ components do not bind future design. Do not freeze the product at VC1 fidelity.
 This does not expand VC1: deliver the current interactive-reference correction
 first, then evolve deliberately alongside the roadmap. No new implementation or
 deployment is authorized by this clarification alone.
+
+Follow-up scope: implement the owner-approved 'VC1-close addition — sortable Chatter' in VISUAL-CORRECTION-PLAN.md together with Eighth-return closure. Sorting is now required in this delivery.
+
