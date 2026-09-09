@@ -2,7 +2,7 @@
 
 This section supersedes historical status/next-action/deploy statements below.
 Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
-Branch codex/radar-release-candidate; **HEAD fea864f** or the commit after it --
+Branch codex/radar-release-candidate; **HEAD db529eb** or the commit after it --
 verify with `git rev-parse --short HEAD` -- built on the verified base d3bc795.
 Production is ba1c381 per RELEASE-RECORD.md, migration head a7c31f0b52d4.
 Capture remains off and /radar/ remains the original route.
@@ -25,6 +25,8 @@ browser checks and the screenshot paths.
 | d66b52e | the documents name their commits |
 | **20dfc03** | **sortable Chatter, and the Eighth return's A, B and D** |
 | **fea864f** | the VC1-close ledger, and a fixture that showed an impossible state |
+| d21788e | the Eighth return and the sorting contract, carried in |
+| **e0ef136** | the second independent review's fourteen findings |
 
 **The Eighth return is closed.** A: the tone detail says the bar approximates,
 in the ruling's own words. B: the 860 table breakpoint is Chatter's alone --
@@ -39,11 +41,23 @@ ordering lives in the hub so Research -> Back restores it. Both layouts can
 sort -- headers on the desk, a labelled selector below 860 where the header row
 is `display: none`.
 
-**The first independent review's twelve findings are all resolved** and
-recorded in the ledger. Two of its questions went back to Codex and the Eighth
-return answered both: the 2px minimum bar segment is **ratified as an
-approximate indicator**, and the table breakpoints are **scoped back to
-Chatter**, which this delivery does.
+**Two independent reviews have been performed** -- one on VC1, one on
+VC1-close and sorting -- and all twenty-six findings are resolved and recorded
+in the ledger. Neither found anything blocking.
+
+Two questions from the first went back to Codex and the Eighth return answered
+both: the 2px minimum bar segment is **ratified as an approximate indicator**,
+and the table breakpoints are **scoped back to Chatter**, which this delivery
+does.
+
+The second review's worst finding was in my evidence rather than the code:
+three of the sixty browser checks did not test what they claimed -- a hardcoded
+pass, a tautological `or`, and a loop that broke before its second assertion
+and mislabelled the one direction that ran. All three now assert the thing they
+name. It also found a real keyboard defect (pressing "Radar order" dropped
+focus to `<body>`), that Today's sort had inherited Price's currency
+requirement, and that sorting was silent to assistive technology beyond
+`aria-sort`.
 
 **Immediate next action: the owner looks at it.** The preview is runnable:
 
