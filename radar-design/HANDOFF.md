@@ -1,102 +1,65 @@
-# Current dispatch — VC1-close delivered, awaiting the owner's eyes, 2026-09-10
+# Current dispatch — VC1 deployed, 2026-09-10
 
 This section supersedes historical status/next-action/deploy statements below.
 Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
-Branch codex/radar-release-candidate; **HEAD db529eb** or the commit after it --
-verify with `git rev-parse --short HEAD` -- built on the verified base d3bc795.
-Production is ba1c381 per RELEASE-RECORD.md, migration head a7c31f0b52d4.
-Capture remains off and /radar/ remains the original route.
-**Nothing has been merged, pushed or deployed, and nothing here authorizes it.**
-The foundations worktree remains unchanged.
+Branch codex/radar-release-candidate. **Production is now `1f8016c`**, merged
+from candidate `31ae58a` plus the documentation-only ruling commit `8e3fd00`.
+Migration head **unchanged at a7c31f0b52d4** -- this update added no migration.
+Capture remains off and `/radar/` remains the original route.
 
-**TE1, VC1a-c, VC1-close and sortable Chatter are complete.**
-VISUAL-CORRECTION-LEDGER.md is the full account, with the measurements, the
-browser checks and the screenshot paths.
+**RELEASE-RECORD-VC1.md is the full account of the deployment**, including the
+89-second second outage caused by operator error and how it was recovered. The
+first release's record is RELEASE-RECORD.md and remains accurate for that one.
 
-| commit | what |
-| --- | --- |
-| c90cf92 | additive `activity_sources`, and the pure tone/source presentation helpers |
-| db9f153 | the corrected Chatter, the More-filters disclosure, column proportions, responsive rules, and the screenshots |
-| ea98c50 | Codex's brief, dispatch and reference images carried in, plus the VC1 ledger |
-| b1cf313 | the panel's company filter had taken the topbar search's class |
-| 43526e8 | the tone bar drew a rare share as nothing at all |
-| fc578b8 | the loading state, and one test flake reported rather than hidden |
-| 79235db | the first independent review's twelve findings |
-| d66b52e | the documents name their commits |
-| **20dfc03** | **sortable Chatter, and the Eighth return's A, B and D** |
-| **fea864f** | the VC1-close ledger, and a fixture that showed an impossible state |
-| d21788e | the Eighth return and the sorting contract, carried in |
-| **e0ef136** | the second independent review's fourteen findings |
+## What is live
 
-**The Eighth return is closed.** A: the tone detail says the bar approximates,
-in the ruling's own words. B: the 860 table breakpoint is Chatter's alone --
-Watching and Activity keep their 700, verified on POPULATED fixtures at 861,
-860, 768, 701 and 700. D: Chatter's duplicate cell labels are gone from the
-desk layout entirely and visible in the stacked one. C needed no code and E is
-deferred by the ruling itself.
+The corrected Human chatter: a platform count with the concrete feeds behind
+it, a tone percentage with a bar over the directional sample, compact rows,
+deliberate column proportions, and sortable columns with a stacked-layout
+selector. Verified on real production rows -- all 50 carry `activity_sources`,
+and the six sampled show 2-4 feeds talking out of 34-36 looked at, which is the
+defect the owner rejected. Production has real directional tone samples, so the
+percentage and bar render on live data rather than only on the fixture.
 
-**Sorting is in.** Owner-approved 2026-09-10. It is a view over the loaded
-candidates: no request, no server sort parameter, and the page says so. The
-ordering lives in the hub so Research -> Back restores it. Both layouts can
-sort -- headers on the desk, a labelled selector below 860 where the header row
-is `display: none`.
+## Immediate next action
 
-**Two independent reviews have been performed** -- one on VC1, one on
-VC1-close and sorting -- and all twenty-six findings are resolved and recorded
-in the ledger. Neither found anything blocking.
+**The owner's own authenticated look at the deployed hub**, at
+`https://mgemmel.viewdns.net/radar/hub/`. Every check in the record is
+unauthenticated or server-side; no owner session was minted and none should be.
 
-Two questions from the first went back to Codex and the Eighth return answered
-both: the 2px minimum bar segment is **ratified as an approximate indicator**,
-and the table breakpoints are **scoped back to Chatter**, which this delivery
-does.
+After that, historical analysis is the next NEW feature, ahead of portfolio and
+news. Capture enablement and root promotion remain separate, untaken decisions.
 
-The second review's worst finding was in my evidence rather than the code:
-three of the sixty browser checks did not test what they claimed -- a hardcoded
-pass, a tautological `or`, and a loop that broke before its second assertion
-and mislabelled the one direction that ran. All three now assert the thing they
-name. It also found a real keyboard defect (pressing "Radar order" dropped
-focus to `<body>`), that Today's sort had inherited Price's currency
-requirement, and that sorting was silent to assistive technology beyond
-`aria-sort`.
+## Named follow-ups, none of them blocking
 
-**Immediate next action: the owner looks at it.** The preview is runnable:
+- Duplicate desktop cell labels on Activity and Watching -- the same defect
+  Chatter's item D fixed, deferred by ruling to those pages' next UI pass.
+- Watching's tone/source presentation, with a populated mockup first.
+- The zero-feed question in legacy `sources` / `venues` / breadth filtering,
+  which is a ranking decision and not a display one.
+- OT1: the retired encoder trial's watchdog still fires every minute doing
+  nothing. Not authorized by any approval so far.
+- Inert generic flex declarations on Chatter cells below 700px -- clean them
+  when that CSS is next edited, per the Eighth return.
+
+## Verified state
+
+Assert the disposable test database before any backend test or migration; the
+worktree `.env` names `personal_apps_radar_te1`, the schema-preserving rebuild
+carrying all 29 foreign keys:
+
+```
+cd personal_apps && PYTHONPATH=. py -3.12 -c "from app import app; from extensions import db; app.app_context().push(); print(db.engine.url.database)"
+```
+
+The preview is still runnable and still useful for fixture edge cases the live
+board does not currently show:
 
 ```
 cd C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate/personal_apps
 PYTHONPATH=. py -3.12 scratchpad/vc1_serve.py 5071
 ```
 
-then `http://127.0.0.1:5071/scratchpad/vc1/real.html#chatter` and
-`.../fixture.html#chatter`. Click a column header to sort; the stacked layout
-below 860px offers a **Sort by** selector instead. The annotated before/after
-is `radar-design/reports/vc1/comparison-1440.png`, and the sorted captures are
-`close-sorted-1440.png` and `close-sorted-390.png`.
-
-The fixture page also carries a five-row watch list and seven days of activity.
-Both are **labelled fictional fixtures**: the local database has no watch marks
-and records no ingest runs, and an empty table cannot verify a table layout.
-
-**The test database changed.** The worktree `.env` now names
-`personal_apps_radar_te1` — a schema-preserving rebuild carrying all 29 foreign
-keys, at migration head a7c31f0b52d4. The old constraint-free
-`personal_apps_radar_wt` is preserved and NOT dropped; every result recorded
-against it stays labelled constraint-free. Assert the name before any backend
-test or migration:
-
-```
-cd personal_apps && PYTHONPATH=. py -3.12 -c "from app import app; from extensions import db; app.app_context().push(); print(db.engine.url.database)"
-```
-
-Dirty ownership: nothing. Codex's Eighth return, the sortable-Chatter contract
-and the dispatch update are carried in as documentation, which the ruling asked
-for. `.gitignore` now
-excludes `personal_apps/scratchpad/vc1/`, which holds regenerable board
-payloads; the committed evidence is `radar-design/reports/vc1/`.
-
-Seventh-return documentation carry and OT1 remain separate supporting tasks and
-were not touched. Historical analysis remains the next NEW feature, after this
-correction is accepted. Use RELEASE-RECORD.md for executed facts, not the old
-deployment statements below.
 Protected: all .env/credentials/backups/private fixtures, unrelated planning
 checkout research changes, and the foundations worktree. No staging all files.
 
