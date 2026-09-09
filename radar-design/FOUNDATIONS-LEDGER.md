@@ -14,7 +14,8 @@ Updated: 2026-09-09
 | F2 independent review | Complete | No blocking findings; 4 should-fix + 5 minor, resolved in 236f862 |
 | F3 activity/ops APIs | Complete | 328074a, fixes in a178ba6 |
 | F3 independent review | Complete | No blocking findings; 7 should-fix + 4 minor, resolved in a178ba6 |
-| R2 activity volume measured | Complete | ffbdd37 + the review's fixes; ~2,880 was 5x low on firings. Measured 14,652 rows / 64.2 MiB / 1.6 s / 228 MiB peak heap at days=30 |
+| R2 activity volume measured | Complete | ffbdd37, corrected in 08c5b47; ~2,880 was 5x low on firings. Measured 14,652 rows / 64.2 MiB / 1.6 s / 228 MiB peak heap at days=30 |
+| R2 independent review | Complete | 1 blocking + 9 should-fix + 8 minor + 2 nits; all 20 resolved in 08c5b47 |
 | R2 activity cost decision | Open, Codex's | Five options below, two needing no migration. NOT implemented, per the owner's instruction |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -197,7 +198,7 @@ than a growing scan.
 
 ## R2 evidence -- what the activity endpoint actually reads (2026-09-09)
 
-Commits **ffbdd37** (first pass) and the R2 review's fixes. Files:
+Commits **ffbdd37** (first pass) and **08c5b47** (the review's findings). Files:
 `features/radar/activity.py` (the capacity note), `features/radar/observations.py` and
 `tests/test_radar_observations.py` (the `capture(now)` wording, and the test it claimed
 but that did not exist), `scratchpad/bench_activity.py` (new, repeatable).
@@ -306,6 +307,35 @@ local time and the whole suite would have stayed green.
 `test_the_scheduled_job_captures_the_wall_clock` now pins it, and the docstring names it so
 the claim is checkable. Mutation-checked: passing `observations._slot(_utcnow())` instead
 fails **that test and only that test**.
+
+### What the R2 review found
+
+One blocking, nine should-fix, eight minor, two nits. All twenty resolved in 08c5b47. The
+blocking one is above; the rest, briefly:
+
+- The `days=1` row paired a rolling-window row count with a Berlin-window timing -- three
+  numbers from two row sets. Both now come from the same window, asked of the database.
+- The byte figure was a Python re-serialization in a format nothing in the pipeline uses.
+  Now `SUM(LENGTH(summary_json))`, which is also what would have caught the blocking finding.
+- The docstring cited a call-path test that did not exist. It does now.
+- HANDOFF.md and this ledger still carried the debunked ~2,880 figure, and `activity.py`
+  pointed its evidence at HUB-LEDGER.md, which never held it. Both corrected; activity is
+  foundations work and the evidence belongs here.
+- The firing walk added the interval to each run's START. APScheduler rebuilds the trigger
+  with `start_date = now + interval` on reschedule, so it is FINISH + interval. Both models
+  are printed and the drift-free one is labelled as the upper bound it is.
+- No control and no memory measurement -- the two numbers that turned out to matter most.
+- No `try`/`finally`, so a failure in the timed region would have left ~15,000 rows behind;
+  and the database guard was an `assert`, which `-O` compiles away. Both fixed.
+- The recommendation named no option that avoids a migration, and its typed-counter sketch
+  dropped the null semantics the ruling requires. Five options now, with the `CASE WHEN`.
+- The endpoint's exposure was never stated: `login_required`, not admin-gated, uncached,
+  repeatable. Said plainly now, in the source comment and above.
+- Minor: `intake_reasons` used invented keys rather than the extractor's `REASONS`;
+  `WEEKEND_ANCHOR` was unused while the commit quoted a weekend figure as if measured; the
+  engine and version went unrecorded while the argument rests on MySQL and MariaDB
+  differing; `reddit_interval()` re-implemented `_reddit_job_seconds()` instead of importing
+  it; the seeded rows are all `status='ok'` with full envelopes, an upper bound now stated.
 
 ### Verification
 

@@ -330,7 +330,13 @@ def main():
                   f'({ANCHOR:%H:%M}), as a reader opening it mid-day would '
                   f'find it.')
 
-            print('\nfirings per window, by scheduling model:')
+            # A different question from the "runs" column above, and the two do
+            # not have to agree. That column is what the endpoint READ: rows
+            # inside a Berlin calendar window, from one walk seeded 32 days
+            # back. This is what the schedulers would FIRE over a rolling
+            # 24h * days, each window walked from its own start, so the
+            # interval chain restarts at a different phase.
+            print('\nfirings per rolling window, by scheduling model:')
             print(f'{"window":>7} {"start+interval":>15} {"finish+interval":>16}')
             for days in WINDOWS:
                 start = ANCHOR - dt.timedelta(days=days)

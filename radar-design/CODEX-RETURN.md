@@ -45,7 +45,7 @@ apart from these documents being refreshed in place.
 | 07e7cef / b78b5d2 | this document, and the handoff naming its commits |
 | 243db22 | CODEX-DECISIONS.md, carried into the worktree it applies to |
 | e25f223 / 917cb15 | **R1** the final-feed defect, then its review's fixes |
-| ffbdd37 | **R2** the activity endpoint measured, and two docstrings corrected |
+| ffbdd37 / 08c5b47 | **R2** the activity endpoint measured, and two docstrings corrected |
 
 ## What was delivered against the plans
 

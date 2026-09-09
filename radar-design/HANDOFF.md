@@ -51,7 +51,7 @@ Commits on this branch, oldest first:
 | b78b5d2 | the handoff names the commits that carry it |
 | 243db22 | Codex's rulings (CODEX-DECISIONS.md), carried into this worktree |
 | e25f223 | R1: unchecking the last feed selected other feeds instead of refusing |
-| ffbdd37 | R2: the activity endpoint measured instead of guessed at |
+| ffbdd37 / 08c5b47 | R2: the activity endpoint measured, then the review's findings |
 | 917cb15 | the R1 review's fixes |
 
 Working tree is clean apart from this file's own edit.
@@ -88,7 +88,7 @@ behaviour. The migration head on this branch is d82f9afb5898.
 
 ## Tests and their results
 
-Recorded at 917cb15, all against the disposable database:
+Recorded at 08c5b47, all against the disposable database:
 
 - `npm test`: **403 passed** (root config, 32 files) and **438 passed** (radar config).
   The radar count rose from 419 by R1's 19 new tests.
@@ -98,8 +98,8 @@ Recorded at 917cb15, all against the disposable database:
 - `pytest tests/test_radar_hub_page.py tests/test_radar_api.py tests/test_radar_watch_api.py tests/test_gym_routes_smoke.py`: **135 passed**.
 - R1: `npx vitest run -c vite.radar.config.ts static/radar/src/hub/`: **171 passed**, 12 files.
   Mutation-checked -- reverting only the reducer fails 6 of them.
-- R2: `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py -q`: **66 passed**
-  (65 before the call-path test the R2 review found missing).
+- R2: `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py -q`: **124 passed**
+  (the observations suite went 65 -> 66 with the call-path test the R2 review found missing).
 - R2 benchmark: `PYTHONPATH=. py -3.12 scratchpad/bench_activity.py`, which asserts the disposable
   database by name, seeds into 2019 and removes its rows afterwards. Results in FOUNDATIONS-LEDGER.md.
 - Browser: 13 captures across all six pages and the recovery view at 1440x1000, 768x1024 and
