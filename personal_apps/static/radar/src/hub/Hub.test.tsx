@@ -109,7 +109,27 @@ describe('the shell', () => {
     // silently break -- and these are real hrefs precisely so it works.
     // fireEvent, not userEvent: the modifier is the whole subject here, and
     // it has to arrive on the click event the handler reads.
-    fireEvent.click(link, { ctrlKey: true })
+    //
+    // The document listener is what makes this test safe to run beside
+    // others. It sees the event after the component's handler, so
+    // defaultPrevented is the component's own answer -- and then it stops the
+    // default itself, because letting a real href through makes jsdom attempt
+    // a navigation it cannot perform. That throws asynchronously, on a timer,
+    // long after this test has finished, and lands on whichever test happens
+    // to be running: the suite failed roughly one run in six, on a different
+    // test each time.
+    const prevented: boolean[] = []
+    const swallow = (event: MouseEvent) => {
+      prevented.push(event.defaultPrevented)
+      event.preventDefault()
+    }
+    document.addEventListener('click', swallow)
+    try {
+      fireEvent.click(link, { ctrlKey: true })
+    } finally {
+      document.removeEventListener('click', swallow)
+    }
+    expect(prevented).toEqual([false])
     expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
   })
 
