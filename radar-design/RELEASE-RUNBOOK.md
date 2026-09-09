@@ -5,9 +5,14 @@ return", section B. **Nothing here is authorized and nothing here has been
 executed.** This is the one authoritative path; RELEASE-PROPOSAL.md describes the
 architecture and the drift, and does not contain a second procedure.
 
-**Sections 1, 2 and 3 are marked GATE — PENDING ACCESS.** They cannot be written
-as executable commands from this workspace, and the release cannot proceed past
-them. Each states exactly what it needs.
+**Gates 1 and 2 are CLOSED.** The deploy script and the target were read over SSH,
+read-only, with the owner's authorization; the facts are in **TARGET-FACTS.md** and
+four of them changed this document. Gate 3, the backup restore, is recorded in
+FOUNDATIONS-LEDGER.md.
+
+**One requirement is unmet and is not a formality: `update_coc.sh` does not stop
+`personal_apps_web`.** Section 1 says what that does and does not mean for this
+release.
 
 ---
 
@@ -29,46 +34,59 @@ services or of the schema.
 
 ---
 
-## 1. GATE — PENDING ACCESS: read the deploy script before using it
+## 1. The deploy script — read, and one requirement is unmet
 
-`/root/update_coc.sh` is the intended **single owner of the migration**. This
-runbook must not contain a second, manual migration path, and does not.
+`/root/update_coc.sh` is the **single owner of the migration**. Its full text and
+the unit definitions are in TARGET-FACTS.md section 1. Verdict:
 
-**It cannot be finalised until the script's actual contents are read.** A report
-of what it does is not evidence. Required before the window:
-
-- [ ] The full text of `/root/update_coc.sh`.
-- [ ] `systemctl cat personal_apps_web radar_ingest radar-encoder-trial.service
-      radar-encoder-trial.timer` — for `WorkingDirectory`, `ExecStart`, `User`,
-      `Environment`/`EnvironmentFile`.
-
-What must be confirmed in that text, each of which changes the procedure if absent:
-
-| # | requirement | if absent |
+| # | requirement | verdict |
 | --- | --- | --- |
-| 1.1 | it stops **`personal_apps_web`**, not only `radar_ingest` | propose a minimal wrapper change for review; do not edit in place during a release |
-| 1.2 | it **exits without restarting** when the migration or build fails | same |
-| 1.3 | it runs `flask db upgrade` exactly **once**, with the right interpreter and `WorkingDirectory` | same |
-| 1.4 | it resets to `origin/main` — the reason the candidate must be merged there first | see step 4 |
-| 1.5 | it builds the frontend (`npm ci && npm run build`) with the expected Node | if it does not, the build step must be added, not run alongside |
+| 1.1 | stops **`personal_apps_web`** | **NO** — never stopped, only restarted at the end |
+| 1.2 | exits without restarting on failure | **YES** — `set -e` aborts before the restart block |
+| 1.3 | runs `flask db upgrade` once, right interpreter and directory | **YES**, inside the venv |
+| 1.4 | resets to `origin/main` | **YES** |
+| 1.5 | builds the frontend | **YES**, `npm ci && npm run build` |
 
-**Until 1.1 and 1.2 are confirmed, the release does not start.** A script that
-restarts services after a failed migration would bring the web process up against
-a half-migrated schema, which is the exact failure this sequencing exists to
-prevent.
+### What 1.1 being unmet means here, and what it does not
+
+The web process serves throughout the migration. **For this release that is not
+dangerous**, for a specific reason rather than a general one: the deployed code
+declares no `RadarIngestRun` or `RadarBoardObservation` model, and this migration
+only creates those two tables and alters one of them. A process cannot touch what
+it has no model for, and `radar_ingest` — the actual writer — *is* stopped.
+
+**No wrapper change is proposed for this release**, on that basis. Codex's ruling
+allows proposing one; the honest position is that it is not needed here and would
+be a production edit made during a release for no benefit.
+
+**It will matter for a later migration.** Any future revision that alters a table
+the web app reads must not use this script unmodified. Record that decision here
+rather than rediscovering it.
+
+One smaller window to know about: between `git reset --hard` and the restart, the
+running gunicorn holds **old Python in memory** while **new files sit on disk**.
+Templates are read per request, so a page can render a new template against old
+code for the length of the pip install, two migrations, `npm ci` and the build —
+minutes. Neither interface breaks on that in practice; it is why 1.1 exists.
 
 ---
 
-## 2. GATE — PENDING ACCESS: read-only target preflight
+## 2. Target preflight — run, and the results are recorded
 
 Every item is a read. Nothing here writes, and **`flask db upgrade` is never a
 preflight** — it performs the schema mutation. Do not run `rehearse_mariadb.py` or
 `rehearse_first_migration.py` against anything but a throwaway server; both drop
 their schema.
 
+**Note the variable name.** An earlier version of this block asked for
+`@@transaction_isolation`, which does not exist on MariaDB 10.11 and fails with
+`ERROR 1193 Unknown system variable`. MariaDB spells it `@@tx_isolation`. That was
+a MySQL-ism carried in from the development environment, and finding it is exactly
+what this gate is for.
+
 ```sql
 select version(), @@version_comment;
-select @@sql_mode, @@transaction_isolation, @@character_set_server,
+select @@sql_mode, @@tx_isolation, @@character_set_server,
        @@collation_server, @@lower_case_table_names, @@max_allowed_packet;
 select database();
 select version_num from alembic_version;
@@ -77,6 +95,10 @@ show tables like 'radar\_board\_observations';
 select count(*) from radar_watch;
 select count(*) from radar_buckets;
 ```
+
+**Results as of 2026-09-09 are in TARGET-FACTS.md section 2, and every expectation
+below was confirmed.** Re-run them immediately before the window: they are a
+snapshot, not a standing fact.
 
 Expected, and each mismatch is a stop-and-diagnose:
 
@@ -94,6 +116,11 @@ that is a diagnosis, not something to migrate over.
 Also record, before anything changes:
 
 - [ ] The **currently deployed SHA** on the target (`git -C /root/coc-stats rev-parse HEAD`).
+      As of 2026-09-09 this is `b7d8adf`, **one commit behind `origin/main`**
+      (`2a83905`). Running the deploy therefore ships that commit too. It is a
+      merge that changes no files relative to the deployed tree, so the effect is
+      nil — but compare against the DEPLOYED SHA, not only against `origin/main`,
+      or the drift check misses whatever else has accumulated.
 - [ ] The **approved candidate SHA** (section 8) and the **current `origin/main` SHA**.
       **Abort on drift** between what was approved and what is about to deploy.
 - [ ] The configured capture flag as the service actually sees it — from the unit's
@@ -173,18 +200,27 @@ condition fires — which is the point of ordering them this way.
 ```
 systemctl list-units --type=service --state=running 'radar*' 'personal_apps*' 'coc*'
 systemctl list-timers --all
+crontab -l                     # NOT optional -- see below
 systemctl is-enabled radar_ingest personal_apps_web radar-encoder-trial.timer
 ps -eo pid,etime,cmd | grep -E 'radar|gunicorn' | grep -v grep
 ```
 
+**`crontab -l` is there because `list-timers` does not show the database backup.**
+The nightly `mysqldump` is a cron job at **03:15**, not a systemd timer. A window
+overlapping it would run a dump of the database being migrated. An earlier version
+of this step listed only timers and would have missed it entirely.
+
 5. **Record the prior enabled/running state of every unit touched.** Only
    previously enabled/running services are restarted afterwards.
 6. Stop and inhibit for the window: `radar_ingest`, `personal_apps_web`, and
-   **`radar-encoder-trial.timer`**. That timer is pre-existing and *not* part of
-   this release, but it fires against the same `personal_apps` database — its
-   pre-existence does not make it irrelevant. Determine from its unit file whether
-   it can write to any affected table; if it can, mask it for the window
-   (`systemctl mask`) so the timer cannot restart it, and unmask afterwards.
+   **`radar-encoder-trial.timer`**.
+
+   **That timer is a confirmed database writer and it fires every minute.** Its
+   own unit file says it "persists `recovering` and drains a bounded slice of the
+   recovery" and "needs the database and nothing else"; observed cadence is one
+   run per minute. `update_coc.sh` does **not** stop it. `systemctl stop` alone is
+   not enough — the timer restarts the service — so **mask** it for the window and
+   unmask afterwards. Its pre-existence is exactly why it was nearly missed.
 
    **The named three are a floor, not the list.** Step 4's `list-timers --all` is
    there to be read: for every timer it surfaces, decide whether it can touch
