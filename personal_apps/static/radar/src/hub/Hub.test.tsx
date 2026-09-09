@@ -131,8 +131,11 @@ describe('the shell', () => {
   })
 
   it('names the market context it is showing', () => {
-    mount()
-    expect(screen.getByText(/US markets/)).toBeVisible()
+    const { container } = mount()
+    // In the top bar specifically: the page below it names the market too,
+    // and this is about the shell's own standing context line.
+    expect(container.querySelector('.rh-session')?.textContent)
+      .toMatch(/US markets/)
   })
 
   it('offers a skip link that moves focus and keeps the page', async () => {

@@ -15,16 +15,18 @@ import { useQueryClient } from '@tanstack/react-query'
 import { BoardUnavailable } from '../api'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
 import { Chatter } from './Chatter'
+import { Overview } from './Overview'
 import {
   Forbidden, Loading, Missing, SignedOut, StaleNotice, Unavailable,
 } from './PageState'
 import { Research } from './Research'
+import { Watching } from './Watching'
 import { Search } from './Search'
 import {
   hashFor, isInPageAnchor, readRoute, readSelection, readSpan, urlFor,
 } from './navigation'
 import type { HubRoute } from './navigation'
-import { selectionOf, useBoard } from './queries'
+import { selectionOf, useBoard, useWatchMutation } from './queries'
 import './hub.css'
 
 /** Only destinations this release actually renders. An empty page behind a
@@ -225,6 +227,19 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
   isAdmin: boolean
   go: (route: HubRoute, selection?: Selection, span?: PanelSpan) => void
 }) {
+  // Declared before any early return, because hooks are.
+  const watch = useWatchMutation()
+  const [marking, setMarking] = useState<string | null>(null)
+  const watching = board.data?.watching
+  const onToggleWatch = (ticker: string) => {
+    // One write at a time. Two in flight can land out of order, and the later
+    // answer would restore a list that predates the earlier one.
+    if (marking) return
+    setMarking(ticker)
+    watch.mutate({ ticker, on: !(watching ?? []).includes(ticker) },
+                 { onSettled: () => setMarking(null) })
+  }
+
   if (route.page === 'missing') {
     return <Missing onHome={() => go({ page: 'overview' })} />
   }
@@ -243,6 +258,10 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
         selection={selection}
         span={span}
         visible={visible}
+        watching={watching}
+        onToggleWatch={watching === undefined ? undefined : onToggleWatch}
+        watchPending={marking !== null}
+        watchError={watch.error}
         onSpan={(next) => go(route, selection, next)}
         onBack={() => go({ page: 'chatter' })}
         onSearch={() => document.getElementById('rh-search-input')?.focus()}
@@ -250,19 +269,23 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
     )
   }
 
-  if (route.page === 'chatter') {
+  // Overview, Human chatter and Watching are three readings of one board.
+  if (route.page === 'overview' || route.page === 'chatter'
+      || route.page === 'watching') {
     if (!board.data) {
       return board.isError
         ? <Unavailable error={board.error} retry={() => void board.refetch()} />
-        : <Loading label="Loading the ranked list…" />
+        : <Loading label={`Loading ${title.toLowerCase()}…`} />
     }
-    return (
-      <Chatter
-        board={board.data}
-        selection={selection}
-        onOpen={(ticker) => go({ page: 'research', ticker })}
-      />
-    )
+    const open = (ticker: string) => go({ page: 'research', ticker })
+    if (route.page === 'overview') {
+      return <Overview board={board.data} onOpen={open}
+                       onGo={(page) => go({ page })} />
+    }
+    if (route.page === 'watching') {
+      return <Watching board={board.data} onOpen={open} />
+    }
+    return <Chatter board={board.data} selection={selection} onOpen={open} />
   }
 
   return <Placeholder title={title} />

@@ -35,7 +35,8 @@ const CAPTIONS: Record<PanelSpan, string> = {
 }
 
 export function Research({ ticker, selection, span, onSpan, onBack, onSearch,
-                           watching, onToggleWatch, visible = true }: {
+                           watching, onToggleWatch, watchPending = false,
+                           watchError, visible = true }: {
   ticker: string
   selection: Selection
   span: PanelSpan
@@ -44,6 +45,8 @@ export function Research({ ticker, selection, span, onSpan, onBack, onSearch,
   onSearch: () => void
   watching?: string[]
   onToggleWatch?: (ticker: string) => void
+  watchPending?: boolean
+  watchError?: unknown
   visible?: boolean
 }) {
   const { data, error, isLoading, refetch } = useDetail(ticker, selection, span,
@@ -82,12 +85,27 @@ export function Research({ ticker, selection, span, onSpan, onBack, onSearch,
             type="button"
             className={`rh-button${isWatched ? '' : ' primary'}`}
             aria-pressed={isWatched}
+            // Disabled until the write lands, so a second click cannot race
+            // the first and leave the mark in whichever state answered last.
+            disabled={watchPending}
             onClick={() => onToggleWatch(identity.ticker)}
           >
-            {isWatched ? '✓ Watching' : 'Watch'}
+            {watchPending ? 'Saving…' : isWatched ? '✓ Watching' : 'Watch'}
           </button>
         ) : null}
       </div>
+
+      {watchError ? (
+        <div className="rh-notice red" role="alert">
+          <div>
+            <strong>That mark could not be saved.</strong>
+            <p>
+              {watchError instanceof BoardUnavailable ? watchError.message
+                : 'The change was refused.'} Your marks are unchanged.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rh-researchcols">
         <div className="rh-stack">

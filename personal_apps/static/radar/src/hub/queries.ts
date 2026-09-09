@@ -10,9 +10,11 @@
 // the key, and the panel's key carries the listing context that opened it,
 // because its breakdown and posts describe the same window the row's phrase
 // did.
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import {
+  keepPreviousData, useMutation, useQuery, useQueryClient,
+} from '@tanstack/react-query'
 
-import { fetchBoard, fetchDetail, fetchSearch, queryFor } from '../api'
+import { fetchBoard, fetchDetail, fetchSearch, queryFor, setWatch } from '../api'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
 
 /** Every hub key starts here, so the hub and the old board island can share a
@@ -97,6 +99,35 @@ export function useDetail(ticker: string | null, selection: Selection,
     refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
     retry,
+  })
+}
+
+/** Mark or unmark a company.
+ *
+ *  No optimistic flip. The endpoint answers the caller's WHOLE list, and
+ *  adopting that answer is what keeps one truth about which companies are
+ *  marked -- a locally applied change plus a server list is two, free to
+ *  diverge the moment a write is refused. The caller disables the control
+ *  until the answer lands, so the cost is a moment of latency rather than a
+ *  screen that is briefly a lie.
+ *
+ *  Every board query is invalidated afterwards, because `watching` and
+ *  `watch_rows` ride on the board payload and are now stale in each of them.
+ */
+export function useWatchMutation() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ticker, on }: { ticker: string; on: boolean }) =>
+      setWatch(ticker, on),
+    onSuccess: (watching) => {
+      // Adopt the server's list into every cached board, then refetch: the
+      // adopted list is authoritative immediately, and the refetch brings the
+      // rows that go with it.
+      client.setQueriesData<BoardPayload>(
+        { queryKey: [ROOT, 'board'] },
+        (board) => (board ? { ...board, watching } : board))
+      void client.invalidateQueries({ queryKey: [ROOT, 'board'] })
+    },
   })
 }
 
