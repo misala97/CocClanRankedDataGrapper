@@ -19,9 +19,9 @@ take the ingest daemon down — see "What is still there, and why".
 | so, per day | roughly **1.8 CPU-hours doing nothing** |
 
 `TRIAL_RETIRED = True` has been deployed since 2026-09-08, so every one of
-those 1,439 ticks read the row, saw `RECOVERING` under retirement, and returned
-`{'action': 'none'}`. The work was already pointless; only the schedule was
-left.
+those 1,439 ticks read the row and returned `{'action': 'none'}` — under
+retirement `deadline()` is `None`, so there is nothing for a watchdog to
+enforce. The work was already pointless; only the schedule was left.
 
 ## What was removed
 
@@ -61,8 +61,15 @@ systemctl daemon-reload && systemctl enable --now radar-encoder-trial.timer
 
 ## What is still there, and why
 
-**The `radar_judge_trial` row (one row, status `RECOVERING`) stays. Deleting it
+**The `radar_judge_trial` row (one row, status `running`) stays. Deleting it
 would fail the ingest daemon at startup.**
+
+*Correction, 2026-09-10 01:45: the first version of this document said the row's
+status was `RECOVERING`. It is `running`. The conclusion below is unchanged —
+deleting the row still raises — but the reason I gave for it was wrong, and so
+was the claim that the row's `RECOVERING` status is what keeps the daemon
+starting. With `running`, `_may_judge` does not object at all: the encoder is
+the live primary judge and judges normally.*
 
 The chain, read rather than assumed:
 
@@ -79,15 +86,25 @@ The chain, read rather than assumed:
   startup, where an operator sees it."* The daemon's configure path is uncaught
   on purpose.
 
-So today the row being `RECOVERING` is exactly what keeps `radar_ingest`
-starting: it takes the warning branch, judging stays disabled, ingestion
-continues. Remove the row and the encoder's configuration raises instead.
+So today the row simply satisfies the guard — status `running`, matching
+`model_id` and `prompt_version` — and the encoder judges. Remove the row and
+there is nothing left to satisfy it: `_may_judge` raises "no trial is armed",
+`current()` returns `None` so the softening branch does not apply, and the
+daemon's configuration raises `ConfigError` at startup.
 
-That is a code defect, not a reason to keep the trial. **The fix is one small
-change** — under `TRIAL_RETIRED`, a missing row should mean "no trial, judging
-disabled" rather than a configuration error — and it belongs in the ordinary
-review-and-deploy path, not typed into a live box at one in the morning. Once
-that ships, the row can go in a second, five-second step.
+**The trial is not merely retired paperwork: it is the thing authorising the
+encoder to judge at all.** `radar-encoder-v1` is the live primary judge, and
+`guard_encoder_trial` consults this row before every batch. Retirement removed
+its automatic deadline and its retention pin; it did not remove its role as the
+encoder's licence. That is worth knowing before anyone deletes it.
+
+The hard failure on a missing row is a code defect worth fixing — under
+`TRIAL_RETIRED`, "no row" should mean "no trial, judging disabled" rather than
+a configuration error, and that belongs in the ordinary review-and-deploy path
+rather than typed into a live box at one in the morning. But fixing it does not
+make deleting the row harmless, because the row is the encoder's licence to
+judge. Deleting it means the board's tone comes from the wording score instead
+of `radar-encoder-v1`. That is a product decision, not housekeeping.
 
 Also still present, and deliberately untouched:
 
@@ -111,6 +128,10 @@ Also still present, and deliberately untouched:
 1. **Make a missing trial row survivable** — `judge_config._encoder_or_none`
    should treat "no row" under `TRIAL_RETIRED` as judging-disabled rather than
    a `ConfigError`. Small, testable, and the prerequisite for deleting the row.
+   Note what that costs, though: with no row the encoder does not judge, and
+   the board falls back to the wording score. Deleting the row is therefore a
+   decision to stop using the encoder, not a tidy-up. If the encoder is meant
+   to keep judging, the row stays.
 2. **Then delete the row**, and decide whether to drop `radar_judge_trial`
    itself or leave the empty table with its migration intact.
 3. **Retire the trial code** if the trial is never coming back — a deliberate
