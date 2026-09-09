@@ -43,8 +43,13 @@ news. Capture enablement and root promotion remain separate, untaken decisions.
 - Watching's tone/source presentation, with a populated mockup first.
 - The zero-feed question in legacy `sources` / `venues` / breadth filtering,
   which is a ranking decision and not a display one.
-- OT1: the retired encoder trial's watchdog still fires every minute doing
-  nothing. Not authorized by any approval so far.
+- ~~OT1: the retired encoder trial's watchdog~~ **DONE 2026-09-10** on the
+  owner's direct instruction. Timer, service, unit files and `/root/trial-audit`
+  are gone; 1,439 pointless invocations a day with them. OT1-RECORD.md has the
+  account, the archive location and the reversal. **The `radar_judge_trial` row
+  stays**: with no row, `judge_config._encoder_or_none` raises `ConfigError`
+  and the ingest daemon fails at startup. Making a missing row survivable is a
+  small code change and the prerequisite for deleting it.
 - Inert generic flex declarations on Chatter cells below 700px -- clean them
   when that CSS is next edited, per the Eighth return.
 
