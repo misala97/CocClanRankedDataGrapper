@@ -562,6 +562,54 @@
 .rh-chatter strong { font-size: 13px; }
 .rh-chatter .rh-sub { font-size: 12px; }
 .rh-chatter tbody tr:hover { background: var(--wash); }
+/* Out of BOTH trees on the desk layout. The column header already names the
+   figure; carrying a second name on all seven cells meant a screen reader
+   read the column twice per cell, seven times per row, every row. `display:
+   none` rather than `aria-hidden`, because the stacked layout below 860 needs
+   the very same element visible and announced -- one CSS switch, no JavaScript
+   watching the viewport. */
+.rh-chatter .rh-cell-label { display: none; }
+
+/* --- sorting ------------------------------------------------------------- */
+
+/* The header IS the control. It keeps the header's own type -- 12px, muted,
+   medium -- so turning the column names into buttons did not turn the header
+   row into a toolbar. */
+.rh-sortbutton {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+.rh-sortbutton:hover { color: var(--ink); text-decoration: underline; }
+.rh-sortbutton.active { color: var(--green); font-weight: 600; }
+.rh-sortarrow { font-size: 10px; line-height: 1; }
+.rh-pricehead .rh-sortbutton { display: inline; }
+
+/* Present on every width, and the only sort control that survives the header
+   row's `display: none` below 860. Hidden here rather than unmounted, so the
+   two are never both offering the same thing. */
+.rh-sortpicker { display: none; }
+.rh-sortpicker .rh-field { min-width: 0; }
+.rh-sortpicker select { min-width: 150px; }
+.rh-sortdir { min-height: 40px; white-space: nowrap; }
+
+/* What the sort did, and what it did not. Sits between the panel heading and
+   the table, where a reader looking at a reordered list is looking. */
+.rh-sortnote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: 12px 0 0;
+  padding: 0 23px;
+  max-width: none;
+}
+.rh-sortnote strong { color: var(--ink); font-weight: 600; }
+.rh-sortreset { padding: 0; font-size: 12px; }
 .rh-chatter .rh-col-company { min-width: 0; }
 /* Wraps rather than clipping: a warning that does not fit is a warning that
    did not happen, and the row is allowed to grow for it. */
@@ -1191,56 +1239,30 @@
   .rh-tablewrap { padding: 16px 18px 0; }
   .rh-tablefoot { padding: 13px 18px 16px; }
 
-  /* Stacked, not scrolled sideways. A six-column table on a phone puts the
-     price and the tone past the right edge, and the spec is explicit that a
-     scrolling region may not hide the company, the price or the evidence
-     quality. Each cell keeps its column's name beside it instead.
+  /* Chatter stacks HERE, at 860, and no other table does -- seven columns is
+     what makes 860 the right number for this one, and the Eighth return
+     scopes the change to it. Watching and Activity keep their own 700px table
+     breakpoint, further down.
+     ---------------------------------------------------------------------
+     Self-sufficient on purpose: it no longer leans on a generic stacking block
+     that now fires 160px later. Written as `.rh-table.rh-chatter` wherever it
+     has to outrank that generic block below 700, so the two do not depend on
+     which one the file happens to list last.
+     ---------------------------------------------------------------------
+     Company and price on the top line, attention and voices beneath, sources
+     and tone beneath that. Tone stays VISIBLE -- the prototype hid it on
+     mobile and the reading is half the point of the page. Qualifications stay
+     in the company block, where they belong.
      ---------------------------------------------------------------------
      `display: block` on table elements drops their implicit roles, so the
-     markup carries explicit ARIA roles that survive it -- otherwise a screen
-     reader below 700px gets undifferentiated blocks with no header
-     association. The visible label comes from a real element in the DOM, not
-     from generated content, for the same reason. */
-  .rh-table thead { display: none; }
-  .rh-table,
-  .rh-table tbody,
-  .rh-table tr,
-  .rh-table td,
-  .rh-table th[scope='row'] { display: block; }
-  .rh-table tr { border-top: 1px solid var(--line); padding: 6px 0 14px; }
-  .rh-table tbody tr:first-child { border-top: 0; }
-  .rh-table th[scope='row'] { padding: 0; border: 0; }
-  .rh-table td {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 5px 0 0;
-    border: 0;
-    text-align: left;
-  }
-  .rh-table .rh-cell-label {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: 0;
-    clip-path: none;
-    color: var(--muted);
-    font-size: 11px;
-    flex: none;
-  }
-  .rh-table td.right { text-align: right; }
-  .rh-table td > strong { display: inline; }
-  .rh-table .rh-sub { display: inline; margin: 0 0 0 6px; }
-  .rh-table td > * { text-align: right; }
-  .rh-tonebar { margin-left: auto; }
-
-  /* Chatter stacks into a deliberate grid rather than the generic
-     label-and-value rows above: company and price on the top line, attention
-     and voices beneath, sources and tone beneath that. Tone stays VISIBLE --
-     the prototype hid it on mobile, and the reading is half the point of the
-     page. Qualifications stay in the company block, where they belong. */
-  .rh-chatter tbody tr {
+     markup carries explicit ARIA roles that survive it; and the cell labels
+     become real visible text here, because the header row is gone and they are
+     the only thing naming each figure. */
+  .rh-table.rh-chatter thead { display: none; }
+  .rh-table.rh-chatter,
+  .rh-table.rh-chatter tbody,
+  .rh-table.rh-chatter tr { display: block; }
+  .rh-table.rh-chatter tbody tr {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
@@ -1251,29 +1273,45 @@
     align-items: start;
     padding: 15px 0 17px;
   }
+  .rh-table.rh-chatter tbody tr { border-top: 1px solid var(--line); }
+  .rh-table.rh-chatter tbody tr:first-child { border-top: 0; }
   .rh-chatter .rh-col-company { grid-area: company; }
   .rh-chatter .rh-col-price { grid-area: price; }
   .rh-chatter .rh-col-attention { grid-area: attention; }
   .rh-chatter .rh-col-voices { grid-area: voices; }
   .rh-chatter .rh-col-sources { grid-area: sources; }
   .rh-chatter .rh-col-tone { grid-area: tone; }
-  /* The chevron duplicates the company control, which is a 44px target and
-     is still here. One affordance is enough on a phone. */
-  .rh-chatter .rh-col-open { display: none; }
+  /* The chevron duplicates the company control, which is a 44px target and is
+     still here. One affordance is enough on a phone.
+     ---------------------------------------------------------------------
+     `.rh-table.rh-chatter`, not `.rh-chatter`: the cell rule below is
+     `.rh-table.rh-chatter td { display: block }` and outranked the plainer
+     selector, so the chevron came back on mobile as a block with no grid area
+     and sat alone at the bottom of every row. */
+  .rh-table.rh-chatter .rh-col-open { display: none; }
 
-  .rh-chatter td,
-  .rh-chatter th[scope='row'] {
+  .rh-table.rh-chatter td,
+  .rh-table.rh-chatter th[scope='row'] {
     display: block;
     padding: 0;
+    border: 0;
     text-align: left;
   }
-  .rh-chatter td > *,
-  .rh-chatter td.right,
-  .rh-chatter td.right > * { text-align: left; }
-  .rh-chatter .rh-cell-label { display: block; margin-bottom: 3px; }
-  .rh-chatter td > strong { display: block; }
-  .rh-chatter .rh-sub { display: block; margin: 3px 0 0; }
-  .rh-chatter .rh-tonebar { margin: 6px 0 0; }
+  .rh-table.rh-chatter td > *,
+  .rh-table.rh-chatter td.right,
+  .rh-table.rh-chatter td.right > * { text-align: left; }
+  /* Visible, and in the accessibility tree, ONLY here. On the desk layout the
+     column header already names the figure and this repeated it on all seven
+     cells of every row -- see the `display: none` beside `.rh-chatter`. */
+  .rh-table.rh-chatter .rh-cell-label {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .rh-table.rh-chatter td > strong { display: block; }
+  .rh-table.rh-chatter .rh-sub { display: block; margin: 3px 0 0; }
+  .rh-table.rh-chatter .rh-tonebar { margin: 6px 0 0; }
   /* Two lines, not one and not five. A long legal name wrapped to four lines
      on a phone and made its row twice as tall as its neighbours; `title` and
      the research page still carry the whole thing. */
@@ -1298,6 +1336,17 @@
   .rh-panelempty { padding: 4px 18px 0; }
   .rh-morebutton { min-height: 44px; width: 100%; justify-content: space-between; }
   .rh-more { width: 100%; }
+  /* The header row is gone from here down, so this becomes the sort control.
+     `flex`, not `block`: the direction button sits beside the selector. */
+  .rh-sortpicker {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    width: 100%;
+  }
+  .rh-sortpicker .rh-field { flex: 1; }
+  .rh-sortdir { min-height: 44px; flex: none; }
+  .rh-sortnote { padding: 0 18px; }
   .rh-identity h1 { font-size: 23px; }
   .rh-mark.large { width: 41px; height: 41px; }
   .rh-researchhead { gap: 18px; }
@@ -1305,6 +1354,53 @@
   .rh-spans button { min-height: 40px; }
   .rh .pxchart .ax { font-size: 14px; }
   .rh .phead .who { max-width: 12ch; }
+}
+
+/* Watching and Activity keep the 700px table breakpoint they always had.
+   Splitting Chatter out to 860 was about ITS seven columns; carrying the other
+   two tables along was an uncommanded change to pages this work was asked only
+   to CHECK, and the capture that seemed to justify it was of an empty table.
+   Chatter's own rules outrank these by specificity, so below 700 it keeps its
+   grid rather than reverting to these label-and-value rows. */
+@media (max-width: 700px) {
+  .rh-table thead { display: none; }
+  .rh-table,
+  .rh-table tbody,
+  .rh-table tr,
+  .rh-table td,
+  .rh-table th[scope='row'] { display: block; }
+  .rh-table tr { border-top: 1px solid var(--line); padding: 6px 0 14px; }
+  .rh-table tbody tr:first-child { border-top: 0; }
+  .rh-table th[scope='row'] { padding: 0; border: 0; }
+  .rh-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 5px 0 0;
+    border: 0;
+    text-align: left;
+  }
+  /* Activity and Watching still mark these `rh-visually-hidden` in the markup,
+     so this is what brings them back into the layout. Chatter no longer does;
+     it toggles `display` instead. Their duplicate announcement on the DESK
+     layout is the same defect Chatter's fix addresses, and it is recorded as a
+     named follow-up rather than changed here. */
+  .rh-table .rh-cell-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    clip-path: none;
+    color: var(--muted);
+    font-size: 11px;
+    flex: none;
+  }
+  .rh-table td.right { text-align: right; }
+  .rh-table td > strong { display: inline; }
+  .rh-table .rh-sub { display: inline; margin: 0 0 0 6px; }
+  .rh-table td > * { text-align: right; }
+  .rh-tonebar { margin-left: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -303,3 +303,87 @@ describe('the shell', () => {
     expect(menu).toHaveFocus()
   })
 })
+
+describe('the reader’s ordering of the chatter list', () => {
+  const board = payload({ rows: [
+    row({ ticker: 'MID', authors: 5 }),
+    row({ ticker: 'TOP', authors: 10 }),
+    row({ ticker: 'LOW', authors: 2 }),
+  ] })
+
+  const listed = () =>
+    screen.getAllByTestId('rh-row-ticker').map((el) => el.textContent)
+
+  it('sorts without asking the server for anything', async () => {
+    // Sorting is a view over the rows already here. A request would be a
+    // different board, and could quietly change which companies are listed.
+    const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(board)
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: board })
+    await screen.findByTestId('rh-sort-voices')
+    const before = fetchBoard.mock.calls.length
+
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+
+    expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+    expect(fetchBoard.mock.calls.length).toBe(before)
+    expect(window.location.search).not.toContain('sort')
+  })
+
+  it('still has the reader’s ordering after Back from a company', async () => {
+    vi.spyOn(api, 'fetchBoard').mockResolvedValue(board)
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: board })
+    await screen.findByTestId('rh-sort-voices')
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+
+    // Chatter unmounts here, which is why the ordering cannot live in it.
+    await userEvent.click(screen.getByRole('button', { name: /^TOP/ }))
+    await waitFor(() => expect(window.location.hash).toContain('research'))
+    window.history.back()
+
+    await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
+    expect(screen.getByRole('columnheader', { name: 'Voices' }))
+      .toHaveAttribute('aria-sort', 'descending')
+  })
+
+  it('keeps the ordering when a server filter changes the board', async () => {
+    const reordered = payload({ rows: [
+      row({ ticker: 'LOW', authors: 2 }),
+      row({ ticker: 'TOP', authors: 10 }),
+      row({ ticker: 'MID', authors: 5 }),
+    ] })
+    vi.spyOn(api, 'fetchBoard').mockResolvedValue(reordered)
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: board })
+    await screen.findByTestId('rh-sort-voices')
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+
+    await userEvent.selectOptions(screen.getByLabelText(/window/i), '1')
+
+    // The new response arrives in a different order; the reader's sort is
+    // applied to it rather than to a stale copy of the old one.
+    await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
+  })
+
+  it('resets to whichever response is current, not the one that was sorted',
+    async () => {
+      const reordered = payload({ rows: [
+        row({ ticker: 'LOW', authors: 2 }),
+        row({ ticker: 'TOP', authors: 10 }),
+        row({ ticker: 'MID', authors: 5 }),
+      ] })
+      vi.spyOn(api, 'fetchBoard').mockResolvedValue(reordered)
+      window.history.replaceState(null, '', '/radar/hub/#chatter')
+      mount({ initial: board })
+      await screen.findByTestId('rh-sort-voices')
+      await userEvent.click(screen.getByTestId('rh-sort-voices'))
+      await userEvent.selectOptions(screen.getByLabelText(/window/i), '1')
+      await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
+
+      await userEvent.click(screen.getByRole('button', { name: /radar order/i }))
+
+      expect(listed()).toEqual(['LOW', 'TOP', 'MID'])
+    })
+})

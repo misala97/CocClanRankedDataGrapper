@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -5,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { payload, quote, row } from '../fixtures'
 import type { Row, Selection } from '../types'
 import { Chatter } from './Chatter'
+import type { ChatterSort } from './chatterSort'
 
 const initial = payload()
 const selection: Selection = {
@@ -258,6 +260,194 @@ describe('the ranked list', () => {
     render(<Chatter board={payload({ rows: [], excluded: {} })}
                     selection={selection} onOpen={vi.fn()} />)
     expect(screen.getByText(/no company/i)).toBeVisible()
+  })
+})
+
+/** Chatter with somewhere to keep its ordering, which is the hub's job in
+ *  production. `onSort` present is also what makes the controls render. */
+function Sortable({ rows, onOpen = vi.fn(), onSelect }: {
+  rows: Row[]
+  onOpen?: (t: string) => void
+  onSelect?: (next: Selection) => void
+}) {
+  const [sort, setSort] = useState<ChatterSort | null>(null)
+  return (
+    <Chatter board={payloadWithRows(rows)} selection={selection}
+             sort={sort} onSort={setSort} onOpen={onOpen} onSelect={onSelect} />
+  )
+}
+
+const listed = () =>
+  screen.getAllByTestId('rh-row-ticker').map((el) => el.textContent)
+
+describe('ordering the candidates on screen', () => {
+  const three = () => [
+    row({ ticker: 'MID', authors: 5, ratio: 2 }),
+    row({ ticker: 'TOP', authors: 10, ratio: 9 }),
+    row({ ticker: 'LOW', authors: 2, ratio: 1 }),
+  ]
+
+  it('starts in Radar order with no column marked', () => {
+    render(<Sortable rows={three()} />)
+    expect(listed()).toEqual(['MID', 'TOP', 'LOW'])
+    for (const name of ['Company', 'Attention', 'Voices', 'Sources', 'Tone']) {
+      expect(screen.getByRole('columnheader', { name }))
+        .toHaveAttribute('aria-sort', 'none')
+    }
+  })
+
+  it('reorders on a header click and marks the column', async () => {
+    render(<Sortable rows={three()} />)
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+    expect(screen.getByRole('columnheader', { name: 'Voices' }))
+      .toHaveAttribute('aria-sort', 'descending')
+  })
+
+  it('flips direction when the same column is clicked again', async () => {
+    render(<Sortable rows={three()} />)
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    expect(listed()).toEqual(['LOW', 'MID', 'TOP'])
+    expect(screen.getByRole('columnheader', { name: 'Voices' }))
+      .toHaveAttribute('aria-sort', 'ascending')
+  })
+
+  it('answers the keyboard the way a button does', async () => {
+    render(<Sortable rows={three()} />)
+    screen.getByTestId('rh-sort-attention').focus()
+    await userEvent.keyboard('{Enter}')
+    expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+    await userEvent.keyboard(' ')
+    expect(listed()).toEqual(['LOW', 'MID', 'TOP'])
+  })
+
+  it('gives price and today two separate controls, not one ambiguous one',
+    async () => {
+      // A single "Price / today" control cannot say whether the reader asked
+      // for the dearest company or the one that rose most.
+      const rows = [
+        row({ ticker: 'DEAR', price: 90, price_move: 0.01 }),
+        row({ ticker: 'RISER', price: 2, price_move: 0.30 }),
+      ]
+      render(<Sortable rows={rows} />)
+      await userEvent.click(screen.getByTestId('rh-sort-price'))
+      expect(listed()).toEqual(['DEAR', 'RISER'])
+      // The header names WHICH control its sort state describes.
+      expect(screen.getByRole('columnheader', { name: 'Price' }))
+        .toHaveAttribute('aria-sort', 'descending')
+
+      await userEvent.click(screen.getByTestId('rh-sort-move'))
+      expect(listed()).toEqual(['RISER', 'DEAR'])
+      expect(screen.getByRole('columnheader', { name: 'Today' }))
+        .toHaveAttribute('aria-sort', 'descending')
+    })
+
+  it('says what it sorted and what it did not', async () => {
+    render(<Sortable rows={three()} />)
+    await userEvent.click(screen.getByTestId('rh-sort-attention'))
+    const note = screen.getByText(/sorts these 3 candidates/i)
+    expect(note).toBeVisible()
+    expect(note).toHaveTextContent(/not the whole market/i)
+    expect(note).toHaveTextContent(/ranking and eligibility are unchanged/i)
+  })
+
+  it('counts the rows it could not order', async () => {
+    render(<Sortable rows={[row({ ticker: 'A', ratio: 4 }),
+                            row({ ticker: 'B', ratio: null })]} />)
+    await userEvent.click(screen.getByTestId('rh-sort-attention'))
+    expect(screen.getByText(/1 with no attention reading stays at the end/i))
+      .toBeVisible()
+    expect(listed()).toEqual(['A', 'B'])
+  })
+
+  it('says prices are grouped when more than one currency is on screen',
+    async () => {
+      const priced = (ticker: string, price: number, currency: string) =>
+        row({ ticker, price,
+              quote: { ...quote(), price, currency } as Row['quote'] })
+      render(<Sortable rows={[priced('US', 90, 'USD'), priced('DE', 4, 'EUR')]} />)
+      await userEvent.click(screen.getByTestId('rh-sort-price'))
+      expect(screen.getByText(/grouped by currency \(EUR, USD\)/i)).toBeVisible()
+      expect(screen.getByText(/rather than\s+converted/i)).toBeVisible()
+    })
+
+  it('does not claim grouping when every price is in one currency', async () => {
+    render(<Sortable rows={three()} />)
+    await userEvent.click(screen.getByTestId('rh-sort-price'))
+    expect(screen.queryByText(/grouped by currency/i)).not.toBeInTheDocument()
+  })
+
+  it('returns to Radar order on reset', async () => {
+    render(<Sortable rows={three()} />)
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+    await userEvent.click(screen.getByRole('button', { name: /radar order/i }))
+    expect(listed()).toEqual(['MID', 'TOP', 'LOW'])
+    expect(screen.getByRole('columnheader', { name: 'Voices' }))
+      .toHaveAttribute('aria-sort', 'none')
+  })
+
+  it('composes with the in-page filter and keeps the sort while typing',
+    async () => {
+      const rows = [row({ ticker: 'AAB', name: 'Alpha', authors: 1 }),
+                    row({ ticker: 'AAC', name: 'Alpha', authors: 9 }),
+                    row({ ticker: 'ZZZ', name: 'Zeta', authors: 5 })]
+      render(<Sortable rows={rows} />)
+      await userEvent.click(screen.getByTestId('rh-sort-voices'))
+      expect(listed()).toEqual(['AAC', 'ZZZ', 'AAB'])
+      await userEvent.type(screen.getByLabelText(/filter companies/i), 'alpha')
+      expect(listed()).toEqual(['AAC', 'AAB'])
+      expect(screen.getByRole('columnheader', { name: 'Voices' }))
+        .toHaveAttribute('aria-sort', 'descending')
+      expect(screen.getByText(/sorts these 2 candidates/i)).toBeVisible()
+    })
+
+  it('offers the same keys through the stacked layout’s selector', () => {
+    render(<Sortable rows={three()} />)
+    const picker = screen.getByLabelText(/sort by/i)
+    const options = Array.from(picker.querySelectorAll('option'))
+      .map((o) => o.textContent)
+    expect(options).toEqual(['Radar order', 'Company', 'Attention', 'Voices',
+                             'Sources', 'Tone', 'Price', 'Today'])
+  })
+
+  it('sorts from the selector and flips with its direction control',
+    async () => {
+      render(<Sortable rows={three()} />)
+      const direction = screen.getByRole('button', { name: /first/i })
+      expect(direction).toBeDisabled()
+      await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'voices')
+      expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+      expect(direction).toHaveTextContent(/highest first/i)
+      await userEvent.click(direction)
+      expect(listed()).toEqual(['LOW', 'MID', 'TOP'])
+      expect(direction).toHaveTextContent(/lowest first/i)
+    })
+
+  it('returns to Radar order from the selector too', async () => {
+    render(<Sortable rows={three()} />)
+    await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'voices')
+    await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'radar')
+    expect(listed()).toEqual(['MID', 'TOP', 'LOW'])
+  })
+
+  it('renders plain headers when no sort control was given', () => {
+    // Chatter without `onSort` is exactly what it was before sorting existed.
+    show([row({ ticker: 'AAA' })])
+    expect(screen.queryByTestId('rh-sort-voices')).not.toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Voices' })).toBeVisible()
+    expect(screen.queryByLabelText(/sort by/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the visible column name inside each sort control’s name', () => {
+    // WCAG 2.5.3 again: the arrow is decoration, the name is the column.
+    render(<Sortable rows={three()} />)
+    for (const [id, label] of [['rh-sort-voices', 'Voices'],
+                               ['rh-sort-move', 'Today']] as const) {
+      expect(screen.getByTestId(id)).toHaveAccessibleName(
+        expect.stringContaining(label) as unknown as string)
+    }
   })
 })
 

@@ -170,8 +170,43 @@ def fixture_payload(real):
     out = envelope(real, [copy.deepcopy(r) for r in FIXTURE_ROWS])
     out['excluded'] = {'too_few_mentions': 3418, 'too_few_voices': 96}
     out['segment_counts'] = {'all': 7, 'large': 3, 'micro': 4}
-    out['watching'] = []
-    out['watch_rows'] = []
+    # A POPULATED watch list, so the Watching table can be checked at a width
+    # where it is a table. An empty one proves nothing about a layout: the
+    # Eighth return made exactly that point about the capture that seemed to
+    # justify moving its breakpoint.
+    watched = [copy.deepcopy(r) for r in FIXTURE_ROWS[:5]]
+    watched[-1]['eligible'] = False
+    watched[-1]['floor_reason'] = 'too_few_voices'
+    out['watching'] = [r['ticker'] for r in watched]
+    out['watch_rows'] = watched
+    return out
+
+
+# Fictional, and labelled as such wherever it is shown. It exists so the
+# Activity table has rows at the widths its breakpoint has to be checked at;
+# the local database records no ingest runs, so its real payload is seven days
+# of nulls and every column collapses.
+def fixture_activity(days):
+    import datetime as _dt
+    out = {'generated_at': REAL_NOW.isoformat() + 'Z',
+           'from': (REAL_NOW - _dt.timedelta(days=days)).date().isoformat(),
+           'to': REAL_NOW.date().isoformat(),
+           'recording_started_at': '2026-08-01T00:00:00Z', 'days': []}
+    for index in range(days):
+        day = (REAL_NOW - _dt.timedelta(days=days - 1 - index)).date()
+        quiet = index % 4 == 3
+        out['days'].append({
+            'date': day.isoformat(),
+            'posts_seen': None if quiet else 15729 + index * 811,
+            'posts_new': None if quiet else 22 + index,
+            'mentions': None if quiet else 3211 + index * 97,
+            'buckets_written': None if quiet else 966 + index * 12,
+            'completed_runs': 0 if quiet else 96,
+            'counted_runs': 0 if quiet else 96,
+            'incomplete_runs': 1 if index == 0 else 0,
+            'error_runs': 2 if index == 2 else 0,
+            'completeness': 'unknown' if quiet else 'complete',
+        })
     return out
 
 
@@ -287,7 +322,14 @@ def main():
     for name, payload in side.items():
         (api / f'{name}.json').write_text(json.dumps(payload, default=str),
                                           encoding='utf-8')
-    print(f'side payloads: {", ".join(sorted(side))}')
+    # Dataset-specific answers win over the shared ones. The fixture page gets
+    # fictional activity; the real page keeps the real, mostly-null one.
+    for days in (1, 7, 30):
+        (api / f'fixture-activity-{days}.json').write_text(
+            json.dumps(fixture_activity(days)), encoding='utf-8')
+        (api / f'dense-activity-{days}.json').write_text(
+            json.dumps(fixture_activity(days)), encoding='utf-8')
+    print(f'side payloads: {", ".join(sorted(side))} (+ fixture activity)')
 
     pages = {
         'real': (real, 'REAL local dev data, 24h window ending 2026-09-01 18:15'),

@@ -45,6 +45,12 @@ def load():
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def dataset(self):
+        referer = self.headers.get('Referer') or ''
+        stem = pathlib.PurePosixPath(
+            urllib.parse.urlparse(referer).path).stem
+        return stem or 'fixture'
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
@@ -61,10 +67,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def canned(self, name):
-        path = PAGES / 'api' / f'{name}.json'
-        if not path.exists():
-            return self.send_json({'error': 'not in this preview'}, 404)
-        return self.send_json(json.loads(path.read_text('utf-8')))
+        # A dataset-specific answer wins, so the fictional page can show
+        # fictional activity while the real page keeps the real, mostly-empty
+        # one. Neither ever borrows the other's numbers.
+        for candidate in (f'{self.dataset()}-{name}', name):
+            path = PAGES / 'api' / f'{candidate}.json'
+            if path.exists():
+                return self.send_json(json.loads(path.read_text('utf-8')))
+        return self.send_json({'error': 'not in this preview'}, 404)
 
     def send_json(self, payload, status=200):
         body = json.dumps(payload).encode('utf-8')
@@ -78,10 +88,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         def one(name, default=None):
             return query.get(name, [default])[0]
 
-        referer = self.headers.get('Referer') or ''
-        stem = pathlib.PurePosixPath(
-            urllib.parse.urlparse(referer).path).stem or 'fixture'
-        payload = copy.deepcopy(DATASETS.get(stem, DATASETS['fixture']))
+        payload = copy.deepcopy(
+            DATASETS.get(self.dataset(), DATASETS['fixture']))
         # Echo the selection back, which is what the real API does and what the
         # controls read to show themselves as selected.
         sources = [s for s in (one('sources') or '').split(',') if s]

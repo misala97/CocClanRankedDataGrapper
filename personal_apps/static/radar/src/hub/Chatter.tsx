@@ -21,22 +21,37 @@ import { useId, useMemo, useRef, useState } from 'react'
 import type { BoardPayload, Row, Selection } from '../types'
 import { sourcePresentation, tonePresentation } from './chatterPresentation'
 import type { SourcePresentation, TonePresentation } from './chatterPresentation'
+import {
+  SORT_LABELS, knownCount, nextSort, priceCurrencies, sortRows,
+} from './chatterSort'
+import type { ChatterSort, SortKey } from './chatterSort'
 import { Filters } from './Filters'
 import { Empty } from './PageState'
 
-export function Chatter({ board, selection, onOpen, onSelect }: {
+export function Chatter({ board, selection, sort = null, onOpen, onSelect,
+                         onSort }: {
   board: BoardPayload
   selection: Selection
+  /** Null is Radar order: the response exactly as it arrived. Held by the hub
+   *  rather than here, so leaving for Research and coming back does not throw
+   *  the reader's ordering away. */
+  sort?: ChatterSort | null
   onOpen: (ticker: string) => void
   onSelect?: (next: Selection) => void
+  onSort?: (next: ChatterSort | null) => void
 }) {
   const [filter, setFilter] = useState('')
   const needle = filter.trim().toLowerCase()
-  const rows = useMemo(() => (
-    needle
+  // Filter first, then order what survived. Both are views over the response:
+  // neither fetches, and neither can add a company the server did not send.
+  // Sorting outlives a refresh because it is applied to whatever `board.rows`
+  // currently is, rather than stored as a reordered copy that would go stale.
+  const rows = useMemo(() => {
+    const matching = needle
       ? board.rows.filter((row) => matches(row, needle))
       : board.rows
-  ), [board.rows, needle])
+    return sortRows(matching, sort)
+  }, [board.rows, needle, sort])
 
   const excluded = Object.values(board.excluded ?? {})
     .reduce((total, count) => total + count, 0)
@@ -59,7 +74,8 @@ export function Chatter({ board, selection, onOpen, onSelect }: {
         ? <EmptyBoard excluded={excluded} />
         : (
           <Panel board={board} rows={rows} filter={filter}
-                 onFilter={setFilter} onOpen={onOpen} />
+                 onFilter={setFilter} onOpen={onOpen}
+                 sort={sort} onSort={onSort} />
         )}
     </>
   )
@@ -86,12 +102,14 @@ function EmptyBoard({ excluded }: { excluded: number }) {
   )
 }
 
-function Panel({ board, rows, filter, onFilter, onOpen }: {
+function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
   board: BoardPayload
   rows: Row[]
   filter: string
   onFilter: (next: string) => void
   onOpen: (ticker: string) => void
+  sort: ChatterSort | null
+  onSort?: (next: ChatterSort | null) => void
 }) {
   const total = board.rows.length
   const shown = rows.length
@@ -114,6 +132,7 @@ function Panel({ board, rows, filter, onFilter, onOpen }: {
               onChange={(event) => onFilter(event.target.value)}
             />
           </label>
+          {onSort ? <SortPicker sort={sort} onSort={onSort} /> : null}
           <p className="small muted rh-panelcount">
             {shown === total
               ? `${total} ${total === 1 ? 'company' : 'companies'}`
@@ -121,6 +140,10 @@ function Panel({ board, rows, filter, onFilter, onOpen }: {
           </p>
         </div>
       </div>
+
+      {onSort && sort
+        ? <SortNote rows={rows} sort={sort} onSort={onSort} />
+        : null}
 
       {shown === 0 ? (
         <div className="rh-panelempty">
@@ -131,7 +154,7 @@ function Panel({ board, rows, filter, onFilter, onOpen }: {
           </Empty>
         </div>
       ) : (
-        <Table rows={rows} onOpen={onOpen} />
+        <Table rows={rows} onOpen={onOpen} sort={sort} onSort={onSort} />
       )}
 
       <Foot board={board} shown={shown} />
@@ -150,8 +173,11 @@ function Panel({ board, rows, filter, onFilter, onOpen }: {
 // anyway, which is exactly the thing it says not to do.
 const COLUMNS = ['26%', '13%', '10%', '18%', '17%', '12%', '4%']
 
-function Table({ rows, onOpen }: {
-  rows: Row[]; onOpen: (ticker: string) => void
+function Table({ rows, onOpen, sort, onSort }: {
+  rows: Row[]
+  onOpen: (ticker: string) => void
+  sort: ChatterSort | null
+  onSort?: (next: ChatterSort | null) => void
 }) {
   return (
     // Labelled and scrollable: the table may scroll inside this region, but
@@ -166,12 +192,12 @@ function Table({ rows, onOpen }: {
         </colgroup>
         <thead>
           <tr role="row">
-            <th scope="col">Company</th>
-            <th scope="col">Attention</th>
-            <th scope="col">Voices</th>
-            <th scope="col">Sources</th>
-            <th scope="col">Tone</th>
-            <th scope="col" className="right">Price · today</th>
+            <SortHead sortKey="company" label="Company" sort={sort} onSort={onSort} />
+            <SortHead sortKey="attention" label="Attention" sort={sort} onSort={onSort} />
+            <SortHead sortKey="voices" label="Voices" sort={sort} onSort={onSort} />
+            <SortHead sortKey="sources" label="Sources" sort={sort} onSort={onSort} />
+            <SortHead sortKey="tone" label="Tone" sort={sort} onSort={onSort} />
+            <PriceHead sort={sort} onSort={onSort} />
             {/* The chevron's column. Named for a screen reader rather than
                 left as an empty header, which reads as a missing one. */}
             <th scope="col"><span className="rh-visually-hidden">Open research</span></th>
@@ -184,6 +210,188 @@ function Table({ rows, onOpen }: {
         </tbody>
       </table>
     </div>
+  )
+}
+
+/** A column header that is also its sort control.
+ *
+ *  `aria-sort` lives on the header cell, where assistive technology looks for
+ *  it, and the button's own accessible name is just the column name -- no
+ *  aria-label overriding the visible text, which is how the row disclosures
+ *  first broke WCAG 2.5.3. A native button gives Enter and Space for free.
+ *
+ *  When no sort control is supplied the header is plain text, so a Chatter
+ *  rendered without `onSort` is exactly what it was before. */
+function SortHead({ sortKey, label, className, sort, onSort }: {
+  sortKey: SortKey
+  label: string
+  className?: string
+  sort: ChatterSort | null
+  onSort?: (next: ChatterSort | null) => void
+}) {
+  const active = sort && sort.key === sortKey ? sort : null
+  return (
+    <th scope="col" className={className} aria-sort={ariaSort(active)}>
+      {onSort
+        ? <SortControl sortKey={sortKey} label={label} sort={sort} onSort={onSort} />
+        : label}
+    </th>
+  )
+}
+
+/** Price and today's move are two questions and two controls.
+ *
+ *  One combined "Price / today" sort would be ambiguous -- a reader clicking it
+ *  cannot know whether they asked for the dearest company or the one that rose
+ *  most. Because both controls live under one header, the header takes an
+ *  explicit name saying WHICH of them `aria-sort` is describing. */
+function PriceHead({ sort, onSort }: {
+  sort: ChatterSort | null
+  onSort?: (next: ChatterSort | null) => void
+}) {
+  const active = sort && (sort.key === 'price' || sort.key === 'move')
+    ? sort : null
+  return (
+    <th
+      scope="col"
+      className="right rh-pricehead"
+      aria-sort={ariaSort(active)}
+      aria-label={active
+        ? (active.key === 'price' ? 'Price' : 'Today')
+        : 'Price and today'}
+    >
+      {onSort ? (
+        <>
+          <SortControl sortKey="price" label="Price" sort={sort} onSort={onSort} />
+          <span aria-hidden="true"> · </span>
+          <SortControl sortKey="move" label="Today" sort={sort} onSort={onSort} />
+        </>
+      ) : 'Price · today'}
+    </th>
+  )
+}
+
+function ariaSort(active: ChatterSort | null) {
+  if (!active) return 'none' as const
+  return active.dir === 'asc' ? ('ascending' as const) : ('descending' as const)
+}
+
+function SortControl({ sortKey, label, sort, onSort }: {
+  sortKey: SortKey
+  label: string
+  sort: ChatterSort | null
+  onSort: (next: ChatterSort | null) => void
+}) {
+  const active = sort && sort.key === sortKey ? sort : null
+  return (
+    <button
+      type="button"
+      className={`rh-sortbutton${active ? ' active' : ''}`}
+      onClick={() => onSort(nextSort(sort, sortKey))}
+      data-testid={`rh-sort-${sortKey}`}
+    >
+      {label}
+      {/* The arrow is decoration; `aria-sort` on the header carries the state,
+          and colour is not the only thing marking the active column -- the
+          arrow and the weight do too. */}
+      {active ? (
+        <span className="rh-sortarrow" aria-hidden="true">
+          {active.dir === 'asc' ? '↑' : '↓'}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
+const SORT_KEYS: SortKey[] = ['company', 'attention', 'voices', 'sources',
+                              'tone', 'price', 'move']
+
+/** The stacked layout's sort control.
+ *
+ *  Below 860px the header row is `display: none`, which takes it out of the
+ *  accessibility tree along with the eye's -- so without this, sorting would
+ *  exist only in controls nobody on a phone can reach. Rendered always and
+ *  hidden by the same CSS breakpoint, rather than by JavaScript watching the
+ *  viewport: one switch, one source of truth. */
+function SortPicker({ sort, onSort }: {
+  sort: ChatterSort | null
+  onSort: (next: ChatterSort | null) => void
+}) {
+  return (
+    <div className="rh-sortpicker">
+      <label className="rh-field">
+        <span>Sort by</span>
+        <select
+          value={sort ? sort.key : 'radar'}
+          onChange={(event) => {
+            const value = event.target.value
+            onSort(value === 'radar'
+              ? null
+              : nextSort(null, value as SortKey))
+          }}
+        >
+          <option value="radar">Radar order</option>
+          {SORT_KEYS.map((key) => (
+            <option key={key} value={key}>{SORT_LABELS[key]}</option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="rh-button rh-sortdir"
+        disabled={!sort}
+        onClick={() => sort && onSort({
+          key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
+      >
+        {sort && sort.dir === 'asc' ? 'Lowest first' : 'Highest first'}
+      </button>
+    </div>
+  )
+}
+
+/** What the sort did, and — more importantly — what it did not do.
+ *
+ *  "Sorted by tone" reads like "the most bullish companies in the market". It
+ *  is not that: it is the loaded candidates reordered. The eligibility floor,
+ *  the breadth filter and Radar's own ranking all ran before this, and none of
+ *  them moved. */
+function SortNote({ rows, sort, onSort }: {
+  rows: Row[]
+  sort: ChatterSort | null
+  onSort: (next: ChatterSort | null) => void
+}) {
+  if (!sort) return null
+  const known = knownCount(rows, sort.key)
+  const missing = rows.length - known
+  const currencies = sort.key === 'price' ? priceCurrencies(rows) : []
+  return (
+    <p className="small muted rh-sortnote">
+      <span>
+        Sorted by <strong>{SORT_LABELS[sort.key]}</strong>,{' '}
+        {sort.dir === 'asc' ? 'lowest first' : 'highest first'}.
+      </span>
+      <span>
+        Sorts these {rows.length}{' '}
+        {rows.length === 1 ? 'candidate' : 'candidates'}, not the whole market —
+        Radar’s ranking and eligibility are unchanged.
+      </span>
+      {missing > 0 ? (
+        <span>
+          {missing} with no {SORT_LABELS[sort.key].toLowerCase()} reading{' '}
+          {missing === 1 ? 'stays' : 'stay'} at the end.
+        </span>
+      ) : null}
+      {currencies.length > 1 ? (
+        <span>
+          Prices are grouped by currency ({currencies.join(', ')}) rather than
+          converted.
+        </span>
+      ) : null}
+      <button type="button" className="rh-textbutton rh-sortreset"
+              onClick={() => onSort(null)}>
+        Radar order
+      </button>
+    </p>
   )
 }
 
@@ -575,9 +783,12 @@ function Cell({ label, className, testId, children }: {
   // header row is gone and this is the only thing naming the figure.
   return (
     <td role="cell" className={className} data-testid={testId}>
-      {label
-        ? <span className="rh-cell-label rh-visually-hidden">{label}</span>
-        : null}
+      {/* No `rh-visually-hidden` here any more: the class hid it from the eye
+          while leaving it in the accessibility tree, so the desk layout
+          announced every column name twice per cell. hub.css toggles its
+          `display` instead -- gone on the desk layout, visible and announced
+          in the stacked one, where the header row no longer exists. */}
+      {label ? <span className="rh-cell-label">{label}</span> : null}
       {children}
     </td>
   )

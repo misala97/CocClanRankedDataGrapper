@@ -111,7 +111,12 @@ export function tonePresentation(tone: Tone | null | undefined): TonePresentatio
       + 'balanced, mixed or unclear, together with signals nothing has '
       + 'classified yet — not known neutral sentiment. Total means this tone '
       + 'sample of eligible mention rows in the selected window, not every '
-      + 'post or person read.',
+      + 'post or person read. '
+      // The bar is an approximate indicator, and says so where the exact
+      // figures are. A segment below about 2% of the track is drawn wider
+      // than its share so it does not vanish -- see `.rh-tonebar` in hub.css.
+      + 'Tiny nonzero shares are drawn at a minimum width so they remain '
+      + 'visible; use the percentage and counts for the exact balance.',
   }
 }
 
