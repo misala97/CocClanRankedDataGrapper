@@ -1536,6 +1536,27 @@ class RadarIngestRun(db.Model):
     rows, and `buckets_written` counts work performed rather than distinct
     quarter-hours. The per-source intake reasons are not mutually exclusive
     categories and must not be summed into a discarded total.
+
+    The four scalar counters below are a PROJECTION of `summary_json`, written
+    in the same transaction that stores it. They exist because reading a month
+    of activity meant transferring and decoding every envelope -- 56.8 MiB and
+    ~201 MiB of Python heap for 120 integers, measured. `summary_json` remains
+    the record; these are a typed view of it and nothing may treat them as an
+    independent source of truth.
+
+    Three fields carry the compatibility question the counters cannot.
+    `summary_schema_version` is the version the envelope declared, NULL when it
+    declared none. `summary_countable` says the envelope was structurally
+    valid and versioned -- not that its version is one any particular reader
+    understands, which is a question only the reader can answer against its own
+    SCHEMA_VERSION. A counter absent from an otherwise valid summary is NULL
+    here and does not make the row uncountable; that distinction is the whole
+    reason a marker exists alongside nullable counters, because NULL alone
+    cannot separate "this run stored nothing countable" from "this run's
+    summary omitted this one counter".
+
+    Signed BIGINT, not unsigned: the accepted domain is non-negative, but a
+    column that cannot represent a negative cannot record that one arrived.
     """
     __tablename__ = 'radar_ingest_runs'
     __table_args__ = (
@@ -1555,6 +1576,18 @@ class RadarIngestRun(db.Model):
     # row of source content or a credential, and this table is read by the
     # admin surface.
     error_code   = db.Column(db.String(48), nullable=True)
+
+    # The projection. NULL throughout on a row written before it existed, and
+    # on every running or error row, which report no counters by design.
+    summary_schema_version = db.Column(db.Integer, nullable=True)
+    # Non-null with a server default, so a row inserted by anything that does
+    # not know about this column is uncountable rather than unknown.
+    summary_countable = db.Column(db.Boolean, nullable=False,
+                                  server_default=sa.text('0'), default=False)
+    posts_seen      = db.Column(db.BigInteger, nullable=True)
+    posts_new       = db.Column(db.BigInteger, nullable=True)
+    mentions        = db.Column(db.BigInteger, nullable=True)
+    buckets_written = db.Column(db.BigInteger, nullable=True)
 
 
 class RadarBoardObservation(db.Model):

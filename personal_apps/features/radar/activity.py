@@ -28,6 +28,7 @@ import logging
 import uuid
 from zoneinfo import ZoneInfo
 
+import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from extensions import db
@@ -48,6 +49,71 @@ BERLIN = ZoneInfo('Europe/Berlin')
 ALLOWED_DAYS = (1, 7, 30)
 
 COUNTERS = ('posts_seen', 'posts_new', 'mentions', 'buckets_written')
+
+# The accepted domain of a stored counter: a non-negative integer that fits a
+# signed BIGINT. Anything else is not coerced, clamped or turned into a zero --
+# it is refused, and the refusal is visible as a null.
+COUNTER_MAX = 2 ** 63 - 1
+
+# How many rows the read holds at once. Bounded on purpose: the cost this
+# module was rewritten to remove was holding a month of them.
+READ_BATCH = 1000
+
+
+def project(envelope) -> tuple[int | None, bool, dict[str, int | None]]:
+    """The typed view of one `summary_json`, as (version, countable, counters).
+
+    This is the ONLY definition of the projection. `finish_run` writes it, the
+    migration's backfill re-implements it against a frozen copy, and the tests
+    compare both against the envelope reducer they replace. A second definition
+    anywhere would be a second answer to the same question.
+
+    `countable` means the envelope is structurally what this module writes: a
+    mapping, declaring an integer schema version, carrying a mapping summary.
+    It deliberately does NOT mean the version is one any reader understands --
+    only a reader can decide that, against its own SCHEMA_VERSION, and a marker
+    that folded the two together would have to be rewritten every time the
+    version moved.
+
+    A counter missing from an otherwise valid summary is null and leaves the
+    row countable. That is the distinction the marker exists for: null alone
+    cannot separate "this run stored nothing countable" from "this run's
+    summary omitted this counter", and those two have opposite consequences --
+    the first is skipped, the second nulls the day.
+    """
+    empty = {name: None for name in COUNTERS}
+    if not isinstance(envelope, dict):
+        return None, False, dict(empty)
+    version = envelope.get('schema_version')
+    # bool is an int in Python, and `True` is not a schema version.
+    if isinstance(version, bool) or not isinstance(version, int):
+        return None, False, dict(empty)
+    summary = envelope.get('summary')
+    if not isinstance(summary, dict):
+        return version, False, dict(empty)
+    return version, True, {name: _counter(summary.get(name))
+                           for name in COUNTERS}
+
+
+def _counter(value) -> int | None:
+    """One counter, or null when it is not one.
+
+    Null covers absent, explicitly null, and out of domain. Out of domain is
+    logged rather than silently dropped, because a counter arriving as a string
+    or a negative means the writer changed and this projection is the place
+    that noticed.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        logger.warning('radar run counter is %s, not an integer; recorded as '
+                       'absent', type(value).__name__)
+        return None
+    if not 0 <= value <= COUNTER_MAX:
+        logger.warning('radar run counter %d is outside the accepted domain; '
+                       'recorded as absent', value)
+        return None
+    return value
 
 
 def _session():
@@ -74,10 +140,16 @@ def finish_run(run_id: str, now: dt.datetime, *, summary: dict | None,
     Only a row still `running` is updated, which is what makes this idempotent:
     a retry, a duplicated job or a late callback cannot restate totals that
     were already recorded, in either direction.
+
+    The envelope and its projection are written by the same UPDATE, inside this
+    transaction and under this guard. Not a second writer and not a later pass:
+    a row whose typed counters disagreed with its own JSON would be a row with
+    two answers, and there would be no way to tell which one was the record.
     """
     status = 'error' if error_code else 'ok'
     envelope = (None if summary is None
                 else {'schema_version': SCHEMA_VERSION, 'summary': summary})
+    version, countable, counters = project(envelope)
     try:
         with _session() as session, session.begin():
             # FOR UPDATE, so a second closer waits and then re-reads the status
@@ -102,6 +174,10 @@ def finish_run(run_id: str, now: dt.datetime, *, summary: dict | None,
             run.status = status
             run.summary_json = envelope
             run.error_code = error_code
+            run.summary_schema_version = version
+            run.summary_countable = countable
+            for name, value in counters.items():
+                setattr(run, name, value)
     except Exception:
         logger.exception('radar run recorder could not close run %s', run_id)
 
@@ -148,42 +224,78 @@ def _day_bounds(day: dt.date) -> tuple[dt.datetime, dt.datetime]:
             end.astimezone(dt.timezone.utc).replace(tzinfo=None))
 
 
-def _counted(runs) -> list[dict]:
-    """The summaries of one day that this code can honestly add up.
+class _Day:
+    """One Berlin day's totals, folded a row at a time.
 
-    Only the schema version it understands. The version exists because a
-    counter's MEANING changed, and adding a v1 `posts_seen` to a v2 one
-    produces a number that means neither.
+    An accumulator rather than a list of rows, because the list was the whole
+    problem: a month of runs held every row and every decoded envelope at once.
+    Nothing here grows with the number of runs.
     """
-    return [run.summary_json['summary'] for run in runs
-            if isinstance(run.summary_json, dict)
-            and run.summary_json.get('schema_version') == SCHEMA_VERSION
-            and isinstance(run.summary_json.get('summary'), dict)]
 
+    __slots__ = ('completed', 'counted', 'running', 'errored', 'sums',
+                 'missing')
 
-def _counters(summaries: list[dict]) -> dict[str, int | None]:
-    """Sum one day's countable summaries, counter by counter.
+    def __init__(self):
+        self.completed = self.counted = self.running = self.errored = 0
+        self.sums = {name: 0 for name in COUNTERS}
+        # Counters that at least one PARTICIPATING row did not report. Kept as
+        # a set of names rather than a null running total, so a later row
+        # cannot quietly resurrect a counter an earlier one already made
+        # unanswerable.
+        self.missing = set()
 
-    A counter absent from any summary being added makes THAT counter null for
-    the day rather than a zero. Counters are allowed to be added without a
-    version bump, so an older run genuinely never measured a newer one -- and
-    reporting 0 for it would be the exact lie this module exists to avoid:
-    a cycle that measured nothing turned into a cycle that measured nothing
-    happening.
+    def add(self, row) -> None:
+        if row.status == 'running':
+            self.running += 1
+            return
+        if row.status == 'error':
+            self.errored += 1
+            return
+        self.completed += 1
+        # The reader decides compatibility, not the writer's marker: the marker
+        # says the envelope was well formed, this says its vocabulary is the
+        # one these sums are in. Adding a v1 counter to a v2 one produces a
+        # number that means neither.
+        if not (row.summary_countable
+                and row.summary_schema_version == SCHEMA_VERSION):
+            return
+        self.counted += 1
+        for name in COUNTERS:
+            value = getattr(row, name)
+            if value is None:
+                self.missing.add(name)
+            else:
+                self.sums[name] += value
 
-    The counters keep the meanings ingest gave them. posts_seen counts fetch
-    deliveries and repeats a post two overlapping cycles returned;
-    buckets_written counts work performed rather than distinct quarter-hours.
-    Neither is a claim about how much of the internet was covered.
-    """
-    if not summaries:
-        return {name: None for name in COUNTERS}
-    counters: dict[str, int | None] = {}
-    for name in COUNTERS:
-        values = [summary.get(name) for summary in summaries]
-        counters[name] = (None if any(value is None for value in values)
-                          else sum(values))
-    return counters
+    def counters(self) -> dict[str, int | None]:
+        """A counter is null when nothing countable contributed to it, or when
+        anything that did failed to report it. Never a zero standing in for an
+        absent measurement -- a genuine measured zero and a missing one are
+        different facts, and this module exists to keep them apart."""
+        if not self.counted:
+            return {name: None for name in COUNTERS}
+        return {name: (None if name in self.missing else self.sums[name])
+                for name in COUNTERS}
+
+    def as_json(self, day: dt.date) -> dict:
+        return {
+            'date': day.isoformat(),
+            **self.counters(),
+            'completed_runs': self.completed,
+            # How many of those the counters were actually drawn from. Lower
+            # than completed_runs when a run stored no summary or stored one in
+            # a schema version this code will not add to the current one.
+            # Without it, a day of runs whose totals were all skipped is
+            # indistinguishable from a day of runs that reported nothing, and a
+            # per-run rate computed from completed_runs would be silently wrong.
+            'counted_runs': self.counted,
+            # Still open: either running now, or left behind by a process that
+            # died. Both are cycles whose totals were never reported, which is
+            # not the same as cycles that reported nothing.
+            'incomplete_runs': self.running,
+            'error_runs': self.errored,
+            'completeness': 'partial' if self.completed else 'unknown',
+        }
 
 
 def summary(now: dt.datetime, days: int) -> dict:
@@ -197,6 +309,12 @@ def summary(now: dt.datetime, days: int) -> dict:
 
     `recording_started_at` is when the first run was ever recorded. Before it
     there is no gap to explain: nothing was recording.
+
+    Nothing here is memoised and no day is ever frozen by its date. A run is
+    filed under the Berlin day it STARTED in, but `finish_run` closes it later,
+    so a cycle spanning midnight changes the previous day's totals after that
+    day has ended -- roughly one day in five at the measured cadence. Every
+    read re-reads.
     """
     if days not in ALLOWED_DAYS:
         raise ValueError(f'unsupported window: {days!r}')
@@ -207,78 +325,49 @@ def summary(now: dt.datetime, days: int) -> dict:
     window_from = _day_bounds(dates[0])[0]
     window_to = _day_bounds(dates[-1])[1]
 
-    # Three columns rather than whole ORM rows, and it is not enough at the
-    # widest window.
+    # The typed projection, never `summary_json`.
     #
-    # MEASURED 2026-09-09 against the disposable clone (MySQL 8.0.46; production
-    # is MariaDB) by scratchpad/bench_activity.py, which derives the run count
-    # from the two schedulers that actually call tick -- `radar_cycle` on the
-    # NYSE session (180s open, 600s after hours, 1800s overnight and weekends)
-    # and `radar_reddit` fixed at ARCTIC_SHIFT_INTERVAL_SECONDS. Rows and bytes
-    # are asked of the database over the same Berlin-day window queried below.
+    # MEASURED 2026-09-09 against the disposable clone (MySQL 8.0.46;
+    # production is MariaDB) by scratchpad/bench_activity.py. Reading a month
+    # of activity used to transfer and decode every envelope: 12,728 rows,
+    # 56.8 MiB and ~201 MiB of peak Python heap to return 120 integers, on a
+    # `login_required`, uncached route. The projection columns are written
+    # beside the envelope by `finish_run`; the envelope stays as provenance and
+    # is never selected here.
     #
-    # Both scheduling models are seeded and measured, because APScheduler
-    # reschedules at FINISH + interval, not start + interval:
+    # Two things keep the memory bounded and both are load-bearing. The query
+    # names seven scalar columns, so no envelope is fetched and no ORM entity
+    # is constructed that could lazily load one. And the rows are STREAMED --
+    # `yield_per` folds each batch into the accumulators below and lets it go,
+    # so nothing proportional to the number of runs is ever live. Replacing
+    # either with `.all()` restores the original cost exactly.
     #
-    #   start + interval, the drift-free upper bound
-    #     window  rows     JSON     summary()   no summary_json   peak heap
-    #     1 day     276    1.3 MiB     27 ms          4 ms           4 MiB
-    #     7 days  3,212   14.3 MiB    307 ms         40 ms          50 MiB
-    #     30 days 14,652  64.2 MiB  1,609 ms        196 ms         228 MiB
-    #
-    #   finish + interval, 38s runs -- what the scheduler actually does
-    #     1 day     239    1.1 MiB     26 ms          4 ms           4 MiB
-    #     7 days  2,791   12.6 MiB    297 ms         35 ms          45 MiB
-    #     30 days 12,728  56.8 MiB  1,390 ms        160 ms         201 MiB
-    #
-    # An earlier note here guessed ~2,880 runs over 30 days by dividing the
-    # window by the board archive's 15-minute cadence. That is the wrong writer:
-    # two jobs each write one row per firing, which is ~12,700-14,800 firings
-    # over 30 days, five times the guess.
-    #
-    # The two jobs write different envelopes, and modelling one shape for both
-    # overstated this table's first version by roughly half. `run_cycle` keys
-    # aggregate_status and catchup_depth by the ROOT fetcher name and only
-    # per_source by concrete names, and the schedulers pass disjoint fetcher
-    # sets. So a radar_cycle envelope is 632 bytes (bluesky and fourchan) and a
-    # radar_reddit one is 7,447 (34 subs in per_source, one root elsewhere).
-    #
-    # The last two columns are the finding. Without summary_json the same rows
-    # take 160 ms against 1,390, so the envelopes dominate -- that control is a
-    # bare two-column select rather than this query minus the column, so it also
-    # skips the grouping loop and somewhat overstates their share. And .all()
-    # holds every row and every decoded dict at once: ~201 MiB of PYTHON heap
-    # for one request on a login_required, uncached route. That is tracemalloc,
-    # so a floor on RSS rather than the figure. On a small host it is the number
-    # that ends the process, not the seconds.
-    #
-    # Bounds, in both directions. Milliseconds are best-of-five on a warm buffer
-    # pool: lower bounds. Bytes assume every run succeeded and every source
-    # reported all eight intake reasons; intake_reasons is 84% of the reddit
-    # envelope, so a quiet sub makes it markedly smaller. Upper bound.
-    #
-    # Nothing is changed here. Extracting the counters in SQL needs JSON path
-    # functions whose behaviour on the production MariaDB cannot be verified
-    # from this environment. The portable fixes -- typed counter columns written
-    # at finish_run, a daily rollup, memoising completed days, or dropping 30
-    # from ALLOWED_DAYS -- are product or schema decisions, and they belong to
-    # the plan owner. Note for whoever takes them: a day is NOT immutable at
-    # Berlin midnight, because runs are grouped by started_at and finish_run
-    # closes them later. The evidence and the options are in
-    # FOUNDATIONS-LEDGER.md, "R2 evidence".
-    runs = db.session.query(
-        RadarIngestRun.started_at, RadarIngestRun.status,
-        RadarIngestRun.summary_json,
-    ).filter(RadarIngestRun.started_at >= window_from,
-             RadarIngestRun.started_at < window_to).all()
-    by_day: dict[dt.date, list] = {day: [] for day in dates}
-    for run in runs:
-        day = _berlin_date(run.started_at)
+    # One statement, so one snapshot. Paging with separate LIMIT/OFFSET
+    # queries would assemble a window out of several transactions, and a cycle
+    # closing between two of them could be counted twice or not at all.
+    rows = db.session.execute(
+        sa.select(
+            RadarIngestRun.started_at, RadarIngestRun.status,
+            RadarIngestRun.summary_countable,
+            RadarIngestRun.summary_schema_version,
+            RadarIngestRun.posts_seen, RadarIngestRun.posts_new,
+            RadarIngestRun.mentions, RadarIngestRun.buckets_written,
+        ).where(RadarIngestRun.started_at >= window_from,
+                RadarIngestRun.started_at < window_to)
+        .execution_options(yield_per=READ_BATCH)
+    )
+
+    by_day: dict[dt.date, _Day] = {day: _Day() for day in dates}
+    for row in rows:
+        day = _berlin_date(row.started_at)
         # The window is the union of exactly these Berlin days, so a run
         # inside it belongs to one of them. Dropping it silently instead of
         # saying so would be a missing run nobody could find.
-        assert day in by_day, f'run at {run.started_at} fell outside {dates}'
-        by_day[day].append(run)
+        accumulator = by_day.get(day)
+        if accumulator is None:
+            raise AssertionError(
+                f'run at {row.started_at} fell outside {dates}')
+        accumulator.add(row)
 
     recording_started_at = db.session.query(
         db.func.min(RadarIngestRun.started_at)).scalar()
@@ -288,28 +377,5 @@ def summary(now: dt.datetime, days: int) -> dict:
         'from': iso_z(window_from),
         'to': iso_z(window_to),
         'recording_started_at': iso_z(recording_started_at),
-        'days': [_day(day, by_day.get(day, [])) for day in dates],
-    }
-
-
-def _day(day: dt.date, runs: list) -> dict:
-    completed = [run for run in runs if run.status == 'ok']
-    summaries = _counted(completed)
-    return {
-        'date': day.isoformat(),
-        **_counters(summaries),
-        'completed_runs': len(completed),
-        # How many of those the counters were actually drawn from. Lower than
-        # completed_runs when a run stored no summary or stored one in a
-        # schema version this code will not add to the current one. Without
-        # it, a day of runs whose totals were all skipped is indistinguishable
-        # from a day of runs that reported nothing, and a per-run rate
-        # computed from completed_runs would be silently wrong.
-        'counted_runs': len(summaries),
-        # Still open: either running now, or left behind by a process that
-        # died. Both are cycles whose totals were never reported, which is not
-        # the same as cycles that reported nothing.
-        'incomplete_runs': sum(1 for run in runs if run.status == 'running'),
-        'error_runs': sum(1 for run in runs if run.status == 'error'),
-        'completeness': 'partial' if completed else 'unknown',
+        'days': [by_day[day].as_json(day) for day in dates],
     }
