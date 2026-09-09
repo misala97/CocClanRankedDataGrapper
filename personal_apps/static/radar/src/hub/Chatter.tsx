@@ -142,11 +142,13 @@ function Panel({ board, rows, filter, onFilter, onOpen }: {
 /** The proportions the design contract sets at 1440, carried by a colgroup so
  *  the widest feed name can never decide them again. Percentages of the
  *  table's own content width; they add to 100. */
-// A few points off the contract's 26/13/11/15/19/12/4, which it allows to
-// avoid collisions: Sources takes two points from Attention and Voices so
-// `Reddit · 4chan /biz/ · Bluesky` fits on one line at 1440, and Tone gives
-// one back for the same reason.
-const COLUMNS = ['26%', '12%', '10%', '18%', '18%', '12%', '4%']
+// Three points off the contract's 26/13/11/15/19/12/4, which it allows to
+// avoid collisions. Sources needs them: `Reddit · 4chan /biz/ · Bluesky` wraps
+// at 15%. They come from Voices and Tone, and deliberately NOT from Attention
+// -- the contract names that one specifically: "do not compress Attention to
+// make room for source prose". An earlier revision took a point from it
+// anyway, which is exactly the thing it says not to do.
+const COLUMNS = ['26%', '13%', '10%', '18%', '17%', '12%', '4%']
 
 function Table({ rows, onOpen }: {
   rows: Row[]; onOpen: (ticker: string) => void
@@ -398,9 +400,12 @@ function Detail({ label, trigger, children }: {
         className="rh-detailtoggle"
         aria-expanded={open}
         aria-controls={id}
-        // The visible text is the figure, which is not a name for a control.
-        // The label says what opening it does.
-        aria-label={label}
+        // The visible text LEADS the accessible name, then the label says what
+        // opening it does. Replacing the visible text outright failed WCAG
+        // 2.5.3 Label in Name: the button read `26 directional / 71 total` and
+        // answered to "How KSTR's tone is counted", so a voice-control reader
+        // saying "click 26 directional" had no handle on it at all.
+        aria-label={`${trigger} — ${label}`}
         onClick={() => setOpen((was) => !was)}
       >
         <span className="rh-sub">{trigger}</span>
@@ -566,7 +571,7 @@ function Cell({ label, className, testId, children }: {
   // name and cannot carry the header association a stacked table loses.
   //
   // Not aria-hidden. On the desk layout the column header supplies the
-  // association and this repeats it, which costs a word; below 700px the
+  // association and this repeats it, which costs a word; below 860px the
   // header row is gone and this is the only thing naming the figure.
   return (
     <td role="cell" className={className} data-testid={testId}>

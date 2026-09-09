@@ -128,12 +128,22 @@ export function Filters({ board, selection, onChange }: {
           value={selection.minVenues}
           onChange={(event) => onChange({
             ...selection, minVenues: Number(event.target.value) })}
+          aria-describedby={BREADTH_ID}
         >
           {VENUES.map((venue) => (
             <option key={venue.value} value={venue.value}>{venue.label}</option>
           ))}
         </select>
       </label>
+      {/* Beside the control it describes, not only in the table's glossary.
+          The two counts genuinely differ and a reader who sets this filter is
+          exactly the reader who will wonder why a row saying "1 platform"
+          survived a two-venue floor. */}
+      <p id={BREADTH_ID} className="rh-fieldnote">
+        Counts every feed that was read, quiet ones included — which is what
+        the board is scored on. The Sources column counts only the feeds that
+        said something, so the two numbers differ.
+      </p>
 
       <fieldset className="rh-sources">
         <legend>Feeds</legend>
@@ -184,6 +194,7 @@ export function Filters({ board, selection, onChange }: {
 
 const FLOOR_ID = 'rh-feeds-floor'
 const MORE_ID = 'rh-more-filters'
+const BREADTH_ID = 'rh-breadth-note'
 
 /** What the hidden controls are currently doing, in the summary line.
  *

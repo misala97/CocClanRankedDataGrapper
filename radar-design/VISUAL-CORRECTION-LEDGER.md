@@ -13,14 +13,14 @@ Implementation and verification by Claude, 2026-09-09, in
 | **TE1** | **Complete** | New disposable `personal_apps_radar_te1`, 29 FKs, both migrations, integrity tests pass. See below. |
 | **VC1a data/helpers** | **Complete** | `c90cf92`. Additive `activity_sources`; pure `tonePresentation`/`sourcePresentation`. Mutation-checked. |
 | **VC1b Chatter correction** | **Complete** | `db9f153`. Composition, tone bar + percentage, source summary, column proportions, responsive rules. |
-| **VC1c visual verification** | **Complete** | Matched before/after screenshots, 42 browser checks, measurements in `reports/vc1/`. |
+| **VC1c visual verification** | **Complete** | Matched before/after screenshots, 48 browser checks, measurements in `reports/vc1/`. |
 | **Two defects found by looking** | **Fixed** | `b1cf313` the class collision, `43526e8` the tone bar's invisible rare share. Both below. |
-| Independent review | Complete | Read-only reviewer against this contract and the actual screenshots; findings recorded below. |
+| **Independent review** | **Performed, findings resolved** | Read-only reviewer against this contract, the source and the actual screenshots. Twelve findings, none blocking; every one addressed below. |
 | Owner acceptance | **Open — this is the ask** | Run the preview and look at it. Command below. |
 | Deployment | Not authorized | Separate decision, after visual acceptance |
 
 Baseline: release-candidate branch `d3bc795`; production `ba1c381` per accepted
-RELEASE-RECORD.md. HEAD after this work is **`43526e8`**.
+RELEASE-RECORD.md. HEAD after this work is **`d94905e`**.
 
 | commit | what |
 | --- | --- |
@@ -29,6 +29,8 @@ RELEASE-RECORD.md. HEAD after this work is **`43526e8`**.
 | `ea98c50` | Codex's brief, dispatch and reference images carried in, plus this ledger |
 | `b1cf313` | the panel's company filter had taken the topbar search's class |
 | `43526e8` | the tone bar drew a rare share as nothing |
+| `fc578b8` | the loading state, and one test flake reported rather than hidden |
+| `d94905e` | the independent review's twelve findings |
 
 ---
 
@@ -136,10 +138,12 @@ cost the row no height.
 sample size. The residual is named rather than folded in. A row with no sample
 gets no breakdown control: there is nothing to break down.
 
-**Columns**: a colgroup with `table-layout: fixed` at 26/12/10/18/18/12/4 —
-two points moved from Attention and Voices into Sources, and one from Tone,
-which the contract permits to avoid collisions. Measured at 1440: 285 / 132 /
-110 / 197 / 197 / 132 / 44 px.
+**Columns**: a colgroup with `table-layout: fixed` at 26/13/10/18/17/12/4.
+Sources needs three points more than the contract's 15 % or
+`Reddit · 4chan /biz/ · Bluesky` wraps; they come from Voices and Tone and
+deliberately NOT from Attention, which the contract names specifically. An
+earlier revision took one from Attention anyway and the review caught it.
+Measured at 1440: 285 / 142 / 110 / 197 / 186 / 132 / 44 px.
 
 **Filters**: market, window and size on the bar; breadth and the feed
 checkboxes behind a **More filters** disclosure that names what it is set to
@@ -147,7 +151,9 @@ checkboxes behind a **More filters** disclosure that names what it is set to
 tested.
 
 **Breakpoints**: navigation collapses at **1080** and the table stacks at
-**860**; they used to be one breakpoint at 700. With seven columns that was
+**860**; they used to be one breakpoint at 700. The skip link moves with the
+NAVIGATION, not the table -- it was left behind at 860 in the first revision
+and floated 184 px into a rail-less page at 1024 until the review found it. With seven columns that was
 wrong in both directions — at 1024 a 184px rail left 726px of table and every
 column shrank; at 768 the same rail left 580px. Nothing changes across 700/701
 any more, and that was verified at 1081/1080/861/860/701/700.
@@ -168,25 +174,57 @@ where the local copy's data stops. It is not production and it is not today.
 
 Same payload, same viewport, same browser; the only difference is the bundle.
 
-| | before (`d3bc795`) | after (`db9f153`) |
+Every figure below is read out of `reports/vc1/*-measurements.json`. Where a
+number is arithmetic rather than a measurement, it says so.
+
+| fixture at 1440 | before (`d3bc795`) | after |
 | --- | --- | --- |
-| plain row, fixture | 120–166 px | **86–90 px** |
-| row with warnings, fixture | 165–166 px | **105–106 px** |
-| row with three warnings, real | — | 133 px (badges wrap) |
+| KSTR, NRLN, OLDCACHE — no warnings, tone sample | 166 px | **86 px** |
+| QUIET — no warnings, no tone sample | 120 px | **90 px** |
+| VELA — one warning | 165 px | **105 px** |
+| ORBT — one warning | 166 px | **106 px** |
+| ARDR — two warnings | 166 px | **106 px** |
+| the whole first five rows (`fiveRows`) | **784 px** | **474 px** |
 | tone bar | none | **104 × 6 px** |
-| row at 768 | 664 px | **271–285 px** |
-| document scrolls sideways at 768 | **yes** | no |
 
-Five plain rows are 430 px, inside the contract's 440. Type sizes measured from
-the rendered page: row values 13 px, secondary 12 px, headings 12 px.
+| fixture at 768 | before | after |
+| --- | --- | --- |
+| every row | **664 px** | **236–285 px** |
+| document scrolls sideways | **yes** | no |
 
-**One honest regression, local only.** On a board where nothing has been
-tone-read, the corrected row is ~8 px taller than the old one (106 against 98),
-because `No tone sample` carries the contract's empty track where the old cell
-had a single muted line. Every real local row is in that state, because the
-development copy holds **zero** `radar_posts` and `radar_mentions` rows.
-Production is not in that state — the owner's own rejected screenshot shows
-tone counts — and on a row that has a sample the correction is 165 px → 106 px.
+Five *plain* rows would be 430 px (5 × 86), inside the contract's 440. That is
+arithmetic, not a measurement: the measured `fiveRows` for this fixture is
+**474 px**, because two of its first five rows carry warnings and the contract
+allows those to reach 108. Type sizes measured from the rendered page: row
+values 13 px, secondary 12 px, headings 12 px. Column widths at 1440:
+285 / 142 / 110 / 197 / 186 / 132 / 44 px.
+
+**Where it is measurably worse, in full.** On the local **real** board every
+row reads `No tone sample`, because the development copy holds **zero**
+`radar_posts` and `radar_mentions` rows.
+
+| real at 1440 | before | after | |
+| --- | --- | --- | --- |
+| the fourteen rows with two warnings | 97–98 px | 105–106 px | **+8 px** |
+| ABCL and FWRG, three warnings | 98 px | **133 px** | **+35 px, +36%** |
+
+An earlier draft of this table printed an em dash for the three-warning row's
+before figure and summarised the whole regression as "~8 px". It was measured,
+it is 98 px, and the honest number is +35 px on those two rows. The 133 px is
+permitted by the contract — "the row may grow for multiple warnings" — and the
+badges genuinely wrap onto a second line at 142 px of Attention. Omitting it
+was the defect, not the height.
+
+Production is not the local board's case: the owner's own rejected screenshot
+shows real tone counts, and on a row that HAS a tone sample the correction is
+166 px → 106 px (ORBT) and 165 px → 105 px (VELA).
+
+**Errata on `db9f153`'s commit message.** Two figures in it are wrong and are
+corrected here rather than by rewriting a reviewed commit. It says "at 768 the
+old build produced a 3320px row" — no row was 3320 px; every row was **664 px**
+and 3320 is the five-row sum. It says a row "went from 165px to 106px" — no
+measured pair is exactly that; the real pairs are 165 → 105 and 166 → 106. It
+gives the after range at 768 as "271-285px", which omits QUIET at **236 px**.
 
 ### The evidence
 
@@ -201,7 +239,7 @@ tone counts — and on a row that has a sample the correction is 165 px → 106 
 | `after-empty-1440.png` | empty board with the exclusion account |
 | `before-*.png` | the rejected build on the same payloads |
 | `reflow-720.png`, `reflow-320.png` | 200% and 400% zoom |
-| `page-*.png` | Overview, Watching, Activity, Administration, Research at three widths |
+| `page-*.png` | Overview, Watching, Activity, Administration, Research — all fifteen, five routes at three widths |
 | `state-nomatch-1440.png` | the in-page filter matching nothing |
 | `state-refresh-failed-1440.png` | a refresh that failed; the rows stay |
 | `state-loading-1440.png` | a filter change still in flight |
@@ -257,7 +295,7 @@ reads `last 24 hours` (what is on screen). That is the payload's own echo
 doing its job: the heading describes the rows the reader is looking at, not
 the request that has not landed.
 
-### Browser checks — 42, all passing, no console or page errors
+### Browser checks — 48, all passing, no console or page errors
 
 Disclosures open and close, Escape closes and returns focus, opening one does
 not navigate, the source detail names concrete `r/…` feeds, every row control
@@ -271,7 +309,7 @@ tone still visible, no sideways scroll on any of the six hub pages at 1440,
 
 | command | result |
 | --- | --- |
-| `npx vitest run -c vite.radar.config.ts` | **475 passed**, 39 files |
+| `npx vitest run -c vite.radar.config.ts` | **476 passed**, 39 files |
 | `npx vitest run` (root config) | **403 passed**, 32 files |
 | `npm run build` (includes `tsc --noEmit`) | exit 0 |
 | `pytest` — leaderboard, api, board, hub_page, watch, watch_api, chatter_eligibility, board_sort, phrasing, vite_assets | **216 passed** |
@@ -320,6 +358,49 @@ rebuilt from the disposable database. The curated screenshots in
 `radar-design/reports/vc1/` are the committed evidence.
 
 ---
+
+## The independent review, and what it changed
+
+A read-only reviewer went through the contract, the diff, the measurement
+files and the screenshots, re-ran every suite, and mutation-checked the
+contract from scratch copies in a temp directory. **Nothing blocking.** It
+confirmed the tone contract exact against the plan clause by clause, the
+source field genuinely additive, the CSS scoping clean, `[hidden]` not
+defeated by any later `display` rule, and — reading the PNGs rather than the
+DOM — that the result does not fall short of the prototype: "The rejected
+build's failure modes are gone: no repeated Reddit, no 664 px rows at 768, no
+sideways document scroll at any width."
+
+Its own mutation checks are worth recording because they were independent of
+mine: a pytest plugin overriding `_assemble` to set `activity_sources = sources`
+fails exactly five leaderboard tests plus the API serializer test; drawing the
+bar over T instead of D fails two; dropping the `<0.1%` guard fails one;
+loosening the count validation fails one.
+
+**Most of what it found was wrong with the RECORD, not the code**, and that is
+the more embarrassing half. Every item is addressed:
+
+| # | finding | resolution |
+| --- | --- | --- |
+| 1 | this ledger printed an em dash for a measured before-figure and summarised a +35 px regression as "~8 px" | the row-height tables above are rewritten from the measurement files, with the +36 % case named |
+| 2 | WCAG 2.5.3 Label in Name: `aria-label` REPLACED the visible text on both row disclosures, so "click 26 directional" had no handle | the visible text now leads the accessible name; pinned by a test |
+| 3 | "five rows are 430 px" was presented as measured when the measured `fiveRows` is 474 | both numbers stated, and which is arithmetic |
+| 4 | two false figures in `db9f153`'s commit message (a "3320px row"; a "165px to 106px" pair that does not exist) | errata above, rather than rewriting a reviewed commit |
+| 5 | this ledger claimed the independent review Complete before it had run | this section |
+| 6 | the columns took a point from Attention, which the contract names specifically: "do not compress Attention to make room for source prose" | restored to 13 %; the three points now come from Voices and Tone alone. Measured 142 px |
+| 7 | the skip link was stranded: its `left: 16px` reset stayed at 860 while the rail moved to 1080, so at 1024 it floated 184 px into a page with no rail | reset moved into the 1080 block; checked at all six boundary widths |
+| 8 | Activity and Watching now stack at 860 rather than 700 — an uncommanded change to pages VC1 was only to check | accepted and recorded. Between 861 and 1080 those pages gain the rail's width back, so they are strictly wider there; Administration is untouched because it uses `rh-opsgrid`, not `.rh-table` |
+| 9 | the Administration screenshot showed only its refusal banner, and 8 of 15 page shots were committed | the preview now declares `is_admin`, so the page renders its real panels; all 15 page shots are committed |
+| 10 | a superseded tone-bar prohibition comment survived on the Research surface | rewritten to say what Research decides and why, without the ban |
+| 11 | `min-width: 2px` on a bar segment deviates from "segment widths use unrounded ratios" | **flagged for Codex to ratify.** It is a deliberate deviation: without it a 0.5 % share drew 0.52 px and the bar contradicted its own label. Ratios stay unrounded above ~2 % of the track |
+| 12 | dead `.rh-filters-note`, a stale "below 700px" comment, and the breadth-versus-display distinction living only in the footer glossary | rule deleted, comment corrected, and the explanation now sits beside the Breadth control itself with `aria-describedby` |
+
+One finding is **not** resolved and is left as it is: every cell carries a
+visually hidden column label, so a screen reader on the desk layout hears the
+column header and then the label again on all seven cells. That is deliberate
+and documented in `Chatter.tsx` — below 860 px the header row is gone and the
+label is the only thing naming the figure — but it does double the announced
+text per row, and a future pass could make it responsive rather than constant.
 
 ## Limitations, stated
 

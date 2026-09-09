@@ -2,7 +2,7 @@
 
 This section supersedes historical status/next-action/deploy statements below.
 Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
-Branch codex/radar-release-candidate; **HEAD 43526e8**, built on the verified
+Branch codex/radar-release-candidate; **HEAD d94905e**, built on the verified
 base d3bc795. Production is ba1c381 per RELEASE-RECORD.md, migration head
 a7c31f0b52d4. Capture remains off and /radar/ remains the original route.
 **Nothing has been merged, pushed or deployed, and nothing here authorizes it.**
@@ -19,6 +19,17 @@ paths.
 | ea98c50 | Codex's brief, dispatch and reference images carried in, plus the VC1 ledger |
 | b1cf313 | the panel's company filter had taken the topbar search's class |
 | 43526e8 | the tone bar drew a rare share as nothing at all |
+| fc578b8 | the loading state, and one test flake reported rather than hidden |
+| d94905e | the independent review's twelve findings |
+
+**The independent review has been performed.** Twelve findings, none blocking.
+Most were wrong with the RECORD rather than the code, and the ledger's
+"The independent review, and what it changed" section resolves each one. Two
+need Codex's attention rather than mine: the tone bar's 2px minimum on a drawn
+segment is a deliberate deviation from "segment widths use unrounded ratios"
+and should be **ratified or overruled**; and the table now stacks Activity and
+Watching at 860 rather than 700, which is an uncommanded change to pages VC1
+was only asked to check.
 
 **Immediate next action: the owner looks at it.** The preview is runnable:
 

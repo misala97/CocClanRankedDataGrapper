@@ -197,6 +197,24 @@ def main():
             print(f'    {width}px: stacked={shape["stacked"]} '
                   f'rail={shape["railed"]} sideways={shape["sideways"]}')
             check(f'{width}px does not scroll sideways', not shape['sideways'])
+            # The skip link has to move with the RAIL, not with the table.
+            # Between 861 and 1080 it was left indented 184px into a page
+            # that no longer had a rail there.
+            skip = page.evaluate("""() => {
+              const el = document.querySelector('.rh-skip');
+              if (!el) return null;
+              el.focus();
+              const box = el.getBoundingClientRect();
+              const rail = document.querySelector('.rh-nav');
+              return { left: Math.round(box.left),
+                       railVisible: !!rail
+                         && getComputedStyle(rail).visibility !== 'hidden' };
+            }""")
+            check(f'{width}px: the skip link sits where the rail does',
+                  skip is not None
+                  and (skip['left'] > 100 if skip['railVisible']
+                       else skip['left'] <= 20),
+                  str(skip))
             context.close()
 
         # --- the other hub pages, because shared styling changed ------------

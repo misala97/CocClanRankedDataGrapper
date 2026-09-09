@@ -92,6 +92,22 @@ describe('the ranked list', () => {
       expect(within(detail).getByText(/not known neutral sentiment/i)).toBeVisible()
     })
 
+  it('keeps the visible text inside each disclosure’s accessible name', () => {
+    // WCAG 2.5.3 Label in Name. The accessible name used to REPLACE the
+    // visible text, so a voice-control reader saying "click 26 directional"
+    // had no handle on the control at all.
+    show([row({ tone: { bullish: 10, neutral: 45, bearish: 16 },
+                activity_sources: ['bluesky', 'reddit:a'] })])
+    for (const [visible, purpose] of [
+      ['26 directional / 71 total', /tone is counted/i],
+      ['Bluesky · Reddit', /which feeds/i],
+    ] as const) {
+      const control = screen.getByRole('button', { name: purpose })
+      expect(control).toHaveTextContent(visible)
+      expect(control.getAttribute('aria-label')).toContain(visible)
+    }
+  })
+
   it('closes a row detail on Escape and gives focus back', async () => {
     show([row()])
     const toggle = screen.getByRole('button', { name: /tone is counted/i })

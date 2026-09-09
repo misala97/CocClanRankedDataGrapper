@@ -356,7 +356,6 @@
   margin-bottom: 20px;
   flex-wrap: wrap;
 }
-.rh-filters-note { margin-left: auto; }
 
 .rh-sources {
   border: 1px solid var(--line);
@@ -688,6 +687,15 @@
   padding-top: 4px;
 }
 .rh-morepanel[hidden] { display: none; }
+/* A definition next to the control it defines. Full width of the disclosure,
+   so it reads as a note under the row rather than as a fourth field. */
+.rh-fieldnote {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 78ch;
+}
 
 /* --- overview ----------------------------------------------------------- */
 
@@ -994,8 +1002,11 @@
 .rh .zone h3 .q { font-weight: 400; font-size: 12px; color: var(--muted); }
 .rh .note { font-size: 11px; color: var(--muted); margin-top: 10px; }
 
-/* Counts in words. A green/red tone bar has been built and deleted twice on
-   this surface: green and red mean price direction here and nothing else. */
+/* Counts in words on THIS surface, which is a different decision from the
+   Chatter column's. The comment here used to forbid a tone bar outright; VC1
+   supersedes that ban, and the bar now lives in `.rh-tonebar` with its own
+   stated denominator. Research keeps words because it has the room for them
+   and because green and red already carry price direction on this page. */
 .rh .wording {
   display: flex;
   gap: 18px;
@@ -1160,6 +1171,12 @@
     border-radius: 7px;
   }
   .rh-menu[aria-expanded='true'] { background: var(--wash); }
+  /* With the rail hidden, `left: var(--nav-width)` would float the skip link
+     184px into a page that has no rail there -- so it moves with the
+     navigation, not with the table's breakpoint. It was left behind in the
+     860 block when the two were split, and between 861 and 1080 the first
+     thing a keyboard reader met was a link hanging in open space. */
+  .rh-skip { left: 16px; }
 }
 
 @media (max-width: 860px) {
@@ -1170,7 +1187,6 @@
   .rh-pad { padding: 19px; }
   .rh-button { min-height: 44px; }
   .rh-textbutton { min-height: 44px; }
-  .rh-skip { left: 16px; }
   .rh-session { display: none; }
   .rh-tablewrap { padding: 16px 18px 0; }
   .rh-tablefoot { padding: 13px 18px 16px; }
@@ -1273,7 +1289,6 @@
   .rh-chatter .rh-detailtoggle { min-height: 44px; padding: 11px 0; }
   .rh-field input, .rh-field select { min-width: 0; width: 100%; font-size: 16px; }
   .rh-field { width: 100%; }
-  .rh-filters-note { margin-left: 0; }
   .rh-search { max-width: none; }
   .rh-search input { font-size: 16px; }
   .rh-tablefilter input { font-size: 16px; min-width: 0; }

@@ -214,7 +214,11 @@ HARNESS = """<!DOCTYPE html>
 def harness(name, payload, label, assets):
     css = '\n'.join(f'<link rel="stylesheet" href="{href}">'
                     for href in assets['css'])
-    shell = json.dumps({'board': payload, 'is_admin': False})
+    # Admin true: `is_admin` is a rendering hint the API does not trust,
+    # and with it false the Administration page renders only its refusal
+    # banner -- a screenshot that proves nothing about the page this
+    # correction's shared styling might have broken.
+    shell = json.dumps({'board': payload, 'is_admin': True})
     # `</script>` inside embedded JSON would end the block early.
     shell = shell.replace('</', '<\\/')
     text = HARNESS.format(label=label, css=css, js=assets['js'], shell=shell)
