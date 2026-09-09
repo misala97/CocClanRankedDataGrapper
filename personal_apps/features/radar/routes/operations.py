@@ -12,8 +12,15 @@ signed-in non-admin rather than pretending not to exist: the endpoint is no
 secret, and "not allowed" is the honest answer to a real reader asking for
 someone else's page. That distinction matters on the client, where a 403 must
 not be mistaken for an expired session -- reloading fixes one and not the other.
+
+The admin gate here is about who gets an operations PAGE, not about keeping
+these figures secret: /api/board already serves `spend`, `sentiment_ops` and
+`market_data_ops` to any signed-in reader. Removing them from that payload is
+a compatibility decision the spec explicitly defers, so this endpoint is the
+new front door and not a new wall.
 """
 import datetime as dt
+import re
 
 from flask import jsonify, request
 
@@ -39,12 +46,12 @@ def activity_read():
     for.
     """
     raw = request.args.get('days', '7')
-    try:
-        days = int(raw)
-    except (TypeError, ValueError):
+    # Digits only, so `7 ` is rejected rather than quietly read as 7. A module
+    # whose argument is that it does not reinterpret the reader's number
+    # should not begin by reinterpreting it.
+    if not re.fullmatch(r'\d+', raw) or int(raw) not in activity.ALLOWED_DAYS:
         return jsonify({'error': 'unsupported days'}), 400
-    if days not in activity.ALLOWED_DAYS:
-        return jsonify({'error': 'unsupported days'}), 400
+    days = int(raw)
     return jsonify(activity.summary(_utcnow(), days))
 
 

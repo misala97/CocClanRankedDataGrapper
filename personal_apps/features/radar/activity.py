@@ -113,12 +113,19 @@ def iso_z(value: dt.datetime | None) -> str | None:
 
     Every datetime in this codebase is naive UTC by convention, and a naive
     timestamp on the wire is one the browser renders in local time without
-    being asked to.
+    being asked to. An aware value would come out as `...+00:00Z`, which is
+    not a timestamp at all -- hence the assertion rather than a coercion.
     """
-    return None if value is None else value.isoformat() + 'Z'
+    if value is None:
+        return None
+    assert value.tzinfo is None, 'naive UTC expected'
+    return value.isoformat() + 'Z'
 
 
 def _berlin_date(now: dt.datetime) -> dt.date:
+    # replace(), not astimezone(): the input is naive UTC by convention, and
+    # an aware value handed in here would be relabelled rather than converted.
+    assert now.tzinfo is None, 'naive UTC expected'
     return now.replace(tzinfo=dt.timezone.utc).astimezone(BERLIN).date()
 
 
@@ -129,6 +136,10 @@ def _day_bounds(day: dt.date) -> tuple[dt.datetime, dt.datetime]:
     Germany starts summer time is 23 hours long and the day it ends is 25, and
     a fixed-width day would put the boundary inside the wrong day and move
     runs between them.
+
+    Midnight itself is never ambiguous or absent in this zone -- Berlin
+    transitions at 02:00 and 03:00 -- so `fold` never has to be chosen. A zone
+    that changed at midnight would need more than this.
     """
     start = dt.datetime.combine(day, dt.time(0), tzinfo=BERLIN)
     end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(0),
@@ -137,26 +148,42 @@ def _day_bounds(day: dt.date) -> tuple[dt.datetime, dt.datetime]:
             end.astimezone(dt.timezone.utc).replace(tzinfo=None))
 
 
-def _counters(runs: list[RadarIngestRun]) -> dict[str, int | None]:
-    """Sum what the completed runs of one day reported.
+def _counted(runs) -> list[dict]:
+    """The summaries of one day that this code can honestly add up.
 
-    Only runs carrying a summary in the schema version this code understands
-    are added. A day with no such run reports null for every counter -- it is
-    a day nobody measured, and a zero would say the sources were quiet.
+    Only the schema version it understands. The version exists because a
+    counter's MEANING changed, and adding a v1 `posts_seen` to a v2 one
+    produces a number that means neither.
+    """
+    return [run.summary_json['summary'] for run in runs
+            if isinstance(run.summary_json, dict)
+            and run.summary_json.get('schema_version') == SCHEMA_VERSION
+            and isinstance(run.summary_json.get('summary'), dict)]
 
-    These keep the meanings ingest gave them: posts_seen counts fetch
-    deliveries and repeats a post two overlapping cycles returned, and
+
+def _counters(summaries: list[dict]) -> dict[str, int | None]:
+    """Sum one day's countable summaries, counter by counter.
+
+    A counter absent from any summary being added makes THAT counter null for
+    the day rather than a zero. Counters are allowed to be added without a
+    version bump, so an older run genuinely never measured a newer one -- and
+    reporting 0 for it would be the exact lie this module exists to avoid:
+    a cycle that measured nothing turned into a cycle that measured nothing
+    happening.
+
+    The counters keep the meanings ingest gave them. posts_seen counts fetch
+    deliveries and repeats a post two overlapping cycles returned;
     buckets_written counts work performed rather than distinct quarter-hours.
     Neither is a claim about how much of the internet was covered.
     """
-    envelopes = [run.summary_json for run in runs
-                 if run.status == 'ok' and isinstance(run.summary_json, dict)
-                 and run.summary_json.get('schema_version') == SCHEMA_VERSION]
-    if not envelopes:
+    if not summaries:
         return {name: None for name in COUNTERS}
-    return {name: sum((envelope.get('summary') or {}).get(name) or 0
-                      for envelope in envelopes)
-            for name in COUNTERS}
+    counters: dict[str, int | None] = {}
+    for name in COUNTERS:
+        values = [summary.get(name) for summary in summaries]
+        counters[name] = (None if any(value is None for value in values)
+                          else sum(values))
+    return counters
 
 
 def summary(now: dt.datetime, days: int) -> dict:
@@ -180,12 +207,26 @@ def summary(now: dt.datetime, days: int) -> dict:
     window_from = _day_bounds(dates[0])[0]
     window_to = _day_bounds(dates[-1])[1]
 
-    runs = RadarIngestRun.query.filter(
-        RadarIngestRun.started_at >= window_from,
-        RadarIngestRun.started_at < window_to).all()
-    by_day: dict[dt.date, list[RadarIngestRun]] = {day: [] for day in dates}
+    # Three columns rather than whole ORM rows. The counters are four integers
+    # per run, and a summary carries a per-source map for every configured
+    # source; a 30-day window is ~2,880 runs, so the envelopes dominate both
+    # the transfer and the parse. Extracting the four values in SQL would
+    # remove the transfer as well, and was not taken: it needs JSON path
+    # functions whose behaviour on the production MariaDB cannot be verified
+    # from this environment, and a read-only page is not the place to find out.
+    runs = db.session.query(
+        RadarIngestRun.started_at, RadarIngestRun.status,
+        RadarIngestRun.summary_json,
+    ).filter(RadarIngestRun.started_at >= window_from,
+             RadarIngestRun.started_at < window_to).all()
+    by_day: dict[dt.date, list] = {day: [] for day in dates}
     for run in runs:
-        by_day.setdefault(_berlin_date(run.started_at), []).append(run)
+        day = _berlin_date(run.started_at)
+        # The window is the union of exactly these Berlin days, so a run
+        # inside it belongs to one of them. Dropping it silently instead of
+        # saying so would be a missing run nobody could find.
+        assert day in by_day, f'run at {run.started_at} fell outside {dates}'
+        by_day[day].append(run)
 
     recording_started_at = db.session.query(
         db.func.min(RadarIngestRun.started_at)).scalar()
@@ -199,12 +240,20 @@ def summary(now: dt.datetime, days: int) -> dict:
     }
 
 
-def _day(day: dt.date, runs: list[RadarIngestRun]) -> dict:
+def _day(day: dt.date, runs: list) -> dict:
     completed = [run for run in runs if run.status == 'ok']
+    summaries = _counted(completed)
     return {
         'date': day.isoformat(),
-        **_counters(completed),
+        **_counters(summaries),
         'completed_runs': len(completed),
+        # How many of those the counters were actually drawn from. Lower than
+        # completed_runs when a run stored no summary or stored one in a
+        # schema version this code will not add to the current one. Without
+        # it, a day of runs whose totals were all skipped is indistinguishable
+        # from a day of runs that reported nothing, and a per-run rate
+        # computed from completed_runs would be silently wrong.
+        'counted_runs': len(summaries),
         # Still open: either running now, or left behind by a process that
         # died. Both are cycles whose totals were never reported, which is not
         # the same as cycles that reported nothing.
