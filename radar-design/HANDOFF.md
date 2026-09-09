@@ -57,6 +57,7 @@ Commits on this branch, oldest first:
 | 3c2eb77 | ledgers name 08c5b47 |
 | 78b17c6 | the jsdom navigation flake in Hub.test.tsx |
 | 8c50cda | hub ledger records R1 and the flake |
+| 8bbd57e | the R2 re-review: both scheduling models measured, the recommendation corrected |
 
 Working tree is clean apart from this file's own edit.
 

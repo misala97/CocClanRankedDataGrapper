@@ -16,7 +16,7 @@ Updated: 2026-09-09
 | F3 independent review | Complete | No blocking findings; 7 should-fix + 4 minor, resolved in a178ba6 |
 | R2 activity volume measured | Complete | ffbdd37, corrected in 08c5b47; ~2,880 was 5x low on firings. Measured 14,652 rows / 64.2 MiB / 1.6 s / 228 MiB peak heap at days=30 |
 | R2 independent review | Complete | 1 blocking + 9 should-fix + 8 minor + 2 nits; all 20 resolved in 08c5b47 |
-| R2 correction re-review | Complete | No blocking; every committed figure re-derived independently and reproduced exactly. 4 should-fix + 3 minor + 5 nits resolved below |
+| R2 correction re-review | Complete | No blocking; every committed figure re-derived independently and reproduced exactly. 4 should-fix + 3 minor + 5 nits resolved in 8bbd57e |
 | R2 activity cost decision | Open, Codex's | Five options below, two needing no migration. NOT implemented, per the owner's instruction |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -199,7 +199,7 @@ than a growing scan.
 
 ## R2 evidence -- what the activity endpoint actually reads (2026-09-09)
 
-Commits **ffbdd37** (first pass) and **08c5b47** (the review's findings). Files:
+Commits **ffbdd37** (first pass), **08c5b47** (the review's blocking finding) and **8bbd57e** (the re-review's). Files:
 `features/radar/activity.py` (the capacity note), `features/radar/observations.py` and
 `tests/test_radar_observations.py` (the `capture(now)` wording, and the test it claimed
 but that did not exist), `scratchpad/bench_activity.py` (new, repeatable).

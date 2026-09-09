@@ -22,7 +22,7 @@ Base       dev_personal @ 7a9ffe445076e57d02fea5627e8cd185ec9cb39f
 HEAD       verify with `git rev-parse --short HEAD`; the table below lists every commit
 ```
 
-Twenty-one commits. The planning package (radar-design/ and both dated plans) was untracked
+Twenty-seven commits: `git log --oneline 7a9ffe4..codex/radar-foundations`. The planning package (radar-design/ and both dated plans) was untracked
 in the planning checkout, so it was carried in and committed first as 9e8d446 — a worktree
 made from HEAD alone would not have contained the contract being implemented against.
 
@@ -45,7 +45,9 @@ apart from these documents being refreshed in place.
 | 07e7cef / b78b5d2 | this document, and the handoff naming its commits |
 | 243db22 | CODEX-DECISIONS.md, carried into the worktree it applies to |
 | e25f223 / 917cb15 | **R1** the final-feed defect, then its review's fixes |
-| ffbdd37 / 08c5b47 | **R2** the activity endpoint measured, and two docstrings corrected |
+| ffbdd37 / 08c5b47 / 8bbd57e | **R2** the endpoint measured, twice corrected under review |
+| 78b17c6 | a jsdom navigation flake that had been failing random tests since H1 |
+| 3c2eb77 / 8c50cda | ledgers and handoff |
 
 ## What was delivered against the plans
 
