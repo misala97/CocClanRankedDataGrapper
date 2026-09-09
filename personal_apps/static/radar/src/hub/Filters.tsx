@@ -115,31 +115,56 @@ export function Filters({ board, selection, onChange }: {
           // naming one sub keeps that feed lit rather than lighting none.
           const on = selection.sources.some(
             (chosen) => chosen.split(':')[0] === source)
+          // The last one standing cannot be turned off, and says so rather
+          // than absorbing the click. Two subreddits are still one feed, so
+          // "last" counts roots and not entries.
+          const onlyOne = on && rootsOf(selection.sources).length === 1
           return (
             <label key={source}>
               <input
                 type="checkbox"
                 checked={on}
+                disabled={onlyOne}
+                aria-describedby={onlyOne ? FLOOR_ID : undefined}
                 onChange={() => onChange({
-                  ...selection, sources: toggle(selection.sources, source,
-                                                board.all_sources) })}
+                  ...selection, sources: toggle(selection.sources, source) })}
               />
               {sourceLabel(source)}
             </label>
           )
         })}
+        <p id={FLOOR_ID} className="rh-sources-note">
+          At least one feed has to stay selected — a board with no feeds is
+          not one the server can build.
+        </p>
       </fieldset>
     </div>
   )
 }
 
-/** Turning a feed off drops it and every concrete venue under it. Turning the
- *  last one off is refused: an empty source list is not a board the API can
- *  build, and silently answering with all of them would be a selection the
- *  reader never made. */
-function toggle(current: string[], source: string, all: string[]): string[] {
+const FLOOR_ID = 'rh-feeds-floor'
+
+/** The feeds a selection covers, each named once. `reddit:options` and
+ *  `reddit:wallstreetbets` are two entries and one feed. */
+function rootsOf(sources: string[]): string[] {
+  return Array.from(new Set(sources.map((name) => name.split(':')[0] ?? name)))
+}
+
+/** Turning a feed off drops it and every concrete venue under it.
+ *
+ *  Turning the LAST one off returns the selection unchanged. It previously
+ *  returned every other feed instead, which is not a refusal: unchecking
+ *  Reddit silently produced a Bluesky-and-4chan board, fetched it, and left
+ *  the controls showing Reddit unchecked. An empty list is not a board the
+ *  server can build, and neither is a substitute for one nobody asked for.
+ *
+ *  The checkbox is disabled in that state too, so the reader is told rather
+ *  than having a click absorbed. This stays as the guarantee: a disabled
+ *  input is a UI affordance, not an invariant.
+ */
+export function toggle(current: string[], source: string): string[] {
   const on = current.some((chosen) => chosen.split(':')[0] === source)
   if (!on) return [...current, source]
   const rest = current.filter((chosen) => chosen.split(':')[0] !== source)
-  return rest.length ? rest : all.filter((name) => name !== source)
+  return rest.length ? rest : current
 }

@@ -361,6 +361,16 @@
   min-height: 40px;
 }
 .rh-sources input { accent-color: var(--green); }
+.rh-sources input:disabled + span,
+.rh-sources label:has(input:disabled) { color: var(--muted); cursor: not-allowed; }
+/* Always in the DOM so the description it carries can be referenced; shown
+   only when a checkbox actually points at it. */
+.rh-sources-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
 
 .rh-field {
   display: flex;

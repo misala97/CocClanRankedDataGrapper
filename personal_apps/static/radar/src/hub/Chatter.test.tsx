@@ -153,19 +153,6 @@ describe('filtering the list in place', () => {
       expect.objectContaining({ segments: [] }))
   })
 
-  it('refuses to leave the board with no feed at all', async () => {
-    // An empty source list is not a board the API can build, and answering
-    // with all of them would be a selection the reader never made.
-    const onSelect = vi.fn()
-    render(<Chatter board={payloadWithRows([row()])}
-                    selection={{ ...selection, sources: ['bluesky'] }}
-                    onOpen={vi.fn()} onSelect={onSelect} />)
-    await userEvent.click(screen.getByRole('checkbox', { name: /bluesky/i }))
-    const next = onSelect.mock.calls[0]![0] as { sources: string[] }
-    expect(next.sources.length).toBeGreaterThan(0)
-    expect(next.sources).not.toContain('bluesky')
-  })
-
   it('narrows by company without asking the server', async () => {
     show([row({ ticker: 'AAA', name: 'Alpha Inc' }),
           row({ ticker: 'BBB', name: 'Beta Corp' })])
