@@ -1581,6 +1581,10 @@ class RadarBoardObservation(db.Model):
     __tablename__ = 'radar_board_observations'
     __table_args__ = (
         db.UniqueConstraint('slot_start', name='uq_radar_board_observation_slot'),
+        # How the admin surface asks how old the archive is. The table gains
+        # 96 rows a day, so the scan would stay cheap for years -- but the
+        # question is asked on every admin load and the index is one column.
+        db.Index('ix_radar_board_observations_observed', 'observed_at'),
         {'mysql_charset': 'utf8mb4'},
     )
 

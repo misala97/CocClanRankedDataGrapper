@@ -8,10 +8,13 @@ mints its id before it touches the database, so ingest has something to report
 against even when nothing can be stored.
 
 The second is that the recorder owns its transaction. It opens a session bound
-to `db.engine` rather than joining `db.session`, because the caller is the
-ingest cycle and that session holds partially built buckets. Committing the
-caller's pending work as a side effect of writing a marker row would be a
-data-corruption bug wearing an instrumentation costume.
+to `db.engine` rather than joining `db.session`. On the success path the cycle
+has already committed by the time the run is closed, so the danger is on the
+FAILURE path: `finish_run` runs there while `db.session` may still hold a
+half-written roll-up that nobody rolled back. Committing that pending work as a
+side effect of writing a marker row would be a data-corruption bug wearing an
+instrumentation costume, and joining the caller's session would also make a
+recorder rollback discard whatever the caller had staged.
 
 What is recorded is deliberately narrow. A completed run carries the summary
 `ingest.run_cycle` returned, exactly, inside an envelope naming its schema
@@ -68,14 +71,27 @@ def finish_run(run_id: str, now: dt.datetime, *, summary: dict | None,
                 else {'schema_version': SCHEMA_VERSION, 'summary': summary})
     try:
         with _session() as session, session.begin():
-            updated = session.query(RadarIngestRun).filter(
-                RadarIngestRun.id == run_id,
-                RadarIngestRun.status == 'running',
-            ).update({'finished_at': now, 'status': status,
-                      'summary_json': envelope, 'error_code': error_code},
-                     synchronize_session=False)
-        if not updated:
-            logger.warning('radar run recorder found no open run %s to close',
-                           run_id)
+            # FOR UPDATE, so a second closer waits and then re-reads the status
+            # this one committed rather than deciding against a stale snapshot.
+            run = session.get(RadarIngestRun, run_id, with_for_update=True)
+            if run is None:
+                # Not the benign case. The start marker was never stored, so
+                # this cycle's outcome is not recorded anywhere.
+                logger.warning(
+                    'radar run recorder has no row for run %s -- its start '
+                    'marker never stored and this cycle is unrecorded', run_id)
+                return
+            if run.status in TERMINAL:
+                # The designed no-op: a retry or a late callback arriving after
+                # the run was closed. Distinct from the case above, because an
+                # operator reading the log has to be able to tell a healthy
+                # repeat from a lost run.
+                logger.info('radar run %s was already closed as %s; leaving '
+                            'its totals alone', run_id, run.status)
+                return
+            run.finished_at = now
+            run.status = status
+            run.summary_json = envelope
+            run.error_code = error_code
     except Exception:
         logger.exception('radar run recorder could not close run %s', run_id)

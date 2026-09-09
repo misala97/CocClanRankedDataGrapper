@@ -53,9 +53,13 @@ def upgrade():
         sa.UniqueConstraint('slot_start', name='uq_radar_board_observation_slot'),
         mysql_charset='utf8mb4',
     )
+    op.create_index('ix_radar_board_observations_observed',
+                    'radar_board_observations', ['observed_at'], unique=False)
 
 
 def downgrade():
+    # Dropping the tables takes their indexes with them. Naming the indexes
+    # here as well only adds a statement that fails if one of them is already
+    # absent, which is a worse downgrade, not a more thorough one.
     op.drop_table('radar_board_observations')
-    op.drop_index('ix_radar_ingest_runs_started', table_name='radar_ingest_runs')
     op.drop_table('radar_ingest_runs')

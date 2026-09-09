@@ -16,6 +16,7 @@ serve this session the snapshot it opened BEFORE the recorder's own
 transaction committed, and every assertion here is about what another
 transaction wrote.
 """
+import contextlib
 import datetime as dt
 import uuid
 
@@ -52,13 +53,33 @@ def _reload(run_id):
 
 
 def _summary(**over):
-    """The shape ingest.run_cycle actually returns."""
-    base = {'status': 'ok', 'posts_seen': 12, 'posts_new': 4, 'mentions': 7,
-            'buckets_written': 3, 'per_source': {'bluesky': 12},
-            'aggregate_status': {}, 'catchup_depth': {},
-            'intake_reasons': {'bluesky': {'no_ticker': 8}}}
+    """The shape ingest.run_cycle returns -- its keys, and its vocabulary.
+
+    `per_source` is a source-to-health map and not a count: the value is 'ok',
+    'missing' or 'truncated', which is exactly the kind of field a reader could
+    mistake for a number and sum. There is deliberately no 'status' key; that
+    one belongs to tick's error return, which is never stored.
+    """
+    base = {'posts_seen': 12, 'posts_new': 4, 'mentions': 7,
+            'buckets_written': 3, 'per_source': {'bluesky': 'ok'},
+            'aggregate_status': {'bluesky': 'ok'}, 'catchup_depth': {},
+            'intake_reasons': {'bluesky': {'no_ticker': 8, 'low_confidence': 3}}}
     base.update(over)
     return base
+
+
+def test_the_fixture_matches_what_ingest_actually_returns(app_context):
+    """Pins the fixture above to the real producer, by calling it.
+
+    Without this the module could agree with itself about an envelope
+    production never writes -- which it did, until a review caught a 'status'
+    key run_cycle has never returned and a `per_source` value typed as a count
+    when it is a health string. A cycle with no fetchers stores nothing.
+    """
+    from features.radar import ingest
+
+    real = ingest.run_cycle(dt.datetime(2019, 6, 1, 12), {})
+    assert set(real) == set(_summary())
 
 
 def _broken_session(*args, **kwargs):
@@ -248,6 +269,57 @@ def test_a_broken_recorder_still_lets_the_cycle_run(app_context, monkeypatch):
     assert result['posts_seen'] == 12
 
 
+def test_a_broken_recorder_does_not_roll_back_committed_intake(
+        app_context, monkeypatch):
+    """The stronger half of the same rule.
+
+    The previous test only proves tick returns. This one has the cycle commit
+    a real row through db.session -- the way run_cycle does -- and then breaks
+    the recorder on both sides of it, so a recorder that shared or rolled back
+    the caller's transaction would take that row with it.
+    """
+    import run_radar_ingest as runner
+
+    marker_id = str(uuid.uuid4())
+
+    def cycle_that_commits(now, fetchers):
+        db.session.add(RadarIngestRun(id=marker_id, started_at=now,
+                                      status='running'))
+        db.session.commit()
+        return _summary()
+
+    monkeypatch.setattr(runner.ingest, 'run_cycle', cycle_that_commits)
+    monkeypatch.setattr(activity, '_session', _broken_session)
+    try:
+        runner.tick(dt.datetime(2026, 9, 9, 12, tzinfo=dt.timezone.utc), {})
+
+        db.session.rollback()
+        with db.engine.connect() as outside:
+            survived = outside.execute(
+                sa.text('select count(*) from radar_ingest_runs where id = :i'),
+                {'i': marker_id}).scalar()
+        assert survived == 1, 'the recorder discarded work the cycle committed'
+    finally:
+        db.session.rollback()
+        RadarIngestRun.query.filter_by(id=marker_id).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+
+def test_a_lost_start_marker_is_not_reported_as_a_repeat(
+        app_context, monkeypatch, caplog):
+    """Two different situations reach the same code path and must not read the
+    same in the log: a run closed twice is by design, a run whose start marker
+    was never stored means a cycle went unrecorded."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger='features.radar.activity'):
+        activity.finish_run(str(uuid.uuid4()), dt.datetime(2026, 9, 9, 12),
+                            summary=_summary(), error_code=None)
+    assert any(record.levelno == logging.WARNING and 'unrecorded' in record.message
+               for record in caplog.records), caplog.records
+
+
 # --- schema ----------------------------------------------------------------
 
 def test_the_two_recording_tables_exist_with_their_constraints(app_context):
@@ -269,9 +341,116 @@ def test_the_two_recording_tables_exist_with_their_constraints(app_context):
     assert any(u['column_names'] == ['slot_start'] for u in unique), unique
 
 
+def test_the_status_vocabulary_is_enforced_by_the_database(app_context):
+    """A CHECK is only a comment until the server enforces it.
+
+    MySQL parsed and silently ignored CHECK before 8.0.16, MariaDB before
+    10.2, and production is MariaDB -- so the constraint's existence in the
+    migration proves nothing about the database the rows actually land in.
+    This writes a status the vocabulary forbids and insists on a rejection.
+    """
+    run_id = str(uuid.uuid4())
+    try:
+        db.session.add(RadarIngestRun(id=run_id,
+                                      started_at=dt.datetime(2019, 1, 1),
+                                      status='banana'))
+        with pytest.raises((sa.exc.IntegrityError, sa.exc.OperationalError,
+                            sa.exc.DataError)):
+            db.session.commit()
+    finally:
+        db.session.rollback()
+        RadarIngestRun.query.filter_by(id=run_id).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+
+def test_the_migration_adds_and_removes_only_its_own_two_tables(app_context):
+    """Upgrade, downgrade, upgrade -- against the disposable database.
+
+    The claim being pinned is not that the tables appear, but that nothing
+    else moves when they do. A column-shape fingerprint of every table is
+    taken before and after, and a pre-existing row is counted, so a migration
+    that quietly rebuilt or emptied a neighbour would be caught.
+    """
+    from flask_migrate import downgrade, upgrade
+
+    before = _schema_fingerprint()
+    watches_before = db.session.execute(
+        sa.text('select count(*) from radar_watch')).scalar()
+    assert 'radar_ingest_runs' in before
+
+    with _logging_preserved():
+        downgrade()
+    after_down = _schema_fingerprint()
+    try:
+        assert set(before) - set(after_down) == {
+            'radar_ingest_runs', 'radar_board_observations'}
+        assert set(after_down) - set(before) == set()
+        assert {t: f for t, f in before.items() if t in after_down} == after_down
+    finally:
+        with _logging_preserved():
+            upgrade()
+
+    assert _schema_fingerprint() == before
+    assert db.session.execute(
+        sa.text('select count(*) from radar_watch')).scalar() == watches_before
+
+
+@contextlib.contextmanager
+def _logging_preserved():
+    """Undo what running alembic in-process does to logging.
+
+    migrations/env.py calls `fileConfig(config.config_file_name)`, and
+    logging.config.fileConfig disables every logger it does not name. Running a
+    migration inside the suite therefore silences `features.radar.*` and the
+    daemon's loggers for every test that comes after -- which showed up as
+    three unrelated caplog assertions in tests/test_radar_daemon.py finding an
+    empty log, only when this module ran first.
+    """
+    import logging
+
+    manager = logging.root.manager
+    before = {name: logger.disabled
+              for name, logger in manager.loggerDict.items()
+              if isinstance(logger, logging.Logger)}
+    root_level = logging.root.level
+    try:
+        yield
+    finally:
+        for name, was_disabled in before.items():
+            logger = manager.loggerDict.get(name)
+            if isinstance(logger, logging.Logger):
+                logger.disabled = was_disabled
+        logging.root.setLevel(root_level)
+
+
+def _schema_fingerprint():
+    """Every table's column shape, as a dict the test can diff.
+
+    The rollback is load-bearing. MySQL 8's information_schema is served from
+    the transactional data dictionary, so a session that read it once keeps
+    showing the pre-migration catalogue under REPEATABLE READ -- the tables
+    looked like they survived their own downgrade.
+    """
+    db.session.rollback()
+    rows = db.session.execute(sa.text(
+        'select table_name, column_name, column_type, is_nullable'
+        ' from information_schema.columns where table_schema = database()'
+        ' order by table_name, ordinal_position')).fetchall()
+    shape: dict[str, list] = {}
+    for table, column, ctype, nullable in rows:
+        shape.setdefault(table, []).append((column, ctype, nullable))
+    return shape
+
+
 def test_a_slot_cannot_be_recorded_twice(app_context):
     """The archive's immutability is enforced in SQL, not only in Python."""
     slot = dt.datetime(2019, 1, 1, 0, 0)     # far outside any real capture
+    # Left behind if an earlier run of this test died between its commit and
+    # its cleanup; without this the first insert below would be the conflict.
+    RadarBoardObservation.query.filter_by(slot_start=slot).delete(
+        synchronize_session=False)
+    db.session.commit()
     try:
         db.session.add(RadarBoardObservation(
             id=str(uuid.uuid4()), slot_start=slot,
