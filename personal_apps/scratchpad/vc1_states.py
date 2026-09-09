@@ -45,15 +45,23 @@ def main():
         print(f'failed refresh: rows still shown = {has_rows}')
         context.close()
 
-        # A slow board, caught mid-flight.
+        # A filter change still in flight. This is the only loading state
+        # Chatter really has: the first board is embedded in the page, so
+        # first paint has nothing to wait for, and a screenshot of it is
+        # byte-identical to the failed-refresh one above -- which is the
+        # honest answer, not two states.
         context = browser.new_context(viewport={'width': 1440, 'height': 1000})
         page = context.new_page()
-        page.route('**/radar/api/board*',
-                   lambda route: (page.wait_for_timeout(1), route.abort()))
+        held = []
+        page.route('**/radar/api/board*', lambda route: held.append(route))
         page.goto(f'{BASE}/fixture.html#chatter', wait_until='domcontentloaded')
-        page.wait_for_selector('.rh-main')
-        page.screenshot(path=str(OUT / 'state-first-paint-1440.png'),
-                        full_page=True)
+        page.wait_for_selector('.rh-chatter')
+        page.select_option('.rh-filters label:nth-of-type(2) select', '1')
+        page.wait_for_timeout(700)
+        page.screenshot(path=str(OUT / 'state-loading-1440.png'), full_page=True)
+        rows = page.locator('.rh-chatter tbody tr').count()
+        print(f'filter change in flight: held requests = {len(held)}, '
+              f'rows still shown = {rows}')
         context.close()
 
         browser.close()

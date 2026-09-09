@@ -204,7 +204,7 @@ tone counts — and on a row that has a sample the correction is 165 px → 106 
 | `page-*.png` | Overview, Watching, Activity, Administration, Research at three widths |
 | `state-nomatch-1440.png` | the in-page filter matching nothing |
 | `state-refresh-failed-1440.png` | a refresh that failed; the rows stay |
-| `state-first-paint-1440.png` | the embedded payload, before any fetch |
+| `state-loading-1440.png` | a filter change still in flight |
 | `after-measurements.json`, `before-measurements.json` | the numbers above, as measured |
 
 ### Two defects the screenshots caught and the tests did not
@@ -245,7 +245,17 @@ filter runs over the seven already listed, and the count reads `0 of 7 shown`;
 it is not confused with an empty board.
 `state-refresh-failed-1440.png` — a refresh that fails keeps all seven rows on
 screen rather than blanking, which is what the stale-response protection is
-for. `state-first-paint-1440.png` — the embedded payload before any fetch.
+for.
+
+`state-loading-1440.png` — a filter change still in flight, with the board
+request held open. This is the only loading state Chatter really has: the
+first board is embedded in the page, so first paint has nothing to wait for —
+a capture of it came back byte-identical to the failed-refresh one, and one
+image was deleted rather than presented as two states. In flight, the Window
+control reads `Last hour` (what was asked for) while the context line still
+reads `last 24 hours` (what is on screen). That is the payload's own echo
+doing its job: the heading describes the rows the reader is looking at, not
+the request that has not landed.
 
 ### Browser checks — 42, all passing, no console or page errors
 
@@ -267,6 +277,15 @@ tone still visible, no sideways scroll on any of the six hub pages at 1440,
 | `pytest` — leaderboard, api, board, hub_page, watch, watch_api, chatter_eligibility, board_sort, phrasing, vite_assets | **216 passed** |
 
 Every backend run is on `personal_apps_radar_te1`, asserted by name first.
+
+**One intermittent failure seen once, and reported rather than hidden.** In a
+single radar run, one test in `static/radar/src/board/BoardPage.test.tsx` —
+the OLD board at `/radar/`, which this work does not touch — failed, and that
+file took 8.7s against its usual 6.7s. It did not reproduce: the file alone
+passes 22/22, and three consecutive full radar runs afterwards are 475/475.
+The run that failed was sharing the machine with an independent reviewer
+running its own suites. Recorded as a suspected timing flake under load, not
+as a clean result.
 
 ---
 
