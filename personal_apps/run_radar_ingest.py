@@ -33,7 +33,8 @@ from models import (RadarInstrument, RadarPollState, RadarQuote,
 from features.radar import (
     activity, fx, history, ingest, instruments, journal, judge_config,
     judge_trial, llm_sentiment,
-    market_calendar, quotes, retention, scheduling, scoring, universe)
+    market_calendar, observations, quotes, retention, scheduling, scoring,
+    universe)
 from features.radar.markets import classify_quality
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
@@ -1128,6 +1129,27 @@ def _scheduled_reddit(fetcher):
     return run
 
 
+def _scheduled_observations():
+    """Archive the fixed board pair for this quarter-hour.
+
+    Its own job, never folded into tick or the scoring pass: a capture is a
+    read of the board and must not be able to delay, block or fail ingest. It
+    calls no quote provider -- everything it stores comes from the board the
+    API would have served anyway.
+
+    A failure here logs and leaves a gap, which is the honest outcome. The
+    archive is allowed to be incomplete; it is not allowed to be wrong.
+    """
+    if not observations.capture_enabled():
+        return
+    with app.app_context():
+        try:
+            observations.capture(
+                _utcnow(), producer_revision=observations.producer_revision())
+        except Exception:
+            logger.exception('radar board observation capture failed')
+
+
 def _scheduled_prune():
     with app.app_context():
         now = _utcnow()
@@ -1394,6 +1416,15 @@ def main(argv=None):
                       + dt.timedelta(minutes=1))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
+    # Registered whether or not capture is switched on, so turning it on is an
+    # environment change and a restart rather than a code change. The job
+    # itself reads the flag and returns; see _scheduled_observations.
+    scheduler.add_job(_scheduled_observations, 'interval', minutes=15,
+                      id='radar_board_observations', max_instances=1,
+                      coalesce=True)
+    if not observations.capture_enabled():
+        logger.info('radar board observation capture is disabled '
+                    '(RADAR_OBSERVATION_CAPTURE_ENABLED)')
     # Ten minutes, and PASS_LIMIT caps each run, so a day of normal volume is
     # covered many times over and an abnormal one cannot run up a bill
     # unattended. Offset past the first cycle so there are mentions to read.
