@@ -20,6 +20,10 @@ Updated: 2026-09-09
 | R2 activity cost decision | Resolved by Codex | Option 3 chosen before first rollout; ALLOWED_DAYS stays (1,7,30). See CODEX-DECISIONS.md "Second return" |
 | R3 typed activity counters | Complete | c4e0455 + 278625c; migration a7c31f0b52d4. Both acceptance targets pass: 0.8 MiB peak heap (<=16), 390 ms median endpoint (<=500) |
 | R3 independent review | Complete | 1 blocking + 4 should-fix + 4 minor + 5 nits; all resolved in cfe39e7 |
+| R3 acceptance | Accepted by Codex | Strict integers confirmed correct; counter contract accepted as implemented. CODEX-DECISIONS.md "Third return" |
+| P1 MariaDB rehearsal | Complete | 01b056d; MariaDB 10.11.14, 34 checks, all passing. Both migrations, both interruption points, recovery, refusal, and the app's own path |
+| Release proposal | Open, for review | RELEASE-PROPOSAL.md. Drift measured, runbook written. NOT authorized and NOT executed |
+| Owner visual review | Open | Codex: nothing blocks it; the owner prefers to compare on the VPS |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
 Implementation workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-foundations
@@ -590,5 +594,89 @@ transaction and guard, `recording_started_at` sharing the window snapshot, keyse
 paging correctness under the column collation, the downgrade being an exact inverse,
 the refusal message not leaking values, and the midnight test's `db.session.rollback()`
 modelling a request boundary rather than masking a failure.
+
+## P1 rehearsal -- both migrations on MariaDB 10.11.14 (2026-09-09)
+
+Commit **01b056d**. `scratchpad/rehearse_mariadb.py`, **34 checks, all passing**.
+
+### The engine, and why it had to be this one
+
+The target runs **MariaDB 10.11.14** (recorded in the workspace's own VPS notes, not
+read from production). Local development is MySQL 8.0.46. They differ exactly where
+these two migrations are most delicate: MariaDB aliases `JSON` to `LONGTEXT`, and its
+DDL auto-commits so no surrounding transaction can undo a half-applied `ALTER`. A
+MySQL result is not evidence about the target, and Codex's P1 said so explicitly.
+
+**The machine had no such environment.** No MariaDB binary, no Docker, no Podman, and
+WSL is not installed -- only the MySQL 8.0 service. With the owner's agreement a
+portable MariaDB 10.11.14 was fetched from mariadb.org and run from the scratchpad on
+port 3399 with its own datadir. Nothing was installed system-wide, no service was
+registered, and the MySQL80 service was untouched.
+
+The harness builds its own Flask app rather than importing `app`, because `app.py`
+hard-codes port 3306 where MySQL already listens. **No application code was changed to
+run it.** It refuses any schema named `personal_apps` or `coc_stats`, and refuses
+outright to run against a server that is not MariaDB -- the point being to make a
+substituted MySQL result impossible rather than merely discouraged.
+
+### What passed
+
+| # | rehearsed | checks |
+| --- | --- | --- |
+| 1 | clean upgrade of both revisions over 12 pre-existing rows | 9 |
+| 2 | downgrade, then re-upgrade | 3 |
+| 3 | interrupted after only THREE of six columns exist | 6 |
+| 4 | interrupted partway through the backfill | 6 |
+| 5 | the pre-DDL domain refusal, on this engine | 5 |
+| 6 | the application's own writer and reader | 4 |
+
+The twelve seeded rows are one of every shape the projection must classify: valid,
+genuine zero, partial counters, an explicitly null counter, off-version,
+**float-version**, unversioned, malformed summary, not-a-mapping, no envelope,
+running, error. They are written as the PREVIOUS revision wrote them -- envelope only,
+no projection -- which is what the backfill has to read.
+
+Load-bearing results:
+
+- **The backfill reproduces `activity.project` exactly for all twelve shapes**, checked
+  row by row rather than in aggregate.
+- **Every envelope is byte-identical after the upgrade**, after the downgrade, and
+  after each recovery. Row count never moves.
+- A `schema_version` of `1.0` stays uncountable on MariaDB too -- the case Codex ruled
+  on, confirmed against the engine where `JSON` is text.
+- **A blind re-upgrade over partially created columns fails loudly** with a duplicate
+  column, which is exactly what the runbook warns an operator about. Dropping only the
+  columns actually present and upgrading again reproduces the clean projection.
+- The half-written backfill state is asserted to **differ** from the clean one, so
+  step 4 cannot pass by accident.
+- The refusal names the row id and the value shape and **does not leak the value**;
+  it adds no column and leaves the revision unstamped, so the retry after fixing the
+  data is clean.
+- `finish_run` stores a readable envelope and its projection on MariaDB, `summary()`
+  reads it back, and the read still never selects `summary_json`.
+
+### What this does NOT establish
+
+- It ran on a **fresh database stamped at b3d9e1f5a274**, not on a copy of the target's
+  data. It proves the two revisions behave correctly on this engine; it does not
+  prove the target's existing rows are free of surprises. The runbook's preflight
+  covers that, and the migration's own refusal is the backstop.
+- The other 60 revisions below `b3d9e1f5a274` were stamped, not replayed. They are
+  already applied on the target.
+- 10.11.14 was matched deliberately. A target on a different minor version is a gate,
+  not a formality.
+
+### How to repeat it
+
+```
+# portable server, throwaway datadir, spare port
+mariadb-install-db.exe --datadir=<scratch>\data --password=""
+mariadbd.exe --datadir=<scratch>\data --port=3399 --console
+cd personal_apps && PYTHONPATH=. py -3.12 scratchpad/rehearse_mariadb.py
+```
+
+The script drops and recreates its schema on every run, so it is repeatable without
+cleanup. Stop the server and delete the directory when finished; nothing else on the
+machine is affected.
 
 For each completed step append commit, exact tests/results, reviewer findings, fixes/rulings and next step. Never mark an unrun check passed. Keep environmentally blocked tasks open with exact failure evidence. Takeover verifies this ledger against Git and reports.

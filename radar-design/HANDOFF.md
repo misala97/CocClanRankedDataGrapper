@@ -10,9 +10,13 @@ the return (radar-design/CODEX-DECISIONS.md, carried in as 243db22) and set two 
 R2, both complete**; it then ruled on the second return (carried in as 3c93ad8) and set **R3, also
 complete**.
 
-**Immediate next action: owner visual review of the opt-in `/radar/hub/`.** Codex's ruling says
-explicitly that R3 does not block looking at the interface. Nothing in either plan is open. Do not
-re-dispatch anything the ledgers mark complete.
+**Immediate next action: Codex reviews RELEASE-PROPOSAL.md**, then the owner decides whether to
+run it. R3 is accepted and P1 is done; the release itself is not authorized.
+
+The owner has said they would rather compare the two interfaces on the VPS with live data than
+locally, so local visual approval is not a prerequisite to preparing the side-by-side deployment.
+The visual review stays open until it is actually performed. Do not re-dispatch anything the
+ledgers mark complete.
 
 The release sequence in CODEX-DECISIONS.md section C is **planning, not authorization**: merging,
 deploying, running a migration outside the disposable clone, enabling capture and promoting
@@ -65,6 +69,9 @@ Commits on this branch, oldest first:
 | c4e0455 | **R3** typed activity counters + migration a7c31f0b52d4 |
 | 278625c | R3 acceptance evidence, and two fixtures that had outlived their schema |
 | cfe39e7 | the R3 review's findings |
+| c6efdd5 | R3 in the ledgers, handoff and return |
+| 140267f | Codex accepts R3 and sets the release-preparation task |
+| 01b056d | **P1** both migrations rehearsed on MariaDB 10.11.14 |
 
 Working tree is clean. Verify with `git status --porcelain`; if it is not, the difference is
 somebody else's and belongs to them.
@@ -117,6 +124,10 @@ Recorded at cfe39e7, all against the disposable database:
 - R3 acceptance, 30-day upper-bound fixture: peak incremental Python heap **0.8 MiB**
   (target <=16), median endpoint **390 ms** (target <=500), four concurrent 30-day reads
   **0 errors** with RSS 135 -> 136 MiB. Repeatable via `scratchpad/bench_activity.py`.
+- P1: `scratchpad/rehearse_mariadb.py` against **MariaDB 10.11.14** -- the target's own
+  version, not MySQL -- **34 checks, all passing**. Needs a disposable MariaDB on port 3399;
+  this machine has none installed, so one is fetched as a portable server into the
+  scratchpad. See FOUNDATIONS-LEDGER.md "P1 rehearsal" for how to repeat it.
 - The radar frontend suite was FLAKY and is no longer: `Hub.test.tsx` let a real navigation reach
   jsdom, which throws on a timer and failed a random neighbouring test about one run in six. Fixed
   in 78b17c6; four consecutive clean `npm test` runs since.
@@ -179,14 +190,45 @@ background task was raised for it.
 
 Nothing here is deployed and no live migration has been run.
 
-Before any rollout: apply migration d82f9afb5898 (additive, two tables, downgrade verified as an
-exact inverse), then decide separately whether to set `RADAR_OBSERVATION_CAPTURE_ENABLED=true` and
-`RADAR_PRODUCER_REVISION=<git sha>` on the ingest host. The board-observation job is registered
-whether or not capture is enabled and returns immediately when it is off, so enabling it is an
-environment change plus a restart.
+**TWO migrations are required, not one.** An earlier version of this paragraph named only
+d82f9afb5898, which is now wrong: applying it alone leaves the new writer and reader without the
+projection columns they both depend on, which is a broken deployment rather than a partial one.
 
-`/radar/` is unchanged and is the rollback. `/radar/hub/` is the opt-in route for owner review.
-Promoting the hub to the root route is a separate decision that has not been made.
+| revision | what it does |
+| --- | --- |
+| d82f9afb5898 | creates `radar_ingest_runs` and `radar_board_observations` |
+| a7c31f0b52d4 | adds six projection columns to `radar_ingest_runs` and backfills them |
+
+Both are additive, both downgrades were verified as exact inverses, and `summary_json` is never
+modified by either. `flask db upgrade` applies both; do not stop between them. Check the target's
+heads again before the release rather than trusting the pair above to still be the top of the
+chain -- see RELEASE-PROPOSAL.md section 2.
+
+`radar_ingest` must be STOPPED for the migration. It is the writer of `radar_ingest_runs`, and
+MariaDB's DDL auto-commits, so there is no supported window in which the old writer stores
+envelopes while the new reader expects projections.
+
+Rehearsed on **MariaDB 10.11.14**, the target's own version, by
+`scratchpad/rehearse_mariadb.py`: 34 checks covering a clean upgrade over pre-existing rows, the
+downgrade round trip, interruption after partial column creation, interruption partway through
+the backfill, recovery from both, the pre-DDL domain refusal, and the application's writer and
+reader on that engine. **If `flask db upgrade` fails partway, do not re-run it blindly** -- the
+revision is unstamped and some columns may exist, and a blind retry fails on a duplicate column.
+The rehearsed recovery is in RELEASE-PROPOSAL.md section 4.5.
+
+Capture is a separate decision after a healthy deployment: `RADAR_OBSERVATION_CAPTURE_ENABLED=true`
+and `RADAR_PRODUCER_REVISION=<the deployed sha>` on the ingest host. The board-observation job is
+registered whether or not capture is enabled, returns immediately when it is off, and logs
+`radar board observation capture is disabled` at startup, so enabling it is an environment change
+plus a restart rather than a code change.
+
+`/radar/` is unchanged and is the rollback: a code-only rollback is complete, because the old code
+neither reads nor writes the new columns and they can be left in place. `/radar/hub/` is the
+opt-in route for owner review. Promoting the hub to the root route is a separate decision that has
+not been made, and once it is, "the old /radar/ is the rollback" stops being sufficient.
+
+The full plan -- drift, gates, service ordering, verification, rollback and open decisions -- is
+**RELEASE-PROPOSAL.md**. Nothing in it is authorized or executed.
 
 Local preview: `PYTHONPATH=. py -3.12 scratchpad-served app on port 5051` (a two-line `app.run`
 script), then `/radar/hub/`. Port 5001 belongs to the owner's own instance -- do not take it.
