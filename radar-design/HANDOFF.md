@@ -10,8 +10,14 @@ the return (radar-design/CODEX-DECISIONS.md, carried in as 243db22) and set two 
 R2, both complete**; it then ruled on the second return (carried in as 3c93ad8) and set **R3, also
 complete**.
 
-**Immediate next action: Codex reviews RELEASE-PROPOSAL.md**, then the owner decides whether to
-run it. R3 is accepted and P1 is done; the release itself is not authorized.
+**Immediate next action: Codex reviews the P2 release package**, then the owner grants the access
+three gates need. R3, P1 and the local half of P2 are done; the release itself is not authorized.
+
+**There is a second worktree now.** `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate`
+holds `codex/radar-release-candidate`, the isolated release candidate built off fetched `origin/main`
+with the 38 release commits transplanted and the 12 unpublished research commits excluded. **The P2
+work lives there, not on this branch**, because Codex required the foundations branch and worktree to
+stay unchanged. RELEASE-RUNBOOK.md and the P2 ledger evidence exist only on the candidate.
 
 The owner has said they would rather compare the two interfaces on the VPS with live data than
 locally, so local visual approval is not a prerequisite to preparing the side-by-side deployment.
@@ -72,6 +78,8 @@ Commits on this branch, oldest first:
 | c6efdd5 | R3 in the ledgers, handoff and return |
 | 140267f | Codex accepts R3 and sets the release-preparation task |
 | 01b056d | **P1** both migrations rehearsed on MariaDB 10.11.14 |
+| 5664a83 / 8f78850 | the release package, then its review's findings |
+| (candidate) | **P2** on `codex/radar-release-candidate`, a separate branch and worktree |
 
 Working tree is clean. Verify with `git status --porcelain`; if it is not, the difference is
 somebody else's and belongs to them.

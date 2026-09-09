@@ -3,8 +3,35 @@
 Counterpart to CLAUDE-START.md. Codex plans; Claude implements and verifies. Both plans are
 complete, every task was independently reviewed, and every finding was resolved.
 
-**Fourth pass, 2026-09-09.** You accepted R3 and set the release-preparation task.
-**P1 is done on the target engine and the release package is ready for your review.**
+**Fifth pass, 2026-09-09.** You accepted P1, chose `origin/main` as the integration
+target and set P2. **The isolated candidate exists, the single-path runbook is
+written, and three gates are blocked on access this workspace has never had.**
+
+```
+candidate branch   codex/radar-release-candidate
+worktree           C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate
+branched from      origin/main 2a83905
+transplanted       38 commits, chronological, 7a9ffe4..codex/radar-foundations
+excluded           the 12 unpublished research commits below the base
+```
+
+`codex/radar-foundations` and its worktree are untouched, as you required. **The P2
+work lives on the candidate only.**
+
+The transplant is clean and, more to your point, it was *tested* rather than
+inspected: no excluded commit is an ancestor, the candidate changes none of the 19
+paths those twelve touch, and every regression number on the candidate matches the
+source branch exactly — 403 + 438 frontend, 253 backend, 96 shared-helper, single
+head `a7c31f0b52d4`. Nothing in the release imports any of the twelve, so there is
+no minimal dependency to bring back for scope review.
+
+**Blocked, and each is a stop rather than a caveat:** the deploy script's actual
+contents, the read-only target preflight, and the backup restore. Exactly what each
+needs is in "P2: what is blocked" below.
+
+**Earlier this pass.** P1 rehearsed both migrations on MariaDB 10.11.14 (39 checks),
+and the independent review of my own runbook found a blocking defect in it, described
+below.
 
 P1 needed a disposable MariaDB and this machine had none — no MariaDB, no Docker or
 Podman, WSL not installed. Rather than record the gate as pending, the owner agreed to
@@ -362,6 +389,55 @@ measured against it, since this workspace has no production access.
    neither remote, so what this branch was built on is not what is published.
 2. **Who deploys, and with what** — `update_coc.sh` or by hand. They interact badly.
 3. **Backup verification** is listed as a gate. A restore has not been rehearsed.
+
+## P2: the candidate, and what it proved
+
+`git cherry-pick 7a9ffe4..codex/radar-foundations` onto fetched `origin/main`, no
+conflicts. Acceptance evidence:
+
+- 38 selected, 38 transplanted, counts match.
+- **No excluded commit is an ancestor** — checked individually for all twelve.
+- The twelve touch 19 paths; the candidate changes **none** of them, so nothing
+  entered through conflict resolution.
+- Candidate diff against `origin/main`: 114 files, +14,287 / −32.
+- Regressions on the candidate, against the disposable clone: `npm test` 403 + 438,
+  `npm run build` exit 0, `flask db heads` single `a7c31f0b52d4`, 253 backend across
+  the seven radar suites, 96 across the shared-helper and old-surface suites.
+- No release file imports any module the twelve introduced.
+
+## P2: first-migration recovery, which P1 did not cover
+
+P1 rehearsed a failure inside `a7c31f0b52d4`. A failure inside `d82f9afb5898` leaves
+a different state and the projection-column recipe does not apply to it — assuming
+one procedure fixes both is how an operator drops something they should not.
+
+`scratchpad/rehearse_first_migration.py`, MariaDB 10.11.14, **25 checks**:
+interruption after each of the four DDL statements that migration issues, inspection
+reporting what is actually present, a blind re-run failing loudly, recovery dropping
+**only** the partial tables and rebuilding a schema **byte-identical** to a clean
+run — and two refusals: it will not drop a table that holds records, and it will not
+run at all when the stamp shows the first migration completed.
+
+## P2: what is blocked
+
+| gate | what I need |
+| --- | --- |
+| **Deploy script** | The full text of `/root/update_coc.sh` and `systemctl cat personal_apps_web radar_ingest radar-encoder-trial.{service,timer}`. The two questions that decide the procedure: does it stop `personal_apps_web`, and does it exit **without restarting** when the migration or build fails? |
+| **Target preflight** | Read-only: `version()`, `@@version_comment`, `sql_mode`, isolation, charset/collation, `alembic_version`, and whether both radar tables are absent. Plus the deployed SHA and the capture flag as the unit actually sees it. |
+| **Backup restore** | A consistent `personal_apps` backup with its timestamp, producing version, checksum and scope, and a disposable MariaDB to restore into. Verification compares against **that snapshot**, never against the live database. |
+
+This workspace has never had production access and has not attempted it. Neither
+rehearsal harness may be pointed at a restored backup or anything live — both drop
+their schema, and both now refuse a non-loopback host.
+
+## P2: what I did not do, and why
+
+- **No merge and no push.** The candidate exists locally. Merging it to `main` is
+  step 4.1 of the runbook and is not authorized here.
+- **The proposal's second runbook is gone**, not amended. One migration owner.
+- **No production access of any kind**, including read-only. Every ruling has said
+  not to, and the preflight is written to be run when access is granted rather than
+  guessed at now.
 
 ## Evidence, if you want to check rather than take my word
 

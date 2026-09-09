@@ -22,7 +22,13 @@ Updated: 2026-09-09
 | R3 independent review | Complete | 1 blocking + 4 should-fix + 4 minor + 5 nits; all resolved in cfe39e7 |
 | R3 acceptance | Accepted by Codex | Strict integers confirmed correct; counter contract accepted as implemented. CODEX-DECISIONS.md "Third return" |
 | P1 MariaDB rehearsal | Complete | 01b056d + review fixes; MariaDB 10.11.14, 39 checks, all passing. Both migrations, both downgrades, both interruption points, recovery, refusal, and the app's own path |
-| Release proposal | Open, for Codex | RELEASE-PROPOSAL.md. Drift measured, runbook written, independently reviewed (1 blocking + 5 should-fix, all resolved). NOT authorized, NOT executed |
+| Release proposal | Approved by Codex | Architecture approved; the runbook was not release-ready. CODEX-DECISIONS.md "Fourth return" |
+| P2 candidate branch | Complete | `codex/radar-release-candidate` off origin/main 2a83905; 38 transplanted, 12 excluded, no leak, regressions match the source branch |
+| P2 first-migration recovery | Complete | rehearse_first_migration.py, MariaDB 10.11.14, 25 checks |
+| P2 single-path runbook | Complete | RELEASE-RUNBOOK.md; the proposal's second path removed |
+| P2 deploy-script inspection | **Blocked** | Needs /root/update_coc.sh and the unit files. No VPS access |
+| P2 target preflight | **Blocked** | Needs read-only queries on the target. No VPS access |
+| P2 backup restore | **Blocked** | Needs a consistent backup and a disposable MariaDB to restore into |
 | Owner visual review | Open | Codex: nothing blocks it; the owner prefers to compare on the VPS |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -702,5 +708,107 @@ cd personal_apps && PYTHONPATH=. py -3.12 scratchpad/rehearse_mariadb.py
 The script drops and recreates its schema on every run, so it is repeatable without
 cleanup. Stop the server and delete the directory when finished; nothing else on the
 machine is affected.
+
+## P2 candidate and access gates (2026-09-09)
+
+Prepared on branch **`codex/radar-release-candidate`**, in a separate worktree at
+`C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate`. The
+`codex/radar-foundations` branch and worktree are unchanged, as the ruling requires.
+
+### The transplant
+
+| | |
+| --- | --- |
+| branched from | fetched `origin/main` **2a83905** |
+| selected | **38** commits, `7a9ffe4..codex/radar-foundations`, chronological |
+| excluded | **12** unpublished research commits below the base |
+| method | `git cherry-pick 7a9ffe4..codex/radar-foundations`, no conflicts |
+
+The excluded twelve are the judge/encoder work: `473c4b9`, `d8e1bea`, `728f75f`,
+`002c5bf`, `c50b73a`, `f6d2887`, `7e57a1b`, `8ad7899`, `ace9ead`, `7efee13`,
+`40c9c7c`, `7a9ffe4`. None is a radar-hub change.
+
+**Acceptance evidence** (`scratchpad/candidate_check.py`, run from the foundations
+worktree):
+
+- 38 selected, 38 transplanted, counts match.
+- **No excluded commit is an ancestor of the candidate.** Checked individually with
+  `git merge-base --is-ancestor` for all twelve: none.
+- The twelve touch **19 paths**. The candidate changes **none** of them, so nothing
+  entered through conflict resolution.
+- Candidate diff against `origin/main`: **114 files, +14,287 / -32**.
+- The candidate tree differs from the source branch by exactly those 19 files, which
+  is the research work correctly left behind.
+
+### A clean transplant is not dependency safety, so it was tested
+
+Codex is explicit that a textual transplant proves nothing about whether the release
+still works without the twelve. Run **on the candidate**, against the disposable
+clone `personal_apps_radar_wt`:
+
+- `npm ci` clean, `npm run build` exit 0.
+- `npm test` -> **403 passed** (root config) and **438 passed** (radar config).
+- `flask db heads` -> **a7c31f0b52d4**, single head.
+- `pytest` over the seven radar suites -> **253 passed**.
+- Shared-helper and old-surface regressions --
+  `test_vite_assets.py`, `test_radar_hub_page.py`, `test_gym_routes_smoke.py`,
+  `test_radar_watch_api.py` -> **96 passed**.
+- Dependency grep: no release file imports `hard_negatives`, `compare_judges`,
+  `freeze_newshape`, `tone_training`, `train_encoder`, `checkpointing` or
+  `sample_new_shape`. **Nothing needs one of the twelve**, so no minimal dependency
+  has to be brought back for scope review.
+
+Every number matches the foundations branch exactly, which is what "no dependency on
+the excluded work" should look like.
+
+### First-migration failure recovery, rehearsed (item 6)
+
+P1 covered a failure inside `a7c31f0b52d4`. It did **not** cover a failure inside
+`d82f9afb5898`, and the projection-column recovery does not apply there --
+assuming one recipe fixes both is how an operator drops something they should not.
+
+`scratchpad/rehearse_first_migration.py`, MariaDB 10.11.14, **25 checks, all
+passing**:
+
+- Interruption after each of statements 1, 2 and 3 of the four that
+  `d82f9afb5898` issues (two `create_table`, two `create_index`, each
+  auto-committing).
+- Inspection correctly reports which tables exist, which are absent, and whether the
+  index was created -- the operator looks rather than assumes.
+- A blind re-run fails loudly with "already exists" in every case.
+- Recovery drops **only the partial tables that are present**, and the rebuilt schema
+  is **byte-identical** to a clean run on `SHOW CREATE TABLE` for both tables.
+- **It refuses to drop a table holding records**, naming the count so the operator
+  can judge, and the row survives the refusal.
+- **It refuses to run at all when the stamp shows the first migration completed**,
+  pointing at the projection-column procedure instead.
+
+No blanket `DROP TABLE`, and no stamp-to-skip anywhere.
+
+### The runbook
+
+`RELEASE-RUNBOOK.md` is now the single authoritative execution path. The proposal's
+own runbook section was removed, so there is no second procedure and no
+hand-migration branch: `/root/update_coc.sh` is the sole migration owner.
+
+It carries the read-only preflight, service **and timer** inhibition (including
+`radar-encoder-trial.timer`, whose pre-existence does not make it irrelevant),
+verification with wall-clock deadlines derived from the scheduler's own
+configuration, durable rollback that survives the deploy script's hard reset, and
+the two distinct failure-recovery procedures above.
+
+### Access gates, still pending
+
+Three steps cannot be completed from this workspace. Each is a stop, not a caveat.
+
+| gate | what is needed |
+| --- | --- |
+| **The deploy script** | The full text of `/root/update_coc.sh`, plus `systemctl cat personal_apps_web radar_ingest radar-encoder-trial.{service,timer}`. Specifically whether the script stops `personal_apps_web` and whether it exits without restarting on a failed migration or build. A report of what it does is not evidence. |
+| **Target preflight** | Read-only: `version()`, `@@version_comment`, `sql_mode`, isolation, charset/collation, `alembic_version`, and whether `radar_ingest_runs` and `radar_board_observations` are absent. Plus the deployed SHA and the capture flag as the unit actually sees it. |
+| **Backup restore** | A consistent `personal_apps` backup with timestamp, producing engine version, checksum and scope, and a disposable MariaDB to restore into. Verification must compare against **that snapshot**, not against the still-changing live database. |
+
+This workspace has never had production access and has not attempted it. The
+rehearsal harnesses must never be pointed at a restored backup or anything live:
+both drop their schema, and both refuse a non-loopback host for that reason.
 
 For each completed step append commit, exact tests/results, reviewer findings, fixes/rulings and next step. Never mark an unrun check passed. Keep environmentally blocked tasks open with exact failure evidence. Takeover verifies this ledger against Git and reports.
