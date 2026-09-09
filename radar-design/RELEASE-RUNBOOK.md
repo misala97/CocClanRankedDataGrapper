@@ -129,20 +129,25 @@ Also record, before anything changes:
 
 ---
 
-## 3. GATE — PENDING ACCESS: backup restore is a hard gate
+## 3. Backup restore — the hard gate, closed
 
-Not "restore or accept without". The release does not proceed until a backup has
-been restored and verified.
+Not "restore or accept without". **Done on 2026-09-09**: `db_2026-09-09_0315`,
+SHA-256 verified against the source, restored into the disposable MariaDB and
+checked from within that one snapshot. Full evidence in FOUNDATIONS-LEDGER.md,
+"P2 backup restore".
 
-**Required, and none of it is available from this workspace:**
+The achievable **data-loss window is just under 24 hours** — backups run once
+daily at 03:15. Acceptable for this release, which adds two empty tables and
+changes nothing existing; weigh it again before any migration that alters existing
+data.
+
+Re-verify before the window if the release is far from this date. What that needs:
 
 - [ ] A **consistent** backup of `personal_apps`, with its **timestamp, the engine
       version that produced it, a checksum, and its scope** (which schemas, whether
       routines/triggers are included) recorded.
-- [ ] An isolated disposable MariaDB to restore into. **This part is not
-      missing**: the portable 10.11.14 used for P1 and P2 is exactly that, and
-      can be started again from the instructions in FOUNDATIONS-LEDGER.md.
-      **The backup file itself is the only thing genuinely unavailable.**
+- [ ] An isolated disposable MariaDB to restore into — the portable 10.11.14 used
+      for P1 and P2, started from the instructions in FOUNDATIONS-LEDGER.md.
 - [ ] The restore commands as actually used, and the storage location and
       permissions of the backup.
 
@@ -168,7 +173,9 @@ select * from radar_watch order by id limit 5;
 **Never run either rehearsal harness against the restored copy.** They drop their
 schema. Restoring is a read-and-verify exercise.
 
-No live restore and no production write is authorized.
+No live restore and no production write was performed or is authorized. Restoring
+recreates **both** databases: a partial restore of `personal_apps` alone means
+extracting it from the file, not running the file as-is.
 
 ---
 

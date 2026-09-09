@@ -152,9 +152,11 @@ preflight, the deploy script as the sole migration owner, service and timer
 inhibition, verification with wall-clock deadlines, durable rollback, and two
 distinct failure-recovery procedures for the two migrations.
 
-Three of its steps are marked **GATE — PENDING ACCESS** and the release cannot pass
-them from this workspace. What each needs is listed in its section 6 and summarised
-in FOUNDATIONS-LEDGER.md "P2 access gates".
+**All three of its access gates are now closed.** The deploy script and the target
+were read over SSH, read-only, with the owner's authorization (TARGET-FACTS.md), and
+the nightly backup was restored into a disposable MariaDB and verified
+(FOUNDATIONS-LEDGER.md, "P2 backup restore"). Four things the runbook had wrong were
+found by doing so, which is what the gates were for.
 
 
 ## 5. What is deliberately not in this release

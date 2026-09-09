@@ -34,9 +34,10 @@ Updated: 2026-09-09
 | P2 candidate branch | Complete | `codex/radar-release-candidate` off origin/main 2a83905; 38 transplanted, 12 excluded, no leak, regressions match the source branch |
 | P2 first-migration recovery | Complete | rehearse_first_migration.py, MariaDB 10.11.14, 25 checks |
 | P2 single-path runbook | Complete | RELEASE-RUNBOOK.md; the proposal's second path removed |
-| P2 deploy-script inspection | **Blocked** | Needs /root/update_coc.sh and the unit files. No VPS access |
-| P2 target preflight | **Blocked** | Needs read-only queries on the target. No VPS access |
-| P2 backup restore | **Blocked** | Needs a consistent backup and a disposable MariaDB to restore into |
+| P2 deploy-script inspection | Complete | TARGET-FACTS.md; 4 of 5 requirements met. It does NOT stop personal_apps_web |
+| P2 target preflight | Complete | TARGET-FACTS.md; every expectation confirmed. Found a MySQL-ism in the runbook's own SQL |
+| P2 backup restore | Complete | db_2026-09-09_0315, sha256 verified, restored to the disposable MariaDB, 43 tables + representative rows |
+| P2 review | Complete | 7 blocking + 8 should-fix + 7 minor; all resolved in 066aada |
 | Owner visual review | Open | Codex: nothing blocks it; the owner prefers to compare on the VPS |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -775,12 +776,16 @@ the excluded work" should look like.
 
 **The whole backend suite, disclosed rather than only the release subset.** The
 evidence above is seven radar suites plus four shared ones, which is what the
-release touches. `pytest tests/ -q` over everything is **FULL_SUITE_RESULT**. Every
-failure reproduces at the pre-release baseline `7a9ffe4`, so none is caused by the
-transplant -- but the release evidence set is a subset, and saying so matters more
-than the subset looking clean. Three of them are the long-recorded
-`test_radar_ingest.py` cleanup defect (see the workspace/baseline gate above); the
-rest predate this work in suites it does not touch, two of which
+release touches. `pytest tests/ -q` over everything is **13 failed, 2,679 passed**
+in 16m31s. **All thirteen reproduce at the pre-release baseline `7a9ffe4`**, checked in the probe
+worktree: the eight suites involved fail *more* there when run in isolation (23), which
+also shows what kind of failure these are. The suite is not re-runnable against a
+persistent database -- the same `_wipe()` class of defect recorded at the
+workspace/baseline gate -- so the count varies with run order and prior state rather
+than with the code.
+
+None is caused by the transplant. But the release evidence set is a subset of the
+suite, and saying so matters more than the subset looking clean: two of the thirteen
 (`test_radar_watch`) sit on the watch cascade, a surface the hub shares.
 
 ### First-migration failure recovery, rehearsed (item 6)
@@ -832,5 +837,100 @@ Three steps cannot be completed from this workspace. Each is a stop, not a cavea
 This workspace has never had production access and has not attempted it. The
 rehearsal harnesses must never be pointed at a restored backup or anything live:
 both drop their schema, and both refuse a non-loopback host for that reason.
+
+## P2 backup restore — the hard gate, closed (2026-09-09)
+
+Codex made this a hard gate rather than "restore or accept without". It is now
+done, with the backup restored and verified, and no live restore or production
+write of any kind.
+
+### The backup mechanism, read from the target
+
+```
+script     /root/backup_db.sh, cron 03:15 daily (a CRON job, not a systemd timer)
+command    mysqldump --single-transaction --quick --routines --events
+                    --databases coc_stats personal_apps | gzip
+integrity  gzip -t immediately after writing, BEFORE the off-box copy
+retention  14 days local in /root/db_backups/, 90 days on Drive via rclone
+```
+
+`--single-transaction` gives a consistent InnoDB snapshot, so the file is a point
+in time rather than a smear across the dump's duration. `--routines --events`
+puts stored programs in scope. Both application databases share one file.
+
+### The snapshot used
+
+```
+file       db_2026-09-09_0315.sql.gz
+taken      2026-09-09 03:15 CEST, logged OK at 03:16:52
+size       189,934,571 bytes compressed, 1.94 GiB expanded
+sha256     5585cefe378bb340eb2041ac0d097ac9e542cbcb9b3f7ee549187c7b057fb468
+```
+
+The checksum was taken on the VPS and **re-verified after transfer**; the two
+match, so what was restored is what the box holds.
+
+### Restored into the disposable MariaDB, never anything live
+
+The portable MariaDB 10.11.14 on port 3399 — the same isolated server used for
+P1 and P2, and deliberately not the MySQL 8 instance holding the local dev data.
+Restore command:
+
+```
+mariadb -h 127.0.0.1 -P 3399 -u root < dump.sql
+```
+
+Exit 0, ~14 minutes. **Neither rehearsal harness was pointed at it**; both drop
+their schema, and both refuse a non-loopback host.
+
+### Verification, all from within that one snapshot
+
+| check | result |
+| --- | --- |
+| `personal_apps` base tables | **43** |
+| `coc_stats` base tables | 23 |
+| `alembic_version` | **b3d9e1f5a274** |
+| `radar_watch` | 4 rows |
+| `app_user` | 3 rows |
+| `radar_buckets` | 1,133,729 |
+| `radar_mentions` | 283,970 |
+| `radar_posts` | 213,946 |
+| `radar_ingest_runs` | absent, consistent with the stamp |
+| gym tables | present and populated (`gym_session_sets` 1,131, `gym_workout_sessions` 53, …) |
+
+Representative rows, not only counts: the four watch rows read back as
+`RZLV`, `HTZ`, `UUUU`, `REI`, and **all four join to a real `app_user`** — the
+account relationship survives the round trip, which a count alone would not show.
+The bucket window runs `2026-08-04 00:00` to `2026-09-09 01:00`, consistent with
+a 03:15 dump and with the retention policy.
+
+### The count that differs, and why it is not a failure
+
+`radar_buckets` holds **1,133,729** in the snapshot against **1,225,015** read
+live at 20:35. That is not a discrepancy to chase: the daemon has been writing
+all day, and Codex's ruling is explicit that comparing an old backup's counts to
+a still-changing live database is **not a valid restore check**. The valid check
+is the snapshot's internal consistency, above.
+
+The difference is useful for one thing only — it makes the data-loss window
+concrete: ~91,000 buckets in the ~17 hours between the dump and the reading.
+
+### Achievable data-loss window
+
+Backups run once daily at 03:15. **Worst case is therefore just under 24 hours**
+of Radar ingest, plus any gym or watch activity in the same period. For this
+release that is an acceptable exposure — the release adds two empty tables and
+changes nothing existing — but it is the number to weigh before any migration
+that alters existing data, and it is not shortened by anything in this package.
+
+Recovery, as documented by the script itself:
+
+```
+gunzip < db_FILE.sql.gz | mysql          # recreates BOTH databases
+rclone copy gdrive:vps-backups/db_FILE.sql.gz /root/db_backups/   # off-box copy
+```
+
+Note that restoring recreates `coc_stats` as well as `personal_apps`. A partial
+restore of one database means extracting it from the file, not running it as-is.
 
 For each completed step append commit, exact tests/results, reviewer findings, fixes/rulings and next step. Never mark an unrun check passed. Keep environmentally blocked tasks open with exact failure evidence. Takeover verifies this ledger against Git and reports.

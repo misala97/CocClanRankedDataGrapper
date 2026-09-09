@@ -25,9 +25,13 @@ source branch exactly — 403 + 438 frontend, 253 backend, 96 shared-helper, sin
 head `a7c31f0b52d4`. Nothing in the release imports any of the twelve, so there is
 no minimal dependency to bring back for scope review.
 
-**Blocked, and each is a stop rather than a caveat:** the deploy script's actual
-contents, the read-only target preflight, and the backup restore. Exactly what each
-needs is in "P2: what is blocked" below.
+**All three access gates are now CLOSED.** The owner authorized read-only VPS
+access, so the deploy script and the target were read and the nightly backup was
+restored into a disposable MariaDB and verified. **Four things this runbook had
+wrong were found by doing that**, which is what the gates were for -- including a
+requirement the deploy script does not meet and a MySQL-ism in my own preflight SQL
+that MariaDB rejects outright. See "P2: the gates, and what reading the target
+found".
 
 **Earlier this pass.** P1 rehearsed both migrations on MariaDB 10.11.14 (39 checks),
 and the independent review of my own runbook found a blocking defect in it, described
@@ -421,26 +425,71 @@ reporting what is actually present, a blind re-run failing loudly, recovery drop
 run — and two refusals: it will not drop a table that holds records, and it will not
 run at all when the stamp shows the first migration completed.
 
-## P2: what is blocked
+## P2: the gates, and what reading the target found
 
-| gate | what I need |
-| --- | --- |
-| **Deploy script** | The full text of `/root/update_coc.sh` and `systemctl cat personal_apps_web radar_ingest radar-encoder-trial.{service,timer}`. The two questions that decide the procedure: does it stop `personal_apps_web`, and does it exit **without restarting** when the migration or build fails? |
-| **Target preflight** | Read-only: `version()`, `@@version_comment`, `sql_mode`, isolation, charset/collation, `alembic_version`, and whether both radar tables are absent. Plus the deployed SHA and the capture flag as the unit actually sees it. |
-| **Backup restore** | A consistent `personal_apps` backup with its timestamp, producing version, checksum and scope, and a disposable MariaDB to restore into. Verification compares against **that snapshot**, never against the live database. |
+The owner authorized read-only VPS access. Nothing was written: no service change,
+no migration, no deployment, no file modified on the host. The only transfer off the
+box was a copy of the already-existing nightly backup. Everything read is in
+**TARGET-FACTS.md**.
 
-This workspace has never had production access and has not attempted it. Neither
-rehearsal harness may be pointed at a restored backup or anything live — both drop
-their schema, and both now refuse a non-loopback host.
+**Every preflight expectation was confirmed.** Stamp `b3d9e1f5a274`, both new tables
+absent, `sql_mode` and `REPEATABLE-READ` identical to the rehearsal, engine
+`10.11.14-MariaDB-0ubuntu0.24.04.1`, capture off in the ingest process's own
+environment.
+
+**And four things this runbook had wrong, three of them precisely because it was
+written without the access:**
+
+1. **`update_coc.sh` does not stop `personal_apps_web`.** It only restarts it at the
+   end, so the web process serves throughout the migration. For *this* release that
+   is not dangerous, for a specific reason: the deployed code declares no model for
+   either new table, so it cannot touch what this migration creates, and
+   `radar_ingest` — the real writer — *is* stopped. **I am not proposing a wrapper
+   change**; it would be a production edit made during a release for no benefit. It
+   would be dangerous for any later migration that alters a table the web app reads,
+   and that is now recorded rather than left to be rediscovered.
+2. **My preflight SQL was wrong.** It asked for `@@transaction_isolation`, which does
+   not exist on MariaDB 10.11 — `ERROR 1193 Unknown system variable`. MariaDB spells
+   it `@@tx_isolation`. A MySQL-ism carried in from the development environment,
+   which is the exact class of difference this gate existed to find.
+3. **`radar-encoder-trial.timer` is a confirmed database writer firing every
+   minute**, and `update_coc.sh` does not stop it. Its own unit says it "persists
+   `recovering`" and "needs the database and nothing else". Masking it for the window
+   is now required rather than conditional on an inspection.
+4. **The nightly backup is a cron job at 03:15, not a systemd timer.** The
+   `list-timers` inventory I specified would never have surfaced it. A window
+   overlapping 03:15 would run a `mysqldump` of the database being migrated.
+
+Also: the deployed SHA is `b7d8adf`, **one commit behind `origin/main`**, so the
+drift check must compare against the deployed SHA and not only the remote.
+
+## P2: the backup restore
+
+`db_2026-09-09_0315.sql.gz`, 190 MB, SHA-256 verified on the box and again after
+transfer. Restored into the disposable MariaDB — never anything live, and neither
+rehearsal harness was pointed at it.
+
+From within that one snapshot: **43 `personal_apps` base tables**, stamp
+`b3d9e1f5a274`, `radar_watch` 4 rows, `app_user` 3, `radar_buckets` 1,133,729,
+`radar_mentions` 283,970, gym tables populated. Representative rows rather than only
+counts: the four watch rows read back as `RZLV`, `HTZ`, `UUUU`, `REI` and **all four
+join to a real `app_user`**, so the account relationship survives the round trip.
+
+`radar_buckets` differs from the live count (1,225,015 read at 20:35). **That is not
+a discrepancy** — your ruling is explicit that comparing an old backup to a
+still-changing live database is not a valid check. It is useful for one thing: it
+makes the **data-loss window** concrete at ~91,000 buckets over ~17 hours. Backups
+are daily, so worst case is just under 24 hours.
 
 ## P2: what I did not do, and why
 
 - **No merge and no push.** The candidate exists locally. Merging it to `main` is
   step 4.1 of the runbook and is not authorized here.
 - **The proposal's second runbook is gone**, not amended. One migration owner.
-- **No production access of any kind**, including read-only. Every ruling has said
-  not to, and the preflight is written to be run when access is granted rather than
-  guessed at now.
+- **No write to production of any kind.** Read-only access was authorized by the
+  owner and used for exactly that: reading the script, the units, the settings and
+  the backup. No service state changed, no migration ran, nothing on the host was
+  modified.
 
 ## Evidence, if you want to check rather than take my word
 
