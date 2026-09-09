@@ -47,7 +47,7 @@ describe('recorded activity', () => {
     // different facts, and this table is the one place that must not blur them.
     expect(within(row).queryByText('0')).not.toBeInTheDocument()
     expect(within(row).getAllByText('—').length).toBeGreaterThan(0)
-    expect(within(row).getByText(/not recorded/i)).toBeVisible()
+    expect(within(row).getByText(/nothing recorded/i)).toBeVisible()
   })
 
   it('renders a recorded zero as zero', async () => {
@@ -57,15 +57,50 @@ describe('recorded activity', () => {
     })]))
     const row = await screen.findByTestId('rh-day-2026-09-08')
     expect(within(row).getAllByText('0').length).toBeGreaterThan(0)
-    expect(within(row).queryByText(/not recorded/i)).not.toBeInTheDocument()
+    expect(within(row).queryByText(/nothing recorded/i)).not.toBeInTheDocument()
   })
 
-  it('labels partial coverage as partial and never as complete', async () => {
+  it('says partially recorded, never partial coverage', async () => {
+    // `completeness` is about runs. The endpoint says in terms that it is not
+    // a measure of how much was covered, and this page's own header repeats
+    // it two lines above the table.
     show(activity([day()]))
-    expect(await screen.findByText(/partial/i)).toBeVisible()
+    expect(await screen.findByText(/partially recorded/i)).toBeVisible()
+    expect(screen.queryByText(/partial coverage/i)).not.toBeInTheDocument()
     const text = document.body.textContent ?? ''
     expect(text).not.toMatch(/\b100%\b/)
     expect(text).not.toMatch(/\bcomplete\b/i)
+  })
+
+  it('does not call a day unrecorded when its runs crashed', async () => {
+    // "Not recorded" beside "3 failed" contradicts the cell next to it.
+    show(activity([day({
+      posts_seen: null, posts_new: null, mentions: null, buckets_written: null,
+      completed_runs: 0, counted_runs: 0, incomplete_runs: 1, error_runs: 3,
+      completeness: 'unknown',
+    })]))
+    const row = await screen.findByTestId('rh-day-2026-09-08')
+    expect(within(row).getByText(/no run finished/i)).toBeVisible()
+    expect(within(row).queryByText(/nothing recorded/i)).not.toBeInTheDocument()
+    expect(within(row).getByText(/3 failed/i)).toBeVisible()
+  })
+
+  it('names each column beside its figure when the row is stacked', async () => {
+    // Below 700px the header row is gone and this label is the only thing
+    // saying which figure is which. Four cells labelled "Count" made a phone
+    // read as seven days of identical dashes.
+    show(activity([day()]))
+    const row = await screen.findByTestId('rh-day-2026-09-08')
+    for (const label of ['Fetched', 'New posts', 'Mentions', 'Bucket writes']) {
+      expect(within(row).getByText(label)).toBeInTheDocument()
+    }
+  })
+
+  it('dates the recording start in Berlin, like every other date here', async () => {
+    // 22:30 UTC is the next day in Berlin. Slicing the UTC string filed the
+    // first run under a day the table shows as empty.
+    show(activity([day()], { recording_started_at: '2026-09-01T22:30:00Z' }))
+    expect(await screen.findByText(/recording began Wed 2 Sept/i)).toBeVisible()
   })
 
   it('counts crashed and failed runs separately from completed ones', async () => {

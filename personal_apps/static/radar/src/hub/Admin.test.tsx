@@ -77,12 +77,40 @@ describe('the operations page', () => {
     expect(await screen.findByText(/11:45 Berlin/)).toBeVisible()
   })
 
-  it('offers no control that could start, stop or retry anything', async () => {
+  it('offers no control at all on the success path', async () => {
+    // Walking the buttons and asserting none of them says "retry" passes
+    // trivially when there are none -- and would keep passing against a
+    // button labelled "Backfill" or "Enable capture". The line is that this
+    // page has no controls.
     show(ops())
     await screen.findByText(/\$1\.25/)
-    for (const button of screen.queryAllByRole('button')) {
-      expect(button.textContent ?? '').not.toMatch(/retry|restart|retrain|run|stop|clear/i)
-    }
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+  })
+
+  it('rounds the backlog age rather than printing a raw float', async () => {
+    // ops_summary divides seconds by 60. Unrounded this tile read
+    // "43.31666666666667 min".
+    show(ops({ sentiment: { ...ops().sentiment, p95_age_minutes: 43.31666666666667 } }))
+    expect(await screen.findByText('43 min')).toBeVisible()
+  })
+
+  it('shows the backlog the pass can never reach', async () => {
+    // Two zeroes above it would otherwise read as an empty backlog.
+    show(ops({ sentiment: { ...ops().sentiment, pinned_pending: 7 } }))
+    expect(await screen.findByText(/unreachable/i)).toBeVisible()
+    expect(screen.getByText('7')).toBeVisible()
+  })
+
+  it('does not round sub-cent spend down to nothing', async () => {
+    show(ops({ spend: { today_usd: 0.004, month_usd: 0.004, unpriced_tokens: 0 } }))
+    expect((await screen.findAllByText(/under \$0\.01/)).length).toBeGreaterThan(0)
+  })
+
+  it('says when a collection cycle actually ran', async () => {
+    // The server takes the newest row per channel with no recency bound, so a
+    // cycle from three weeks ago looks identical to one from five minutes ago.
+    show(ops())
+    expect(await screen.findByText(/ran 9 Sept?,? 11:55 Berlin/i)).toBeVisible()
   })
 
   it('says forbidden when the reader is not an administrator', async () => {

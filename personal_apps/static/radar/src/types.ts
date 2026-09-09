@@ -389,6 +389,8 @@ export interface OpsPayload {
   spend: { today_usd: number; month_usd: number; unpriced_tokens: number }
   sentiment: {
     pending: number
+    /** Always sent by llm_sentiment.ops_summary; optional only so an older
+     *  deployment does not break the page. */
     gated_pending?: number
     pinned_pending?: number
     p95_age_minutes: number | null
@@ -421,7 +423,8 @@ export interface OpsPayload {
       http_status: number | null
       backoff_until: string | null
     }
-    post_close_claims: Record<string, unknown>
+    /** Keyed `source:market`; the claim, or null where none was made. */
+    post_close_claims: Record<string, string | null>
     de_download_budget_24h: { spent: number; limit: number; remaining: number }
   }
   /** How old the board archive is. Null until capture is switched on and has

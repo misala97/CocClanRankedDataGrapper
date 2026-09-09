@@ -40,6 +40,24 @@ describe('the ranked list', () => {
     expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
   })
 
+  it('never computes a percentage over the tone counts', () => {
+    // board.py returns three counts for a stated reason: the lexicon scores
+    // 0.0 both for "balanced" and for "no lexicon word matched", the second
+    // dominates, and a single "% bullish" over that is -- its words -- noise
+    // wearing a percentage sign. A rounded one would also print 0% for one
+    // bullish post in two hundred.
+    show([row({ tone: { bullish: 1, neutral: 200, bearish: 0 } })])
+    expect(screen.queryByText(/%\s*positive/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('0% positive')).not.toBeInTheDocument()
+    expect(screen.getByText(/1\s*bullish|bullish/)).toBeVisible()
+    expect(screen.getByText(/unread or balanced/i)).toBeVisible()
+  })
+
+  it('says the tone has not been read rather than calling it neutral', () => {
+    show([row({ tone: { bullish: 0, neutral: 0, bearish: 0 } })])
+    expect(screen.getByText(/not read yet/i)).toBeVisible()
+  })
+
   it('shows a measured zero move as zero', () => {
     // 0% is a fact: the price did not move. It must not read as "no data",
     // and "no data" must not read as 0%.
@@ -105,6 +123,49 @@ describe('the ranked list', () => {
 })
 
 describe('filtering the list in place', () => {
+  it('offers the server-side filters the spec requires', () => {
+    // The in-page text box narrows what is on screen; these change which
+    // board the server builds, which is a different thing and a new request.
+    render(<Chatter board={payloadWithRows([row()])} selection={selection}
+                    onOpen={vi.fn()} onSelect={vi.fn()} />)
+    for (const label of [/market/i, /window/i, /size/i, /breadth/i]) {
+      expect(screen.getByLabelText(label)).toBeVisible()
+    }
+    expect(screen.getByRole('group', { name: /feeds/i })).toBeVisible()
+  })
+
+  it('asks the server for a new board when a filter changes', async () => {
+    const onSelect = vi.fn()
+    render(<Chatter board={payloadWithRows([row()])} selection={selection}
+                    onOpen={vi.fn()} onSelect={onSelect} />)
+    await userEvent.selectOptions(screen.getByLabelText(/market/i), 'de')
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ market: 'de' }))
+  })
+
+  it('asks for All with an empty segment rather than omitting it', async () => {
+    const onSelect = vi.fn()
+    render(<Chatter board={payload({ rows: [row()], segments: ['large'] })}
+                    selection={{ ...selection, segments: ['large'] }}
+                    onOpen={vi.fn()} onSelect={onSelect} />)
+    await userEvent.selectOptions(screen.getByLabelText(/size/i), 'all')
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ segments: [] }))
+  })
+
+  it('refuses to leave the board with no feed at all', async () => {
+    // An empty source list is not a board the API can build, and answering
+    // with all of them would be a selection the reader never made.
+    const onSelect = vi.fn()
+    render(<Chatter board={payloadWithRows([row()])}
+                    selection={{ ...selection, sources: ['bluesky'] }}
+                    onOpen={vi.fn()} onSelect={onSelect} />)
+    await userEvent.click(screen.getByRole('checkbox', { name: /bluesky/i }))
+    const next = onSelect.mock.calls[0]![0] as { sources: string[] }
+    expect(next.sources.length).toBeGreaterThan(0)
+    expect(next.sources).not.toContain('bluesky')
+  })
+
   it('narrows by company without asking the server', async () => {
     show([row({ ticker: 'AAA', name: 'Alpha Inc' }),
           row({ ticker: 'BBB', name: 'Beta Corp' })])

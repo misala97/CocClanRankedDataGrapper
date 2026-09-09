@@ -1,9 +1,14 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+// Watching renders; the hub writes.
+//
+// The mark mutation lives in the shell, not in this component, because one
+// write at a time has to hold across a navigation too -- leaving this page
+// mid-write and pressing Watch on a company would otherwise put two writes in
+// flight, which is the out-of-order landing the discipline exists to prevent.
+// Those tests are in Hub.test.tsx, where the guard is.
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import * as api from '../api'
 import { BoardUnavailable } from '../api'
 import { payload, row } from '../fixtures'
 import type { BoardPayload, Row } from '../types'
@@ -11,17 +16,20 @@ import { Watching } from './Watching'
 
 const payloadWithRows = (rows: Row[]) => payload({ rows })
 
-function show(board: BoardPayload, onOpen = vi.fn()) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
-    <QueryClientProvider client={client}>
-      <Watching board={board} onOpen={onOpen} />
-    </QueryClientProvider>,
-  )
+function show(board: BoardPayload,
+              props: Partial<Parameters<typeof Watching>[0]> = {}) {
+  const onOpen = props.onOpen ?? vi.fn()
+  render(<Watching board={board} onOpen={onOpen}
+                   onToggleWatch={vi.fn()} {...props} />)
   return onOpen
 }
 
-afterEach(() => { vi.restoreAllMocks() })
+function watched() {
+  const p = payloadWithRows([])
+  p.watching = ['AAA', 'BBB']
+  p.watch_rows = [row({ ticker: 'AAA' }), row({ ticker: 'BBB', name: 'Beta Corp' })]
+  return p
+}
 
 describe('the caller’s marks', () => {
   it('keeps quiet watched companies visible', () => {
@@ -52,7 +60,6 @@ describe('the caller’s marks', () => {
     delete older.watch_rows
     show(older)
     expect(screen.getByText(/not included in this board/i)).toBeVisible()
-
     expect(screen.queryByText(/nothing marked yet/i)).not.toBeInTheDocument()
   })
 
@@ -72,73 +79,65 @@ describe('the caller’s marks', () => {
     await userEvent.click(screen.getByRole('button', { name: /Alpha Inc/ }))
     expect(onOpen).toHaveBeenCalledWith('AAA')
   })
+
+  it('draws the move it promises in the column heading', () => {
+    const p = watched()
+    p.watch_rows![0] = row({ ticker: 'AAA', price: 10, price_move: -0.021 })
+    show(p)
+    expect(screen.getByText('-2.1%')).toBeVisible()
+  })
+
+  it('keeps an unavailable quote unavailable', () => {
+    const p = watched()
+    p.watch_rows = [row({ ticker: 'AAA', price: null,
+                          quote: { ...row().quote, price: null,
+                                   quality: 'unavailable' } })]
+    p.watching = ['AAA']
+    show(p)
+    expect(screen.getByText(/unavailable/i)).toBeVisible()
+    expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
+  })
 })
 
-describe('unmarking', () => {
-  function watched() {
-    const p = payloadWithRows([])
-    p.watching = ['AAA', 'BBB']
-    p.watch_rows = [row({ ticker: 'AAA' }), row({ ticker: 'BBB' })]
-    return p
-  }
-
-  it('adopts the whole list the server answers with', async () => {
-    // The endpoint answers the caller's entire list precisely so nothing is
+describe('what the page shows about a write', () => {
+  it('adopts the list the server answered with, before the rows catch up', () => {
+    // The endpoint answers the caller's ENTIRE list precisely so nothing is
     // merged client-side; a merge is where two truths start to diverge.
-    const setWatch = vi.spyOn(api, 'setWatch').mockResolvedValue(['BBB'])
-    show(watched())
-
-    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
-    await waitFor(() => {
-      expect(screen.queryByText('AAA')).not.toBeInTheDocument()
-    })
-    expect(setWatch).toHaveBeenCalledWith('AAA', false)
+    show(watched(), { watching: ['BBB'] })
+    expect(screen.queryByText('AAA')).not.toBeInTheDocument()
     expect(screen.getByText('BBB')).toBeVisible()
   })
 
-  it('disables the control until the write completes', async () => {
-    let release: (value: string[]) => void = () => {}
-    vi.spyOn(api, 'setWatch').mockReturnValue(
-      new Promise((resolve) => { release = resolve }))
-    show(watched())
-
-    const button = screen.getByRole('button', { name: /stop watching AAA/i })
-    await userEvent.click(button)
-    expect(button).toBeDisabled()
-
-    release(['BBB'])
-    await waitFor(() => expect(screen.queryByText('AAA')).not.toBeInTheDocument())
+  it('disables every mark while one is being written', () => {
+    // Every control, not just the one clicked: two marks changing at once can
+    // land out of order, and the later answer would restore a list that
+    // predates the earlier one.
+    show(watched(), { pending: 'AAA' })
+    expect(screen.getByRole('button', { name: /removing/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /stop watching BBB/i }))
+      .toBeDisabled()
   })
 
-  it('cannot be raced by repeated clicks', async () => {
-    const setWatch = vi.spyOn(api, 'setWatch')
-      .mockReturnValue(new Promise(() => {}))
-    show(watched())
-
-    const button = screen.getByRole('button', { name: /stop watching AAA/i })
-    await userEvent.click(button)
-    await userEvent.click(button)
-    await userEvent.click(button)
-    expect(setWatch).toHaveBeenCalledTimes(1)
-  })
-
-  it('leaves the previous state alone when the write is refused', async () => {
-    vi.spyOn(api, 'setWatch').mockRejectedValue(new BoardUnavailable('server'))
-    show(watched())
-
-    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
-    await waitFor(() => {
-      expect(screen.getByText(/could not be saved/i)).toBeVisible()
-    })
+  it('leaves the marks alone and says what failed', () => {
+    show(watched(), { watchError: new BoardUnavailable('server') })
+    expect(screen.getByText(/could not be saved/i)).toBeVisible()
+    expect(screen.getByText(/the board answered with an error/i)).toBeVisible()
     // Still watched, because the server never said otherwise.
     expect(screen.getByText('AAA')).toBeVisible()
     expect(screen.getByRole('button', { name: /stop watching AAA/i })).toBeEnabled()
   })
 
-  it('says plainly when a write was refused rather than failing quietly', async () => {
-    vi.spyOn(api, 'setWatch').mockRejectedValue(new BoardUnavailable('forbidden'))
-    show(watched())
-    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
-    expect(await screen.findByText(/not allowed/i)).toBeVisible()
+  it('does not claim the marks are unchanged when it cannot know', () => {
+    // A request that timed out may well have been applied server-side.
+    show(watched(), { watchError: new BoardUnavailable('timeout') })
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/marks are unchanged/i)
+    expect(text).toMatch(/last one the server confirmed/i)
+  })
+
+  it('renders no mark control at all when the caller cannot service one', () => {
+    render(<Watching board={watched()} onOpen={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /stop watching/i }))
+      .not.toBeInTheDocument()
   })
 })

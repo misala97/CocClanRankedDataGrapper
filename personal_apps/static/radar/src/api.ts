@@ -88,7 +88,7 @@ export function defaultDirection(key: SortKey): 'asc' | 'desc' {
  *  transparently -- so an expired session arrives as a 200 full of HTML. Two
  *  copies of that check is one copy that eventually goes missing. */
 async function getJson<T>(url: string, signal?: AbortSignal,
-                          init: RequestInit = {}): Promise<T> {
+                          init: RequestInit = {}, write = false): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   // Checked before the listener is attached: a signal that was ALREADY
@@ -105,7 +105,7 @@ async function getJson<T>(url: string, signal?: AbortSignal,
       credentials: 'same-origin', signal: controller.signal,
     })
     if (response.redirected) throw new BoardUnavailable('session')
-    if (!response.ok) throw new BoardUnavailable(statusReason(response.status))
+    if (!response.ok) throw new BoardUnavailable(statusReason(response.status, write))
     return await response.json() as T
   } catch (error) {
     if (error instanceof BoardUnavailable) throw error
@@ -124,9 +124,13 @@ async function getJson<T>(url: string, signal?: AbortSignal,
  *  feature could read every row, and false since /radar/api/ops began
  *  answering 403 to a signed-in non-admin. Telling that reader to reload is
  *  advice that cannot work. */
-function statusReason(status: number): keyof typeof REASON_TEXT {
+function statusReason(status: number, write = false): keyof typeof REASON_TEXT {
   if (status === 401) return 'session'
-  if (status === 403) return 'forbidden'
+  // On a WRITE, 403 is the radar blueprint's CSRF gate (routes/_blueprint.py),
+  // which runs before @login_required -- so an expired session reaches a write
+  // as 403 rather than as a redirect, and the token is re-minted by reloading.
+  // On a read, 403 is a permission that reloading will never fix.
+  if (status === 403) return write ? 'session' : 'forbidden'
   if (status === 404) return 'missing'
   if (status === 429) return 'busy'
   if (status >= 500) return 'server'
@@ -191,6 +195,7 @@ export async function fetchOps(signal?: AbortSignal): Promise<OpsPayload> {
 export async function setWatch(ticker: string, on: boolean): Promise<string[]> {
   const answer = await getJson<{ watching: string[] }>(
     `/radar/api/watch/${encodeURIComponent(ticker)}`, undefined,
-    { method: on ? 'PUT' : 'DELETE', headers: { 'X-CSRF-Token': csrfToken() } })
+    { method: on ? 'PUT' : 'DELETE', headers: { 'X-CSRF-Token': csrfToken() } },
+    true)
   return answer.watching
 }

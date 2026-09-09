@@ -21,7 +21,9 @@ describe('the overview', () => {
     expect(screen.getByText(/US markets/)).toBeVisible()
     // The stamp is not decoration: it is what makes the numbers under it
     // readable as of a moment rather than as of now.
-    expect(screen.getByText(/22:00 Berlin|21:00 Berlin|19:00/)).toBeVisible()
+    // Exact, and in Berlin. An alternation that also accepted the raw UTC
+    // hour would pass with the conversion broken.
+    expect(screen.getByText(/built 21:00 Berlin/)).toBeVisible()
   })
 
   it('greets nobody and narrates nothing', () => {
@@ -85,9 +87,21 @@ describe('the overview', () => {
       rows: [row({ ticker: 'AAA', authors: 9, mentions: 20 }),
              row({ ticker: 'BBB', authors: 7, mentions: 30 })],
     }))
-    const text = document.body.textContent ?? ''
-    expect(text).not.toMatch(/\b16\b/)   // 9 + 7
-    expect(text).not.toMatch(/\b50\b/)   // 20 + 30
+    // Every number on the page has to be one the rows themselves carry. A
+    // sum, a mean, or a count of companies would all fail this; greping for
+    // one literal total would only ever have caught the sum.
+    const allowed = new Set([
+      '9', '7', '20', '30',            // the rows' own authors and mentions
+      '10.00', '1.2', '3.3',           // one row's price, move and ratio
+      '21', '00',                      // the build stamp
+      '4',                             // the window, in hours
+      '3', '2',                        // inside the server's own phrase
+    ])
+    for (const found of (document.body.textContent ?? '')
+      .match(/\d+(?:[.,]\d+)?/g) ?? []) {
+      expect(allowed.has(found.replace(',', '')),
+             `unexpected number on the page: ${found}`).toBe(true)
+    }
   })
 
   it('says so when the board is empty and marks are not', () => {

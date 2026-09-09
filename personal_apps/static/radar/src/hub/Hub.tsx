@@ -49,12 +49,14 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   const [menuOpen, setMenuOpen] = useState(false)
   const main = useRef<HTMLElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
+  const expiredRef = useRef(false)
   const visible = useVisible()
   const client = useQueryClient()
 
   // useBoard decides for itself whether this payload matches the key it would
   // seed; passing it unconditionally is safe.
-  const board = useBoard(selection, initial, visible)
+  const board = useBoard(selection, expiredRef.current ? undefined : initial,
+                         visible)
 
   // Both events, because they are not the same event. A hash typed into the
   // address bar fires hashchange; Back across a pushState that changed only
@@ -86,6 +88,11 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   // is how one reader sees another's.
   const expired = board.error instanceof BoardUnavailable
     && board.error.reason === 'session'
+  // Latched, and read before the query is built. The embedded payload carries
+  // this account's `watching`, so re-seeding the cleared cache from it would
+  // put the previous reader's marks back -- marked fresh, defeating the clear
+  // for the one payload the clear exists for.
+  if (expired) expiredRef.current = true
   useEffect(() => {
     if (expired) client.clear()
   }, [expired, client])
@@ -102,7 +109,8 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   }, [menuOpen])
 
   const go = useCallback((next: HubRoute, nextSelection = selection,
-                          nextSpan = span) => {
+                          nextSpan = span,
+                          options: { keepFocus?: boolean } = {}) => {
     window.history.pushState(null, '', urlFor(next, nextSelection, nextSpan))
     setRoute(next)
     setSelection(nextSelection)
@@ -110,7 +118,11 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
     setMenuOpen(false)
     // The reader asked for a different page; the keyboard should be on it and
     // a screen reader should be told, which neither gets from a URL change.
-    main.current?.focus()
+    //
+    // Not for a control INSIDE the page. Changing the chart span or a filter
+    // is a toggle, and moving focus to the top would make a keyboard reader
+    // tab back through the whole page to press the next one.
+    if (!options.keepFocus) main.current?.focus()
   }, [selection, span])
 
   const title = titleFor(route)
@@ -227,12 +239,24 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
   title: string
   visible: boolean
   isAdmin: boolean
-  go: (route: HubRoute, selection?: Selection, span?: PanelSpan) => void
+  go: (route: HubRoute, selection?: Selection, span?: PanelSpan,
+       options?: { keepFocus?: boolean }) => void
 }) {
   // Declared before any early return, because hooks are.
   const watch = useWatchMutation()
   const [marking, setMarking] = useState<string | null>(null)
   const watching = board.data?.watching
+  // A refusal belongs to the page it happened on. Without this the red
+  // "could not be saved" banner followed the reader to another company.
+  const here = route.page === 'research' ? route.ticker : route.page
+  const lastPlace = useRef(here)
+  useEffect(() => {
+    if (lastPlace.current !== here) {
+      lastPlace.current = here
+      watch.reset()
+    }
+  }, [here, watch])
+
   const onToggleWatch = (ticker: string) => {
     // One write at a time. Two in flight can land out of order, and the later
     // answer would restore a list that predates the earlier one.
@@ -269,7 +293,7 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
         onToggleWatch={watching === undefined ? undefined : onToggleWatch}
         watchPending={marking !== null}
         watchError={watch.error}
-        onSpan={(next) => go(route, selection, next)}
+        onSpan={(next) => go(route, selection, next, { keepFocus: true })}
         onBack={() => go({ page: 'chatter' })}
         onSearch={() => document.getElementById('rh-search-input')?.focus()}
       />
@@ -290,9 +314,16 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go }: {
                        onGo={(page) => go({ page })} />
     }
     if (route.page === 'watching') {
-      return <Watching board={board.data} onOpen={open} />
+      return (
+        <Watching board={board.data} onOpen={open} watching={watch.data}
+                  onToggleWatch={onToggleWatch} pending={marking}
+                  watchError={watch.error} />
+      )
     }
-    return <Chatter board={board.data} selection={selection} onOpen={open} />
+    return (
+      <Chatter board={board.data} selection={selection} onOpen={open}
+              onSelect={(next) => go(route, next)} />
+    )
   }
 
   return <Placeholder title={title} />

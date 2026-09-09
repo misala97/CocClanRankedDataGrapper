@@ -12,13 +12,88 @@ import os
 
 import pytest
 
-from vite_assets import ViteManifestError, resolve_asset
+from vite_assets import ViteManifestError, resolve_asset, resolve_asset_css
 
 
 def _write_manifest(tmp_path, mapping):
     manifest = tmp_path / '.vite' / 'manifest.json'
     manifest.parent.mkdir(parents=True)
     manifest.write_text(json.dumps(mapping), encoding='utf-8')
+
+
+def test_an_entry_with_no_stylesheet_asks_for_none(tmp_path):
+    """Every gym entry and the radar board. Their stylesheets are plain link
+    tags on unhashed files, not imports."""
+    _write_manifest(tmp_path, {
+        'static/gym/src/entries/exercise.tsx': {'file': 'assets/exercise-a1.js'},
+    })
+    assert resolve_asset_css('exercise', dist_dir=tmp_path) == []
+
+
+def test_resolves_the_stylesheet_an_entry_imports(tmp_path):
+    """A template that linked only the script rendered the page unstyled, with
+    nothing in the console to say why."""
+    _write_manifest(tmp_path, {
+        'static/radar/src/entries/hub.tsx': {
+            'file': 'assets/hub-a1.js', 'css': ['assets/hub-b2.css'],
+        },
+    })
+    assert resolve_asset_css('hub', dist_dir=tmp_path, feature='radar') == \
+        ['/static/radar/dist/assets/hub-b2.css']
+
+
+def test_follows_a_stylesheet_rollup_moved_onto_a_shared_chunk(tmp_path):
+    """Rollup may attach a shared stylesheet to an imported chunk rather than
+    to the entry. Reading only the entry's own `css` would return nothing --
+    the same silent unstyled page, from the other direction."""
+    _write_manifest(tmp_path, {
+        'static/radar/src/entries/hub.tsx': {
+            'file': 'assets/hub-a1.js', 'imports': ['_shared-c3.js'],
+        },
+        '_shared-c3.js': {'file': 'assets/shared-c3.js',
+                          'css': ['assets/shared-d4.css']},
+    })
+    assert resolve_asset_css('hub', dist_dir=tmp_path, feature='radar') == \
+        ['/static/radar/dist/assets/shared-d4.css']
+
+
+def test_a_cyclic_import_graph_terminates(tmp_path):
+    _write_manifest(tmp_path, {
+        'static/radar/src/entries/hub.tsx': {'file': 'a.js', 'imports': ['b.js']},
+        'b.js': {'file': 'b.js', 'imports': ['static/radar/src/entries/hub.tsx'],
+                 'css': ['assets/x.css']},
+    })
+    assert resolve_asset_css('hub', dist_dir=tmp_path, feature='radar') == \
+        ['/static/radar/dist/assets/x.css']
+
+
+def test_an_unknown_entry_still_names_the_config(tmp_path):
+    _write_manifest(tmp_path, {'static/radar/src/entries/hub.tsx': {'file': 'a.js'}})
+    with pytest.raises(ViteManifestError, match='rollupOptions'):
+        resolve_asset_css('nope', dist_dir=tmp_path, feature='radar')
+
+
+def test_two_features_share_the_memo(tmp_path):
+    """The memo evicted the other feature's manifest on every miss, so gym and
+    radar pages alternating re-read and re-parsed both on every render."""
+    import vite_assets
+
+    gym, radar = tmp_path / 'gym', tmp_path / 'radar'
+    _write_manifest(gym, {'static/gym/src/entries/exercise.tsx': {'file': 'g.js'}})
+    _write_manifest(radar, {'static/radar/src/entries/hub.tsx': {'file': 'r.js'}})
+
+    vite_assets._manifests.clear()
+    resolve_asset('exercise', dist_dir=gym)
+    resolve_asset('hub', dist_dir=radar, feature='radar')
+    assert len(vite_assets._manifests) == 2
+
+    # And a rebuild of one evicts only that one.
+    (gym / '.vite' / 'manifest.json').write_text(
+        json.dumps({'static/gym/src/entries/exercise.tsx': {'file': 'g2.js'}}),
+        encoding='utf-8')
+    os.utime(gym / '.vite' / 'manifest.json', (2_000_000_000, 2_000_000_000))
+    assert resolve_asset('exercise', dist_dir=gym) == '/static/gym/dist/g2.js'
+    assert len(vite_assets._manifests) == 2
 
 
 def test_resolves_hashed_filename(tmp_path):

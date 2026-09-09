@@ -14,8 +14,8 @@
 import { Breakdown } from '../detail/Breakdown'
 import { Posts } from '../detail/Posts'
 import { ChartBasisNote, PriceChart } from '../detail/PriceChart'
-import { exchangeLabel, segmentLabel } from '../format'
-import type { Detail, PanelSpan, Selection } from '../types'
+import { exchangeLabel, segmentLabel, sourceLabel } from '../format'
+import type { Detail, DetailChart, PanelSpan, Selection } from '../types'
 import { Loading, Unavailable } from './PageState'
 import { useDetail } from './queries'
 import { BoardUnavailable } from '../api'
@@ -34,6 +34,18 @@ const CAPTIONS: Record<PanelSpan, string> = {
   '3Y': 'daily closes · mentions per day',
 }
 
+/** 1D prices from quote snapshots when there are enough of them and from
+ *  stored daily closes when there are not, so its caption cannot be a
+ *  constant -- it would claim a resolution the line does not have. The board
+ *  panel guards this the same way; copying the table and not the guard is how
+ *  the hub came to label a daily line "intraday quotes". */
+function captionFor(chart: DetailChart): string {
+  if (chart.span === '1D' && chart.priced_from === 'daily') {
+    return 'daily closes · mentions per 15 min'
+  }
+  return CAPTIONS[chart.span]
+}
+
 export function Research({ ticker, selection, span, onSpan, onBack, onSearch,
                            watching, onToggleWatch, watchPending = false,
                            watchError, visible = true }: {
@@ -49,13 +61,21 @@ export function Research({ ticker, selection, span, onSpan, onBack, onSearch,
   watchError?: unknown
   visible?: boolean
 }) {
-  const { data, error, isLoading, refetch } = useDetail(ticker, selection, span,
-                                                        visible)
+  const { data, error, isPlaceholderData, refetch } = useDetail(
+    ticker, selection, span, visible)
 
-  if (isLoading && !data) return <Loading label={`Loading ${ticker}…`} />
-  if (!data) return <NotHere ticker={ticker} error={error} onBack={onBack}
-                             onSearch={onSearch} retry={() => void refetch()} />
-
+  // Placeholder data is the PREVIOUS company's panel, kept so the layout does
+  // not collapse between two fetches. Rendering it here would put one
+  // company's name, price, chart and evidence under another company's
+  // heading and URL -- which is the reader-facing half of "old replies may
+  // not replace the current ticker".
+  if (!data || isPlaceholderData) {
+    if (error && !isPlaceholderData) {
+      return <NotHere ticker={ticker} error={error} onBack={onBack}
+                      onSearch={onSearch} retry={() => void refetch()} />
+    }
+    return <Loading label={`Loading ${ticker}…`} />
+  }
   const { identity, chart, breakdown } = data
   const isWatched = watching?.includes(identity.ticker) ?? false
 
@@ -115,7 +135,7 @@ export function Research({ ticker, selection, span, onSpan, onBack, onSearch,
             <div className="rh-sectionhead">
               <div>
                 <h2 id="rh-chart-head">Price and chatter</h2>
-                <p className="muted small">{CAPTIONS[chart.span]}</p>
+                <p className="muted small">{captionFor(chart)}</p>
               </div>
               <div className="rh-spans" role="group" aria-label="Chart span">
                 {SPANS.map((option) => (
@@ -191,10 +211,10 @@ function Quote({ detail }: { detail: Detail }) {
                 : ` ${identity.price_move > 0 ? '+' : ''}${(identity.price_move * 100).toFixed(1)}% today`}
             </span>
           </p>
-          <p className="muted small">
+          <p className="muted small" data-testid="rh-quote-provenance">
             {[quote.venue, quote.currency, quote.mic].filter(Boolean).join(' · ')}
-            {quote.quoted_at ? ` · quoted ${berlinTime(quote.quoted_at)} Berlin` : ''}
-            {' · '}{quote.quality}
+            {quote.quoted_at ? ` · quoted ${berlinStamp(quote.quoted_at)}` : ''}
+            {' · '}{qualityWord(quote.quality)}
             {quote.is_fallback ? ' · fallback listing' : ''}
           </p>
         </>
@@ -202,7 +222,7 @@ function Quote({ detail }: { detail: Detail }) {
       <dl className="rh-facts">
         <div>
           <dt>Session</dt>
-          <dd>{identity.session}</dd>
+          <dd>{SESSION_WORD[identity.session] ?? identity.session}</dd>
         </div>
         <div>
           <dt>Market cap</dt>
@@ -210,7 +230,7 @@ function Quote({ detail }: { detail: Detail }) {
         </div>
         <div>
           <dt>Basis</dt>
-          <dd>{quote.price_basis ?? 'unknown'}</dd>
+          <dd>{BASIS_WORD[quote.price_basis ?? ''] ?? 'unknown'}</dd>
         </div>
       </dl>
       {/* A quote timestamp is not the observation time of the chatter. Two
@@ -229,6 +249,9 @@ function Summary({ detail }: { detail: Detail }) {
   const { breakdown, read } = detail
   const concentrated = breakdown.top_author_share !== null
     && breakdown.top_author_share >= 0.5
+  // No venue rows at all means the evidence behind the window is not held any
+  // more, not that nobody spoke.
+  const noEvidence = breakdown.venues.length === 0 && breakdown.mentions === 0
   return (
     <aside className="rh-summary" aria-labelledby="rh-summary-head">
       <h2 id="rh-summary-head">What the figures say</h2>
@@ -248,30 +271,45 @@ function Summary({ detail }: { detail: Detail }) {
       )}
 
       <h3>How concentrated it is</h3>
-      <ul className="rh-facts-list">
-        <li>
-          <strong className="num">{breakdown.voices}</strong> independent
-          {breakdown.voices === 1 ? ' voice' : ' voices'} across
-          {' '}<strong className="num">{breakdown.mentions}</strong>
-          {breakdown.mentions === 1 ? ' post' : ' posts'}
-        </li>
-        <li>
-          <strong className="num">{breakdown.venues.length}</strong>
-          {breakdown.venues.length === 1 ? ' venue' : ' venues'}:
-          {' '}{breakdown.venues.map((venue) => venue.source).join(', ') || '—'}
-        </li>
-        <li className={concentrated ? 'warning' : undefined}>
-          {breakdown.top_author_share === null
-            ? 'Author concentration not measured'
-            : `Loudest account is ${(breakdown.top_author_share * 100).toFixed(0)}% of the posts`}
-        </li>
-        {breakdown.disagreements > 0 ? (
+      {noEvidence ? (
+        // Not zero. The per-mention evidence has a much shorter retention than
+        // the bucket totals the clauses above are counted from, so an older
+        // window legitimately has totals and no rows behind them. Printing
+        // "0 independent voices across 0 posts" beside a clause saying 80
+        // mentions would report an absence as a measurement.
+        <p className="muted small">
+          No per-post evidence is held for this window. The figures above come
+          from stored bucket totals, which outlive the individual mentions and
+          posts behind them — so this is missing detail rather than a quiet
+          company.
+        </p>
+      ) : (
+        <ul className="rh-facts-list">
           <li>
-            <strong className="num">{breakdown.disagreements}</strong> posts
-            where the wording score and the model read the tone differently
+            <strong className="num">{breakdown.voices}</strong> independent
+            {breakdown.voices === 1 ? ' voice' : ' voices'} across
+            {' '}<strong className="num">{breakdown.mentions}</strong>
+            {breakdown.mentions === 1 ? ' post' : ' posts'}
           </li>
-        ) : null}
-      </ul>
+          <li>
+            <strong className="num">{breakdown.venues.length}</strong>
+            {breakdown.venues.length === 1 ? ' venue' : ' venues'}:
+            {' '}{breakdown.venues.map((venue) => sourceLabel(venue.source))
+                   .join(', ')}
+          </li>
+          <li className={concentrated ? 'warning' : undefined}>
+            {breakdown.top_author_share === null
+              ? 'Author concentration not measured'
+              : `Loudest account is ${(breakdown.top_author_share * 100).toFixed(0)}% of the posts`}
+          </li>
+          {breakdown.disagreements > 0 ? (
+            <li>
+              <strong className="num">{breakdown.disagreements}</strong> posts
+              where the wording score and the model read the tone differently
+            </li>
+          ) : null}
+        </ul>
+      )}
 
       <h3>What this is not</h3>
       <p className="muted small">
@@ -325,9 +363,34 @@ function formatPrice(value: number, currency: string | null): string {
   return symbol ? `${symbol}${text}` : `${text} ${currency ?? ''}`.trim()
 }
 
-function berlinTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-GB',
+const SESSION_WORD: Record<string, string> = {
+  regular: 'open', premarket: 'pre-market', afterhours: 'after hours',
+  closed: 'closed',
+}
+
+const BASIS_WORD: Record<string, string> = {
+  trade: 'last trade', midpoint: 'bid/ask midpoint', close: 'closing price',
+}
+
+/** With the date. A bare clock time reads as today, which is precisely wrong
+ *  for the `eod` and `stale` qualities the timestamp exists to qualify. */
+function berlinStamp(iso: string): string {
+  const when = new Date(iso)
+  const day = when.toLocaleDateString('en-GB',
+    { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Berlin' })
+  const time = when.toLocaleTimeString('en-GB',
     { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })
+  return `${day}, ${time} Berlin`
+}
+
+/** The provider's own classification, in words. "eod" is not one. */
+const QUALITY_WORD: Record<string, string> = {
+  live: 'live', delayed: 'delayed', eod: 'previous close',
+  stale: 'not printing', unavailable: 'unavailable',
+}
+
+function qualityWord(quality: string): string {
+  return QUALITY_WORD[quality] ?? quality
 }
 
 function cap(value: number): string {

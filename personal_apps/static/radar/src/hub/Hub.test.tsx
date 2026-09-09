@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { payload } from '../fixtures'
+import * as api from '../api'
+import { BoardUnavailable } from '../api'
+import { payload, row } from '../fixtures'
 import { Hub } from './Hub'
 
 const initial = payload()
@@ -168,10 +170,66 @@ describe('the shell', () => {
     expect(screen.getByText(/is for administrators/i)).toBeVisible()
   })
 
-  it('lets an admin open the admin page', () => {
+  it('lets an admin open the admin page', async () => {
+    vi.spyOn(api, 'fetchOps').mockResolvedValue({
+      generated_at: '2026-09-09T10:00:00Z',
+      spend: { today_usd: 0, month_usd: 1.25, unpriced_tokens: 0 },
+      sentiment: { pending: 0, p95_age_minutes: null,
+                   review: { demanded: 0, attempted: 0, served: 0, capped: 0,
+                             over_ceiling: 0 } },
+      market_data: {
+        cycles: {}, mapping_generations: {}, quote_basis_24h: {},
+        grouped_closes: { latest_accepted_date: null, retryable_gaps: [],
+                          counts: null, error_code: null, http_status: null,
+                          backoff_until: null },
+        post_close_claims: {},
+        de_download_budget_24h: { spent: 0, limit: 40, remaining: 40 },
+      },
+      capture: { latest_observed_at: null },
+    })
     window.history.replaceState(null, '', '/radar/hub/#admin')
     mount({ isAdmin: true })
+    // The page itself, not merely the absence of the refusal -- which is also
+    // true while nothing has rendered.
+    expect(await screen.findByText(/model API spend/i)).toBeVisible()
     expect(screen.queryByText(/is for administrators/i)).not.toBeInTheDocument()
+  })
+
+  it('writes one mark at a time, across pages as well as within one', async () => {
+    // The guard lives in the shell precisely so leaving Watching mid-write and
+    // pressing Watch on a company cannot put two writes in flight.
+    const p = payload({ rows: [row({ ticker: 'AAA' })] })
+    p.watching = ['AAA']
+    p.watch_rows = [row({ ticker: 'AAA' })]
+    const setWatch = vi.spyOn(api, 'setWatch')
+      .mockReturnValue(new Promise(() => {}))
+
+    window.history.replaceState(null, '', '/radar/hub/#watching')
+    mount({ initial: p })
+
+    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
+    expect(setWatch).toHaveBeenCalledTimes(1)
+
+    // Still in flight; the control is refused rather than queued.
+    await userEvent.click(screen.getByRole('button', { name: /removing/i }))
+    expect(setWatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not carry a failed mark to the next page', async () => {
+    const p = payload({ rows: [row({ ticker: 'AAA' })] })
+    p.watching = ['AAA']
+    p.watch_rows = [row({ ticker: 'AAA' })]
+    vi.spyOn(api, 'setWatch').mockRejectedValue(new BoardUnavailable('server'))
+
+    window.history.replaceState(null, '', '/radar/hub/#watching')
+    mount({ initial: p })
+    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
+    expect(await screen.findByText(/could not be saved/i)).toBeVisible()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Human chatter' }))
+    await waitFor(() => {
+      expect(screen.queryByText(/could not be saved/i)).not.toBeInTheDocument()
+    })
   })
 
   it('closes the menu on Escape and returns focus to its toggle', async () => {

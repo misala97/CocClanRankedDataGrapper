@@ -106,6 +106,43 @@ describe('when a refresh fails', () => {
 })
 
 describe('the reasons a request can fail', () => {
+  it('retries what might come good', async () => {
+    // The positive control. Without it a retry rule of "never" would satisfy
+    // every assertion in the block above.
+    const fetchBoard = vi.spyOn(api, 'fetchBoard')
+      .mockRejectedValue(new BoardUnavailable('network'))
+    const client = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 1 } },
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <Probe selection={{ ...selection, market: 'de' }} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(fetchBoard.mock.calls.length).toBeGreaterThan(1),
+                  { timeout: 4000 })
+  })
+
+  it('reads 403 as forbidden on a read and as a session on a write', async () => {
+    // The admin endpoint answers 403 to a signed-in non-admin, which
+    // reloading will never fix. A WRITE answers 403 from the blueprint's CSRF
+    // gate, which runs before the login check -- so there it IS an expired
+    // session and reloading re-mints the token. Same status, opposite advice.
+    const answer = (status: number) => Promise.resolve(new Response('{}', {
+      status, headers: { 'Content-Type': 'application/json' },
+    }))
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+
+    fetchMock.mockImplementation(() => answer(403))
+    await expect(api.fetchOps()).rejects.toMatchObject({ reason: 'forbidden' })
+    await expect(api.setWatch('AAA', true)).rejects
+      .toMatchObject({ reason: 'session' })
+
+    fetchMock.mockImplementation(() => answer(401))
+    await expect(api.setWatch('AAA', true)).rejects
+      .toMatchObject({ reason: 'session' })
+  })
+
   it('separates a forbidden endpoint from an expired session', () => {
     // Reloading fixes one and will never fix the other, so they cannot share
     // a sentence. 403 stopped meaning "signed out" when the admin operations

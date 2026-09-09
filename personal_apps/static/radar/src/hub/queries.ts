@@ -125,7 +125,15 @@ export function useWatchMutation() {
       // rows that go with it.
       client.setQueriesData<BoardPayload>(
         { queryKey: [ROOT, 'board'] },
-        (board) => (board ? { ...board, watching } : board))
+        (board) => {
+          if (!board) return board
+          // The rows go with the list. Updating `watching` alone left an
+          // unmarked company still in every reading of watch_rows until the
+          // refetch landed, and a newly marked one in the list with no row.
+          const rows = board.watch_rows?.filter(
+            (row) => watching.includes(row.ticker))
+          return { ...board, watching, watch_rows: rows }
+        })
       void client.invalidateQueries({ queryKey: [ROOT, 'board'] })
     },
   })

@@ -56,7 +56,12 @@ def _manifest(dist: Path) -> dict:
     cached = _manifests.get(cache_key)
     if cached is None:
         cached = json.loads(manifest_path.read_text(encoding='utf-8'))
-        _manifests.clear()          # only ever one build per dist is current
+        # Only this dist's older entries. Clearing the whole dict evicted the
+        # other feature's manifest, so gym and radar pages alternating gave a
+        # 100% miss rate -- a stat, a read and a parse per render, which is
+        # the cost this memo exists to remove.
+        for stale in [key for key in _manifests if key[0] == cache_key[0]]:
+            del _manifests[stale]
         _manifests[cache_key] = cached
     return cached
 
@@ -120,4 +125,5 @@ def resolve_asset_css(entry: str, dist_dir: Path | None = None,
             if href not in seen:
                 seen.append(href)
         pending.extend(record.get('imports', []))
+        pending.extend(record.get('dynamicImports', []))
     return [f'/static/{feature}/dist/{href}' for href in seen]

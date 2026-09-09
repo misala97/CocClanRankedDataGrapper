@@ -11,13 +11,16 @@
 // context, and the copy says so in the words the spec insists on.
 import { useMemo, useState } from 'react'
 
+import { sourceLabel } from '../format'
 import type { BoardPayload, Row, Selection } from '../types'
+import { Filters } from './Filters'
 import { Empty } from './PageState'
 
-export function Chatter({ board, selection, onOpen }: {
+export function Chatter({ board, selection, onOpen, onSelect }: {
   board: BoardPayload
   selection: Selection
   onOpen: (ticker: string) => void
+  onSelect?: (next: Selection) => void
 }) {
   const [filter, setFilter] = useState('')
   const needle = filter.trim().toLowerCase()
@@ -34,7 +37,7 @@ export function Chatter({ board, selection, onOpen }: {
     <>
       <div className="rh-heading">
         <div>
-          <p className="rh-datestamp">{contextLine(board, selection)}</p>
+          <p className="rh-datestamp">{contextLine(board)}</p>
           <h1>Human chatter</h1>
           <p>
             Ranked by how unusual the discussion is, with the independent
@@ -42,6 +45,10 @@ export function Chatter({ board, selection, onOpen }: {
           </p>
         </div>
       </div>
+
+      {onSelect ? (
+        <Filters board={board} selection={selection} onChange={onSelect} />
+      ) : null}
 
       <div className="rh-filters">
         <label className="rh-field">
@@ -87,9 +94,10 @@ function EmptyBoard({ excluded }: { excluded: number }) {
     )
   }
   return (
-    <Empty title="No company was measured in this window.">
-      Nothing was excluded either, so there was nothing to exclude. Widen the
-      window or the sources, or check Activity for whether the fetch ran.
+    <Empty title="No company cleared this selection.">
+      Nothing was recorded as excluded by the eligibility floor or the breadth
+      filter — a segment filter does not report itself that way. Widen the
+      window or the feeds, or check Activity for whether the fetch ran.
     </Empty>
   )
 }
@@ -103,13 +111,13 @@ function Table({ rows, board, onOpen }: {
           but the document never scrolls sideways. */}
       <div className="rh-tablewrap" role="region" aria-label="Ranked companies"
            tabIndex={0}>
-        <table className="rh-table">
+        <table role="table" className="rh-table">
           <thead>
-            <tr>
+            <tr role="row">
               <th scope="col">Company</th>
               <th scope="col">Attention</th>
               <th scope="col">Voices</th>
-              <th scope="col">Sources</th>
+              <th scope="col">Feeds</th>
               <th scope="col">Tone</th>
               <th scope="col" className="right">Price / today</th>
             </tr>
@@ -132,8 +140,8 @@ function Table({ rows, board, onOpen }: {
 
 function TickerRow({ row, onOpen }: { row: Row; onOpen: (t: string) => void }) {
   return (
-    <tr>
-      <th scope="row" className="rh-company">
+    <tr role="row">
+      <th role="rowheader" scope="row" className="rh-company">
         <button type="button" className="rh-open" onClick={() => onOpen(row.ticker)}>
           <span className="rh-mark" aria-hidden="true">{row.ticker.slice(0, 2)}</span>
           <span>
@@ -143,23 +151,29 @@ function TickerRow({ row, onOpen }: { row: Row; onOpen: (t: string) => void }) {
         </button>
         <Marks marks={row.marks} />
       </th>
-      <td data-label="Attention">
+      <Cell label="Attention">
         <Attention row={row} />
-      </td>
-      <td data-label="Voices">
+      </Cell>
+      <Cell label="Voices">
         <strong className="num">{row.authors}</strong>
         <span className="rh-sub">{row.mentions} {row.mentions === 1 ? 'post' : 'posts'}</span>
-      </td>
-      <td data-label="Sources" data-testid="rh-row-sources">
+      </Cell>
+      {/* Feeds, not venues. A row lists every concrete feed it was seen on,
+          including each subreddit; the research page counts venues with all
+          the subreddits rooted into one. Two honest numbers, so they are
+          given two different names rather than left to look inconsistent. */}
+      <Cell label="Feeds" testId="rh-row-sources">
         <strong className="num">{row.sources.length}</strong>
-        <span className="rh-sub">{row.sources.join(', ')}</span>
-      </td>
-      <td data-label="Tone">
+        <span className="rh-sub">
+          {row.sources.map((source) => sourceLabel(source)).join(', ')}
+        </span>
+      </Cell>
+      <Cell label="Tone">
         <Tone row={row} />
-      </td>
-      <td className="right" data-label="Price / today">
+      </Cell>
+      <Cell label="Price / today" className="right">
         <Price row={row} />
-      </td>
+      </Cell>
     </tr>
   )
 }
@@ -187,23 +201,30 @@ function Attention({ row }: { row: Row }) {
   )
 }
 
+/** Three counts, and deliberately not a percentage.
+ *
+ *  board.py returns the split as three numbers for a stated reason: the
+ *  lexicon scores 0.0 both for "balanced" and for "no lexicon word matched",
+ *  the second dominates, and a single "% bullish" computed over that is --
+ *  its words -- "mostly noise wearing a percentage sign". `neutral` is not
+ *  padding; it is every mention nothing has read yet, and folding it into a
+ *  denominator turns a handful of scored posts into a confident-looking
+ *  reading. A rounded percentage would also print 0% for one bullish post in
+ *  two hundred, and 100% for one bearish one.
+ */
 function Tone({ row }: { row: Row }) {
-  const total = row.tone.bullish + row.tone.neutral + row.tone.bearish
-  if (total === 0) {
+  const { bullish, neutral, bearish } = row.tone
+  if (bullish + neutral + bearish === 0) {
     return <span className="muted small">Not read yet</span>
   }
-  const positive = Math.round((row.tone.bullish / total) * 100)
   return (
-    <>
-      <strong className="num">{positive}% positive</strong>
-      {/* Proportions as text first, then as a bar. Colour is never the only
-          signal, and the bar is decoration over a figure that already reads. */}
-      <span className="rh-tonebar" aria-hidden="true">
-        <span style={{ flexGrow: row.tone.bullish || 0.001 }} className="bull" />
-        <span style={{ flexGrow: row.tone.neutral || 0.001 }} className="flat" />
-        <span style={{ flexGrow: row.tone.bearish || 0.001 }} className="bear" />
+    <span className="rh-tone">
+      <span><strong className="num">{bullish}</strong> bullish</span>
+      <span><strong className="num">{bearish}</strong> bearish</span>
+      <span className="muted">
+        <strong className="num">{neutral}</strong> unread or balanced
       </span>
-    </>
+    </span>
   )
 }
 
@@ -268,7 +289,32 @@ function matches(row: Row, needle: string): boolean {
     || (row.name ?? '').toLowerCase().includes(needle)
 }
 
-function contextLine(board: BoardPayload, selection: Selection): string {
-  const hours = selection.window
+/** Both halves from the payload's own echo. Taking the venue from the board
+ *  and the window from the request meant that, while a new window loaded, the
+ *  previous window's rows sat under a heading naming the new one. */
+function contextLine(board: BoardPayload): string {
+  const hours = board.window_hours
   return `${board.market_venue} · last ${hours} ${hours === 1 ? 'hour' : 'hours'}`
+}
+
+function Cell({ label, className, testId, children }: {
+  label: string
+  className?: string
+  testId?: string
+  children: React.ReactNode
+}) {
+  // An explicit role, because `display: block` in the stacked mobile layout
+  // drops the implicit one; and a real element for the label rather than
+  // generated content, because ::before is not part of a cell's accessible
+  // name and cannot carry the header association a stacked table loses.
+  //
+  // Not aria-hidden. On the desk layout the column header supplies the
+  // association and this repeats it, which costs a word; below 700px the
+  // header row is gone and this is the only thing naming the figure.
+  return (
+    <td role="cell" className={className} data-testid={testId}>
+      <span className="rh-cell-label rh-visually-hidden">{label}</span>
+      {children}
+    </td>
+  )
 }

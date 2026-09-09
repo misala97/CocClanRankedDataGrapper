@@ -22,7 +22,7 @@ export function Overview({ board, onOpen, onGo }: {
   onGo: (page: 'chatter' | 'watching') => void
 }) {
   const candidates = board.rows.slice(0, LEAD)
-  const marks = board.watch_rows ?? []
+  const marks = board.watch_rows
   const excluded = Object.values(board.excluded ?? {})
     .reduce((total, count) => total + count, 0)
 
@@ -48,7 +48,7 @@ export function Overview({ board, onOpen, onGo }: {
             <div>
               <h2 id="rh-lead-head">Current chatter</h2>
               <p className="muted small">
-                Loudest against their own normal, last {board.window_hours}
+                {orderWord(board)}, last {board.window_hours}
                 {board.window_hours === 1 ? ' hour' : ' hours'}
               </p>
             </div>
@@ -74,7 +74,7 @@ export function Overview({ board, onOpen, onGo }: {
         <section className="rh-panel rh-pad" aria-labelledby="rh-marks-head">
           <div className="rh-sectionhead">
             <h2 id="rh-marks-head">Watching</h2>
-            {marks.length > MARKS ? (
+            {marks !== undefined && marks.length > MARKS ? (
               <button type="button" className="rh-textbutton"
                       onClick={() => onGo('watching')}>
                 All {marks.length} marked →
@@ -82,7 +82,17 @@ export function Overview({ board, onOpen, onGo }: {
             ) : null}
           </div>
 
-          {marks.length === 0
+          {marks === undefined
+            ? (
+              // Absent, not empty. Telling a reader with marks that they have
+              // none is the mistake Watching is built to avoid, and it would
+              // be no better here.
+              <p className="muted small">
+                Your marks were not included in this board. Reload the page;
+                this is a missing list, not an empty one.
+              </p>
+            )
+            : marks.length === 0
             ? (
               <p className="muted small">
                 Nothing marked yet. Open a company and choose Watch; marked
@@ -103,7 +113,7 @@ export function Overview({ board, onOpen, onGo }: {
                 ))}
               </ul>
             )}
-          {marks.length > 0 && marks.length <= MARKS ? (
+          {marks !== undefined && marks.length > 0 && marks.length <= MARKS ? (
             <button type="button" className="rh-textbutton"
                     onClick={() => onGo('watching')}>
               Open Watching →
@@ -160,8 +170,9 @@ function EmptyBoard({ excluded }: { excluded: number }) {
   }
   return (
     <p className="muted small">
-      No company was measured in this window, and nothing was excluded either.
-      Activity says whether the fetch ran.
+      No company cleared this selection in this window. Nothing was recorded
+      as excluded by the floor or the breadth filter, so try a wider window or
+      more feeds — and Activity says whether the fetch ran at all.
     </p>
   )
 }
@@ -176,6 +187,20 @@ const MARK_WORD: Record<string, string> = {
 
 function markWord(mark: string): string {
   return MARK_WORD[mark] ?? mark
+}
+
+/** The board can be sorted, and a sorted board's first three are not the
+ *  loudest three. Saying so anyway would caption the rows with a claim the
+ *  ordering does not support. */
+const SORT_WORD: Record<string, string> = {
+  ticker: 'First alphabetically', mentions: 'Most mentions',
+  divergence: 'Largest divergence', ratio: 'Furthest above their own normal',
+  move: 'Largest price move', lean: 'Strongest lean',
+}
+
+function orderWord(board: BoardPayload): string {
+  if (board.sort === null) return 'Loudest against their own normal'
+  return SORT_WORD[board.sort] ?? 'In the order the board is sorted'
 }
 
 function sessionWord(board: BoardPayload): string {

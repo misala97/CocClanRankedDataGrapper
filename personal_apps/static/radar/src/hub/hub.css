@@ -323,6 +323,15 @@
 
 .rh-caption { font-size: 11px; color: var(--muted); margin-top: 12px; }
 
+/* --- tone ---------------------------------------------------------------- */
+
+/* Three counts in words. A green/red tone bar has been built and deleted twice
+   on this surface: green and red mean price direction here and nothing else,
+   and a single percentage over these counts is what board.py returns three
+   numbers to prevent. */
+.rh-tone { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.rh-tone strong { display: inline; font-weight: 600; }
+
 /* --- filters ------------------------------------------------------------ */
 
 .rh-filters {
@@ -333,6 +342,25 @@
   flex-wrap: wrap;
 }
 .rh-filters-note { margin-left: auto; }
+
+.rh-sources {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 11px 9px;
+  margin: 0;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.rh-sources legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.rh-sources label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  min-height: 40px;
+}
+.rh-sources input { accent-color: var(--green); }
 
 .rh-field {
   display: flex;
@@ -743,7 +771,44 @@
 .rh .stat .v { font-weight: 600; color: var(--ink); }
 .rh .stat.hot .v { color: var(--amber); }
 .rh .zone { margin: 0; }
+/* The heading wraps as a row before it wraps inside a word, and the gap is
+   what separates the heading from its qualifier -- JSX strips the newline
+   between them, so without this the posts zone read "…saying· 0 posts". */
+.rh .zone h3 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rh .zone h3 .q { font-weight: 400; font-size: 12px; color: var(--muted); }
 .rh .note { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+/* Counts in words. A green/red tone bar has been built and deleted twice on
+   this surface: green and red mean price direction here and nothing else. */
+.rh .wording {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rh .wording b { font-weight: 650; color: var(--ink); }
+.rh .wording .q { color: var(--muted); }
+.rh .wording .q b { color: var(--muted); }
+
+.rh .plain {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-wrap: pretty;
+  max-width: 52ch;
+}
+.rh .plain b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .rh .posts { list-style: none; margin: 0; padding: 0; max-width: 660px; }
 .rh .post { padding: 14px 0 15px; border-bottom: 1px solid var(--line); }
@@ -789,7 +854,22 @@
   color: var(--ink);
   overflow-wrap: anywhere;
 }
-.rh .post .more { font-size: 11px; color: var(--green); margin-top: 6px; }
+/* The clamp is the whole point of the "show the whole post" control. Without
+   it one pasted wall of text runs past thirty screen-heights and buries the
+   posts under it, and the button toggles nothing visible. A height rather
+   than line-clamp, because line-clamp cannot be transitioned. */
+.rh .post p.clamp {
+  height: calc(7 * 1.6em);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2em), transparent);
+}
+.rh .post .more {
+  font-size: 12px;
+  color: var(--green);
+  margin-top: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .rh .below { font-size: 11px; color: var(--muted); margin-top: 12px; }
 
 /* --- page states -------------------------------------------------------- */
@@ -826,6 +906,11 @@
 
 @media (max-width: 1100px) {
   .rh-twocol { grid-template-columns: 1fr; }
+  /* Panning starts here, not at 700. At 768 the content column is about
+     500px, so an unpanned chart scaled its 11px axis labels to roughly 6px --
+     unreadable, and the tablet width is one the spec names explicitly. */
+  .rh .pxchart { min-width: 620px; height: auto; }
+  .rh .pxchart .ax { font-size: 13px; }
   /* The summary follows the evidence rather than sitting beside it. Below
      this width a 280px rail makes the chart unreadable, and the chart is the
      reason the page exists. */
@@ -875,7 +960,13 @@
   /* Stacked, not scrolled sideways. A six-column table on a phone puts the
      price and the tone past the right edge, and the spec is explicit that a
      scrolling region may not hide the company, the price or the evidence
-     quality. Each cell keeps its column's name beside it instead. */
+     quality. Each cell keeps its column's name beside it instead.
+     ---------------------------------------------------------------------
+     `display: block` on table elements drops their implicit roles, so the
+     markup carries explicit ARIA roles that survive it -- otherwise a screen
+     reader below 700px gets undifferentiated blocks with no header
+     association. The visible label comes from a real element in the DOM, not
+     from generated content, for the same reason. */
   .rh-table thead { display: none; }
   .rh-table,
   .rh-table tbody,
@@ -894,8 +985,12 @@
     border: 0;
     text-align: left;
   }
-  .rh-table td::before {
-    content: attr(data-label);
+  .rh-table .rh-cell-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    clip-path: none;
     color: var(--muted);
     font-size: 11px;
     flex: none;
@@ -915,9 +1010,6 @@
   .rh-researchhead { gap: 18px; }
   .rh-summary { padding: 18px; }
   .rh-spans button { min-height: 40px; }
-  /* Panning, not scaling: a chart squeezed into 390px has an axis nobody can
-     read. The region scrolls; the document does not. */
-  .rh .pxchart { min-width: 620px; height: auto; }
   .rh .pxchart .ax { font-size: 14px; }
   .rh .phead .who { max-width: 12ch; }
 }

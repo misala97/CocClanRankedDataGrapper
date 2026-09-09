@@ -13,7 +13,7 @@ import { useState } from 'react'
 
 import { fetchActivity } from '../api'
 import type { ActivityDay, ActivityPayload } from '../types'
-import { Loading, Unavailable } from './PageState'
+import { Loading, StaleNotice, Unavailable } from './PageState'
 import { useQuery } from '@tanstack/react-query'
 import { REFRESH_MS } from './queries'
 
@@ -66,6 +66,10 @@ export function Activity() {
       {!query.data && query.error
         ? <Unavailable error={query.error} retry={() => void query.refetch()} />
         : null}
+      {query.data && query.error
+        ? <StaleNotice error={query.error}
+                       since={berlinClock(query.data.generated_at)} />
+        : null}
       {query.data ? <Recorded payload={query.data} /> : null}
     </>
   )
@@ -76,9 +80,9 @@ function Recorded({ payload }: { payload: ActivityPayload }) {
     <div className="rh-panel">
       <div className="rh-tablewrap" role="region" aria-label="Recorded activity"
            tabIndex={0}>
-        <table className="rh-table">
+        <table role="table" className="rh-table">
           <thead>
-            <tr>
+            <tr role="row">
               <th scope="col">Day</th>
               <th scope="col" className="right">Fetched</th>
               <th scope="col" className="right">New posts</th>
@@ -95,7 +99,7 @@ function Recorded({ payload }: { payload: ActivityPayload }) {
         </table>
       </div>
       <p className="rh-tablefoot small muted">
-        {recordingLine(payload)}{' '}
+        Read {berlinClock(payload.generated_at)}. {recordingLine(payload)}{' '}
         Counters keep the meanings ingest gave them: fetched counts deliveries
         and repeats a post two overlapping cycles returned, and bucket writes
         counts work performed rather than distinct quarter-hours.
@@ -107,18 +111,16 @@ function Recorded({ payload }: { payload: ActivityPayload }) {
 function Day({ day }: { day: ActivityDay }) {
   const unobserved = day.completed_runs === 0
   return (
-    <tr data-testid={`rh-day-${day.date}`}>
-      <th scope="row">
+    <tr role="row" data-testid={`rh-day-${day.date}`}>
+      <th role="rowheader" scope="row">
         {dayLabel(day.date)}
-        <span className="rh-sub">
-          {day.completeness === 'partial' ? 'Partial coverage' : 'Not recorded'}
-        </span>
+        <span className="rh-sub">{dayState(day)}</span>
       </th>
-      <Counter value={day.posts_seen} />
-      <Counter value={day.posts_new} />
-      <Counter value={day.mentions} />
-      <Counter value={day.buckets_written} />
-      <td data-label="Runs">
+      <Counter label="Fetched" value={day.posts_seen} />
+      <Counter label="New posts" value={day.posts_new} />
+      <Counter label="Mentions" value={day.mentions} />
+      <Counter label="Bucket writes" value={day.buckets_written} />
+      <Cell label="Runs">
         {unobserved
           ? <span className="muted">None completed</span>
           : <strong className="num">{day.completed_runs} completed</strong>}
@@ -135,20 +137,33 @@ function Day({ day }: { day: ActivityDay }) {
             || (unobserved ? 'nothing ran, or nothing reported'
                            : 'no failures recorded')}
         </span>
-      </td>
+      </Cell>
     </tr>
   )
 }
 
+/** What this day's record is, in words that match the cells beside it.
+ *
+ *  Not "coverage": `completeness` is about runs, and the endpoint says in
+ *  terms that it is not a measure of how much was covered. And not "not
+ *  recorded" for a day whose runs crashed -- three failures in the next cell
+ *  contradict it. A day is unrecorded only when nothing at all is on file.
+ */
+function dayState(day: ActivityDay): string {
+  if (day.completeness === 'partial') return 'Partially recorded'
+  if (day.error_runs || day.incomplete_runs) return 'No run finished'
+  return 'Nothing recorded'
+}
+
 /** Null is a gap, and it is drawn as one. A zero here would say the sources
  *  were quiet on a day when nothing was watching them. */
-function Counter({ value }: { value: number | null }) {
+function Counter({ label, value }: { label: string; value: number | null }) {
   return (
-    <td className="right" data-label="Count">
+    <Cell label={label} className="right">
       {value === null
         ? <span className="muted" title="No completed run reported this">—</span>
         : <strong className="num">{value.toLocaleString('en-US')}</strong>}
-    </td>
+    </Cell>
   )
 }
 
@@ -157,8 +172,26 @@ function recordingLine(payload: ActivityPayload): string {
     return 'No run has been recorded yet, so every day here is a gap rather '
       + 'than a quiet day.'
   }
-  return `Recording began ${dayLabel(payload.recording_started_at.slice(0, 10))}.`
+  // Berlin, like every other date on this page. Slicing the UTC string filed
+  // a 22:30Z first run under the previous day, so the footer named a day the
+  // table showed as empty.
+  return `Recording began ${berlinDay(payload.recording_started_at)}.`
     + ' Days before that are not missing measurements — nothing was recording.'
+}
+
+function berlinClock(iso: string): string {
+  try {
+    return `${new Date(iso).toLocaleTimeString('en-GB',
+      { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Berlin`
+  } catch {
+    return 'an unknown time'
+  }
+}
+
+function berlinDay(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB',
+    { weekday: 'short', day: 'numeric', month: 'short',
+      timeZone: 'Europe/Berlin' })
 }
 
 function dayLabel(date: string): string {
@@ -168,4 +201,26 @@ function dayLabel(date: string): string {
   } catch {
     return date
   }
+}
+
+function Cell({ label, className, testId, children }: {
+  label: string
+  className?: string
+  testId?: string
+  children: React.ReactNode
+}) {
+  // An explicit role, because `display: block` in the stacked mobile layout
+  // drops the implicit one; and a real element for the label rather than
+  // generated content, because ::before is not part of a cell's accessible
+  // name and cannot carry the header association a stacked table loses.
+  //
+  // Not aria-hidden. On the desk layout the column header supplies the
+  // association and this repeats it, which costs a word; below 700px the
+  // header row is gone and this is the only thing naming the figure.
+  return (
+    <td role="cell" className={className} data-testid={testId}>
+      <span className="rh-cell-label rh-visually-hidden">{label}</span>
+      {children}
+    </td>
+  )
 }
