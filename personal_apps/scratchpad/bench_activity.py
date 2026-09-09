@@ -63,6 +63,12 @@ ANCHOR = dt.datetime(2019, 6, 26, 12, 0)           # Wednesday
 WEEKEND_ANCHOR = dt.datetime(2019, 6, 30, 12, 0)   # Sunday, for contrast
 WINDOWS = (1, 7, 30)
 
+# Acceptance targets set by Codex's R3 ruling, against the 30-day upper-bound
+# fixture on this local environment. Targets, not predictions, and not a
+# production guarantee.
+PEAK_TARGET_MIB = 16
+ENDPOINT_TARGET_MS = 500
+
 # What a cycle costs before the scheduler counts the next interval. APScheduler
 # builds a fresh interval trigger on reschedule and its start_date is
 # `now + interval` at construction (apscheduler/triggers/interval.py), so the
@@ -157,9 +163,16 @@ def reddit_envelope():
 
 
 def rows_for(starts, body):
+    """Seeded rows carry the typed projection beside the envelope, because
+    that is what `finish_run` writes. Seeding envelopes alone would leave every
+    row uncountable and the read would be measured returning nulls -- fast, and
+    measuring nothing."""
+    version, countable, counters = activity.project(body)
     return [{'id': str(uuid.uuid4()), 'started_at': when,
              'finished_at': when + dt.timedelta(seconds=38), 'status': 'ok',
-             'summary_json': body, 'error_code': None}
+             'summary_json': body, 'error_code': None,
+             'summary_schema_version': version,
+             'summary_countable': countable, **counters}
             for when in starts]
 
 
@@ -178,17 +191,108 @@ def clear():
     db.session.commit()
 
 
-def timed(call, repeats=5):
-    """Best and median of N, after one untimed warm-up. Both reported: the best
-    is what the work costs on a warm buffer pool, which is a LOWER bound on a
-    cold one."""
-    call()
+def timed(call, repeats=5, warm_up=True):
+    """Median and maximum of N. The maximum is the honest number for a route a
+    reader can hit repeatedly; the median says what it usually costs.
+
+    `warm_up=False` leaves the first call inside the measurement, which is what
+    a COLD read looks like -- no application object caches, no warmed pool.
+    """
+    if warm_up:
+        call()
     runs = []
     for _ in range(repeats):
         began = time.perf_counter()
         call()
         runs.append((time.perf_counter() - began) * 1000)
-    return min(runs), statistics.median(runs)
+    return statistics.median(runs), max(runs)
+
+
+def rss_mib():
+    """What the operating system thinks the process is using.
+
+    tracemalloc sees Python allocations and misses allocator overhead and
+    fragmentation, so it is a floor. This is the number a host actually runs
+    out of. psutil first; on Windows without it, ask the API directly rather
+    than report nothing.
+    """
+    try:
+        import psutil
+        return psutil.Process().memory_info().rss / 1048576
+    except ImportError:
+        pass
+    if sys.platform != 'win32':
+        try:
+            import resource
+            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            # Linux reports KiB, macOS bytes.
+            return peak / 1024 if sys.platform.startswith('linux') \
+                else peak / 1048576
+        except ImportError:
+            return None
+    import ctypes
+    import ctypes.wintypes as wintypes
+
+    class Counters(ctypes.Structure):
+        _fields_ = [('cb', wintypes.DWORD),
+                    ('PageFaultCount', wintypes.DWORD),
+                    ('PeakWorkingSetSize', ctypes.c_size_t),
+                    ('WorkingSetSize', ctypes.c_size_t),
+                    ('QuotaPeakPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPeakNonPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaNonPagedPoolUsage', ctypes.c_size_t),
+                    ('PagefileUsage', ctypes.c_size_t),
+                    ('PeakPagefileUsage', ctypes.c_size_t)]
+
+    counters = Counters()
+    counters.cb = ctypes.sizeof(counters)
+    # restype matters. ctypes defaults a return to c_int, which truncates the
+    # 64-bit pseudo-handle GetCurrentProcess returns, and the call then fails
+    # silently with a zero return and a zero working set.
+    current_process = ctypes.windll.kernel32.GetCurrentProcess
+    current_process.restype = wintypes.HANDLE
+    get_info = ctypes.windll.psapi.GetProcessMemoryInfo
+    get_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters),
+                         wintypes.DWORD]
+    if not get_info(current_process(), ctypes.byref(counters), counters.cb):
+        return None
+    return counters.WorkingSetSize / 1048576
+
+
+def concurrent_reads(client_factory, days, workers=4):
+    """Several readers at once. One request says nothing about what happens
+    when four arrive together -- and the endpoint is reachable by any signed-in
+    reader, repeatedly."""
+    import threading
+
+    errors, timings = [], []
+    lock = threading.Lock()
+
+    def one():
+        try:
+            began = time.perf_counter()
+            with client_factory() as client:
+                response = client.get(f'/radar/api/activity?days={days}')
+                body = response.get_data()
+            elapsed = (time.perf_counter() - began) * 1000
+            with lock:
+                if response.status_code != 200:
+                    errors.append(f'status {response.status_code}')
+                timings.append(elapsed)
+            del body
+        except Exception as problem:                     # noqa: BLE001
+            with lock:
+                errors.append(f'{type(problem).__name__}: {problem}')
+
+    threads = [threading.Thread(target=one) for _ in range(workers)]
+    before = rss_mib()
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    after = rss_mib()
+    return errors, timings, before, after
 
 
 def window_bounds(days):
@@ -241,7 +345,14 @@ def peak_mib(call):
 
 def pass_over(label, duration, admin, cycle_body, reddit_body):
     """Seed one scheduling model and measure it. Clears first, so the two
-    passes cannot see each other's rows."""
+    passes cannot see each other's rows.
+
+    Two kinds of read are timed. COLD includes the first call, before any
+    application-level object cache or warmed connection exists. WARM is the
+    median of five after a warm-up. The database buffer pool is warm in both
+    after the seed, and that is stated rather than claimed away: what separates
+    the two columns here is APPLICATION state, not disk.
+    """
     clear()
     # Two days wider than the widest window: summary() queries Berlin calendar
     # days, whose start can precede ANCHOR - days.
@@ -254,31 +365,62 @@ def pass_over(label, duration, admin, cycle_body, reddit_body):
     print(f'seeded {total:,} runs over {widest + 2} days '
           f'(cycle {len(cycles):,} + reddit {len(reddits):,})')
 
-    print(f'{"window":>7} {"runs":>8} {"MiB":>6} {"summary ms":>13} '
-          f'{"endpoint ms":>13} {"no-JSON ms":>11} {"peak MiB":>9}')
+    def client_factory():
+        client = app.test_client()
+        with client.session_transaction() as session:
+            session['user_id'] = admin.id
+        return client
+
+    print(f'{"window":>7} {"rows":>7} {"JSON MiB":>9} {"summary ms":>16} '
+          f'{"endpoint ms":>16} {"cold ms":>9} {"peak MiB":>9}')
+    results = {}
     for days in WINDOWS:
         window_from, window_to = window_bounds(days)
         rows, byte_total = measured(window_from, window_to)
 
-        best, median = timed(lambda d=days: activity.summary(ANCHOR, d))
-        bare_best, _ = timed(lambda f=window_from, t=window_to: control(f, t))
+        median, worst = timed(lambda d=days: activity.summary(ANCHOR, d))
         peak = peak_mib(lambda d=days: activity.summary(ANCHOR, d))
 
-        with app.test_client() as client:
-            with client.session_transaction() as session:
-                session['user_id'] = admin.id
-
+        with client_factory() as client:
             def call(d=days):
                 response = client.get(f'/radar/api/activity?days={d}')
                 assert response.status_code == 200, response.status_code
                 return response.get_data()
 
-            endpoint_best, endpoint_median = timed(call)
+            endpoint_median, endpoint_worst = timed(call)
 
-        print(f'{days:>7} {rows:>8,} {byte_total / 1048576:>6.1f} '
-              f'{best:>9.0f}/{median:<3.0f} '
-              f'{endpoint_best:>9.0f}/{endpoint_median:<3.0f} '
-              f'{bare_best:>11.0f} {peak:>9.1f}')
+        # A fresh client and a fresh session, first call measured.
+        with client_factory() as cold_client:
+            def cold(d=days):
+                response = cold_client.get(f'/radar/api/activity?days={d}')
+                assert response.status_code == 200, response.status_code
+                return response.get_data()
+
+            cold_median, _ = timed(cold, repeats=1, warm_up=False)
+
+        print(f'{days:>7} {rows:>7,} {byte_total / 1048576:>9.1f} '
+              f'{median:>10.0f}/{worst:<5.0f} '
+              f'{endpoint_median:>10.0f}/{endpoint_worst:<5.0f} '
+              f'{cold_median:>9.0f} {peak:>9.1f}')
+        results[days] = {'rows': rows, 'endpoint_median': endpoint_median,
+                         'endpoint_max': endpoint_worst, 'peak': peak}
+
+    print('  ms columns are median/maximum of five measured requests after a '
+          'warm-up; "cold" is a single first request on a fresh client.')
+
+    # Four at once, at the widest window.
+    errors, timings, rss_before, rss_after = concurrent_reads(
+        client_factory, max(WINDOWS), workers=4)
+    shown = '/'.join(f'{value:.0f}' for value in sorted(timings))
+    print(f'  four concurrent {max(WINDOWS)}-day reads: {len(errors)} errors, '
+          f'{shown} ms')
+    if errors:
+        print(f'    errors: {errors}')
+    if rss_before is not None:
+        print(f'    process RSS {rss_before:.0f} -> {rss_after:.0f} MiB')
+    else:
+        print('    process RSS unavailable on this platform')
+    return results
 
 
 def main():
@@ -334,29 +476,42 @@ def main():
             # this file argues APScheduler does not actually produce, so
             # publishing only it would be the same overstatement in a
             # different place.
-            pass_over('start + interval (drift-free upper bound)', 0,
-                      admin, cycle_body, reddit_body)
+            upper = pass_over('start + interval (drift-free upper bound)', 0,
+                              admin, cycle_body, reddit_body)
             pass_over(f'finish + interval ({CYCLE_DURATION}s runs, what '
                       f'APScheduler does)', CYCLE_DURATION,
                       admin, cycle_body, reddit_body)
 
-            print('\nms columns are best/median of five on a warm buffer pool, '
-                  'after a warm-up: LOWER bounds.')
-            print('the endpoint is timed last, over rows already read ~12 '
-                  'times, so it can read a few ms faster than the function it '
-                  'wraps. That gap is the noise floor, not a saving.')
-            print('the no-JSON column is a bare two-column select, not '
-                  'summary() minus the column: it also skips the grouping '
-                  'loop, so it slightly overstates the envelopes\' share.')
-            print('"runs" and "MiB" are asked of the database over the same '
-                  'Berlin-day window summary() queries.')
+            # Codex's acceptance targets, checked against the 30-day
+            # UPPER-BOUND fixture -- the larger of the two models, which is the
+            # one the ruling names.
+            widest = upper[max(WINDOWS)]
+            print(f'\nacceptance, 30-day upper-bound fixture '
+                  f'({widest["rows"]:,} rows):')
+            for name, value, limit, unit in (
+                    ('peak incremental Python heap', widest['peak'],
+                     PEAK_TARGET_MIB, 'MiB'),
+                    ('median endpoint', widest['endpoint_median'],
+                     ENDPOINT_TARGET_MS, 'ms')):
+                verdict = 'PASS' if value <= limit else 'FAIL'
+                print(f'  {verdict}  {name}: {value:.1f} {unit} '
+                      f'(target <= {limit} {unit})')
+
+            print('\n"JSON MiB" is what the envelopes WOULD have cost: the '
+                  'bytes are still stored, and the read no longer fetches '
+                  'them. It is the size of the problem, not of the request.')
+            print('"rows" and "JSON MiB" are asked of the database over the '
+                  'same Berlin-day window summary() queries.')
             print('peak MiB is tracemalloc, so Python allocations only. The '
                   'driver is pymysql -- pure Python, so its buffers ARE '
                   'counted -- but allocator overhead is not: a floor on RSS.')
-            print('every seeded row is status=ok with a full envelope, and '
-                  'every source reports all 8 intake reasons. That is an '
-                  'UPPER bound: intake_reasons is 84% of the reddit envelope, '
-                  'and a quiet sub contributes fewer reasons or no key.')
+            print('the database buffer pool is warm in every column here, '
+                  'having just been seeded. What "cold" varies is APPLICATION '
+                  'state: a fresh client and session, first call measured.')
+            print('every seeded row is status=ok, countable, at the current '
+                  'schema version and reporting all four counters: the '
+                  'maximum-work case for the read, since every row is folded '
+                  'into a day rather than skipped.')
             print(f'the newest day is partial -- seeding stops at the anchor '
                   f'({ANCHOR:%H:%M}), as a reader opening it mid-day would '
                   f'find it.')

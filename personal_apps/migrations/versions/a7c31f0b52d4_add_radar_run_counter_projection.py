@@ -105,6 +105,14 @@ def _out_of_domain(envelope):
 
 
 def upgrade():
+    # The domain scan runs FIRST, before any DDL. MySQL commits implicitly on
+    # `ALTER TABLE`, so a refusal raised after the columns were added would
+    # leave them present with the revision unstamped -- and the next
+    # `flask db upgrade`, after the data was fixed, would fail with a duplicate
+    # column instead of retrying. Refusing here leaves the schema untouched and
+    # the retry clean.
+    _refuse_out_of_domain()
+
     op.add_column('radar_ingest_runs',
                   sa.Column('summary_schema_version', sa.Integer(),
                             nullable=True))
@@ -117,6 +125,53 @@ def upgrade():
         op.add_column('radar_ingest_runs',
                       sa.Column(name, sa.BigInteger(), nullable=True))
     _backfill()
+
+
+def _batches(connection, *columns):
+    """Keyset paging by primary key, so the pass is bounded whatever the table
+    holds and no OFFSET grows with it."""
+    last_id = ''
+    while True:
+        batch = connection.execute(
+            sa.select(*columns).select_from(sa.table('radar_ingest_runs'))
+            .where(sa.column('id') > last_id)
+            .order_by(sa.column('id')).limit(BATCH)).all()
+        if not batch:
+            return
+        yield batch
+        last_id = batch[-1].id
+
+
+def _refuse_out_of_domain():
+    """Read every stored envelope and refuse if any counter is not one.
+
+    Reported, never repaired. Silently turning a negative or a string into a
+    null would rewrite what history says happened, and the shape of such a row
+    is a compatibility question for whoever owns the schema, not something a
+    migration should settle while running unattended.
+    """
+    connection = op.get_bind()
+    seen, refused = 0, []
+    for batch in _batches(connection, sa.column('id'),
+                          sa.column('summary_json', sa.JSON)):
+        for row in batch:
+            seen += 1
+            bad = _out_of_domain(row.summary_json)
+            if bad:
+                refused.append((row.id, bad))
+    if not refused:
+        return
+    # The report names ids and value SHAPES, never stored content.
+    shapes = sorted({f'{name}: {kind}'
+                     for _, bad in refused for name, kind in bad})
+    raise RuntimeError(
+        f'{len(refused)} of {seen} radar_ingest_runs carry counter values '
+        f'outside the accepted domain (non-negative integers fitting a signed '
+        f'BIGINT): {"; ".join(shapes)}. First ids: '
+        f'{[run_id for run_id, _ in refused[:5]]}. This is a compatibility '
+        f'decision for the schema owner -- the migration refuses rather than '
+        f'alter what history says happened. No column has been added and '
+        f'nothing has been projected; fix the data and run the upgrade again.')
 
 
 def _backfill():
@@ -134,46 +189,9 @@ def _backfill():
         sa.column('summary_countable', sa.Boolean),
         *[sa.column(name, sa.BigInteger) for name in COUNTERS])
 
-    def batches():
-        last_id = ''
-        while True:
-            batch = connection.execute(
-                sa.select(runs.c.id, runs.c.summary_json)
-                .where(runs.c.id > last_id)
-                .order_by(runs.c.id).limit(BATCH)).all()
-            if not batch:
-                return
-            yield batch
-            last_id = batch[-1].id
-
-    # Two passes, and the order matters. The first only reads: if any stored
-    # counter is outside the accepted domain, the migration refuses BEFORE
-    # writing anything, so a refused upgrade leaves no half-projected table
-    # behind. MySQL commits implicitly on DDL, so a later raise could not be
-    # relied on to undo these updates.
-    seen, refused = 0, []
-    for batch in batches():
-        for row in batch:
-            seen += 1
-            bad = _out_of_domain(row.summary_json)
-            if bad:
-                refused.append((row.id, bad))
-
-    if refused:
-        # The report names ids and value SHAPES, never stored content.
-        shapes = sorted({f'{name}: {kind}'
-                         for _, bad in refused for name, kind in bad})
-        raise RuntimeError(
-            f'{len(refused)} of {seen} radar_ingest_runs carry counter values '
-            f'outside the accepted domain (non-negative integers fitting a '
-            f'signed BIGINT): {"; ".join(shapes)}. First ids: '
-            f'{[run_id for run_id, _ in refused[:5]]}. This is a '
-            f'compatibility decision for the schema owner -- the migration '
-            f'refuses rather than alter what history says happened. Nothing '
-            f'has been projected.')
-
     projected = 0
-    for batch in batches():
+    for batch in _batches(connection, sa.column('id'),
+                          sa.column('summary_json', sa.JSON)):
         for row in batch:
             version, countable, counters = _frozen_project(row.summary_json)
             connection.execute(

@@ -83,17 +83,27 @@ def plain_user():
             db.session.commit()
 
 
-def _run(ids, started, *, status, summary=None, error_code=None):
-    """A test-owned run row, written directly so the day it lands in is exact."""
+def _run(ids, started, *, status, summary=None, error_code=None,
+         schema_version=1):
+    """A test-owned run row, written directly so the day it lands in is exact.
+
+    The typed projection is written beside the envelope, because that is what a
+    row now IS: `finish_run` writes both in one transaction, and a row carrying
+    an envelope with no projection is the unsupported old-writer/new-reader
+    state the migration refuses to assume. Projected through `activity.project`
+    rather than by hand, so a fixture cannot disagree with the writer.
+    """
     run_id = str(uuid.uuid4())
     ids.append(run_id)
+    envelope = (None if summary is None
+                else {'schema_version': schema_version, 'summary': summary})
+    version, countable, counters = activity.project(envelope)
     db.session.add(RadarIngestRun(
         id=run_id, started_at=started,
         finished_at=None if status == 'running' else started + dt.timedelta(seconds=40),
-        status=status,
-        summary_json=None if summary is None
-        else {'schema_version': 1, 'summary': summary},
-        error_code=error_code))
+        status=status, summary_json=envelope, error_code=error_code,
+        summary_schema_version=version, summary_countable=countable,
+        **counters))
     db.session.commit()
     return run_id
 
@@ -186,13 +196,8 @@ def test_runs_written_in_another_schema_version_are_not_added_in_silence(
     would produce a number that means neither. Skipping them is right; doing
     it invisibly is not, which is what counted_runs says."""
     _run(owned_runs, QUIET, status='ok', summary=_counts(posts_seen=5))
-    future = str(uuid.uuid4())
-    owned_runs.append(future)
-    db.session.add(RadarIngestRun(
-        id=future, started_at=QUIET.replace(hour=14),
-        finished_at=QUIET.replace(hour=14, minute=1), status='ok',
-        summary_json={'schema_version': 99, 'summary': _counts(posts_seen=500)}))
-    db.session.commit()
+    _run(owned_runs, QUIET.replace(hour=14), status='ok', schema_version=99,
+         summary=_counts(posts_seen=500))
 
     day = activity.summary(QUIET, 1)['days'][0]
     assert day['posts_seen'] == 5

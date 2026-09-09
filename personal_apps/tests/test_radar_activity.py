@@ -28,6 +28,11 @@ from extensions import db
 from features.radar import activity
 from models import RadarBoardObservation, RadarIngestRun
 
+# The revision before radar_ingest_runs and radar_board_observations existed.
+# Named, so this file keeps testing the same thing however many revisions are
+# later stacked above d82f9afb5898.
+BEFORE_THESE_TABLES = 'b3d9e1f5a274'
+
 
 @pytest.fixture()
 def app_context():
@@ -371,6 +376,11 @@ def test_the_migration_adds_and_removes_only_its_own_two_tables(app_context):
     else moves when they do. A column-shape fingerprint of every table is
     taken before and after, and a pre-existing row is counted, so a migration
     that quietly rebuilt or emptied a neighbour would be caught.
+
+    The target is named rather than left as "one step back". Once another
+    revision was stacked on top of this one, a bare downgrade() stopped
+    reaching the point where these tables do not exist, and the test began
+    asserting something it was no longer doing.
     """
     from flask_migrate import downgrade, upgrade
 
@@ -380,7 +390,7 @@ def test_the_migration_adds_and_removes_only_its_own_two_tables(app_context):
     assert 'radar_ingest_runs' in before
 
     with _logging_preserved():
-        downgrade()
+        downgrade(revision=BEFORE_THESE_TABLES)
     after_down = _schema_fingerprint()
     try:
         assert set(before) - set(after_down) == {
@@ -389,7 +399,7 @@ def test_the_migration_adds_and_removes_only_its_own_two_tables(app_context):
         assert {t: f for t, f in before.items() if t in after_down} == after_down
     finally:
         with _logging_preserved():
-            upgrade()
+            upgrade()          # to head, whatever is stacked above
 
     assert _schema_fingerprint() == before
     assert db.session.execute(
