@@ -58,10 +58,24 @@ schema one and says nothing about what else moves underneath a running worker.
 That second effect is the concrete reason. Between `git reset --hard` and the
 restart, the running gunicorn holds **old Python in memory** while **new files
 sit on disk**: templates are read per request, static assets are served from the
-new tree, and Python dependencies have already been reinstalled. That window
-lasts a pip install, two migrations, an `npm ci` and a Vite build. I had no
+new tree, and Python dependencies have already been reinstalled. I had no
 mixed-version test to support the claim that nothing breaks across it, which is
 why the claim does not belong here.
+
+**How long that window is, measured.** Five real `update_coc.sh` runs on
+2026-09-08, bracketed by `radar_ingest` stopped → started in the journal:
+
+```
+03:32:04 -> 03:32:30   26 s
+12:04:23 -> 12:04:47   24 s
+12:43:32 -> 12:43:56   24 s
+16:53:05 -> 16:53:31   26 s
+17:35:27 -> 17:35:54   27 s
+```
+
+So the whole script runs in well under half a minute when `pip` and `npm ci` have
+nothing new to fetch. Stopping the two web units turns that into a ~25-second
+outage rather than the "minutes" an earlier version of this document guessed.
 
 **The read facts above are unchanged.** What changed is the conclusion drawn
 from them.

@@ -60,11 +60,19 @@ test to support "neither interface breaks in practice".
 because `update_coc.sh` updates the shared checkout and restarts `coc_web` too,
 **stop `coc_web` as well** for the window.
 
-**This is a real, recorded outage.** Both web applications are down from step 4.2
-until the script's own restarts inside step 10 of 4.3 — the length of a pip
-install, two
-migrations, `npm ci` and a Vite build. Minutes, not seconds. That is the cost of
-the ruling and it is stated here rather than discovered on the night.
+**This is a real, recorded outage, and it is short.** Both web applications are
+down from step 4.2 until the script's own restarts inside step 10 of 4.3 — a pip
+install, two migrations, `npm ci` and a Vite build.
+
+**Measured: 24-27 seconds.** Five real `update_coc.sh` runs on 2026-09-08,
+bracketed by `radar_ingest` stopped → started in the journal: 26 s, 24 s, 24 s,
+26 s, 27 s. An earlier version of this runbook said "minutes, not seconds", which
+was a guess and was wrong in the cautious direction.
+
+Budget ~60 seconds rather than 30: this release's frontend build includes the new
+hub entry, and its migration does real DDL where those runs had none. Add the
+manual stop and restart either side. That is the cost of the ruling, and it is a
+number rather than an adjective.
 
 **No permanent edit to `/root/update_coc.sh` is required.** The stops are
 orchestrated around the existing script, which is the single migration owner and
