@@ -1,6 +1,14 @@
 # Foundations progress ledger
 
 Plan: docs/superpowers/plans/2026-09-09-radar-foundations.md
+
+**Provenance of the SHAs below.** Rows for F1-F3, H1-H4, R1-R3 and P1 cite commits
+on `codex/radar-foundations`, where that work was done and reviewed. The P2 rows
+cite commits on `codex/radar-release-candidate`. The two are different branches:
+the candidate transplants the former's release commits onto `origin/main`, so a
+foundations SHA does **not** resolve there. Test evidence recorded against a
+foundations SHA was re-run on the candidate and is recorded separately under
+"P2 candidate".
 Spec: radar-design/IMPLEMENTATION-SPEC.md
 Updated: 2026-09-09
 
@@ -728,8 +736,12 @@ The excluded twelve are the judge/encoder work: `473c4b9`, `d8e1bea`, `728f75f`,
 `002c5bf`, `c50b73a`, `f6d2887`, `7e57a1b`, `8ad7899`, `ace9ead`, `7efee13`,
 `40c9c7c`, `7a9ffe4`. None is a radar-hub change.
 
-**Acceptance evidence** (`scratchpad/candidate_check.py`, run from the foundations
-worktree):
+**Acceptance evidence** — `personal_apps/scratchpad/candidate_check.py` on the
+candidate, which **exits non-zero if any claim fails**. The first version exited 0
+whatever it printed and swallowed git's return code, so a mistyped revision read as
+"nothing found, all clear"; the review caught that and both are fixed. The file
+counts are quoted against the transplant tip **91d3e2b**, since documentation
+commits land above it; ancestry and contamination are checked against HEAD.
 
 - 38 selected, 38 transplanted, counts match.
 - **No excluded commit is an ancestor of the candidate.** Checked individually with
@@ -760,6 +772,16 @@ clone `personal_apps_radar_wt`:
 
 Every number matches the foundations branch exactly, which is what "no dependency on
 the excluded work" should look like.
+
+**The whole backend suite, disclosed rather than only the release subset.** The
+evidence above is seven radar suites plus four shared ones, which is what the
+release touches. `pytest tests/ -q` over everything is **FULL_SUITE_RESULT**. Every
+failure reproduces at the pre-release baseline `7a9ffe4`, so none is caused by the
+transplant -- but the release evidence set is a subset, and saying so matters more
+than the subset looking clean. Three of them are the long-recorded
+`test_radar_ingest.py` cleanup defect (see the workspace/baseline gate above); the
+rest predate this work in suites it does not touch, two of which
+(`test_radar_watch`) sit on the watch cascade, a surface the hub shares.
 
 ### First-migration failure recovery, rehearsed (item 6)
 

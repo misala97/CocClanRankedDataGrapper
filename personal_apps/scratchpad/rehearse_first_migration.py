@@ -16,8 +16,10 @@ MariaDB:
     4. create_index  ix_radar_board_observations_observed
 
 A process killed between any two leaves the revision UNSTAMPED at
-`b3d9e1f5a274` with part of that list applied. This script builds each of those
-three partial states and rehearses recovery from it.
+`b3d9e1f5a274` with part of that list applied. This script builds each of those four partial states -- including the one
+where all four statements applied but the stamp was never written, which is
+where an operator is most tempted to stamp and move on -- and rehearses recovery
+from each.
 
     PYTHONPATH=. py -3.12 scratchpad/rehearse_first_migration.py
 
@@ -128,50 +130,78 @@ def stamped():
             return None
 
 
-def build_partial(after):
-    """Reproduce the state left by a kill after `after` of the four statements.
+def capture_real_ddl():
+    """The exact CREATE statements this migration produces, taken FROM it.
 
-    Issued as the migration issues them, so the resulting shapes are the
-    migration's own rather than an approximation.
+    Hand-written DDL was the first version of this and it was wrong: the
+    migration's `sa.JSON()` columns materialise on MariaDB as
+    `longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin` with a `json_valid`
+    CHECK, and a hand-copied `longtext` has neither the binary collation nor
+    the same check placement. The partial states were therefore states the
+    migration could not leave, which is the one thing a recovery rehearsal
+    must not get wrong.
+
+    So: run the real thing, read `SHOW CREATE TABLE`, and build every partial
+    state from that. Fidelity by construction rather than by transcription.
     """
-    ddl = {
-        'radar_ingest_runs': """
-            create table radar_ingest_runs (
-                id varchar(36) not null,
-                started_at datetime(6) not null,
-                finished_at datetime(6) null,
-                status varchar(8) not null,
-                summary_json longtext null
-                    check (json_valid(summary_json)),
-                error_code varchar(48) null,
-                primary key (id),
-                constraint ck_radar_ingest_run_status
-                    check (status in ('running','ok','error'))
-            ) default charset=utf8mb4""",
-        'ix_radar_ingest_runs_started':
-            'create index ix_radar_ingest_runs_started '
-            'on radar_ingest_runs (started_at)',
-        'radar_board_observations': """
-            create table radar_board_observations (
-                id varchar(36) not null,
-                slot_start datetime(6) not null,
-                observed_at datetime(6) not null,
-                schema_version int not null,
-                producer_revision varchar(64) null,
-                selections_json longtext not null
-                    check (json_valid(selections_json)),
-                payload_json longtext not null
-                    check (json_valid(payload_json)),
-                primary key (id),
-                constraint uq_radar_board_observation_slot unique (slot_start)
-            ) default charset=utf8mb4""",
-        'ix_radar_board_observations_observed':
-            'create index ix_radar_board_observations_observed '
-            'on radar_board_observations (observed_at)',
-    }
+    upgrade(revision=OBSERVATIONS)
+    statements = {}
+    with db.engine.connect() as connection:
+        for name in NEW_TABLES:
+            statements[name] = tuple(connection.execute(
+                sa.text(f'show create table `{name}`')).one())[1]
+        # The index DDL, read back the same way rather than guessed.
+        for table, index in (('radar_ingest_runs',
+                              'ix_radar_ingest_runs_started'),
+                             ('radar_board_observations',
+                              'ix_radar_board_observations_observed')):
+            column = connection.execute(sa.text(
+                f'select column_name from information_schema.statistics '
+                f"where table_schema = database() and table_name = '{table}' "
+                f"and index_name = '{index}'")).scalar()
+            statements[index] = (f'create index {index} on `{table}` '
+                                 f'({column})')
+    # The captured CREATE TABLE includes the index, so strip it: the partial
+    # states need the table WITHOUT its index for step 1.
+    for name in NEW_TABLES:
+        statements[name + ':noindex'] = _without_index(statements[name])
+    return statements
+
+
+def _without_index(create_statement):
+    """The same CREATE TABLE with its non-unique KEY lines removed.
+
+    `SHOW CREATE TABLE` folds the separately-created index into the table
+    definition. Statement 1 of the migration creates the table before that
+    index exists, so reproducing that state means removing exactly those lines
+    and nothing else.
+    """
+    kept = []
+    for line in create_statement.split('\n'):
+        stripped = line.strip()
+        if stripped.startswith('KEY `ix_'):
+            continue
+        kept.append(line)
+    # A trailing comma before the closing paren, left by a removed KEY line.
+    for index in range(len(kept) - 1, -1, -1):
+        if kept[index].strip().startswith(')'):
+            previous = kept[index - 1].rstrip()
+            if previous.endswith(','):
+                kept[index - 1] = previous[:-1]
+            break
+    return '\n'.join(kept)
+
+
+def build_partial(after, ddl):
+    """Reproduce the state left by a kill after `after` of the four statements,
+    using the DDL the migration itself produced."""
+    order = [('radar_ingest_runs:noindex', None),
+             ('ix_radar_ingest_runs_started', None),
+             ('radar_board_observations:noindex', None),
+             ('ix_radar_board_observations_observed', None)]
     with db.engine.begin() as connection:
-        for _, name in STEPS[:after]:
-            connection.execute(sa.text(ddl[name]))
+        for key, _ in order[:after]:
+            connection.execute(sa.text(ddl[key]))
 
 
 def inspect():
@@ -199,6 +229,10 @@ def recover(report):
     deployed code declares no model for these tables -- so a row here means the
     assumption behind the whole procedure is wrong, and the operator has to
     stop rather than let a script decide.
+
+    Counting and then dropping is a check-then-act, and it is only safe because
+    the runbook stops every writer before recovery begins. Do not lift this
+    procedure into a context where something could still be inserting.
     """
     if report['stamp'] != BASE_REVISION:
         raise SystemExit(
@@ -231,6 +265,11 @@ def main():
     application = make_app()
     with application.app_context():
         stamp(revision=BASE_REVISION)
+        ddl = capture_real_ddl()
+        with db.engine.connect() as connection:
+            after_first = {name: tuple(connection.execute(
+                sa.text(f'show create table `{name}`')).one())[1]
+                for name in NEW_TABLES}
         upgrade(revision=PROJECTION)
         with db.engine.connect() as connection:
             complete = {name: tuple(connection.execute(
@@ -245,7 +284,31 @@ def main():
             recreate_schema()
             db.engine.dispose()
             stamp(revision=BASE_REVISION)
-            build_partial(after)
+            build_partial(after, ddl)
+
+            # The check that makes the rest mean anything: the state being
+            # recovered from must be one the migration could actually leave.
+            # Compared BEFORE recovery, because recovery drops these tables and
+            # any comparison afterwards is against the real migration's output
+            # whatever was here.
+            with db.engine.connect() as connection:
+                partial_shapes = {name: tuple(connection.execute(
+                    sa.text(f'show create table `{name}`')).one())[1]
+                    for name in sorted(tables() & set(NEW_TABLES))}
+            faithful = all(
+                partial_shapes[name] == after_first[name]
+                for name in partial_shapes
+                if not (after == 1 and name == 'radar_ingest_runs')
+                and not (after == 3 and name == 'radar_board_observations'))
+            check('the partial state is one the migration could leave',
+                  faithful,
+                  'SHOW CREATE TABLE matches the real migration, '
+                  'collation and CHECK included')
+            if after == 1:
+                check('the un-indexed table differs from the indexed one '
+                      'only by its index',
+                      partial_shapes['radar_ingest_runs']
+                      == _without_index(after_first['radar_ingest_runs']))
 
             report = inspect()
             check('the revision is unstamped at the base',
@@ -285,16 +348,45 @@ def main():
                 rebuilt = {name: tuple(connection.execute(
                     sa.text(f'show create table `{name}`')).one())[1]
                     for name in NEW_TABLES}
-            check('the rebuilt schema is identical to a clean run',
+            # Weaker than it looks, and labelled so: recovery drops the
+            # partial tables, so this compares the real migration's output
+            # against itself. It catches a recovery that left something behind
+            # or upgraded to the wrong revision -- not a bad partial state,
+            # which is what the check above is for.
+            check('the recovered schema equals a clean run',
                   rebuilt == complete,
                   'byte-for-byte on both SHOW CREATE TABLE')
+
+        # All four statements applied, the stamp never written. This is the
+        # state where an operator is most tempted to stamp the revision and
+        # move on -- the schema LOOKS complete -- and doing so would skip the
+        # second migration's own work forever.
+        print('\ninterrupted after all four statements, before the stamp')
+        recreate_schema()
+        db.engine.dispose()
+        stamp(revision=BASE_REVISION)
+        build_partial(4, ddl)
+        report = inspect()
+        check('both tables present and the revision still unstamped',
+              len(report['present']) == 2 and report['stamp'] == BASE_REVISION)
+        dropped = recover(report)
+        check('recovery drops both and re-runs rather than stamping',
+              not (tables() & set(NEW_TABLES)), f'dropped {dropped}')
+        upgrade(revision=PROJECTION)
+        check('the re-run reaches the real head, not a stamped shortcut',
+              stamped() == PROJECTION)
+        with db.engine.connect() as connection:
+            rebuilt = {name: tuple(connection.execute(
+                sa.text(f'show create table `{name}`')).one())[1]
+                for name in NEW_TABLES}
+        check('and the schema equals a clean run', rebuilt == complete)
 
         # The guard that matters most: a partial table holding records.
         print('\na partial table that holds records')
         recreate_schema()
         db.engine.dispose()
         stamp(revision=BASE_REVISION)
-        build_partial(2)
+        build_partial(2, ddl)
         with db.engine.begin() as connection:
             connection.execute(
                 sa.text('insert into radar_ingest_runs '

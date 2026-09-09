@@ -207,10 +207,11 @@ projection columns they both depend on, which is a broken deployment rather than
 | d82f9afb5898 | creates `radar_ingest_runs` and `radar_board_observations` |
 | a7c31f0b52d4 | adds six projection columns to `radar_ingest_runs` and backfills them |
 
-Both are additive, both downgrades were verified as exact inverses, and `summary_json` is never
-modified by either. `flask db upgrade` applies both; do not stop between them. Check the target's
-heads again before the release rather than trusting the pair above to still be the top of the
-chain -- see RELEASE-PROPOSAL.md section 2.
+Both are additive, both downgrades were rehearsed as exact inverses on MariaDB 10.11.14, and
+`summary_json` is never modified by either. **The procedure is not here**: `/root/update_coc.sh` is
+the single migration owner and RELEASE-RUNBOOK.md is the single execution path. Do not run
+`flask db upgrade` by hand alongside it. Check the target's heads again before the release rather
+than trusting the pair above to still be the top of the chain -- see RELEASE-PROPOSAL.md section 2.
 
 `radar_ingest` must be STOPPED for the migration. It is the writer of `radar_ingest_runs`, and
 MariaDB's DDL auto-commits, so there is no supported window in which the old writer stores
@@ -224,7 +225,8 @@ engine. Note what the first deployment actually is: `radar_ingest_runs` does not
 target, so it is created empty and the backfill projects zero rows. The seeded cases rehearse the
 second deployment onward. **If `flask db upgrade` fails partway, do not re-run it blindly** -- the
 revision is unstamped and some columns may exist, and a blind retry fails on a duplicate column.
-The rehearsed recovery is in RELEASE-PROPOSAL.md section 4.5.
+**Two different failures with two different procedures** -- an interrupted FIRST migration and an
+interrupted SECOND one -- are in RELEASE-RUNBOOK.md section 7.
 
 Capture is a separate decision after a healthy deployment: `RADAR_OBSERVATION_CAPTURE_ENABLED=true`
 and `RADAR_PRODUCER_REVISION=<the deployed sha>` on the ingest host. The board-observation job is

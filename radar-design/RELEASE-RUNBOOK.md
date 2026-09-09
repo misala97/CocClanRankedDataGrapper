@@ -5,15 +5,15 @@ return", section B. **Nothing here is authorized and nothing here has been
 executed.** This is the one authoritative path; RELEASE-PROPOSAL.md describes the
 architecture and the drift, and does not contain a second procedure.
 
-**Three steps below are marked GATE — PENDING ACCESS.** They cannot be written as
-executable commands from this workspace, and the release cannot proceed past them.
-What is needed to close each is stated exactly, in section 6.
+**Sections 1, 2 and 3 are marked GATE — PENDING ACCESS.** They cannot be written
+as executable commands from this workspace, and the release cannot proceed past
+them. Each states exactly what it needs.
 
 ---
 
 ## 0. What this release is
 
-Candidate branch **`codex/radar-release-candidate`**, HEAD recorded in section 7,
+Candidate branch **`codex/radar-release-candidate`**, HEAD recorded in section 8,
 branched from fetched `origin/main` (2a83905) with the 38 release commits
 transplanted and the 12 unpublished research commits excluded.
 
@@ -94,7 +94,7 @@ that is a diagnosis, not something to migrate over.
 Also record, before anything changes:
 
 - [ ] The **currently deployed SHA** on the target (`git -C /root/coc-stats rev-parse HEAD`).
-- [ ] The **approved candidate SHA** (section 7) and the **current `origin/main` SHA**.
+- [ ] The **approved candidate SHA** (section 8) and the **current `origin/main` SHA**.
       **Abort on drift** between what was approved and what is about to deploy.
 - [ ] The configured capture flag as the service actually sees it — from the unit's
       `Environment`/`EnvironmentFile`, not from its absence in this worktree.
@@ -112,7 +112,10 @@ been restored and verified.
 - [ ] A **consistent** backup of `personal_apps`, with its **timestamp, the engine
       version that produced it, a checksum, and its scope** (which schemas, whether
       routines/triggers are included) recorded.
-- [ ] An **isolated disposable MariaDB** to restore into. Not the live server.
+- [ ] An isolated disposable MariaDB to restore into. **This part is not
+      missing**: the portable 10.11.14 used for P1 and P2 is exactly that, and
+      can be started again from the instructions in FOUNDATIONS-LEDGER.md.
+      **The backup file itself is the only thing genuinely unavailable.**
 - [ ] The restore commands as actually used, and the storage location and
       permissions of the backup.
 
@@ -144,9 +147,13 @@ No live restore and no production write is authorized.
 
 ## 4. The execution path
 
-Numbered, single-path, and every step has an owner and a stop condition. Claude is
-the operator once the owner separately authorizes deployment with access; until
-then this is a document.
+Numbered and single-path. Claude is the operator once the owner separately
+authorizes deployment with access; until then this is a document, and every step
+below is Claude's to run under that authorization.
+
+Steps that can end the release carry an explicit stop condition. The rest are
+observations and preparation, and their failure mode is that a later step's stop
+condition fires — which is the point of ordering them this way.
 
 ### 4.1 Reconcile the target (before the window)
 
@@ -178,8 +185,16 @@ ps -eo pid,etime,cmd | grep -E 'radar|gunicorn' | grep -v grep
    pre-existence does not make it irrelevant. Determine from its unit file whether
    it can write to any affected table; if it can, mask it for the window
    (`systemctl mask`) so the timer cannot restart it, and unmask afterwards.
-7. Confirm **one and only one** ingest process is gone, by process list, not by
-   unit state alone.
+
+   **The named three are a floor, not the list.** Step 4's `list-timers --all` is
+   there to be read: for every timer it surfaces, decide whether it can touch
+   `personal_apps` or compete for the database, and inhibit it if it can. The
+   host's nightly database-backup timer is the obvious one — a dump starting
+   mid-migration is a slow, confusing failure. Record each decision, because step
+   12 restores only what was previously enabled.
+7. Confirm **no ingest process remains**, by process list rather than unit
+   state alone — a stopped unit and a surviving process are different facts,
+   and only the second one corrupts a migration.
 
 ### 4.3 Deploy and migrate — one owner
 
@@ -216,14 +231,20 @@ show tables like 'radar\_board\_observations';    -- expect present
 ## 5. Verification, with deadlines
 
 Wall-clock deadlines come from the scheduler's own configuration
-(`run_radar_ingest.py`): the session cycle is registered with
-`next_run_time=now`, the reddit job at `now + 30s`, board observations at the next
-quarter-hour, sentiment at `now + 4 minutes`. **An operator should never be left
-waiting indefinitely or restarting a healthy slow job.**
+(`run_radar_ingest.py:1353, 1359, 1437, 1448`): the session cycle is registered
+with `next_run_time=now`, the reddit job at `now + 30s`, board observations at the
+next quarter-hour, sentiment at `now + 4 minutes`. The cycle then reschedules
+itself on the NYSE session, floor `CYCLE_SECONDS = 180`
+(`features/radar/config.py`). **An operator should never be left waiting
+indefinitely or restarting a healthy slow job.**
+
+The 5- and 10-minute figures below allow the first cycle to start immediately and
+take up to a few minutes; the 35-minute one is two quarter-hour boundaries and is
+exact.
 
 | # | check | deadline |
 | --- | --- | --- |
-| 5.1 | a run row exists: `select count(*), max(status) from radar_ingest_runs` | **5 min** after start |
+| 5.1 | a run row exists: `select count(*) from radar_ingest_runs` and `select status, count(*) from radar_ingest_runs group by status` | **5 min** after start |
 | 5.2 | the first completed run has BOTH a `summary_json` envelope and matching projection columns, and `counted_runs` on the day equals the completed count | **10 min** |
 | 5.3 | `/radar/api/activity?days=1`, `days=7`, `days=30` all 200 | immediate |
 | 5.4 | `/radar/api/ops` — **200 admin, 403 non-admin, 302 signed out** | immediate |
@@ -260,18 +281,45 @@ anything — a restart loses the evidence and does not fix a configuration fault
 `update_coc.sh` resets to `origin/main`. **A detached `git checkout` on the target
 is not a durable rollback** — the next routine deploy undoes it.
 
-### 6.1 Preferred: code-only, reverted on main
+### 6.1 Preferred: code-only, reverted on main — **keeping the migration files**
+
+**The revert must NOT remove `personal_apps/migrations/versions/`.** This is the
+one part of the rollback that is easy to get wrong and fails loudly when you do.
+
+`alembic_version` still holds `a7c31f0b52d4` after the release. `update_coc.sh`
+runs `flask db upgrade`. If the revert removed the two migration files, that
+upgrade cannot resolve the stamped revision and dies:
+
+```
+CommandError: Can't locate revision identified by 'a7c31f0b52d4'
+```
+
+Reproduced on the disposable MariaDB. Combined with requirement 1.2 — the script
+exits without restarting on a migration failure — a naive full revert leaves the
+site **down**, which is a worse outcome than the fault being rolled back.
 
 1. Stop `personal_apps_web` and `radar_ingest`.
-2. `git revert` the release merge on `main`, push.
-3. Run `update_coc.sh`, which now deploys the reverted state and rebuilds assets.
-4. Verify the deployed SHA is the reverted one — check it, do not assume.
+2. Revert the release merge on `main` **except** the two migration files:
+
+```
+git revert -n -m 1 <release merge sha>
+git checkout <release merge sha> -- personal_apps/migrations/versions/d82f9afb5898_add_radar_observations.py
+git checkout <release merge sha> -- personal_apps/migrations/versions/a7c31f0b52d4_add_radar_run_counter_projection.py
+git commit
+git push
+```
+
+3. Run `update_coc.sh`. `flask db upgrade` is now a **no-op** — the database is
+   already at `a7c31f0b52d4` and the files that define it are present.
+4. Verify the deployed SHA is the reverted one. Check it; do not assume.
 5. Start the previously running services.
 
 **Leave the schema in place.** Both tables and all six columns are additive, and
-the rollback target declares no `RadarIngestRun` model at all
-(`git grep RadarIngestRun 7a9ffe4` is empty), so the old code does not read them,
-write them, or know they exist. Nothing anywhere issues `SELECT *` on them.
+the rollback target declares no `RadarIngestRun` model
+(`git grep RadarIngestRun 7a9ffe4` is empty), so the application does not read
+them, write them, or know they exist, and nothing issues `SELECT *` on them.
+**Alembic is the exception**: it does know, through `alembic_version`, which is
+why the files stay even though the code that uses them does not.
 
 ### 6.2 Emergency: pinned artifact, routine deploy inhibited
 

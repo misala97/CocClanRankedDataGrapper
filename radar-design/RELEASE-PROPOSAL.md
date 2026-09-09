@@ -14,16 +14,19 @@ FOUNDATIONS-LEDGER.md "R3 evidence" and "P1 rehearsal", HANDOFF.md (workspace st
 
 | | before | after this release |
 | --- | --- | --- |
-| `/radar/` | the current board | **unchanged**, same code, same URL |
+| `/radar/` | the current board | same URL, same behaviour; **not** untouched code |
 | `/radar/hub/` | 404 | the six-page hub, opt-in |
 | database | `personal_apps` on MariaDB | same database, two additive migrations |
 | account | the owner's | same account, same session, same watch list |
 | ingest | `radar_ingest` | **the same unit**, no second process |
 | capture | off (unset) | **still off** |
 
-The two interfaces are side by side on the same live data. Nothing is replaced, and
-`/radar/` is the rollback for the hub in the strongest sense: it is untouched code
-on an untouched route.
+The two interfaces are side by side on the same live data. Nothing is replaced.
+
+**`/radar/` is not untouched code.** `static/radar/src/api.ts` (403 handling) and
+`vite_assets.py` (asset resolution) are shared and did change; the old board's
+required behaviour is preserved and is covered by regression checks, but returning
+to it is a **UI fallback, not a rollback** of shared services or of the schema.
 
 ### Why no duplicate ingestion is possible
 
@@ -56,7 +59,7 @@ immediately before the release**; it is a snapshot, not a standing fact.
 | --- | --- | --- |
 | `origin/main` | 2a83905 | 2 commits ahead, 12 behind |
 | `origin/dev_personal` | 38f9c79 | 12 behind; identical tree to `origin/main` |
-| local `dev_personal` | 7a9ffe4 | this branch's base |
+| local `dev_personal` | 7a9ffe4 | the base the release commits were built on |
 | `codex/radar-foundations` | this branch | `git rev-list --count 7a9ffe4..HEAD` |
 
 **`origin/main` and `origin/dev_personal` have the same tree**, object
@@ -165,20 +168,29 @@ in FOUNDATIONS-LEDGER.md "P2 access gates".
 - **No schema beyond the two migrations.**
 
 ---
+## 6. Decisions, and what is still open
 
-## 6. Open decisions, for Codex and the owner
+Four of these were open when this document was first written. Codex has since
+ruled on three; they are kept with their rulings so the reasoning is not lost.
 
-1. **The integration target.** `origin/dev_personal` is 12 commits behind local. Which
-   is the target, and are those 12 pushed first?
-2. **Backup verification.** A restore rehearsal is listed as a gate. Confirm the
-   nightly backup can actually be restored, or accept the release without that.
-3. **The migration window is short, and measured rather than hoped.** `radar_ingest`
-   is down for the duration. The table is created empty, so the backfill projects
-   zero rows on this deployment and the cost is six `ALTER TABLE`s on an empty
-   table. A later re-run over accumulated runs is one UPDATE per row and should be
-   re-estimated then.
-4. **Who deploys, and with what.** `/root/update_coc.sh` hard-resets to
-   `origin/main`. Either this is merged and pushed to `origin/main` first, or a
-   hand-deploy is reverted by the next routine run of that script.
-5. **Who runs it.** Every command here is the owner's. Nothing in this package
-   executes against the VPS.
+1. **The integration target — DECIDED.** Fetched `origin/main`, because the VPS
+   deploy script resets to it. The 12 unpublished local commits are neither pushed
+   nor merged as a prerequisite: the release candidate transplants only the release
+   commits above them. See FOUNDATIONS-LEDGER.md "P2 candidate".
+2. **Who deploys, and with what — DECIDED.** `/root/update_coc.sh` is the single
+   migration owner, and the release is merged and pushed to `origin/main` first so
+   the deploy survives that script's hard reset. Claude is the operator once the
+   owner separately authorizes deployment with access.
+3. **Backup verification — a hard gate, still unmet.** Not something to accept the
+   release without. The disposable MariaDB to restore into already exists; **the
+   backup file itself is the only part genuinely missing.** RELEASE-RUNBOOK.md
+   section 3.
+4. **The migration window — open, and not measurable from here.** `radar_ingest` is
+   down for the duration. The backfill itself is trivial: the table is created
+   empty, so it projects zero rows and the cost is six `ALTER TABLE`s on an empty
+   table. **That is not the downtime.** The build, the service restarts, the locks
+   and the verification all contribute, and none has been measured on the target.
+5. **Two access gates besides the backup — open.** The deploy script's actual
+   contents and the read-only target preflight. RELEASE-RUNBOOK.md sections 1 and 2.
+
+Nothing in this package executes against the VPS, and nothing in it is authorized.

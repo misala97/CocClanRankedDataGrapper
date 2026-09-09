@@ -356,7 +356,10 @@ Three things follow, and they change what this release is:
   assumed state.
 - The pre-DDL domain refusal **cannot fire** here. It matters from the second
   deployment onward, which is what the rehearsal's twelve seeded rows actually cover.
-- There is no safe partial dry run. The upgrade is the release.
+- There is no safe partial dry run: `flask db upgrade` performs the schema
+  mutation, so it can never be a read-only preflight. Nor does it by itself
+  complete the release — the deployment and the verification are separate steps
+  that follow it.
 
 ### Also corrected after review
 
