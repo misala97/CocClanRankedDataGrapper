@@ -501,7 +501,15 @@
   border-radius: 3px;
   overflow: hidden;
 }
-.rh-tonebar span { border-radius: 2px; min-width: 0; }
+/* A segment that exists is drawn wide enough to be seen. Measured at 1440
+   before this rule: a 0.5% bullish share rendered 0.52px and a 0.1% bearish
+   one 0.02px, so the bar read 0% and 100% under labels that deliberately say
+   `0.5%` and `>99.9%` -- the bar reintroducing exactly the rounding lie the
+   wording exists to prevent. 2px of a 104px track slightly OVER-states a rare
+   share, which is the honest direction to err: the percentage above it is the
+   reading, and this only has to say "present, and very small". A zero share
+   still draws no segment at all, because that difference is the point. */
+.rh-tonebar span { border-radius: 2px; min-width: 2px; }
 .rh-tonebar .bull { background: var(--sage); }
 .rh-tonebar .flat { background: var(--line); }
 .rh-tonebar .bear { background: oklch(72% 0.09 25); }

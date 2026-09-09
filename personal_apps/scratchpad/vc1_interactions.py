@@ -74,6 +74,35 @@ def main():
               page.evaluate('location.hash'))
         page.keyboard.press('Escape')
 
+        print('\nthe tone bar')
+        # Measured in a real browser, because this is a layout fact that jsdom
+        # cannot have an opinion about: flex-grow over a 104px track.
+        bars = page.evaluate("""() =>
+          Array.from(document.querySelectorAll('.rh-chatter tbody tr')).map((tr) => {
+            const label = tr.querySelector('.rh-col-tone strong');
+            return {
+              label: label && label.textContent,
+              segs: Array.from(tr.querySelectorAll('.rh-tonebar span')).map((s) => ({
+                cls: s.className,
+                w: Math.round(s.getBoundingClientRect().width * 100) / 100,
+              })),
+            };
+          })""")
+        rare = [b for b in bars if b['label'] in ('0.5% bullish', '>99.9% bullish')]
+        check('a rare share draws a segment you can see',
+              bool(rare) and all(min(s['w'] for s in b['segs']) >= 2 for b in rare),
+              '; '.join(f"{b['label']}: {[s['w'] for s in b['segs']]}" for b in rare))
+        full = [b for b in bars if b['label'] == '100% bullish']
+        check('a TRUE zero share draws no segment at all',
+              bool(full) and all(len(b['segs']) == 1
+                                 and b['segs'][0]['cls'] == 'bull' for b in full),
+              '; '.join(str([s['cls'] for s in b['segs']]) for b in full))
+        ordinary = [b for b in bars if b['label'] == '38.5% bullish']
+        check('an ordinary share is drawn in proportion, unrounded',
+              bool(ordinary)
+              and abs(ordinary[0]['segs'][0]['w'] / 102 - 10 / 26) < 0.02,
+              str([s['w'] for s in ordinary[0]['segs']]) if ordinary else '')
+
         print('\nkeyboard reach')
         page.evaluate('document.body.focus()')
         # Tab from the top of the document until the first row's company
