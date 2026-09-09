@@ -13,9 +13,11 @@ Implementation and verification by Claude, 2026-09-09, in
 | **TE1** | **Complete** | New disposable `personal_apps_radar_te1`, 29 FKs, both migrations, integrity tests pass. See below. |
 | **VC1a data/helpers** | **Complete** | `c90cf92`. Additive `activity_sources`; pure `tonePresentation`/`sourcePresentation`. Mutation-checked. |
 | **VC1b Chatter correction** | **Complete** | `db9f153`. Composition, tone bar + percentage, source summary, column proportions, responsive rules. |
-| **VC1c visual verification** | **Complete** | Matched before/after screenshots, 48 browser checks, measurements in `reports/vc1/`. |
+| **VC1c visual verification** | **Complete** | Matched before/after screenshots, 50 browser checks, measurements in `reports/vc1/`. |
 | **Two defects found by looking** | **Fixed** | `b1cf313` the class collision, `43526e8` the tone bar's invisible rare share. Both below. |
 | **Independent review** | **Performed, findings resolved** | Read-only reviewer against this contract, the source and the actual screenshots. Twelve findings, none blocking; every one addressed below. |
+| **VC1-close (Eighth return A, B, D)** | **Complete** | `20dfc03`. Approximate-bar sentence, table breakpoints scoped back to Chatter, responsive cell labels. |
+| **Sortable Chatter** | **Complete** | `20dfc03`. Owner-approved 2026-09-10; the binding contract is in VISUAL-CORRECTION-PLAN.md. |
 | Owner acceptance | **Open — this is the ask** | Run the preview and look at it. Command below. |
 | Deployment | Not authorized | Separate decision, after visual acceptance |
 
@@ -33,6 +35,8 @@ because a document cannot name the commit that carries it.
 | `43526e8` | the tone bar drew a rare share as nothing |
 | `fc578b8` | the loading state, and one test flake reported rather than hidden |
 | `79235db` | the independent review's twelve findings |
+| `d66b52e` | the documents name their commits |
+| `20dfc03` | **VC1-close**: sortable Chatter, and the Eighth return's A, B and D |
 
 ---
 
@@ -297,7 +301,7 @@ reads `last 24 hours` (what is on screen). That is the payload's own echo
 doing its job: the heading describes the rows the reader is looking at, not
 the request that has not landed.
 
-### Browser checks — 48, all passing, no console or page errors
+### Browser checks — 50, all passing, no console or page errors
 
 Disclosures open and close, Escape closes and returns focus, opening one does
 not navigate, the source detail names concrete `r/…` feeds, every row control
@@ -404,6 +408,155 @@ and documented in `Chatter.tsx` — below 860 px the header row is gone and the
 label is the only thing naming the figure — but it does double the announced
 text per row, and a future pass could make it responsive rather than constant.
 
+## VC1-close — the Eighth return's A, B and D, `20dfc03`
+
+Codex accepted TE1 and the principal correction and set three narrow items
+before a deployment proposal. This is a small closure, **not** a redispatch of
+VC1a-c: nothing in the earlier work was reopened.
+
+**A. The bar says it approximates.** The tone detail now ends with the ruling's
+own sentence: *"Tiny nonzero shares are drawn at a minimum width so they remain
+visible; use the percentage and counts for the exact balance."* It is in the
+accessible detail, not the row. The rare-share geometry and percentage tests
+are retained unchanged, and the geometry is not described anywhere as strictly
+proportional.
+
+**B. The 860 table breakpoint is Chatter's alone.** Watching and Activity keep
+the 700px table breakpoint they always had. Carrying them to 860 was an
+uncommanded change to pages this work was asked only to check, and the capture
+that seemed to justify it was of an **empty** table. Navigation still collapses
+at 1080 and the skip-link correction stands.
+
+Chatter's stacking rules are written `.rh-table.rh-chatter`, so they outrank
+the generic `.rh-table` block by specificity below 700 rather than by which
+media query the file happens to list last.
+
+Verified on **populated** fixtures — a five-row watch list and seven days of
+labelled fictional activity, because the local database records no ingest runs
+and its real activity payload is seven days of nulls:
+
+| width | Chatter | Watching | Activity |
+| --- | --- | --- | --- |
+| 861 | table | table | table |
+| 860 | **stacked** | table | table |
+| 768 | stacked | table | table |
+| 701 | stacked | table | table |
+| 700 | stacked | **stacked** | **stacked** |
+
+No page scrolls sideways at any of those widths.
+
+**D. The duplicate cell labels are gone from the desk layout.** They were
+`rh-visually-hidden`, which hides from the eye and keeps in the accessibility
+tree — so a screen reader heard the column name from the header and again from
+the cell, seven times a row, every row. They are now `display: none` on the
+desk layout, which removes them from both trees, and `display: block` in the
+stacked layout where the header row no longer exists and they are the only
+thing naming each figure. One CSS switch; no JavaScript watching the viewport;
+the explicit ARIA roles that survive `display: block` on table elements are
+unchanged.
+
+Activity and Watching still carry the same duplicate on their desk layouts.
+That is the same defect and it is **not fixed here** — those pages were out of
+scope — and it is recorded below as a named follow-up.
+
+---
+
+## Sortable Chatter, `20dfc03`
+
+Owner-approved on 2026-09-10 after using the preview. The binding contract is
+the "VC1-close addition" section of VISUAL-CORRECTION-PLAN.md.
+
+**It is a view, and the page says so.** Sorting issues no request, touches no
+server sort parameter and cannot add a company the response did not carry. A
+browser check asserts the board-request count does not move when a header is
+clicked. The note above the table reads *"Sorts these 7 candidates, not the
+whole market — Radar's ranking and eligibility are unchanged"*, because
+"sorted by tone" otherwise reads as "the most bullish companies in the market"
+and it is not that.
+
+**Every key reads what its cell displays.** Sorting a formatted percentage
+would put 10% before 2%; sorting the bar's geometry would rank rows by the 2px
+minimum that exists so a rare share stays visible. So:
+
+| column | sorts on | unknown when |
+| --- | --- | --- |
+| Company | the ticker, locale-aware and numeric-aware, never the clamped name | never |
+| Attention | `row.ratio`, the server's guard, never recomputed | no baseline |
+| Voices | `authors` | not a finite number |
+| Sources | platforms from validated `activity_sources`; never legacy `sources` | the field is missing (an empty list is a measured zero and sorts) |
+| Tone | the unrounded bullish share of the DIRECTIONAL sample | no directional sample, or malformed counts |
+| Price | the displayed price, **grouped by currency** | unavailable quote, no price, or no currency |
+| Today | the raw `price_move` fraction; zero is a value | no move, or no usable quote |
+
+**Unknown is not zero and not smallest.** Rows with nothing measured stay last
+in **both** directions — reversing a sort must not promote the companies nobody
+has a reading for. Equal keys keep the response order, with an explicit index
+tiebreak rather than borrowing the engine's sort stability.
+
+**Price groups rather than pretends.** €4.44 is not "less than" $18.20 in any
+sense a reader would accept and this board has no conversion to make it one, so
+a German fallback row sorts among the euro rows and the page names the
+currencies when more than one is present. Today's move does **not** group: a
+percentage is comparable across currencies where a price is not.
+
+**Where the state lives.** In the hub, not in Chatter — Chatter unmounts when
+the reader opens a company, so Back would otherwise throw the ordering away. In
+memory only: it is a view over whichever response is current, so it survives a
+refresh and a server-filter change, and "Radar order" resets to the **newest**
+response rather than the one that was sorted. Not in the URL either; the query
+string is the SELECTION, which decides what the server builds, and this decides
+nothing the server does.
+
+**Both layouts can sort.** Desk: the column headers are real buttons, with
+`aria-sort` on the header cell and the visible column name as the button's own
+accessible name. Price and Today are two controls, because one combined
+control cannot say whether the reader asked for the dearest company or the one
+that rose most — and the shared header takes an explicit name saying which of
+them `aria-sort` is describing. Below 860 the header row is `display: none`,
+which takes it out of the accessibility tree too, so the stacked layout gets a
+labelled **Sort by** selector and a direction button with the same seven keys.
+Same CSS breakpoint as everything else; no JavaScript watching the viewport.
+
+**One defect the screenshots caught.** Raising specificity for item B made
+`.rh-table.rh-chatter td { display: block }` outrank the chevron column's
+`display: none`, so on mobile a stray chevron reappeared as a block with no
+grid area and sat alone at the bottom of every row. Every test still passed.
+Fixed, and pinned by a check that every visible stacked cell has a named grid
+area.
+
+### Tests and checks at `20dfc03`
+
+| command | result |
+| --- | --- |
+| `npx vitest run -c vite.radar.config.ts` | **519 passed**, 40 files (was 476; +23 comparator, +16 UI, +4 hub) |
+| `npx vitest run` (root config) | **403 passed**, 32 files |
+| `npm run build` (includes `tsc --noEmit`) | exit 0 |
+
+Browser checks: **110 passing**, no console or page errors — **50** from the
+earlier VC1c pass, re-run unchanged against this build, plus **60** covering
+sorting, the responsive labels and the breakpoints on populated tables at five
+widths across three pages.
+
+Backend code was not touched by this commit.
+
+### New evidence
+
+| file | what |
+| --- | --- |
+| `close-sorted-1440.png` | sorted by Tone, desk layout, with the arrow and the scope note |
+| `close-sorted-390.png` | sorted by Voices from the stacked layout's selector |
+| `close-chatter-768.png`, `close-chatter-700.png` | Chatter stacked at both |
+| `close-watching-768.png`, `close-watching-700.png` | populated Watching: table, then stacked |
+| `close-activity-768.png`, `close-activity-700.png` | populated Activity: table, then stacked |
+
+The watch list and the activity days in those captures are **labelled
+fictional fixtures**. The local database has no watch marks and records no
+ingest runs, so its real payloads are an empty list and seven days of nulls —
+and an empty table cannot verify a table layout, which is the Eighth return's
+own point.
+
+---
+
 ## Limitations, stated
 
 1. **No tone reading on local data.** The development copy has no
@@ -421,6 +574,31 @@ text per row, and a future pass could make it responsive rather than constant.
    change. They are not claimed to be prototype-identical, and no page-specific
    fidelity work was done on them.
 5. **TE1's schema comes from local development, not from a production restore.**
+   Codex accepted it as closing the constraint-free TEST ENVIRONMENT defect
+   while noting it is not a production clone: MySQL 8 and `utf8mb4_0900_ai_ci`
+   differ from the target's MariaDB and collation, and matching local foreign
+   keys does not establish every production constraint.
+6. **Sorting was verified in Chromium only**, through the built bundle. The
+   `Intl.Collator` ordering of tickers and the `display: none` breakpoint
+   switch are standard, but no second engine was checked.
+7. **The duplicate cell labels persist on Activity and Watching.** Chatter's
+   are fixed; those two were out of scope and are a named follow-up.
+8. **No screen reader was run.** The accessibility claims here rest on the DOM,
+   computed styles and `aria-*` attributes as measured in the browser — not on
+   an actual assistive-technology pass.
+
+## Named follow-ups
+
+- **The duplicate cell labels on Activity and Watching.** Same defect Chatter's
+  item D fixed, same one-line shape. Out of scope here by ruling.
+- **Watching's tone and source presentation.** Eighth return E: reuse these
+  helpers where Watching shows those metrics, with a populated mockup first.
+  Not a Watching redesign, and not in this delivery.
+- **The zero-feed question in legacy `sources` / `venues` / breadth filtering.**
+  Changing it can change which companies appear, so it is a ranking decision
+  and not a display one.
+- **Whether 860 is right for Watching and Activity too.** This delivery
+  restored their 700, and the question is open rather than answered.
 
 ## Not done, deliberately
 
@@ -428,3 +606,15 @@ No merge, no push, no deploy. Capture stays off. `/radar/` is unchanged and no
 root-route promotion. OT1 — the retired encoder-trial watchdog — was not
 touched. Historical analysis remains the next new feature after this
 correction.
+
+## Codex review update — 2026-09-10
+
+See CODEX-DECISIONS.md Eighth return. TE1 accepted with local-schema limits;
+principal VC1 accepted for owner preview. VC1-close remains before deployment:
+approximate-bar explanation, scope table breakpoint changes to Chatter, responsive
+accessible labels. Do not redispatch completed work. Owner may review now;
+no deployment authorized. Current reviewed HEAD d66b52e; Codex documentation
+edits are intentional and uncommitted. Fresh focused Vitest: 56 passed/2 files.
+
+2026-09-10 owner addition: sortable Chatter is OPEN within VC1-close. Read the appended binding sorting contract in VISUAL-CORRECTION-PLAN.md. Preserve completed tasks; return sorting with the same closure review/preview. No deployment authorized.
+

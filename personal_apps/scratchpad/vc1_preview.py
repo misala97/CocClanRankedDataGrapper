@@ -205,7 +205,14 @@ def fixture_activity(days):
             'counted_runs': 0 if quiet else 96,
             'incomplete_runs': 1 if index == 0 else 0,
             'error_runs': 2 if index == 2 else 0,
-            'completeness': 'unknown' if quiet else 'complete',
+            # 'partial' and 'unknown' are the ONLY values the endpoint emits:
+            # it never claims a day is complete, because successful runs prove
+            # cycles ran and not that anything was covered. An earlier version
+            # of this fixture invented 'complete', fell through the page's
+            # mapping, and captured a screenshot reading "Nothing recorded"
+            # above 16,540 fetched posts. A state the API cannot produce is
+            # not evidence of anything.
+            'completeness': 'unknown' if quiet else 'partial',
         })
     return out
 
