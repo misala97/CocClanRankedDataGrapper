@@ -1,0 +1,179 @@
+{
+  "pages": [
+    {
+      "route": "overview",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "chatter",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "news",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "combined",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "research/KSTR",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "watchlist",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "portfolio",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "analysis",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "activity",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "admin",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "trade/KSTR",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "route": "overview",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "chatter",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "news",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "combined",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "research/KSTR",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "watchlist",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "portfolio",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "analysis",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "activity",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "admin",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "trade/KSTR",
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "route": "overview",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "chatter",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "news",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "combined",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "research/KSTR",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "watchlist",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "portfolio",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "analysis",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "activity",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "admin",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "route": "trade/KSTR",
+      "width": 390,
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "checks": [
+    "Watchlist mutation persisted",
+    "Research evidence tabs",
+    "Broker unknown and no-match filters",
+    "Oversell blocked and partial sale updates position",
+    "Local alert creation",
+    "Scenario state selector",
+    "Global search and dialog dismissal"
+  ]
+}
