@@ -66,45 +66,50 @@ describe('the last remaining feed', () => {
     const onChange = show(['reddit'])
     await userEvent.click(feed(/reddit/i))
 
-    // Either nothing was asked for, or exactly what was already selected was.
-    // Both are acceptable; a board of feeds nobody picked is not.
-    for (const call of onChange.mock.calls) {
-      expect(call[0].sources).toEqual(['reddit'])
-    }
-    expect(feed(/reddit/i)).toBeChecked()
-    expect(feed(/bluesky/i)).not.toBeChecked()
-    expect(feed(/4chan/i)).not.toBeChecked()
+    // Nothing is asked for at all. This is what discriminates: with the
+    // defect the click reported ['bluesky','fourchan'] and a board of two
+    // feeds nobody picked was fetched immediately.
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('keeps a concrete venue selection when its only feed is unchecked', async () => {
     const onChange = show(['reddit:wallstreetbets'])
     await userEvent.click(feed(/reddit/i))
 
-    for (const call of onChange.mock.calls) {
-      expect(call[0].sources).toEqual(['reddit:wallstreetbets'])
-    }
+    expect(onChange).not.toHaveBeenCalled()
     expect(feed(/reddit/i)).toBeChecked()
   })
 
-  it('says why it cannot be unchecked rather than ignoring the click', async () => {
+  it('says why it cannot be unchecked rather than ignoring the click', () => {
     // A control that silently does nothing is the same defect wearing a
-    // different face.
+    // different face. aria-disabled and not disabled, so the keyboard reader
+    // this description exists for can still reach it -- the board's own
+    // recorded decision, in board/Controls.tsx.
     show(['reddit'])
     const only = feed(/reddit/i)
-    expect(only).toBeDisabled()
-    expect(only).toHaveAccessibleDescription(/at least one feed/i)
+    expect(only).toHaveAttribute('aria-disabled', 'true')
+    expect(only).not.toBeDisabled()
+    expect(only).toHaveAccessibleDescription(/one feed has to stay on/i)
   })
 
-  it('is clickable again as soon as a second feed is on', () => {
+  it('says nothing about a floor nobody is standing on', () => {
+    // The note used to render on every board, including the default with all
+    // three feeds on and nothing locked.
     show(['bluesky', 'reddit'])
-    expect(feed(/reddit/i)).toBeEnabled()
-    expect(feed(/bluesky/i)).toBeEnabled()
+    expect(screen.queryByText(/one feed has to stay on/i))
+      .not.toBeInTheDocument()
+  })
+
+  it('is unlocked again as soon as a second feed is on', () => {
+    show(['bluesky', 'reddit'])
+    expect(feed(/reddit/i)).not.toHaveAttribute('aria-disabled')
+    expect(feed(/bluesky/i)).not.toHaveAttribute('aria-disabled')
   })
 
   it('counts concrete venues under one feed as one feed', () => {
     // Two subreddits are still only Reddit, so Reddit is still the last one.
     show(['reddit:wallstreetbets', 'reddit:options'])
-    expect(feed(/reddit/i)).toBeDisabled()
+    expect(feed(/reddit/i)).toHaveAttribute('aria-disabled', 'true')
   })
 })
 
@@ -158,5 +163,22 @@ describe('the reducer behind the checkboxes', () => {
 
   it('adds a feed that is off', () => {
     expect(toggle(['bluesky'], 'reddit')).toEqual(['bluesky', 'reddit'])
+  })
+
+  it('signals a refusal by identity, so a caller can tell it apart', () => {
+    // The component reads this to decide whether to report anything at all;
+    // reporting an unchanged selection would push a dead history entry.
+    const only = ['reddit']
+    expect(toggle(only, 'reddit')).toBe(only)
+    expect(toggle(['bluesky', 'reddit'], 'reddit')).not.toBe(only)
+  })
+
+  it('roots the source it was given, not only the ones it holds', () => {
+    // Exported, so it can be called with a concrete venue. Rooting one side
+    // only made this a remove that silently appended a duplicate.
+    expect(toggle(['reddit:options'], 'reddit:options'))
+      .toEqual(['reddit:options'])
+    expect(toggle(['bluesky', 'reddit:options'], 'reddit:options'))
+      .toEqual(['bluesky'])
   })
 })

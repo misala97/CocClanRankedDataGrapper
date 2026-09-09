@@ -361,10 +361,10 @@
   min-height: 40px;
 }
 .rh-sources input { accent-color: var(--green); }
-.rh-sources input:disabled + span,
-.rh-sources label:has(input:disabled) { color: var(--muted); cursor: not-allowed; }
-/* Always in the DOM so the description it carries can be referenced; shown
-   only when a checkbox actually points at it. */
+/* The feed that cannot be turned off. `.locked` rather than `:disabled`,
+   because the input is aria-disabled and still focusable -- see Filters.tsx. */
+.rh-sources label.locked { color: var(--muted); cursor: not-allowed; }
+/* Rendered only while a checkbox points at it. */
 .rh-sources-note {
   flex-basis: 100%;
   margin: 0;

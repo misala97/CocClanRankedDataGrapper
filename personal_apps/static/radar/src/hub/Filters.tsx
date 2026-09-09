@@ -115,28 +115,40 @@ export function Filters({ board, selection, onChange }: {
           // naming one sub keeps that feed lit rather than lighting none.
           const on = selection.sources.some(
             (chosen) => chosen.split(':')[0] === source)
-          // The last one standing cannot be turned off, and says so rather
-          // than absorbing the click. Two subreddits are still one feed, so
-          // "last" counts roots and not entries.
-          const onlyOne = on && rootsOf(selection.sources).length === 1
+          // The last one standing cannot be turned off. Two subreddits are
+          // still one feed, so "last" counts roots and not entries.
+          const last = on && rootsOf(selection.sources).length === 1
           return (
-            <label key={source}>
+            <label key={source} className={last ? 'locked' : undefined}>
               <input
                 type="checkbox"
                 checked={on}
-                disabled={onlyOne}
-                aria-describedby={onlyOne ? FLOOR_ID : undefined}
-                onChange={() => onChange({
-                  ...selection, sources: toggle(selection.sources, source) })}
+                // aria-disabled, not disabled, which is the board's own
+                // recorded decision (board/Controls.tsx): a disabled input
+                // leaves the tab order, so the keyboard reader it exists for
+                // never reaches the control OR the description attached to
+                // it. The click is a real no-op instead.
+                aria-disabled={last || undefined}
+                aria-describedby={last ? FLOOR_ID : undefined}
+                onChange={() => {
+                  const next = toggle(selection.sources, source)
+                  // Nothing was asked for. Reporting the same selection back
+                  // would push a history entry that changes nothing, so Back
+                  // would need two presses to go anywhere.
+                  if (next === selection.sources) return
+                  onChange({ ...selection, sources: next })
+                }}
               />
               {sourceLabel(source)}
             </label>
           )
         })}
-        <p id={FLOOR_ID} className="rh-sources-note">
-          At least one feed has to stay selected — a board with no feeds is
-          not one the server can build.
-        </p>
+        {last(selection) ? (
+          <p id={FLOOR_ID} className="rh-sources-note">
+            One feed has to stay on — a board with none is not one the server
+            can build.
+          </p>
+        ) : null}
       </fieldset>
     </div>
   )
@@ -150,6 +162,12 @@ function rootsOf(sources: string[]): string[] {
   return Array.from(new Set(sources.map((name) => name.split(':')[0] ?? name)))
 }
 
+/** Whether the selection is down to its last feed, and the note explaining
+ *  that is therefore worth rendering. */
+function last(selection: Selection): boolean {
+  return rootsOf(selection.sources).length === 1
+}
+
 /** Turning a feed off drops it and every concrete venue under it.
  *
  *  Turning the LAST one off returns the selection unchanged. It previously
@@ -158,13 +176,24 @@ function rootsOf(sources: string[]): string[] {
  *  the controls showing Reddit unchecked. An empty list is not a board the
  *  server can build, and neither is a substitute for one nobody asked for.
  *
- *  The checkbox is disabled in that state too, so the reader is told rather
- *  than having a click absorbed. This stays as the guarantee: a disabled
- *  input is a UI affordance, not an invariant.
+ *  The control is marked aria-disabled in that state and says why, so the
+ *  reader is told rather than having a click absorbed. This function stays
+ *  as the guarantee for THIS control: an ARIA state is an affordance, and
+ *  only the reducer survives a programmatic change. It is not the only floor
+ *  on `sources` -- navigation.readSources has its own for a URL naming a
+ *  retired feed, and that one falls back to the server's echo rather than to
+ *  the reader's current selection.
+ *
+ *  Identity is the signal: a refusal returns `current` itself, so a caller
+ *  can tell "nothing to do" from "here is a new list".
  */
 export function toggle(current: string[], source: string): string[] {
-  const on = current.some((chosen) => chosen.split(':')[0] === source)
+  // Both sides rooted. Everything the component passes is a bare root, but
+  // this is exported, and rooting only one side made
+  // toggle(['reddit:options'], 'reddit:options') append a duplicate.
+  const root = source.split(':')[0] ?? source
+  const on = current.some((chosen) => chosen.split(':')[0] === root)
   if (!on) return [...current, source]
-  const rest = current.filter((chosen) => chosen.split(':')[0] !== source)
+  const rest = current.filter((chosen) => chosen.split(':')[0] !== root)
   return rest.length ? rest : current
 }

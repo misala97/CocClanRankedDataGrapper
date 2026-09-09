@@ -215,6 +215,41 @@ describe('the shell', () => {
     expect(setWatch).toHaveBeenCalledTimes(1)
   })
 
+  it('never fetches a board of feeds the reader did not pick', async () => {
+    // The level Codex named: Filters reports a selection, the shell turns it
+    // into a request. With the defect, unchecking the only feed asked the
+    // server for the OTHER two -- so this asserts on the request, not on the
+    // callback.
+    const onlyReddit = payload({ sources: ['reddit'] })
+    const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(onlyReddit)
+
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: onlyReddit })
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
+
+    for (const call of fetchBoard.mock.calls) {
+      expect(call[0]!.sources).toEqual(['reddit'])
+    }
+    expect(window.location.search).not.toContain('bluesky')
+    expect(window.location.search).not.toContain('fourchan')
+  })
+
+  it('does fetch when a feed selection really changes', async () => {
+    // The positive control: without it the test above passes against a hub
+    // whose checkboxes are wired to nothing at all.
+    const both = payload({ sources: ['bluesky', 'reddit'] })
+    const fetchBoard = vi.spyOn(api, 'fetchBoard')
+      .mockResolvedValue(payload({ sources: ['bluesky'] }))
+
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: both })
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
+    await waitFor(() => expect(fetchBoard).toHaveBeenCalled())
+    expect(fetchBoard.mock.calls[0]![0].sources).toEqual(['bluesky'])
+  })
+
   it('does not carry a failed mark to the next page', async () => {
     const p = payload({ rows: [row({ ticker: 'AAA' })] })
     p.watching = ['AAA']
