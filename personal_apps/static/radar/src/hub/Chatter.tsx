@@ -105,7 +105,7 @@ function Panel({ board, rows, filter, onFilter, onOpen }: {
           </p>
         </div>
         <div className="rh-panelheadtools">
-          <label className="rh-field rh-search">
+          <label className="rh-field rh-tablefilter">
             <span>Filter companies</span>
             <input
               type="search"

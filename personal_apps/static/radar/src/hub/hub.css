@@ -535,7 +535,11 @@
   margin-left: auto;
 }
 .rh-panelcount { white-space: nowrap; padding-bottom: 10px; }
-.rh-search input { min-width: 200px; }
+/* Not `.rh-search` -- that class is the topbar's global search, and
+   sharing it made this box inherit the topbar's styling and, worse,
+   made a test that typed into `.rh-search input` type into the wrong
+   field entirely. */
+.rh-tablefilter input { min-width: 200px; }
 .rh-panelempty { padding: 4px 23px 0; }
 
 /* The column proportions come from the colgroup; `fixed` is what makes the
@@ -1263,7 +1267,8 @@
   .rh-field { width: 100%; }
   .rh-filters-note { margin-left: 0; }
   .rh-search { max-width: none; }
-  .rh-search input { font-size: 16px; min-width: 0; }
+  .rh-search input { font-size: 16px; }
+  .rh-tablefilter input { font-size: 16px; min-width: 0; }
   .rh-panelhead { padding: 18px 18px 0; gap: 14px; }
   .rh-panelheadtools { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .rh-panelcount { padding-bottom: 0; }
