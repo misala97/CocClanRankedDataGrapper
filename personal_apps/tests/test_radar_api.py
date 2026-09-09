@@ -437,6 +437,65 @@ def test_the_row_serializer_actually_runs(client):
     _json.dumps(payload)
 
 
+def test_the_row_serializes_the_feeds_that_counted_something(client):
+    """`sources` is every scored feed that was looked at; `activity_sources`
+    is the subset that counted something. Both cross the boundary, because
+    the second is what the row displays and the first is what the breadth
+    filter is built on."""
+    import datetime as dt
+    import json as _json
+    from app import app as flask_app
+    from extensions import db
+    from features.radar import board
+    from features.radar.routes.api import serialize
+    from features.radar.config import source_config_version
+    from models import (RadarBucketSource, RadarMention, RadarPost,
+                        TickerUniverse)
+
+    now = dt.datetime(2026, 3, 12, 15, 0, 0)
+    tag = 'ACTZ'
+
+    def wipe():
+        RadarMention.query.filter(RadarMention.ticker == tag).delete(
+            synchronize_session=False)
+        RadarPost.query.filter(RadarPost.external_id.like(f'{tag}%')).delete(
+            synchronize_session=False)
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker == tag).delete(synchronize_session=False)
+        TickerUniverse.query.filter_by(symbol=tag).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    def bucket(source, mentions, authors):
+        return RadarBucketSource(
+            ticker=tag, bucket_start=now - dt.timedelta(minutes=30),
+            source=source, mention_count=mentions,
+            high_confidence_count=mentions, low_count=0,
+            distinct_authors=authors, distinct_text_ratio=0.9,
+            engagement_weighted_count=float(mentions), status='ok',
+            source_config_version=source_config_version(),
+            expected=1.0, variance=2.0, mention_z=5.0, baseline_days=30)
+
+    with flask_app.app_context():
+        wipe()
+        db.session.add(TickerUniverse(symbol=tag, name='Activity Corp',
+                                      first_seen=dt.datetime(2020, 1, 1),
+                                      daily_sigma=0.02))
+        db.session.add(bucket('bluesky', 10, 6))
+        db.session.add(bucket('reddit:options', 0, 0))
+        db.session.commit()
+
+        payload = serialize(board.build(['bluesky', 'reddit'], now))
+        wipe()
+
+    rows = [r for r in payload['rows'] if r['ticker'] == tag]
+    assert len(rows) == 1, 'the fixture row did not reach the board'
+    row = rows[0]
+    assert row['sources'] == ['bluesky', 'reddit:options']
+    assert row['activity_sources'] == ['bluesky']
+    _json.dumps(payload)
+
+
 def test_an_unsupported_venue_filter_is_rejected(client):
     assert client.get('/radar/api/board?venues=7').status_code == 400
     assert client.get('/radar/api/board?venues=2').status_code == 200

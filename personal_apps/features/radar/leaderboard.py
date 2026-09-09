@@ -50,6 +50,14 @@ class Row:
     text_ratio: float
     # Concrete stored names that contributed -- `reddit:pennystocks`, not
     # `reddit`. This is the breakdown, and it must stay concrete.
+    #
+    # It lists every scored feed the ticker has a bucket on in the window,
+    # INCLUDING feeds that counted nothing. `_aggregate` admits a bucket on
+    # `mention_z IS NOT NULL`, not on a positive mention count, and a scored
+    # feed that saw nothing still writes a row -- so this is the list of feeds
+    # that were LOOKED AT. Ranking, `venues` and the breadth filter are all
+    # built on it and keep it: changing what it means would change which
+    # companies appear. `activity_sources` answers the other question.
     sources: list
     # How many INDEPENDENT venues those names represent, which is the count of
     # their roots. Two subreddits are two entries in `sources` and one venue:
@@ -73,6 +81,19 @@ class Row:
     # 'no_mentions' (no bucket in the window at all). phrasing.py turns
     # it into words.
     floor_reason: str | None = None
+    # The subset of `sources` that actually counted something: concrete feeds
+    # whose summed mentions over the selected window are greater than zero.
+    #
+    # This is bucket-OBSERVED activity and nothing more. It does not claim the
+    # feeds are independent of each other, that anything on them was verified,
+    # or that a human read them -- two subreddits are two entries here and one
+    # venue, exactly as in `sources`.
+    #
+    # Additive on purpose. `sources`, `venues`, the eligibility floor and the
+    # breadth filter are untouched, so no ticker enters or leaves the board
+    # because this field exists. Defaulted so every existing constructor --
+    # tests included -- keeps working.
+    activity_sources: list = dataclasses.field(default_factory=list)
 
 
 def _universe_rows(tickers):
@@ -295,6 +316,14 @@ def _assemble(ticker, folded, parts, profile, quote, moves, quote_sigmas,
     contributing = sorted({part.source for part in parts})
     # One venue per ROOT, not per stored name -- see Row.venues.
     venues = len({source_root(name) for name in contributing})
+    # The feeds that counted something, out of the feeds that were looked at.
+    # Folded from the SAME aggregated `parts` -- no extra query, and none that
+    # grows with the number of rows. `mentions` is a SUM over an INTEGER
+    # column, so MySQL and MariaDB both hand it back as Decimal; compared
+    # against 0 rather than coerced, because Decimal('0') > 0 is False and a
+    # NULL sum (no rows folded into this source) must not raise.
+    active = sorted({part.source for part in parts
+                     if part.mentions is not None and part.mentions > 0})
     # MIN already skipped NULLs per source; this skips the sources that
     # had nothing but NULLs, so a row with no usable baseline anywhere
     # still reports None rather than raising. Coerced like the aggregates
@@ -365,6 +394,7 @@ def _assemble(ticker, folded, parts, profile, quote, moves, quote_sigmas,
         marks=marks,
         eligible=eligible,
         floor_reason=floor_reason,
+        activity_sources=active,
     )
 
 
