@@ -494,7 +494,8 @@ are daily, so worst case is just under 24 hours.
 
 ```
 candidate branch   codex/radar-release-candidate
-final SHA          P2CLOSE_SHA
+final SHA          2563b95, plus the commit that records it here
+                   verify with: git rev-parse --short HEAD
 ```
 
 ### 1. Service ordering — you overruled me, and the runbook now says so
