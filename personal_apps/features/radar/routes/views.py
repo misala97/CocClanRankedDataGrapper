@@ -11,7 +11,7 @@ separate "initial" code path to keep in sync.
 """
 from flask import render_template, request
 
-from auth import current_user, login_required
+from auth import current_user, is_admin, login_required
 
 from ._blueprint import radar_bp
 from .api import BadQuery, build_payload
@@ -32,3 +32,29 @@ def board_page():
     except BadQuery:
         payload = build_payload({}, user_id=user_id)
     return render_template('radar/board.html', payload=payload)
+
+
+@radar_bp.route('/hub/')
+@login_required
+def hub_page():
+    """The opt-in hub, offered alongside the board rather than in place of it.
+
+    /radar/ above is unchanged and stays the way back. Promoting this route is
+    a separate release decision, so nothing here may change what that one does.
+
+    `is_admin` travels with the board so the shell can decide whether to render
+    an Administration link on first paint rather than after a probe request.
+    It is a rendering hint: /radar/api/ops enforces authorization itself and
+    does not trust it.
+
+    Same BadQuery fallback as the board page: a person editing the address bar
+    is not a bug, and answering a typo with an error page is an odd way to run
+    a dashboard.
+    """
+    user_id = current_user().id
+    try:
+        payload = build_payload(request.args, user_id=user_id)
+    except BadQuery:
+        payload = build_payload({}, user_id=user_id)
+    return render_template('radar/hub.html',
+                           shell={'board': payload, 'is_admin': is_admin()})

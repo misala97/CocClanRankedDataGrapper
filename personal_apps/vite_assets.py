@@ -38,14 +38,7 @@ class ViteManifestError(RuntimeError):
     """The bundle for an entry could not be resolved."""
 
 
-def resolve_asset(entry: str, dist_dir: Path | None = None,
-                  feature: str = 'gym') -> str:
-    """URL path for a built entry, e.g. resolve_asset('exercise').
-
-    `entry` is the basename under static/<feature>/src/entries/, without
-    extension. `feature` defaults to gym because it was the only one when this
-    was written and every gym template calls it unqualified.
-    """
+def _record(entry: str, dist_dir: Path | None, feature: str) -> tuple[dict, Path]:
     dist = dist_dir or (_STATIC / feature / 'dist')
     manifest_path = dist / '.vite' / 'manifest.json'
     if not manifest_path.exists():
@@ -53,10 +46,6 @@ def resolve_asset(entry: str, dist_dir: Path | None = None,
             f'No Vite manifest at {manifest_path}. Run `npm run build` in '
             f'personal_apps/ -- on the VPS this runs after `git reset --hard`, '
             f'which deletes the untracked dist/ directory.')
-
-    cache_key = (f'{dist}:{entry}', manifest_path.stat().st_mtime)
-    if cache_key in _cache:
-        return _cache[cache_key]
 
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     key = f'static/{feature}/src/entries/{entry}.tsx'
@@ -66,7 +55,38 @@ def resolve_asset(entry: str, dist_dir: Path | None = None,
             f'Entry {entry!r} (looked for {key!r}) is not in the Vite '
             f'manifest. Add it to rollupOptions.input in the Vite config '
             f'for feature {feature!r}.')
+    return record, manifest_path
 
+
+def resolve_asset(entry: str, dist_dir: Path | None = None,
+                  feature: str = 'gym') -> str:
+    """URL path for a built entry, e.g. resolve_asset('exercise').
+
+    `entry` is the basename under static/<feature>/src/entries/, without
+    extension. `feature` defaults to gym because it was the only one when this
+    was written and every gym template calls it unqualified.
+    """
+    dist = dist_dir or (_STATIC / feature / 'dist')
+    record, manifest_path = _record(entry, dist_dir, feature)
+    cache_key = (f'{dist}:{entry}', manifest_path.stat().st_mtime)
+    if cache_key in _cache:
+        return _cache[cache_key]
     url = f'/static/{feature}/dist/{record["file"]}'
     _cache[cache_key] = url
     return url
+
+
+def resolve_asset_css(entry: str, dist_dir: Path | None = None,
+                      feature: str = 'gym') -> list[str]:
+    """URL paths for the stylesheets an entry imports, hashed like its bundle.
+
+    An entry whose module graph imports a `.css` file gets it emitted as a
+    separate asset rather than injected at runtime, and the manifest lists it
+    under `css`. A template that linked only the script would render the page
+    unstyled -- with no error anywhere, because the bundle loads fine.
+
+    Empty for an entry that imports no CSS, which is every gym entry and the
+    radar board: their stylesheets are plain <link> tags on unhashed files.
+    """
+    record, _ = _record(entry, dist_dir, feature)
+    return [f'/static/{feature}/dist/{href}' for href in record.get('css', [])]
