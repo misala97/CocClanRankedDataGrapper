@@ -2,7 +2,7 @@
 
 This section supersedes historical status/next-action/deploy statements below.
 Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
-Branch codex/radar-release-candidate; **HEAD db9f153**, built on the verified
+Branch codex/radar-release-candidate; **HEAD 43526e8**, built on the verified
 base d3bc795. Production is ba1c381 per RELEASE-RECORD.md, migration head
 a7c31f0b52d4. Capture remains off and /radar/ remains the original route.
 **Nothing has been merged, pushed or deployed, and nothing here authorizes it.**
@@ -16,6 +16,9 @@ paths.
 | --- | --- |
 | c90cf92 | additive `activity_sources`, and the pure tone/source presentation helpers |
 | db9f153 | the corrected Chatter, the More-filters disclosure, column proportions, responsive rules, and the screenshots |
+| ea98c50 | Codex's brief, dispatch and reference images carried in, plus the VC1 ledger |
+| b1cf313 | the panel's company filter had taken the topbar search's class |
+| 43526e8 | the tone bar drew a rare share as nothing at all |
 
 **Immediate next action: the owner looks at it.** The preview is runnable:
 

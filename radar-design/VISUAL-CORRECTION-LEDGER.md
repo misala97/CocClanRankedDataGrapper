@@ -13,13 +13,22 @@ Implementation and verification by Claude, 2026-09-09, in
 | **TE1** | **Complete** | New disposable `personal_apps_radar_te1`, 29 FKs, both migrations, integrity tests pass. See below. |
 | **VC1a data/helpers** | **Complete** | `c90cf92`. Additive `activity_sources`; pure `tonePresentation`/`sourcePresentation`. Mutation-checked. |
 | **VC1b Chatter correction** | **Complete** | `db9f153`. Composition, tone bar + percentage, source summary, column proportions, responsive rules. |
-| **VC1c visual verification** | **Complete** | Matched before/after screenshots, 39 browser checks, measurements in `reports/vc1/`. |
+| **VC1c visual verification** | **Complete** | Matched before/after screenshots, 42 browser checks, measurements in `reports/vc1/`. |
+| **Two defects found by looking** | **Fixed** | `b1cf313` the class collision, `43526e8` the tone bar's invisible rare share. Both below. |
 | Independent review | Complete | Read-only reviewer against this contract and the actual screenshots; findings recorded below. |
 | Owner acceptance | **Open — this is the ask** | Run the preview and look at it. Command below. |
 | Deployment | Not authorized | Separate decision, after visual acceptance |
 
 Baseline: release-candidate branch `d3bc795`; production `ba1c381` per accepted
-RELEASE-RECORD.md. HEAD after this work is `db9f153`.
+RELEASE-RECORD.md. HEAD after this work is **`43526e8`**.
+
+| commit | what |
+| --- | --- |
+| `c90cf92` | VC1a — additive `activity_sources`, pure tone/source presentation helpers |
+| `db9f153` | VC1b/VC1c — the corrected Chatter, filters disclosure, CSS, responsive rules, screenshots |
+| `ea98c50` | Codex's brief, dispatch and reference images carried in, plus this ledger |
+| `b1cf313` | the panel's company filter had taken the topbar search's class |
+| `43526e8` | the tone bar drew a rare share as nothing |
 
 ---
 
@@ -193,9 +202,52 @@ tone counts — and on a row that has a sample the correction is 165 px → 106 
 | `before-*.png` | the rejected build on the same payloads |
 | `reflow-720.png`, `reflow-320.png` | 200% and 400% zoom |
 | `page-*.png` | Overview, Watching, Activity, Administration, Research at three widths |
+| `state-nomatch-1440.png` | the in-page filter matching nothing |
+| `state-refresh-failed-1440.png` | a refresh that failed; the rows stay |
+| `state-first-paint-1440.png` | the embedded payload, before any fetch |
 | `after-measurements.json`, `before-measurements.json` | the numbers above, as measured |
 
-### Browser checks — 39, all passing, no console or page errors
+### Two defects the screenshots caught and the tests did not
+
+**The panel's company filter had taken the topbar search's class.**
+`.rh-search` already belonged to the global search field in the topbar. The
+new "Filter companies" box reused it, so a capture script that typed into
+`.rh-search input` put the string in the topbar instead: the suggestion
+popover opened over the page heading and the table underneath was completely
+unfiltered. Every hub test still passed, because none of them addresses either
+field by class. Renamed to `.rh-tablefilter`. Fixed in `b1cf313`.
+
+**The tone bar was telling the rounding lie the label refuses to.** Measured
+at 1440: a `0.5% bullish` share drew a **0.52px** segment and a `>99.9%` one
+drew **0.02px**, on a 104px track. Both invisible — so the bar read 0% and
+100% under labels that deliberately do not, reintroducing exactly the rounding
+the wording exists to prevent, in the more persuasive channel. A segment that
+exists is now at least 2px, which slightly over-states a rare share; that is
+the honest direction to err, because the percentage above it is the reading
+and the bar only has to say "present, and very small". A TRUE zero still draws
+no segment. Fixed in `43526e8` and pinned by three browser checks, since it is
+a layout fact jsdom cannot have an opinion about.
+
+Measured segments after the fix, at 1440:
+
+```
+38.5% bullish     bull 39.23px   bear 62.77px     (10/26 of 102px, unrounded)
+0.5% bullish      bull  2.00px   bear 100.00px
+>99.9% bullish    bull 100.00px  bear   2.00px
+100% bullish      bull 104.00px  — one segment, no bear at all
+No directional signal / No tone sample   one 104px neutral track
+```
+
+### The other states
+
+`state-nomatch-1440.png` — the in-page filter matching nothing. It says the
+filter runs over the seven already listed, and the count reads `0 of 7 shown`;
+it is not confused with an empty board.
+`state-refresh-failed-1440.png` — a refresh that fails keeps all seven rows on
+screen rather than blanking, which is what the stale-response protection is
+for. `state-first-paint-1440.png` — the embedded payload before any fetch.
+
+### Browser checks — 42, all passing, no console or page errors
 
 Disclosures open and close, Escape closes and returns focus, opening one does
 not navigate, the source detail names concrete `r/…` feeds, every row control
