@@ -1,3 +1,59 @@
+# Current dispatch — VC1 delivered, awaiting the owner's eyes, 2026-09-09
+
+This section supersedes historical status/next-action/deploy statements below.
+Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
+Branch codex/radar-release-candidate; **HEAD db9f153**, built on the verified
+base d3bc795. Production is ba1c381 per RELEASE-RECORD.md, migration head
+a7c31f0b52d4. Capture remains off and /radar/ remains the original route.
+**Nothing has been merged, pushed or deployed, and nothing here authorizes it.**
+The foundations worktree remains unchanged.
+
+**TE1, VC1a, VC1b and VC1c are complete.** VISUAL-CORRECTION-LEDGER.md is the
+full account, with the measurements, the browser checks and the screenshot
+paths.
+
+| commit | what |
+| --- | --- |
+| c90cf92 | additive `activity_sources`, and the pure tone/source presentation helpers |
+| db9f153 | the corrected Chatter, the More-filters disclosure, column proportions, responsive rules, and the screenshots |
+
+**Immediate next action: the owner looks at it.** The preview is runnable:
+
+```
+cd C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate/personal_apps
+PYTHONPATH=. py -3.12 scratchpad/vc1_serve.py 5071
+```
+
+then `http://127.0.0.1:5071/scratchpad/vc1/real.html#chatter` and
+`.../fixture.html#chatter`. The annotated before/after is
+`radar-design/reports/vc1/comparison-1440.png`.
+
+**The test database changed.** The worktree `.env` now names
+`personal_apps_radar_te1` — a schema-preserving rebuild carrying all 29 foreign
+keys, at migration head a7c31f0b52d4. The old constraint-free
+`personal_apps_radar_wt` is preserved and NOT dropped; every result recorded
+against it stays labelled constraint-free. Assert the name before any backend
+test or migration:
+
+```
+cd personal_apps && PYTHONPATH=. py -3.12 -c "from app import app; from extensions import db; app.app_context().push(); print(db.engine.url.database)"
+```
+
+Dirty ownership: Codex's CODEX-DECISIONS.md edit is still uncommitted and is
+Codex's. Everything else in this worktree is committed. `.gitignore` now
+excludes `personal_apps/scratchpad/vc1/`, which holds regenerable board
+payloads; the committed evidence is `radar-design/reports/vc1/`.
+
+Seventh-return documentation carry and OT1 remain separate supporting tasks and
+were not touched. Historical analysis remains the next NEW feature, after this
+correction is accepted. Use RELEASE-RECORD.md for executed facts, not the old
+deployment statements below.
+Protected: all .env/credentials/backups/private fixtures, unrelated planning
+checkout research changes, and the foundations worktree. No staging all files.
+
+---
+
+## Historical handoff preserved for evidence
 # Radar current handoff
 
 Updated 2026-09-09, by Claude, during implementation. Supersedes the planning-stage handoff.
@@ -257,3 +313,23 @@ Replace the sections above with the then-current worktree, branch, HEAD, dirty o
 and open tasks, review findings, exact tests and results, protected files and deployment carries.
 Verify this file against Git and the reports before trusting it; if they disagree, the evidence wins
 and the discrepancy belongs in the ledger.
+
+
+## Owner clarification — staged design ambition (2026-09-09)
+
+The interactive prototype is the near-term fidelity target for VC1 and the next
+iterations, NOT the desired final product or a permanent ceiling. The longer-term
+ambition remains the visual richness, sophistication and research depth of the
+original image concepts: A's welcoming overview and B's focused research workflow,
+unified in the selected light/green identity. C remains rejected.
+
+As history, portfolio and news capabilities mature, design their pages and revisit
+the hub's composition with richer charts, evidence interactions, hierarchy and
+polish, using fresh mockups before implementation. Aim for the original concepts'
+level of craft and complexity where it serves research; their fictional content
+is not a promise of available data. The current prototype's simplified layout and
+components do not bind future design. Do not freeze the product at VC1 fidelity.
+
+This does not expand VC1: deliver the current interactive-reference correction
+first, then evolve deliberately alongside the roadmap. No new implementation or
+deployment is authorized by this clarification alone.
