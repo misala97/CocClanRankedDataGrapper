@@ -1,0 +1,70 @@
+from playwright.sync_api import sync_playwright
+from pathlib import Path
+import json
+
+ROOT = Path(__file__).parent
+results = {'pages': [], 'errors': [], 'checks': []}
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={'width': 1440, 'height': 1000}, device_scale_factor=1)
+    page.on('pageerror', lambda e: results['errors'].append(str(e)))
+    page.goto('http://127.0.0.1:5187')
+    page.evaluate('localStorage.clear()')
+    page.reload()
+    page.evaluate('document.fonts.ready')
+    for width, height in [(1440,1000),(768,1024),(390,844)]:
+        page.set_viewport_size({'width':width,'height':height})
+        for route in ['overview','chatter','news','combined','research/KSTR','watchlist','portfolio','analysis','activity','admin','trade/KSTR']:
+            page.goto('http://127.0.0.1:5187/#'+route)
+            page.wait_for_timeout(80)
+            overflow = page.evaluate('document.documentElement.scrollWidth > innerWidth + 1')
+            results['pages'].append({'route':route,'width':width,'overflow':overflow})
+            if width != 768:
+                page.screenshot(path=str(ROOT/'screenshots'/f'{route.replace("/","-")}-{width}.png'),full_page=True)
+    page.set_viewport_size({'width':1440,'height':1000})
+    page.goto('http://127.0.0.1:5187/#research/ARDR')
+    page.locator('[data-action="watch"]').click()
+    assert 'ARDR' in page.evaluate('JSON.parse(localStorage.getItem("radar-design-v2")).watch')
+    results['checks'].append('Watchlist mutation persisted')
+    page.locator('[data-action="tab"][data-value="Counter-evidence"]').click()
+    assert page.get_by_text('What the positive story leaves out').is_visible()
+    results['checks'].append('Research evidence tabs')
+    page.goto('http://127.0.0.1:5187/#chatter')
+    page.locator('#broker-filter').check()
+    assert page.get_by_text('No verified listings in this sample').is_visible()
+    page.locator('[data-action="clear-filters"]').click()
+    page.locator('#candidate-filter').fill('not-a-company')
+    assert page.get_by_text('No matching companies').is_visible()
+    results['checks'].append('Broker unknown and no-match filters')
+    page.goto('http://127.0.0.1:5187/#trade/KSTR?side=sell')
+    page.locator('#trade-qty').fill('600')
+    page.locator('#trade-price').fill('1.90')
+    page.get_by_role('button',name='Save recorded trade').click()
+    assert 'only have 500' in page.locator('#trade-error').inner_text()
+    page.locator('#trade-qty').fill('100')
+    page.get_by_role('button',name='Save recorded trade').click()
+    page.wait_for_url('**/#portfolio')
+    trades=page.evaluate('JSON.parse(localStorage.getItem("radar-design-v2")).trades')
+    assert len(trades)==8
+    page.get_by_role('button',name='Positions',exact=True).click()
+    assert '400' in page.locator('tbody').inner_text()
+    results['checks'].append('Oversell blocked and partial sale updates position')
+    page.goto('http://127.0.0.1:5187/#watchlist')
+    page.locator('[data-action="alert-editor"]').click()
+    page.get_by_role('button',name='Save alert',exact=True).click()
+    assert '2 rules' in page.locator('#main').inner_text()
+    results['checks'].append('Local alert creation')
+    for scenario in ['empty','delayed','error','loading','normal']:
+        page.locator('#scenario').select_option(scenario)
+        assert page.locator('#main').inner_text().strip()
+    results['checks'].append('Scenario state selector')
+    page.locator('[data-action="reset"]').click()
+    page.goto('http://127.0.0.1:5187/#overview')
+    page.locator('[data-action="search"]').click()
+    page.locator('#global-search').fill('Kestrel')
+    assert page.locator('#search-results a').count()>=1
+    page.keyboard.press('Escape')
+    results['checks'].append('Global search and dialog dismissal')
+    browser.close()
+(ROOT/'QA.json').write_text(json.dumps(results,indent=2))
+print(json.dumps(results))

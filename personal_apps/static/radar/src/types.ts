@@ -342,6 +342,96 @@ export interface Selection {
   dir: 'asc' | 'desc'
 }
 
+/** One Berlin calendar day of recorded ingest activity.
+ *
+ *  Every counter is nullable and the null is the point: it means no completed
+ *  run reported that figure for this day, which is not the same as a run that
+ *  measured zero. `counted_runs` is how many summaries the counters were
+ *  actually drawn from -- lower than `completed_runs` when a run stored no
+ *  summary or stored one in a schema version the server will not add to the
+ *  current one.
+ *
+ *  `completeness` never says complete. Successful runs prove those cycles
+ *  happened, never that every post on every source was seen.
+ */
+export interface ActivityDay {
+  date: string
+  posts_seen: number | null
+  posts_new: number | null
+  mentions: number | null
+  buckets_written: number | null
+  completed_runs: number
+  counted_runs: number
+  incomplete_runs: number
+  error_runs: number
+  completeness: 'partial' | 'unknown'
+}
+
+export interface ActivityPayload {
+  generated_at: string
+  /** UTC bounds of the Berlin days below. A DST day is 23 or 25 hours. */
+  from: string
+  to: string
+  /** When the first run was ever recorded. Days before it are not missing
+   *  measurements -- nothing was recording yet. Null before the first run. */
+  recording_started_at: string | null
+  days: ActivityDay[]
+}
+
+/** The operational summaries the server already computes, read-only.
+ *
+ *  Shapes copied from features/radar/{spend,llm_sentiment,market_data}.py and
+ *  features/radar/routes/operations.py. Deliberately not `any`: a contract
+ *  that drifts should break the build rather than render a blank tile.
+ */
+export interface OpsPayload {
+  generated_at: string
+  spend: { today_usd: number; month_usd: number; unpriced_tokens: number }
+  sentiment: {
+    pending: number
+    /** Always sent by llm_sentiment.ops_summary; optional only so an older
+     *  deployment does not break the page. */
+    gated_pending?: number
+    pinned_pending?: number
+    p95_age_minutes: number | null
+    review: {
+      demanded: number
+      attempted: number
+      served: number
+      capped: number
+      over_ceiling: number
+    }
+  }
+  market_data: {
+    cycles: Record<string, {
+      status: string
+      scheduled_at: string
+      files_seen: number
+      files_accepted: number
+      selected: number
+      rejected: number
+      parse_ms: number
+      error_code: string | null
+    }>
+    mapping_generations: Record<string, number>
+    quote_basis_24h: Record<string, number>
+    grouped_closes: {
+      latest_accepted_date: string | null
+      retryable_gaps: string[]
+      counts: Record<string, number> | null
+      error_code: string | null
+      http_status: number | null
+      backoff_until: string | null
+    }
+    /** Keyed `source:market`; the claim, or null where none was made. */
+    post_close_claims: Record<string, string | null>
+    de_download_budget_24h: { spent: number; limit: number; remaining: number }
+  }
+  /** How old the board archive is. Null until capture is switched on and has
+   *  stored its first quarter-hour. */
+  capture: { latest_observed_at: string | null }
+}
+
 /** One universe match. Identity only: whether it is on the board, and its
  *  score, the island knows from the rows it holds. */
 export interface SearchMatch {

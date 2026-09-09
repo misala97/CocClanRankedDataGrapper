@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173f35">
+  <title>Radar — design preview</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <aside id="sidebar" class="sidebar" aria-label="Main navigation"></aside>
+  <div class="workspace">
+    <header id="topbar" class="topbar"></header>
+    <main id="main" tabindex="-1"></main>
+    <footer class="preview-bar"><span><i class="preview-dot"></i> Design preview <span class="soft">/ Fictional data</span></span><label>Page state <select id="scenario" aria-label="Preview page state"><option value="normal">Populated</option><option value="empty">First use / empty</option><option value="delayed">Delayed coverage</option><option value="error">Connection error</option><option value="loading">Loading</option></select></label><button class="text-button" data-action="reset">Reset demo</button></footer>
+  </div>
+  <dialog id="search-dialog" aria-label="Search Radar"><div class="dialog-top"><h2>Search Radar</h2><button class="icon-button" data-action="close-search" aria-label="Close search">×</button></div><label class="search-field"><span>Find a company, story or page</span><input id="global-search" type="search" placeholder="Try Kestrel, portfolio or trial…" autocomplete="off"></label><div id="search-results"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="preview.js"></script>
+</body>
+</html>

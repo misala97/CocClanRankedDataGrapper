@@ -68,8 +68,12 @@ app.register_blueprint(showoff_bp)
 # Gym templates call {{ vite_asset('exercise') }} for the content-hashed bundle
 # built by `npm run build`. Raises rather than returning an empty src when the
 # build has not run -- see vite_assets.py and DEPLOY_FRONTEND.md.
-from vite_assets import resolve_asset
+from vite_assets import resolve_asset, resolve_asset_css
 app.jinja_env.globals['vite_asset'] = resolve_asset
+# {{ vite_asset_css(...) }} for an entry that imports its own stylesheet: Vite
+# emits it as a separate hashed file, and a template that linked only the
+# script would render unstyled with nothing in the console to say why.
+app.jinja_env.globals['vite_asset_css'] = resolve_asset_css
 
 
 _HASHED_ASSET_PATH = re.compile(r'^/static/[^/]+/dist/assets/')

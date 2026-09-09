@@ -1,0 +1,76 @@
+{# The Radar hub: the opt-in surface at /radar/hub/.
+
+   Its own template rather than an extension of board.html. The two are
+   deliberately separate for the length of this review: /radar/ must keep
+   working exactly as it does, so that promoting this route -- or abandoning
+   it -- is one decision and not a migration.
+
+   `tojson` escapes <, > and & for embedding in HTML, so no |safe here. The
+   board inside the envelope is the same shape /radar/api/board returns, which
+   is why the hub has one payload type and no separate first-paint path. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radar</title>
+
+  {# The per-session CSRF token the island sends as X-CSRF-Token on the watch
+     writes. auth.py mints it; the radar blueprint's before_request checks it. #}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+
+  {# The hub's workspace ground, so the browser chrome does not frame a pale
+     page in a dark bar. It commits to the light identity in both schemes:
+     this is a daylight desk tool and its palette is the design, not a theme. #}
+  <meta name="theme-color" content="#FBFBFC">
+
+  <link rel="icon" type="image/svg+xml"
+        href="{{ url_for('static', filename='radar/favicon.svg') }}">
+
+  {# Inter is served from this app, not linked from Google -- see the header of
+     static/radar/inter.css. Only the latin subset is preloaded; latin-ext
+     carries the long tail of company names and most views never touch it. #}
+  <link rel="preload" href="{{ url_for('static', filename='radar/fonts/inter-latin.woff2') }}"
+        as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ url_for('static', filename='radar/inter.css') }}">
+
+  {# radar.css is deliberately NOT loaded. The hub's visual system is its own,
+     scoped under .rh and imported by the entry -- so Vite emits it as a
+     separate hashed file that has to be linked here. Linking only the script
+     renders the page unstyled with nothing in the console to say why. #}
+  {% for href in vite_asset_css('hub', feature='radar') %}
+  <link rel="stylesheet" href="{{ href }}">
+  {% endfor %}
+
+  {# The two views that render when the bundle is the thing that failed. They
+     cannot come from the bundle, and radar.css -- where .broken lives for the
+     old board -- is deliberately not loaded here. Small enough to inline. #}
+  <style>
+    body { margin: 0; font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+           color: oklch(23% .018 165); background: oklch(98.5% .002 165); }
+    .broken { max-width: 46rem; margin: 12vh auto; padding: 0 1.5rem;
+              line-height: 1.6; }
+    .broken h1 { font-size: 1.4rem; letter-spacing: .07em; }
+    .broken h2 { font-size: 1.1rem; margin: .6rem 0; }
+    .broken a { color: oklch(42% .095 161); }
+  </style>
+</head>
+<body>
+
+<div id="radar-hub-root">
+  <noscript>
+    <div class="broken">
+      <h1>Radar</h1>
+      <h2>The hub needs JavaScript.</h2>
+      <p>The board underneath it is readable as JSON at
+         <a href="/radar/api/board"><code>/radar/api/board</code></a>, and the
+         original board page is at <a href="/radar/">/radar/</a>.</p>
+    </div>
+  </noscript>
+</div>
+
+<script type="application/json" id="radar-hub-data">{{ shell | tojson }}</script>
+<script type="module" src="{{ vite_asset('hub', feature='radar') }}"></script>
+
+</body>
+</html>

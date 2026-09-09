@@ -31,9 +31,10 @@ from extensions import db
 from models import (RadarInstrument, RadarPollState, RadarQuote,
                     RadarRedditCursor)
 from features.radar import (
-    fx, history, ingest, instruments, journal, judge_config, judge_trial,
-    llm_sentiment,
-    market_calendar, quotes, retention, scheduling, scoring, universe)
+    activity, fx, history, ingest, instruments, journal, judge_config,
+    judge_trial, llm_sentiment,
+    market_calendar, observations, quotes, retention, scheduling, scoring,
+    universe)
 from features.radar.markets import classify_quality
 from features.radar.prices import finnhub as finnhub_provider
 from features.radar.prices import twelvedata as twelvedata_provider
@@ -359,20 +360,37 @@ def _format_operational_map(values):
 # pass, which then took a Reddit cycle down every thirty minutes.
 
 
+def _recorder_now():
+    """Actual wall time, not the cycle's `now`. A run that took four minutes
+    must not be recorded as having finished when it started."""
+    return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
+
 def tick(now_utc, fetchers):
     """One cycle across every source, with failures contained.
 
     APScheduler drops a job whose function raises, so an unhandled error here
     would silently end ingest until the next restart -- losing far more than
     the cycle that failed.
+
+    The run marker is written BEFORE the cycle, so a process that dies inside
+    run_cycle still leaves evidence that a cycle was attempted. The zeros in
+    the error return below are the caller's stable shape and are deliberately
+    not what gets recorded: `finish_run` stores a code and no counters.
     """
+    run_id = activity.start_run(now_utc.replace(tzinfo=None))
     try:
         summary = ingest.run_cycle(now_utc.replace(tzinfo=None), fetchers)
     except Exception:
         logger.exception('radar ingest cycle failed')
+        activity.finish_run(run_id, _recorder_now(),
+                            summary=None, error_code='ingest_failed')
         return {'status': 'error', 'posts_seen': 0, 'posts_new': 0,
                 'mentions': 0, 'buckets_written': 0, 'per_source': {},
                 'aggregate_status': {}, 'catchup_depth': {}}
+
+    activity.finish_run(run_id, _recorder_now(), summary=summary,
+                        error_code=None)
 
     logger.info('radar cycle posts=%d new=%d mentions=%d buckets=%d sources=%s '
                 'aggregate=%s catchup_depth=%s intake=%s',
@@ -1111,6 +1129,33 @@ def _scheduled_reddit(fetcher):
     return run
 
 
+def _next_quarter_hour(now):
+    """The next :00, :15, :30 or :45 strictly after `now`."""
+    floor = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+    return floor + dt.timedelta(minutes=15)
+
+
+def _scheduled_observations():
+    """Archive the fixed board pair for this quarter-hour.
+
+    Its own job, never folded into tick or the scoring pass: a capture is a
+    read of the board and must not be able to delay, block or fail ingest. It
+    calls no quote provider -- everything it stores comes from the board the
+    API would have served anyway.
+
+    A failure here logs and leaves a gap, which is the honest outcome. The
+    archive is allowed to be incomplete; it is not allowed to be wrong.
+    """
+    if not observations.capture_enabled():
+        return
+    with app.app_context():
+        try:
+            observations.capture(
+                _utcnow(), producer_revision=observations.producer_revision())
+        except Exception:
+            logger.exception('radar board observation capture failed')
+
+
 def _scheduled_prune():
     with app.app_context():
         now = _utcnow()
@@ -1377,6 +1422,23 @@ def main(argv=None):
                       + dt.timedelta(minutes=1))
     scheduler.add_job(_scheduled_prune, 'cron', hour=4, minute=30,
                       id='radar_prune')
+    # Registered whether or not capture is switched on, so turning it on is an
+    # environment change and a restart rather than a code change. The job
+    # itself reads the flag and returns; see _scheduled_observations.
+    #
+    # Started on the next quarter-hour boundary rather than fifteen minutes
+    # after this process happened to start. Which part of a slot gets sampled
+    # is then a property of the design instead of the last restart, and two
+    # firings cannot land in one slot -- the second would be refused as
+    # already recorded and its neighbour would read as an outage.
+    scheduler.add_job(_scheduled_observations, 'interval', minutes=15,
+                      id='radar_board_observations', max_instances=1,
+                      coalesce=True,
+                      next_run_time=_next_quarter_hour(
+                          dt.datetime.now(dt.timezone.utc)))
+    if not observations.capture_enabled():
+        logger.info('radar board observation capture is disabled '
+                    '(RADAR_OBSERVATION_CAPTURE_ENABLED)')
     # Ten minutes, and PASS_LIMIT caps each run, so a day of normal volume is
     # covered many times over and an abnormal one cannot run up a bill
     # unattended. Offset past the first cycle so there are mentions to read.

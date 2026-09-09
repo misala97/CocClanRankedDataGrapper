@@ -1,5 +1,8 @@
 import { csrfToken } from './csrf'
-import type { BoardPayload, Detail, PanelSpan, SearchMatch, Selection, SortKey } from './types'
+import type {
+  ActivityPayload, BoardPayload, Detail, OpsPayload, PanelSpan, SearchMatch,
+  Selection, SortKey,
+} from './types'
 
 // `Accept: application/json` is explicit and not optional. A bare fetch() sends
 // `*/*`, a wildcard accepts HTML, and the login redirect this route sits behind
@@ -24,6 +27,10 @@ const REASON_TEXT = {
   timeout: 'The board did not answer in time.',
   network: 'Could not reach the board.',
   missing: 'Nothing here for that ticker.',
+  // Signed in, and not allowed. Kept apart from `session` because the two
+  // have opposite advice: reloading fixes an expired session and will never
+  // fix a permission. Reachable since the admin operations endpoint exists.
+  forbidden: 'This account is not allowed to read that.',
   server: 'The board answered with an error.',
   busy: 'The board is rate-limiting requests. Give it a moment.',
 } as const
@@ -81,7 +88,7 @@ export function defaultDirection(key: SortKey): 'asc' | 'desc' {
  *  transparently -- so an expired session arrives as a 200 full of HTML. Two
  *  copies of that check is one copy that eventually goes missing. */
 async function getJson<T>(url: string, signal?: AbortSignal,
-                          init: RequestInit = {}): Promise<T> {
+                          init: RequestInit = {}, write = false): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   // Checked before the listener is attached: a signal that was ALREADY
@@ -98,7 +105,7 @@ async function getJson<T>(url: string, signal?: AbortSignal,
       credentials: 'same-origin', signal: controller.signal,
     })
     if (response.redirected) throw new BoardUnavailable('session')
-    if (!response.ok) throw new BoardUnavailable(statusReason(response.status))
+    if (!response.ok) throw new BoardUnavailable(statusReason(response.status, write))
     return await response.json() as T
   } catch (error) {
     if (error instanceof BoardUnavailable) throw error
@@ -112,12 +119,18 @@ async function getJson<T>(url: string, signal?: AbortSignal,
 
 /** Which sentence a status code earns.
  *
- *  401 and 403 join `session` rather than getting a permission line of their
- *  own: the routes are behind @login_required, everyone who can open the page
- *  can read every row, and the only way to see one is a session that stopped
- *  being valid. Reloading is the fix in all three cases. */
-function statusReason(status: number): keyof typeof REASON_TEXT {
-  if (status === 401 || status === 403) return 'session'
+ *  401 is a session that stopped being valid; reloading is the fix. 403 is
+ *  not, and used to be folded in with it -- true while every reader of this
+ *  feature could read every row, and false since /radar/api/ops began
+ *  answering 403 to a signed-in non-admin. Telling that reader to reload is
+ *  advice that cannot work. */
+function statusReason(status: number, write = false): keyof typeof REASON_TEXT {
+  if (status === 401) return 'session'
+  // On a WRITE, 403 is the radar blueprint's CSRF gate (routes/_blueprint.py),
+  // which runs before @login_required -- so an expired session reaches a write
+  // as 403 rather than as a redirect, and the token is re-minted by reloading.
+  // On a read, 403 is a permission that reloading will never fix.
+  if (status === 403) return write ? 'session' : 'forbidden'
   if (status === 404) return 'missing'
   if (status === 429) return 'busy'
   if (status >= 500) return 'server'
@@ -160,12 +173,29 @@ export async function fetchSearch(q: string, signal?: AbortSignal): Promise<Sear
   return found.matches
 }
 
+/** Recorded ingest activity, by Berlin calendar day.
+ *
+ *  Only 1, 7 and 30 are accepted; the server validates rather than clamps, so
+ *  the type is the same three values here. */
+export async function fetchActivity(
+  days: 1 | 7 | 30, signal?: AbortSignal,
+): Promise<ActivityPayload> {
+  return getJson<ActivityPayload>(`/radar/api/activity?days=${days}`, signal)
+}
+
+/** The operational summaries, admin only. A 403 here is a permission and not
+ *  an expired session -- see statusReason. */
+export async function fetchOps(signal?: AbortSignal): Promise<OpsPayload> {
+  return getJson<OpsPayload>('/radar/api/ops', signal)
+}
+
 /** Mark or unmark a ticker. Answers the caller's whole list, so nothing is
  *  merged client-side. Carries the CSRF token the radar blueprint demands
  *  on writes. */
 export async function setWatch(ticker: string, on: boolean): Promise<string[]> {
   const answer = await getJson<{ watching: string[] }>(
     `/radar/api/watch/${encodeURIComponent(ticker)}`, undefined,
-    { method: on ? 'PUT' : 'DELETE', headers: { 'X-CSRF-Token': csrfToken() } })
+    { method: on ? 'PUT' : 'DELETE', headers: { 'X-CSRF-Token': csrfToken() } },
+    true)
   return answer.watching
 }
