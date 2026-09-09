@@ -3,11 +3,28 @@
 Counterpart to CLAUDE-START.md. Codex plans; Claude implements and verifies. Both plans are
 complete, every task was independently reviewed, and every finding was resolved.
 
-**Second pass, 2026-09-09.** You reviewed the first return, approved four decisions and set
-two follow-ups in CODEX-DECISIONS.md. **R1 and R2 are both done.** R1 was a real defect and
-is fixed with tests that fail without it. R2 says your instinct was right and the number was
-worse than either of us wrote down: the old estimate was **five times low**, and the fix is a
-schema change that is yours to rule on. Section "One decision waiting on you" below.
+**Third pass, 2026-09-09.** You ruled on the second return and chose option 3 — typed
+counter columns before the first rollout, month view retained. **R3 is done and both
+acceptance targets pass**, by a wide margin:
+
+| 30-day upper-bound fixture, 14,652 rows | before | after | your target |
+| --- | --- | --- | --- |
+| peak incremental Python heap | ~228 MiB | **0.8 MiB** | <= 16 MiB |
+| median endpoint | ~1,586 ms | **390 ms** | <= 500 ms |
+
+Four concurrent 30-day reads: 0 errors, 1958–2042 ms, process RSS 135 → 136 MiB. Cold reads
+match warm, so the gain is the read getting cheaper rather than a second request getting
+lucky. `summary_json` is unchanged, still stored, and never fetched by the read.
+
+**One thing needs your attention and one thing does not.** The first is that parity with the
+old reducer is deliberately not total — three cases, one of which I had neither documented
+nor tested until the review found it. See "Where R3 departs from the old reducer". The
+second is that no compatibility exception arose: the disposable clone holds no counter
+outside the accepted domain, so there is nothing to bring you under requirement 6.
+
+**Earlier passes.** R1 was a real defect, fixed with tests that fail without it. R2 measured
+what you asked for; the estimate had been five times low, and my first measurement of it was
+then twice too high — caught by review and corrected before it reached you.
 
 Read this first, then HUB-LEDGER.md and FOUNDATIONS-LEDGER.md for the item-by-item
 record, then HANDOFF.md for exact workspace state. **Where a document and Git disagree,
@@ -22,9 +39,12 @@ Base       dev_personal @ 7a9ffe445076e57d02fea5627e8cd185ec9cb39f
 HEAD       verify with `git rev-parse --short HEAD`; the table below lists every commit
 ```
 
-Twenty-seven commits: `git log --oneline 7a9ffe4..codex/radar-foundations`. The planning package (radar-design/ and both dated plans) was untracked
-in the planning checkout, so it was carried in and committed first as 9e8d446 — a worktree
-made from HEAD alone would not have contained the contract being implemented against.
+Count them with `git log --oneline 7a9ffe4..codex/radar-foundations`; this document cannot
+name the commit that carries it.
+
+The planning package (radar-design/ and both dated plans) was untracked in the planning
+checkout, so it was carried in and committed first as 9e8d446 — a worktree made from HEAD
+alone would not have contained the contract being implemented against.
 
 Nothing is merged, nothing is deployed, no live migration has run, and `/radar/` is
 untouched. The planning checkout at `C:/Users/michi/Desktop/CodingStuff` is unchanged
@@ -46,6 +66,8 @@ apart from these documents being refreshed in place.
 | 243db22 | CODEX-DECISIONS.md, carried into the worktree it applies to |
 | e25f223 / 917cb15 | **R1** the final-feed defect, then its review's fixes |
 | ffbdd37 / 08c5b47 / 8bbd57e | **R2** the endpoint measured, twice corrected under review |
+| 3c93ad8 | your binding ruling on the second return, carried in |
+| c4e0455 / 278625c / cfe39e7 | **R3** typed counters, acceptance evidence, review findings |
 | 78b17c6 | a jsdom navigation flake that had been failing random tests since H1 |
 | 3c2eb77 / 8c50cda | ledgers and handoff |
 
@@ -84,7 +106,7 @@ the surface saying something the data does not support.
 H3 and H4 returned no blocking findings. Roughly forty should-fix items across the nine
 reviews were also resolved; the two ledgers list them.
 
-## The two follow-ups you set
+## The follow-ups you set
 
 ### R1 — unchecking the last feed. Real, reproduced, fixed.
 
@@ -180,62 +202,33 @@ boundary or a local time and the suite would have stayed green.
 `test_the_scheduled_job_captures_the_wall_clock` now supplies it; mutation-checked, it is the
 only test that fails when the caller is changed.
 
-## One decision waiting on you
+## The decision that was waiting on you — now made, and built
 
-**The activity endpoint's schema.** Not implemented — the owner's instruction was to bring
-you the evidence and a recommendation rather than act on it, and it is a schema change.
+**The activity endpoint's cost.** R2 brought you five options with what each cost, and a
+recommendation. You chose **option 3, typed counter columns, before the first rollout**, and
+declined the memoisation and the `ALLOWED_DAYS` cut I had put ahead of it — on the grounds
+that a memo does not bound a cold request and that a schema change was already needed. The
+measurements bear that out: cold reads now match warm, which a cache would not have given.
 
-Three of the five need no migration; two of those are viable.
+R3 built it. See "R3 — typed activity counters" below.
 
-**One fact constrains all of them, and my first version of this section got it backwards.**
-A day is **not** immutable at Berlin midnight. `summary()` groups runs by
-`_berlin_date(started_at)`, but `finish_run` writes `status` and `summary_json` at *finish*
-time and never touches `started_at`. A run starting at 23:59:5x Berlin and closing after
-midnight moves the **previous** day's `incomplete_runs` into `completed_runs` and adds its
-counters — after that day looked complete. At ~38 s runs against a 300 s reddit interval,
-that is roughly **one day in five**. A memo keyed on the Berlin date alone would freeze a
-wrong count into ~20% of days. (Nothing else invalidates a past day: `retention.prune_*`
-never touches `RadarIngestRun`.)
-
-1. **Memoise completed days.** Portable, no schema change, largest single win — **but a day
-   is only safe to freeze once it holds no `running` rows.** A cheap
-   `COUNT(*) WHERE status='running'` per candidate day gives that; a day left `running` by a
-   dead process is simply never memoised.
-2. **Drop 30 from `ALLOWED_DAYS`** until a real fix lands. One line, and the only option that
-   removes the exposure today. Costs the reader the month view.
-3. **Typed counter columns** written at `finish_run`, the JSON staying as provenance.
-   Portable, no JSON functions. Two traps:
-   - `SUM()` skips NULLs, so a day mixing a run that reported `posts_seen` with one that did
-     not returns a number where `_counters` deliberately returns `None`. Needs
-     `CASE WHEN COUNT(*) <> COUNT(col) THEN NULL ELSE SUM(col) END` per counter.
-   - **Even that is not equivalent** over "the day's `status='ok'` rows", the only population
-     typed columns can name. `_counted` *drops* an ok-run whose envelope is missing,
-     malformed, or of another `schema_version`. The CASE would null the whole day for such a
-     row — and would silently *sum* an older-version run, the exact cross-version addition
-     `SCHEMA_VERSION` exists to prevent. Typed columns cannot tell "stored nothing countable"
-     from "omitted this counter"; both are NULL. So the migration also needs a stored
-     `schema_version` column and a countable marker, with the CASE filtered on it.
-   Costs a migration; there are **no production rows yet**, which makes now the cheapest this
-   will ever be.
-4. **A daily rollup table.** Smallest read, but a second writer to keep correct and a repair
-   path when a run closes late — the same hazard as 1, made explicit.
-5. **JSON path extraction in SQL.** No migration either, but **rejected**: it needs
-   `JSON_EXTRACT`/`JSON_VALUE` behaviour that cannot be verified against the production
-   MariaDB from here, and the null-versus-zero contract turns on telling an absent key from a
-   zero — exactly where the two engines' JSON functions are least alike.
-
-**Recommendation: 2 now, 1 next with the `running`-row condition, 3 when a migration is being
-cut anyway and only with the schema-version column.**
-
-What is *not* urgent: at `days=1` and `days=7` — the windows a reader actually opens — the
-endpoint answers in 26 ms and 297 ms. Only `days=30` is bad, and it is bad in memory before
-it is bad in time.
+One fact from R2 survives the change and is recorded because a future memoisation would need
+it: **a day is not immutable at Berlin midnight.** `summary()` groups runs by
+`_berlin_date(started_at)`, but `finish_run` writes `status` at *finish* time and never
+touches `started_at`, so a run starting at 23:59:5x Berlin and closing after midnight rewrites
+the previous day — roughly one day in five at the measured cadence. R3 adds no cache, so
+nothing depends on it today.
 
 ## What you already ruled on, now closed
 
 Per CODEX-DECISIONS.md, all four kept as built: **`counted_runs`** stays in the activity
 payload; **`Filters.tsx`** stays; **`api.ts`'s 403 read/write split** stays; and
 **`vite_assets.resolve_asset_css`** with its manifest memo stays. Nothing was reverted.
+
+`counted_runs` earns its place again under R3: it is now the count of ok rows that were
+`summary_countable` AND at the reader's own schema version, which is exactly the population
+the counters were summed from. Without it a day whose totals were all skipped would still be
+indistinguishable from a day that reported nothing.
 
 ## Still open from the first return, unchanged
 
@@ -245,17 +238,83 @@ fails three tests. **Reproduced identically at the base commit 7a9ffe4** in a se
 worktree with no source changes, so it predates this work. Left alone as an unrelated suite;
 a background task was raised for it.
 
+## R3 — typed activity counters
+
+Six additive columns beside `summary_json`, migration **a7c31f0b52d4** on the verified head.
+`finish_run` writes the projection in the same transaction under the same terminal guard. The
+read names eight scalar columns and streams them with `yield_per`, folding into at most thirty
+Berlin-day accumulators. `_counted`/`_counters` are gone from production — the old reducer
+lives in the tests as an oracle, because a JSON fallback in production would leave the read
+able to fetch envelopes, which is the cost being removed.
+
+The marker/version split you specified is what makes parity possible. `summary_countable` says
+the envelope was structurally well formed and versioned; the reader alone applies
+`== SCHEMA_VERSION`. A counter missing from an otherwise valid summary is null and leaves the
+row countable — the case a nullable column alone cannot express.
+
+**Migration.** Backfill is Python, batched 500 by primary key, with the projection rules as a
+frozen copy pinned to the live ones by a 20-case test. The domain scan runs **before any DDL**,
+and that was a real defect in my first version: MySQL commits implicitly on `ALTER TABLE`, so
+refusing after the columns were added left them present with the revision unstamped, and the
+retry then failed on a duplicate column. I hit that state and repaired the clone by hand. One
+state remains that cannot be made clean — a backfill dying part-way — and the recovery SQL is
+now in the migration's docstring.
+
+## Where R3 departs from the old reducer
+
+Parity is exact for every shape production writes. It is deliberately **not** exact in three
+places, and the review was right that my test module claimed otherwise while routing every
+disagreeing case around the oracle:
+
+- A `schema_version` of **`1.0`** counted before and does not now. `1.0 == 1` is true in
+  Python, so the old equality check accepted it. **This one I had neither documented nor
+  tested** — it existed only as an accident of `isinstance`.
+- A `schema_version` of **`True`** likewise, since `isinstance(True, int)` is true.
+- A counter of **`-4`, `True` or `1.5`** was summed before and is refused now; **`'5'`** raised
+  TypeError out of the endpoint and is now null for that counter.
+
+Each is the behaviour your ruling implies: an Integer column recording `1` for a declared `1.0`
+would claim the envelope said something it did not, and requirement 6 forbids coercing
+counters. Four tests now assert the DIFFERENCE against the oracle rather than avoiding it. If
+you would rather `1.0` and `True` stay countable, that is a one-line change and a decision, not
+a defect — say so and I will make it.
+
+## What R3 did not need from you
+
+No compatibility exception under requirement 6: the disposable clone holds no counter outside
+the accepted domain, so the refusal path is tested but never fired on real data. No cache, no
+rollup table, no JSON-path SQL, as instructed. `ALLOWED_DAYS` is still `(1, 7, 30)` and the
+month selector is untouched.
+
+Recorded because a future memoisation would need it: **a day is not immutable at Berlin
+midnight** — runs are grouped by `started_at` but `finish_run` closes them later, so a run
+spanning midnight rewrites the previous day, roughly one day in five. R3 adds no cache, so
+nothing depends on it today.
+
 ## Evidence, if you want to check rather than take my word
 
 All against `personal_apps_radar_wt`, a disposable full clone of the local dev database,
-asserted before every backend run:
+asserted before every backend run. Local is **MySQL 8.0.46**; production is MariaDB, and no
+result here establishes MariaDB behaviour — that is a rollout rehearsal, as your section C
+says.
 
 - `npm test` → **403 passed** (root config) and **438 passed** (radar config), four consecutive runs
 - `npm run build` → exit 0
-- `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py tests/test_radar_daemon.py -q` → **195 passed**
+- `pytest` over the seven radar suites (activity, observations, operations_api,
+  activity_projection, projection_migration, api, daemon) → **253 passed**
 - `pytest tests/test_radar_hub_page.py tests/test_vite_assets.py tests/test_radar_api.py -q` → **85 passed**
-- Migration upgrade → downgrade → upgrade, with a column-shape fingerprint of all 43
-  tables and a row count taken either side: exactly the two new tables move, nothing else
+- Both migrations, upgrade → downgrade → upgrade, with a column-shape fingerprint of every
+  table and row counts taken either side. d82f9afb5898 moves exactly its two tables;
+  a7c31f0b52d4 moves exactly its six columns and preserves every envelope, checked against
+  eleven seeded row shapes rather than an empty table
+- R3 acceptance, 30-day upper-bound fixture (14,652 rows): peak incremental Python heap
+  **0.8 MiB** (your target ≤16), median/max endpoint **390/414 ms** (target ≤500 median),
+  four concurrent 30-day reads **0 errors** at 1958–2042 ms with process RSS 135 → 136 MiB.
+  Repeatable: `PYTHONPATH=. py -3.12 scratchpad/bench_activity.py`, which refuses any database
+  but the clone, seeds into 2019 and clears in a `finally`
+- Mutation-checked rather than asserted: selecting `summary_json` fails the query-level test;
+  a fixed-width `_day_bounds` fails the two DST boundary tests and neither grouping test;
+  reverting the R1 reducer fails six frontend tests
 
 `reports/hub/` holds 13 screenshots at 1440, 768 and 390 across all six pages plus the
 recovery view, and `reports/hub/EVIDENCE.md` states precisely **which pixels are real

@@ -7,14 +7,16 @@ Updated 2026-09-09, by Claude, during implementation. Supersedes the planning-st
 Codex designs and plans; Claude implements and verifies. **Release 0 (F1-F3) and Release 1 (H1-H4)
 are both built, each task independently reviewed, and every finding resolved.** Codex then reviewed
 the return (radar-design/CODEX-DECISIONS.md, carried in as 243db22) and set two follow-ups, **R1 and
-R2, both now complete.**
+R2, both complete**; it then ruled on the second return (carried in as 3c93ad8) and set **R3, also
+complete**.
 
-**Immediate next action: owner visual review of the opt-in `/radar/hub/`, plus one decision that is
-Codex's** -- the activity endpoint's schema, now that R2 has measured what it actually reads. Nothing
-else in either plan is open. Do not re-dispatch anything the ledgers mark complete.
+**Immediate next action: owner visual review of the opt-in `/radar/hub/`.** Codex's ruling says
+explicitly that R3 does not block looking at the interface. Nothing in either plan is open. Do not
+re-dispatch anything the ledgers mark complete.
 
-Everything after that review is the owner's decision and outside this package: whether to promote
-`/radar/hub/` to `/radar/`, whether to deploy, and whether to enable board-observation capture.
+The release sequence in CODEX-DECISIONS.md section C is **planning, not authorization**: merging,
+deploying, running a migration outside the disposable clone, enabling capture and promoting
+`/radar/hub/` to `/radar/` all remain untaken decisions.
 
 ## Verified workspace state
 
@@ -51,13 +53,18 @@ Commits on this branch, oldest first:
 | b78b5d2 | the handoff names the commits that carry it |
 | 243db22 | Codex's rulings (CODEX-DECISIONS.md), carried into this worktree |
 | e25f223 | R1: unchecking the last feed selected other feeds instead of refusing |
-| ffbdd37 / 08c5b47 | R2: the activity endpoint measured, then the review's findings |
+| ffbdd37 | R2: the activity endpoint measured instead of guessed at |
 | 917cb15 | the R1 review's fixes |
 | 08c5b47 | the R2 review's blocking finding: the envelope shape was not production's |
 | 3c2eb77 | ledgers name 08c5b47 |
 | 78b17c6 | the jsdom navigation flake in Hub.test.tsx |
 | 8c50cda | hub ledger records R1 and the flake |
 | 8bbd57e | the R2 re-review: both scheduling models measured, the recommendation corrected |
+| 482d954 / b480116 | documents name their commits |
+| 3c93ad8 | Codex's binding ruling on the second return, carried in |
+| c4e0455 | **R3** typed activity counters + migration a7c31f0b52d4 |
+| 278625c | R3 acceptance evidence, and two fixtures that had outlived their schema |
+| cfe39e7 | the R3 review's findings |
 
 Working tree is clean. Verify with `git status --porcelain`; if it is not, the difference is
 somebody else's and belongs to them.
@@ -90,22 +97,26 @@ It must print `personal_apps_radar_wt`. If it prints `personal_apps`, the worktr
 or wrong -- stop, because migrations run there would hit the shared dev database.
 
 Production is MariaDB; local is MySQL. Keep DDL portable and do not rely on MySQL-only JSON
-behaviour. The migration head on this branch is d82f9afb5898.
+behaviour. The migration head on this branch is **a7c31f0b52d4** (R3's projection columns),
+following d82f9afb5898. Single head. MariaDB compatibility is a rollout rehearsal, not
+something local MySQL success establishes.
 
 ## Tests and their results
 
-Recorded at 08c5b47, all against the disposable database:
+Recorded at cfe39e7, all against the disposable database:
 
 - `npm test`: **403 passed** (root config, 32 files) and **438 passed** (radar config).
   The radar count rose from 419 by R1's 19 new tests.
 - `npm run build`: exit 0. Emits `hub-*.js` and `hub-*.css` beside `board-*.js`.
-- `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py tests/test_radar_daemon.py`: **195 passed**.
 - `pytest tests/test_radar_hub_page.py tests/test_vite_assets.py tests/test_radar_api.py`: **85 passed**.
 - `pytest tests/test_radar_hub_page.py tests/test_radar_api.py tests/test_radar_watch_api.py tests/test_gym_routes_smoke.py`: **135 passed**.
 - R1: `npx vitest run -c vite.radar.config.ts static/radar/src/hub/`: **171 passed**, 12 files.
   Mutation-checked -- reverting only the reducer fails 6 of them.
-- R2: `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py -q`: **66 passed**
-  (65 before the call-path test the R2 review found missing).
+- R3: `pytest` over the seven radar suites (activity, observations, operations_api,
+  activity_projection, projection_migration, api, daemon): **253 passed**.
+- R3 acceptance, 30-day upper-bound fixture: peak incremental Python heap **0.8 MiB**
+  (target <=16), median endpoint **390 ms** (target <=500), four concurrent 30-day reads
+  **0 errors** with RSS 135 -> 136 MiB. Repeatable via `scratchpad/bench_activity.py`.
 - The radar frontend suite was FLAKY and is no longer: `Hub.test.tsx` let a real navigation reach
   jsdom, which throws on a timer and failed a random neighbouring test about one run in six. Fixed
   in 78b17c6; four consecutive clean `npm test` runs since.
@@ -144,20 +155,18 @@ background task was raised for it.
   `counted_runs`. Off-version runs were skipped from the counters while still counted as completed,
   so a per-run rate read off the payload was silently wrong. Removing it is a one-line change if
   Codex prefers the enumerated shape.
-- **MEASURED under R2. F3's estimate was five times low on firings; the first measurement of it
-  was then ~2x too high, caught by the R2 review.** The activity query still transfers each run's
-  `summary_json`. At `days=30` that is **12,728 rows / 56.8 MiB / ~1.4 s / ~201 MiB of peak Python
-  heap** on the scheduling model APScheduler actually uses, and 14,652 / 64.2 MiB / 1.6 s /
-  228 MiB on the drift-free upper bound -- both seeded and measured. Either way it is 120 integers
-  returned, not the ~2,880 envelopes F3 guessed: runs are written by `tick` and TWO scheduler jobs
-  call it. The same window without `summary_json` takes 160 ms against 1,390, so the envelopes
-  dominate. Repeatable via `scratchpad/bench_activity.py`. **The decision is Codex's** -- five
-  options, three needing no migration; see FOUNDATIONS-LEDGER.md, "R2 evidence". Nothing was
-  implemented.
-- **A day is not immutable at Berlin midnight**, which matters to anyone taking that decision:
-  runs are grouped by `started_at` but `finish_run` closes them later, so a run spanning midnight
-  changes the previous day. Roughly one day in five. Any memo needs a `no running rows` condition,
-  not just a date key.
+- **RESOLVED by R3.** R2 measured the activity read at 12,728 rows / 56.8 MiB / ~1.4 s /
+  ~201 MiB of peak Python heap for 120 integers; Codex chose typed counter columns, and R3 built
+  them. The read now names eight scalar columns and streams them: **0.8 MiB peak heap, 390 ms
+  median** at the widest window. `summary_json` is unchanged and is never fetched by the read.
+- **A day is not immutable at Berlin midnight.** Runs are grouped by `started_at` but
+  `finish_run` closes them later, so a run spanning midnight changes the previous day --
+  roughly one day in five. R3 adds no cache, so nothing depends on this today; it is recorded
+  because any future memoisation would need a `no running rows` condition, not a date key.
+- **Parity with the old reducer is exact for every shape production writes, and deliberately
+  not exact in three places**: a `schema_version` of `1.0` or `True` is no longer countable,
+  and a counter outside the accepted domain is null rather than summed or raising. Each is
+  pinned by a test asserting the difference. See FOUNDATIONS-LEDGER.md, "R3 evidence".
 - **Accepted limit, wording corrected under R2:** `observations.capture()` will accept a backdated
   `now`. `now` is an injected clock and the parameter exists for deterministic tests; the docstring
   no longer claims the function guarantees real time. The guarantee is a property of the call path.

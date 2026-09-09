@@ -17,7 +17,9 @@ Updated: 2026-09-09
 | R2 activity volume measured | Complete | ffbdd37, corrected in 08c5b47; ~2,880 was 5x low on firings. Measured 14,652 rows / 64.2 MiB / 1.6 s / 228 MiB peak heap at days=30 |
 | R2 independent review | Complete | 1 blocking + 9 should-fix + 8 minor + 2 nits; all 20 resolved in 08c5b47 |
 | R2 correction re-review | Complete | No blocking; every committed figure re-derived independently and reproduced exactly. 4 should-fix + 3 minor + 5 nits resolved in 8bbd57e |
-| R2 activity cost decision | Open, Codex's | Five options below, two needing no migration. NOT implemented, per the owner's instruction |
+| R2 activity cost decision | Resolved by Codex | Option 3 chosen before first rollout; ALLOWED_DAYS stays (1,7,30). See CODEX-DECISIONS.md "Second return" |
+| R3 typed activity counters | Complete | c4e0455 + 278625c; migration a7c31f0b52d4. Both acceptance targets pass: 0.8 MiB peak heap (<=16), 390 ms median endpoint (<=500) |
+| R3 independent review | Complete | 1 blocking + 4 should-fix + 4 minor + 5 nits; all resolved in cfe39e7 |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
 Implementation workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-foundations
@@ -442,5 +444,151 @@ caller looks up, and that the sentinel's microseconds defeat any rounding.
 - The 2019 window is shared with the backend suite's fixtures, which run the same blanket
   `started_at < 2020-01-01` delete. No test anchor falls inside 05-27..06-26, so there is no
   collision today; do not run the benchmark concurrently with that suite.
+
+## R3 evidence -- typed activity counters (2026-09-09)
+
+Commits **c4e0455** (core), **278625c** (acceptance evidence, and two fixtures that
+had outlived their schema), **cfe39e7** (the review's findings). Migration
+**a7c31f0b52d4**, following the verified head d82f9afb5898. Single head after it.
+
+Files: `models.py`, `features/radar/activity.py`,
+`migrations/versions/a7c31f0b52d4_add_radar_run_counter_projection.py` (new),
+`tests/test_radar_activity_projection.py` (new, 53),
+`tests/test_radar_projection_migration.py` (new, 5),
+`tests/test_radar_activity.py` and `tests/test_radar_operations_api.py` (fixtures),
+`scratchpad/bench_activity.py`.
+
+### What it does
+
+Six additive columns beside `summary_json`, which is unchanged and remains the
+record: `summary_schema_version` (nullable int), `summary_countable` (non-null bool,
+server default false) and the four counters as nullable signed BIGINTs. `finish_run`
+writes the projection in the SAME transaction and under the SAME terminal guard as
+the envelope -- a row whose typed counters disagreed with its own JSON would be a row
+with two answers and no way to tell which was the record.
+
+The marker and the version answer different questions, and keeping them apart is what
+makes parity possible. `summary_countable` says the envelope was structurally well
+formed and carried an integer version; it does NOT say the version is one any reader
+understands, which only a reader can decide against its own `SCHEMA_VERSION`. A
+counter missing from an otherwise valid summary is null and leaves the row countable
+-- exactly the case a nullable column alone cannot express, since NULL cannot separate
+"stored nothing countable" from "omitted this one counter", and those have opposite
+consequences.
+
+The read names eight scalar columns and streams them with `yield_per`, folding into
+at most 30 Berlin-day accumulators. One statement, so one snapshot: paging with
+separate queries would assemble a window from several transactions and a cycle
+closing between two of them could be counted twice or not at all. `_counted` and
+`_counters` are gone from production; the old envelope reducer lives in the tests as
+an oracle, because keeping a JSON fallback would leave the read able to fetch
+envelopes -- the cost being removed.
+
+### Measured, against the disposable clone
+
+MySQL 8.0.46; production is MariaDB. Both scheduling models seeded and measured.
+
+| | rows | `summary()` med/max | endpoint med/max | cold | peak heap |
+| --- | --- | --- | --- | --- | --- |
+| **upper bound**, 1 day | 276 | 10/11 ms | 10/11 ms | 9 ms | 0.1 MiB |
+| 7 days | 3,212 | 85/183 ms | 92/328 ms | 86 ms | 0.8 MiB |
+| **30 days** | 14,652 | 383/419 ms | **390/414 ms** | 394 ms | **0.8 MiB** |
+| **finish+interval**, 1 day | 239 | 9/9 ms | 11/11 ms | 9 ms | 0.1 MiB |
+| 7 days | 2,791 | 73/76 ms | 77/79 ms | 82 ms | 0.8 MiB |
+| **30 days** | 12,728 | 332/369 ms | 333/351 ms | 346 ms | 0.8 MiB |
+
+**Both acceptance targets pass**, on the 30-day upper-bound fixture Codex named:
+
+| | before R3 | after | target |
+| --- | --- | --- | --- |
+| peak incremental Python heap | ~228 MiB | **0.8 MiB** | <= 16 MiB |
+| median endpoint | ~1,586 ms | **390 ms** | <= 500 ms |
+
+Four concurrent 30-day reads: **0 errors**, 1958/1971/1987/2042 ms, process RSS
+135 -> 136 MiB (finish+interval: 1524-1663 ms, RSS 140 -> 140). Concurrency costs
+roughly linear time and almost no memory, which is what a streaming read should look
+like; it is not evidence of concurrency safety beyond "four readers did not fail".
+
+Cold reads match warm (394 vs 390 ms at 30 days), which is the point: the improvement
+is the read getting cheaper, not a second request getting lucky. The database buffer
+pool is warm in every column -- what "cold" varies is application state, a fresh
+client and session with the first call measured. Stated in the script's own output.
+
+The 56.8-64.2 MiB of JSON is still stored and no longer read. That column is the size
+of the problem, not of the request.
+
+### Three deliberate divergences from the old reducer
+
+Parity is exact for every shape production writes. It is deliberately NOT exact in
+three places, and the R3 review was right that the test module claimed otherwise
+while routing every disagreeing case around the oracle:
+
+- `schema_version` of **`1.0`** counted before and does not now. `1.0 == 1` is true in
+  Python, so the old equality check accepted it. **Undocumented and untested until the
+  review found it.**
+- `schema_version` of **`True`** likewise -- `isinstance(True, int)` is true.
+- A counter of **-4, `True` or 1.5** was summed; **`'5'`** raised TypeError out of the
+  endpoint. All are now null for that counter.
+
+Each is the right behaviour: an Integer column recording `1` for a declared `1.0`
+would claim the envelope said something it did not, and requirement 6 forbids
+coercing counters. Four tests now assert the DIFFERENCE against the oracle, named
+`..._before_and_..._now`, so the choice is on the record.
+
+### The migration
+
+Additive, and the backfill is Python rather than a JSON-path UPDATE: production is
+MariaDB, local is MySQL, and their JSON functions differ exactly where this
+projection is most delicate. Batched by primary key, 500 at a time, keyset paged. The
+projection rules are a **frozen copy, not an import** -- a migration must keep
+producing the same rows years from now -- pinned to the live rules by a 20-case test.
+
+The domain scan runs **before any DDL**. That was a real defect in the first version:
+MySQL commits implicitly on `ALTER TABLE`, so refusing after the columns were added
+left them present with the revision unstamped, and the next `flask db upgrade` failed
+on a duplicate column instead of retrying. I hit that state and repaired the clone by
+hand. Refusing first leaves the schema untouched.
+
+One state remains that cannot be made clean and is now documented in the migration:
+if the BACKFILL dies part-way, the columns exist and the revision is unstamped.
+Recovery is to drop the six columns and upgrade again; the SQL is in the docstring.
+Nothing is lost, because every projected column is derived from `summary_json`.
+
+Counter domain is non-negative integers fitting a signed BIGINT. Violations are
+refused, never coerced or clamped, and the migration reports ids and value SHAPES,
+never stored content (asserted). No such row exists in the clone, so there is no
+compatibility exception to bring to Codex.
+
+### Verification
+
+- `pytest test_radar_activity + test_radar_observations + test_radar_operations_api +
+  test_radar_activity_projection + test_radar_projection_migration + test_radar_api +
+  test_radar_daemon -q` -> **253 passed**.
+- Migration applied to `personal_apps_radar_wt`; upgrade/downgrade/upgrade with 11
+  seeded row shapes preserves every envelope and a `show columns` fingerprint of every
+  table.
+- Mutation-checked: selecting `summary_json` fails the query-level test; a fixed-width
+  `_day_bounds` fails the two new DST boundary tests and neither grouping test.
+- `yield_per` verified to stream genuinely -- pymysql executes it on an `SSCursor`.
+
+### What the R3 review found
+
+One blocking, four should-fix, four minor, five nits; all resolved in cfe39e7. The
+blocking one is above. Also fixed: the refusal test's assertion was guarded by "if the
+column exists" and so asserted nothing once the scan moved above the DDL; both DST
+tests passed under a naive 86,400-second day; `project()` sat outside `finish_run`'s
+try, against this module's own first rule; a mid-backfill failure had no documented
+retry; `_Day.add` treated any non-running, non-error status as completed where the
+reducer required `ok`; `_out_of_domain` blocked on junk rows no reader could count;
+`_batches` would skip an empty-string id; "seven scalar columns" is eight; and
+"replacing either with `.all()` restores the original cost exactly" credited streaming
+with a win the column list had already delivered.
+
+Confirmed correct and left alone by the reviewer: oracle fidelity against 3c93ad8, the
+marker/version split, null-semantics order independence, the write path's single
+transaction and guard, `recording_started_at` sharing the window snapshot, keyset
+paging correctness under the column collation, the downgrade being an exact inverse,
+the refusal message not leaking values, and the midnight test's `db.session.rollback()`
+modelling a request boundary rather than masking a failure.
 
 For each completed step append commit, exact tests/results, reviewer findings, fixes/rulings and next step. Never mark an unrun check passed. Keep environmentally blocked tasks open with exact failure evidence. Takeover verifies this ledger against Git and reports.
