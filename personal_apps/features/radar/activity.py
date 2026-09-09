@@ -210,28 +210,44 @@ def summary(now: dt.datetime, days: int) -> dict:
     # Three columns rather than whole ORM rows, and it is not enough at the
     # widest window.
     #
-    # MEASURED, 2026-09-09, against the disposable clone by
-    # scratchpad/bench_activity.py, which derives the run count from the two
-    # schedulers that actually call tick -- `radar_cycle` on the NYSE session
-    # (180s open, 600s after hours, 1800s overnight and weekends) and
-    # `radar_reddit` fixed at ARCTIC_SHIFT_INTERVAL_SECONDS:
+    # MEASURED 2026-09-09 against the disposable clone (MySQL 8.0.46; production
+    # is MariaDB) by scratchpad/bench_activity.py, which derives the run count
+    # from the two schedulers that actually call tick -- `radar_cycle` on the
+    # NYSE session (180s open, 600s after hours, 1800s overnight and weekends)
+    # and `radar_reddit` fixed at ARCTIC_SHIFT_INTERVAL_SECONDS. Rows and bytes
+    # are asked of the database over the same Berlin-day window queried below;
+    # milliseconds are the best of five on a warm buffer pool, so a lower bound:
     #
-    #     days=1   568 runs    3.3 MiB   36 ms    (weekday; a weekend day is 336)
-    #     days=7   3,352 runs 19.2 MiB  406 ms
-    #     days=30  14,792 runs 84.7 MiB 2,706 ms
+    #     window  rows     JSON     summary()   without summary_json   peak heap
+    #     1 day     276    1.3 MiB    29 ms            5 ms              4 MiB
+    #     7 days  3,212   14.3 MiB   326 ms           42 ms             50 MiB
+    #     30 days 14,652  64.2 MiB 1,577 ms          183 ms            228 MiB
     #
     # An earlier note here guessed ~2,880 runs over 30 days by dividing the
-    # window by the board archive's 15-minute cadence. That is the wrong
-    # writer and it was five times low: one envelope is 6 KB because every
-    # per-source map is keyed by all 36 concrete sources, and two jobs write
-    # one row each per firing.
+    # window by the board archive's 15-minute cadence. That is the wrong writer:
+    # two jobs each write one row per firing, which is ~14,800 firings over 30
+    # days, five times the guess.
     #
-    # So days=30 reads ~85 MiB to return four integers a day. Extracting the
-    # counters in SQL would remove the transfer and is NOT taken here: it needs
-    # JSON path functions whose behaviour on the production MariaDB cannot be
-    # verified from this environment. The portable fix -- typed counter columns
-    # written at finish_run, or a daily rollup -- is a schema change, and that
-    # decision belongs to the plan owner. The evidence is in HUB-LEDGER.md.
+    # The two jobs write different envelopes, and modelling one shape for both
+    # overstated this table's first version by roughly half. `run_cycle` keys
+    # aggregate_status and catchup_depth by the ROOT fetcher name and only
+    # per_source by concrete names, and the schedulers pass disjoint fetcher
+    # sets. So a radar_cycle envelope is 631 bytes (bluesky and fourchan) and a
+    # radar_reddit one is 7,447 (34 subs in per_source, one root elsewhere).
+    #
+    # The last two columns are the finding. Without summary_json the same rows
+    # take 183 ms, so the envelopes are ~88% of the cost -- and .all() holds
+    # every row and every decoded dict at once, which is 228 MiB of heap for one
+    # request on a login_required, uncached route. On a small host that is the
+    # number that ends the process, not the seconds.
+    #
+    # Nothing is changed here. Extracting the counters in SQL needs JSON path
+    # functions whose behaviour on the production MariaDB cannot be verified
+    # from this environment. The portable fixes -- typed counter columns written
+    # at finish_run, a daily rollup, memoising completed days, or dropping 30
+    # from ALLOWED_DAYS -- are product or schema decisions, and they belong to
+    # the plan owner. The evidence and the options are in FOUNDATIONS-LEDGER.md,
+    # "R2 evidence".
     runs = db.session.query(
         RadarIngestRun.started_at, RadarIngestRun.status,
         RadarIngestRun.summary_json,

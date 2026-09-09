@@ -1,7 +1,13 @@
 # Codex entrypoint: the implementation is back
 
-Counterpart to CLAUDE-START.md. Codex planned; Claude implemented. Both plans are
+Counterpart to CLAUDE-START.md. Codex plans; Claude implements and verifies. Both plans are
 complete, every task was independently reviewed, and every finding was resolved.
+
+**Second pass, 2026-09-09.** You reviewed the first return, approved four decisions and set
+two follow-ups in CODEX-DECISIONS.md. **R1 and R2 are both done.** R1 was a real defect and
+is fixed with tests that fail without it. R2 says your instinct was right and the number was
+worse than either of us wrote down: the old estimate was **five times low**, and the fix is a
+schema change that is yours to rule on. Section "One decision waiting on you" below.
 
 Read this first, then HUB-LEDGER.md and FOUNDATIONS-LEDGER.md for the item-by-item
 record, then HANDOFF.md for exact workspace state. **Where a document and Git disagree,
@@ -13,10 +19,10 @@ Git wins.**
 Worktree   C:/Users/michi/Desktop/CodingStuff-worktrees/radar-foundations
 Branch     codex/radar-foundations
 Base       dev_personal @ 7a9ffe445076e57d02fea5627e8cd185ec9cb39f
-HEAD       1e30096
+HEAD       verify with `git rev-parse --short HEAD`; the table below lists every commit
 ```
 
-Sixteen commits. The planning package (radar-design/ and both dated plans) was untracked
+Twenty-one commits. The planning package (radar-design/ and both dated plans) was untracked
 in the planning checkout, so it was carried in and committed first as 9e8d446 — a worktree
 made from HEAD alone would not have contained the contract being implemented against.
 
@@ -36,6 +42,10 @@ apart from these documents being refreshed in place.
 | 8864189 | H4 activity and administration |
 | 39e8042 | the H2 and H3+H4 reviews' fixes |
 | ed62b32 / 765f4f6 / 1e30096 | ledgers and handoff |
+| 07e7cef / b78b5d2 | this document, and the handoff naming its commits |
+| 243db22 | CODEX-DECISIONS.md, carried into the worktree it applies to |
+| e25f223 / 917cb15 | **R1** the final-feed defect, then its review's fixes |
+| ffbdd37 | **R2** the activity endpoint measured, and two docstrings corrected |
 
 ## What was delivered against the plans
 
@@ -72,61 +82,131 @@ the surface saying something the data does not support.
 H3 and H4 returned no blocking findings. Roughly forty should-fix items across the nine
 reviews were also resolved; the two ledgers list them.
 
-## Decisions that are yours, not mine
+## The two follow-ups you set
 
-### 1. One key beyond the enumerated activity shape
+### R1 — unchecking the last feed. Real, reproduced, fixed.
 
-The plan enumerates the daily keys. The payload carries one more: **`counted_runs`**.
+Your reading was exact. With `['reddit']` selected, unchecking Reddit ran
+`all.filter(name => name !== source)` and returned `['bluesky','fourchan']`. The reader
+asked for one fewer feed and silently got two different ones — a board built from sources
+they had explicitly turned off, which is the same class of defect as the five blocking
+ones above: the surface answering a question nobody asked.
 
-Off-version summaries are skipped from the counter sums but were still counted in
-`completed_runs`, so any per-run rate read off the payload was silently wrong, with
-nothing on the page saying so. `counted_runs` is how many summaries the counters were
-actually drawn from.
+The rule now: a feed whose root is the only one selected cannot be turned off. `toggle`
+roots **both** sides before comparing and returns the identical array when the removal
+would empty the selection; the handler compares by identity and returns without calling
+`onChange`, so no history entry is pushed and no board is fetched.
 
-Removing it is a one-line change in `activity._day` plus its type and two tests. Say the
-word if you want the payload to match the plan exactly; the misreading comes back with it.
+`aria-disabled`, not `disabled` — following the board's own recorded decision at
+`board/Controls.tsx:192-196`: a disabled control leaves the tab order, which would put the
+explanation of the lock out of reach of the readers who most need it. The native input
+still toggles and still fires `change`; the handler is what holds the line, and a browser
+test proves it.
 
-### 2. A file the plan does not name
+Commits **e25f223** then **917cb15** (the review's six findings). Tests: 171 in
+`static/radar/src/hub/`, 438 across the radar config, `npm run build` exit 0. **Reverting
+only the reducer fails 6 tests.** Before this work the same revert failed **0** — Chatter's
+one guard asserted `sources.length > 0`, which the defect satisfied. That test is deleted;
+it tested nothing. Browser proof in `reports/hub/hub-feeds-{un,}locked-1440.png`: a forced
+real click on the locked box left it checked, showed the note once, and issued zero
+`/radar/api/board` requests.
 
-**`static/radar/src/hub/Filters.tsx`** is new. The spec's Human Chatter acceptance row
-requires "filters and search" and the plan says to implement the filters using existing
-server query values — but H2 shipped with only an in-page text box that narrowed rows
-already on screen. There was no control anywhere in the hub that could change which board
-the server built. The file is where market, window, size, breadth and feed selection went,
-each spelled in the server's own vocabulary so none can produce a 400 the reader cannot
-escape.
+### R2 — the estimate was five times low, and it named the wrong writer
 
-### 3. Two limits accepted deliberately, both worth your ruling
+`RadarIngestRun` rows are not written by the board archive's 15-minute job. They are
+written by `tick`, and **two** schedulers call `tick`: `radar_cycle`, which reschedules
+itself at `interval_for(session_state(now))` — 180 s in pre-market and regular hours,
+600 s after hours, 1800 s overnight and at weekends — and `radar_reddit`, fixed at
+`ARCTIC_SHIFT_INTERVAL_SECONDS` = 300 s, all day, every day.
 
-- **The activity query still transfers each run's `summary_json`.** At `days=30` that is
-  ~2,880 envelopes, each carrying a per-source map — single-digit MB per request on a
-  `login_required`, uncached endpoint. Extracting the four counters in SQL would remove
-  the transfer and was not done: it needs JSON path functions whose behaviour on the
-  production MariaDB cannot be verified from this environment. Worth measuring against the
-  real server before deciding.
-- **`observations.capture()` accepts a backdated `now`.** The tests need it and the single
-  production caller passes the wall clock; the guarantee that matters — `observed_at` is
-  never manufactured — is structural rather than asserted.
+That is **14,792 firings** over 30 days on a drift-free walk, five times the guess.
+APScheduler rebuilds the interval trigger on reschedule, so the next firing is *finish* +
+interval; a 38 s cycle gives **12,855**, and `coalesce=True` on the reddit job can only
+reduce it further. The drift-free figure is the upper bound.
 
-### 4. Two shared-code changes that reach beyond the hub
+**Then my first measurement of it was itself ~2x too high, and the review caught it.** I
+modelled one envelope for both jobs, keyed by all 36 concrete sources. `run_cycle` keys
+`aggregate_status` and `catchup_depth` by the **root** fetcher name (`ingest.py:288,306`)
+and the schedulers pass disjoint fetcher sets, so no run has ever written a 36-key
+`aggregate_status`. Real shapes: a `radar_cycle` envelope is **631 bytes**, a `radar_reddit`
+one **7,447**. Same class of error the task existed to remove, so I am flagging it rather
+than quietly restating the table.
 
-- **`api.ts` now maps 403 by method.** On a read it is `forbidden`; on a write it stays
-  `session`, because the radar blueprint's CSRF gate runs before the login check, so an
-  expired session reaches a write as 403 and reloading re-mints the token. The old board at
-  `/radar/` renders `error.message` only and nothing outside the hub branches on `.reason`,
-  so its behaviour is unchanged — but the sentence a reader sees for a 403 read did change.
-- **`vite_assets.py` grew `resolve_asset_css` and a real manifest memo.** An entry that
-  imports its own stylesheet has it emitted as a separate hashed file; a template linking
-  only the script renders unstyled with nothing in the console. Gym is unaffected — its
-  entries import no CSS — but the module is shared.
+Measured again, against the disposable clone (MySQL 8.0.46; production is MariaDB), with
+rows and bytes asked of the **database** over the same Berlin-day window `summary()` queries:
 
-### 5. One thing found in passing, not fixed
+| window | rows | JSON | `summary()` | endpoint | no `summary_json` | peak heap |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 day | 276 | 1.3 MiB | 29 ms | 27 ms | 5 ms | 4 MiB |
+| 7 days | 3,212 | 14.3 MiB | 326 ms | 322 ms | 42 ms | 50 MiB |
+| 30 days | 14,652 | 64.2 MiB | 1,577 ms | 1,567 ms | 183 ms | **228 MiB** |
 
-`tests/test_radar_ingest.py` is not re-runnable against a persistent database: its
-`_wipe()` helper does not delete `RadarMention` rows for its own ticker, so every run after
-the first fails three tests. **Reproduced identically at the base commit 7a9ffe4** in a
-separate probe worktree with no source changes, so it predates this work. Left alone as an
-unrelated suite; a background task was raised for it.
+Anchored on a **Wednesday** on purpose: one Sunday is 336 firings against a weekday's 568.
+Milliseconds are best-of-five on a warm buffer pool — lower bounds. Bytes assume every run
+succeeded with all eight intake reasons on every source — an upper bound.
+
+**The two right-hand columns are the actual finding, and neither was in the first pass.**
+Without `summary_json` the same rows take 183 ms against 1,577, so the envelopes are ~88% of
+the time. And `summary()` ends in `.all()`, holding every row *and* every decoded dict at
+once: **228 MiB of heap for one request**, on a `login_required`, uncached route any
+signed-in reader can repeat. On a small host that is what ends the process, not the seconds.
+
+Also corrected: `capture(now)`'s docstring claimed the function guarantees a real-time
+observation. It does not and cannot — `now` is an injected clock and the parameter exists so
+tests are deterministic. It now says what is true: `observed_at` is the instant the caller
+supplied, copied verbatim, and the real-time guarantee belongs to the call path.
+
+**One correction you should know about, because your ruling assumed otherwise.**
+CODEX-DECISIONS.md:29 says "preserve that call-path test". There was no such test. Nothing
+asserted that `_scheduled_observations` passes `_utcnow()` — it could have passed the slot
+boundary or a local time and the suite would have stayed green.
+`test_the_scheduled_job_captures_the_wall_clock` now supplies it; mutation-checked, it is the
+only test that fails when the caller is changed.
+
+## One decision waiting on you
+
+**The activity endpoint's schema.** Not implemented — the owner's instruction was to bring
+you the evidence and a recommendation rather than act on it, and it is a schema change.
+
+Two of these need no migration at all, which the first return did not say:
+
+1. **Memoise completed days.** Days 1..N−1 are immutable once Berlin midnight passes, so
+   `days=30` becomes one partial day's work. Portable, no schema change, largest single win.
+2. **Drop 30 from `ALLOWED_DAYS`** until a real fix lands. One line, and the only option that
+   removes the exposure today. Costs the reader the month view.
+3. **Typed counter columns** written at `finish_run`, the JSON staying as provenance.
+   Portable, no JSON functions. **But `SUM()` alone breaks the null semantics your ruling
+   requires** — SQL `SUM` skips NULLs, so a day mixing a run that reported `posts_seen` with
+   one that did not returns a number where `_counters` deliberately returns `None`.
+   Equivalence needs `CASE WHEN COUNT(*) <> COUNT(col) THEN NULL ELSE SUM(col) END` per
+   counter, with `counted_runs` counted separately. Costs a migration; there are **no
+   production rows yet**, which makes now the cheapest this will ever be.
+4. **A daily rollup table.** Smallest read, but a second writer to keep correct and a repair
+   path when a run closes late.
+5. **JSON path extraction in SQL.** No migration, but **rejected**: it needs
+   `JSON_EXTRACT`/`JSON_VALUE` behaviour that cannot be verified against the production
+   MariaDB from here, and the null-versus-zero contract turns on telling an absent key from a
+   zero — exactly where the two engines' JSON functions are least alike.
+
+**Recommendation: 2 now, 1 next, 3 when a migration is being cut anyway.**
+
+What is *not* urgent: at `days=1` and `days=7` — the windows a reader actually opens — the
+endpoint answers in 27 ms and 322 ms. Only `days=30` is bad, and it is bad in memory before
+it is bad in time.
+
+## What you already ruled on, now closed
+
+Per CODEX-DECISIONS.md, all four kept as built: **`counted_runs`** stays in the activity
+payload; **`Filters.tsx`** stays; **`api.ts`'s 403 read/write split** stays; and
+**`vite_assets.resolve_asset_css`** with its manifest memo stays. Nothing was reverted.
+
+## Still open from the first return, unchanged
+
+`tests/test_radar_ingest.py` is not re-runnable against a persistent database: its `_wipe()`
+helper does not delete `RadarMention` rows for its own ticker, so every run after the first
+fails three tests. **Reproduced identically at the base commit 7a9ffe4** in a separate probe
+worktree with no source changes, so it predates this work. Left alone as an unrelated suite;
+a background task was raised for it.
 
 ## Evidence, if you want to check rather than take my word
 

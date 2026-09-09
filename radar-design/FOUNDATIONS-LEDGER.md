@@ -14,6 +14,8 @@ Updated: 2026-09-09
 | F2 independent review | Complete | No blocking findings; 4 should-fix + 5 minor, resolved in 236f862 |
 | F3 activity/ops APIs | Complete | 328074a, fixes in a178ba6 |
 | F3 independent review | Complete | No blocking findings; 7 should-fix + 4 minor, resolved in a178ba6 |
+| R2 activity volume measured | Complete | ffbdd37 + the review's fixes; ~2,880 was 5x low on firings. Measured 14,652 rows / 64.2 MiB / 1.6 s / 228 MiB peak heap at days=30 |
+| R2 activity cost decision | Open, Codex's | Five options below, two needing no migration. NOT implemented, per the owner's instruction |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
 Implementation workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-foundations
@@ -181,7 +183,9 @@ than a growing scan.
 - Minor: `days=7 ` was read as 7 (now refused), naive-UTC is asserted where an aware value would be
   relabelled, a run outside the rendered days raises instead of vanishing, and the non-admin fixture
   clears its unique username before inserting.
-- **Known limit, accepted deliberately:** the day query selects three columns rather than whole ORM
+- **Known limit, accepted deliberately** (every figure in this bullet is SUPERSEDED -- measured
+  under R2 below: the run count was five times low and "single-digit MB" is 64.2 MiB): the day
+  query selects three columns rather than whole ORM
   rows, but still transfers each run's `summary_json`. At a 15-minute cadence `days=30` is ~2,880
   envelopes, each carrying a per-source map -- single-digit MB per request on a `login_required`,
   uncached endpoint. Extracting the four counters in SQL would remove the transfer and was not
@@ -190,5 +194,138 @@ than a growing scan.
 - Documented rather than changed: the admin gate on `/api/ops` is a front door, not a new wall --
   `/api/board` already serves `spend`, `sentiment_ops` and `market_data_ops` to any signed-in
   reader, and the spec explicitly defers removing them.
+
+## R2 evidence -- what the activity endpoint actually reads (2026-09-09)
+
+Commits **ffbdd37** (first pass) and the R2 review's fixes. Files:
+`features/radar/activity.py` (the capacity note), `features/radar/observations.py` and
+`tests/test_radar_observations.py` (the `capture(now)` wording, and the test it claimed
+but that did not exist), `scratchpad/bench_activity.py` (new, repeatable).
+
+### The estimate was wrong because it named the wrong writer
+
+F3's note divided the window by the board archive's 15-minute cadence and got ~2,880 runs
+over 30 days. `RadarIngestRun` rows are not written by that job at all. They are written by
+`tick`, and **two** scheduler jobs call `tick`:
+
+- `radar_cycle` reschedules itself after every run at `interval_for(session_state(now))` --
+  180 s in pre-market and regular hours, 600 s after hours, 1800 s overnight and at weekends.
+- `radar_reddit` runs at a fixed `ARCTIC_SHIFT_INTERVAL_SECONDS` = 300 s, all day, every day.
+
+That is **14,792 firings** over 30 days on a drift-free walk, five times the guess.
+APScheduler rebuilds the interval trigger on reschedule with `start_date = now + interval`,
+so the next firing is *finish* + interval; feeding a 38 s cycle back in gives **12,855**.
+`coalesce=True` with `max_instances=1` on the reddit job can only reduce it further. The
+drift-free number is therefore an upper bound, and the script prints both.
+
+### And the first measurement of it was itself ~2x too high
+
+Caught by the R2 review, and it is the same class of error the task existed to remove: a
+constructed envelope asserted as a measurement. The first benchmark keyed all four
+per-source maps by all 36 concrete sources. `run_cycle` does not do that
+(`ingest.py:288,306`): `aggregate_status` and `catchup_depth` are keyed by the **root**
+fetcher name and only `per_source` by concrete names. And the two schedulers pass disjoint
+fetcher sets -- `session_fetchers` is everything but reddit (`run_radar_ingest.py:1348`),
+the reddit job gets `{'reddit': fetcher}` alone (`:1128`). No run has ever written a 36-key
+`aggregate_status`.
+
+| envelope, as the server stores it | radar_cycle | radar_reddit |
+| --- | --- | --- |
+| `per_source` | 2 | 34 |
+| `aggregate_status` | 2 | **1** |
+| `catchup_depth` | 2 | **1** |
+| `intake_reasons` | <=2 | <=34 |
+| bytes | **631** | **7,447** |
+
+### Measured, against the disposable clone
+
+MySQL 8.0.46; production is MariaDB. Anchor 2019-06-26 12:00, **a Wednesday** --
+deliberately: one Sunday is 336 firings against a weekday's 568, so a weekend anchor would
+have flattered the cheapest window. Rows and bytes are asked of the **database** over the
+same Berlin-calendar-day window `summary()` queries, rather than counted over a rolling
+`24h * days` and multiplied by a Python re-serialization -- which is how the first table
+came to carry three numbers drawn from two different row sets.
+
+| window | rows | JSON | `summary()` | endpoint | same rows, no `summary_json` | peak heap |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 day | 276 | 1.3 MiB | 29 ms | 27 ms | 5 ms | 4 MiB |
+| 7 days | 3,212 | 14.3 MiB | 326 ms | 322 ms | 42 ms | 50 MiB |
+| 30 days | 14,652 | 64.2 MiB | 1,577 ms | 1,567 ms | 183 ms | **228 MiB** |
+
+Milliseconds are best of five on a warm buffer pool -- a **lower** bound. Every seeded row
+is `status='ok'` carrying a full envelope with all eight intake reasons on every source, so
+the bytes are an upper bound. The newest day is partial, seeding stopping at the 12:00
+anchor exactly as a reader opening it mid-day would find it.
+
+The last two columns are the finding, and neither existed in the first pass. **The envelopes
+are ~88% of the time** -- the same rows without `summary_json` take 183 ms against 1,577.
+And `summary()` ends in `.all()`, holding every row *and* every decoded dict at once:
+**228 MiB of Python heap for one request** on a `login_required`, uncached route that any
+signed-in reader can repeat. On a small host that is the number that ends the process, not
+the seconds.
+
+### Not implemented. This is Codex's decision.
+
+Recorded per the owner's instruction to bring evidence and a recommendation rather than act.
+Two of these need no migration at all:
+
+1. **Memoise completed days.** Days 1..N-1 are immutable once Berlin midnight passes, so
+   `days=30` becomes one partial day's work. Portable, no schema change, and the largest
+   single win. Needs a cache keyed by the Berlin date and an eviction story.
+2. **Drop 30 from `ALLOWED_DAYS`** until a real fix lands. One line in `activity.py:48`, and
+   the only option that removes the exposure today. Costs the reader the month view.
+3. **Typed counter columns** written at `finish_run`, beside the envelope, which stays as
+   provenance. Portable -- no JSON functions. **But `SUM()` alone breaks the null contract**
+   the ruling requires: SQL `SUM` skips NULLs, so a day mixing a run that reported
+   `posts_seen` with one that did not would return a number where `_counters` deliberately
+   returns `None`. Equivalence needs, per counter,
+   `CASE WHEN COUNT(*) <> COUNT(col) THEN NULL ELSE SUM(col) END`, with `counted_runs`
+   counted separately. Costs a migration; there are no production rows yet, which makes now
+   the cheapest this will ever be.
+4. **A daily rollup table.** Smallest read, but a second writer to keep correct and a repair
+   path for when a run closes late.
+5. **JSON path extraction in SQL.** No migration, and still **rejected**: it needs
+   `JSON_EXTRACT`/`JSON_VALUE` behaviour that cannot be verified against the production
+   MariaDB from here, and the null-versus-zero contract turns on telling an absent key from
+   a zero -- exactly where the two engines' JSON functions are least alike.
+
+**Recommendation: 2 now, 1 next, 3 when a migration is being cut anyway.** Note what is not
+urgent: at `days=1` and `days=7` the endpoint answers in 27 ms and 322 ms. Only `days=30` is
+bad, and it is bad in memory before it is bad in time.
+
+### Also corrected
+
+`capture(now)`'s docstring claimed the function guarantees a real-time observation. It does
+not and cannot: `now` is an injected clock and the parameter exists for deterministic tests.
+The wording now says what is true -- `observed_at` is the instant the caller supplied,
+copied verbatim; the guarantee belongs to the call path.
+
+That docstring then cited a test that **did not exist**, and CODEX-DECISIONS.md:29 asked to
+"preserve" it. `_scheduled_observations` could have passed `_next_quarter_hour(...)` or a
+local time and the whole suite would have stayed green.
+`test_the_scheduled_job_captures_the_wall_clock` now pins it, and the docstring names it so
+the claim is checkable. Mutation-checked: passing `observations._slot(_utcnow())` instead
+fails **that test and only that test**.
+
+### Verification
+
+- `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py -q`
+  -> **66 passed** (65 before the new test). No behaviour changed under R2 outside that test;
+  the rest is comments and docstrings, and the benchmark lives in `scratchpad/`.
+- `PYTHONPATH=. py -3.12 scratchpad/bench_activity.py` -> the tables above. It refuses any
+  database but `personal_apps_radar_wt` -- checked with `raise SystemExit`, not `assert`,
+  which `-O` compiles away -- seeds into 2019 and clears in a `finally`.
+
+### Limits of the measurement, stated
+
+- MySQL 8.0.46, not the production MariaDB.
+- Warm buffer pool, best of five: the milliseconds are lower bounds.
+- Envelopes are constructed to the real shapes, not captured from a production run -- this
+  machine has none. Every key is `run_cycle`'s own and every map is keyed the way
+  `run_cycle` keys it, which is what makes them representative in the dimension that matters
+  here.
+- The 2019 window is shared with the backend suite's fixtures, which run the same blanket
+  `started_at < 2020-01-01` delete. No test anchor falls inside 05-27..06-26, so there is no
+  collision today; do not run the benchmark concurrently with that suite.
 
 For each completed step append commit, exact tests/results, reviewer findings, fixes/rulings and next step. Never mark an unrun check passed. Keep environmentally blocked tasks open with exact failure evidence. Takeover verifies this ledger against Git and reports.

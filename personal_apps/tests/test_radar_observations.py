@@ -107,8 +107,12 @@ def test_a_later_slot_is_a_second_observation(app_context, monkeypatch):
 
 
 def test_a_late_capture_keeps_the_time_it_actually_ran(app_context, monkeypatch):
-    """observed_at is evidence, not a label. A capture that ran fourteen
-    minutes into its slot must not claim to have run at the boundary."""
+    """observed_at is the caller's instant, not the slot it was filed under.
+
+    Half of what makes it evidence; the other half is
+    test_the_scheduled_job_captures_the_wall_clock, which pins that the one
+    production caller's instant is the clock's.
+    """
     monkeypatch.setattr(observations, 'build_payload', fake_payload)
     late = BASE.replace(minute=14, second=59)
     observations.capture(late)
@@ -317,6 +321,32 @@ def test_the_scheduled_job_does_nothing_while_capture_is_disabled(
     monkeypatch.setattr(runner.observations, 'capture_enabled', lambda: True)
     runner._scheduled_observations()
     assert len(calls) == 1
+
+
+def test_the_scheduled_job_captures_the_wall_clock(app_context, monkeypatch):
+    """The whole real-time guarantee lives here.
+
+    `capture(now)` cannot enforce that its instant is the wall clock -- `now`
+    is an injected clock and the parameter exists so the tests are
+    deterministic. What makes an observation evidence of a moment is that the
+    ONE production caller passes `_utcnow()`, so that is what this pins.
+    Without it, `_scheduled_observations` could pass the slot boundary,
+    `_next_quarter_hour(...)` or a local time and every other test would still
+    be green.
+    """
+    import run_radar_ingest as runner
+
+    sentinel = dt.datetime(2019, 4, 2, 9, 37, 12, 5)
+    calls = []
+    monkeypatch.setenv('RADAR_OBSERVATION_CAPTURE_ENABLED', 'true')
+    monkeypatch.setattr(runner, '_utcnow', lambda: sentinel)
+    monkeypatch.setattr(runner.observations, 'capture',
+                        lambda now, **kw: calls.append(now))
+    runner._scheduled_observations()
+
+    assert calls == [sentinel], (
+        'the capture job must file the observation under the instant the clock '
+        'reported, unrounded and unadjusted')
 
 
 def test_the_job_is_registered_on_the_quarter_hour(monkeypatch):

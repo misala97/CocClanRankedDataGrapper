@@ -28,10 +28,11 @@ What this function does NOT do is enforce that the instant is the wall clock.
 `now` is an injected clock -- the tests need one, and determinism is the reason
 the parameter exists. The guarantee that observations carry real time is a
 property of the call path, not of this function: the only production caller is
-`_scheduled_observations`, which passes `_utcnow()`, and a test pins that. There
-is no backfill entry point and no user-supplied timestamp reaches here. Adding
-either would need a provenance contract of its own, because a row would then no
-longer be self-evidently something that was seen.
+`_scheduled_observations`, which passes `_utcnow()`, pinned by
+`test_the_scheduled_job_captures_the_wall_clock`. There is no backfill entry
+point and no user-supplied timestamp reaches here. Adding either would need a
+provenance contract of its own, because a row would then no longer be
+self-evidently something that was seen.
 
 Account state never enters the archive. `build_payload`'s serializer also reads
 spend and the operational summaries as a side effect of building any board;

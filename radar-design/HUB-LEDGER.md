@@ -17,6 +17,7 @@ Updated: 2026-09-09
 | H4 activity/admin | Complete | 8864189 |
 | H3+H4 independent review | Complete | No blocking; ~15 should-fix, all resolved |
 | Verification pass | Complete | 13 captures at 1440/768/390, keyboard and real-API pass; see reports/hub/EVIDENCE.md |
+| R1 final-feed deselection | Complete | e25f223; independent review, 6 findings, all resolved in 917cb15; browser proof below |
 | Owner visual review | Open | Opt-in /radar/hub/ is ready for it |
 | Root route promotion/deploy | Outside scope | Separate release decision |
 
@@ -105,5 +106,52 @@ button" on a page that has none.
 - The mobile stacked table carries explicit ARIA roles and a real labelled element per
   cell, because `display: block` drops a table's implicit roles and `::before` content is
   not part of a cell's accessible name.
+
+## R1 evidence -- the last feed (2026-09-09)
+
+Codex's finding, reproduced first: with `['reddit']` selected, unchecking Reddit called
+`toggle`, which returned `all.filter(name => name !== source)` -- `['bluesky','fourchan']`.
+The reader asked for one less feed and silently got two different ones.
+
+Commits: **e25f223** (fix + tests), **917cb15** (the review's six findings).
+Files: `static/radar/src/hub/Filters.tsx`, `Filters.test.tsx` (new), `Hub.test.tsx`,
+`Chatter.test.tsx`, `hub.css`.
+
+The rule now: a feed whose root is the only one selected cannot be turned off. `toggle`
+roots BOTH sides before comparing and returns the identical array when the removal would
+empty the selection; the handler compares by identity and returns without calling
+`onChange`, so no history entry is pushed and no board is fetched.
+
+Tests:
+- `npx vitest run -c vite.radar.config.ts static/radar/src/hub/` -> **171 passed**, 12 files.
+- `npm test` -> **403 passed** (root config), **438 passed** (radar config).
+- `npm run build` -> exit 0.
+- Mutation check: reverting only the reducer to `current.filter(...)` fails **6** tests.
+  Before this work the same revert failed 0 -- Chatter's one guard asserted only
+  `sources.length > 0`, which the defect satisfied. That test is gone; it tested nothing.
+
+Browser proof, local server on 5051, board injected at two selections:
+`reports/hub/hub-feeds-unlocked-1440.png` (three feeds, no lock, note absent) and
+`reports/hub/hub-feeds-locked-1440.png` (one feed, locked, note shown). A real click on
+the locked box -- forced past Playwright's actionability gate, because a browser does let
+a click through to a checkbox carrying only `aria-disabled` -- left it checked, showed the
+note exactly once, and issued **zero** `/radar/api/board` requests.
+
+### What the R1 review found
+
+Six, all resolved in 917cb15. Two were mine to have caught:
+
+- `disabled` on the locked checkbox contradicted the board's own recorded decision
+  (`board/Controls.tsx:192-196`): a disabled control leaves the tab order, so the
+  explanation attached to it becomes unreachable by the readers who most need it. Now
+  `aria-disabled` plus `aria-describedby`, and the handler enforces the rule.
+- `toggle` rooted only the incoming source, so `toggle(['reddit:options'], 'reddit:options')`
+  appended a duplicate. Both sides are rooted now.
+- The floor note rendered unconditionally while its CSS comment claimed otherwise.
+- Two of the new tests still passed under a full revert of the fix.
+- No test above the component boundary: nothing proved the SHELL did not fetch. Two
+  request-level tests in `Hub.test.tsx` now assert every `fetchBoard` call carries
+  `sources: ['reddit']`, with a positive control that a real change does fetch.
+- A dead `.rh-sources input:disabled + span` rule left behind by the attribute change.
 
 Record commits, exact tests, screenshots, findings and resolutions for each task. Preserve completed tasks across session/model switches. Prototype approval is not approval of finished production implementation.
