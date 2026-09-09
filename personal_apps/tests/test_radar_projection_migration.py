@@ -308,16 +308,14 @@ def test_the_backfill_refuses_a_counter_outside_the_accepted_domain(
     assert 'out of range' in message, 'the report did not name the shape'
     assert '-4' not in message, 'the report leaked a stored value'
 
-    # Nothing projected. The columns exist -- DDL committed -- but the valid
-    # row beside the offender was not written, so a fixed database can simply
-    # be upgraded again.
+    # The schema is untouched. This is the property the error message
+    # promises -- "No column has been added" -- and the reason a fixed database
+    # can simply be upgraded again rather than needing the columns dropped
+    # first. Asserted unconditionally: guarding it on the columns existing
+    # would make it pass under the very ordering it exists to rule out.
     with db.engine.connect() as connection:
-        if 'posts_seen' in _columns(connection):
-            projected = connection.execute(sa.text(
-                'select count(*) from radar_ingest_runs '
-                'where posts_seen is not null')).scalar()
-            assert projected == 0, (
-                'the refused migration projected rows before refusing')
+        assert not _columns(connection) & set(NEW_COLUMNS), (
+            'the refused migration added its columns before refusing')
 
     with db.engine.begin() as connection:
         connection.execute(sa.text(

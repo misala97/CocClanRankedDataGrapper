@@ -2,11 +2,19 @@
 
 Three things are under test here and they are separate questions.
 
-Parity: the new read must return exactly what the old envelope-based reducer
-returned, for every shape of stored data. The old reducer lives in this file as
+Parity: the new read must return what the old envelope-based reducer returned
+for every shape production writes. The old reducer lives in this file as
 `reference_day` -- an oracle, deliberately not a production fallback. If
 production kept a JSON path to fall back to, the read would still be able to
 fetch envelopes, which is the cost this whole change exists to remove.
+
+Parity is NOT total, and the exceptions are deliberate. Python made the old
+predicate `schema_version == SCHEMA_VERSION` accept `True` and `1.0` as
+version 1, and made `sum()` accept a negative or a bool and raise TypeError on
+a string. The projection refuses all of those. Each divergence is pinned by a
+test named `..._before_and_..._now`, which asserts the DIFFERENCE against the
+oracle rather than routing around it, so the choice is on the record and cannot
+be quietly "fixed" back into agreement by someone who did not know it was made.
 
 Provenance: the migration's frozen projection and the live `activity.project`
 must agree. They are separate code on purpose -- a migration cannot import a
@@ -329,8 +337,10 @@ def test_an_error_run_stores_no_projection(app_context):
 ])
 def test_dst_days_group_by_the_berlin_day_that_was_lived(app_context, start,
                                                          label):
-    """Built from two Berlin midnights, so a 23- or 25-hour day still holds
-    exactly the runs that happened inside it."""
+    """A run is filed under the Berlin day it happened in, across both
+    transitions. This exercises the GROUPING; the two tests below exercise the
+    day's LENGTH, which is a different thing and the one that is easy to get
+    wrong."""
     store(start, envelope=envelope(posts_seen=1, posts_new=1, mentions=1,
                                    buckets_written=1))
     expected_date = activity._berlin_date(start)
@@ -340,6 +350,48 @@ def test_dst_days_group_by_the_berlin_day_that_was_lived(app_context, start,
     assert matching, f'{label}: {expected_date} missing from the window'
     assert matching[0]['completed_runs'] == 1, label
     assert matching[0]['posts_seen'] == 1, label
+
+
+def test_the_25_hour_day_keeps_its_last_hour(app_context):
+    """2019-10-27 is 25 hours long in Berlin, and a one-day window has to hold
+    all of them.
+
+    A window built by adding 86,400 seconds to that day's start ends at
+    22:00 UTC instead of 23:00, so a run at 23:30 Berlin -- inside the day, in
+    the extra hour -- falls outside it and the day silently loses a run. The
+    seven-day tests above cannot catch this: they span the boundary, so a
+    misplaced internal edge makes no difference to what the window contains.
+    """
+    run_at = dt.datetime(2019, 10, 27, 22, 30)      # 23:30 Berlin, CET
+    assert activity._berlin_date(run_at) == dt.date(2019, 10, 27)
+    store(run_at, envelope=envelope(posts_seen=1, posts_new=1, mentions=1,
+                                    buckets_written=1))
+
+    day = activity.summary(dt.datetime(2019, 10, 27, 22, 45), 1)['days'][-1]
+    assert day['date'] == '2019-10-27'
+    assert day['completed_runs'] == 1, 'the 25th hour fell outside its own day'
+    assert day['posts_seen'] == 1
+
+
+def test_the_23_hour_day_does_not_borrow_an_hour_from_the_next(app_context):
+    """The mirror. 2019-03-31 is 23 hours long, so a fixed-width window runs an
+    hour past midnight and reaches into 2019-04-01.
+
+    The run below is at 00:30 Berlin on the FOLLOWING day. If the window were
+    86,400 seconds wide it would be pulled into 03-31 -- and `summary` would
+    raise, because 04-01 is not one of the days it is rendering. That guard is
+    the point: a run in the wrong day is not something to discover later.
+    """
+    run_at = dt.datetime(2019, 3, 31, 22, 30)       # 00:30 Berlin on 04-01
+    assert activity._berlin_date(run_at) == dt.date(2019, 4, 1)
+    store(run_at, envelope=envelope(posts_seen=1, posts_new=1, mentions=1,
+                                    buckets_written=1))
+
+    day = activity.summary(dt.datetime(2019, 3, 31, 21, 0), 1)['days'][-1]
+    assert day['date'] == '2019-03-31'
+    assert day['completed_runs'] == 0, (
+        'the 23-hour day reached past its own midnight')
+    assert day['posts_seen'] is None
 
 
 # --- the read must not fetch summary_json ----------------------------------
@@ -445,6 +497,76 @@ def test_the_frozen_domain_check_names_shapes_and_not_values():
     assert sorted(bad) == [('posts_new', 'str'), ('posts_seen', 'out of range')]
     assert frozen._out_of_domain(
         {'schema_version': 1, 'summary': {'posts_seen': 4}}) == []
+
+
+# --- where the projection deliberately disagrees with the oracle -----------
+#
+# Every test above asserts the two agree. These four assert they do not, and
+# say why. Without them the divergences would exist only in a docstring, and a
+# later reader could "fix" one back into agreement without knowing it was
+# chosen.
+
+def _oracle_and_projection(envelope):
+    """One stored row, reduced both ways."""
+    store(BASE, envelope=envelope)
+    produced = activity.summary(BASE, 1)['days'][-1]
+    day_from, day_to = activity._day_bounds(activity._berlin_date(BASE))
+    rows = RadarIngestRun.query.filter(
+        RadarIngestRun.started_at >= day_from,
+        RadarIngestRun.started_at < day_to).all()
+    return reference_day(rows), produced
+
+
+def test_a_float_schema_version_counted_before_and_does_not_now(app_context):
+    """`1.0 == 1` is true in Python, so the old equality check accepted a float
+    version and added its counters. An Integer column recording `1` for a
+    declared `1.0` would claim the envelope said something it did not."""
+    oracle, produced = _oracle_and_projection(
+        envelope(version=1.0, posts_seen=3, posts_new=3, mentions=3,
+                 buckets_written=3))
+    assert oracle['counted_runs'] == 1 and oracle['posts_seen'] == 3
+    assert produced['counted_runs'] == 0
+    assert produced['posts_seen'] is None
+    assert produced['completed_runs'] == 1, 'the run still happened'
+
+
+def test_a_boolean_schema_version_counted_before_and_does_not_now(app_context):
+    """`isinstance(True, int)` is True, so `True == 1` passed the old check."""
+    oracle, produced = _oracle_and_projection(
+        envelope(version=True, posts_seen=3, posts_new=3, mentions=3,
+                 buckets_written=3))
+    assert oracle['counted_runs'] == 1
+    assert produced['counted_runs'] == 0
+    assert produced['completed_runs'] == 1
+
+
+def test_a_negative_counter_was_summed_before_and_is_refused_now(app_context):
+    """The accepted domain is non-negative. Refusing shows as a null, which is
+    the module's word for 'not answerable' -- never a clamp to zero, which
+    would be a measurement nobody took."""
+    oracle, produced = _oracle_and_projection(
+        envelope(posts_seen=-4, posts_new=1, mentions=1, buckets_written=1))
+    assert oracle['posts_seen'] == -4, 'the oracle no longer sums what it summed'
+    assert produced['posts_seen'] is None
+    assert produced['posts_new'] == 1, 'one bad counter cost the others'
+    assert produced['counted_runs'] == 1, 'one bad counter cost the row'
+
+
+def test_a_string_counter_raised_before_and_is_refused_now(app_context):
+    """The old reducer called sum() on it and took the endpoint down with a
+    TypeError. A null is the honest answer and it does not 500."""
+    store(BASE, envelope=envelope(posts_seen='5', posts_new=1, mentions=1,
+                                  buckets_written=1))
+    day_from, day_to = activity._day_bounds(activity._berlin_date(BASE))
+    rows = RadarIngestRun.query.filter(
+        RadarIngestRun.started_at >= day_from,
+        RadarIngestRun.started_at < day_to).all()
+    with pytest.raises(TypeError):
+        reference_day(rows)
+
+    produced = activity.summary(BASE, 1)['days'][-1]
+    assert produced['posts_seen'] is None
+    assert produced['posts_new'] == 1
 
 
 # --- the accepted counter domain -------------------------------------------

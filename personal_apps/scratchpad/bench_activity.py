@@ -332,9 +332,12 @@ def control(window_from, window_to):
 
 
 def peak_mib(call):
-    """Python's own peak during one call. `summary()` ends in .all(), so every
-    row AND every decoded dict is live at once -- on a small host that is the
-    number that kills the process, not the seconds."""
+    """Python's own peak during one call.
+
+    This used to be the headline cost: `summary()` ended in `.all()` over rows
+    carrying `summary_json`, so every row and every decoded envelope was live
+    at once. It now selects scalars and streams them, and this is the number
+    that proves it."""
     gc.collect()
     tracemalloc.start()
     call()

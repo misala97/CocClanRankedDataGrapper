@@ -80,12 +80,31 @@ def project(envelope) -> tuple[int | None, bool, dict[str, int | None]]:
     cannot separate "this run stored nothing countable" from "this run's
     summary omitted this counter", and those two have opposite consequences --
     the first is skipped, the second nulls the day.
+
+    THREE DELIBERATE DIVERGENCES from the envelope reducer this replaced. It
+    compared `schema_version == SCHEMA_VERSION` and summed whatever the summary
+    held, so in Python it accepted `True` and `1.0` as version 1 and would have
+    added a negative or a bool to a total. This is stricter on purpose, and
+    each case is pinned by a test that asserts the DIFFERENCE rather than
+    parity:
+
+      * `schema_version` of `1.0` or `True` is not countable. An Integer column
+        recording `1` for either would claim the envelope declared something it
+        did not, and a projection that misreports its own provenance is worse
+        than one that declines to answer.
+      * A counter outside the accepted domain is null rather than summed;
+        see `_counter`.
+      * A counter stored as a string nulls that counter instead of raising
+        TypeError out of the endpoint, which is what the old reducer did.
+
+    Parity is exact everywhere else, which is every shape production writes.
     """
     empty = {name: None for name in COUNTERS}
     if not isinstance(envelope, dict):
         return None, False, dict(empty)
     version = envelope.get('schema_version')
-    # bool is an int in Python, and `True` is not a schema version.
+    # `isinstance(True, int)` is True in Python, and 1.0 == 1 -- both would
+    # have passed the old equality check. Neither is an integer version.
     if isinstance(version, bool) or not isinstance(version, int):
         return None, False, dict(empty)
     summary = envelope.get('summary')
@@ -149,8 +168,13 @@ def finish_run(run_id: str, now: dt.datetime, *, summary: dict | None,
     status = 'error' if error_code else 'ok'
     envelope = (None if summary is None
                 else {'schema_version': SCHEMA_VERSION, 'summary': summary})
-    version, countable, counters = project(envelope)
     try:
+        # Inside the try, with everything else. `project` only inspects types
+        # and logs, so it is not expected to raise -- but this module's first
+        # rule is that instrumentation never takes a cycle down, and `tick`
+        # does not wrap this call. A guarantee with an exception in it is not
+        # one.
+        version, countable, counters = project(envelope)
         with _session() as session, session.begin():
             # FOR UPDATE, so a second closer waits and then re-reads the status
             # this one committed rather than deciding against a stale snapshot.
@@ -251,6 +275,12 @@ class _Day:
         if row.status == 'error':
             self.errored += 1
             return
+        # Explicitly 'ok', not "whatever is left". The CHECK constraint allows
+        # only three statuses today, but the reducer this replaced required
+        # `status == 'ok'`, and a fourth status added later must not silently
+        # become a completed run here.
+        if row.status != 'ok':
+            return
         self.completed += 1
         # The reader decides compatibility, not the writer's marker: the marker
         # says the envelope was well formed, this says its vocabulary is the
@@ -335,12 +365,19 @@ def summary(now: dt.datetime, days: int) -> dict:
     # beside the envelope by `finish_run`; the envelope stays as provenance and
     # is never selected here.
     #
-    # Two things keep the memory bounded and both are load-bearing. The query
-    # names seven scalar columns, so no envelope is fetched and no ORM entity
-    # is constructed that could lazily load one. And the rows are STREAMED --
-    # `yield_per` folds each batch into the accumulators below and lets it go,
-    # so nothing proportional to the number of runs is ever live. Replacing
-    # either with `.all()` restores the original cost exactly.
+    # Two things keep the memory bounded, and they are not equal. The query
+    # names eight scalar columns, so no envelope is fetched and no ORM entity
+    # is constructed that could lazily load one -- that is what removed the
+    # 201 MiB, because the heap was the decoded envelopes. Streaming then buys
+    # the margin: `yield_per` folds each batch into the accumulators below and
+    # lets it go, so nothing proportional to the run count is ever live.
+    # Without it, `.all()` over the same eight scalars would hold single-digit
+    # MiB of row tuples -- far short of the original cost, and far short of the
+    # 0.8 MiB measured.
+    #
+    # Verified rather than assumed: on pymysql this executes on an SSCursor, so
+    # the streaming is genuine server-side streaming and not a buffered result
+    # handed out in slices.
     #
     # One statement, so one snapshot. Paging with separate LIMIT/OFFSET
     # queries would assemble a window out of several transactions, and a cycle

@@ -24,6 +24,22 @@ the old writer stores envelopes while the new reader reads projections: such a
 row would be countable-looking with null counters, which reads as a day whose
 totals cannot be answered.
 
+IF THE BACKFILL DIES PART-WAY -- a dropped connection, an OOM, a kill -- the six
+columns are already there, because MySQL commits implicitly on `ALTER TABLE`,
+and the revision is not stamped. `flask db upgrade` will then fail on a
+duplicate column rather than resume. Recovery is to drop the six columns and run
+the upgrade again:
+
+    ALTER TABLE radar_ingest_runs
+      DROP COLUMN summary_schema_version, DROP COLUMN summary_countable,
+      DROP COLUMN posts_seen, DROP COLUMN posts_new,
+      DROP COLUMN mentions, DROP COLUMN buckets_written;
+
+Nothing is lost by that: every column this migration writes is derived from
+`summary_json`, which it never touches. The refusal path above is different and
+needs no recovery -- it runs before any DDL, so a refused upgrade leaves the
+schema exactly as it was.
+
 Downgrade drops only these six columns. Every envelope and every other table
 survives it, so the projection can be rebuilt by upgrading again -- but the
 projection itself is lost, which matters only in that it must be rebuilt, never
@@ -84,12 +100,16 @@ def _out_of_domain(envelope):
     null would rewrite what history says happened, and the shape of such a row
     is a compatibility question for whoever owns the schema, not for a
     migration running unattended.
+
+    Only COUNTABLE envelopes are examined. A row whose envelope is malformed or
+    unversioned is never counted by any reader, so whatever sits in its
+    counters is not a semantic question -- and blocking an upgrade on junk that
+    could never have been read would be an obstruction, not a safeguard.
     """
-    if not isinstance(envelope, dict):
+    version, countable, _ = _frozen_project(envelope)
+    if not countable:
         return []
     summary = envelope.get('summary')
-    if not isinstance(summary, dict):
-        return []
     bad = []
     for name in COUNTERS:
         if name not in summary:
@@ -129,17 +149,24 @@ def upgrade():
 
 def _batches(connection, *columns):
     """Keyset paging by primary key, so the pass is bounded whatever the table
-    holds and no OFFSET grows with it."""
-    last_id = ''
+    holds and no OFFSET grows with it.
+
+    The first page is unbounded rather than `id > ''`, because '' is less than
+    every other string and that predicate would skip a row whose id is the
+    empty string. uuid4 never produces one, but a scan that silently omits a
+    row is not the kind of thing to leave resting on that.
+    """
+    last_id, first = None, True
     while True:
+        query = sa.select(*columns).select_from(sa.table('radar_ingest_runs'))
+        if not first:
+            query = query.where(sa.column('id') > last_id)
         batch = connection.execute(
-            sa.select(*columns).select_from(sa.table('radar_ingest_runs'))
-            .where(sa.column('id') > last_id)
-            .order_by(sa.column('id')).limit(BATCH)).all()
+            query.order_by(sa.column('id')).limit(BATCH)).all()
         if not batch:
             return
         yield batch
-        last_id = batch[-1].id
+        last_id, first = batch[-1].id, False
 
 
 def _refuse_out_of_domain():
