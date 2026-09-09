@@ -11,6 +11,12 @@ Capture remains off and `/radar/` remains the original route.
 89-second second outage caused by operator error and how it was recovered. The
 first release's record is RELEASE-RECORD.md and remains accurate for that one.
 
+**`origin/main` sits ahead of the deployed SHA by documentation commits, and
+that is expected.** The record and this handoff were written after the deploy
+and pushed after it; they change nothing the server runs. Compare the deployed
+checkout against the last commit that touches `personal_apps/`, not against the
+tip of `main`, before concluding the target has drifted.
+
 ## What is live
 
 The corrected Human chatter: a platform count with the concrete feeds behind
