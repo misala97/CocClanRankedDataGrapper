@@ -18,6 +18,7 @@ Updated: 2026-09-09
 | H3+H4 independent review | Complete | No blocking; ~15 should-fix, all resolved |
 | Verification pass | Complete | 13 captures at 1440/768/390, keyboard and real-API pass; see reports/hub/EVIDENCE.md |
 | R1 final-feed deselection | Complete | e25f223; independent review, 6 findings, all resolved in 917cb15; browser proof below |
+| Suite flake found and fixed | Complete | 78b17c6; Hub.test.tsx let a real navigation reach jsdom, failing ~1 run in 6 on a random neighbour |
 | Owner visual review | Open | Opt-in /radar/hub/ is ready for it |
 | Root route promotion/deploy | Outside scope | Separate release decision |
 
@@ -153,5 +154,30 @@ Six, all resolved in 917cb15. Two were mine to have caught:
   request-level tests in `Hub.test.tsx` now assert every `fetchBoard` call carries
   `sources: ['reddit']`, with a positive control that a real change does fetch.
 - A dead `.rh-sources input:disabled + span` rule left behind by the attribute change.
+
+## The suite was flaky, and it was ours (2026-09-09)
+
+Found while re-verifying for the R2 documentation, not by a review: one `npm test` run
+reported **1 failed / 437 passed** in the radar config, and five further runs were green
+without ever naming the same test.
+
+`Hub.test.tsx`'s `'leaves a modified click to the browser'` asserts the handler does not
+`preventDefault` on a ctrl-click, and proved it by letting the click through to a real
+`href`. jsdom cannot navigate, so it throws `Not implemented: navigation (except hash
+changes)` -- **asynchronously, on a timer, after the test has already passed**. The error
+then attaches to whichever test is running when it fires, which is why it moved around and
+why the file passed in isolation.
+
+Fixed in **78b17c6**. A document-level listener runs after the component's handler, records
+`event.defaultPrevented` -- the component's own answer -- and then prevents the default
+itself, so nothing reaches jsdom's navigation. Mutation-checked: removing the modifier guard
+in `Hub.tsx:159` fails this test and only this test. Four consecutive `npm test` runs are
+now **403 passed** (root) and **438 passed** (radar), with the jsdom error gone from the
+output entirely; `npm run build` exit 0.
+
+Worth recording as a class, not an incident: a green suite that is green only most of the
+time reports the same word as one that is actually green. This one had been in the tree
+since H1 and nine reviews did not catch it, because every one of them read the code rather
+than running the suite six times.
 
 Record commits, exact tests, screenshots, findings and resolutions for each task. Preserve completed tasks across session/model switches. Prototype approval is not approval of finished production implementation.
