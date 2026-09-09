@@ -587,7 +587,11 @@
 .rh-sortbutton:hover { color: var(--ink); text-decoration: underline; }
 .rh-sortbutton.active { color: var(--green); font-weight: 600; }
 .rh-sortarrow { font-size: 10px; line-height: 1; }
+/* `inline` drops the flex context, and with it `.rh-sortbutton`'s gap -- so
+   the arrow sat flush against the word: `Today↓` where every other column
+   reads `Tone ↓`. */
 .rh-pricehead .rh-sortbutton { display: inline; }
+.rh-pricehead .rh-sortarrow { margin-left: 4px; }
 
 /* Present on every width, and the only sort control that survives the header
    row's `display: none` below 860. Hidden here rather than unmounted, so the
@@ -609,7 +613,18 @@
   max-width: none;
 }
 .rh-sortnote strong { color: var(--ink); font-weight: 600; }
-.rh-sortreset { padding: 0; font-size: 12px; }
+/* `.rh-textbutton { color: var(--green) }` is 0,1,0 and loses to
+   `.rh button { color: inherit }` at 0,1,1, so inside this muted paragraph
+   the reset inherited --muted and read as the tail of the sentence beside
+   it: same colour, no underline, nothing to suggest it was a control. */
+.rh-sortnote .rh-sortreset {
+  padding: 0;
+  font-size: 12px;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rh-sortnote .rh-sortreset:hover { color: var(--pine); }
 .rh-chatter .rh-col-company { min-width: 0; }
 /* Wraps rather than clipping: a warning that does not fit is a warning that
    did not happen, and the row is allowed to grow for it. */

@@ -22,7 +22,7 @@ import type { BoardPayload, Row, Selection } from '../types'
 import { sourcePresentation, tonePresentation } from './chatterPresentation'
 import type { SourcePresentation, TonePresentation } from './chatterPresentation'
 import {
-  SORT_LABELS, knownCount, nextSort, priceCurrencies, sortRows,
+  SORT_LABELS, knownCount, nextSort, priceCurrencies, readingWord, sortRows,
 } from './chatterSort'
 import type { ChatterSort, SortKey } from './chatterSort'
 import { Filters } from './Filters'
@@ -113,6 +113,9 @@ function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
 }) {
   const total = board.rows.length
   const shown = rows.length
+  // Somewhere for focus to land when the control holding it unmounts -- see
+  // SortNote's reset.
+  const region = useRef<HTMLDivElement>(null)
   return (
     <section className="rh-panel rh-chatterpanel">
       <div className="rh-panelhead">
@@ -142,7 +145,8 @@ function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
       </div>
 
       {onSort && sort
-        ? <SortNote rows={rows} sort={sort} onSort={onSort} />
+        ? <SortNote rows={rows} sort={sort} onSort={onSort}
+                    onReset={() => region.current?.focus()} />
         : null}
 
       {shown === 0 ? (
@@ -154,8 +158,17 @@ function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
           </Empty>
         </div>
       ) : (
-        <Table rows={rows} onOpen={onOpen} sort={sort} onSort={onSort} />
+        <Table rows={rows} onOpen={onOpen} sort={sort} onSort={onSort}
+               region={region} />
       )}
+
+      {/* Announced, not merely rendered. `aria-sort` tells a reader who lands
+          on a header what the order IS; it does not tell anyone that the list
+          just moved under them -- and on the stacked layout there is no header
+          to land on at all. */}
+      <p className="rh-visually-hidden" role="status">
+        {onSort && sort ? sortSentence(rows, sort) : ''}
+      </p>
 
       <Foot board={board} shown={shown} />
     </section>
@@ -173,17 +186,18 @@ function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
 // anyway, which is exactly the thing it says not to do.
 const COLUMNS = ['26%', '13%', '10%', '18%', '17%', '12%', '4%']
 
-function Table({ rows, onOpen, sort, onSort }: {
+function Table({ rows, onOpen, sort, onSort, region }: {
   rows: Row[]
   onOpen: (ticker: string) => void
   sort: ChatterSort | null
   onSort?: (next: ChatterSort | null) => void
+  region?: React.RefObject<HTMLDivElement | null>
 }) {
   return (
     // Labelled and scrollable: the table may scroll inside this region, but
     // the document never scrolls sideways.
     <div className="rh-tablewrap" role="region" aria-label="Ranked companies"
-         tabIndex={0}>
+         tabIndex={0} ref={region}>
       <table role="table" className="rh-table rh-chatter">
         <colgroup>
           {COLUMNS.map((width, index) => (
@@ -336,14 +350,22 @@ function SortPicker({ sort, onSort }: {
           ))}
         </select>
       </label>
+      {/* The visible text is the CURRENT order; the accessible name is what
+          pressing it does, because "Lowest first" as a name promises the
+          opposite of what happens. Disabled with no sort, and then it claims
+          no order at all rather than asserting one that is not in effect. */}
       <button
         type="button"
         className="rh-button rh-sortdir"
         disabled={!sort}
+        aria-label={sort
+          ? `Sort ${sort.dir === 'asc' ? 'highest' : 'lowest'} first`
+          : 'Sort direction'}
         onClick={() => sort && onSort({
           key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
       >
-        {sort && sort.dir === 'asc' ? 'Lowest first' : 'Highest first'}
+        {!sort ? 'Direction'
+          : sort.dir === 'asc' ? 'Lowest first' : 'Highest first'}
       </button>
     </div>
   )
@@ -355,14 +377,14 @@ function SortPicker({ sort, onSort }: {
  *  is not that: it is the loaded candidates reordered. The eligibility floor,
  *  the breadth filter and Radar's own ranking all ran before this, and none of
  *  them moved. */
-function SortNote({ rows, sort, onSort }: {
+function SortNote({ rows, sort, onSort, onReset }: {
   rows: Row[]
   sort: ChatterSort | null
   onSort: (next: ChatterSort | null) => void
+  onReset?: () => void
 }) {
   if (!sort) return null
-  const known = knownCount(rows, sort.key)
-  const missing = rows.length - known
+  const missing = rows.length - knownCount(rows, sort.key)
   const currencies = sort.key === 'price' ? priceCurrencies(rows) : []
   return (
     <p className="small muted rh-sortnote">
@@ -370,29 +392,53 @@ function SortNote({ rows, sort, onSort }: {
         Sorted by <strong>{SORT_LABELS[sort.key]}</strong>,{' '}
         {sort.dir === 'asc' ? 'lowest first' : 'highest first'}.
       </span>
-      <span>
-        Sorts these {rows.length}{' '}
-        {rows.length === 1 ? 'candidate' : 'candidates'}, not the whole market —
-        Radar’s ranking and eligibility are unchanged.
-      </span>
+      {rows.length === 0 ? (
+        // "Sorts these 0 candidates" is not a sentence anyone needs above
+        // "No company here matches that."
+        <span>Nothing is left to sort under the current filter.</span>
+      ) : (
+        <span>
+          Sorts these {rows.length}{' '}
+          {rows.length === 1 ? 'candidate' : 'candidates'}, not the whole
+          market — Radar’s ranking and eligibility are unchanged.
+        </span>
+      )}
       {missing > 0 ? (
         <span>
-          {missing} with no {SORT_LABELS[sort.key].toLowerCase()} reading{' '}
+          {missing} with no {readingWord(sort.key)} reading{' '}
           {missing === 1 ? 'stays' : 'stay'} at the end.
         </span>
       ) : null}
       {currencies.length > 1 ? (
         <span>
           Prices are grouped by currency ({currencies.join(', ')}) rather than
-          converted.
+          converted, so reversing moves the groups as well as the rows.
         </span>
       ) : null}
+      {/* Focus is handed on deliberately: pressing this unmounts it, and
+          React leaves focus on the body when that happens -- so a keyboard
+          reader's next Tab restarted from the top of the document, past the
+          navigation and every filter. */}
       <button type="button" className="rh-textbutton rh-sortreset"
-              onClick={() => onSort(null)}>
+              onClick={() => { onSort(null); onReset?.() }}>
         Radar order
       </button>
     </p>
   )
+}
+
+/** The same reading as the note, in one sentence, for the status region.
+ *  A screen reader gets told the list moved and what it moved by -- which
+ *  `aria-sort` alone cannot say, and cannot say at all on the stacked layout
+ *  where the header row does not exist. */
+function sortSentence(rows: Row[], sort: ChatterSort): string {
+  const missing = rows.length - knownCount(rows, sort.key)
+  const order = sort.dir === 'asc' ? 'lowest first' : 'highest first'
+  const tail = missing > 0
+    ? ` ${missing} with no ${readingWord(sort.key)} reading at the end.`
+    : ''
+  return `Sorted by ${SORT_LABELS[sort.key]}, ${order}. `
+    + `${rows.length} ${rows.length === 1 ? 'candidate' : 'candidates'}.${tail}`
 }
 
 function TickerRow({ row, onOpen }: { row: Row; onOpen: (t: string) => void }) {

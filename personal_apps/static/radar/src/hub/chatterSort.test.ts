@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { row, quote } from '../fixtures'
 import type { Row } from '../types'
 import {
-  firstDirection, knownCount, nextSort, priceCurrencies, sortRows,
+  firstDirection, knownCount, nextSort, priceCurrencies, readingWord, sortRows,
 } from './chatterSort'
 
 const tickers = (rows: Row[]) => rows.map((r) => r.ticker)
@@ -210,6 +210,26 @@ describe('price and today', () => {
       .toEqual(['DOWN', 'FLAT', 'UNKNOWN'])
   })
 
+  it('sorts a move the page displays even with no currency on the quote', () => {
+    // Price needs a currency because it groups by one. Today does not: it is a
+    // percentage, `formatPrice` prints a bare number when the currency is
+    // absent, so the page shows `12.34` and `+5.0%` -- and parking that row
+    // last in both directions would call a move the reader can see "no
+    // reading". Not reachable through today's backend, which admits only USD
+    // and EUR, but the display half already survives it.
+    const nameless = row({ ticker: 'NOCUR', price: 12.34, price_move: 0.05,
+                           quote: { ...quote(), price: 12.34,
+                                    currency: null } as Row['quote'] })
+    const usual = row({ ticker: 'USUAL', price: 10, price_move: 0.01 })
+    expect(tickers(sortRows([usual, nameless], { key: 'move', dir: 'desc' })))
+      .toEqual(['NOCUR', 'USUAL'])
+    expect(knownCount([usual, nameless], 'move')).toBe(2)
+    // Price still refuses it: there is no group to put it in.
+    expect(knownCount([usual, nameless], 'price')).toBe(1)
+    expect(tickers(sortRows([nameless, usual], { key: 'price', dir: 'desc' })))
+      .toEqual(['USUAL', 'NOCUR'])
+  })
+
   it('sorts the move without regard to the currency it moved in', () => {
     // A percentage move is comparable across currencies; a price is not.
     const rows = [priced('EUR_UP', 4, 'EUR', 'ok', 0.09),
@@ -234,5 +254,16 @@ describe('the control’s own rules', () => {
     const rows = [row({ ratio: 1 }), row({ ratio: null }), row({ ratio: 3 })]
     expect(knownCount(rows, 'attention')).toBe(2)
     expect(knownCount(rows, 'company')).toBe(3)
+  })
+
+  it('names each key the way a sentence needs it, not the way a header does', () => {
+    // "1 with no Today reading" is not a sentence.
+    expect(readingWord('move')).toBe("today's move")
+    expect(readingWord('company')).toBe('ticker')
+    expect(readingWord('sources')).toBe('source')
+    for (const key of ['company', 'attention', 'voices', 'sources', 'tone',
+                       'price', 'move'] as const) {
+      expect(readingWord(key)).toBe(readingWord(key).toLowerCase())
+    }
   })
 })

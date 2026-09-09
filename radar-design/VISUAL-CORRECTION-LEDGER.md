@@ -18,6 +18,7 @@ Implementation and verification by Claude, 2026-09-09, in
 | **Independent review** | **Performed, findings resolved** | Read-only reviewer against this contract, the source and the actual screenshots. Twelve findings, none blocking; every one addressed below. |
 | **VC1-close (Eighth return A, B, D)** | **Complete** | `20dfc03`. Approximate-bar sentence, table breakpoints scoped back to Chatter, responsive cell labels. |
 | **Sortable Chatter** | **Complete** | `20dfc03`. Owner-approved 2026-09-10; the binding contract is in VISUAL-CORRECTION-PLAN.md. |
+| **Second independent review** | **Performed, findings resolved** | Fourteen items on VC1-close and sorting, none blocking. Every one addressed; see below. |
 | Owner acceptance | **Open — this is the ask** | Run the preview and look at it. Command below. |
 | Deployment | Not authorized | Separate decision, after visual acceptance |
 
@@ -37,6 +38,8 @@ because a document cannot name the commit that carries it.
 | `79235db` | the independent review's twelve findings |
 | `d66b52e` | the documents name their commits |
 | `20dfc03` | **VC1-close**: sortable Chatter, and the Eighth return's A, B and D |
+| `fea864f` | the VC1-close ledger, and a fixture that showed an impossible state |
+| `d21788e` | the Eighth return and the sorting contract, carried in |
 
 ---
 
@@ -528,16 +531,16 @@ area.
 
 | command | result |
 | --- | --- |
-| `npx vitest run -c vite.radar.config.ts` | **519 passed**, 40 files (was 476; +23 comparator, +16 UI, +4 hub) |
+| `npx vitest run -c vite.radar.config.ts` | **527 passed**, 40 files (was 476) |
 | `npx vitest run` (root config) | **403 passed**, 32 files |
 | `npm run build` (includes `tsc --noEmit`) | exit 0 |
 
-Browser checks: **110 passing**, no console or page errors — **50** from the
-earlier VC1c pass, re-run unchanged against this build, plus **60** covering
+Browser checks: **128 passing**, no console or page errors — **50** from the
+earlier VC1c pass, re-run unchanged against this build, plus **78** covering
 sorting, the responsive labels and the breakpoints on populated tables at five
-widths across three pages.
+widths across three pages. Counted from the scripts' own output, not estimated.
 
-Backend code was not touched by this commit.
+Backend code was not touched by this work.
 
 ### New evidence
 
@@ -556,6 +559,45 @@ and an empty table cannot verify a table layout, which is the Eighth return's
 own point.
 
 ---
+
+## The second independent review, and what it changed
+
+A read-only reviewer went through the Eighth return's items, the sorting
+contract clause by clause, the diff, the measurement files and the screenshots,
+re-ran every suite, and verified item B's specificity claim empirically —
+computing ten properties on sixteen Chatter selectors at 701 and 700 and
+confirming they are identical. **Nothing blocking.** Fourteen items; every one
+is addressed.
+
+| # | finding | resolution |
+| --- | --- | --- |
+| 1 | pressing "Radar order" unmounted the control holding focus, so focus fell to `<body>` and a keyboard reader's next Tab restarted at the top of the document | focus is handed to the table region; pinned by a unit test and a browser check that reads `document.activeElement` |
+| 2 | **three of my own browser checks did not test what they claimed** — a hardcoded `check(..., True)`, a tautological `A or B` where B was unconditionally true, and a `break` that made the second half of a loop dead code while mislabelling the one direction that ran | all three rewritten to assert the thing named; the currency check now reads the note while PRICE is active rather than after switching away |
+| 3 | `move` inherited Price's currency requirement, so a row the page renders as `12.34 / +5.0%` sorted as "no today's move reading" | `move` now needs a usable price, not a currency; `price` still needs one because it groups by it |
+| 4 | "1 with no **today** reading" — `SORT_LABELS` are column headings, not sentence words | a separate `readingWord` map: "today's move", "ticker", "source" |
+| 5 | the reset was invisible as a control — `.rh-textbutton`'s green lost to `.rh button { color: inherit }`, so it read as the tail of the sentence beside it | explicit green and an underline at higher specificity; a browser check compares its computed colour against the prose next to it |
+| 6 | sorting was silent to assistive technology beyond `aria-sort`, which says nothing to a reader who just pressed a control and nothing at all on the stacked layout; and the direction button's name stated the CURRENT order rather than the action | a polite status region announces the new order; the direction button's accessible name is what pressing it does, and it claims no order while disabled |
+| 7 | "58 browser checks" in `20dfc03`'s message was false — the script emits 60 | already self-corrected in `fea864f`; the count above is now 128, counted |
+| 8 | "Sorts these **0** candidates" above "No company here matches that." | the note says "Nothing is left to sort under the current filter", and the way back is still there |
+| 9 | the arrow sat flush against "Today" — `display: inline` in the price header drops `.rh-sortbutton`'s gap | an explicit margin on the arrow in that header |
+| 10 | comparator edge cases: the currency GROUPS swap with direction; `Intl.Collator` can return 0 for distinct tickers; `sortRows(rows, null)` returns the input array | the note now warns that reversing moves the groups too; the other two are deliberate and documented in the source rather than changed |
+| 11 | item A's required sentence was pinned by no test, so re-wording it would have failed nothing | a test asserts it verbatim, and asserts it is absent from the label and the sample line |
+| 12 | item B verified, with two residues (below) | recorded, not changed |
+| 13 | item D and the interaction contract | verified, no findings |
+| 14 | density and column widths | verified byte-identical to `d66b52e` apart from the header string `"Price · today"` → `"Price · Today"` |
+
+**Item B's two residues, recorded rather than changed.** Non-table mobile chrome
+— table padding, 44px button heights, 16px inputs — still switches at 860 for
+Watching and Activity, where it used to switch at 700; the ruling's letter is
+about the TABLE breakpoint, which is restored, and the 768 captures look
+correct. And `.rh-table td { align-items / justify-content / gap }` still lands
+on Chatter's cells below 700, inert because `display: block` wins, but live the
+moment any Chatter cell becomes a flex container.
+
+**One thing the reviewer confirmed rather than found:** the `BoardPage.test.tsx`
+flake reappeared once under concurrent load, in the same file and the same
+shape already recorded above, and passed on its own and in a quiet full run. It
+is the old `/radar/` board and no commit here touches it.
 
 ## Limitations, stated
 
@@ -581,6 +623,10 @@ own point.
 6. **Sorting was verified in Chromium only**, through the built bundle. The
    `Intl.Collator` ordering of tickers and the `display: none` breakpoint
    switch are standard, but no second engine was checked.
+   `Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })` can
+   return 0 for two distinct tickers — `A007` against `A7`, or a case
+   difference — and those rows then keep response order in both directions
+   rather than swapping. Stable and harmless; not what "Z–A" implies.
 7. **The duplicate cell labels persist on Activity and Watching.** Chatter's
    are fixed; those two were out of scope and are a named follow-up.
 8. **No screen reader was run.** The accessibility claims here rest on the DOM,

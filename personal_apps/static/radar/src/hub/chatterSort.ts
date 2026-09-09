@@ -78,11 +78,28 @@ function numberOf(value: unknown): Value {
  *  rows, and the page says so when it happens. A quote with no currency at all
  *  cannot be placed in a group, so it is unknown. */
 function priceOf(row: Row): Value {
+  if (!priced(row)) return UNKNOWN
+  const currency = row.quote?.currency
+  // No currency, no group -- and without a group there is nothing honest to
+  // compare this price against. Price alone requires it; see `move`.
+  if (typeof currency !== 'string' || !currency) return UNKNOWN
+  return { group: currency, value: row.price as number }
+}
+
+/** Whether the row shows a price at all, which is the condition a MOVE
+ *  depends on -- `Price` renders neither when this is false.
+ *
+ *  Deliberately not the same test as `priceOf`. Today's move is a percentage,
+ *  and a percentage is comparable across currencies where a price is not, so
+ *  requiring a currency here would park a row the page is visibly showing as
+ *  `+5.0%` at the bottom of the list in both directions and count it as having
+ *  no reading. `formatPrice` prints a bare number when the currency is absent,
+ *  so that row exists on screen even though today's backend cannot produce
+ *  one -- markets.py admits only USD and EUR quotes. */
+function priced(row: Row): boolean {
   const quote = row.quote
-  if (!quote || quote.quality === 'unavailable') return UNKNOWN
-  if (typeof row.price !== 'number' || !Number.isFinite(row.price)) return UNKNOWN
-  if (typeof quote.currency !== 'string' || !quote.currency) return UNKNOWN
-  return { group: quote.currency, value: row.price }
+  if (!quote || quote.quality === 'unavailable') return false
+  return typeof row.price === 'number' && Number.isFinite(row.price)
 }
 
 function valueOf(row: Row, key: SortKey): Value {
@@ -119,8 +136,9 @@ function valueOf(row: Row, key: SortKey): Value {
       return priceOf(row)
     case 'move':
       // Zero is a measurement: the price did not move. Only a missing move,
-      // or a quote too broken to show one, is unknown.
-      return priceOf(row).value === null ? UNKNOWN : numberOf(row.price_move)
+      // or a quote too broken to show one, is unknown -- and NOT a missing
+      // currency, which is Price's requirement and not this one.
+      return priced(row) ? numberOf(row.price_move) : UNKNOWN
   }
 }
 
@@ -139,12 +157,32 @@ function compareKnown(a: Value, b: Value): number {
   return (a.value as number) - (b.value as number)
 }
 
+/** What a key is called in "N with no ___ reading". Not `SORT_LABELS`: those
+ *  are column headings, and "1 with no Today reading" is not a sentence. */
+const READING_WORDS: Record<SortKey, string> = {
+  company: 'ticker',
+  attention: 'attention',
+  voices: 'voice',
+  sources: 'source',
+  tone: 'tone',
+  price: 'price',
+  move: "today's move",
+}
+
+export function readingWord(key: SortKey): string {
+  return READING_WORDS[key]
+}
+
 /** The rows in the reader's order.
  *
  *  Pure and stable: a copy is sorted, `rows` itself is never touched, and rows
  *  that tie keep the order the server sent them in -- so a sort is a reordering
- *  of Radar's ranking, not a replacement for it. `null` is Radar order, and
- *  returns the response exactly as it arrived. */
+ *  of Radar's ranking, not a replacement for it.
+ *
+ *  `null` is Radar order and returns the response array ITSELF, not a copy.
+ *  Deliberate: it keeps the reference stable so React does not re-render the
+ *  whole table for an unsorted board, and nothing here or in Chatter mutates
+ *  what it is handed. */
 export function sortRows(rows: Row[], sort: ChatterSort | null): Row[] {
   if (!sort) return rows
   const decorated = rows.map((row, index) => ({

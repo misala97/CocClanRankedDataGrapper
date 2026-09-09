@@ -415,11 +415,15 @@ describe('ordering the candidates on screen', () => {
   it('sorts from the selector and flips with its direction control',
     async () => {
       render(<Sortable rows={three()} />)
-      const direction = screen.getByRole('button', { name: /first/i })
+      // Named for what pressing it DOES, and claiming no order while
+      // there is none to claim.
+      const direction = screen.getByRole('button', { name: /^sort direction/i })
       expect(direction).toBeDisabled()
+      expect(direction).toHaveTextContent(/^direction$/i)
       await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'voices')
       expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
       expect(direction).toHaveTextContent(/highest first/i)
+      expect(direction).toHaveAccessibleName('Sort lowest first')
       await userEvent.click(direction)
       expect(listed()).toEqual(['LOW', 'MID', 'TOP'])
       expect(direction).toHaveTextContent(/lowest first/i)
@@ -430,6 +434,65 @@ describe('ordering the candidates on screen', () => {
     await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'voices')
     await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'radar')
     expect(listed()).toEqual(['MID', 'TOP', 'LOW'])
+  })
+
+  it('hands focus on when the reset unmounts itself', async () => {
+    // Pressing it removes the control that has focus, and React leaves focus
+    // on the body when that happens -- so the next Tab restarted at the top of
+    // the document, past the navigation and every filter.
+    render(<Sortable rows={three()} />)
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    const reset = screen.getByRole('button', { name: /radar order/i })
+    reset.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(document.activeElement).not.toBe(document.body)
+    expect(document.activeElement)
+      .toHaveAttribute('aria-label', 'Ranked companies')
+  })
+
+  it('announces the new order rather than only marking the header', async () => {
+    // aria-sort says what the order IS to a reader who lands on a header. It
+    // says nothing to one who just pressed a control, and there is no header
+    // at all on the stacked layout.
+    render(<Sortable rows={three()} />)
+    const status = screen.getByRole('status')
+    expect(status).toHaveTextContent('')
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    expect(status).toHaveTextContent(/sorted by voices, highest first/i)
+    expect(status).toHaveTextContent(/3 candidates/i)
+  })
+
+  it('says what is left rather than "sorts these 0 candidates"', async () => {
+    render(<Sortable rows={three()} />)
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    await userEvent.type(screen.getByLabelText(/filter companies/i), 'zzzz')
+    expect(screen.queryByText(/sorts these 0 candidates/i)).toBeNull()
+    expect(screen.getByText(/nothing is left to sort under the current filter/i))
+      .toBeVisible()
+    // And the way back is still there.
+    expect(screen.getByRole('button', { name: /radar order/i })).toBeVisible()
+  })
+
+  it('phrases the unsorted remainder as a sentence', async () => {
+    const rows = [row({ ticker: 'HAS', price: 10, price_move: 0.02 }),
+                  row({ ticker: 'NONE', price: null,
+                        quote: { ...quote(), price: null,
+                                 quality: 'unavailable' } })]
+    render(<Sortable rows={rows} />)
+    await userEvent.click(screen.getByTestId('rh-sort-move'))
+    expect(screen.getByText(/1 with no today's move reading stays at the end/i))
+      .toBeVisible()
+    expect(screen.queryByText(/no today reading/i)).toBeNull()
+  })
+
+  it('warns that reversing moves the currency groups too', async () => {
+    const priced = (ticker: string, price: number, currency: string) =>
+      row({ ticker, price,
+            quote: { ...quote(), price, currency } as Row['quote'] })
+    render(<Sortable rows={[priced('US', 90, 'USD'), priced('DE', 4, 'EUR')]} />)
+    await userEvent.click(screen.getByTestId('rh-sort-price'))
+    expect(screen.getByText(/reversing moves the groups as well as the rows/i))
+      .toBeVisible()
   })
 
   it('renders plain headers when no sort control was given', () => {

@@ -80,6 +80,20 @@ describe('tone, as a share of the directional sample', () => {
     expect(t.sample).toBeNull()
   })
 
+  it('says the bar approximates a tiny share, in the ruling’s own words', () => {
+    // The bar floors a drawn segment at 2px so a rare share stays visible,
+    // which over-states it. The exact figures are the percentage and the
+    // counts, and the detail has to say so -- otherwise the geometry quietly
+    // contradicts the wording it exists to protect.
+    const t = tonePresentation(tone(1, 1999, 0))
+    expect(t.detail).toContain(
+      'Tiny nonzero shares are drawn at a minimum width so they remain '
+      + 'visible; use the percentage and counts for the exact balance.')
+    // Not on the row: the label and the sample line stay figures.
+    expect(t.label).not.toMatch(/minimum width/i)
+    expect(t.sample).not.toMatch(/minimum width/i)
+  })
+
   it('never calls the residual known neutral sentiment', () => {
     const t = tonePresentation(tone(10, 16, 45))
     expect(t.detail).toMatch(/not known neutral sentiment/i)

@@ -66,25 +66,25 @@ def main():
               page.evaluate("""() =>
                 document.querySelectorAll('.rh-sortarrow').length""") == 1)
 
+        # Unknowns last in BOTH directions, on really rendered rows. ORBT is
+        # the fixture's row with no baseline and therefore no ratio.
+        known = [t for t in sorted_by_attention if t != 'ORBT']
+        check('descending: the row with no attention is last',
+              sorted_by_attention[-1] == 'ORBT',
+              ', '.join(sorted_by_attention))
+
         page.click('[data-testid=rh-sort-attention]')
         page.wait_for_timeout(150)
-        check('clicking again flips it',
-              page.evaluate(TICKERS) == list(reversed(
-                  [t for t in sorted_by_attention if t not in ('ORBT',)]))
-              or page.evaluate("""() => document.querySelector(
+        ascending = page.evaluate(TICKERS)
+        check('clicking again reverses the rows that HAVE a reading',
+              [t for t in ascending if t != 'ORBT'] == list(reversed(known)),
+              ', '.join(ascending))
+        check('and the header follows',
+              page.evaluate("""() => document.querySelector(
                   '.rh-chatter thead th:nth-child(2)').getAttribute('aria-sort')""")
-              == 'ascending',
-              ', '.join(page.evaluate(TICKERS)))
-
-        # Unknowns last in both directions, on real rendered rows.
-        for direction in ('descending', 'ascending'):
-            order = page.evaluate(TICKERS)
-            check(f'the row with no attention stays last ({direction})',
-                  order[-1] == 'ORBT', ', '.join(order))
-            if direction == 'descending':
-                break
-            page.click('[data-testid=rh-sort-attention]')
-            page.wait_for_timeout(150)
+              == 'ascending')
+        check('ascending: the row with no attention is STILL last',
+              ascending[-1] == 'ORBT', ', '.join(ascending))
 
         check('the note says what was sorted and what was not',
               'not the whole market' in page.inner_text('.rh-sortnote'),
@@ -118,14 +118,71 @@ def main():
         check('the shared header names price when price is active',
               page.get_attribute('.rh-pricehead', 'aria-label') == 'Price',
               str(page.get_attribute('.rh-pricehead', 'aria-label')))
+
+        # Read WHILE price is the active sort. An earlier version of this check
+        # read the note after switching to Today and asserted `True` instead,
+        # so it passed without looking at anything.
+        note = page.inner_text('.rh-sortnote')
+        check('the currency grouping is disclosed on the price sort',
+              'EUR' in note and 'USD' in note and 'grouped by currency' in note,
+              note.replace('\n', ' ')[:160])
+        check('and it warns that reversing moves the groups too',
+              'reversing moves the groups' in note,
+              note.replace('\n', ' ')[:160])
+
         page.click('[data-testid=rh-sort-move]')
         page.wait_for_timeout(150)
         check('and names today when today is active',
               page.get_attribute('.rh-pricehead', 'aria-label') == 'Today',
               str(page.get_attribute('.rh-pricehead', 'aria-label')))
-        check('the currency grouping is disclosed on the price sort',
-              True)
+        check('a sort that does not group claims no grouping',
+              'grouped by currency' not in page.inner_text('.rh-sortnote'))
+        check('the unsorted remainder reads as a sentence',
+              "no today's move reading" in page.inner_text('.rh-sortnote'),
+              page.inner_text('.rh-sortnote').replace('\n', ' ')[-90:])
+        page.click('[data-testid=rh-sort-tone]')
+        page.wait_for_timeout(150)
+
+        print('\nthe reset')
+        reset = page.locator('.rh-sortreset')
+        check('the reset does not look like the prose beside it',
+              page.evaluate("""() => {
+                const b = getComputedStyle(document.querySelector('.rh-sortreset'));
+                const p = getComputedStyle(document.querySelector('.rh-sortnote span'));
+                return b.color !== p.color
+                       && b.textDecorationLine.includes('underline');
+              }"""),
+              page.evaluate("""() => {
+                const b = getComputedStyle(document.querySelector('.rh-sortreset'));
+                return b.color + ' / ' + b.textDecorationLine;
+              }"""))
+        reset.focus()
+        page.keyboard.press('Enter')
+        page.wait_for_timeout(200)
+        # Pressing it unmounts it. React leaves focus on the body when that
+        # happens, and the reader's next Tab restarts at the top of the page.
+        landed = page.evaluate("""() => {
+          const el = document.activeElement;
+          return el === document.body
+            ? 'BODY'
+            : (el.getAttribute('aria-label') || el.tagName);
+        }""")
+        check('focus survives the reset unmounting itself',
+              landed == 'Ranked companies', landed)
+
+        print('\nwhat a screen reader is told')
+        status = page.locator('[role=status]')
+        check('there is a status region', status.count() == 1)
+        check('it is silent in Radar order',
+              (status.inner_text() or '').strip() == '',
+              repr(status.inner_text()))
+        page.click('[data-testid=rh-sort-voices]')
+        page.wait_for_timeout(200)
+        check('and it says what the list was just ordered by',
+              'Sorted by Voices' in status.inner_text(),
+              status.inner_text())
         page.click('.rh-sortreset')
+        page.wait_for_timeout(150)
 
         print('\ncell labels')
         # D: gone from BOTH trees on the desk layout.
@@ -139,8 +196,18 @@ def main():
         # active column and the note all have to sit inside the density and
         # column widths that were already accepted.
         page.click('[data-testid=rh-sort-tone]')
+        # Settle the page before capturing. The focus checks above scrolled the
+        # table region into view and left the skip link showing, and a
+        # full-page shot of a fixed sidebar mid-scroll is a picture of the
+        # capture rather than of the page.
+        page.evaluate("""() => {
+          if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
+          window.scrollTo(0, 0);
+        }""")
         page.mouse.move(0, 0)
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(250)
         page.screenshot(path=str(OUT / 'close-sorted-1440.png'), full_page=True)
         context.close()
 
@@ -164,11 +231,25 @@ def main():
         by_voices = page.evaluate(TICKERS)
         check('sorting from the selector works', by_voices[0] == 'KSTR',
               ', '.join(by_voices))
+        # Its NAME is what pressing it does; its TEXT is the current order.
+        # A control named "Lowest first" that produces highest-first is a
+        # control that lies about itself.
+        check('the direction control is named for what it does',
+              page.get_attribute('.rh-sortdir', 'aria-label')
+              == 'Sort lowest first',
+              str(page.get_attribute('.rh-sortdir', 'aria-label')))
         page.click('.rh-sortdir')
         page.wait_for_timeout(200)
         check('and its direction control flips it',
               page.evaluate(TICKERS) != by_voices,
               ', '.join(page.evaluate(TICKERS)))
+        check('the name follows the flip',
+              page.get_attribute('.rh-sortdir', 'aria-label')
+              == 'Sort highest first',
+              str(page.get_attribute('.rh-sortdir', 'aria-label')))
+        check('the stacked layout is told about the reorder too',
+              'Sorted by Voices' in page.inner_text('[role=status]'),
+              page.inner_text('[role=status]'))
         check('no sideways scroll while sorted',
               not page.evaluate('document.documentElement.scrollWidth'
                                 ' > document.documentElement.clientWidth + 1'))
@@ -228,6 +309,8 @@ def main():
                 for k, v in shapes.items()))
             check(f'{width}px: chatter is {"stacked" if width <= 860 else "tabular"}',
                   shapes['chatter'].get('stacked') is (width <= 860))
+            check(f'{width}px: chatter does not scroll sideways',
+                  not shapes['chatter'].get('sideways'))
             for page_name in ('watching', 'activity'):
                 shape = shapes[page_name]
                 check(f'{width}px: {page_name} has rows to judge',
