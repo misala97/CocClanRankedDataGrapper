@@ -59,7 +59,8 @@ Commits on this branch, oldest first:
 | 8c50cda | hub ledger records R1 and the flake |
 | 8bbd57e | the R2 re-review: both scheduling models measured, the recommendation corrected |
 
-Working tree is clean apart from this file's own edit.
+Working tree is clean. Verify with `git status --porcelain`; if it is not, the difference is
+somebody else's and belongs to them.
 
 ### Untracked and protected
 
