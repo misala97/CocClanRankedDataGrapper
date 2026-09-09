@@ -196,3 +196,41 @@ Release architecture and P1 approved. Release execution remains blocked on P2 ca
 After this release work, the next FEATURE is historical analysis ahead of portfolio/news. The planning checkout contains the newer ROADMAP.md, HISTORY-ANALYSIS-PLAN.md and HISTORY-ANALYSIS-LEDGER.md. Carry only those reviewed planning files at the next coordination point; do not overwrite active execution handoffs with stale copies. This does not add analysis implementation to P2.
 
 Claude's next dispatch should prepare P2 and return its candidate SHA, reviewed runbook, evidence and precise remaining access gates. Do not repeat F1–F3, H1–H4, R1–R3 or P1. No deployment action follows automatically from this document.
+
+## Fifth return: P2 review and final bounded closure — 2026-09-09
+
+Verified candidate HEAD 97bb9a6cd5795a260bbb8f78da2fc90b9bf79854 on codex/radar-release-candidate; Git status clean before this doc edit, with ignore/cache access warnings. Read runbook, target facts, P2 return/ledger sections and candidate/recovery harness source. Target reads, restore, rehearsal and test counts are Claude's recorded evidence; Codex did not rerun them or access production. No application, database, merge, push, deployment or service change made here.
+
+### A. Accepted package components
+
+Accept the isolated candidate and exclusion of the twelve research commits, subject to the normal final-SHA drift gate. Accept the recorded target inspection and backup restore as closing those access/evidence gates. Accept P1 and first-migration recovery evidence, including all-four-DDL-before-stamp case; do not repeat completed work. Keep strict-integer behavior and the approved side-by-side architecture: same data/account/ingest, old route retained, capture off, no root promotion.
+
+The restored snapshot proves recoverability of that snapshot. It does not authorize nearly 24 hours of potential user-data loss. Before the scheduled window obtain a fresh consistent backup through the verified mechanism, record its checksum/timestamp and verify integrity; do not repeat the entire restore rehearsal solely because another backup is taken by the same verified process. Disclose the remaining loss window if full restore becomes necessary. A full live restore remains an exceptional separately authorized operation, not an automatic rollback step. Prefer tested code-only rollback retaining migration files and additive schema.
+
+### B. Overrule serving through the in-place deployment; no permanent script edit required
+
+The narrow schema compatibility argument is reasonable, but 'no model means cannot touch it' is not a general guarantee and does not address templates/assets/dependencies changing beneath old workers. The claim neither interface breaks 'in practice' lacks a mixed-version deployment test. Stop personal_apps_web BEFORE checkout/build. Because update_coc.sh also updates the shared checkout and restarts coc_web, stop that web unit too for this maintenance window. Record the associated temporary outage.
+
+Use pre-stop orchestration around the existing script; a permanent edit to /root/update_coc.sh is not required for THIS release if this procedure is faithfully documented and checked. Stop/inhibit radar-encoder-trial.timer AND ensure an already-running radar-encoder-trial.service has stopped; stopping a timer does not terminate its current invocation. Keep the scheduled backup outside the window. Preserve prior enabled/active/masked states, using temporary inhibition and restoring the original state only.
+
+The current runbook contradicts itself: section 1 permits serving, step 6 stops the web, and section 4.4 claims checks happen before services start even though update_coc.sh already restarts them. Fix this explicitly. Choose the actual script behavior: successful build/migration is followed by its restarts; subsequent schema/API checks are POST-restart verification. A nonzero script exit stops the procedure and requires inspection/recovery, not blindly starting everything. No false promise of a separate pre-start SQL gate. Do not mask units the script itself must restart; inhibit the trial trigger separately. Check prior service states: if they differ from the script's unconditional restart assumptions, stop and revise before execution.
+
+### D. Full-suite disposition
+
+Accept the disclosed 13 failures as reproduced at the old baseline; do not call the full suite green or reopen all unrelated failures. The baseline 7a9ffe4 is not the deployed candidate base, so baseline reproduction alone is not proof of target behavior. Release-specific suites remain useful evidence.
+
+Two shared-watch failures require a focused explanation before the go decision: test_deleting_the_account_deletes_its_marks and test_a_mark_for_an_account_that_does_not_exist_is_an_error. These assert cascade and foreign-key integrity, not merely list rendering. Four valid restored watch rows prove neither constraint works. No assumption that these are just dirty fixtures is accepted without the actual failing assertion and schema/session evidence.
+
+### P2-close: only the following remains for Claude
+
+1. Correct RELEASE-RUNBOOK.md/TARGET-FACTS.md interpretations per B without altering historical read facts. Record the true script restart boundary; correct failure-path cross-references (script failure currently points at section 5 verification instead of rollback/recovery); remove the stale 'backup timer' wording. State 33 first-migration checks/four interruption points instead of stale 25/three. Keep the preferred rollback migration files and specify a no-fast-forward release merge so the documented git revert -m 1 has a merge parent to reference. Do not actually merge.
+2. For the two watch failures, capture exact failing assertions and classify using a disposable restored MariaDB copy: SHOW CREATE TABLE radar_watch, foreign-key/delete rule, engine and session foreign_key_checks. Test account deletion cascade, orphan insert rejection, per-account isolation and normal add/remove with uniquely owned temporary fixtures. Compare with the candidate-base definitions/migration; if needed use read-only target constraint inspection under existing read authorization, without dumping private rows. If fixtures/config explain it and intact production-compatible schema passes, record that evidence and close. If the shared contract is genuinely broken, return the narrow finding and proposed repair for a ruling; do not expand into broad schema cleanup or change live data.
+3. Independently review ONLY these closure changes/checks. Update CODEX-RETURN.md with the resulting candidate SHA, exact watch results and a single go/no-go summary. Do not rerun all 2,692 backend tests just to chase unrelated baseline failures. No repeat of F/H/R/P1 or completed P2 work.
+
+### C. Scheduled release disposition and outstanding authorization
+
+Provisionally accept the candidate for a side-by-side release. Execution is NO-GO until P2-close resolves the contradictory service ordering and the two watch failures. This is a small final closure, not another feature iteration or access exercise. A tentative window can be chosen now, outside the backup job, but it must not execute before closure.
+
+After closure, what remains is explicit owner authorization naming the final candidate/release SHA and window to (1) merge/push the reviewed release into main and (2) run the VPS deployment with both migrations and the documented temporary stops/restarts. No authorization to enable capture or promote /radar/ is bundled into that. If unexpected drift or target state appears, stop and report rather than improvising. Claude remains the operator after authorization; Codex owns the go/no-go ruling.
+
+No application or infrastructure modification is requested in this ruling turn. Claude's next dispatch is P2-close as defined above. Preserve completed ledgers; append these two outstanding closure items, do not relabel all of P2 incomplete.

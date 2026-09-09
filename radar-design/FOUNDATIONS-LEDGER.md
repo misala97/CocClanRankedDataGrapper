@@ -38,6 +38,8 @@ Updated: 2026-09-09
 | P2 target preflight | Complete | TARGET-FACTS.md; every expectation confirmed. Found a MySQL-ism in the runbook's own SQL |
 | P2 backup restore | Complete | db_2026-09-09_0315, sha256 verified, restored to the disposable MariaDB, 43 tables + representative rows |
 | P2 review | Complete | 7 blocking + 8 should-fix + 7 minor; all resolved in 066aada |
+| P2-close service ordering | Complete | Codex overruled serving through the deploy; both web units now stop first, outage recorded |
+| P2-close watch integrity | Complete | Contract INTACT. Production has the FK, the disposable clone has none of its 29 |
 | Owner visual review | Open | Codex: nothing blocks it; the owner prefers to compare on the VPS |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -932,5 +934,93 @@ rclone copy gdrive:vps-backups/db_FILE.sql.gz /root/db_backups/   # off-box copy
 
 Note that restoring recreates `coc_stats` as well as `personal_apps`. A partial
 restore of one database means extracting it from the file, not running it as-is.
+
+## P2-close: the two watch-integrity failures, explained (2026-09-09)
+
+Codex would not accept "dirty fixtures" without the actual failing assertion and
+schema evidence. Here is both. **The shared contract is intact. The failures are
+a defect in the disposable test clone, and the finding is wider than the two
+tests.**
+
+### The exact failing assertions
+
+```
+test_deleting_the_account_deletes_its_marks
+    assert RadarWatch.query.filter_by(user_id=a).count() == 0
+    E   assert 1 == 0
+
+test_a_mark_for_an_account_that_does_not_exist_is_an_error
+    with pytest.raises(sa.exc.IntegrityError):
+    E   Failed: DID NOT RAISE <class 'sqlalchemy.exc.IntegrityError'>
+```
+
+Both are the signature of a missing foreign key: no `ON DELETE CASCADE`, and no
+rejection of an orphan row.
+
+### The schema, in all three places
+
+`models.py:1271` declares it correctly:
+`db.ForeignKey('app_user.id', ondelete='CASCADE')`.
+
+| database | `radar_watch` FK | engine | `foreign_key_checks` |
+| --- | --- | --- | --- |
+| **production** (MariaDB 10.11.14) | **present** | InnoDB | 1 |
+| local dev `personal_apps` (MySQL 8) | **present** | InnoDB | 1 |
+| disposable clone `personal_apps_radar_wt` | **ABSENT** | InnoDB | 1 |
+
+Production's own DDL, read read-only from the target:
+
+```
+CONSTRAINT `radar_watch_ibfk_1` FOREIGN KEY (`user_id`)
+  REFERENCES `app_user` (`id`) ON DELETE CASCADE
+```
+
+The same constraint is present in the nightly backup, so it survives a restore.
+
+### Proven behaviourally, not just read off a schema
+
+`scratchpad/probe_watch_integrity.py` builds **production's exact DDL** on a
+disposable MariaDB 10.11.14 and runs the four scenarios Codex named. No
+production rows are used or copied; every row is a temporary fixture the script
+creates and drops.
+
+| scenario | production schema | clone schema |
+| --- | --- | --- |
+| normal add and remove | works | works |
+| per-account isolation | holds | holds |
+| orphan mark | **refused** | **accepted** |
+| deleting the account | **marks cascade away** | **marks survive** |
+
+The clone's schema reproduces both failures exactly, and production's schema
+passes all four. That is the classification: **a test-environment defect, not a
+product defect, and not caused by this release.**
+
+### The wider finding, which matters more than the two tests
+
+The clone is not missing one constraint. It is missing **all** of them.
+
+| database | base tables | foreign keys |
+| --- | --- | --- |
+| production `personal_apps` | 43 | **29** |
+| local dev `personal_apps` | 43 | **29** |
+| disposable clone `personal_apps_radar_wt` | 45 | **0** |
+
+All 29 were lost when the clone was made. **Every backend test in this project
+has therefore run against a database with no referential integrity at all**, and
+that is a limit on all of the recorded test evidence, not only on these two
+tests.
+
+It does **not** weaken this release's own evidence: the two new tables declare no
+foreign keys and depend on none, so nothing in F1-F3, H1-H4, R1-R3 or P1 rests on
+constraint behaviour. It does mean any future work that touches cascade or
+referential behaviour needs a clone built with constraints, and that the two
+watch tests were never going to pass where they were run.
+
+**Proposed repair, not carried out here:** rebuild the disposable clone with a
+method that preserves constraints -- restore from the verified nightly backup,
+which is now known to contain them, rather than whatever schema copy produced
+this one. That is a workspace change beyond P2-close's scope, so it is recorded
+as a finding rather than actioned. No live data was changed and no broad schema
+cleanup was attempted.
 
 For each completed step append commit, exact tests/results, reviewer findings, fixes/rulings and next step. Never mark an unrun check passed. Keep environmentally blocked tasks open with exact failure evidence. Takeover verifies this ledger against Git and reports.

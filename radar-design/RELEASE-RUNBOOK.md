@@ -47,29 +47,28 @@ the unit definitions are in TARGET-FACTS.md section 1. Verdict:
 | 1.4 | resets to `origin/main` | **YES** |
 | 1.5 | builds the frontend | **YES**, `npm ci && npm run build` |
 
-### What 1.1 being unmet means here, and what it does not
+### 1.1 is unmet, and Codex overruled my judgement about it
 
-The web process serves throughout the migration. **For this release that is not
-dangerous**, for a specific reason rather than a general one: the deployed code
-declares no `RadarIngestRun` or `RadarBoardObservation` model, and this migration
-only creates those two tables and alters one of them. A process cannot touch what
-it has no model for, and `radar_ingest` — the actual writer — *is* stopped.
+I argued the web process could keep serving, because the deployed code declares
+no model for either new table. **Codex overruled that, and was right to.** "No
+model means it cannot touch it" is a narrow schema argument that does not address
+what else changes underneath a running worker: templates, static assets and
+Python dependencies all move when the checkout does, and I had no mixed-version
+test to support "neither interface breaks in practice".
 
-**No wrapper change is proposed for this release**, on that basis. Codex's ruling
-allows proposing one; the honest position is that it is not needed here and would
-be a production edit made during a release for no benefit.
+**The ruling: stop `personal_apps_web` BEFORE the checkout and build.** And
+because `update_coc.sh` updates the shared checkout and restarts `coc_web` too,
+**stop `coc_web` as well** for the window.
 
-**It will matter for a later migration.** Any future revision that alters a table
-the web app reads must not use this script unmodified. Record that decision here
-rather than rediscovering it.
+**This is a real, recorded outage.** Both web applications are down from step 4.2
+until the script's own restarts in 4.4 — the length of a pip install, two
+migrations, `npm ci` and a Vite build. Minutes, not seconds. That is the cost of
+the ruling and it is stated here rather than discovered on the night.
 
-One smaller window to know about: between `git reset --hard` and the restart, the
-running gunicorn holds **old Python in memory** while **new files sit on disk**.
-Templates are read per request, so a page can render a new template against old
-code for the length of the pip install, two migrations, `npm ci` and the build —
-minutes. Neither interface breaks on that in practice; it is why 1.1 exists.
+**No permanent edit to `/root/update_coc.sh` is required.** The stops are
+orchestrated around the existing script, which is the single migration owner and
+stays unmodified.
 
----
 
 ## 2. Target preflight — run, and the results are recorded
 
@@ -182,76 +181,115 @@ extracting it from the file, not running the file as-is.
 ## 4. The execution path
 
 Numbered and single-path. Claude is the operator once the owner separately
-authorizes deployment with access; until then this is a document, and every step
-below is Claude's to run under that authorization.
+authorizes deployment with access; until then this is a document.
 
-Steps that can end the release carry an explicit stop condition. The rest are
-observations and preparation, and their failure mode is that a later step's stop
-condition fires — which is the point of ordering them this way.
+**The one thing to understand before reading it.** `update_coc.sh` restarts
+`coc_web` and `personal_apps_web` **itself**, at the end, after a successful
+build and migration. So there is no window in which the schema can be checked
+while services are still down — an earlier version of this runbook promised one
+and it was a false promise. **All schema and API checks below are POST-restart
+verification.** What protects the migration is that the units are stopped
+*before* the script runs, not that anything is inspected between its steps.
+
+The script carries `set -e`. A non-zero exit means it stopped somewhere in the
+middle and **did not reach its restarts**. That is not a case for starting things
+by hand: go to section 7, identify which migration was in flight, and recover.
 
 ### 4.1 Reconcile the target (before the window)
 
 1. Fetch and confirm `origin/main` has not moved from the SHA the candidate was
-   built on. **A newly changed migration head is a stop-and-reconcile gate**, not a
-   permanent rejection: update the candidate's chain, re-run section 5, resume.
-2. Merge the candidate into `main` and push. **This is what makes the deploy
-   durable** — `update_coc.sh` resets to `origin/main`, so a hand-deploy of the
-   candidate branch would be silently reverted by the next routine run.
+   built on. **A newly changed migration head is a stop-and-reconcile gate**, not
+   a permanent rejection: update the candidate's chain, re-run the checks in
+   FOUNDATIONS-LEDGER.md "P2 candidate", resume.
+2. Merge the candidate into `main` **with `--no-ff`** and push. The explicit
+   merge commit is not cosmetic: section 6.1's rollback is `git revert -m 1`,
+   which needs a merge parent to reference. A fast-forward leaves nothing to
+   revert as a unit.
 3. Record the merged SHA. That is the approved deployed SHA from here on.
+4. **Choose a window that does not overlap 03:15**, when the backup cron runs.
+   Do not disable the backup to make room; move the window.
 
-### 4.2 Inhibit competing writers
+### 4.2 Stop everything that writes, and the two web units
 
-4. Inventory what is **actually running**, not merely loaded — units *and* timers,
-   because a timer can start a job that undoes a stopped service:
+5. Inventory what is **actually running**, not merely loaded — units *and*
+   timers *and* cron, because each can start work the others do not show:
 
 ```
 systemctl list-units --type=service --state=running 'radar*' 'personal_apps*' 'coc*'
 systemctl list-timers --all
-crontab -l                     # NOT optional -- see below
-systemctl is-enabled radar_ingest personal_apps_web radar-encoder-trial.timer
+crontab -l                     # the backup lives here, not in list-timers
+systemctl is-enabled personal_apps_web coc_web radar_ingest coc_scheduler \
+                    personal_apps_gym_notifier radar-encoder-trial.timer
+systemctl is-active  personal_apps_web coc_web radar_ingest coc_scheduler \
+                    personal_apps_gym_notifier radar-encoder-trial.service
 ps -eo pid,etime,cmd | grep -E 'radar|gunicorn' | grep -v grep
 ```
 
-**`crontab -l` is there because `list-timers` does not show the database backup.**
-The nightly `mysqldump` is a cron job at **03:15**, not a systemd timer. A window
-overlapping it would run a dump of the database being migrated. An earlier version
-of this step listed only timers and would have missed it entirely.
+6. **Record the prior enabled/active/masked state of every unit touched.** Only
+   what was previously enabled and running is restored afterwards, and it is
+   restored to its *original* state — not to whatever seems reasonable at 2am.
 
-5. **Record the prior enabled/running state of every unit touched.** Only
-   previously enabled/running services are restarted afterwards.
-6. Stop and inhibit for the window: `radar_ingest`, `personal_apps_web`, and
-   **`radar-encoder-trial.timer`**.
+   **Compare that inventory against what the script unconditionally restarts**:
+   `coc_web`, `personal_apps_web`, `coc_scheduler`,
+   `personal_apps_gym_notifier`, `radar_ingest`. As of 2026-09-09 all five are
+   enabled and running, so the script's assumption holds. **If any is masked,
+   disabled or deliberately stopped, stop and revise before executing** — the
+   script would start something the owner had turned off.
 
-   **That timer is a confirmed database writer and it fires every minute.** Its
-   own unit file says it "persists `recovering` and drains a bounded slice of the
-   recovery" and "needs the database and nothing else"; observed cadence is one
-   run per minute. `update_coc.sh` does **not** stop it. `systemctl stop` alone is
-   not enough — the timer restarts the service — so **mask** it for the window and
-   unmask afterwards. Its pre-existence is exactly why it was nearly missed.
+7. Stop, in this order:
 
-   **The named three are a floor, not the list.** Step 4's `list-timers --all` is
-   there to be read: for every timer it surfaces, decide whether it can touch
-   `personal_apps` or compete for the database, and inhibit it if it can. The
-   host's nightly database-backup timer is the obvious one — a dump starting
-   mid-migration is a slow, confusing failure. Record each decision, because step
-   12 restores only what was previously enabled.
-7. Confirm **no ingest process remains**, by process list rather than unit
-   state alone — a stopped unit and a surviving process are different facts,
-   and only the second one corrupts a migration.
+```
+systemctl stop personal_apps_web        # OUTAGE BEGINS
+systemctl stop coc_web                  # shared checkout; the script restarts it
+systemctl stop radar_ingest
+systemctl stop radar-encoder-trial.timer
+systemctl stop radar-encoder-trial.service   # a timer stop does NOT kill a running invocation
+```
 
-### 4.3 Deploy and migrate — one owner
+   **`radar-encoder-trial` needs both.** The timer fires every minute and the
+   service writes to `personal_apps`; stopping only the timer leaves whatever is
+   already running to finish against a migrating schema.
 
-8. Run `/root/update_coc.sh`. **It performs the checkout, the build and the
-   migration.** Do not run `flask db upgrade` by hand before or after; that would
-   be the double migration this runbook exists to remove.
-9. **Stop conditions**, any of which ends the release and moves to section 5:
-   - the script exits non-zero;
-   - the migration output is not `radar_ingest_runs: projected 0 rows`;
-   - the build fails.
+8. **Do not mask `coc_web`, `personal_apps_web`, `coc_scheduler`,
+   `personal_apps_gym_notifier` or `radar_ingest`** — the script must be able to
+   restart them, and a masked unit makes it fail at the last step for no reason.
+   Mask **only** `radar-encoder-trial.timer`, whose trigger is the thing being
+   inhibited, and unmask it in 4.5.
 
-### 4.4 Confirm the schema before anything serves
+9. Confirm **no ingest or gunicorn process remains**, by process list rather than
+   unit state — a stopped unit and a surviving process are different facts, and
+   only the second one corrupts a migration.
 
-10. Read-only, after the script and before starting the web process:
+### 4.3 Run the script — the single migration owner
+
+10. `bash /root/update_coc.sh`
+
+    It stops `coc_scheduler`, `personal_apps_gym_notifier` and `radar_ingest`
+    (already down), resets the checkout to `origin/main`, installs Python
+    dependencies, runs `flask db upgrade` for **coc_stats first and then
+    personal_apps**, builds the frontend, and then restarts `coc_web`,
+    `personal_apps_web` and the three background units.
+
+    Do not run `flask db upgrade` by hand before or after. That would be the
+    double migration this runbook exists to prevent.
+
+11. Expected in the output: `radar_ingest_runs: projected 0 rows`.
+
+12. **Stop conditions.** Any of these ends the release and goes to **section 7**
+    for recovery, or **section 6** for rollback once the state is understood:
+    - the script exits non-zero;
+    - the projection line is missing or reports a non-zero count;
+    - the build fails.
+
+    A non-zero exit means the restarts never happened. **Do not start services by
+    hand to "get back up"** — the schema state is unknown until section 7's
+    inspection says otherwise.
+
+### 4.4 Verify, after the script has restarted things
+
+13. The script has already brought `coc_web` and `personal_apps_web` back. Read
+    the schema now, as verification of what happened rather than as a gate before
+    it:
 
 ```sql
 select version_num from alembic_version;          -- expect a7c31f0b52d4
@@ -259,17 +297,19 @@ show columns from radar_ingest_runs;              -- expect the six projection c
 show tables like 'radar\_board\_observations';    -- expect present
 ```
 
-11. **Stop** on anything unexpected. Do not start services against a schema that
-    does not match.
+14. **If any of these is wrong the services are already serving**, so the
+    decision is immediate: go to section 6 and roll back rather than investigate
+    with traffic on the new schema.
 
-### 4.5 Start, in order
+### 4.5 Restore the inhibited trigger
 
-12. Start `personal_apps_web`, then `radar_ingest`, then unmask/restore
-    `radar-encoder-trial.timer` **only if it was enabled before**.
-13. `journalctl -u radar_ingest -n 50` must contain, verbatim:
+15. `systemctl unmask radar-encoder-trial.timer` and start it **only if it was
+    enabled and active before** (4.2 step 6). Restore the original state, not a
+    tidier one.
+16. `journalctl -u radar_ingest -n 50` must contain, verbatim:
     `radar board observation capture is disabled (RADAR_OBSERVATION_CAPTURE_ENABLED)`
+17. **Record the end of the outage.**
 
----
 
 ## 5. Verification, with deadlines
 
@@ -342,7 +382,9 @@ exits without restarting on a migration failure — a naive full revert leaves t
 site **down**, which is a worse outcome than the fault being rolled back.
 
 1. Stop `personal_apps_web` and `radar_ingest`.
-2. Revert the release merge on `main` **except** the two migration files:
+2. Revert the release merge on `main` **except** the two migration files. This is
+   why 4.1 requires `--no-ff`: `-m 1` names the first parent of a merge commit, and a
+   fast-forwarded release leaves no merge commit to revert as a unit.
 
 ```
 git revert -n -m 1 <release merge sha>
@@ -414,10 +456,12 @@ one — the deployed code has no model — so a row means the assumption behind 
 procedure is wrong. Back it up and diagnose; do not drop it.
 
 Rehearsed by `scratchpad/rehearse_first_migration.py` on MariaDB 10.11.14:
-**25 checks**, covering interruption after each of statements 1, 2 and 3, the
-rebuilt schema being byte-identical to a clean run, the refusal to drop a
-populated table, and the refusal to apply this procedure when the stamp shows the
-first migration completed.
+**33 checks**, covering interruption after each of **all four** statements — including the case where every statement applied but the stamp was never written,
+which is where stamping to skip is most tempting — an assertion that each partial
+state is one the migration could actually leave, the rebuilt schema being
+byte-identical to a clean run, the refusal to drop a populated table, and the
+refusal to apply this procedure when the stamp shows the first migration
+completed.
 
 ### 7.2 Stamp `d82f9afb5898`, some projection columns present — the SECOND died
 
