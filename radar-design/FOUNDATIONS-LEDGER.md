@@ -21,8 +21,8 @@ Updated: 2026-09-09
 | R3 typed activity counters | Complete | c4e0455 + 278625c; migration a7c31f0b52d4. Both acceptance targets pass: 0.8 MiB peak heap (<=16), 390 ms median endpoint (<=500) |
 | R3 independent review | Complete | 1 blocking + 4 should-fix + 4 minor + 5 nits; all resolved in cfe39e7 |
 | R3 acceptance | Accepted by Codex | Strict integers confirmed correct; counter contract accepted as implemented. CODEX-DECISIONS.md "Third return" |
-| P1 MariaDB rehearsal | Complete | 01b056d; MariaDB 10.11.14, 34 checks, all passing. Both migrations, both interruption points, recovery, refusal, and the app's own path |
-| Release proposal | Open, for review | RELEASE-PROPOSAL.md. Drift measured, runbook written. NOT authorized and NOT executed |
+| P1 MariaDB rehearsal | Complete | 01b056d + review fixes; MariaDB 10.11.14, 39 checks, all passing. Both migrations, both downgrades, both interruption points, recovery, refusal, and the app's own path |
+| Release proposal | Open, for Codex | RELEASE-PROPOSAL.md. Drift measured, runbook written, independently reviewed (1 blocking + 5 should-fix, all resolved). NOT authorized, NOT executed |
 | Owner visual review | Open | Codex: nothing blocks it; the owner prefers to compare on the VPS |
 | Staging enablement/deploy | Outside scope | Capture defaults off; separate release step |
 
@@ -597,7 +597,8 @@ modelling a request boundary rather than masking a failure.
 
 ## P1 rehearsal -- both migrations on MariaDB 10.11.14 (2026-09-09)
 
-Commit **01b056d**. `scratchpad/rehearse_mariadb.py`, **34 checks, all passing**.
+Commits **01b056d** and the review's fixes. `scratchpad/rehearse_mariadb.py`,
+**39 checks, all passing**.
 
 ### The engine, and why it had to be this one
 
@@ -615,20 +616,33 @@ registered, and the MySQL80 service was untouched.
 
 The harness builds its own Flask app rather than importing `app`, because `app.py`
 hard-codes port 3306 where MySQL already listens. **No application code was changed to
-run it.** It refuses any schema named `personal_apps` or `coc_stats`, and refuses
-outright to run against a server that is not MariaDB -- the point being to make a
-substituted MySQL result impossible rather than merely discouraged.
+run it.**
+
+Three guards, and it is worth being exact about what each does. The host must be
+loopback, so no remote server can be reached whatever the environment says. The schema
+must not be `personal_apps` or `coc_stats`. And the server must be MariaDB, checked
+before anything is dropped -- the point being to make a substituted MySQL result
+impossible rather than merely discouraged. What they do NOT do is protect an arbitrary
+schema name on a loopback MariaDB: any other name is dropped and recreated. The first
+version of the docstring claimed more than that, and the host guard was added after
+review pointed out that `REHEARSAL_HOST` was unconstrained.
 
 ### What passed
 
 | # | rehearsed | checks |
 | --- | --- | --- |
-| 1 | clean upgrade of both revisions over 12 pre-existing rows | 9 |
-| 2 | downgrade, then re-upgrade | 3 |
+| 1 | clean upgrade of both revisions over 12 pre-existing rows | 10 |
+| 2 | both downgrades, then re-upgrade | 8 |
 | 3 | interrupted after only THREE of six columns exist | 6 |
 | 4 | interrupted partway through the backfill | 6 |
 | 5 | the pre-DDL domain refusal, on this engine | 5 |
 | 6 | the application's own writer and reader | 4 |
+
+Section 2 covers **both** downgrades. The first version of this rehearsal only ever
+downgraded to `d82f9afb5898`, so the `drop_table` in `d82f9afb5898.downgrade` -- the
+one the runbook's rollback command actually reaches -- had never run on MariaDB while
+a note beside it claimed "both revisions". It drops exactly the two tables, adds
+nothing, and leaves `b3d9e1f5a274` stamped.
 
 The twelve seeded rows are one of every shape the projection must classify: valid,
 genuine zero, partial counters, an explicitly null counter, off-version,
@@ -657,14 +671,24 @@ Load-bearing results:
 
 ### What this does NOT establish
 
-- It ran on a **fresh database stamped at b3d9e1f5a274**, not on a copy of the target's
-  data. It proves the two revisions behave correctly on this engine; it does not
-  prove the target's existing rows are free of surprises. The runbook's preflight
-  covers that, and the migration's own refusal is the backstop.
+- It ran on a **fresh database stamped at b3d9e1f5a274**, not on a copy of the
+  target's data.
+- **The target has no `radar_ingest_runs` table at all.** `d82f9afb5898` creates it,
+  and the deployed code declares no `RadarIngestRun` model
+  (`git grep RadarIngestRun 7a9ffe4` is empty). So the twelve seeded rows rehearse the
+  SECOND deployment and every one after it, not the first: on the first the table is
+  created empty, the backfill projects zero rows, and the domain refusal cannot fire.
+  An earlier version of this section warned about "the target's existing rows", which
+  described a risk that cannot occur.
 - The other 60 revisions below `b3d9e1f5a274` were stamped, not replayed. They are
-  already applied on the target.
-- 10.11.14 was matched deliberately. A target on a different minor version is a gate,
-  not a formality.
+  **expected** to be applied on the target -- asserted from the repository, not
+  measured against it, since this workspace has no production access. The runbook
+  checks `flask db current` before migrating.
+- 10.11.14 was matched deliberately, but the build was not: this ran the mariadb.org
+  binary distribution on a default configuration, and the VPS runs the Ubuntu package
+  `10.11.14-MariaDB-0ubuntu0.24.04.1` with its own `99-tuning.cnf`. Same upstream
+  version, different build and settings. A target on a different minor version is a
+  gate, not a formality.
 
 ### How to repeat it
 

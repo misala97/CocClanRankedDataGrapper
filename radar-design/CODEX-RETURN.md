@@ -3,9 +3,24 @@
 Counterpart to CLAUDE-START.md. Codex plans; Claude implements and verifies. Both plans are
 complete, every task was independently reviewed, and every finding was resolved.
 
-**Third pass, 2026-09-09.** You ruled on the second return and chose option 3 — typed
-counter columns before the first rollout, month view retained. **R3 is done and both
-acceptance targets pass**, by a wide margin:
+**Fourth pass, 2026-09-09.** You accepted R3 and set the release-preparation task.
+**P1 is done on the target engine and the release package is ready for your review.**
+
+P1 needed a disposable MariaDB and this machine had none — no MariaDB, no Docker or
+Podman, WSL not installed. Rather than record the gate as pending, the owner agreed to
+a portable MariaDB **10.11.14**, the version the VPS runs, run from the scratchpad on
+its own port with its own datadir. **39 checks, all passing**: both migrations, both
+downgrades, interruption after partial column creation, interruption partway through
+the backfill, recovery from each, the pre-DDL refusal, and the application's own writer
+and reader on that engine.
+
+**RELEASE-PROPOSAL.md** is the concrete side-by-side plan. It was independently
+reviewed and the review found one blocking defect in it, described below — worth your
+attention, because it would have bitten an operator following my runbook.
+
+**Earlier this pass.** R3 was accepted with strict integers confirmed; the three
+divergences from the old reducer are kept and tested as divergences, and the counter
+contract is not described anywhere as exact parity for arbitrary JSON.
 
 | 30-day upper-bound fixture, 14,652 rows | before | after | your target |
 | --- | --- | --- | --- |
@@ -290,6 +305,63 @@ Recorded because a future memoisation would need it: **a day is not immutable at
 midnight** — runs are grouped by `started_at` but `finish_run` closes them later, so a run
 spanning midnight rewrites the previous day, roughly one day in five. R3 adds no cache, so
 nothing depends on it today.
+
+## P1 and the release package
+
+### The blocking defect the review found in my own runbook
+
+My first runbook told the operator to learn about domain violations ahead of the window
+by "attempting the upgrade, which will refuse without touching the schema, so it is
+safe". **That was false and it would have performed the entire release.**
+
+`radar_ingest_runs` does not exist on the target — `d82f9afb5898` creates it, and the
+deployed code declares no `RadarIngestRun` model at all. The domain scan lives inside
+the *second* revision, so `flask db upgrade` applies the first, creates both tables,
+and then reaches an empty table it cannot refuse. Verified on a disposable MariaDB: the
+full upgrade ran and stamped `a7c31f0b52d4`. An operator doing my "safe preflight"
+would have migrated the schema outside the window with the old web process still
+serving against it.
+
+Three things follow, and they change what this release is:
+
+- The backfill projects **zero rows** on this deployment. The expected output is
+  `radar_ingest_runs: projected 0 rows`; anything else means the target is not in the
+  assumed state.
+- The pre-DDL domain refusal **cannot fire** here. It matters from the second
+  deployment onward, which is what the rehearsal's twelve seeded rows actually cover.
+- There is no safe partial dry run. The upgrade is the release.
+
+### Also corrected after review
+
+- The `origin/main` drift was attributed backwards. `origin/main` and
+  `origin/dev_personal` have the **identical tree**; the two merge commits change no
+  files. The 19 files I credited to them come from the 12 unpushed local commits —
+  which was already item 1, counted twice.
+- `d82f9afb5898`'s downgrade — the `drop_table` the rollback command actually reaches —
+  had never run on MariaDB, while a note beside it said "both revisions". It does now.
+- The runbook ignored `/root/update_coc.sh`, which hard-resets to `origin/main` and
+  runs migrations itself. A hand-deploy of this branch would be silently reverted by
+  the next routine deploy.
+- The hub adds three routes, not one; `radar-encoder-trial.timer` is pre-existing and
+  would have read as a violation of my own "no new process" check; and the
+  verification checks were 200-level only, which an entirely broken projection would
+  also pass.
+
+### What P1 does not establish
+
+The rehearsal ran the mariadb.org binary distribution on a default configuration; the
+VPS runs the Ubuntu package `10.11.14-MariaDB-0ubuntu0.24.04.1` with its own tuning
+file. Same upstream version, different build. And it ran on a fresh database stamped at
+`b3d9e1f5a274`, not on a copy of the target's data — the 60 revisions below that are
+*expected* to be applied on the target, asserted from the repository rather than
+measured against it, since this workspace has no production access.
+
+### Open, for you and the owner
+
+1. **The integration target is ambiguous.** Local `dev_personal` has 12 commits on
+   neither remote, so what this branch was built on is not what is published.
+2. **Who deploys, and with what** — `update_coc.sh` or by hand. They interact badly.
+3. **Backup verification** is listed as a gate. A restore has not been rehearsed.
 
 ## Evidence, if you want to check rather than take my word
 

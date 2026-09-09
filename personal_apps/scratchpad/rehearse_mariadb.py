@@ -100,9 +100,24 @@ def make_app():
 
 
 def recreate_schema():
-    """A fresh, empty database every run. Refuses a name that is not the
-    rehearsal one, so a stray environment variable cannot point this at
-    something real."""
+    """A fresh, empty database every run.
+
+    Three guards, and it is worth being exact about what each one does rather
+    than claiming they add up to more than they do. The host must be loopback,
+    so no remote server can be reached whatever the environment says. The
+    schema must not be one of the two real names. And the server must be
+    MariaDB, checked BEFORE anything is dropped -- a MySQL result would not be
+    evidence about the target, and the point is to make substituting one
+    impossible rather than merely discouraged.
+
+    What they do NOT do is protect an arbitrary schema name on a loopback
+    MariaDB: any other name is dropped and recreated.
+    """
+    if HOST not in ('127.0.0.1', 'localhost', '::1'):
+        raise SystemExit(
+            f'refusing to run against host {HOST!r}: this rehearsal drops and '
+            f'recreates its schema, and must only ever reach a disposable '
+            f'server on this machine')
     if SCHEMA in ('personal_apps', 'coc_stats'):
         raise SystemExit(f'refusing to use schema {SCHEMA!r}')
     engine = sa.create_engine(SERVER_URL, isolation_level='AUTOCOMMIT')
@@ -259,6 +274,36 @@ def main():
         upgrade(revision=PROJECTION)
         check('re-upgrade rebuilds the identical projection',
               projection() == clean)
+
+        # BOTH downgrades, not just the projection's. The runbook's rollback
+        # command names b3d9e1f5a274, which unwinds d82f9afb5898 as well, and
+        # an untested drop_table is not something to discover during a
+        # rollback. It runs last in this block because it destroys the rows
+        # every earlier step depends on.
+        with db.engine.connect() as connection:
+            tables_before = {row[0] for row in connection.execute(
+                sa.text('show tables'))}
+        downgrade(revision=BASE_REVISION)
+        with db.engine.connect() as connection:
+            tables_after = {row[0] for row in connection.execute(
+                sa.text('show tables'))}
+        check('the full downgrade drops exactly the two tables it created',
+              tables_before - tables_after
+              == {'radar_ingest_runs', 'radar_board_observations'},
+              f'removed: {sorted(tables_before - tables_after)}')
+        check('the full downgrade adds nothing',
+              not (tables_after - tables_before))
+        check('the full downgrade leaves the base revision stamped',
+              stamped() == BASE_REVISION, stamped())
+
+        # Back up, and reseed, so the interruption steps below have rows.
+        upgrade(revision=OBSERVATIONS)
+        seed_envelopes()
+        upgrade(revision=PROJECTION)
+        check('a full re-upgrade reproduces the clean projection',
+              projection() == clean)
+        check('a full re-upgrade reproduces the source rows',
+              envelopes() == source_before)
 
         # --- 2. interruption after only some columns exist ----------------
         print('\n3. interrupted after only some columns exist')

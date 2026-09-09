@@ -125,7 +125,7 @@ Recorded at cfe39e7, all against the disposable database:
   (target <=16), median endpoint **390 ms** (target <=500), four concurrent 30-day reads
   **0 errors** with RSS 135 -> 136 MiB. Repeatable via `scratchpad/bench_activity.py`.
 - P1: `scratchpad/rehearse_mariadb.py` against **MariaDB 10.11.14** -- the target's own
-  version, not MySQL -- **34 checks, all passing**. Needs a disposable MariaDB on port 3399;
+  version, not MySQL -- **39 checks, all passing**. Needs a disposable MariaDB on port 3399;
   this machine has none installed, so one is fetched as a portable server into the
   scratchpad. See FOUNDATIONS-LEDGER.md "P1 rehearsal" for how to repeat it.
 - The radar frontend suite was FLAKY and is no longer: `Hub.test.tsx` let a real navigation reach
@@ -209,10 +209,12 @@ MariaDB's DDL auto-commits, so there is no supported window in which the old wri
 envelopes while the new reader expects projections.
 
 Rehearsed on **MariaDB 10.11.14**, the target's own version, by
-`scratchpad/rehearse_mariadb.py`: 34 checks covering a clean upgrade over pre-existing rows, the
-downgrade round trip, interruption after partial column creation, interruption partway through
-the backfill, recovery from both, the pre-DDL domain refusal, and the application's writer and
-reader on that engine. **If `flask db upgrade` fails partway, do not re-run it blindly** -- the
+`scratchpad/rehearse_mariadb.py`: 39 checks covering a clean upgrade over pre-existing rows, BOTH
+downgrades, interruption after partial column creation, interruption partway through the backfill,
+recovery from both, the pre-DDL domain refusal, and the application's writer and reader on that
+engine. Note what the first deployment actually is: `radar_ingest_runs` does not exist on the
+target, so it is created empty and the backfill projects zero rows. The seeded cases rehearse the
+second deployment onward. **If `flask db upgrade` fails partway, do not re-run it blindly** -- the
 revision is unstamped and some columns may exist, and a blind retry fails on a duplicate column.
 The rehearsed recovery is in RELEASE-PROPOSAL.md section 4.5.
 
