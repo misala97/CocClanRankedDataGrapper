@@ -23,7 +23,7 @@ Implementation and verification by Claude, 2026-09-09, in
 | Deployment | Not authorized | Separate decision, after visual acceptance |
 
 Baseline: release-candidate branch `d3bc795`; production `ba1c381` per accepted
-RELEASE-RECORD.md. The work below ends at **`79235db`**, plus the one
+RELEASE-RECORD.md. The work below ends at **`e0ef136`**, plus the one
 commit that carries this line -- verify with `git rev-parse --short HEAD`,
 because a document cannot name the commit that carries it.
 
@@ -40,6 +40,7 @@ because a document cannot name the commit that carries it.
 | `20dfc03` | **VC1-close**: sortable Chatter, and the Eighth return's A, B and D |
 | `fea864f` | the VC1-close ledger, and a fixture that showed an impossible state |
 | `d21788e` | the Eighth return and the sorting contract, carried in |
+| `e0ef136` | the second independent review's fourteen findings |
 
 ---
 
