@@ -17,7 +17,8 @@ Everything after that review is the owner's decision and outside this package: w
 
 Implementation worktree: `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-foundations`
 Branch: `codex/radar-foundations`, branched from `dev_personal` at 7a9ffe445076e57d02fea5627e8cd185ec9cb39f
-HEAD: 39e8042
+HEAD: the tip of `codex/radar-foundations`. Verify with `git rev-parse --short HEAD` --
+this file cannot name the commit that carries it. The table below lists every commit before it.
 Planning checkout: `C:/Users/michi/Desktop/CodingStuff` (branch dev_personal, unchanged)
 
 A second worktree exists at `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-baseline-probe`,
@@ -42,8 +43,10 @@ Commits on this branch, oldest first:
 | c88266b | H3 watching and overview |
 | 8864189 | H4 activity and administration |
 | 39e8042 | the H2 and H3/H4 reviews' fixes |
+| 1e30096 | ledgers and this handoff |
+| 07e7cef | CODEX-RETURN.md, the entrypoint back to Codex |
 
-Working tree is clean apart from the ledger/handoff edits in flight.
+Working tree is clean apart from this file's own edit.
 
 ### Untracked and protected
 
