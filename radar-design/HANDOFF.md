@@ -4,18 +4,20 @@ Updated 2026-09-09, by Claude, during implementation. Supersedes the planning-st
 
 ## Roles and next action
 
-Codex designed and planned; Claude is implementing. Release 0 (foundations F1-F3) is built, reviewed
-and fixed. Release 1 (the hub) is in progress: H1 is committed and under review; H2-H4 are open.
+Codex designed and planned; Claude implemented. **Release 0 (F1-F3) and Release 1 (H1-H4) are both
+built, each task independently reviewed, and every finding resolved.**
 
-**Immediate next action:** resolve the H1 review findings, then start H2 (chatter, research, search)
-from `docs/superpowers/plans/2026-09-09-radar-research-hub.md`. Do not re-dispatch anything the
-ledgers mark complete.
+**Immediate next action: owner visual review of the opt-in `/radar/hub/`.** Nothing in either plan is
+open. Do not re-dispatch anything the ledgers mark complete.
+
+Everything after that review is the owner's decision and outside this package: whether to promote
+`/radar/hub/` to `/radar/`, whether to deploy, and whether to enable board-observation capture.
 
 ## Verified workspace state
 
 Implementation worktree: `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-foundations`
 Branch: `codex/radar-foundations`, branched from `dev_personal` at 7a9ffe445076e57d02fea5627e8cd185ec9cb39f
-HEAD: 92da7c8
+HEAD: 39e8042
 Planning checkout: `C:/Users/michi/Desktop/CodingStuff` (branch dev_personal, unchanged)
 
 A second worktree exists at `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-baseline-probe`,
@@ -35,6 +37,11 @@ Commits on this branch, oldest first:
 | a178ba6 | F3 review fixes |
 | ed62b32 | ledgers |
 | 92da7c8 | H1 hub shell |
+| 765f4f6 | handoff |
+| 0f3767b | H2 chatter, research, search + the H1 review's fixes |
+| c88266b | H3 watching and overview |
+| 8864189 | H4 activity and administration |
+| 39e8042 | the H2 and H3/H4 reviews' fixes |
 
 Working tree is clean apart from the ledger/handoff edits in flight.
 
@@ -70,14 +77,19 @@ behaviour. The migration head on this branch is d82f9afb5898.
 
 ## Tests and their results
 
-Recorded at HEAD 92da7c8, all against the disposable database:
+Recorded at HEAD 39e8042, all against the disposable database:
 
-- `npm test`: **403 passed** (root config, 32 files) and **307 passed** (radar config, 29 files).
+- `npm test`: **403 passed** (root config, 32 files) and **419 passed** (radar config, 37 files).
 - `npm run build`: exit 0. Emits `hub-*.js` and `hub-*.css` beside `board-*.js`.
 - `pytest tests/test_radar_activity.py tests/test_radar_observations.py tests/test_radar_operations_api.py tests/test_radar_api.py tests/test_radar_daemon.py`: **194 passed**.
+- `pytest tests/test_radar_hub_page.py tests/test_vite_assets.py tests/test_radar_api.py`: **85 passed**.
 - `pytest tests/test_radar_hub_page.py tests/test_radar_api.py tests/test_radar_watch_api.py tests/test_gym_routes_smoke.py`: **135 passed**.
-- Browser: `/radar/hub/` at 1440x1000 and 390x844 against a local server on port 5051 -- no document
-  overflow, no console or page errors, sidebar collapses to a labelled toggle.
+- Browser: 13 captures across all six pages and the recovery view at 1440x1000, 768x1024 and
+  390x844, plus a separate keyboard and live-endpoint pass over all five destinations at all three
+  widths. No document horizontal scroll, no console or page errors anywhere; the skip link is the
+  first tab stop, carries a visible ring and focuses the page without replacing it.
+  `reports/hub/EVIDENCE.md` records which pixels are real data and which are the one labelled
+  fixture.
 
 **Known environment failure, not caused by this work.** `tests/test_radar_ingest.py` fails three
 tests on every run after the first against a persistent database
@@ -91,6 +103,14 @@ background task was raised for it.
 
 - Every F1-F3 review returned **no blocking findings**. All should-fix items were resolved; see
   FOUNDATIONS-LEDGER.md for the item-by-item record.
+- The H1 review returned **one blocking** finding (the skip link destroyed the page) and the H2
+  review **four** (absent evidence printed as zero; a tone percentage board.py returns three counts
+  to prevent; a chart caption claiming a resolution the line lacked; the previous company rendered
+  under the new company's heading). All resolved. H3+H4 returned none. HUB-LEDGER.md has the
+  item-by-item record.
+- **Scope gap found by review, now closed:** Human Chatter shipped with no server-side filters,
+  which is half of its acceptance row. `static/radar/src/hub/Filters.tsx` is new and is the only
+  file in Release 1 the plan does not name.
 - **Deviation:** the activity payload carries one key beyond the shape the plan enumerates,
   `counted_runs`. Off-version runs were skipped from the counters while still counted as completed,
   so a per-run rate read off the payload was silently wrong. Removing it is a one-line change if
