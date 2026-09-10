@@ -20,7 +20,8 @@ appended to `CODEX-DECISIONS.md`.
 | S9 ingest contention | **Done** — `run_s9_contention.py`. Producer costs the write +7%; the write costs the producer far more |
 | T1 worker threading (prepare only) | **Done** — `run_t1_workers.py`. CONFIRMED **in a MODEL of gunicorn, not gunicorn** (Windows, no WSL): 7,602 ms against 9 ms. Recommendation is still DO NOT ship it yet |
 | T2 access-log proposal (prepare only) | **Done** — `PERF2-TELEMETRY.md`, verified with `perf2-spike/telemetry_format_probe.py` against gunicorn's own `Logger.atoms`. Prepared, NOT activated |
-| Independent read-only review | In progress |
+| Independent read-only review | **Done** — six findings, one a wrong-board vector; all accepted, Part I corrected in place |
+| Backend suite, run whole | **Done** — 2,706 tests, `17 failed, 2650 passed, 9 skipped, 30 errors`, all environmental; `personal_apps/` is byte-identical to `4221196` |
 | Deployment | **Not authorized.** Full product implementation follows Codex's review of this return. |
 
 ## Workspace
@@ -96,6 +97,90 @@ in that ledger is an artifact.
 **Repeatability is claimed only to that extent**: the scripts exist, they name
 their database, and their prerequisites are written down. They have not been
 re-run in this workstream, and no claim here rests on re-running them.
+
+---
+
+## The backend suite, run whole
+
+`python -m pytest tests -q` from `personal_apps/`, no `-x`, 2026-09-10.
+
+```
+17 failed, 2650 passed, 9 skipped, 1737 warnings, 30 errors in 2308.43s (0:38:28)
+```
+
+**2,706 tests, 38 minutes.** Two earlier figures in this workstream were both
+partial and should not be quoted: the spike's own run used `-x`, which stops
+at the first failure and reported 72 tests; `PERF1-LEDGER.md` reports "227
+passed", which is smaller than this suite by an order of magnitude.
+
+**Nothing here is attributable to this branch, and that is checkable rather
+than asserted:** `git diff 4221196..HEAD -- personal_apps/` is **empty**. This
+branch changes no application code at all, so every failure below is a
+property of the database the worktree's `.env` points at —
+`personal_apps_radar_perf1`, a synthetic radar fixture with no gym data.
+
+The failures say so themselves:
+
+| Count | Message | What it means |
+| ---: | --- | --- |
+| 17 | `the dev database needs at least one exercise` | gym suites; the fixture has no gym data |
+| 13 | `the dev database needs an exercise` | same |
+| 5 | `the dev database needs at least one gym exercise` | same |
+| 4 | needs sessions / a finished session / an exercise owned by the admin | same |
+| 1 | `this database should hold more than eight ranked lifts` | same |
+
+30 of the 30 errors are `test_gym_routes_smoke.py`,
+`test_gym_mutation_json.py` and `test_gym_session_json.py` — gym suites,
+`conftest.py`'s own docstring: *"Every suite here runs against the real local
+development database"*.
+
+**I did not re-run the suite against a second database to confirm this**, and
+the claim rests on the empty diff plus the assertion messages, not on a
+comparison run.
+
+### A FOURTH trace of the held migration, and this one is a warning
+
+```
+ERROR [flask_migrate] Error: Can't locate revision identified by 'c4e17b90d3f2'
+```
+
+**`personal_apps_radar_perf1` is stamped at `c4e17b90d3f2`** — the held index
+migration — because PERF1 ran `flask db upgrade` against it. Read directly:
+
+| Database | `alembic_version` |
+| --- | --- |
+| `personal_apps_radar_perf1` (the fixture) | **`c4e17b90d3f2`** |
+| `personal_apps` (the local dev database) | `b3d9e1f5a274` |
+| production, per `TARGET-FACTS.md` | `a7c31f0b52d4` |
+| this branch's head | `a7c31f0b52d4` |
+
+`codex/radar-perf2` does not carry that revision, so alembic cannot resolve
+the fixture's stamp and `test_the_migration_adds_and_removes_only_its_own_two_tables`
+fails on the attempt.
+
+This is the **third** place the held change had to be found and dealt with in
+this workstream: the physical index on the fixture (dropped, and now asserted
+by `env_check.preflight`), this `alembic_version` stamp, and the branch
+lineage itself — which is why PERF2 is based on the deployed SHA rather than
+on PERF1's head.
+
+**It is only a disposable fixture, and production is untouched.** But it is a
+concrete demonstration of exactly what Codex's ruling guards against, and it
+is a hazard for whoever next uses this fixture: **the fixture's stamp must be
+reset to `a7c31f0b52d4` before it is used with any branch that lacks
+`c4e17b90d3f2`.** That was not done here, because changing it is a write to
+shared state that nobody asked for.
+
+### The four radar failures, named
+
+`test_the_migration_adds_and_removes_only_its_own_two_tables` is the stamp
+above. `test_panel_chart_states_its_basis`,
+`test_a_lexicon_tone_carries_no_model_name` and three
+`test_radar_yahoo.py::test_daily_closes_*` are data-shape assertions against a
+synthetic fixture (`assert [] == [(datetime..., Decimal('101.0'))]`,
+`assert [('lexicon', 'wording')] == [('lexicon', None)]`). None was
+investigated further, because none can have been caused by a branch that
+changes no code.
 
 ---
 
