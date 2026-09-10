@@ -10,11 +10,11 @@ appended to `CODEX-DECISIONS.md`.
 | PERF1 benchmark artifacts located and carried | **Done** — `radar-design/perf1-bench/` |
 | PERF2 design written | **Done** — `PERF2-PLAN.md` Part I |
 | S1 store and payload weight | **Done** — `run_s1_payload.py` |
-| S2 cross-process reuse and cold miss | **Done** — `run_s2_reuse.py`. Warm PASSES; cold FAILS the 2 s target, as designed |
-| S3 refresh capacity | **Done** — `run_s3_capacity.py`. 120 s fits, 49% duty cycle |
+| S2 cross-process reuse and cold miss | **Done** — `run_s2_reuse.py`. Warm PASSES at 33.5 ms; cold is 6.90 s against a 2 s target and an 8 s abort |
+| S3 refresh capacity | **Done** — `run_s3_capacity.py`. 120 s fits, 55% duty cycle |
 | S4 semantics parity | **Done** — `run_s4_parity.py`. 12/12 identical; two of Part I.1's five predictions were wrong |
 | S5 account isolation | **Done** — `run_s5_isolation.py`. No leak |
-| S6 bounded failure | **Done** — `run_s6_failure.py`. One design defect found and fixed |
+| S6 bounded failure | **Done** — `run_s6_failure.py`. Part I.3's retry rule had no backoff at all; replaced and measured |
 | S7 restart, empty, expired | **Done** — `run_s7_lifecycle.py`. All four |
 | S8 filter switching and browser | **Done** — `run_s8_switching.py`, `run_s8_browser.py`. Warm PASSES; the `pending` render is a FALSE EMPTY STATE |
 | S9 ingest contention | **Done** — `run_s9_contention.py`. Producer costs the write +7%; the write costs the producer far more |
@@ -724,16 +724,20 @@ which is a real sort key and a genuinely different board.
 **Steps 1 and 2 — seven selections back to back.** Four of the seven are in
 the warm set of Part I.6; three are not.
 
+**Re-run on the deployed schema** after the held index was dropped.
+
 | | total | worst single |
 | --- | ---: | ---: |
 | PERF1, deployed code, every selection built | 34.54 s | 5.41 s |
-| **store, all seven warm** | **0.03 s** | **0.01 s** |
+| **store, all seven warm** | **0.02 s** | **0.00 s** |
 | store, three unwarmed — 3 of 7 answer `pending` | 0.04 s | 0.01 s |
-| store, three unwarmed, **until all seven are BOARDS** | **12.43 s** | — |
+| store, three unwarmed, **until all seven are BOARDS** | **15.57 s** | — |
 
 The middle row is the one that must not be quoted alone. Three of its seven
 answers are not boards. Turning them into boards costs three builds at
-12.37 s on one producer, and the honest end-to-end is **12.43 s**.
+15.52 s on one producer, and the honest end-to-end is **15.57 s**. Every
+individual read is 3–8 ms whether it returns a board or a `pending`, which is
+exactly why the `pending` count has to be reported beside the total.
 
 Note the 100 ms local-interaction target is about sort and mode changes the
 client can make without a new server result. Every row above is a new server
