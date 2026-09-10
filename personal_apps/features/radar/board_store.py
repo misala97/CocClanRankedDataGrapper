@@ -197,16 +197,29 @@ def limits(env=os.environ):
 def ensure_namespace(engine, ns, now, *, revision, payload_version):
     """Introduce this generation, or say it is still here.
 
-    Idempotent, and called by the producer on every tick: the insert creates
-    the row the first time and the update is what keeps `last_seen_at` moving,
-    which is the only thing standing between this generation and retirement.
+    Idempotent, and called by the producer on every tick. The update arm
+    rewrites the revision and the payload version rather than only stamping the
+    clock, because a producer is authoritative about its own namespace: the row
+    may have been adopted by a reader that had no idea which build answers here
+    (`_adopt` leaves `producer_revision` NULL on purpose), and an update that
+    only moved `last_seen_at` would leave that NULL standing for the whole life
+    of the generation, with the admin surface reporting no revision at all.
+
+    Rewriting is safe because a namespace *is* a revision: `board_namespace`
+    derives the name from the payload version, the build revision and the
+    configuration, so two producers writing different values into one control
+    row cannot happen -- they would be two namespaces.
+
+    `created_at` is never touched. It is when this generation first appeared,
+    which no later tick knows better than the first one did.
     """
     with engine.begin() as connection:
         connection.execute(sa.text(
             f'INSERT INTO {NAMESPACES}'
             ' (namespace, payload_version, producer_revision, created_at,'
             '  last_seen_at) VALUES (:ns, :version, :revision, :now, :now)'
-            ' ON DUPLICATE KEY UPDATE last_seen_at = :now'),
+            ' ON DUPLICATE KEY UPDATE last_seen_at = :now,'
+            ' producer_revision = :revision, payload_version = :version'),
             {'ns': ns, 'version': payload_version, 'revision': revision,
              'now': now})
 
@@ -235,7 +248,11 @@ def heartbeat(engine, ns, owner, now, *, success_at=None, error=None):
         done = connection.execute(sa.text(
             f'UPDATE {NAMESPACES} SET {", ".join(assignments)}'
             ' WHERE namespace = :ns'), params)
-    return done.rowcount == 1
+        # Read inside the transaction. A CursorResult belongs to the connection
+        # it came from, and `rowcount` after the block has closed it is a value
+        # this code has no promise about.
+        updated = done.rowcount
+    return updated == 1
 
 
 def health(engine, ns):
@@ -255,27 +272,55 @@ def retire_namespaces(engine, keep_ns, now):
     still the right rows, and a clock skew is not a reason to throw away the
     cache the caller is about to read.
 
+    "Touched" means any admission, not merely a producer tick: `_under_lock`
+    moves `last_seen_at` for every reader that admits, so a generation whose
+    producer died yesterday but whose boards are still being read stays. That
+    is the case where the stored boards matter most -- they are the only answer
+    anybody has -- and deleting them under the readers still asking would empty
+    the cache at precisely the wrong moment.
+
     A `building` row does not protect a generation here. Nothing has touched
     the control row for a day, so whatever was building it is long gone, and
     its lease expired within two minutes of that.
 
+    One transaction per doomed generation, and the candidates are chosen
+    WITHOUT `FOR UPDATE`. A single scanning `SELECT ... FOR UPDATE` would take
+    exclusive locks along the way on the rows it examined and rejected -- the
+    live generations' control rows, which are the mutex every web worker admits
+    under -- and hold them for the length of the deletes. So the scan is a
+    plain read, and each candidate is locked, re-checked under that lock, and
+    deleted on its own. A generation that became live between the two steps
+    fails the re-check and is left alone; the worst case is a retirement pass
+    that skips it and finds it again tomorrow.
+
     Returns how many generations were retired.
     """
     cutoff = now - dt.timedelta(seconds=limits().retire_seconds)
-    with engine.begin() as connection:
-        doomed = connection.execute(sa.text(
+    with engine.connect() as connection:
+        candidates = connection.execute(sa.text(
             f'SELECT namespace FROM {NAMESPACES}'
-            ' WHERE namespace <> :keep AND last_seen_at < :cutoff'
-            ' FOR UPDATE'),
+            ' WHERE namespace <> :keep AND last_seen_at < :cutoff'),
             {'keep': keep_ns, 'cutoff': cutoff}).scalars().all()
-        if not doomed:
-            return 0
-        for statement in (f'DELETE FROM {RESULTS} WHERE namespace IN :doomed',
-                          f'DELETE FROM {NAMESPACES} WHERE namespace IN :doomed'):
-            connection.execute(
-                sa.text(statement).bindparams(
-                    sa.bindparam('doomed', expanding=True)), {'doomed': doomed})
-    return len(doomed)
+
+    retired = []
+    for candidate in candidates:
+        deleted = False
+        with engine.begin() as connection:
+            last_seen = connection.execute(sa.text(
+                f'SELECT last_seen_at FROM {NAMESPACES}'
+                ' WHERE namespace = :ns FOR UPDATE'),
+                {'ns': candidate}).scalar()
+            if last_seen is not None and last_seen < cutoff:
+                for statement in (
+                        f'DELETE FROM {RESULTS} WHERE namespace = :ns',
+                        f'DELETE FROM {NAMESPACES} WHERE namespace = :ns'):
+                    connection.execute(sa.text(statement), {'ns': candidate})
+                deleted = True
+        # Counted after the commit, so a generation this pass declined to
+        # delete -- or failed to -- is not reported as retired.
+        if deleted:
+            retired.append(candidate)
+    return len(retired)
 
 
 # --- reading ----------------------------------------------------------------
@@ -442,8 +487,13 @@ def claim(engine, ns, owner, now, *, prefer='warm'):
         raise ValueError(f"prefer must be 'warm' or 'demand', not {prefer!r}")
     bounds = limits()
     wants_warm = prefer == 'warm'
+    # Warm work is ordered by the age of the board, with the never-built ahead
+    # of everything -- a board nobody has ever produced is infinitely stale, and
+    # `as_of IS NULL` is a real state a warm row sits in until its first build.
+    # On-demand work is ordered by arrival, plainly: an admitted row always has
+    # an `enqueued_at`, so there is no NULL case to rank.
     order = ('as_of IS NULL DESC, as_of ASC' if wants_warm
-             else 'enqueued_at IS NULL DESC, enqueued_at ASC')
+             else 'enqueued_at ASC')
 
     with engine.connect() as connection:
         candidates = connection.execute(sa.text(
@@ -511,7 +561,10 @@ def publish(engine, ns, claim, blob, *, as_of, built_at, build_ms,
              'version': board_namespace.PAYLOAD_VERSION,
              'revision': producer_revision, 'ns': ns, 'key': claim.key_hash,
              'owner': claim.owner, 'token': claim.token})
-    return done.rowcount == 1
+        # Inside the block: the fence's whole answer is this number, and a
+        # closed connection is not where to go looking for it.
+        stored = done.rowcount
+    return stored == 1
 
 
 def fail(engine, ns, claim, error, now):
@@ -546,7 +599,8 @@ def fail(engine, ns, claim, error, now):
                    seconds=_backoff(claim.attempts, bounds)),
                'ns': ns, 'key': claim.key_hash, 'owner': claim.owner,
                'token': claim.token})
-    return done.rowcount == 1
+        marked = done.rowcount
+    return marked == 1
 
 
 def _backoff(attempts, bounds):
@@ -574,6 +628,24 @@ def _under_lock(engine, ns, now, work):
     been retired between two admissions. So a missing control row is created in
     a transaction of its own and the lock taken again, rather than pressing on
     without the mutex, which would silently drop the bounds this exists for.
+
+    Holding the lock is also where `last_seen_at` is moved, which makes that
+    column the clock of the whole generation and not of its producer: any
+    admission -- a reader's, a poll's, the warm sweep's -- keeps the generation
+    off the retirement list. One UPDATE on a row this transaction already holds
+    exclusively, so it costs a statement and no additional lock.
+
+    `GREATEST` rather than an assignment, because the caller's clock is an
+    argument and two processes need not agree on it. A call passing an older
+    moment (a test, a retry carrying the instant a request arrived) must not be
+    able to age a generation backwards towards retirement.
+
+    A refused admission rolls this back with everything else, because "a
+    refusal writes nothing at all" is the rule that makes a `'busy'` answer
+    cost a database round trip and not a row. Nothing is lost by it: a
+    generation only answers `'busy'` when it already holds 32 admitted keys,
+    and the viewers waiting on those poll them, which lands here and moves the
+    clock.
     """
     for _ in range(2):
         with engine.begin() as connection:
@@ -581,6 +653,10 @@ def _under_lock(engine, ns, now, work):
                     f'SELECT namespace FROM {NAMESPACES}'
                     ' WHERE namespace = :ns FOR UPDATE'),
                     {'ns': ns}).first() is not None:
+                connection.execute(sa.text(
+                    f'UPDATE {NAMESPACES}'
+                    ' SET last_seen_at = GREATEST(last_seen_at, :now)'
+                    ' WHERE namespace = :ns'), {'ns': ns, 'now': now})
                 return work(connection)
         _adopt(engine, ns, now)
     raise RuntimeError(

@@ -25,6 +25,7 @@ from alembic.script import ScriptDirectory
 from app import app as flask_app
 from extensions import db
 from features.radar import board_keys
+from models import RadarBoardNamespace, RadarBoardResult
 
 REVISION = 'b7e3f9c1a2d4'
 PREVIOUS = 'a7c31f0b52d4'
@@ -48,27 +49,28 @@ def _alembic() -> Config:
     return config
 
 
-def _at_revision(revision):
-    """Alembic's in-process run calls fileConfig, which disables every existing
+def _quietly(migrate, revision):
+    """Run one alembic command with the logging configuration put back.
+
+    Alembic's in-process run calls fileConfig, which disables every existing
     logger. Restore what was on before, or unrelated caplog assertions
-    elsewhere in the suite start failing for reasons no one can find."""
+    elsewhere in the suite start failing for reasons no one can find.
+    """
     disabled = {name: logging.getLogger(name).disabled
                 for name in list(logging.root.manager.loggerDict)}
     try:
-        command.upgrade(_alembic(), revision)
+        migrate(_alembic(), revision)
     finally:
         for name, was in disabled.items():
             logging.getLogger(name).disabled = was
+
+
+def _at_revision(revision):
+    _quietly(command.upgrade, revision)
 
 
 def _downgrade(revision):
-    disabled = {name: logging.getLogger(name).disabled
-                for name in list(logging.root.manager.loggerDict)}
-    try:
-        command.downgrade(_alembic(), revision)
-    finally:
-        for name, was in disabled.items():
-            logging.getLogger(name).disabled = was
+    _quietly(command.downgrade, revision)
 
 
 @pytest.fixture
@@ -196,6 +198,42 @@ def test_the_new_revision_follows_the_projection(disposable):
         stamped = connection.execute(
             sa.text('select version_num from alembic_version')).scalar()
     assert stamped == REVISION
+
+
+def test_the_migration_and_the_models_agree_about_both_tables(disposable):
+    """Two descriptions of the same tables, and only one of them is executed.
+
+    The migration builds the schema; `models.py` is what every ORM query in
+    the application is written against, and nothing forces the two to match.
+    A column the migration spells `nullable=True` and the model spells
+    `nullable=False` is a schema that accepts a row the application swears
+    cannot exist -- and it stays invisible until a NULL reaches code that
+    never checked. So compare what the database actually has, after the
+    upgrade, against the model's own columns and indexes.
+    """
+    for model in (RadarBoardNamespace, RadarBoardResult):
+        table = model.__table__
+        with db.engine.connect() as connection:
+            columns = connection.execute(sa.text(
+                'select column_name, is_nullable'
+                ' from information_schema.columns'
+                ' where table_schema = database() and table_name = :table'),
+                {'table': table.name}).all()
+            indexes = {row[0] for row in connection.execute(sa.text(
+                'select distinct index_name'
+                ' from information_schema.statistics'
+                ' where table_schema = database() and table_name = :table'),
+                {'table': table.name})}
+
+        assert columns, f'{table.name} is not in the database at all'
+        assert {(name, nullable == 'YES') for name, nullable in columns} == {
+            (column.name, column.nullable) for column in table.columns}, (
+            f'{table.name}: the migration and the model disagree')
+        # The model's primary key is the migration's PRIMARY, and every named
+        # index the model declares is one the migration really created.
+        assert indexes == {'PRIMARY'} | {index.name
+                                         for index in table.indexes}, (
+            f'{table.name}: the indexes differ')
 
 
 @pytest.mark.parametrize('sql_mode', ['', None],

@@ -63,11 +63,18 @@ class _Store:
         self.namespaces = []
         self.ns = self.namespace()
 
-    def namespace(self, now=NOW, *, revision=REVISION):
+    def namespace(self, now=NOW, *, revision=REVISION, introduce=True):
+        """A namespace this test owns, cleaned up whatever happens to it.
+
+        `introduce=False` skips `ensure_namespace`, which is how a generation
+        looks before any producer has spoken: whichever reader touches it first
+        adopts the control row, revision unknown.
+        """
         name = 'perf3test-' + secrets.token_hex(20)
         self.namespaces.append(name)
-        board_store.ensure_namespace(self.engine, name, now, revision=revision,
-                                     payload_version=1)
+        if introduce:
+            board_store.ensure_namespace(self.engine, name, now,
+                                         revision=revision, payload_version=1)
         return name
 
     def rows(self, ns=None):
@@ -162,6 +169,23 @@ def test_the_limits_are_the_documented_defaults_and_move_with_the_environment(
     assert changed.fresh_seconds == 15
     assert changed.retire_seconds == 60
     assert changed.max_on_demand == 128, 'an untouched limit moved'
+
+
+def test_a_limit_that_is_not_a_number_is_refused_by_name(monkeypatch):
+    """Loudly, and naming the variable. Falling back to the default would let
+    a typo in a deploy silently restore a bound the operator meant to move --
+    the one failure mode where being quiet is worse than not starting."""
+    monkeypatch.setenv('RADAR_BOARD_MAX_QUEUE', 'thirty-two')
+    with pytest.raises(board_namespace.ConfigError) as refused:
+        board_store.limits()
+    assert 'RADAR_BOARD_MAX_QUEUE' in str(refused.value)
+    assert 'thirty-two' in str(refused.value)
+
+    monkeypatch.setenv('RADAR_BOARD_MAX_QUEUE', '32')
+    monkeypatch.setenv('RADAR_BOARD_LEASE_SECONDS', 'two minutes')
+    with pytest.raises(board_namespace.ConfigError) as refused:
+        board_store.limits()
+    assert 'RADAR_BOARD_LEASE_SECONDS' in str(refused.value)
 
 
 # --- admission -------------------------------------------------------------
@@ -798,6 +822,45 @@ def test_refresh_warm_never_disturbs_a_build_in_flight(store):
     assert row['lease_token'] == claim.token
 
 
+def test_a_warm_key_whose_build_failed_backs_off_before_it_is_swept_again(
+        store):
+    """The one row that is warm and broken at the same time.
+
+    The sweep moves `idle` rows only, so a warm key inside its backoff has to
+    be left to its clock exactly like an on-demand one -- otherwise the eight
+    standing boards would each retry every tick, which is the fastest possible
+    loop against whatever is failing. Once the clock runs out the ordinary
+    warm claim picks it up again, with no sweep in between.
+    """
+    pair = key('warm-broken')
+    board_store.refresh_warm(store.engine, store.ns, [pair], NOW)
+    first = board_store.claim(store.engine, store.ns, 'owner-1', NOW,
+                              prefer='warm')
+    assert board_store.fail(store.engine, store.ns, first, 'RuntimeError',
+                            NOW) is True
+    retry_at = store.read(pair[0]).next_attempt_at
+    assert retry_at == NOW + seconds(30)
+
+    inside = NOW + seconds(10)
+    assert board_store.refresh_warm(store.engine, store.ns, [pair],
+                                    inside) == 0, 'the sweep restarted a backoff'
+    result = store.read(pair[0])
+    assert result.queue_state == 'failed'
+    assert result.next_attempt_at == retry_at
+    assert board_store.claim(store.engine, store.ns, 'owner-2', inside,
+                             prefer='warm') is None
+    assert board_store.due_warm(store.engine, store.ns, inside) == [pair[0]], (
+        'a failed warm key is still a warm key that owes a board')
+
+    second = board_store.claim(store.engine, store.ns, 'owner-2', retry_at,
+                               prefer='warm')
+    assert second is not None, 'the backoff never ended'
+    assert second.key_hash == pair[0]
+    assert second.warm is True
+    assert second.attempts == 2
+    assert second.token != first.token
+
+
 def test_refresh_warm_promotes_a_key_a_viewer_asked_for_first(store):
     pair = key('promoted')
     store.admit(pair)
@@ -827,10 +890,14 @@ def test_due_warm_names_the_stale_warm_keys_oldest_first(store):
 def test_retire_namespaces_removes_only_the_generation_nothing_has_touched(
         store):
     limits = board_store.limits()
-    stale = store.namespace(NOW - seconds(limits.retire_seconds + 60))
+    long_ago = NOW - seconds(limits.retire_seconds + 60)
+    stale = store.namespace(long_ago)
     live = store.namespace(NOW - seconds(60))
-    for name in (stale, live):
-        board_store.admit(store.engine, name, *key('anything'), NOW)
+    # Each generation's traffic at its own moment: an admission moves
+    # `last_seen_at`, so admitting into the stale one at NOW would keep it
+    # alive and this test would be about nothing.
+    board_store.admit(store.engine, stale, *key('anything'), long_ago)
+    board_store.admit(store.engine, live, *key('anything'), NOW)
     board_store.admit(store.engine, store.ns, *key('mine'), NOW)
 
     retired = board_store.retire_namespaces(store.engine, store.ns, NOW)
@@ -846,13 +913,75 @@ def test_retire_namespaces_removes_only_the_generation_nothing_has_touched(
 def test_retire_namespaces_never_retires_the_caller_however_old_it_looks(
         store):
     limits = board_store.limits()
-    ancient = store.namespace(NOW - seconds(limits.retire_seconds + 60))
-    board_store.admit(store.engine, ancient, *key('mine'), NOW)
+    long_ago = NOW - seconds(limits.retire_seconds + 60)
+    ancient = store.namespace(long_ago)
+    # Admitted at its own old moment, so nothing but the keep rule is sparing
+    # it: its `last_seen_at` really is past the cutoff when retirement looks.
+    board_store.admit(store.engine, ancient, *key('mine'), long_ago)
 
     board_store.retire_namespaces(store.engine, ancient, NOW)
 
     assert len(store.rows(ancient)) == 1
     assert board_store.health(store.engine, ancient)
+
+
+def test_reader_traffic_alone_keeps_a_generation_off_the_retirement_list(
+        store):
+    """`last_seen_at` is the whole generation's clock, not the producer's.
+
+    A producer that has been down since yesterday is exactly when the stored
+    boards matter most -- they are the only answer anyone has -- and retiring
+    them under the readers still asking for them would empty the cache at the
+    worst possible moment. So any admission keeps a generation alive, and only
+    a generation nobody is reading either goes.
+    """
+    limits = board_store.limits()
+    long_ago = NOW - seconds(limits.retire_seconds + 60)
+    watched = store.namespace(long_ago)
+    abandoned = store.namespace(long_ago)
+    board_store.admit(store.engine, watched, *key('still-wanted'), long_ago)
+    board_store.admit(store.engine, abandoned, *key('forgotten'), long_ago)
+
+    # A day of readers and no producer at all: no heartbeat, no
+    # `ensure_namespace`, nothing but admissions.
+    for minute in range(3):
+        board_store.admit(store.engine, watched, *key('still-wanted'),
+                          NOW - seconds(60 * minute), poll=True)
+
+    board_store.retire_namespaces(store.engine, store.ns, NOW)
+
+    assert board_store.health(store.engine, watched), (
+        'a generation with live readers was retired'
+    )
+    assert len(store.rows(watched)) == 1
+    assert board_store.health(store.engine, abandoned) == {}
+    assert not store.rows(abandoned)
+
+
+def test_a_producer_stamps_its_revision_onto_a_row_a_reader_adopted(store):
+    """Whoever adopts the control row first, the producer owns what it says.
+
+    A reader can be the first process to touch a generation, and it has no
+    business guessing which build answers there -- so the adopted row carries
+    no revision. When the producer arrives it is authoritative for its own
+    namespace, and an update that only moved `last_seen_at` would leave the
+    admin surface reporting no revision for the whole life of the generation.
+    """
+    fresh = store.namespace(introduce=False)
+    board_store.admit(store.engine, fresh, *key('first-in'), NOW)
+    adopted = board_store.health(store.engine, fresh)
+    assert adopted['producer_revision'] is None, (
+        'a reader guessed at the revision')
+
+    producer_revision = 'deadbeef' * 5
+    board_store.ensure_namespace(store.engine, fresh, NOW + seconds(30),
+                                 revision=producer_revision, payload_version=1)
+
+    reported = board_store.health(store.engine, fresh)
+    assert reported['producer_revision'] == producer_revision
+    assert reported['payload_version'] == 1
+    assert reported['last_seen_at'] == NOW + seconds(30)
+    assert reported['created_at'] == NOW, 'the introduction rewrote the birth'
 
 
 def test_heartbeat_and_health_round_trip_the_producer_fields(store):

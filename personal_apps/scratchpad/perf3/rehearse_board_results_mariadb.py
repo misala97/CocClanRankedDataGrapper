@@ -416,10 +416,19 @@ def main():
               f"error still {reported['producer_error']!r}"
               if reported['producer_error'] else '')
 
-        board_store.ensure_namespace(engine, 'rehearsal-stale',
-                                     NOW - seconds(limits.retire_seconds + 60),
-                                     revision=REVISION_STAMP, payload_version=1)
-        board_store.admit(engine, 'rehearsal-stale', 'b' * 64, KEY_JSON, NOW)
+        # Both generations are introduced and admitted at the same long-ago
+        # moment; the only difference is that one of them is still being read.
+        # An admission moves `last_seen_at` under the control-row lock, so
+        # admitting into the stale one at NOW would keep it alive and this
+        # check would be about nothing.
+        long_ago = NOW - seconds(limits.retire_seconds + 60)
+        for forgotten in ('rehearsal-stale', 'rehearsal-watched'):
+            board_store.ensure_namespace(engine, forgotten, long_ago,
+                                         revision=REVISION_STAMP,
+                                         payload_version=1)
+            board_store.admit(engine, forgotten, 'b' * 64, KEY_JSON, long_ago)
+        board_store.admit(engine, 'rehearsal-watched', 'b' * 64, KEY_JSON, NOW,
+                          poll=True)
         retired = board_store.retire_namespaces(engine, namespace, NOW)
         check('a generation nothing has touched is retired whole',
               retired == 1
@@ -427,6 +436,11 @@ def main():
               and board_store.read(engine, 'rehearsal-stale',
                                    'b' * 64) is None,
               f'retired {retired}')
+        check('a reader alone keeps a generation alive on this engine too',
+              bool(board_store.health(engine, 'rehearsal-watched'))
+              and board_store.read(engine, 'rehearsal-watched',
+                                   'b' * 64) is not None,
+              'GREATEST(last_seen_at, :now) under the lock')
         check("the caller's own generation survived retirement",
               bool(board_store.health(engine, namespace)))
 

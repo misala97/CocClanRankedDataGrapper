@@ -1656,7 +1656,13 @@ class RadarBoardNamespace(db.Model):
     what the admin surface reads to answer whether the board is being built at
     all, as opposed to merely being asked for.
 
-    `last_seen_at` doubles as the retirement clock. A generation nothing has
+    `last_seen_at` doubles as the retirement clock, and it measures the
+    generation rather than its producer: every admission moves it -- a
+    reader's, a poll's, the warm sweep's -- because they all pass through the
+    same row lock. That distinction is the point. A generation whose producer
+    has been down since yesterday but whose boards are still being read holds
+    the only answers anybody has, and a clock only the producer wound would
+    delete them under the readers still asking. A generation nothing has
     touched for a day is a deploy or two ago, and its rows are weight no reader
     in the current generation can address, because a namespace is never
     re-derived once its inputs have moved.
@@ -1665,8 +1671,11 @@ class RadarBoardNamespace(db.Model):
     __table_args__ = ({'mysql_charset': 'utf8mb4'},)
     namespace         = db.Column(db.String(64), primary_key=True)
     payload_version   = db.Column(db.SmallInteger, nullable=False)
-    # NULL only for a control row a reader created before any producer
-    # introduced itself -- the namespace already encodes the revision.
+    # NULL only until a producer introduces itself: a reader that adopts the
+    # control row first has no idea which build answers here, and the producer
+    # writes the revision on its next tick. Not transient in the sense of
+    # "briefly" -- a generation with no producer keeps a NULL here for as long
+    # as it has none, which is itself what the admin surface should report.
     producer_revision = db.Column(db.String(64), nullable=True)
     created_at        = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
     last_seen_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
