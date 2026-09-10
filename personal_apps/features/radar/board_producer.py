@@ -128,9 +128,10 @@ def default_owner():
 def _api():
     """`routes.api`, imported at call time.
 
-    That module is the read path's home and Task 4 gives it an import of the
-    shared reader, which imports this file. Deferring keeps the circle open --
-    the same reason `board_keys.query_from_json` imports `Query` at call time.
+    Importing it binds the whole radar blueprint -- `features.radar.routes`
+    registers every route module on the way in -- which a process whose job is
+    to build boards has no business doing at import time. Deferred for the
+    same reason `board_keys.query_from_json` imports `Query` at call time.
     """
     from .routes import api
     return api

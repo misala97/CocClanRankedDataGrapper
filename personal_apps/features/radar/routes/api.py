@@ -1,6 +1,7 @@
 """JSON for the leaderboard surface."""
 import dataclasses
 import datetime as dt
+import os
 import threading
 
 from flask import jsonify, request
@@ -8,6 +9,7 @@ from flask import jsonify, request
 from auth import current_user, login_required
 
 from .. import board as board_mod
+from .. import board_shared, board_store
 from .. import detail as detail_mod
 from .. import detail_panel, llm_sentiment, market_data, phrasing, spend
 from .. import search as search_mod
@@ -477,12 +479,66 @@ def _build_board(query, now):
     return board
 
 
-def build_payload(args, now=None, user_id=None):
-    """Validated query -> serialized board. Shared by the page and the API.
+# What `RADAR_BOARD_SHARED_RESULTS` has to say for a worker to read boards
+# instead of building them. Four spellings of yes, because an operator setting
+# a flag by hand writes whichever one their other services taught them, and a
+# `RADAR_BOARD_SHARED_RESULTS=true` that silently meant no would be diagnosed
+# as the cache not working.
+_TRUTHY = {'1', 'true', 'yes', 'on'}
+
+
+def shared_results_enabled():
+    """Whether this worker reads the shared store or builds its own board.
+
+    Read from the environment on every call rather than resolved at import.
+    The flag is the rollback: an operator turning it off wants the next
+    request served the old way, and a module-level constant would make that a
+    deploy instead of a restart -- or, under gunicorn's preloading, not even
+    that.
+    """
+    return os.environ.get('RADAR_BOARD_SHARED_RESULTS',
+                          '').strip().lower() in _TRUTHY
+
+
+def build_payload(args, now=None, user_id=None, poll=False):
+    """The board for one request, from wherever this deployment gets boards.
+
+    The dispatch, and nothing else. With the flag on a web worker reads a
+    board the producer built; with it off it builds one itself, exactly as it
+    always has. Both answers carry the same envelope, so neither client has a
+    second shape to render.
+
+    `poll` is a viewer asking again about a board it is already waiting for.
+    It means nothing to the synchronous path -- which has no wait -- and is
+    accepted there rather than branched on, so the two paths keep one
+    signature and the route does not have to know which one it called.
+    """
+    if not shared_results_enabled():
+        return build_payload_direct(args, now=now, user_id=user_id)
+
+    # Imported here rather than at module load: the engine belongs to the
+    # application context, and this module is imported while one is being
+    # built.
+    from extensions import db
+
+    now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    return board_shared.read_payload(db.engine, args, now, user_id, poll=poll)
+
+
+def build_payload_direct(args, now=None, user_id=None):
+    """Validated query -> serialized board, built right here. Never the store.
 
     `user_id` adds the caller's watching list and its rows on top of the
     memoised, viewer-invariant board -- a handful of tickers, uncached
     because it is per account.
+
+    Still called on purpose by two callers even when the shared path is on.
+    `observations.capture` records what a board SHOWED, so it has to build
+    one -- filing a `pending` shell as an observation, or filing one board
+    under two quarter-hours, would put a hole in an archive whose whole claim
+    is that its rows were seen. And the equivalence test in
+    `test_radar_board_producer.py` compares this against the producer's blob,
+    which is what keeps the two ways of making a board the same board.
     """
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     query = parse_query(args, now=now)
@@ -506,15 +562,60 @@ def build_payload(args, now=None, user_id=None):
     payload['watch_rows'] = [_row(entry) for entry in board_mod.build_pinned_rows(
         watching, query.sources, now, window_hours=query.window,
         market=query.market)] if watching else []
+    payload.update(_direct_envelope(board.generated_at, now))
     return payload
+
+
+def _direct_envelope(generated_at, now):
+    """The delivery fields for a board this process just built.
+
+    Every one of them is the degenerate case of what the shared path reports,
+    and each is written rather than left out: a client that had to tell a
+    missing field from a false one would need two code paths for the state
+    that is meant to be the simple one.
+
+    `as_of` and `built_at` are both `generated_at`, which is honest rather
+    than lazy -- there is one clock reading here, taken before the build, and
+    claiming a separate publication instant would invent a number. The age is
+    real though: the build is memoised for a minute, so a second reader inside
+    that minute is genuinely being handed a board that is thirty seconds old
+    and the head's stamp has always said so.
+    """
+    bounds = board_store.limits()
+    stamp = _iso_z(generated_at)
+    return {
+        'shared': False,
+        'pending': False,
+        'busy': False,
+        'stale': False,
+        'failed': False,
+        'as_of': stamp,
+        'built_at': stamp,
+        'age_seconds': (now - generated_at).total_seconds(),
+        'fresh_seconds': bounds.fresh_seconds,
+        'hard_expiry_seconds': bounds.hard_expiry_seconds,
+        # Nothing to come back for: the next request builds its own board.
+        'retry_after_ms': None,
+        'queue_age_seconds': None,
+        # The ops summaries inside this payload were read while it was being
+        # serialized, which is this same instant.
+        'ops_collected_at': stamp,
+    }
 
 
 @radar_bp.route('/api/board')
 @login_required
 def board():
-    """Ranked rows for the selected sources, segment and window."""
+    """Ranked rows for the selected sources, segment and window.
+
+    `poll=1` is the client saying it is asking again about a board it is
+    already waiting for. It is read here rather than in `parse_query`, which
+    reads named keys only and must go on ignoring it: `poll` is not part of
+    the question, so two requests that differ only by it are one cache key.
+    """
     try:
-        return jsonify(build_payload(request.args, user_id=current_user().id))
+        return jsonify(build_payload(request.args, user_id=current_user().id,
+                                     poll=request.args.get('poll') == '1'))
     except BadQuery as exc:
         return jsonify({'error': str(exc)}), 400
 

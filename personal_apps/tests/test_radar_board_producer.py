@@ -35,7 +35,7 @@ from app import app as flask_app
 from extensions import db
 from features.radar import board as board_mod
 from features.radar import (board_keys, board_metrics, board_producer,
-                            board_store)
+                            board_shared, board_store)
 from features.radar.config import DEFAULT_SEGMENT, SOURCES
 from features.radar.routes import api
 
@@ -334,17 +334,22 @@ def test_the_blob_is_the_payload_the_request_path_would_have_served(
 
     This is the whole premise of the shared cache: a reader handed a stored
     blob must be handed what the synchronous path would have built for it. The
-    two are separate code -- `build_payload` parses, builds, roots and
+    two are separate code -- `build_payload_direct` parses, builds, roots and
     serializes; `build_blob` does the same four things from a `Query` -- and
     nothing but this test forces them to stay the same. A rooting rule added
     to one, a field `serialize` grows that only one of them stamps, and the
     shared path serves a board subtly unlike the one it replaced, to everyone,
     silently.
 
-    Three fields are expected to differ, and each is named rather than
-    skipped: `watching` and `watch_rows` are per ACCOUNT and are the reason
-    the blob is viewer-invariant at all, and `ops_collected_at` exists only
-    because a stored payload's frozen ops summaries need an age.
+    Two kinds of field are expected to differ, and each is named rather than
+    skipped. `watching` and `watch_rows` are per ACCOUNT, which is the reason
+    the blob is viewer-invariant at all. And the ENVELOPE -- how this
+    particular copy of the board was delivered, how old it is and when to ask
+    again -- is added by whichever path answered, on top of the board; the
+    blob is the board itself, so it carries none of it. `ops_collected_at` is
+    in the envelope for the request path and in the blob for the producer, and
+    is compared: it is the one field that has to mean the same instant in both
+    places, because a payload's frozen ops summaries are dated by it.
     """
     fake_build(monkeypatch)
     # A cache of this test's own, so a board built by the fake cannot be
@@ -354,13 +359,19 @@ def test_the_blob_is_the_payload_the_request_path_would_have_served(
     query = api.parse_query(args, now=NOW)
     assert (board_keys.canonical(query) in board_producer.warm_keys(NOW)) is warm
 
-    served = api.build_payload(args, now=NOW, user_id=None)
+    served = api.build_payload_direct(args, now=NOW, user_id=None)
     blob, _, _, _, _ = board_producer.build_blob(query, now=Clock())
     stored = json.loads(zlib.decompress(blob))
 
     assert served.pop('watching') == []
     assert served.pop('watch_rows') == []
     assert stored.pop('ops_collected_at') == NOW.isoformat() + 'Z'
+    envelope = {name: served.pop(name)
+                for name in board_shared.ENVELOPE_KEYS if name in served}
+    assert envelope['ops_collected_at'] == NOW.isoformat() + 'Z'
+    assert envelope['shared'] is False and envelope['pending'] is False
+    assert set(envelope) == set(board_shared.ENVELOPE_KEYS), (
+        'the synchronous path stopped writing part of the envelope')
 
     # Both through the same encoder: the blob is JSON on the way into the
     # column and the request path is JSON on the way to the browser, so the

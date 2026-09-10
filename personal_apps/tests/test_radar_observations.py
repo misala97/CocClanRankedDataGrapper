@@ -74,7 +74,7 @@ def _stored(slot):
 
 
 def test_the_slot_is_the_quarter_hour_the_capture_fell_in(app_context, monkeypatch):
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     assert observations.capture(BASE.replace(minute=37, second=51),
                                 producer_revision='test') is True
 
@@ -85,7 +85,7 @@ def test_the_slot_is_the_quarter_hour_the_capture_fell_in(app_context, monkeypat
 
 def test_slot_is_immutable(app_context, monkeypatch):
     """The first capture of a quarter-hour is the one that stands."""
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     now = BASE.replace(minute=1)
     assert observations.capture(now, producer_revision='test') is True
     assert observations.capture(now, producer_revision='changed') is False
@@ -96,7 +96,7 @@ def test_slot_is_immutable(app_context, monkeypatch):
 
 
 def test_a_later_slot_is_a_second_observation(app_context, monkeypatch):
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     assert observations.capture(BASE.replace(minute=1)) is True
     assert observations.capture(BASE.replace(minute=16)) is True
 
@@ -113,7 +113,7 @@ def test_a_late_capture_keeps_the_time_it_actually_ran(app_context, monkeypatch)
     test_the_scheduled_job_captures_the_wall_clock, which pins that the one
     production caller's instant is the clock's.
     """
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     late = BASE.replace(minute=14, second=59)
     observations.capture(late)
 
@@ -125,7 +125,7 @@ def test_account_state_and_operational_counters_never_enter_the_archive(
     """The serializer reads spend and the ops summaries as a side effect of
     building any board. Those are live health, not research evidence, and a
     watching list is somebody's private mark."""
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     observations.capture(BASE.replace(minute=2))
 
     for market in ('us', 'de'):
@@ -145,7 +145,7 @@ def test_the_board_is_never_asked_for_a_caller(app_context, monkeypatch):
         seen.append((dict(args), kwargs))
         return fake_payload(args)
 
-    monkeypatch.setattr(observations, 'build_payload', spy)
+    monkeypatch.setattr(observations, 'build_payload_direct', spy)
     now = BASE.replace(minute=3)
     observations.capture(now)
 
@@ -158,7 +158,7 @@ def test_the_board_is_never_asked_for_a_caller(app_context, monkeypatch):
 def test_the_captured_queries_are_the_fixed_pair(app_context, monkeypatch):
     """Recorded beside the answer, so no later reader has to assume which
     selection produced these rows."""
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     observations.capture(BASE.replace(minute=4))
 
     selections = _stored(BASE).selections_json
@@ -175,7 +175,7 @@ def test_the_searched_subreddits_are_recoverable(app_context, monkeypatch):
     were searched."""
     from features.radar.config import expand_sources
 
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     observations.capture(BASE.replace(minute=9))
 
     expanded = _stored(BASE).selections_json['sources_expanded']
@@ -191,7 +191,7 @@ def test_one_missing_market_records_nothing(app_context, monkeypatch):
             raise RuntimeError('the German board could not be built')
         return fake_payload(args)
 
-    monkeypatch.setattr(observations, 'build_payload', half)
+    monkeypatch.setattr(observations, 'build_payload_direct', half)
     with pytest.raises(RuntimeError):
         observations.capture(BASE.replace(minute=5))
 
@@ -202,7 +202,7 @@ def test_a_database_failure_that_is_not_the_slot_conflict_stays_an_error(
         app_context, monkeypatch):
     """Only the unique-slot conflict means 'already recorded'. Swallowing
     anything else would turn an outage into a silent gap."""
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
 
     def explode(*args, **kwargs):
         raise sa.exc.OperationalError('insert', {}, Exception('no database'))
@@ -222,7 +222,7 @@ def test_an_integrity_error_that_left_no_slot_is_re_raised(
     empty and say so at INFO. The branch asks what actually happened, and this
     forces the answer to be no.
     """
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     now = BASE.replace(minute=11)
     assert observations.capture(now) is True
 
@@ -236,7 +236,7 @@ def test_an_unknown_producer_revision_is_recorded_as_unknown(
         app_context, monkeypatch):
     """NULL is honest. A deployment that did not say which revision it is
     must not be given one."""
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     observations.capture(BASE.replace(minute=7), producer_revision=None)
 
     assert _stored(BASE).producer_revision is None
@@ -268,9 +268,9 @@ def test_latest_observed_at_reads_only_the_database(app_context, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError('latest_observed_at built a board')
 
-    monkeypatch.setattr(observations, 'build_payload', fake_payload)
+    monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     observations.capture(BASE.replace(minute=8))
-    monkeypatch.setattr(observations, 'build_payload', forbidden)
+    monkeypatch.setattr(observations, 'build_payload_direct', forbidden)
 
     # Compared against this module's own rows. A plain `>= BASE` would be
     # satisfied by any genuine 2026 observation the database happens to hold,
@@ -410,13 +410,18 @@ def test_a_failed_capture_does_not_stop_the_next_ingest_cycle(
 # --- against the real serializer -------------------------------------------
 
 def test_the_strip_list_still_matches_the_board_the_server_builds(app_context):
-    """Every other test here replaces build_payload with a fake, so nothing
-    else notices when the serializer changes underneath EXCLUDED.
+    """Every other test here replaces build_payload_direct with a fake, so
+    nothing else notices when the serializer changes underneath EXCLUDED.
 
     If a new account-scoped or operational key appears, or one of the five is
     renamed, this fails rather than letting the field into the archive.
+
+    `build_payload_direct` and not the dispatcher: with the shared flag on,
+    `build_payload` answers out of the result store, and this test would then
+    be asserting about a cached board -- or about a pending shell with no rows
+    at all -- instead of about what the serializer produces right now.
     """
-    built = observations.build_payload(
+    built = observations.build_payload_direct(
         observations._queries()['us'],
         now=dt.datetime.now(dt.timezone.utc).replace(tzinfo=None),
         user_id=None)
@@ -434,7 +439,7 @@ def test_the_strip_list_still_matches_the_board_the_server_builds(app_context):
 def test_a_real_board_row_carries_no_post_text(app_context):
     """The board is rows and counts; the posts live behind the detail
     endpoint. Nothing that would put source prose in the archive."""
-    built = observations.build_payload(
+    built = observations.build_payload_direct(
         observations._queries()['us'],
         now=dt.datetime.now(dt.timezone.utc).replace(tzinfo=None),
         user_id=None)

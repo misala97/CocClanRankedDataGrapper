@@ -34,10 +34,17 @@ point and no user-supplied timestamp reaches here. Adding either would need a
 provenance contract of its own, because a row would then no longer be
 self-evidently something that was seen.
 
-Account state never enters the archive. `build_payload`'s serializer also reads
-spend and the operational summaries as a side effect of building any board;
-those are live health rather than research evidence, and a watching list is
-somebody's private mark. Both are stripped before storage.
+Account state never enters the archive. `build_payload_direct`'s serializer
+also reads spend and the operational summaries as a side effect of building any
+board; those are live health rather than research evidence, and a watching list
+is somebody's private mark. Both are stripped before storage.
+
+The board is BUILT here, never read from the shared result store, whatever
+`RADAR_BOARD_SHARED_RESULTS` says. An archive of what two selections showed at
+a quarter-hour cannot be assembled out of a cache: a miss would file a
+`pending` shell as an observation, and a hit would file the board of some
+earlier minute under this slot's name. So this module calls
+`build_payload_direct` and the flag reaches it nowhere.
 """
 import datetime as dt
 import logging
@@ -51,7 +58,7 @@ from extensions import db
 from models import RadarBoardObservation
 
 from .config import SOURCES, expand_sources
-from .routes.api import build_payload
+from .routes.api import build_payload_direct
 
 logger = logging.getLogger(__name__)
 
@@ -141,8 +148,8 @@ def capture(now: dt.datetime, *, producer_revision: str | None = None) -> bool:
         # A future account-scoped field nested inside a row would need its own
         # handling here rather than an entry in EXCLUDED.
         market: {key: value
-                 for key, value in build_payload(query, now=now,
-                                                 user_id=None).items()
+                 for key, value in build_payload_direct(query, now=now,
+                                                        user_id=None).items()
                  if key not in EXCLUDED}
         for market, query in selections['queries'].items()
     }

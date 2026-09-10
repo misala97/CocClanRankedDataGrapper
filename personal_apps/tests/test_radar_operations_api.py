@@ -345,7 +345,7 @@ def test_ops_sends_a_signed_out_reader_to_sign_in(anon_client):
 def test_ops_answers_the_admin_with_the_existing_summaries(client):
     payload = client.get('/radar/api/ops').get_json()
     assert set(payload) == {'generated_at', 'spend', 'sentiment', 'market_data',
-                            'capture'}
+                            'capture', 'board_results'}
     assert payload['generated_at'].endswith('Z')
     # Present as a key even before the first capture, so the surface renders an
     # age of "never" rather than treating the field as missing.
