@@ -28,6 +28,16 @@ def q(**over):
     return Query(**base)
 
 
+def _key_json(**over):
+    """A raw key payload, json-encoded exactly like canonical() writes it,
+    for tests that need to hand round_trips/query_from_json a shape no
+    Query can produce on its own."""
+    fields = dict(v=2, sources=['bluesky', 'reddit'], segments=[], window=12,
+                  limit=50, venues=1, market='us', sort=None, dir='desc')
+    fields.update(over)
+    return json.dumps(fields, sort_keys=True, separators=(',', ':'))
+
+
 def test_duplicated_segments_are_a_different_key():
     """Codex reproduced the spike collapsing these. The payload echoes
     segments verbatim, so the key must too."""
@@ -98,3 +108,61 @@ def test_round_trips_catches_a_hash_match_that_cannot_reproduce():
     key_hash2 = hashlib.sha256(key_json2.encode('utf-8')).hexdigest()
 
     assert not board_keys.round_trips(key_hash2, key_json2)
+
+
+def test_an_unhashable_sources_element_is_refused_not_raised_through_round_trips():
+    """query_from_json only ever required sources to be iterable, so a
+    decoded Query could carry a nested list among its sources. canonical()'s
+    `sorted(set(query.sources))` then raised a bare TypeError instead of
+    BadKey, and round_trips -- which catches only BadKey -- let that
+    TypeError escape to its caller instead of answering False. A corrupt
+    stored row must make round_trips fail the row, not crash the producer."""
+    key_json = _key_json(sources=[[1, 2], 'a'])
+    key_hash = hashlib.sha256(key_json.encode('utf-8')).hexdigest()
+    assert board_keys.round_trips(key_hash, key_json) is False
+
+
+def test_an_int_among_segments_is_a_bad_key():
+    key_json = _key_json(segments=['mid', 7])
+    with pytest.raises(board_keys.BadKey):
+        board_keys.query_from_json(key_json)
+
+
+def test_a_string_window_is_a_bad_key():
+    key_json = _key_json(window='12')
+    with pytest.raises(board_keys.BadKey):
+        board_keys.query_from_json(key_json)
+
+
+def test_a_bool_limit_is_a_bad_key():
+    """bool is a subclass of int in Python, so isinstance(True, int) is
+    True -- a naive int check would silently accept a limit of True/False."""
+    key_json = _key_json(limit=True)
+    with pytest.raises(board_keys.BadKey):
+        board_keys.query_from_json(key_json)
+
+
+def test_a_list_sort_is_a_bad_key():
+    key_json = _key_json(sort=['lean'])
+    with pytest.raises(board_keys.BadKey):
+        board_keys.query_from_json(key_json)
+
+
+def test_an_unknown_extra_field_is_ignored_not_rejected():
+    """The hash comparison already catches a payload that doesn't match its
+    hash; query_from_json must not itself reject a forward-compatible extra
+    field."""
+    key_json = _key_json(extra='whatever')
+    board_keys.query_from_json(key_json)  # must not raise
+
+
+def test_canonical_rejects_non_string_sources_from_a_hand_built_query():
+    """query_from_json now validates shapes on the way in, so this is belt
+    and braces for a caller that builds a Query directly."""
+    with pytest.raises(board_keys.BadKey):
+        board_keys.canonical(q(sources=[['nested'], 'reddit']))
+
+
+def test_canonical_rejects_non_string_segments_from_a_hand_built_query():
+    with pytest.raises(board_keys.BadKey):
+        board_keys.canonical(q(segments=['mid', 3]))

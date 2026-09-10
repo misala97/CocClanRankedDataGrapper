@@ -56,9 +56,20 @@ def canonical(query):
     us|de before a Query exists, so a third value here is a caller that built
     a Query by hand -- a bug to stop where it happened, not a viewer's typo
     to answer politely.
+
+    sources and segments are checked the same way, and checked before the
+    `sorted(set(...))` below rather than left for it to discover: a caller
+    that hand-builds a Query with a nested list among its sources would
+    otherwise hit a bare TypeError there instead of BadKey.
+    query_from_json validates every field it decodes, so this is belt and
+    braces for a Query no round-trip built.
     """
     if query.market not in ('us', 'de'):
         raise BadKey(f'market must be resolved: {query.market!r}')
+    if not all(isinstance(item, str) for item in query.sources):
+        raise BadKey(f'sources must all be str: {query.sources!r}')
+    if not all(isinstance(item, str) for item in query.segments):
+        raise BadKey(f'segments must all be str: {query.segments!r}')
     fields = {
         'v': KEY_VERSION,
         'sources': sorted(set(query.sources)),
@@ -74,6 +85,16 @@ def canonical(query):
     return hashlib.sha256(key_json.encode('utf-8')).hexdigest(), key_json
 
 
+def _is_str_list(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _is_plain_int(value):
+    # bool is a subclass of int, and isinstance(True, int) is True -- a
+    # stored `"limit": true` must not silently pass as a limit of 1.
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def query_from_json(key_json):
     """The Query a key_json was written from -- the exact inverse of canonical.
 
@@ -86,6 +107,17 @@ def query_from_json(key_json):
     object, a version that isn't current, a field that's missing or the
     wrong shape -- is raised as BadKey. round_trips catches one exception,
     not whatever stdlib type happened to notice the corruption first.
+
+    "Wrong shape" is checked field by field, not left for construction or
+    canonical() to discover: json only promises sources/segments are
+    iterable, an int is only promised to not be a string, and so on, so a
+    decoded field can carry a shape canonical() cannot digest -- a nested
+    list among sources is valid json and iterable, but unhashable, and
+    `canonical()`'s `sorted(set(...))` would otherwise raise a bare
+    TypeError past this function's contract. An unknown extra field in the
+    payload is ignored, not rejected: the hash comparison in round_trips
+    already catches a key_json that does not match what this build would
+    have written.
     """
     from .routes.api import Query
 
@@ -100,16 +132,32 @@ def query_from_json(key_json):
         raise BadKey(f"key version {fields.get('v')!r} is not v{KEY_VERSION}")
 
     try:
-        return Query(sources=list(fields['sources']),
-                     segments=list(fields['segments']),
-                     window=fields['window'],
-                     limit=fields['limit'],
-                     min_venues=fields['venues'],
-                     market=fields['market'],
-                     sort=fields['sort'],
-                     direction=fields['dir'])
-    except (KeyError, TypeError) as exc:
-        raise BadKey(f'missing or malformed field: {exc}') from exc
+        sources, segments = fields['sources'], fields['segments']
+        window, limit, venues = fields['window'], fields['limit'], fields['venues']
+        market, sort, direction = fields['market'], fields['sort'], fields['dir']
+    except KeyError as exc:
+        raise BadKey(f'missing field: {exc}') from exc
+
+    if not _is_str_list(sources):
+        raise BadKey(f'sources must be a list of str: {sources!r}')
+    if not _is_str_list(segments):
+        raise BadKey(f'segments must be a list of str: {segments!r}')
+    if not _is_plain_int(window):
+        raise BadKey(f'window must be an int: {window!r}')
+    if not _is_plain_int(limit):
+        raise BadKey(f'limit must be an int: {limit!r}')
+    if not _is_plain_int(venues):
+        raise BadKey(f'venues must be an int: {venues!r}')
+    if not isinstance(market, str):
+        raise BadKey(f'market must be a str: {market!r}')
+    if sort is not None and not isinstance(sort, str):
+        raise BadKey(f'sort must be a str or None: {sort!r}')
+    if not isinstance(direction, str):
+        raise BadKey(f'dir must be a str: {direction!r}')
+
+    return Query(sources=sources, segments=segments, window=window,
+                 limit=limit, min_venues=venues, market=market, sort=sort,
+                 direction=direction)
 
 
 def round_trips(key_hash, key_json):
