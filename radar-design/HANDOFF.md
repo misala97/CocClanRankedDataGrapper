@@ -84,6 +84,29 @@ be counted. The lean sort could not test the sort-before-limit contract
 because **0 of 50 fixture rows carry a tone**, so the contract was proven on
 `sort=mentions` instead, where membership moved 4 of 50.
 
+## The suite, and a warning about the fixture
+
+`pytest tests -q`, whole, no `-x`: **2,706 tests, `17 failed, 2650 passed,
+9 skipped, 30 errors`, 38 minutes.** None attributable to this branch, and
+that is checkable: **`git diff 4221196..HEAD -- personal_apps/` is empty.**
+The failures name their own cause — *"the dev database needs at least one
+exercise"* — because this worktree points at a radar fixture with no gym data.
+Two figures quoted earlier in this workstream were partial and should not be
+reused: the spike's own `-x` run stopped at 72 tests, and `PERF1-LEDGER.md`
+says 227.
+
+**One failure is a warning rather than noise.** `personal_apps_radar_perf1` is
+stamped `alembic_version = c4e17b90d3f2` — the **held** migration — because
+PERF1 ran `flask db upgrade` against it, and this branch does not carry that
+revision, so alembic cannot resolve the stamp. That is the third place the
+held change had to be found and dealt with here: the physical index still on
+the fixture (which contaminated this spike's first pass until S9 caught it),
+this stamp, and the branch lineage — which is why PERF2 is based on the
+deployed SHA. **Production is untouched and at `a7c31f0b52d4`.** The fixture's
+stamp is left as it is, because resetting it is a write nobody asked for; the
+next person to use that fixture with a branch lacking `c4e17b90d3f2` needs to
+know.
+
 ## Still owed, and it is small
 
 The adopted `sort sources` normalization is ruled but not implemented in the
