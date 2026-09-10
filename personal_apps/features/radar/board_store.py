@@ -212,13 +212,20 @@ def ensure_namespace(engine, ns, now, *, revision, payload_version):
 
     `created_at` is never touched. It is when this generation first appeared,
     which no later tick knows better than the first one did.
+
+    `last_seen_at` moves by `GREATEST`, the same rule `_under_lock` uses and
+    for the same reason: that column is the whole generation's clock and it is
+    what retirement measures against, so a caller whose clock is behind the
+    last one's -- a second producer overlapping a deploy, a host whose NTP
+    stepped back -- must not be able to age a live generation towards deletion.
     """
     with engine.begin() as connection:
         connection.execute(sa.text(
             f'INSERT INTO {NAMESPACES}'
             ' (namespace, payload_version, producer_revision, created_at,'
             '  last_seen_at) VALUES (:ns, :version, :revision, :now, :now)'
-            ' ON DUPLICATE KEY UPDATE last_seen_at = :now,'
+            ' ON DUPLICATE KEY UPDATE'
+            ' last_seen_at = GREATEST(last_seen_at, :now),'
             ' producer_revision = :revision, payload_version = :version'),
             {'ns': ns, 'version': payload_version, 'revision': revision,
              'now': now})
@@ -232,10 +239,16 @@ def heartbeat(engine, ns, owner, now, *, success_at=None, error=None):
     admin surface and someone will chase it. Passing neither leaves both alone:
     a plain tick says the producer is running, not that anything changed.
 
+    `last_seen_at` moves by `GREATEST`, as it does everywhere: it is the
+    generation's clock and retirement measures against it, so an argument from
+    a producer whose clock is behind must not drag it backwards.
+    `producer_seen_at` is assigned plainly, because that one IS this
+    producer's claim about itself and the latest word on it is this call's.
+
     Returns whether there was a control row to update.
     """
-    assignments = ['last_seen_at = :now', 'producer_owner = :owner',
-                   'producer_seen_at = :now']
+    assignments = ['last_seen_at = GREATEST(last_seen_at, :now)',
+                   'producer_owner = :owner', 'producer_seen_at = :now']
     params = {'ns': ns, 'now': now, 'owner': owner}
     if success_at is not None:
         assignments += ['producer_success_at = :success', 'producer_error = NULL']
@@ -316,8 +329,11 @@ def retire_namespaces(engine, keep_ns, now):
                         f'DELETE FROM {NAMESPACES} WHERE namespace = :ns'):
                     connection.execute(sa.text(statement), {'ns': candidate})
                 deleted = True
-        # Counted after the commit, so a generation this pass declined to
-        # delete -- or failed to -- is not reported as retired.
+        # Counted after the commit, so a generation this pass DECLINED to
+        # delete -- one that became live between the scan and the lock -- is
+        # not reported as retired. A generation this pass failed to delete is
+        # not a case the count has to describe: the commit raises and the
+        # whole call goes out with it.
         if deleted:
             retired.append(candidate)
     return len(retired)

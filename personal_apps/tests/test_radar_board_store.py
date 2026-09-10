@@ -1025,6 +1025,44 @@ def test_ensure_namespace_is_idempotent_and_keeps_the_first_creation(store):
     assert reported['last_seen_at'] == NOW + seconds(600)
 
 
+def test_no_clock_on_the_control_row_can_age_a_generation_backwards(store):
+    """`last_seen_at` only ever moves forward, whichever call moves it.
+
+    Three public calls write that column -- `ensure_namespace`, `heartbeat`
+    and every admission through `_under_lock` -- and each takes the clock as
+    an argument, from a process that need not agree with the last one. Two
+    producers overlapping across a deploy, a retry carrying the instant its
+    request arrived, a host whose NTP stepped back: any of those could drag a
+    live generation towards the retirement cutoff, and the cache would be
+    deleted under the readers still asking for it. `_under_lock` already
+    argued this; the other two simply assigned.
+
+    `producer_seen_at` is a different question and is deliberately left alone:
+    it is one producer's claim about itself, not the generation's clock.
+    """
+    ahead = NOW + seconds(600)
+    behind = NOW - seconds(600)
+    board_store.ensure_namespace(store.engine, store.ns, ahead,
+                                 revision=REVISION, payload_version=1)
+
+    board_store.ensure_namespace(store.engine, store.ns, behind,
+                                 revision=REVISION, payload_version=1)
+    assert board_store.health(store.engine, store.ns)['last_seen_at'] == ahead, (
+        'ensure_namespace aged the generation backwards')
+
+    assert board_store.heartbeat(store.engine, store.ns, 'host:42', behind)
+    reported = board_store.health(store.engine, store.ns)
+    assert reported['last_seen_at'] == ahead, (
+        'a heartbeat aged the generation backwards')
+    assert reported['producer_seen_at'] == behind, (
+        "the producer's own stamp is its own to move")
+
+    # The call that already had the rule, so all three are asserted together.
+    board_store.admit(store.engine, store.ns, *key('late-arrival'), behind)
+    assert board_store.health(store.engine, store.ns)['last_seen_at'] == ahead, (
+        'an admission aged the generation backwards')
+
+
 def test_queue_summary_counts_each_class_of_work(store):
     limits = board_store.limits()
     for index in range(3):
@@ -1131,6 +1169,14 @@ def test_no_public_call_leaves_a_transaction_open(store):
     engine, ns = store.engine, store.ns
     pair, warm, busy = key('tx'), key('tx-warm'), key('tx-busy')
     store.seed(limits.max_queue, prefix='tx-queued', state='pending')
+    # One generation actually due for retirement, with a result row of its
+    # own. `retire_namespaces` opens a transaction PER CANDIDATE, so with an
+    # empty candidate list the only part of it the listener would see is the
+    # unlocked scan -- and the loop that takes the lock and deletes would go
+    # unwatched, which is the half of that function this test is about.
+    doomed = store.namespace(NOW - seconds(limits.retire_seconds + 60))
+    board_store.admit(engine, doomed, *key('tx-doomed'),
+                      NOW - seconds(limits.retire_seconds + 60))
 
     with _Depth(engine) as depth:
         def closed(label):
@@ -1169,8 +1215,10 @@ def test_no_public_call_leaves_a_transaction_open(store):
         closed('health')
         board_store.queue_summary(engine, ns, NOW)
         closed('queue_summary')
-        board_store.retire_namespaces(engine, ns, NOW)
+        assert board_store.retire_namespaces(engine, ns, NOW) >= 1, (
+            'the per-candidate loop never ran, so nothing here watched it')
         closed('retire_namespaces')
+        assert not store.rows(doomed)
 
         assert depth.peak == 1, (
             f'a call nested {depth.peak} transactions, so one of them was '

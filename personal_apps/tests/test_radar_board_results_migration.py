@@ -14,6 +14,7 @@ These tests run alembic in-process against the disposable database and are slow
 by nature. They refuse to run anywhere else, and they leave the database at the
 revision they were asked to prove.
 """
+import datetime as dt
 import logging
 
 import pytest
@@ -40,6 +41,9 @@ NEW_INDEXES = {'ix_radar_board_results_queue',
 # itself rather than passing on the well-behaved half of the range. 12 KB is
 # the top of the measured payload band (6-13 KB compressed).
 BLOB = bytes(range(256)) * 48
+
+# Naive UTC with microseconds, the way every timestamp in these tables is.
+REQUESTED_AT = dt.datetime(2026, 9, 10, 12, 0, 0, 123456)
 
 
 def _alembic() -> Config:
@@ -236,21 +240,44 @@ def test_the_migration_and_the_models_agree_about_both_tables(disposable):
             f'{table.name}: the indexes differ')
 
 
-@pytest.mark.parametrize('sql_mode', ['', None],
-                         ids=['permissive', 'strict-default'])
+@pytest.mark.parametrize('sql_mode', ['permissive', 'strict'],
+                         ids=['permissive', 'strict'])
 def test_a_four_thousand_character_key_and_a_twelve_kilobyte_blob_round_trip(
         disposable, sql_mode):
     """The claim TEXT is here for. Under `sql_mode=''` a too-narrow column
     truncates and warns instead of failing, which is how a corrupted key would
-    reach production without anything raising."""
+    reach production without anything raising; under the server's own strict
+    mode it would raise instead. Both have to store four thousand characters.
+
+    On a connection of this test's own, with the mode set explicitly and put
+    back afterwards. `SET SESSION` on a pooled connection outlives the test
+    that set it -- and while it did, the strict case was quietly running under
+    the permissive case's leftover mode, so the half of this test that matters
+    most had never actually run.
+    """
     key_hash, key_json = _long_key()
     assert len(key_json) > 3500, f'the fixture key is only {len(key_json)}'
     assert board_keys.round_trips(key_hash, key_json)
+    # A literal rather than a bind, because the strict case's mode is the
+    # server's own global setting and that is not a value to pass in.
+    wanted = "''" if sql_mode == 'permissive' else '@@GLOBAL.sql_mode'
 
-    with db.engine.begin() as connection:
-        if sql_mode is not None:
-            connection.execute(sa.text('set session sql_mode = :mode'),
-                               {'mode': sql_mode})
+    connection = db.engine.connect()
+    restore = None
+    try:
+        restore = connection.execute(
+            sa.text('select @@session.sql_mode')).scalar()
+        connection.execute(sa.text(f'set session sql_mode = {wanted}'))
+        effective = connection.execute(
+            sa.text('select @@session.sql_mode')).scalar()
+        # Asserted, not assumed: a strict case running permissively proves
+        # nothing, and that is exactly what was happening.
+        if sql_mode == 'permissive':
+            assert effective == '', f'wanted no sql_mode at all, got {effective!r}'
+        else:
+            assert 'STRICT_TRANS_TABLES' in effective, (
+                f'the server default is not strict: {effective!r}')
+
         connection.execute(sa.text(
             'insert into radar_board_results '
             '(namespace, key_hash, key_json, payload_version, queue_state, '
@@ -258,27 +285,41 @@ def test_a_four_thousand_character_key_and_a_twelve_kilobyte_blob_round_trip(
             ' attempts) values '
             '(:ns, :k, :j, 1, :state, 0, :blob, :n, :now, 1, 0)'
         ).bindparams(sa.bindparam('blob', type_=sa.LargeBinary)),
-            {'ns': 'roundtrip-' + (sql_mode or 'default'), 'k': key_hash,
+            {'ns': 'roundtrip-' + sql_mode, 'k': key_hash,
              'j': key_json, 'state': 'idle', 'blob': BLOB, 'n': len(BLOB),
-             'now': sa.func.now(6)})
+             # A real datetime, not `sa.func.now(6)`: a SQL function object
+             # passed as a bind VALUE is stringified, and the literal text
+             # `now(:now_1)` is what reached the DATETIME column.
+             'now': REQUESTED_AT})
+        connection.commit()
 
-    try:
-        with db.engine.connect() as connection:
+        try:
             stored = connection.execute(sa.text(
-                'select key_json, payload, payload_bytes '
+                'select key_json, payload, payload_bytes, requested_at '
                 'from radar_board_results where key_hash = :k'),
                 {'k': key_hash}).one()
-        assert stored.key_json == key_json, (
-            f'stored {len(stored.key_json)} of {len(key_json)} characters')
-        assert board_keys.round_trips(key_hash, stored.key_json), (
-            'the stored key no longer hashes to the name it is stored under')
-        assert stored.payload == BLOB
-        assert stored.payload_bytes == len(BLOB)
-    finally:
-        with db.engine.begin() as connection:
+            assert stored.key_json == key_json, (
+                f'stored {len(stored.key_json)} of {len(key_json)} characters')
+            assert board_keys.round_trips(key_hash, stored.key_json), (
+                'the stored key no longer hashes to the name it is stored under')
+            assert stored.payload == BLOB
+            assert stored.payload_bytes == len(BLOB)
+            # Under a permissive mode a rejected datetime becomes a zero date
+            # rather than an error, so the stamp is read back too.
+            assert stored.requested_at == REQUESTED_AT
+        finally:
             connection.execute(sa.text(
                 'delete from radar_board_results where key_hash = :k'),
                 {'k': key_hash})
+            connection.commit()
+    finally:
+        # Before the connection goes back to the pool, whatever happened above.
+        if restore is not None:
+            connection.rollback()
+            connection.execute(sa.text('set session sql_mode = :mode'),
+                               {'mode': restore})
+            connection.commit()
+        connection.close()
 
 
 def _ddl(direction, revision):
