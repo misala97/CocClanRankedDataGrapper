@@ -20,7 +20,7 @@ appended to `CODEX-DECISIONS.md`.
 | S9 ingest contention | **Done** — `run_s9_contention.py`. Producer costs the write +7%; the write costs the producer far more |
 | T1 worker threading (prepare only) | **Done** - `run_t1_workers.py`. The claim is CONFIRMED: 7,602 ms against 9 ms. Recommendation is still DO NOT ship it yet |
 | T2 access-log proposal (prepare only) | Not started |
-| Independent read-only review | Not started |
+| Independent read-only review | Not started — the dispatcher's to schedule |
 | Deployment | **Not authorized.** Full product implementation follows Codex's review of this return. |
 
 ## Workspace
@@ -981,3 +981,53 @@ into it; Windows' 4 KB pipe buffer filled and **the first worker deadlocked
 mid-write.** Both are fixed in the committed scripts — the log is silenced at
 the source and the parent no longer pipes worker stderr. The numbers above are
 from the run after both fixes.
+
+---
+
+## Part V — a measured number beside each open question
+
+Every row names the task that produced it. Nothing here is a decision; each is
+what the measurement says, for Codex to rule on.
+
+| # | Question | What was measured |
+| --- | --- | --- |
+| 1 | **The cold contract** | An unwarmed selection is **6.90 s** from first request to a board (S2 step 3c), against a 2 s target and an **8,000 ms client abort — 1.1 s of margin**. The `pending` answer itself is 8.8 ms and is not a board. On the current client an unwarmed key renders the board's genuine *empty state* — "Nothing cleared the bar in this window" — which is false (S8 step 3, `shots/s8-unwarmed.png`). **The cold target cannot be met by this design and the client change is a precondition, not a refinement.** |
+| 2 | **The warm set's size** | Sixteen keys sweep in **65.8 s** median, **67.5 s** worst, **102.1 s** cold (S3). At a 120 s cadence that is a **55% duty cycle** and about 1.4x headroom — on a quiet database. Under an ingest write the same sweep fell to **12.8 s per key** (S9). |
+| 3 | **The producer's host** | A producer sweep costs the ingest-shaped bulk write **+7%** (5.91 s → 6.32 s), which is inside its variance — so **the ingest daemon is not ruled out by the test the plan specified**. The reverse is not true and matters more. `run_radar_ingest.py` has 11 jobs, every `max_instances=1`, `coalesce` everywhere, **no `executors=`** — so the producer could not double-fire but would share one default thread pool with ten other jobs (S9). |
+| 4 | **Do the ops summaries freeze?** | **Yes.** They are **93.8 ms** of every `serialize`, 89 ms of it `market_data.ops_summary` — nearly three warm reads (S1 step 3). And `llm_sentiment.ops_summary()` takes the **wall clock**, not the board's `now`, so recomputing it per read makes two readers of one stored board disagree about `p95_age_minutes` (S4 step 0). |
+| 5 | **Cadence and `MAX_AGE`** | `REFRESH_EVERY = 120 s` fits with margin; the worst warm-key age at that cadence is **121 s** (S3 step 4). `MAX_AGE = 300 s` is honest with 179 s to spare *and* is the margin that absorbs S9's contention. `HARD_MAX_AGE = 3600 s` is thirty sweeps away and its boundary behaves (S7 step 3). |
+| 6 | **Is `--threads` worth its risk?** | The claim is **confirmed and then some**: a cheap non-Radar request costs 11 ms idle and **7,602 ms** while two boards build in two sync processes, against **9 ms** with two threads each. The pool peaks at 2 of 15 and memory is identical. **But `leaderboard.sigma_cache` is an unlocked module dict on the request path that a board build clears and repopulates**, and a clear racing a read raises. Guard it first (T1). |
+| 7 | **Does the held index return?** | It is worth about **1.1 s of a 24h build** here (5.4 s without, 4.3 s with — S1/S3 measured both). That second now happens in the background, which is the weaker case Codex already described. It also **quietly stayed on the fixture from PERF1 until this workstream found it**, which is its own argument for keeping the release candidate clean of it. |
+
+### Deviations from Part I, all of them
+
+| Where | Part I said | What was implemented, and why |
+| --- | --- | --- |
+| I.2, `key_json` | `VARCHAR(1024)` | `VARCHAR(2048)`. The worst case with production's real source names measures **939 chars** — it fits, with two subreddits of margin (S1 step 1). |
+| I.3, `as_of` | did not say when it is stamped | Stamped at the **claim**, per key. Pinning one `now` per sweep publishes the last key of every sweep 66 s stale and pushes the worst warm age from 121 s to 186 s (S3 step 4). |
+| I.3, exhausted retries | "stops being retried until a reader asks again, which resets `attempts`" | **A park timer.** Readers ask constantly: measured over thirty simulated minutes with a five-second poll, that rule produced **360 build attempts for 360 polls with no backoff at all**. `enqueue` now records demand and never touches the backoff; `attempts` clamps at `MAX_ATTEMPTS`; a parked key retries at most once per 900 s. Same run: **6 attempts**, 30/60/120/240/480/900 (S6 step 3). |
+| I.4, `state` | reads as though `state='ready'` gated serving | **State is queue state; the payload is the result.** They are orthogonal columns, so a stale or failing key stays claimable while it keeps serving its last good board. |
+| I.1, `segments` dedupe | "none expected" | **Rejected.** The payload echoes `list(segments)` verbatim, so `?segment=mid,micro,mid` is a distinct key from `?segment=mid,micro` (S4 step 3). |
+| I.1, `sources` sort | flagged as the risky candidate | **Adopted.** `build_payload` overwrites `board.sources` with a rooted sorted *set* before serializing, which absorbs both order and duplicates (S4 step 3). |
+| I.6, warm-set sources | `('bluesky', 'fourchan', 'reddit')` | The fixture's own 35 concrete names. The root `reddit` expands through `config.REDDIT_SUBS` to names this fixture does not hold; PERF1 retracted a round of evidence for exactly that. |
+
+### What could not be measured here, and why
+
+- **gunicorn itself.** No Windows support, no WSL. T1 is a model of N request
+  threads per process; the arbiter, worker lifecycle, graceful reload, signal
+  handling and request timeouts are untouched by it.
+- **MariaDB.** Everything is MySQL 8.0.46. The mechanism transfers; the
+  seconds do not, and no plan-shaped finding here has been confirmed against
+  the target's own `EXPLAIN`.
+- **A real ingest cycle beside the producer.** S9 uses one representative bulk
+  write, not the scoring pass, retention, partition maintenance or the fetch
+  loops, and not APScheduler actually running them.
+- **The lean sort's effect on sort-before-limit.** 0 of 50 rows on this
+  fixture carry any tone, so every lean is `None` and a stable sort is a
+  no-op. The contract is proven on `sort=mentions` instead (S4 step 4).
+- **`sentiment_ops` drift.** The fixture has an empty judgment backlog, so
+  `p95_age_minutes` is `None` and cannot be seen moving. The code path is
+  quoted; the behaviour is not in doubt, but it was not observed.
+- **The producer under a real reader population.** Every read here is
+  synthetic and serial or paired; nothing simulates the actual concurrency of
+  the deployed surface.
