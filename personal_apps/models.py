@@ -2,7 +2,8 @@ import datetime as dt
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.mysql import (
-    BIGINT as MYSQL_BIGINT, DATETIME as MYSQL_DATETIME, MEDIUMTEXT)
+    BIGINT as MYSQL_BIGINT, DATETIME as MYSQL_DATETIME, MEDIUMBLOB,
+    MEDIUMTEXT)
 from extensions import db
 
 
@@ -1635,3 +1636,114 @@ class RadarBoardObservation(db.Model):
     # a reader never has to assume which selection produced these rows.
     selections_json   = db.Column(db.JSON, nullable=False)
     payload_json      = db.Column(db.JSON, nullable=False)
+
+
+class RadarBoardNamespace(db.Model):
+    """One row per cache generation -- and the lock that serialises it.
+
+    A generation is a payload shape, a build revision and a configuration read
+    together; `board_namespace` derives its name from the three. This row
+    exists so that generation has somewhere to be locked. Admission and
+    eviction both decide against a count, and two web workers deciding against
+    the same count at the same moment is how a bound of 32 quietly becomes 64.
+    `SELECT ... FOR UPDATE` on this row is the mutex, and unlike a lock inside
+    one Python process it holds across every gunicorn worker and the producer
+    alike.
+
+    The producer's own state belongs here too, because it is per generation and
+    this is the one row a generation has: who last claimed work, when it was
+    last seen, when it last published, and what it last failed with. That is
+    what the admin surface reads to answer whether the board is being built at
+    all, as opposed to merely being asked for.
+
+    `last_seen_at` doubles as the retirement clock. A generation nothing has
+    touched for a day is a deploy or two ago, and its rows are weight no reader
+    in the current generation can address, because a namespace is never
+    re-derived once its inputs have moved.
+    """
+    __tablename__ = 'radar_board_namespaces'
+    __table_args__ = ({'mysql_charset': 'utf8mb4'},)
+    namespace         = db.Column(db.String(64), primary_key=True)
+    payload_version   = db.Column(db.SmallInteger, nullable=False)
+    # NULL only for a control row a reader created before any producer
+    # introduced itself -- the namespace already encodes the revision.
+    producer_revision = db.Column(db.String(64), nullable=True)
+    created_at        = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    last_seen_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    producer_owner    = db.Column(db.String(64), nullable=True)
+    producer_seen_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    producer_success_at = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    # A type name, never an exception message: this is read by the admin
+    # surface and a message can carry a query string or a row of content.
+    producer_error    = db.Column(db.String(255), nullable=True)
+
+
+class RadarBoardResult(db.Model):
+    """The published board for one exact selection, and its queue state.
+
+    Both, in one row, because publication is then a single UPDATE: there is no
+    instant in which a payload exists and the state does not yet say so, and no
+    second table to keep consistent with this one.
+
+    Queue state and payload availability are INDEPENDENT columns, and a reader
+    decides what to serve from the payload and its age, never from
+    `queue_state`. A board being rebuilt is still the board that was last
+    built, and a key whose last build failed still has its previous answer to
+    serve while it backs off. Reading disposition off the state instead would
+    blank the surface every single time a refresh was enqueued, which is once
+    every two minutes per warm key.
+
+    The lease is a random per-claim token rather than a counter. A builder that
+    lost its lease -- to an expiry, or because its row was evicted and then
+    recreated under the same key by a later reader -- must not be able to
+    publish, and a token nobody can guess and nobody reuses cannot be held
+    twice. A counter can be: a recreated row starts counting at zero again, and
+    the stale builder's fence matches the number it left behind.
+
+    `key_json` is TEXT rather than VARCHAR. A legal selection of 37 long source
+    names writes about 4,000 characters, and a VARCHAR(2048) would truncate it
+    without complaint under a permissive `sql_mode` -- leaving a key that no
+    longer hashes to its own name, which is one viewer being handed another
+    viewer's board.
+    """
+    __tablename__ = 'radar_board_results'
+    __table_args__ = (
+        # How the producer finds claimable work, and how admission counts the
+        # jobs already admitted before it decides whether there is room.
+        db.Index('ix_radar_board_results_queue', 'namespace', 'queue_state',
+                 'next_attempt_at'),
+        # The warm sweep: which of the eight standing boards is oldest.
+        db.Index('ix_radar_board_results_warm', 'namespace', 'warm', 'as_of'),
+        # Eviction: the least recently asked-for on-demand rows, oldest first.
+        db.Index('ix_radar_board_results_demand', 'namespace', 'warm',
+                 'requested_at'),
+        {'mysql_charset': 'utf8mb4'},
+    )
+    namespace         = db.Column(db.String(64), primary_key=True)
+    key_hash          = db.Column(db.String(64), primary_key=True)
+    key_json          = db.Column(db.Text, nullable=False)
+    payload_version   = db.Column(db.SmallInteger, nullable=False)
+    producer_revision = db.Column(db.String(64), nullable=True)
+    queue_state       = db.Column(db.String(16), nullable=False)   # idle|pending|building|failed
+    warm              = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    # The wall clock at the START of the build that produced `payload`, which
+    # is what "calculated N ago" has to be measured against; `built_at` is when
+    # that build finished. They differ by the build, deliberately.
+    as_of             = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    built_at          = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    build_ms          = db.Column(db.Integer, nullable=True)
+    payload           = db.Column(MEDIUMBLOB, nullable=True)
+    payload_bytes     = db.Column(db.Integer, nullable=True)
+    # Set when the row ENTERS pending and never moved by a poll, so the
+    # producer's oldest-first order is arrival order and not poll order.
+    enqueued_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    # Demand, which is what eviction ranks by. Polls move this and not
+    # `enqueued_at`: a viewer still watching is a reason to keep the row.
+    requested_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)
+    request_count     = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    lease_owner       = db.Column(db.String(64), nullable=True)
+    lease_token       = db.Column(db.String(32), nullable=True)
+    lease_expires_at  = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    attempts          = db.Column(db.SmallInteger, nullable=False, default=0, server_default='0')
+    next_attempt_at   = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    last_error        = db.Column(db.String(255), nullable=True)
