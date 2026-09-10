@@ -160,11 +160,14 @@ reason.
 
 ### S1 — the store, and what a board weighs
 
-`radar-design/perf2-spike/run_s1_payload.py`, one run, 2026-09-10.
+`radar-design/perf2-spike/run_s1_payload.py`, **re-run on the deployed
+schema** after the held index was found and dropped, 2026-09-10. The payload
+bytes came back byte-for-byte identical, which is the check that the index
+never touched the result — only the time to produce it.
 
 **Step 1 — the table and the key exist and round-trip.** `enqueue` →
-`claim` (fence 1) → build → `publish` → `read` → `decompress` returned a
-payload **identical** to the one built, asserted in the script.
+`claim` (fence 1) → build (6,483 ms) → `publish` → `read` → `decompress`
+returned a payload **identical** to the one built, asserted in the script.
 
 | | |
 | --- | --- |
@@ -197,37 +200,39 @@ PERF1 had to retract:
 
 | Selection | first | second |
 | --- | ---: | ---: |
-| 1h All companies US | **25,137 ms** | 2,782 ms |
-| 4h All companies US | **12,931 ms** | 4,140 ms |
-| 12h All companies US | 3,663 ms | 3,608 ms |
-| 24h All companies US | 4,265 ms | 4,318 ms |
-| 24h default 4 segments US | 4,216 ms | 4,163 ms |
-| 24h All companies US limit=100 | 4,330 ms | 4,167 ms |
+| 1h All companies US | **24,710 ms** | 2,726 ms |
+| 4h All companies US | **12,944 ms** | 4,353 ms |
+| 12h All companies US | 4,862 ms | 4,286 ms |
+| 24h All companies US | 5,360 ms | 5,373 ms |
+| 24h default 4 segments US | 5,447 ms | 5,559 ms |
+| 24h All companies US limit=100 | 5,518 ms | 5,340 ms |
 
 The 1h and 4h first passes are pages this process had not touched; 12h and 24h
-were already warm from the round-trip above. **A cold-page build is five to six
-times a warm one**, and S3 pays that on its first sweep.
+were already warm from the round-trip above. **A cold-page build is nine times
+a warm one at 1h**, and S3 pays that on its first sweep.
 
 **Step 3 — what `serialize` costs beyond the board.** The decision Part V.4
 asks for.
 
 | Call | median | notes |
 | --- | ---: | --- |
-| `spend.summary()` | 4.5 ms | two aggregate queries, no memo |
-| `llm_sentiment.ops_summary()` | 3.0 ms | no memo |
-| `market_data.ops_summary(now)` | **91.2 ms** | memo cleared before each sample |
+| `spend.summary()` | 2.7 ms | two aggregate queries, no memo |
+| `llm_sentiment.ops_summary()` | 2.1 ms | no memo |
+| `market_data.ops_summary(now)` | **89.0 ms** | memo cleared before each sample |
 | `market_data.ops_summary(now)` | 0.0 ms | its own 60-second memo, hit |
-| **all three** | **98.7 ms** | per `serialize` |
+| **all three** | **93.8 ms** | per `serialize` |
 
-**Ruling for Part V.4: freeze all three into the stored payload.** 98.7 ms is
-20% of the 500 ms warm target for three health readouts, and `market_data` is
-91 ms of it. They are *already* accepted as up-to-60-seconds stale by their own
+**Ruling for Part V.4: freeze all three into the stored payload.** 93.8 ms is
+19% of the 500 ms warm target for three health readouts, and `market_data` is
+89 ms of it. They are *already* accepted as up-to-60-seconds stale by their own
 memo, and a stored board's `age_seconds` describes them at least as honestly as
-that memo does. Recomputing them per read would put a 91 ms query on the read
+that memo does. Recomputing them per read would put an 89 ms query on the read
 path the whole design exists to empty — and the first reader after each memo
-expiry would pay it in full. The measured cost of freezing is that the ops
-numbers age with the board; the measured cost of not freezing is 91 ms on
-every cold-memo read.
+expiry would pay it in full, which against a 33.5 ms warm read (S2) is the
+difference between the read and three of them. The measured cost of freezing
+is that the ops numbers age with the board; the measured cost of not freezing
+is 89 ms on every cold-memo read. **S4 Step 0 gives a second, independent
+reason.**
 
 **Step 4 — the storage bound.** Largest measured compressed payload 12,640 B ×
 (16 warm + `MAX_ON_DEMAND_KEYS` 128) = **1.7 MB**. The bound is a rounding
