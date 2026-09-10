@@ -1,3 +1,6 @@
+# CURRENT — Codex accepted PERF2 with amendments; implement PERF3
+
+Read the latest PERF2 ruling appended to CODEX-DECISIONS.md. Full local PERF3 implementation is authorized in a new isolated worktree; no production changes. Eight warm keys initially, explicit asynchronous pending and visible stale states in both clients, separate producer process, generation-safe cache and fair bounded queue. Index and threading remain deferred. Product performance acceptance remains open. Reviewed afe1246, 21 commits from 4221196; Codex's only fresh executable check reproduced the segment-key collision without database access. These decisions/handoff edits are intentional Codex-owned changes. Historical returns below are superseded where this ruling differs.
 # Latest Codex ruling — PERF1 reviewed, performance acceptance OPEN
 
 Read the appended PERF1 ruling in CODEX-DECISIONS.md. It supersedes the current-dispatch conclusions below. Index deployment is held; threading and telemetry are preparation only. Next: PERF2 shared background-result design and disposable feasibility proof, with an explicit freshness and cold-miss contract. Correct the retracted concurrency claims and inventory reproducible evidence artifacts. No production changes authorized. Reviewed HEAD 691f33a (12 commits from 4221196); these decision/handoff edits are Codex-owned. No fresh benchmark or test run by Codex.
@@ -654,4 +657,5 @@ unchanged migration head and capture off. Do not mint an owner login session;
 use existing authorized verification methods. Report any authenticated checks
 that need the owner's session honestly. Record results in RELEASE-RECORD.md and
 HANDOFF.md. Production has not changed merely because this approval is recorded.
+
 
