@@ -17,7 +17,7 @@ appended to `CODEX-DECISIONS.md`.
 | S6 bounded failure | **Done** — `run_s6_failure.py`. One design defect found and fixed |
 | S7 restart, empty, expired | **Done** — `run_s7_lifecycle.py`. All four |
 | S8 filter switching and browser | **Done** — `run_s8_switching.py`, `run_s8_browser.py`. Warm PASSES; the `pending` render is a FALSE EMPTY STATE |
-| S9 ingest contention | Not started |
+| S9 ingest contention | **Done** — `run_s9_contention.py`. Producer costs the write +7%; the write costs the producer far more |
 | T1 worker threading (prepare only) | Not started |
 | T2 access-log proposal (prepare only) | Not started |
 | Independent read-only review | Not started |
@@ -110,6 +110,36 @@ below 2000 MB, so a number here cannot have come from a 128 MB run.
 **The engine is MySQL 8.0.46. The target is MariaDB 10.11.14.** The mechanism
 transfers; the seconds do not. Every plan-shaped finding says so where it
 appears.
+
+### CORRECTION — the first five tasks ran on the wrong schema
+
+Found on 2026-09-10 while writing S9, which asserts the held index is absent
+before it measures a write.
+
+**It was present.** `codex/radar-perf2` does not carry migration
+`c4e17b90d3f2` and never did — but the branch's *code* and the fixture's
+*storage* are two different things. `perf1-bench/acceptance.py` BUILDS
+`ix_radar_bucket_sources_agg` physically, with the migration's own statement,
+and never drops it. It had been sitting on `personal_apps_radar_perf1` since
+PERF1 ran.
+
+So **every build time recorded in S1 through S8 before this point was measured
+WITH the held index**, which PERF1 measured as worth about 0.9 s of a build.
+The store-side numbers — payload bytes, ready-read latency, parity digests,
+isolation, fencing, ages — do not depend on it. The BUILD numbers do.
+
+**What was done.** `perf2-spike/fixture_schema.py --fix` dropped
+`ix_radar_bucket_sources_agg` and left `ix_radar_bucket_sources_start` and
+`ix_radar_bucket_sources_coverage` alone, which is what `models.py` declares
+and what Codex's ruling requires. `env_check.preflight` now asserts the index
+set on every run, so no later script can quietly measure the wrong schema
+again — the same class of guard as the buffer-pool assertion.
+
+**Then S1, S2, S3, S8 and S9 were re-run on the deployed schema.** The tables
+below are the re-run numbers unless a heading says otherwise. Where a section
+was not re-run, it says so and says which of its numbers move.
+
+---
 
 ### The one substitution every run makes, and why
 
@@ -729,3 +759,66 @@ stale MET, unwarmed MISSED because no board rendered at all.**
    visible. (The 465 s here is artificial — the run ages `as_of` backwards —
    so `as_of` and `generated_at` disagree in this shot in a way they never
    would in production, where Part I.5 makes them the same instant.)
+
+---
+
+### S9 — what the producer does to ingest, and what ingest does to the producer
+
+`radar-design/perf2-spike/run_s9_contention.py`, one run, 2026-09-10, on the
+**deployed schema** (the held index dropped — this task is what found it). The
+write is `perf1-bench/write_cost.py`'s, unchanged in shape: one bulk `UPDATE`
+of `mention_z` across 16,793 existing rows in the live partition, restored
+afterwards. The producer runs as a **separate OS process**, because a thread
+in the measuring interpreter would contend for the GIL rather than for the
+database, and the question is about the database.
+
+**Steps 1 and 2.**
+
+| | run 1 | run 2 | run 3 | median |
+| --- | ---: | ---: | ---: | ---: |
+| write, no producer | 6.10 s | 5.86 s | 5.91 s | **5.91 s** |
+| write, under a producer sweep | 6.32 s | 6.33 s | 6.22 s | **6.32 s** |
+
+**The producer costs the write path +7%.** That is inside run-to-run variance
+for this write and is not a measurable delay.
+
+**But the traffic is not symmetric, and this is the finding.** While those
+three writes ran, the sweep managed **3 of 16 keys in 38.4 s — 12.8 s per
+key** against its own unloaded rate, with **13 keys still queued** when the
+writes finished. Three bulk writes of about six seconds each were enough to
+take the producer from a sixty-second sweep to a rate that would not finish
+one inside four minutes.
+
+**Step 3 — the ruling on the host.** By the letter of the plan's test, the
+producer does not measurably delay the write path, so **the ingest daemon is
+not ruled OUT by this measurement**. But the ruling that matters points the
+other way: **ingest delays the producer**, so a warm-set cadence has to be
+stated as a claim about a quiet database, and a scoring pass will push warm
+keys past `MAX_AGE`. `MAX_AGE = 300 s` has the margin for that;
+`REFRESH_EVERY = 120 s` does not mean every key is under 120 s old while
+ingest is writing.
+
+**What the daemon's scheduler actually does, read rather than guessed**
+(`run_radar_ingest.py`):
+
+| | |
+| --- | --- |
+| `add_job` calls | **11** |
+| `max_instances` | on every job, and **every value in the file is `1`** |
+| `coalesce` | on every job |
+| `misfire_grace_time` | **0 occurrences** — APScheduler's default of 1 s applies |
+| Scheduler | `BackgroundScheduler(timezone='UTC')` |
+| `executors=` | **absent** — the default thread pool runs all 11 jobs |
+
+So overlap of a producer job *with itself* would be prevented by
+`max_instances=1`, and the fenced lease makes that belt-and-braces. What is
+not prevented is a multi-second producer job sitting in the same default
+thread pool as the scoring pass and the fetch loops. **Codex's ruling asks for
+the daemon's execution and overlap behaviour to be checked before multi-second
+work goes into its scheduler; that is the check, and it says the scheduler
+would not double-fire the job but would run it beside ten others in one
+pool.**
+
+**Not measured here:** APScheduler's actual behaviour under load, the scoring
+pass, retention and partition maintenance, or the Reddit fetch loop. This box
+runs neither the real ingest cycle nor MariaDB.

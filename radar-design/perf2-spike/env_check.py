@@ -27,6 +27,9 @@ def bootstrap():
             sys.path.insert(0, path)
 MIN_POOL_MB = 2000
 TARGET_POOL_MB = 2560
+# What models.py declares for radar_bucket_sources -- the deployed schema.
+DEPLOYED_INDEXES = {'PRIMARY', 'ix_radar_bucket_sources_start',
+                    'ix_radar_bucket_sources_coverage'}
 
 
 def preflight(db, label=''):
@@ -38,6 +41,16 @@ def preflight(db, label=''):
     rows = db.session.execute(
         sa.text('SELECT COUNT(*) FROM radar_bucket_sources')).scalar()
     version = db.session.execute(sa.text('SELECT VERSION()')).scalar()
+    # The fixture's STORAGE, not the branch's code. `codex/radar-perf2` does
+    # not carry the held migration, but PERF1's `acceptance.py` builds
+    # `ix_radar_bucket_sources_agg` physically and never drops it -- and it
+    # was still there when this workstream started. Every build time taken
+    # with it present is about 0.9 s optimistic. See `fixture_schema.py`.
+    indexes = set(db.session.execute(sa.text(
+        'SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS'
+        ' WHERE TABLE_SCHEMA = :s AND TABLE_NAME = :t'),
+        {'s': DB, 't': 'radar_bucket_sources'}).scalars().all())
+    extra = sorted(indexes - DEPLOYED_INDEXES)
     print('=' * 72)
     if label:
         print('RUN: %s' % label)
@@ -45,7 +58,14 @@ def preflight(db, label=''):
     print('engine:      %s   (the target runs MariaDB 10.11.14)' % version)
     print('buffer pool: %.0f MB   (target 2560 MB)' % pool)
     print('fixture:     %s radar_bucket_sources rows' % format(rows, ','))
+    print('indexes:     %s%s'
+          % ('deployed schema' if not extra else 'EXTRA: %s' % extra,
+             '' if not extra else '  <-- NOT the deployed schema'))
     print('=' * 72, flush=True)
+    assert not extra, (
+        'radar_bucket_sources carries %s, which the target does not. Run '
+        'perf2-spike/fixture_schema.py --fix. Every build time measured with '
+        'the held index present is about 0.9 s optimistic.' % extra)
     assert pool >= MIN_POOL_MB, (
         'buffer pool is %.0f MB; at the local default of 128 every timing is '
         'disk-bound and every ratio is an artifact' % pool)
