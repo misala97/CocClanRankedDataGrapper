@@ -99,9 +99,43 @@ def main():
                          else 'absent'))
                 assert not found, 'account data reached the shared payload'
         # The blob is also account-free of the ACCOUNT, not only its tickers.
-        for needle in (str(user_a), str(user_b), 'perf2_a', 'perf2_b'):
-            assert needle not in blob_text or needle.isdigit(), needle
-        print('  no account id or username appears in the blob either')
+        #
+        # The first version of this check was `needle not in blob_text or
+        # needle.isdigit()`, which an independent review caught: a numeric id
+        # makes the right half unconditionally true, so the id half asserted
+        # nothing at all. A bare integer is genuinely not byte-searchable in a
+        # payload full of integers -- so the id is checked STRUCTURALLY, by
+        # key name, and the usernames are checked by bytes.
+        for needle in ('perf2_a', 'perf2_b'):
+            assert needle not in blob_text, needle
+        print('  usernames: absent from the blob (byte search)')
+
+        ACCOUNT_KEYS = {'user', 'user_id', 'username', 'account', 'account_id',
+                        'watching', 'watch_rows', 'viewer', 'owner'}
+
+        def account_keys_in(node, path='payload'):
+            found = []
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key in ACCOUNT_KEYS:
+                        found.append('%s.%s' % (path, key))
+                    found += account_keys_in(value, '%s.%s' % (path, key))
+            elif isinstance(node, list):
+                for index, value in enumerate(node[:5]):
+                    found += account_keys_in(value, '%s[%d]' % (path, index))
+            return found
+
+        leaked = account_keys_in(stored)
+        print('  account-shaped keys anywhere in the blob: %s'
+              % (', '.join(leaked) if leaked else 'none'))
+        assert not leaked, leaked
+
+        # TEETH for THIS check: it must be able to find one.
+        probe = dict(stored)
+        probe['user_id'] = user_a
+        assert account_keys_in(probe) == ['payload.user_id'],             'the key search cannot find an account key that IS there'
+        print('  mutation check: the same search DOES find an injected'
+              ' user_id -> payload.user_id')
 
         # TEETH: the byte search must be able to fail. Prove it by looking
         # for something that IS in the blob.

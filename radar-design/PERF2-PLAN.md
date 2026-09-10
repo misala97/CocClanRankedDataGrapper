@@ -81,19 +81,25 @@ serialized with `json.dumps(..., sort_keys=True, separators=(',', ':'))` and
 hashed with SHA-256. The hash is the primary key; the JSON is stored beside it
 so a key is readable without a decoder.
 
-**Normalization is limited to transformations proven payload-identical**, and
-Task S4 proves each one before it is adopted:
+**Normalization is limited to transformations proven payload-identical.**
+S4 ruled on each by building both ways and digesting the payloads. **Two of
+the five predictions written here before the measurement were wrong, in
+opposite directions**, and the table now carries the verdict rather than the
+guess:
 
-| Candidate | Why it is a candidate | Risk it must clear |
+| Candidate | MEASURED | Why |
 | --- | --- | --- |
-| dedupe `sources` | `?sources=reddit,reddit` is one selection | none expected |
-| sort `sources` | the payload's `sources` is already the rooted sorted set | `board.build` passes the list into `IN (...)`; order must not reach the payload |
-| dedupe `segments` | same | none expected |
-| **sort `segments`** | would collapse `?segment=mid,micro` and `?segment=micro,mid` | **the payload echoes `list(segments)` in request order** — likely rejected |
-| force `dir='desc'` when `sort is None` | `board.build` ignores direction unless `sort in SORT_KEYS` | the payload echoes `dir` |
+| dedupe `sources` | **ADOPT** | byte-identical |
+| sort `sources` | **ADOPT** | `build_payload` overwrites `board.sources` with `sorted({source_root(s) …})`, a rooted sorted SET, which absorbs order and duplicates before the payload exists |
+| dedupe `segments` | **REJECT** | the payload echoes `list(segments)` verbatim, so `?segment=mid,micro,mid` is a different payload from `?segment=mid,micro` |
+| sort `segments` | **REJECT** | same echo |
+| force `dir='desc'` when `sort is None` | **REJECT** | the payload echoes `dir` |
 
-Any transformation that changes one byte of the payload is not adopted. A
-larger key space is cheaper than a wrong board.
+A duplicated segment name is therefore a distinct key. That is a larger key
+space than this section first assumed, and it is still cheaper than a wrong
+board. **Neither adopted transformation is applied by the spike's reader or
+producer** — `keys.canonical` takes no flags — so the sources-ordering saving
+is ruled but not implemented, and the product slice must implement it.
 
 **`market` is never left to the default in a key.** `parse_query` resolves an
 omitted market through `default_market(now)`, which flips between `de` and `us`
@@ -109,7 +115,7 @@ consistent.
 ```sql
 CREATE TABLE radar_board_results (
   key_hash          CHAR(64)      NOT NULL,
-  key_json          VARCHAR(1024) NOT NULL,
+  key_json          TEXT          NOT NULL,   -- see "how long a key can be"
   payload_version   SMALLINT      NOT NULL,
   producer_revision VARCHAR(64)   NULL,
   state             VARCHAR(16)   NOT NULL,   -- pending|building|ready|failed
@@ -135,12 +141,34 @@ CREATE TABLE radar_board_results (
 ```
 
 **Bounds.** Warm keys are never evicted. On-demand keys are capped at
-`MAX_ON_DEMAND_KEYS = 128` rows, evicted by `requested_at` ascending. The queue
-is capped at `MAX_PENDING = 32`; a cold key arriving past that cap is answered
-`busy` — truthfully — rather than lengthening a queue nobody will reach in
-time. Payload size is measured in Task S1 and bounds the table: a table cap of
-`MAX_ON_DEMAND_KEYS` plus the warm set, times the measured payload, is the
-storage claim, and it is a claim only once measured.
+`MAX_ON_DEMAND_KEYS = 128` rows, evicted by `requested_at` ascending. A cold
+key arriving past `MAX_PENDING = 32` queued jobs is answered `busy` —
+truthfully — rather than lengthening a queue nobody will reach in time.
+
+**Correction, from the review.** `MAX_PENDING` as the spike implements it
+checks depth only when the row does not already exist, so a `ready` or
+`failed` row that a stale read re-enqueues moves to `pending` without
+consulting the cap. **The real ceiling is the row cap — 16 warm plus 128
+on-demand — not 32.** That is still bounded, which is what Codex's ruling
+requires, but it is not what this section originally claimed. The product
+slice must either check the cap on every transition into `pending` or state
+the row cap as the only bound.
+
+Storage measured, not assumed: the largest compressed payload is **12,640 B**,
+so 144 rows is **1.7 MB**.
+
+**How long a key can be.** `parse_query` bounds the source *count* at
+`MAX_SOURCES = 37` but places **no length limit on a source name** —
+`reddit:<anything>` passes the root check. Thirty-seven long-but-legal names
+produce a `key_json` of **3,958 characters**, measured. Such a URL returns a
+board today, so `VARCHAR(1024)` — or the spike's `VARCHAR(2048)` — turns a
+working request into a 500 under strict SQL mode, and into a **wrong board**
+if strict mode is ever off, because `key_hash` would be computed over the full
+JSON while `key_json` was silently truncated and the producer would then
+decode a different selection under that hash. `TEXT` removes both. The
+practical ceiling is gunicorn's `limit_request_line` (4094 bytes by default),
+and the producer must assert that `query_from_json(key_json)` reproduces the
+query before it publishes.
 
 ## I.3 The producer
 
@@ -177,9 +205,54 @@ fail:     UPDATE ... SET state='failed', last_error=:msg,
            WHERE key_hash=:k AND fence=:my_fence
 ```
 
-`backoff(attempts)` is `min(30 * 2 ** (attempts - 1), 900)` seconds. A key that
-has failed `MAX_ATTEMPTS = 6` times keeps its last good payload, if it has one,
-and stops being retried until a reader asks again, which resets `attempts`.
+`backoff(attempts)` is `min(30 * 2 ** (attempts - 1), 900)` seconds.
+
+**Correction, from S6 — the rule this section first stated has no backoff at
+all.** It said a key that has failed `MAX_ATTEMPTS = 6` times "stops being
+retried until a reader asks again, which resets `attempts`". Readers ask
+constantly; the island polls. Measured over thirty simulated minutes of a
+permanently broken key with a reader polling every five seconds: **360 polls
+produced 360 build attempts, and the backoff never grew past 30 s** — the
+unbounded duplicated work Codex's ruling forbids, reintroduced through the
+reset clause.
+
+The rule is therefore:
+
+- `enqueue` records demand (`requested_at`, `request_count`) and **never**
+  touches `attempts` or `next_attempt_at`. A key inside a live backoff keeps
+  its state.
+- `attempts` resets **only** on a successful publish, and is clamped at
+  `MAX_ATTEMPTS` by the claim.
+- At `MAX_ATTEMPTS` the key is **parked**: `next_attempt_at = now + 900 s`, a
+  retry *rate* rather than a stop. Recovery needs no manual step and no number
+  of readers can make it faster.
+
+Same simulated run under this rule: **6 attempts**, backoff 30/60/120/240/480/900 s,
+and the reader was served the last good board — marked stale, with its real
+age — throughout.
+
+**`as_of` is stamped when the producer CLAIMS, per key — never once per
+sweep.** This section did not say which, and it matters: pinning one `now` for
+a whole sweep publishes the last key of the sweep already a sweep old, and
+moves the worst warm-key age from about 121 s to about 186 s. Both were
+measured; per-claim is the rule.
+
+**The claim must also compare `payload_version`.** As the spike implements it,
+`claim` ignores the row's stored version. During a rolling restart a v1
+producer republishes at `payload_version = 1`, a v2 reader treats that as
+missing and re-enqueues, and the key never converges — a live-lock for as long
+as both versions run. The claim therefore takes the producer's own version and
+a row whose stored version is older is rebuilt rather than served. This was
+reasoned from the code by the independent review and is **not** reproduced;
+S7 Step 4 tested only the single-version case.
+
+**`producer_revision` is written and never read.** It is a diagnostic column,
+not an invalidation mechanism; invalidation is `PAYLOAD_VERSION`, a constant a
+human must remember to bump. Anything whose serialization changes without that
+bump serves stale bytes under a new deployment. If that guarantee needs to be
+structural rather than remembered, the version has to be derived — from a hash
+of the serializer's own source, say — and that is a decision, not an
+implementation detail.
 
 **This answers the two defects the in-process single-flight had**, which Codex
 named: there is no unclaimed retry path, because a builder that does not hold

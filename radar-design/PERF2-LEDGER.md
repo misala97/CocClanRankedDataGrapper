@@ -11,16 +11,16 @@ appended to `CODEX-DECISIONS.md`.
 | PERF2 design written | **Done** — `PERF2-PLAN.md` Part I |
 | S1 store and payload weight | **Done** — `run_s1_payload.py` |
 | S2 cross-process reuse and cold miss | **Done** — `run_s2_reuse.py`. Warm PASSES at 33.5 ms; cold is 6.90 s against a 2 s target and an 8 s abort |
-| S3 refresh capacity | **Done** — `run_s3_capacity.py`. 120 s fits, 55% duty cycle |
+| S3 refresh capacity | **Done** — `run_s3_capacity.py`. 120 s fits a WARM sweep on a QUIET database (65.8 s, 55% duty). The **cold first sweep is 102.1 s and does not fit**, and under one bulk write the sweep fell to 12.8 s/key (S9) |
 | S4 semantics parity | **Done** — `run_s4_parity.py`. 12/12 identical; two of Part I.1's five predictions were wrong |
 | S5 account isolation | **Done** — `run_s5_isolation.py`. No leak |
 | S6 bounded failure | **Done** — `run_s6_failure.py`. Part I.3's retry rule had no backoff at all; replaced and measured |
 | S7 restart, empty, expired | **Done** — `run_s7_lifecycle.py`. All four |
 | S8 filter switching and browser | **Done** — `run_s8_switching.py`, `run_s8_browser.py`. Warm PASSES; the `pending` render is a FALSE EMPTY STATE |
 | S9 ingest contention | **Done** — `run_s9_contention.py`. Producer costs the write +7%; the write costs the producer far more |
-| T1 worker threading (prepare only) | **Done** - `run_t1_workers.py`. The claim is CONFIRMED: 7,602 ms against 9 ms. Recommendation is still DO NOT ship it yet |
-| T2 access-log proposal (prepare only) | Not started |
-| Independent read-only review | Not started — the dispatcher's to schedule |
+| T1 worker threading (prepare only) | **Done** — `run_t1_workers.py`. CONFIRMED **in a MODEL of gunicorn, not gunicorn** (Windows, no WSL): 7,602 ms against 9 ms. Recommendation is still DO NOT ship it yet |
+| T2 access-log proposal (prepare only) | **Done** — `PERF2-TELEMETRY.md`, verified with `perf2-spike/telemetry_format_probe.py` against gunicorn's own `Logger.atoms`. Prepared, NOT activated |
+| Independent read-only review | In progress |
 | Deployment | **Not authorized.** Full product implementation follows Codex's review of this return. |
 
 ## Workspace
@@ -32,7 +32,7 @@ appended to `CODEX-DECISIONS.md`.
 | Base | **`4221196`** — the deployed SHA |
 | Migration head | `a7c31f0b52d4`, unchanged from production |
 | Local database | `personal_apps_radar_perf1` (`PERSONAL_DB_NAME` in this worktree's `.env`) |
-| Fixture | 9,272,064 `radar_bucket_sources` rows, verified present on 2026-09-10 |
+| Fixture | **9,269,184** `radar_bucket_sources` rows, verified present on 2026-09-10 |
 | Buffer pool | 2560 MB, matching the target, verified on 2026-09-10 |
 
 **Why the base is the deployed SHA and not PERF1's head.** Codex's ruling holds
@@ -99,11 +99,66 @@ re-run in this workstream, and no claim here rests on re-running them.
 
 ---
 
+## The independent read-only review, and what it found
+
+One reviewer, read-only, dispatched after the spike was complete and told to
+hunt the failure classes this workstream has already produced once. **It found
+six findings plus eight errors of record, one of which is a wrong-board
+vector.** Its verdict on the mechanism: *"the fencing is real... nothing here
+retracts a headline number."*
+
+Every finding and its disposition:
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| 1 | **A legal request cannot be stored.** `parse_query` bounds the source COUNT at 37 but places no length limit on a source NAME, so 37 long-but-legal `reddit:<anything>` names give a `key_json` of **3,958 chars** against the spike's `VARCHAR(2048)`. Today that URL returns a board; after PERF2 it would 500 — and with strict mode off, `key_hash` covers the full JSON while `key_json` truncates, so the producer decodes a **different selection** under that hash | **CONFIRMED independently** (3,958 chars, reproduced). Part I.2 corrected to `TEXT` plus a round-trip assert before publish. **This was the only wrong-board vector found.** |
+| 2 | **"120 s fits, 55% duty" is a leading claim two of the spike's own numbers contradict** — the cold first sweep is 102.1 s (×1.3 = 132.7 s, does not fit) and S9 measured 12.8 s/key under a write | **Accepted.** The status row now says warm sweep, quiet database, and names both contradicting numbers. Exactly the shape Codex ruled against in PERF1. |
+| 3 | **T1's model is labelled as gunicorn in both places a reader looks first** — the status table and the Part V decision row — while the caveat lives only in the body | **Accepted.** Both rows now say MODEL. |
+| 4 | **S5's account-id assertion was vacuous** (`or needle.isdigit()` is always true for a numeric id) and the ledger reported it as measured | **Accepted, fixed and re-run** with a structural key search that has teeth in both directions. See S5. |
+| 5 | **`MAX_PENDING = 32` is not a queue bound** — the depth check runs only when the row does not exist, so a re-enqueued `ready`/`failed` row bypasses it | **Accepted.** Part I.2 corrected: the real ceiling is the row cap, 144. |
+| 6 | **`producer_revision` is written and never read**, and `claim` does not compare versions, so a mixed-version deploy live-locks a key | **Accepted, not reproduced.** Part I.3 corrected; flagged to Codex as a decision (derive the version, or keep bumping a constant by hand). |
+
+Errors of record it caught, all corrected above: the fixture is **9,269,184**
+rows not 9,272,064; the ops-summary cost is **93.8 ms** not the contaminated
+pass's 98.7 ms; S9's collapse is a **third** not a fifth; S4's "0 of 50 rows
+carry a tone" was read from a leaked loop variable and describes the wrong
+selection; S8's warm row was measured with `user_id=None` and so excludes the
+~30 ms per-account work that S2 says is most of a warm read; the adopted
+`sort sources` normalization is **ruled but not implemented**; and
+`fixture_schema.py --fix` is self-blocking, because `main()` calls the
+`preflight` that asserts the very contamination the fix exists to remove.
+
+**What it tried to break and could not** — worth as much as the findings:
+
+- **The fence discriminates.** The reviewer removed `AND fence = :fence` from
+  `publish` in its own scratch harness: with it, the overtaken builder is
+  rejected and the newer payload stands; **without it, the OLD payload
+  overwrites the NEW one**, and S6's assertions fail. This is not a test that
+  passes against its own bug.
+- **The baseline is not contaminated.** `preflight` really queries
+  `information_schema.STATISTICS`; the two sections not re-run after the index
+  was dropped (S4, S5) contain **no build timing**, and S5's blob bytes match
+  the re-run S1 exactly — payloads are index-independent. One stale figure
+  survived and is corrected above.
+- **Key derivation is injective**, its inverse exact, and `market` is resolved
+  before keying — no collision path other than finding 1.
+- **The board is genuinely viewer-invariant**, by construction, not by test.
+- **Parity is not circular**: the producer calls `board_mod.build` directly,
+  bypassing `board_cache`, so the store's payload is an independent build.
+- The PERF1 corrections do lead with the retraction rather than bury it.
+- The telemetry proposal is verified rather than asserted.
+
+One thing the reviewer noticed that the spike had not: `shots/s8-unwarmed.png`
+carries a header stamped **"updated 19:21 CEST"** for a board that was never
+built. The false empty state also tells the reader a time.
+
+---
+
 ## Measurements
 
 Every entry names the script that produced it, the database it ran against and
 the buffer pool that run reported. **Every run below reported
-`personal_apps_radar_perf1`, 9,272,064 `radar_bucket_sources` rows and a
+`personal_apps_radar_perf1`, **9,269,184** `radar_bucket_sources` rows and a
 2560 MB buffer pool**; each script asserts the pool and refuses to continue
 below 2000 MB, so a number here cannot have come from a 128 MB run.
 
@@ -383,7 +438,7 @@ cadence with margin, so the constraint is the worst sweep times 1.30.
 | headroom | about 1.4x the current warm set before 120 s stops fitting |
 
 **Part V.2 and V.5 are answered: sixteen keys at 120 s.** The headroom is real
-but thinner than it looks — S9 measured the sweep collapsing to a fifth of
+but thinner than it looks — S9 measured the sweep collapsing to a THIRD of
 this rate while ingest writes, so this is a quiet-database number.
 
 **Step 4 — the worst age a warm key reaches.** Measured, not reasoned: the
@@ -429,7 +484,7 @@ and derives `p95_age_minutes` from it.
 | On a box with a backlog | that field moves with the wall clock between two builds of the same board |
 
 **This is a second, independent reason to freeze the ops blocks into the
-stored payload** (S1 Step 3 gave the first, 98.7 ms). Recomputed per read,
+stored payload** (S1 Step 3 gave the first; **93.8 ms** on the deployed schema — the 98.7 ms this line first carried was from the contaminated pass, and S4 was not re-run because it holds no build timing). Recomputed per read,
 `sentiment_ops` makes two readers of one stored board disagree about a field
 neither of them asked to be live. The fixture cannot demonstrate the drift
 because it has no backlog; the code path is quoted above and is not in doubt.
@@ -507,34 +562,61 @@ printed by the script.
 
 ### S5 — private data stays private
 
-`radar-design/perf2-spike/run_s5_isolation.py`, one run, 2026-09-10. Two
-accounts read one stored key; the two reads also ran as **separate OS
-processes**.
+`radar-design/perf2-spike/run_s5_isolation.py`. First run 2026-09-10;
+**re-run the same day after the independent review found one of its assertions
+vacuous** — see below. Two accounts read one stored key; the two reads also ran
+as **separate OS processes**.
 
 **The test is built so it can fail.** Both watch lists are drawn from tickers
 that are *absent* from the stored blob, checked before the accounts are made —
-a raw-byte search for a ticker that is legitimately on the board would pass
-for the wrong reason.
+a raw-byte search for a ticker that is legitimately on the board would pass for
+the wrong reason.
 
 | | |
 | --- | --- |
-| Stored blob | 10,801 bytes compressed, 128,448 bytes JSON |
+| Stored blob | 9,976 bytes compressed, 127,710 bytes JSON |
 | A watches | `T00000, T00001, T00002` |
 | B watches | `T00003, T00004` |
 | `watching` in the stored payload | **absent** |
 | `watch_rows` in the stored payload | **absent** |
 | Raw-byte search for each of the five tickers | **absent, all five** |
-| Account id or username in the blob | **absent** |
+| Account usernames in the blob | **absent**, byte search |
+| Account-shaped KEYS anywhere in the blob | **none** |
 | A's response | A's three tickers, 3 watch rows, **none of B's** |
 | B's response | B's two tickers, 2 watch rows, **none of A's** |
 | The shared half of the two responses | **IDENTICAL** |
 
-**Teeth:** the same byte search *does* find `T03960`, which is on the board,
-so it is capable of finding something. And the two responses' digests differ
-(`f4f30cd9f9d4` vs `076bc7f4b545`) — proof the per-account half is actually in
-the response and not silently missing.
-
 **No isolation failure.**
+
+**The correction, and why it matters more than the result.** The account-id
+check read `assert needle not in blob_text or needle.isdigit()`. For a numeric
+user id the right half is unconditionally true, so **that assertion tested
+nothing** — and this ledger reported "Account id or username in the blob:
+absent" as a measured result when only the usernames had been measured. That
+is precisely the failure class PERF1 had to retract a test for, found here by
+an independent reviewer rather than by the author.
+
+A bare integer genuinely cannot be byte-searched inside a payload full of
+integers, so the id is now checked **structurally**: every key in the decoded
+payload tree, recursively, against `user`, `user_id`, `username`, `account`,
+`account_id`, `watching`, `watch_rows`, `viewer`, `owner`.
+
+**Teeth, both directions:**
+
+```
+mutation check: the same search DOES find an injected user_id -> payload.user_id
+mutation check: search the same way for T03960, which IS on the board -> True
+```
+
+The two responses' digests differ (`d2bc7d690439` vs `60002e4d57a5`) — proof
+the per-account half is actually in each response and not silently missing.
+
+**And the structural argument the reviewer added, which is stronger than the
+test.** The blob is produced by `producer.build_and_serialize`, which never
+imports `watch`; `board.py`, `leaderboard.py`, `coverage.py` and `serialize`
+contain no `current_user`, no `request` and no Flask `session`. A producer
+building with no request context **cannot** produce a per-account payload. The
+test is a proof of construction, and this ledger should have said so.
 
 ---
 

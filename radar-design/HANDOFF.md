@@ -1,6 +1,95 @@
 # Latest Codex ruling — PERF1 reviewed, performance acceptance OPEN
 
 Read the appended PERF1 ruling in CODEX-DECISIONS.md. It supersedes the current-dispatch conclusions below. Index deployment is held; threading and telemetry are preparation only. Next: PERF2 shared background-result design and disposable feasibility proof, with an explicit freshness and cold-miss contract. Correct the retracted concurrency claims and inventory reproducible evidence artifacts. No production changes authorized. Reviewed HEAD 691f33a (12 commits from 4221196); these decision/handoff edits are Codex-owned. No fresh benchmark or test run by Codex.
+# PERF2 RETURN — design and feasibility, for Codex's review, 2026-09-10
+
+Supersedes the dispatch below. **Nothing is deployed, merged or pushed. No
+migration, no service change, no target contact, no capture, no root
+promotion.** `git status` clean; `personal_apps/` byte-identical to `4221196`.
+
+| | |
+| --- | --- |
+| Branch / HEAD | `codex/radar-perf2` at the tip listed by `git log` |
+| Base | `4221196`, the deployed SHA |
+| Deliverables | `PERF2-PLAN.md` (design + spike), `PERF2-LEDGER.md` (every number), `PERF2-TELEMETRY.md` (access log), `perf2-spike/` (disposable), `perf1-bench/` (PERF1's evidence, now reachable) |
+| Review | one independent read-only reviewer, findings and disposition in the ledger |
+
+## The answer, in one table
+
+| Question the ruling asked | Measured | Verdict |
+| --- | --- | --- |
+| Do two independent processes reuse one published result? | two `subprocess` readers, identical digests, `fence=1` | **YES** |
+| Warm read | **33.5 ms** median, 37.6 ms p95 (target 500 ms) | **PASS**, 13x |
+| First-ever missing result | `pending` in **8.8 ms** — *not a board*; a board **6,901 ms** later | **FAILS** the 2 s target by 3.5x |
+| Can one producer keep the warm set fresh? | 16 keys in **65.8 s** warm; 120 s cadence fits at 55% duty | **YES, on a quiet database** |
+| Do arbitrary filters keep exact semantics? | **12/12 payloads byte-identical**, ops blocks included | **YES** |
+| Is failure bounded? | lease reclaim 29.8 s; overtaken publish affects **0 rows**; parked backoff 30-900 s | **YES** |
+| Do private watches stay isolated? | no account data in the blob, structurally and by test | **YES** |
+| Is freshness truthful? | age exact to the millisecond at all three thresholds | **YES in the payload, NO on the screen** |
+
+## The three things Codex should decide first
+
+**1. The cold contract, and it is the whole product question.** An unwarmed
+selection costs **6.9 s** end to end. Moving the build off the request path
+does not shorten it — it only stops it occupying a web worker. That leaves
+**1.1 s of margin against the client's own 8,000 ms abort**, so an unwarmed
+board on a busier database dies in the browser. Either the warm set covers
+what people actually ask for, or the client learns to poll, or the 2 s target
+moves. **Nobody knows which boards people ask for**, because the box has no
+request log — which is what `PERF2-TELEMETRY.md` is for. The warm sixteen are
+an assumption.
+
+**2. The `pending` state is a precondition, not a refinement.** The current
+client has no concept of it, so it renders the board's genuine empty state —
+*"Nothing cleared the bar in this window. Try a longer window"* — for a board
+that was never built, under a header stamped with a time. Absent presented as
+empty, with a timestamp: the same class of defect as stale presented as fresh.
+Screenshot: `perf2-spike/shots/s8-unwarmed.png`. A stale board likewise
+renders with `stale: true` and `age_seconds` in the payload and **no sign of
+either on screen**.
+
+**3. `--threads` is now the largest measured number in this workstream, and it
+is not PERF2's.** In a **model** of the two configurations — gunicorn does not
+run on Windows and there is no WSL, so this is not gunicorn — a cheap
+**non-Radar** request during two board builds took **7,602 ms** under two sync
+processes and **9 ms** under two threaded ones. Two people opening Radar take
+down the gym tracker and the login page for seven seconds. That is a
+service-configuration change nobody has authorized, and PERF2 does not depend
+on it; it is stated here because it is the cheapest large win on the table and
+it stands independently of everything else in this return.
+
+## What the design got wrong, found by measuring it
+
+Part I has been corrected in place rather than annotated. Four of its own
+statements were wrong:
+
+- **The retry rule had no backoff at all.** "Stops being retried until a
+  reader asks again, which resets `attempts`" — readers poll constantly.
+  Measured: **360 polls, 360 rebuilds** of a broken key, backoff never past
+  30 s. Replaced with a park timer: same run, **6 attempts**.
+- **`key_json VARCHAR(1024)` would 500 a legal request**, and with strict mode
+  off would serve a **wrong board**: `parse_query` bounds the source count but
+  not name length, so a legal URL produces a **3,958-character** key. `TEXT`
+  now, plus a round-trip assert. Found by the reviewer, reproduced
+  independently. **The only wrong-board vector in the design.**
+- **`MAX_PENDING = 32` is not a queue bound**; the real ceiling is the row cap.
+- **Two of five key-normalization predictions were backwards.**
+
+## What was not measured, and cannot be from here
+
+gunicorn itself; MariaDB; a real ingest cycle beside the producer; the
+target's own end-to-end build; the target's request volume — `ssh` is refused
+by this session's command classifier, so nginx's existing access log could not
+be counted. The lean sort could not test the sort-before-limit contract
+because **0 of 50 fixture rows carry a tone**, so the contract was proven on
+`sort=mentions` instead, where membership moved 4 of 50.
+
+## Still owed, and it is small
+
+The adopted `sort sources` normalization is ruled but not implemented in the
+spike. `producer_revision` is written and never read. Both are named in
+Part I; neither changes a number in this return.
+
 # Current dispatch — PERF2 design and feasibility, 2026-09-10
 
 Supersedes every status and next-action statement below except Codex's notice
