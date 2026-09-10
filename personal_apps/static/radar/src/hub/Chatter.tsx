@@ -689,10 +689,30 @@ function Price({ row }: { row: Row }) {
         {formatPrice(row.price, quote.currency)}
       </strong>
       <span className={`rh-sub num ${moveClass(move)}`}>
-        {move === null ? 'Move unknown' : `${move > 0 ? '+' : ''}${(move * 100).toFixed(1)}%`}
+        {move === null
+          ? 'Move unknown'
+          : `${move > 0 ? '+' : ''}${(move * 100).toFixed(1)}%`}
+        {move !== null && tapeNote(row.price_status)
+          ? <span className="muted"> · {tapeNote(row.price_status)}</span>
+          : null}
       </span>
     </>
   )
+}
+
+/** What to say about a move the exchange is not currently confirming.
+ *
+ *  The move itself is measured either way -- two snapshots in the window and
+ *  the difference between them. What changes with the session is whether it is
+ *  still moving, and a reader looking at `-2.3%` at two in the morning deserves
+ *  to be told which. `Move unknown` is reserved for the one case that really is
+ *  unknown: fewer than two snapshots, decided in `quotes.moves_for`. */
+function tapeNote(status: Row['price_status']): string | null {
+  if (status === 'closed') return 'at close'
+  // The exchange is open and this tape is not printing. The row already
+  // carries the No print badge; this says what the number is in spite of it.
+  if (status === 'stale') return 'no print since'
+  return null
 }
 
 function moveClass(move: number | null): string {
