@@ -11,6 +11,7 @@ quietly re-opening the collision.
 Sources are the one deliberate normalization, and it has its own test saying
 so. No database: a key is a pure function of an already-parsed query.
 """
+import hashlib
 import json
 
 import pytest
@@ -54,7 +55,7 @@ def test_sources_are_deduplicated_and_sorted():
 
 
 def test_market_must_be_resolved():
-    with pytest.raises(AssertionError):
+    with pytest.raises(board_keys.BadKey):
         board_keys.canonical(q(market='moon'))
 
 
@@ -79,3 +80,21 @@ def test_a_long_legal_key_round_trips():
 
 def test_the_key_version_is_two():
     assert json.loads(board_keys.canonical(q())[1])['v'] == 2
+
+
+def test_round_trips_catches_a_hash_match_that_cannot_reproduce():
+    """round_trips has two checks because they fail differently. The first
+    only confirms key_json wasn't corrupted in transit -- it says nothing
+    about whether THIS build would still write that text. A row whose
+    sources were stored unsorted hashes fine against itself, but canonical()
+    sorts sources, so re-canonicalising the decoded query never gets back
+    to the same bytes."""
+    key_hash, key_json = board_keys.canonical(q(sources=['reddit', 'bluesky']))
+    assert board_keys.round_trips(key_hash, key_json)
+
+    fields = json.loads(key_json)
+    key_json2 = json.dumps({**fields, 'sources': ['reddit', 'bluesky']},
+                           sort_keys=True, separators=(',', ':'))
+    key_hash2 = hashlib.sha256(key_json2.encode('utf-8')).hexdigest()
+
+    assert not board_keys.round_trips(key_hash2, key_json2)

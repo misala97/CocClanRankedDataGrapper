@@ -65,6 +65,30 @@ def test_a_worktree_gitfile_is_followed(tmp_path):
     assert board_namespace.build_revision(env={}, root=checkout) == 'd' * 40
 
 
+def test_a_relative_gitfile_path_resolves_from_the_worktree_root(tmp_path):
+    """git writes an absolute gitdir on this machine, but a relative one is
+    legal too, and it is resolved against the worktree root the `.git` file
+    lives in -- not the process cwd, and not the main repository."""
+    git_dir = tmp_path / 'main' / '.git' / 'worktrees' / 'wt'
+    git_dir.mkdir(parents=True)
+    (git_dir / 'HEAD').write_text('f' * 40 + '\n')
+    checkout = tmp_path / 'checkout'; checkout.mkdir()
+    (checkout / '.git').write_text('gitdir: ../main/.git/worktrees/wt\n')
+
+    assert board_namespace.build_revision(env={}, root=checkout) == 'f' * 40
+
+
+def test_head_and_ref_files_with_crlf_line_endings_resolve(tmp_path):
+    """A Windows git client can write CRLF; the trailing \\r must not end up
+    glued onto the ref name or the revision."""
+    git = tmp_path / '.git'; git.mkdir()
+    (git / 'HEAD').write_bytes(b'ref: refs/heads/main\r\n')
+    (git / 'refs' / 'heads').mkdir(parents=True)
+    (git / 'refs' / 'heads' / 'main').write_bytes(b'a' * 40 + b'\r\n')
+
+    assert board_namespace.build_revision(env={}, root=tmp_path) == 'a' * 40
+
+
 def test_a_detached_head_is_the_revision(tmp_path):
     """A deploy that checks out a tag has no branch to follow."""
     git = tmp_path / '.git'; git.mkdir()

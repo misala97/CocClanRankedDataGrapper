@@ -34,6 +34,17 @@ import json
 KEY_VERSION = 2
 
 
+class BadKey(ValueError):
+    """A Query or a key_json does not describe a real board.
+
+    Raised rather than asserted, because `python -O` strips `assert` and
+    round_trips must be able to turn a corrupt or outdated key into a quiet
+    False without depending on a guard that a deploy flag can remove. A
+    ValueError subclass because that is already what json.loads raises for
+    the same shape of mistake -- a caller only has one exception to catch.
+    """
+
+
 def canonical(query):
     """(key_hash, key_json) for a parsed query.
 
@@ -41,13 +52,13 @@ def canonical(query):
     produces the same bytes: the hash is over exactly this text, and the two
     halves of the key are only trustworthy together if the text is stable.
 
-    The market is asserted rather than validated. parse_query resolves it to
+    The market is checked rather than trusted. parse_query resolves it to
     us|de before a Query exists, so a third value here is a caller that built
     a Query by hand -- a bug to stop where it happened, not a viewer's typo
     to answer politely.
     """
-    assert query.market in ('us', 'de'), \
-        f'the market must be resolved before keying: {query.market!r}'
+    if query.market not in ('us', 'de'):
+        raise BadKey(f'market must be resolved: {query.market!r}')
     fields = {
         'v': KEY_VERSION,
         'sources': sorted(set(query.sources)),
@@ -70,20 +81,35 @@ def query_from_json(key_json):
     the route module, which imports this one to key its own cache; importing
     it back at load time would close that circle. Rebuilding a query is also
     the rarer path -- writing a key does not need the class at all.
+
+    Every way this can fail -- text that isn't json, json that isn't an
+    object, a version that isn't current, a field that's missing or the
+    wrong shape -- is raised as BadKey. round_trips catches one exception,
+    not whatever stdlib type happened to notice the corruption first.
     """
     from .routes.api import Query
 
-    fields = json.loads(key_json)
-    assert fields.get('v') == KEY_VERSION, \
-        f"not a v{KEY_VERSION} key: {fields.get('v')!r}"
-    return Query(sources=list(fields['sources']),
-                 segments=list(fields['segments']),
-                 window=fields['window'],
-                 limit=fields['limit'],
-                 min_venues=fields['venues'],
-                 market=fields['market'],
-                 sort=fields['sort'],
-                 direction=fields['dir'])
+    try:
+        fields = json.loads(key_json)
+    except json.JSONDecodeError as exc:
+        raise BadKey(f'not valid json: {exc}') from exc
+
+    if not isinstance(fields, dict):
+        raise BadKey(f'not a key payload: {fields!r}')
+    if fields.get('v') != KEY_VERSION:
+        raise BadKey(f"key version {fields.get('v')!r} is not v{KEY_VERSION}")
+
+    try:
+        return Query(sources=list(fields['sources']),
+                     segments=list(fields['segments']),
+                     window=fields['window'],
+                     limit=fields['limit'],
+                     min_venues=fields['venues'],
+                     market=fields['market'],
+                     sort=fields['sort'],
+                     direction=fields['dir'])
+    except (KeyError, TypeError) as exc:
+        raise BadKey(f'missing or malformed field: {exc}') from exc
 
 
 def round_trips(key_hash, key_json):
@@ -96,11 +122,12 @@ def round_trips(key_hash, key_json):
     field renamed, a normalization widened, a key left behind by a version
     whose canonical() no longer exists. Both are answered False rather than
     raised, because the only sane response to either is to build the board
-    again.
+    again. query_from_json and canonical raise nothing but BadKey, so that
+    is the only exception this needs to catch.
     """
     if hashlib.sha256(key_json.encode('utf-8')).hexdigest() != key_hash:
         return False
     try:
         return canonical(query_from_json(key_json)) == (key_hash, key_json)
-    except (ValueError, TypeError, KeyError, AssertionError):
+    except BadKey:
         return False
