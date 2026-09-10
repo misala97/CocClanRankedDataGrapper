@@ -12,7 +12,7 @@ appended to `CODEX-DECISIONS.md`.
 | S1 store and payload weight | **Done** — `run_s1_payload.py` |
 | S2 cross-process reuse and cold miss | **Done** — `run_s2_reuse.py`. Warm PASSES; cold FAILS the 2 s target, as designed |
 | S3 refresh capacity | **Done** — `run_s3_capacity.py`. 120 s fits, 49% duty cycle |
-| S4 semantics parity | Not started |
+| S4 semantics parity | **Done** — `run_s4_parity.py`. 12/12 identical; two of Part I.1's five predictions were wrong |
 | S5 account isolation | Not started |
 | S6 bounded failure | Not started |
 | S7 restart, empty, expired | Not started |
@@ -353,3 +353,98 @@ to cadence **plus the whole sweep** — about 184 s rather than 120 s. The fix
 is one line and it belongs in the design: **the producer stamps `as_of` when
 it CLAIMS, per key, not once per sweep.** Part I.3 does not say which; it must.
 Both numbers were measured; the per-claim one is what the table above reports.
+
+---
+
+### S4 — the semantics do not move
+
+`radar-design/perf2-spike/run_s4_parity.py`, one run, 2026-09-10. **Step 1:
+`now` pinned at `2026-09-10T12:00:00` for every comparison in the task.**
+
+**Step 0, which is not in the plan and had to be added.** Before the store can
+be compared against a direct build, the direct build has to be compared
+against itself. It is not obviously deterministic: `serialize` embeds three
+health blocks, and `llm_sentiment.ops_summary()` is called with **no
+argument**, so it takes `dt.datetime.utcnow()` rather than the board's `now`
+and derives `p95_age_minutes` from it.
+
+| | |
+| --- | --- |
+| Two builds of one selection at one `now` | **identical on this fixture** |
+| `llm_sentiment` pending backlog here | **0**, so `p95_age_minutes` is `None` |
+| On a box with a backlog | that field moves with the wall clock between two builds of the same board |
+
+**This is a second, independent reason to freeze the ops blocks into the
+stored payload** (S1 Step 3 gave the first, 98.7 ms). Recomputed per read,
+`sentiment_ops` makes two readers of one stored board disagree about a field
+neither of them asked to be live. The fixture cannot demonstrate the drift
+because it has no backlog; the code path is quoted above and is not in doubt.
+
+**Step 2 — the store against a direct build, twelve selections.** SHA-256 of
+the full serialized payload, read-time freshness fields removed.
+
+| Selection | digest | verdict | rows |
+| --- | --- | --- | ---: |
+| 12h All US | `273361f7e40570f8` | IDENTICAL | 50 |
+| 24h All US | `3c575ece5d74ccc9` | IDENTICAL | 50 |
+| 24h All DE | `fddecec8dabed585` | IDENTICAL | 50 |
+| 12h default segments US | `bda244a8ae0c7b92` | IDENTICAL | 50 |
+| 1h All US | `25cfb93eba8289d8` | IDENTICAL | 50 |
+| 4h All US | `bdf7f87a2c5f9e72` | IDENTICAL | 50 |
+| 24h venues=2 US | `5ddf7da254083468` | IDENTICAL | 50 |
+| 24h limit=100 US | `a853ef5299255682` | IDENTICAL | 54 |
+| 24h sort=lean desc US | `c0243f2f5dbc6fd0` | IDENTICAL | 50 |
+| 24h sort=mentions asc US | `74a2065abbab0103` | IDENTICAL | 50 |
+| `sources=reddit` 24h US | `af72440c251fc4b1` | IDENTICAL | 50 |
+| `sources=reddit:wallstreetbets` 24h US | `b63edb9f1f9c74bd` | IDENTICAL | 50 |
+
+**Twelve of twelve identical**, and the full payload with the three ops blocks
+*included* also agrees in 12 of 12 on this fixture. **No parity failure.**
+
+**Step 3 — the normalization candidates, ruled by measurement.** Each
+candidate built both ways and the payloads digested. **Two of Part I.1's five
+predictions were wrong, in opposite directions.**
+
+| Candidate | Part I.1 predicted | MEASURED | what differs |
+| --- | --- | --- | --- |
+| dedupe `sources` | "none expected" | **ADOPT** | byte-identical |
+| sort `sources` | "likely a risk — order must not reach the payload" | **ADOPT** | byte-identical |
+| dedupe `segments` | "none expected" | **REJECT** | `segments` |
+| sort `segments` | "likely rejected" | **REJECT** | `segments` |
+| force `dir='desc'` when `sort is None` | "the payload echoes `dir`" | **REJECT** | `dir` |
+
+Why the two surprises. `sources` survives both transformations because
+`build_payload` overwrites `board.sources` with
+`sorted({source_root(s) for s in query.sources})` — a rooted, sorted *set*,
+which absorbs both duplicates and ordering before the payload is built.
+`segments` does not, because the payload echoes `list(segments)` verbatim, so
+`?segment=mid,micro,mid` is a different payload from `?segment=mid,micro`
+even though it is the same board. **A duplicated segment name is a distinct
+key.** That is a larger key space than Part I.1 assumed, and it is still
+cheaper than a wrong board.
+
+**Step 4 — sort before limit.** `sort=lean` at `limit=50`: the store's rows
+equal the direct build's rows **in order**, asserted.
+
+**And a negative result the plan did not anticipate: the lean case cannot
+test the contract on this fixture.** 0 of 50 rows carry any tone at all —
+nothing has been judged — so every `_lean_value` is `None`, every row lands in
+the same sort bucket, and Python's stable sort returns the default ranking
+unchanged. The lean sort provably moved nothing here.
+
+So the contract is proven on a sort this fixture *can* move:
+
+| | |
+| --- | --- |
+| Candidate pool before the limit | 54 rows, limit 50 |
+| `sort=mentions asc`: order differs from the default ranking | **yes** |
+| membership differs from the default top 50 | **4 of 50 rows** |
+
+A limit applied *before* the sort could not change membership at all. It
+changed by four, which is the entire pool above the limit. The mechanism is
+`board.py:585` — `sort_rows(ranked, ...)` then `ranked[:limit]`.
+
+**Teeth.** The order assertion was mutated: swapping the top two rows of the
+stored board makes it **fail**, as it must, and a set comparison — which is
+what a weaker test would have used — does **not** catch that swap. Both
+printed by the script.
