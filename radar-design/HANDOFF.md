@@ -36,6 +36,38 @@ unauthenticated or server-side; no owner session was minted and none should be.
 After that, historical analysis is the next NEW feature, ahead of portfolio and
 news. Capture enablement and root promotion remain separate, untaken decisions.
 
+## Two honesty defects found on the live board, 2026-09-10
+
+Both are the same mistake VC1 fixed in the tone column: **a deliberate
+suppression rendered as an absence.** Neither is caused by the release; both
+predate it. Neither has been changed — they alter what the board says and that
+is the owner's call.
+
+**1. "Move unknown" on every row while the market is closed.**
+`leaderboard._assemble` sets `move = moves.get(...) if quote.score_eligible
+else None`. When the exchange is shut, `score_eligible` is False, so the move
+is discarded — and the row prints *Move unknown*. Measured live at 00:01 UTC
+with the session `closed`: **50 of 50 rows had a price and 0 had a move**,
+while `quotes.moves_for` returned the moves perfectly well for the same window
+(META +6.55%, GOOGL −2.28%, PL −3.31%). The number is known; the row throws it
+away and then calls it unknown.
+
+The gate is right for the DIVERGENCE score — a frozen tape reporting no
+movement while mentions explode is an artifact, and `_assemble` says so. But
+divergence is already gated separately (`quote.score_eligible and move is not
+None and mention_z is not None`), so the move could be carried and displayed
+with its session context without weakening that. The fix is small; what it
+should SAY when closed is a design decision.
+
+**2. "wording" on a mention the encoder has not reached yet.**
+`detail_panel._judged_by` returns `'lexicon'` whenever only the local float has
+scored a mention — and the lexicon scores every mention at ingest. So the
+`judged_by: null` case in the contract is unreachable in practice, and a
+mention waiting for the 10-minute sentiment pass is attributed to the wording
+score rather than shown as unjudged. Measured: 100% of mentions under 10
+minutes old are unjudged, 0.0% beyond 40 minutes; 15,463 encoder against 181
+wording over 24 hours. Nothing is broken — the label is just wrong about why.
+
 ## Named follow-ups, none of them blocking
 
 - Duplicate desktop cell labels on Activity and Watching -- the same defect
