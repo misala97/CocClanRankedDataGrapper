@@ -15,8 +15,8 @@ appended to `CODEX-DECISIONS.md`.
 | S4 semantics parity | **Done** — `run_s4_parity.py`. 12/12 identical; two of Part I.1's five predictions were wrong |
 | S5 account isolation | **Done** — `run_s5_isolation.py`. No leak |
 | S6 bounded failure | **Done** — `run_s6_failure.py`. One design defect found and fixed |
-| S7 restart, empty, expired | Not started |
-| S8 filter switching and browser | Not started |
+| S7 restart, empty, expired | **Done** — `run_s7_lifecycle.py`. All four |
+| S8 filter switching and browser | **Done** — `run_s8_switching.py`, `run_s8_browser.py`. Warm PASSES; the `pending` render is a FALSE EMPTY STATE |
 | S9 ingest contention | Not started |
 | T1 worker threading (prepare only) | Not started |
 | T2 access-log proposal (prepare only) | Not started |
@@ -597,3 +597,135 @@ history-list cost paid every 120 seconds by the warm sweep, against a table
 ingest is writing to. It is not a blocker and it is not new — the deployed
 synchronous path does exactly the same thing on a web worker — but it is real
 and it belongs in the release package's list of things to watch.
+
+---
+
+### S7 — restart, empty, expired, redeployed
+
+`radar-design/perf2-spike/run_s7_lifecycle.py`, one run, 2026-09-10.
+
+**Step 1 — the result outlives the process that read it.** Two *separate*
+fresh interpreters, the first exited before the second started, three reads
+each.
+
+| | |
+| --- | --- |
+| Worker A (fresh process) | 57 ms, 3 ms, 3 ms |
+| Worker B (a different fresh process) | 66 ms, 3 ms, 4 ms |
+| Digests | identical; neither built anything |
+
+The result survived the process. **The in-process dict never did** — it starts
+empty in every worker at every restart, and with two sync workers that is two
+independent cold starts per deploy. The 57–66 ms first read is pool creation
+and lazy imports, paid once per worker boot, not per request. (S2's 0.6 s
+first read was the same effect plus the first per-account `watch_rows` build;
+this run reads with no account.)
+
+**Step 2 — a completely empty store.**
+
+| | |
+| --- | ---: |
+| First request against an empty store | **`pending` in 8.6 ms** |
+| Producer builds it | 4.1 s |
+| Next read is a board | 2.7 ms |
+| **First request → a board** | **4.1 s** |
+
+The 8.6 ms is an acknowledgement, not a board.
+
+**Step 3 — the three age behaviours.** `MAX_AGE=300 s`, `HARD_MAX_AGE=3600 s`.
+
+| Age | Answer | Age it reported | Error | Rows |
+| ---: | --- | ---: | ---: | ---: |
+| 0 s | fresh board | 0 s | +0.000 s | 50 |
+| 299 s | fresh board | 299 s | +0.000 s | 50 |
+| 301 s | **stale board** | 301 s | +0.000 s | 50 |
+| 3,599 s | **stale board** | 3,599 s | +0.000 s | 50 |
+| 3,601 s | `pending` | — | — | 0 |
+
+Serve, serve-stale, treat-as-missing — and the reported age is the real age to
+the millisecond in every served case. The stale read also **queued a refresh**
+(`state=pending`) while continuing to serve.
+
+**Step 4 — deployment invalidation.**
+
+| Stored version | Running version | Result |
+| ---: | ---: | --- |
+| 1 | 1 | a board — so the case can fail |
+| 0 | 1 | **`pending`, treated as missing** |
+
+Re-queued for rebuild with `payload_version` still 0 — the column describes
+the *blob*, and writing the running version there before the rebuild lands
+would be a lie about bytes nobody has replaced. After the rebuild:
+`payload_version=1`, `state=ready`, 50 rows.
+
+---
+
+### S8 — rapid filter switching, and a real browser
+
+`run_s8_switching.py` and `run_s8_browser.py`, one run each, 2026-09-10.
+
+**A correction to PERF1's churn list.** `acceptance.py` spelled its second
+step `sort='mention_z'` and passed it straight into `board_mod.build`,
+bypassing `parse_query`. `mention_z` is not in `board.SORT_KEYS`, and
+`sort_rows` returns the list unchanged for a key it does not know — so
+**PERF1's second churn step built the same board as its first**, and the API
+would answer that URL with a 400. This run substitutes `sort=divergence`,
+which is a real sort key and a genuinely different board.
+
+**Steps 1 and 2 — seven selections back to back.** Four of the seven are in
+the warm set of Part I.6; three are not.
+
+| | total | worst single |
+| --- | ---: | ---: |
+| PERF1, deployed code, every selection built | 34.54 s | 5.41 s |
+| **store, all seven warm** | **0.03 s** | **0.01 s** |
+| store, three unwarmed — 3 of 7 answer `pending` | 0.04 s | 0.01 s |
+| store, three unwarmed, **until all seven are BOARDS** | **12.43 s** | — |
+
+The middle row is the one that must not be quoted alone. Three of its seven
+answers are not boards. Turning them into boards costs three builds at
+12.37 s on one producer, and the honest end-to-end is **12.43 s**.
+
+Note the 100 ms local-interaction target is about sort and mode changes the
+client can make without a new server result. Every row above is a new server
+result.
+
+**Step 3 — a real browser.** python-playwright, headless chromium, the real
+Flask app on port 5001 with a session cookie minted from the app's own signing
+serializer. `build_payload` is rebound **in the serving process only**
+(`serve_store_app.py`); nothing under `personal_apps/` is modified and
+`git status` is unaffected.
+
+| Case | Response | Rows visible | Age | What actually rendered |
+| --- | ---: | ---: | ---: | --- |
+| warm | 157 ms | **1,040 ms** | 36 s | board, 50 rows |
+| unwarmed | 185 ms | — | — | **`pending` — not a board** |
+| stale | 42 ms | **130 ms** | 465 s | stale board, 50 rows |
+
+Against the 3,000 ms browser target: **warm MET (1,040 ms, and that includes
+chromium's first bundle parse — the stale case a moment later was 130 ms),
+stale MET, unwarmed MISSED because no board rendered at all.**
+
+**And the finding this step exists to produce.** Screenshots in
+`radar-design/perf2-spike/shots/`.
+
+1. **The `pending` render is a FALSE EMPTY STATE.** `s8-unwarmed.png` shows
+   the board's genuine empty state: *"Nothing cleared the bar in this window.
+   Try a longer window, or the All view."* That is not what happened. The
+   board was never built. The current client has no `pending` concept, so it
+   renders "no results" for "no result yet" — and tells the reader to change
+   a filter that was working fine. **This is stale-as-fresh's twin: absent
+   presented as empty.** Part I.7 lists the client change as the one
+   product-visible piece and puts it outside this design's authorization;
+   this screenshot is the evidence that it is not optional but a
+   precondition.
+
+2. **A stale board renders with no sign it is stale.** `s8-stale.png` is a
+   complete board — 50 rows, the detail panel, the header reading "updated
+   19:20 CEST". `stale: true` and `age_seconds: 465` are both in the payload
+   and neither reaches the screen. `generated_at` is truthful, so the header
+   is not lying; but nothing distinguishes a thirty-second-old board from a
+   seven-minute-old one, which is what the freshness contract exists to make
+   visible. (The 465 s here is artificial — the run ages `as_of` backwards —
+   so `as_of` and `generated_at` disagree in this shot in a way they never
+   would in production, where Part I.5 makes them the same instant.)
