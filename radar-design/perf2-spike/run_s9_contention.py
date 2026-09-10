@@ -158,7 +158,8 @@ def main():
         print('  write, alone      : %.2f s' % base_median)
         print('  write, under sweep: %.2f s   (%+.0f%%)'
               % (under_median, delta))
-        sweep_alone_per_key = 59.0 / 16          # S3's median warm sweep
+        sweep_alone_per_key = 65.8 / 16   # S3's median warm sweep on
+        #                                  the DEPLOYED schema
         per_key_under = elapsed / served if served else float('nan')
         print('  producer, alone   : %.1f s per key (S3 median sweep 58.9 s'
               ' / 16 keys)' % sweep_alone_per_key)

@@ -309,58 +309,64 @@ not do, and the primary key is what does it.
 
 ### S3 — one producer, sixteen keys, and the cadence it can sustain
 
-`radar-design/perf2-spike/run_s3_capacity.py`, one run, 2026-09-10.
-Concurrency 1, in-process, because the real producer is a long-lived loop and
-its module memos (notably `market_data`'s 91 ms one) are warm between builds
-exactly as they are here. **`now` advances per CLAIM, not per sweep** — see
-"the deviation Step 4 forced" below.
+`radar-design/perf2-spike/run_s3_capacity.py`, **re-run on the deployed
+schema** after the held index was found and dropped, 2026-09-10. Concurrency
+1, in-process, because the real producer is a long-lived loop and its module
+memos (notably `market_data`'s 91 ms one) are warm between builds exactly as
+they are here. **`now` advances per CLAIM, not per sweep** — see "the
+deviation Step 4 forced" below.
 
 **Steps 1 and 2 — the sweeps.**
 
 | Sweep | Total |
 | --- | ---: |
-| first, cold pages (Step 1) | **93.2 s** |
-| warm sweep 1 | 58.9 s |
-| warm sweep 2 | 59.2 s |
-| warm sweep 3 | 58.2 s |
-| **median warm sweep** | **58.9 s** |
-| worst warm sweep | 59.2 s |
+| first, cold pages (Step 1) | **102.1 s** |
+| warm sweep 1 | 67.5 s |
+| warm sweep 2 | 65.8 s |
+| warm sweep 3 | 65.0 s |
+| **median warm sweep** | **65.8 s** |
+| worst warm sweep | 67.5 s |
 
 Per-key build, median across the warm sweeps, with the cold first pass beside
 it:
 
 | Key | warm | cold first pass |
 | --- | ---: | ---: |
-| 1h All DE | 2,536 ms | 2,504 ms |
-| 1h All US | 2,505 ms | **12,960 ms** |
-| 1h 4-segment DE | 2,572 ms | 2,805 ms |
-| 1h 4-segment US | 2,504 ms | 2,466 ms |
-| 4h All DE | 3,978 ms | **19,576 ms** |
-| 4h All US | 4,119 ms | 5,913 ms |
-| 4h 4-segment DE | 4,048 ms | 3,870 ms |
-| 4h 4-segment US | 4,066 ms | 4,139 ms |
-| 12h All DE | 3,782 ms | 3,682 ms |
-| 12h All US | 3,805 ms | 3,599 ms |
-| 12h 4-segment DE | 3,725 ms | 8,885 ms |
-| 12h 4-segment US | 3,622 ms | 4,426 ms |
-| 24h All DE | 4,335 ms | 4,966 ms |
-| 24h All US | 4,332 ms | 4,334 ms |
-| 24h 4-segment DE | 4,316 ms | 4,516 ms |
-| 24h 4-segment US | 4,305 ms | 4,275 ms |
+| 1h All DE | 2,440 ms | 2,581 ms |
+| 1h All US | 2,402 ms | **13,090 ms** |
+| 1h 4-segment DE | 2,455 ms | 2,829 ms |
+| 1h 4-segment US | 2,449 ms | 2,548 ms |
+| 4h All DE | 4,183 ms | **19,864 ms** |
+| 4h All US | 4,251 ms | 6,046 ms |
+| 4h 4-segment DE | 4,153 ms | 4,176 ms |
+| 4h 4-segment US | 4,213 ms | 4,391 ms |
+| 12h All DE | 4,301 ms | 4,234 ms |
+| 12h All US | 4,367 ms | 4,531 ms |
+| 12h 4-segment DE | 4,251 ms | 9,230 ms |
+| 12h 4-segment US | 4,209 ms | 5,047 ms |
+| 24h All DE | **5,409 ms** | 6,259 ms |
+| 24h All US | **5,541 ms** | 6,016 ms |
+| 24h 4-segment DE | 5,475 ms | 5,537 ms |
+| 24h 4-segment US | 5,311 ms | 5,444 ms |
+
+The 24h builds at 5.4–5.5 s line up with PERF1's without-index 5.38 s median,
+which is the check that dropping the index put the fixture back where the
+target is. The same run with the held index present measured 4.3 s, so the
+index is worth about 1.1 s of a 24h build here — consistent with PERF1's 0.9 s.
 
 **Step 3 — the sustainable cadence.** A sweep has to *finish* inside the
 cadence with margin, so the constraint is the worst sweep times 1.30.
 
 | | |
 | --- | ---: |
-| worst warm sweep × 1.30 margin | 76.9 s needed |
-| **sustainable `REFRESH_EVERY`** | **120 s — the proposed value FITS** |
-| duty cycle at 120 s | **49% of one producer process** |
-| headroom | the warm set could roughly double before 120 s stops fitting |
+| worst warm sweep × 1.30 margin | 87.7 s needed |
+| **sustainable `REFRESH_EVERY`** | **120 s — the proposed value still FITS** |
+| duty cycle at 120 s | **55% of one producer process** |
+| headroom | about 1.4x the current warm set before 120 s stops fitting |
 
-The proposed 120 s is confirmed by measurement, not adopted by assumption. It
-fits with half the producer idle. **Part V.2 and V.5 are answered: sixteen
-keys at 120 s, `MAX_AGE` 300 s.**
+**Part V.2 and V.5 are answered: sixteen keys at 120 s.** The headroom is real
+but thinner than it looks — S9 measured the sweep collapsing to a fifth of
+this rate while ingest writes, so this is a quiet-database number.
 
 **Step 4 — the worst age a warm key reaches.** Measured, not reasoned: the
 interval between one key's consecutive `as_of` stamps *is* its refresh
@@ -368,21 +374,21 @@ interval.
 
 | | |
 | --- | ---: |
-| back-to-back sweeping, per-key `as_of` interval | 58.2 s best, **59.3 s worst** |
-| drift beyond the median sweep | 0.4 s |
-| **worst warm-key age at a 120 s cadence** | **about 120 s** |
+| back-to-back sweeping, per-key `as_of` interval | 65.4 s best, **67.0 s worst** (24h All DE) |
+| drift beyond the median sweep | 1.2 s |
+| **worst warm-key age at a 120 s cadence** | **about 121 s** |
 
-`MAX_AGE = 300 s` is therefore honest with 180 s to spare, and a warm key
-should essentially never be served marked stale. `HARD_MAX_AGE = 3600 s` is
-thirty sweeps away.
+`MAX_AGE = 300 s` is therefore honest with 179 s to spare on a quiet database,
+and it is also the margin that absorbs S9's ingest contention.
+`HARD_MAX_AGE = 3600 s` is thirty sweeps away.
 
 **The deviation Step 4 forced.** The first version of this script pinned one
 `now` for a whole sweep. That publishes the *last* key of a sweep already
-59 s stale at the instant it is published, and pushes the worst warm-key age
-to cadence **plus the whole sweep** — about 184 s rather than 120 s. The fix
+66 s stale at the instant it is published, and pushes the worst warm-key age
+to cadence **plus the whole sweep** — about 186 s rather than 121 s. The fix
 is one line and it belongs in the design: **the producer stamps `as_of` when
 it CLAIMS, per key, not once per sweep.** Part I.3 does not say which; it must.
-Both numbers were measured; the per-claim one is what the table above reports.
+Both were measured; the per-claim one is what the table above reports.
 
 ---
 
@@ -784,7 +790,8 @@ for this write and is not a measurable delay.
 
 **But the traffic is not symmetric, and this is the finding.** While those
 three writes ran, the sweep managed **3 of 16 keys in 38.4 s — 12.8 s per
-key** against its own unloaded rate, with **13 keys still queued** when the
+key**, against 4.1 s per key unloaded (S3's 65.8 s median sweep over
+sixteen keys), with **13 keys still queued** when the
 writes finished. Three bulk writes of about six seconds each were enough to
 take the producer from a sixty-second sweep to a rate that would not finish
 one inside four minutes.
