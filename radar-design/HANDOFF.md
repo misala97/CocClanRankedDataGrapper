@@ -1,3 +1,21 @@
+# CURRENT — PERF3 in progress (Claude implementing under the PERF2 ruling)
+
+| | |
+| --- | --- |
+| Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` |
+| Branch | `codex/radar-perf3`, from `afe1246`; first commit `4f8ad5f` carries Codex's ruling edits |
+| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md`; ledger `PERF3-LEDGER.md` |
+| Databases | tests: `personal_apps_radar_perf3` (te1 clone, 29 FKs, stamp `a7c31f0b52d4`); timings: `personal_apps_radar_perf3_scale` (perf1 clone minus spike tables) |
+| Protected | `personal_apps_radar_perf1` (not modified), the `radar-perf2` worktree and its uncommitted Codex edits, every other worktree, the planning checkout's dirty files, `.env` files |
+| Deployed | still `4221196`; nothing here is merged, pushed, deployed or configured on the VPS |
+
+Read `PERF3-LEDGER.md` for task status, findings and numbers before touching
+code. The ledger's task table names the commits; `git log` is the truth if
+they disagree. Continue from the first task the ledger does not mark
+complete. This block is replaced by Task 9 with the finished handoff.
+
+---
+
 # CURRENT — Codex accepted PERF2 with amendments; implement PERF3
 
 Read the latest PERF2 ruling appended to CODEX-DECISIONS.md. Full local PERF3 implementation is authorized in a new isolated worktree; no production changes. Eight warm keys initially, explicit asynchronous pending and visible stale states in both clients, separate producer process, generation-safe cache and fair bounded queue. Index and threading remain deferred. Product performance acceptance remains open. Reviewed afe1246, 21 commits from 4221196; Codex's only fresh executable check reproduced the segment-key collision without database access. These decisions/handoff edits are intentional Codex-owned changes. Historical returns below are superseded where this ruling differs.
