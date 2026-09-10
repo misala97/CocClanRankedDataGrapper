@@ -163,6 +163,37 @@ describe('the ranked list', () => {
     expect(screen.getByText('0.0%')).toBeVisible()
   })
 
+  it('says a closed-market move is at the close, not unknown', () => {
+    // It used to print "Move unknown" over a number it had. Measured on the
+    // live board with the session closed: 50 of 50 rows priced, 0 with a
+    // move, while the move calculation returned them fine.
+    show([row({ price: 330.65, price_move: -0.0228, direction: 'down',
+                price_status: 'closed' })])
+    expect(screen.getByText(/-2\.3%/)).toBeVisible()
+    expect(screen.getByText(/at close/)).toBeVisible()
+    expect(screen.queryByText(/move unknown/i)).not.toBeInTheDocument()
+  })
+
+  it('says a frozen tape has not printed, and still shows the move', () => {
+    show([row({ price: 10, price_move: 0.031, direction: 'up',
+                price_status: 'stale', marks: ['no-print'] })])
+    expect(screen.getByText(/\+3\.1%/)).toBeVisible()
+    expect(screen.getByText(/no print since/)).toBeVisible()
+  })
+
+  it('adds no session note while the market is open', () => {
+    show([row({ price: 10, price_move: 0.012, price_status: 'ok' })])
+    expect(screen.getByText('+1.2%')).toBeVisible()
+    expect(screen.queryByText(/at close|no print since/)).not.toBeInTheDocument()
+  })
+
+  it('still says unknown when the move really is unmeasurable', () => {
+    // Fewer than two snapshots in the window. That is the one unknown.
+    show([row({ price: 10, price_move: null, price_status: 'closed' })])
+    expect(screen.getByText(/move unknown/i)).toBeVisible()
+    expect(screen.queryByText(/at close/)).not.toBeInTheDocument()
+  })
+
   it('keeps the qualifying marks visible', () => {
     // PRODUCT.md: rendered, never hidden behind a hover.
     show([row({ marks: ['single-source', 'provisional'] })])

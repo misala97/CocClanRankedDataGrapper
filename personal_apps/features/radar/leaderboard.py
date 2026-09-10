@@ -335,14 +335,26 @@ def _assemble(ticker, folded, parts, profile, quote, moves, quote_sigmas,
                          if part.baseline_days is not None), default=None)
 
     status = quote.tape_status
-    move = (moves.get((ticker, quote.market))
-            if quote.score_eligible else None)
+    # The move as MEASURED, whatever the session. It used to be discarded
+    # whenever the quote was not score-eligible, which meant that with the
+    # exchange shut every row printed "Move unknown" over a number the board
+    # had already computed -- 50 of 50 rows priced and 0 with a move, measured
+    # on the live target 2026-09-10. It was never unknown; it was withheld,
+    # and the surface said the wrong one of those two things.
+    #
+    # `moves_for` returns None for its own honest reason -- fewer than two
+    # snapshots in the window -- and THAT is the unknown the row should name.
+    move = moves.get((ticker, quote.market))
 
     # A frozen tape reports no movement while mentions explode because it
     # froze. That is maximum divergence produced by an artifact, so the
-    # row carries the mark and no score rather than a flattering number.
+    # row carries the mark and no SCORE rather than a flattering number.
     # 'closed' lands here too and for the same reason -- but it earns no
     # mark, because the exchange being shut says nothing about the stock.
+    #
+    # Note this gate is on the DIVERGENCE and always was: it tests
+    # `score_eligible` itself rather than relying on `move` having been
+    # nulled, so carrying the move through above cannot weaken it.
     value = None
     if quote.score_eligible and move is not None and mention_z is not None:
         sigma = quote_sigmas.get(ticker)

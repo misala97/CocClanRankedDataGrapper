@@ -12,6 +12,7 @@ chatter share one calendar axis, and the two kinds of gap in them mean
 different things.
 """
 import datetime as dt
+import datetime as dt
 import decimal
 
 import pytest
@@ -295,8 +296,14 @@ def test_the_serialized_payload_carries_who_owns_each_tone(panel_ticker):
     assert [post['judged_label'] for post in posts] ==         [label for _post, _tone, _judged_by, label in built.posts]
     assert 'model' in [post['judged_label'] for post in posts]
     for post in posts:
-        # And the name is present exactly when a model decided the tone.
-        assert (post['judged_label'] is not None) ==             (post['judged_by'] == 'model'), post
+        # A label wherever anything scored the tone, and none where nothing
+        # did. It used to be "present exactly when a MODEL decided it", but
+        # the lexicon case now carries a label too -- 'wording' when a model
+        # has read the mention and left no lean, 'not judged yet' when the
+        # judging pass has not reached it.
+        assert (post['judged_label'] is not None) ==             (post['judged_by'] is not None), post
+        if post['judged_by'] == 'lexicon':
+            assert post['judged_label'] in ('wording', 'not judged yet'), post
 
 
 def test_the_panel_returns_the_posts_themselves(panel_ticker):
@@ -1348,3 +1355,37 @@ def test_a_print_outside_the_extended_session_is_not_an_anchor():
         dt.timezone.utc).replace(tzinfo=None) - dt.timedelta(hours=2)
 
     assert detail_mod._session_prints([(stray, 10.0)], bounds) == []
+
+
+def test_an_unjudged_mention_says_so_rather_than_crediting_the_wording_score():
+    """The lexicon scores every mention at ingest, so `judged_by` is 'lexicon'
+    from the moment one exists. The row therefore said 'wording' whether that
+    was the final word or merely the only thing that had run yet -- and on the
+    live board, 100% of mentions under ten minutes old are in the second case.
+    """
+    from features.radar.detail_panel import _judged_by, _judged_label
+
+    # Nothing has read it: the wording score is standing in, not deciding.
+    assert _judged_by(0.5, None, None) == 'lexicon'
+    assert _judged_label('lexicon', None, None) == 'not judged yet'
+
+    # A model HAS read it and left no lean; the wording score is the answer.
+    assert _judged_label('lexicon', None, dt.datetime(2026, 9, 10)) == 'wording'
+
+    # Nothing at all scored it -- no label, as before.
+    assert _judged_by(None, None, None) is None
+    assert _judged_label(None, None, None) is None
+
+
+def test_the_label_change_leaves_tone_precedence_alone():
+    """`judged_by` drives which value the tone comes from, and the tone on
+    screen really is the wording score's read. Only the LABEL learned a new
+    fact; the three-valued contract is untouched."""
+    from features.radar.detail_panel import _judged_by, _tone_of
+
+    for judged_at in (None, dt.datetime(2026, 9, 10)):
+        assert _judged_by(0.5, None, None) == 'lexicon'
+    assert _tone_of(0.5, None, None) == 'bullish'
+    assert _tone_of(-0.5, None, None) == 'bearish'
+    assert _judged_by(None, 'bullish', None) == 'model'
+    assert _judged_by(None, None, 'positive') == 'model'

@@ -140,6 +140,17 @@ FIXTURE_ROWS = [
          mentions=31, price=18.20, price_move=-0.031, direction='down',
          quote=quote(price=18.20), activity_sources=None,
          tone={'bullish': 4, 'neutral': 3, 'bearish': 0}),
+    # The exchange is shut. The move is MEASURED and must read as one -- this
+    # row is the whole of the 2026-09-10 finding, where 50 of 50 live rows
+    # printed "Move unknown" over a number the board already had.
+    frow(ticker='SHUT', name='Nightwatch Holdings', ratio=2.6, authors=31,
+         mentions=88, price=330.65, price_move=-0.0228, direction='down',
+         price_status='closed',
+         quote={**quote(price=330.65), 'quality': 'stale',
+                'score_eligible': False, 'tape_status': 'closed',
+                'session': 'closed'},
+         activity_sources=['bluesky', 'reddit:stocks'],
+         tone={'bullish': 12, 'neutral': 9, 'bearish': 7}),
     # A euro listing, so the currency path is on screen too.
     frow(ticker='VELA', name='Vela Materials SE', ratio=1.8, authors=23,
          mentions=48, price=4.44, price_move=0.009,

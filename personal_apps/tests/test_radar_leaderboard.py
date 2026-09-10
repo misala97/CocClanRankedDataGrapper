@@ -740,6 +740,44 @@ def test_pinned_rows_keep_the_order_asked_and_drop_duplicates(board):
     assert leaderboard.build_pinned([], ['bluesky'], NOW) == []
 
 
+def test_a_closed_exchange_keeps_the_move_and_drops_only_the_score(board):
+    """The move is measured; the SCORE is what a frozen tape invalidates.
+
+    Both used to be discarded together, so with the exchange shut every row
+    printed "Move unknown" over a number the board had already computed.
+    """
+    universe_row('LBSHUT')
+    scored('LBSHUT')
+    # Two snapshots in the window, so the move is genuinely measurable, and a
+    # quote_ts old enough that the tape is not printing.
+    quoted('LBSHUT', '110.00', '100.00', minutes_ago=200)
+    quoted('LBSHUT', '100.00', '100.00', minutes_ago=30,
+           quote_ts=NOW - dt.timedelta(hours=9))
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBSHUT'], ['bluesky'], NOW,
+                                     window_hours=24)
+
+    assert row.quote.score_eligible is False, 'the fixture must be ineligible'
+    assert row.price_move is not None, 'the measured move must survive'
+    # The score is what the artifact invalidates, and it is still refused.
+    assert row.divergence is None
+
+
+def test_a_move_nobody_could_measure_is_still_none(board):
+    """One snapshot is not a flat price. `moves_for` decides that, and it is
+    the only thing the row should ever call unknown."""
+    universe_row('LBONE')
+    scored('LBONE')
+    quoted('LBONE', '100.00', '100.00', minutes_ago=30)
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBONE'], ['bluesky'], NOW,
+                                     window_hours=24)
+
+    assert row.price_move is None
+
+
 # --- activity_sources: the feeds that counted something ---------------------
 #
 # `sources` lists the feeds that were LOOKED AT: _aggregate admits a bucket on

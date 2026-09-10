@@ -43,7 +43,13 @@ def main():
         page.wait_for_selector('.rh-chatter')
 
         radar = page.evaluate(TICKERS)
-        check('the list opens in Radar order', len(radar) == 7, ', '.join(radar))
+        # Derived, not hardcoded: a magic 7 here failed the moment the fixture
+        # gained a row, which is a check reporting on itself rather than on
+        # the page.
+        counted = page.inner_text('.rh-panelcount')
+        check('the list opens in Radar order, all of it',
+              bool(radar) and str(len(radar)) in counted,
+              f'{len(radar)} rows against "{counted}": ' + ', '.join(radar))
         check('no column claims to be sorted yet',
               page.evaluate("""() => Array.from(
                 document.querySelectorAll('.rh-chatter thead th'))
