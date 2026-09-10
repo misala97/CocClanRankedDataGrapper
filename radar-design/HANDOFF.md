@@ -1,4 +1,113 @@
-# Current dispatch — VC1 deployed, 2026-09-10
+# Latest Codex ruling — PERF1 reviewed, performance acceptance OPEN
+
+Read the appended PERF1 ruling in CODEX-DECISIONS.md. It supersedes the current-dispatch conclusions below. Index deployment is held; threading and telemetry are preparation only. Next: PERF2 shared background-result design and disposable feasibility proof, with an explicit freshness and cold-miss contract. Correct the retracted concurrency claims and inventory reproducible evidence artifacts. No production changes authorized. Reviewed HEAD 691f33a (12 commits from 4221196); these decision/handoff edits are Codex-owned. No fresh benchmark or test run by Codex.
+# Current dispatch — PERF2 design and feasibility, 2026-09-10
+
+Supersedes every status and next-action statement below except Codex's notice
+above, which governs. **Performance acceptance is OPEN and still precedes B2.**
+
+| Fact | Value |
+| --- | --- |
+| Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf2` |
+| Branch | `codex/radar-perf2` |
+| Base | **`4221196`** — the deployed SHA, read from the target |
+| Live record | `PERF2-PLAN.md`, `PERF2-LEDGER.md` in this workspace |
+| Binding ruling | `PERF1-CODEX-RULING.md`, also appended to `CODEX-DECISIONS.md` |
+
+**This branch deliberately carries no PERF1 code.** It is based on the deployed
+SHA and brings forward PERF1's *documentation* only, so the held migration
+`c4e17b90d3f2` and the in-process single-flight cannot reach a release
+candidate by way of a routine `flask db upgrade`. `codex/radar-perf1` at
+`691f33a` is preserved untouched as the evidence branch. `codex/radar-b1` at
+`6c63959` is likewise untouched; its price-narrative correction remains its own
+deployment carry.
+
+**PERF1's benchmark scripts are now reachable.** They lived only in an
+ephemeral session scratchpad, which is why the Git delta did not contain them.
+They are carried into `radar-design/perf1-bench/` with an inventory and their
+prerequisites; see `perf1-bench/README.md`.
+
+---
+
+# PERF1 — closed as an investigation, and corrected, 2026-09-10
+
+Codex accepted PERF1 as a completed investigation with a useful negative
+result, and did **not** accept product performance. This section replaces the
+one that stood here, which led with a concurrency conclusion that is retracted.
+
+## What is retracted
+
+**"The bottleneck is two readers building the same board at once" is
+withdrawn.** The `7.85s / 7.92s` pair that motivated it was two THREADS in one
+process. Production runs `gunicorn --workers 2` with no `--threads`: two
+single-threaded SYNC processes (`NLWP=1` on both, read from the target). Two
+concurrent readers there are in two PROCESSES, which do not share a GIL, so
+the pair is *cheaper* in production than that measurement — and the in-process
+single-flight cannot fire there at all.
+
+That measurement is local evidence about threads. It is **not** a production
+outcome and **not** proof of the owner's timeout. The cause of the owner's
+timeout remains unidentified, and the target has no latency telemetry with
+which to identify it.
+
+## What survives, with its limits stated
+
+Measured on `personal_apps_radar_perf1` — 9,272,064 rows, within 0.7% of the
+target's `radar_bucket_sources` — on **MySQL 8.0.46** with the buffer pool
+raised to the target's 2560 MB. The target runs **MariaDB 10.11.14**. Ratios
+and mechanisms transfer; seconds do not.
+
+| 24h, All companies, one reader, n=20 | median | p95 |
+| --- | --- | --- |
+| deployed code | 5.38s | 5.72s |
+| with the held index `c4e17b90d3f2` | **4.50s** | **4.72s** |
+
+- The index is worth **~0.9s per build**, repeatably, and payload parity is
+  identical at 4h, 12h and 24h.
+- It costs **639 MB** (net ~181 MB if the redundant `ix_radar_bucket_sources_start`
+  goes too, which is measured but not attempted) and **+50%** on ONE
+  representative bulk `UPDATE` of an indexed column — not a measured +50% on
+  the whole scoring pass.
+- The pass-one aggregate is roughly 40% of the build. **A 4.5-second build is
+  still a 4.5-second build**, against a ≤2s cold target and an 8.00s client
+  abort (`static/radar/src/api.ts`).
+- The 59-second index build and its `ALGORITHM=INPLACE, LOCK=NONE` are local.
+  `PREPARE` on the target proved the statement parses on MariaDB; it proved
+  nothing about online-DDL duration, locking or concurrent writers there.
+- Total radar data (3871 MB) exceeding the target's 2500 MB pool is a fact
+  about total size. It does **not** establish that the active working set does
+  not fit.
+
+## What was never measured
+
+- **The target's own end-to-end build.** Running code on the target
+  (`python -c` over ssh) is refused by the session's command classifier and
+  was not routed around. Plain ssh reads, `mariadb -e`, `EXPLAIN` and
+  `PREPARE` all work and were used.
+- **Any production latency at all.** nginx logs no `$request_time`, gunicorn
+  runs with no access log, the slow query log is OFF at `long_query_time` 10s,
+  and `performance_schema` is OFF.
+- **Cross-worker duplication**, which is what PERF2 addresses.
+
+## Codex's disposition
+
+| | |
+| --- | --- |
+| Index `c4e17b90d3f2` | **HELD.** Not to ship for a marginal read gain with unquantified ingest cost. Do not drop `ix_radar_bucket_sources_start`. |
+| In-process single-flight | Not approved as a general solution; the shared path replaces it. Not to be polished further. |
+| `--threads N` on the unit | Local evaluation approved as a candidate. **No service change.** |
+| Latency telemetry | Bounded gunicorn access-log proposal, prepared and locally verified only. **No live activation.** |
+| Product performance acceptance | **OPEN.** |
+
+Nothing on the target was changed by PERF1 — no schema, no configuration, no
+restart, no code.
+
+**`RELEASE-RECORD-VC1.md` says the deployed SHA is `1f8016c`. It is stale.**
+The target is at `4221196`.
+
+---
+
+# Previous dispatch — VC1 deployed, 2026-09-10
 
 This section supersedes historical status/next-action/deploy statements below.
 Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-release-candidate.
@@ -433,3 +542,4 @@ unchanged migration head and capture off. Do not mint an owner login session;
 use existing authorized verification methods. Report any authenticated checks
 that need the owner's session honestly. Record results in RELEASE-RECORD.md and
 HANDOFF.md. Production has not changed merely because this approval is recorded.
+
