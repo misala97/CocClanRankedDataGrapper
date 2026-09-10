@@ -141,6 +141,12 @@ def main():
     ap.add_argument('--pause-before-publish', type=float, default=0.0)
     ap.add_argument('--hang', type=float, default=0.0,
                     help='sleep after claiming, before building (S6)')
+    ap.add_argument('--poll', type=float, default=0.0,
+                    help='run as a daemon loop for this many seconds, '
+                         'claiming whatever is queued -- the shape the real '
+                         'producer has, and the shape that keeps process '
+                         'startup out of the enqueue-to-ready measurement')
+    ap.add_argument('--poll-interval', type=float, default=0.25)
     args = ap.parse_args()
 
     now = dt.datetime.fromisoformat(args.now)
@@ -157,6 +163,24 @@ def main():
                 key_hash, key_json = keys.canonical(query)
                 store.enqueue(engine, key_hash, key_json, now, warm=True)
             print('warm set queued', flush=True)
+
+        if args.poll:
+            # READY is printed once the app and the pool are up, so the
+            # caller can enqueue AFTER startup and measure only the queue
+            # latency plus the build.
+            print('READY', flush=True)
+            until = time.perf_counter() + args.poll
+            while time.perf_counter() < until:
+                key_hash = serve_once(engine, args.owner, now,
+                                      query_cls=Query,
+                                      fail_with=args.fail_with,
+                                      pause_before_publish=(
+                                          args.pause_before_publish))
+                if key_hash is None:
+                    time.sleep(args.poll_interval)
+                else:
+                    print('SERVED %s' % key_hash, flush=True)
+            return
 
         if args.hang:
             claim = store.claim(engine, args.owner, now, key_hash=args.key)

@@ -162,10 +162,11 @@ def main():
                 time.sleep(0.001)
         out = []
         for _ in range(args.repeat):
+            wall = dt.datetime.now().isoformat()
             began = time.perf_counter()
             payload = read_payload(engine, query_args, now, args.user)
             took = time.perf_counter() - began
-            out.append({'seconds': took,
+            out.append({'seconds': took, 'started_at': wall,
                         'pending': bool(payload.get('pending')),
                         'busy': bool(payload.get('busy')),
                         'stale': bool(payload.get('stale')),

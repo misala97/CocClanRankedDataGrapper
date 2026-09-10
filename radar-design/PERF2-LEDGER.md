@@ -10,7 +10,7 @@ appended to `CODEX-DECISIONS.md`.
 | PERF1 benchmark artifacts located and carried | **Done** — `radar-design/perf1-bench/` |
 | PERF2 design written | **Done** — `PERF2-PLAN.md` Part I |
 | S1 store and payload weight | **Done** — `run_s1_payload.py` |
-| S2 cross-process reuse and cold miss | Not started |
+| S2 cross-process reuse and cold miss | **Done** — `run_s2_reuse.py`. Warm PASSES; cold FAILS the 2 s target, as designed |
 | S3 refresh capacity | Not started |
 | S4 semantics parity | Not started |
 | S5 account isolation | Not started |
@@ -202,3 +202,75 @@ every cold-memo read.
 **Step 4 — the storage bound.** Largest measured compressed payload 12,640 B ×
 (16 warm + `MAX_ON_DEMAND_KEYS` 128) = **1.7 MB**. The bound is a rounding
 error against the 1798 MB `radar_bucket_sources` already carries.
+
+---
+
+### S2 — cross-process reuse, and the cold miss measured apart
+
+`radar-design/perf2-spike/run_s2_reuse.py`, one run, 2026-09-10. Every
+concurrency claim below is made with `subprocess.Popen`. **No thread is used
+anywhere in this task**, because the two-reader pair PERF1 had to retract was
+two threads in one interpreter.
+
+**Step 1 — two independent OS processes reuse one published result.**
+
+| | |
+| --- | --- |
+| Producer process, wall | 10.59 s (build 5,311 ms; the rest is interpreter start) |
+| Reader A, own process | 0.604 s, 50 rows, digest `bf55fe5595a48e4d` |
+| Reader B, own process | 0.588 s, 50 rows, digest `bf55fe5595a48e4d` |
+| Digests | **IDENTICAL** |
+| `fence` after both reads | **1** — exactly one build happened |
+
+The 0.6 s each reader reports is a **fresh-process first read**: SQLAlchemy
+pool creation, the lazy imports of `board`/`watch`, first statement compile. A
+gunicorn worker pays it once at boot, not per request. The per-request number
+is Step 2's.
+
+**Step 2 — ready reads on their own. THIS IS THE WARM NUMBER.** Twenty serial
+reads per window through `reader.read_payload`, including the per-account
+`watch_rows` query for an account watching three tickers.
+
+| Window | n | median | p95 | max | payload |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 12h All companies US | 20 | **33.4 ms** | **37.7 ms** | 57.4 ms | 50 rows + 3 watch rows |
+| 24h All companies US | 20 | **38.1 ms** | **41.9 ms** | 119.1 ms | 50 rows + 3 watch rows |
+| 24h, no account at all | 20 | 3.4 ms | 4.0 ms | 4.1 ms | store read alone |
+
+**Warm target 500 ms: PASS, by more than a factor of twelve.** And the split
+matters: the store read is 3.4 ms of it and the per-account `watch_rows` build
+is the other ~30 ms. The store is not the cost of a warm read; the account's
+own pinned rows are.
+
+**Step 3 — the first-ever miss, in three parts.** A `sort=lean` 24h key that
+had never been built, with a producer daemon **already running** so its
+interpreter start is not counted — the real producer is a long-lived loop.
+
+| | |
+| --- | ---: |
+| (a) the reader answers `pending` | **8.3 ms** |
+| (b) enqueue → `state='ready'` | **5,242 ms** (producer build 5,139 ms) |
+| (c) until a reader can SEE that board | **5,282.5 ms** |
+| the follow-up ready read itself | 32.1 ms |
+
+**(a) IS NOT A BOARD.** It is an 8.3 ms acknowledgement that no result exists
+yet. Reporting 8.3 ms as a cold success would be the same lie in a new place.
+
+**(c) 5.28 s is the cold number, against a 2 s target. It FAILS**, and moving
+the build off the request path does not shorten it — that is exactly what
+Part I.8 predicted and what Part V.1 asks Codex to rule on. It is under the
+8,000 ms client abort, which the deployed synchronous path also was; what
+changes is that the wait no longer occupies a web worker.
+
+**Step 4 — two processes race one missing key.** Two reader subprocesses
+released at the same wall-clock instant (`2026-09-10T18:09:49.085861`, both).
+
+| | |
+| --- | ---: |
+| Rows in the table for that key | **1** |
+| `request_count` | 2 — both readers registered demand |
+| Producer builds afterwards | 1 (`fence = 1`) |
+
+**Exactly one row and exactly one queued job across two OS processes.** This
+is the global deduplication the in-process single-flight structurally could
+not do, and the primary key is what does it.
