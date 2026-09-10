@@ -540,8 +540,8 @@ the response and not silently missing.
 
 ### S6 — failure is bounded
 
-`radar-design/perf2-spike/run_s6_failure.py`, one run, 2026-09-10. Steps 1 and
-2 use a **20-second lease** rather than `store.py`'s 120: a test cannot wait
+`radar-design/perf2-spike/run_s6_failure.py`, **re-run on the deployed
+schema**, 2026-09-10. Steps 1 and 2 use a **20-second lease** rather than `store.py`'s 120: a test cannot wait
 out the real one, and the statement is the same either way. Every reader call
 in this task runs under a tripwire that replaces `board.build` and
 `leaderboard.build_rows` with something that raises — so "the read path never
@@ -556,8 +556,8 @@ builds" is enforced, not asserted.
 | A second producer claiming before expiry | **blocked**, correctly |
 | A reader meanwhile | got `pending`, **built nothing** |
 | Lease expired and became reclaimable | 18.9 s after the kill (20 s lease) |
-| Rescuer published | fence **2**, 10,981 payload bytes |
-| **Recovery, kill → ready board** | **29.8 s** |
+| Rescuer published | fence **2**, 10,986 payload bytes |
+| **Recovery, kill → ready board** | **30.8 s** |
 
 A hung builder cannot poison its key: the lease expires and the reclaim
 increments the fence past it.
@@ -628,22 +628,22 @@ first statement recorded.
 
 | Duration | End | First statement |
 | ---: | --- | --- |
-| **4.128 s** | rollback | `SELECT radar_bucket_sources.ticker …` |
+| **5.619 s** | rollback | `SELECT radar_bucket_sources.ticker …` |
 | 0.003 s | commit | `SELECT state FROM radar_board_results …` |
-| 0.002 s | commit | `UPDATE radar_board_results SET state='ready', payload=… ` |
-| 0.002 s | commit | `UPDATE radar_board_results SET state='building', lease_owner=…` |
+| 0.003 s | commit | `UPDATE radar_board_results SET state='ready', payload=… ` |
+| 0.001 s | commit | `UPDATE radar_board_results SET state='building', lease_owner=…` |
 | 0.001 s | rollback | `SELECT key_hash FROM radar_board_results WHERE …` |
 
 | | |
 | --- | ---: |
 | Longest transaction touching `radar_board_results` | **0.003 s** |
-| Longest transaction of any kind | **4.128 s** |
+| Longest transaction of any kind | **5.619 s** |
 
 **The claim commits before the build and the publish opens its own
 transaction after it. Nothing holds a transaction across `board.build`** —
 which is what Codex's ruling requires.
 
-**But a finding the plan does not mention: the build itself is one 4.1-second
+**But a finding the plan does not mention: the build itself is one 5.6-second
 read transaction.** The ORM session opens on its first `SELECT` and does not
 close until the session does, so every produce cycle pins a read view on
 `radar_bucket_sources` for the length of a build. On the target that is a
@@ -656,7 +656,8 @@ and it belongs in the release package's list of things to watch.
 
 ### S7 — restart, empty, expired, redeployed
 
-`radar-design/perf2-spike/run_s7_lifecycle.py`, one run, 2026-09-10.
+`radar-design/perf2-spike/run_s7_lifecycle.py`, **re-run on the deployed
+schema**, 2026-09-10.
 
 **Step 1 — the result outlives the process that read it.** Two *separate*
 fresh interpreters, the first exited before the second started, three reads
@@ -664,13 +665,13 @@ each.
 
 | | |
 | --- | --- |
-| Worker A (fresh process) | 57 ms, 3 ms, 3 ms |
-| Worker B (a different fresh process) | 66 ms, 3 ms, 4 ms |
+| Worker A (fresh process) | 41 ms, 3 ms, 3 ms |
+| Worker B (a different fresh process) | 42 ms, 4 ms, 4 ms |
 | Digests | identical; neither built anything |
 
 The result survived the process. **The in-process dict never did** — it starts
 empty in every worker at every restart, and with two sync workers that is two
-independent cold starts per deploy. The 57–66 ms first read is pool creation
+independent cold starts per deploy. The 41–42 ms first read is pool creation
 and lazy imports, paid once per worker boot, not per request. (S2's 0.6 s
 first read was the same effect plus the first per-account `watch_rows` build;
 this run reads with no account.)
@@ -679,10 +680,10 @@ this run reads with no account.)
 
 | | |
 | --- | ---: |
-| First request against an empty store | **`pending` in 8.6 ms** |
-| Producer builds it | 4.1 s |
-| Next read is a board | 2.7 ms |
-| **First request → a board** | **4.1 s** |
+| First request against an empty store | **`pending` in 8.4 ms** |
+| Producer builds it | 5.5 s |
+| Next read is a board | 3.7 ms |
+| **First request → a board** | **5.5 s** |
 
 The 8.6 ms is an acknowledgement, not a board.
 
