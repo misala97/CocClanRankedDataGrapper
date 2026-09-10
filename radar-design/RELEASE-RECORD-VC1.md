@@ -151,8 +151,6 @@ migration chain is retained intact for routine upgrades and rollback.
 - The named follow-ups in VISUAL-CORRECTION-LEDGER.md: the duplicate cell
   labels on Activity and Watching, Watching's tone/source presentation, and the
   zero-feed question in the legacy breadth filter.
-- OT1, the retired encoder trial's watchdog, still fires every minute doing
-  nothing.
 
 ## Rollback, if it is wanted
 
@@ -161,3 +159,86 @@ so there is no schema question at all. `git revert -m 1 1f8016c` on `main`,
 push, and run `/root/update_coc.sh`. The previous hub bundle returns and the
 additive `activity_sources` field simply stops being serialized — nothing reads
 it but the hub.
+
+
+---
+
+# Second deployment, 2026-09-10 — the two honesty fixes
+
+Same night, same authorization, a separate and smaller release: `4221196`, a
+`--no-ff` merge of `c139856` and `e88e00b` onto `main`. Eight application files,
+no migration, no new dependency, no configuration change.
+
+## What went out
+
+**A move the board measured is not an unknown move.** `_assemble` discarded the
+price move whenever the quote was not score-eligible, so with the exchange shut
+every row printed "Move unknown" over a number the board had already computed.
+The gate on the DIVERGENCE is untouched and still tests `score_eligible` itself,
+so carrying the move through cannot weaken it.
+
+**"not judged yet" is not the same claim as "wording".** The lexicon scores
+every mention at ingest, so `judged_by` is `'lexicon'` from the moment a mention
+exists, and the evidence row read "wording" whether that was the final word or
+merely the only thing that had run so far. `sentiment_judged_at` separates the
+two and is the only thing that can. `judged_by` itself is deliberately unchanged
+— it drives the tone precedence, and the tone on screen really is the wording
+score's read.
+
+## The window
+
+| | |
+|---|---|
+| Preflight | 02:42:25 CEST — deployed `1f8016c`, five services active, head `a7c31f0b52d4 (head)`, 33 minutes clear of the 03:15 backup cron |
+| Backup | `db_2026-09-10_0243.sql.gz`, 198M, `gzip -t` OK, sha256 `dc3b21f2…8b20969e`, 44 foreign keys in the dump, copied to Drive |
+| Stop | 02:47:15 — `personal_apps_web`, `coc_web`, `radar_ingest`; no surviving gunicorn or ingest process |
+| Build and restart | `/root/update_coc.sh` exit 0, bundle built in 2.16s |
+| Up | 02:47:44 — all five units active |
+| **Outage** | **29 seconds** |
+
+No pipeline was attached to the ssh session this time. The 89-second outage
+recorded above came from `Select-Object -First 30` closing the pipe and killing
+`update_coc.sh` mid-run; the deploy script wrote its own log to a file on the
+target and printed a bounded tail instead.
+
+## Verified after, on live production data
+
+- `HEAD` on the target: `4221196a32bc83e002758012b8fb992acb985bfd`.
+- Migration head `a7c31f0b52d4 (head)` — unchanged, as predicted.
+- Five units active since 02:47:44; `personal_apps_web` bound on 127.0.0.1:5001.
+- `observations.capture_enabled()` returns **False**. There is no `.env` on the
+  target and the unit sets only `PATH`, so `RADAR_OBSERVATION_CAPTURE_ENABLED`
+  is unset and capture is off by default rather than by an override that could
+  drift.
+- `/radar/`, `/radar/hub/`, `/radar/api/board` and `/radar/api/activity` all
+  answer `302` to the login page — the app is serving and both surfaces are
+  still routed. No owner session was minted, so the checks below go through the
+  application's own code inside an app context rather than through HTTP.
+- **The move fix.** Building the live US board at 02:59 CEST with the exchange
+  shut: 49 rows, 46 priced, **43 carrying a move** — it was 0 before. Sampled:
+  `IRD −10.05%`, `YELP −2.34%`, `RR −2.34%`, `MSS −1.70%`, `MAT −0.65%`, all
+  `price_status=closed`. Every one of them has `divergence=None`, which is the
+  point: the score is still withheld with the tape shut, and only the measured
+  number stopped being called unknown. The three priced rows with no move are
+  the honest unknown — fewer than two snapshots in the window.
+- **The judged-label fix.** Over 208 live posts on the first 25 tickers:
+  `'Encoder'` 197, `'not judged yet'` 11, `'wording'` 0. The example that
+  motivated the whole fix now reads correctly — `NMCO`, `reddit:pennystock`,
+  19 minutes old, lexicon tone, labelled *not judged yet* rather than claiming
+  the wording score had decided against it.
+
+## Limitations that remain
+
+- Still no authenticated owner view. Every check above is server-side or
+  unauthenticated by design.
+- `'wording'` did not appear in the live sample. It is the label for a mention a
+  model HAS read and left with no lean, and none of the 208 sampled posts were
+  in that state; the case is pinned by test rather than by observation.
+- The named follow-ups in VISUAL-CORRECTION-LEDGER.md are untouched: duplicate
+  cell labels on Activity and Watching, Watching's tone and source presentation,
+  and the zero-feed question in the legacy breadth filter.
+
+## Rollback
+
+`git revert -m 1 4221196` on `main`, push, run `/root/update_coc.sh`. No schema
+question — this update adds no migration.
