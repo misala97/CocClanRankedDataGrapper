@@ -9,7 +9,7 @@ appended to `CODEX-DECISIONS.md`.
 | PERF1 summaries corrected | **Done** — see below |
 | PERF1 benchmark artifacts located and carried | **Done** — `radar-design/perf1-bench/` |
 | PERF2 design written | **Done** — `PERF2-PLAN.md` Part I |
-| S1 store and payload weight | Not started |
+| S1 store and payload weight | **Done** — `run_s1_payload.py` |
 | S2 cross-process reuse and cold miss | Not started |
 | S3 refresh capacity | Not started |
 | S4 semantics parity | Not started |
@@ -101,5 +101,104 @@ re-run in this workstream, and no claim here rests on re-running them.
 
 ## Measurements
 
-Nothing yet. Each entry below will name the script that produced it, the
-database it ran against, and the buffer pool that script reported.
+Every entry names the script that produced it, the database it ran against and
+the buffer pool that run reported. **Every run below reported
+`personal_apps_radar_perf1`, 9,272,064 `radar_bucket_sources` rows and a
+2560 MB buffer pool**; each script asserts the pool and refuses to continue
+below 2000 MB, so a number here cannot have come from a 128 MB run.
+
+**The engine is MySQL 8.0.46. The target is MariaDB 10.11.14.** The mechanism
+transfers; the seconds do not. Every plan-shaped finding says so where it
+appears.
+
+### The one substitution every run makes, and why
+
+The plan spells the warm set's source selection `('bluesky', 'fourchan',
+'reddit')`. On this fixture the root `reddit` expands through
+`config.REDDIT_SUBS` to thirty-five real subreddit names of which the fixture
+holds **three** — it stores `reddit:sub03`..`reddit:sub32` as placeholders.
+PERF1 retracted a whole round of evidence for exactly this: the `IN (...)`
+then matched 41% of the rows.
+
+So every run here spells "every root" as the fixture's own `SELECT DISTINCT
+source` — thirty-five names, asserted in `env_check.fixture_sources` to cover
+100% of the rows, rooting to exactly `['bluesky', 'fourchan', 'reddit']` in
+the payload. `perf1-bench/acceptance.py` did the same thing for the same
+reason.
+
+---
+
+### S1 — the store, and what a board weighs
+
+`radar-design/perf2-spike/run_s1_payload.py`, one run, 2026-09-10.
+
+**Step 1 — the table and the key exist and round-trip.** `enqueue` →
+`claim` (fence 1) → build → `publish` → `read` → `decompress` returned a
+payload **identical** to the one built, asserted in the script.
+
+| | |
+| --- | --- |
+| `key_json`, fixture selection | 644 chars |
+| `key_json`, **worst case with production's real source names** | **939 chars** |
+
+Part I.2 specified `VARCHAR(1024)`. It fits — with 85 characters to spare,
+which is two more subreddits. **Deviation: the spike's column is
+`VARCHAR(2048)`**, because the margin is thinner than the rate at which
+`REDDIT_SUBS` has been growing and a key that will not store is a board that
+will not build.
+
+**Step 2 — one payload, weighed.** `now` fixed at `2026-09-10T12:00:00`.
+
+| Selection | JSON bytes | zlib-6 bytes | ratio | compress | decompress | json.loads |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1h All companies US | 131,981 | 8,999 | 14.7x | 1.4 ms | 0.2 ms | 1.5 ms |
+| 4h All companies US | 156,610 | 11,486 | 13.6x | 1.8 ms | 0.2 ms | 1.8 ms |
+| 12h All companies US | 150,508 | **12,640** | 11.9x | 1.9 ms | 0.2 ms | 1.7 ms |
+| 24h All companies US | 128,448 | 10,801 | 11.9x | 1.6 ms | 0.2 ms | 1.6 ms |
+| 24h default 4 segments US | 64,774 | 6,140 | 10.5x | 0.7 ms | 0.1 ms | 0.8 ms |
+| 24h All companies US limit=100 | 138,336 | 11,252 | 12.3x | 2.1 ms | 0.2 ms | 1.9 ms |
+
+**A board is 6–13 KB stored and costs about 2 ms to read back into Python.**
+That is the whole of what the store adds to a warm read.
+
+**The build cost beside it, first pass against second in the same process** —
+reported apart rather than averaged, because averaging cold into warm is what
+PERF1 had to retract:
+
+| Selection | first | second |
+| --- | ---: | ---: |
+| 1h All companies US | **25,137 ms** | 2,782 ms |
+| 4h All companies US | **12,931 ms** | 4,140 ms |
+| 12h All companies US | 3,663 ms | 3,608 ms |
+| 24h All companies US | 4,265 ms | 4,318 ms |
+| 24h default 4 segments US | 4,216 ms | 4,163 ms |
+| 24h All companies US limit=100 | 4,330 ms | 4,167 ms |
+
+The 1h and 4h first passes are pages this process had not touched; 12h and 24h
+were already warm from the round-trip above. **A cold-page build is five to six
+times a warm one**, and S3 pays that on its first sweep.
+
+**Step 3 — what `serialize` costs beyond the board.** The decision Part V.4
+asks for.
+
+| Call | median | notes |
+| --- | ---: | --- |
+| `spend.summary()` | 4.5 ms | two aggregate queries, no memo |
+| `llm_sentiment.ops_summary()` | 3.0 ms | no memo |
+| `market_data.ops_summary(now)` | **91.2 ms** | memo cleared before each sample |
+| `market_data.ops_summary(now)` | 0.0 ms | its own 60-second memo, hit |
+| **all three** | **98.7 ms** | per `serialize` |
+
+**Ruling for Part V.4: freeze all three into the stored payload.** 98.7 ms is
+20% of the 500 ms warm target for three health readouts, and `market_data` is
+91 ms of it. They are *already* accepted as up-to-60-seconds stale by their own
+memo, and a stored board's `age_seconds` describes them at least as honestly as
+that memo does. Recomputing them per read would put a 91 ms query on the read
+path the whole design exists to empty — and the first reader after each memo
+expiry would pay it in full. The measured cost of freezing is that the ops
+numbers age with the board; the measured cost of not freezing is 91 ms on
+every cold-memo read.
+
+**Step 4 — the storage bound.** Largest measured compressed payload 12,640 B ×
+(16 warm + `MAX_ON_DEMAND_KEYS` 128) = **1.7 MB**. The bound is a rounding
+error against the 1798 MB `radar_bucket_sources` already carries.
