@@ -1031,3 +1031,35 @@ what the measurement says, for Codex to rule on.
 - **The producer under a real reader population.** Every read here is
   synthetic and serial or paired; nothing simulates the actual concurrency of
   the deployed surface.
+
+---
+
+## The backend test suite
+
+`python -m pytest tests -x -q` from `personal_apps/`, at `cf84932`:
+
+```
+1 failed, 71 passed, 27 warnings in 10.71s
+FAILED tests/test_diagnose_extractor_feedback.py::
+       test_the_full_run_is_read_only_and_recommends_nothing_yet
+```
+
+**The failure is environmental, not caused by this workstream.** That test's
+own docstring says "Acceptance 12.7 **against the live restore**", and it
+asserts a `LEGACY-POLICY cohort` appears in the diagnostic's output. This
+worktree's `.env` points `PERSONAL_DB_NAME` at
+`personal_apps_radar_perf1` — the disposable synthetic fixture
+`perf1-bench/gen_perf1.py` builds for board benchmarking. **That database has
+no `radar_post` and no `radar_mention` table at all**, verified directly, so
+there is no cohort for the diagnostic to find.
+
+Nothing under `personal_apps/` was modified by any task here, and `git status`
+is clean, so the failure cannot be a consequence of the spike. It would fail
+identically at `4221196` against this database.
+
+**Not claimed:** that the rest of the suite passes. `pytest tests -q` without
+`-x` was also started and **did not terminate** — it stalled after the failing
+test with no further output and no memory movement for many minutes, and was
+killed. Which test hangs, and why, was not investigated: it is outside this
+assignment and it happens on the fixture database, not on a normal one. The
+`-x` result above is what was actually observed.
