@@ -237,24 +237,27 @@ error against the 1798 MB `radar_bucket_sources` already carries.
 
 ### S2 — cross-process reuse, and the cold miss measured apart
 
-`radar-design/perf2-spike/run_s2_reuse.py`, one run, 2026-09-10. Every
-concurrency claim below is made with `subprocess.Popen`. **No thread is used
-anywhere in this task**, because the two-reader pair PERF1 had to retract was
-two threads in one interpreter.
+`radar-design/perf2-spike/run_s2_reuse.py`, **re-run on the deployed schema**
+after the held index was found and dropped, 2026-09-10. Every concurrency
+claim below is made with `subprocess.Popen`. **No thread is used anywhere in
+this task**, because the two-reader pair PERF1 had to retract was two threads
+in one interpreter.
 
 **Step 1 — two independent OS processes reuse one published result.**
 
 | | |
 | --- | --- |
-| Producer process, wall | 10.59 s (build 5,311 ms; the rest is interpreter start) |
-| Reader A, own process | 0.604 s, 50 rows, digest `bf55fe5595a48e4d` |
-| Reader B, own process | 0.588 s, 50 rows, digest `bf55fe5595a48e4d` |
+| Producer process, wall | 11.61 s (build 6,294 ms; the rest is interpreter start) |
+| Reader A, own process | 0.602 s, 50 rows, digest `bf55fe5595a48e4d` |
+| Reader B, own process | 0.616 s, 50 rows, digest `bf55fe5595a48e4d` |
 | Digests | **IDENTICAL** |
 | `fence` after both reads | **1** — exactly one build happened |
 
 The 0.6 s each reader reports is a **fresh-process first read**: SQLAlchemy
-pool creation, the lazy imports of `board`/`watch`, first statement compile. A
-gunicorn worker pays it once at boot, not per request. The per-request number
+pool creation, the lazy imports of `board`/`watch`, first statement compile,
+and the first per-account `watch_rows` build. A gunicorn worker pays it once
+at boot, not per request (S7 step 1 measures the same first read with no
+account at 57–66 ms, which isolates the account half). The per-request number
 is Step 2's.
 
 **Step 2 — ready reads on their own. THIS IS THE WARM NUMBER.** Twenty serial
@@ -263,14 +266,15 @@ reads per window through `reader.read_payload`, including the per-account
 
 | Window | n | median | p95 | max | payload |
 | --- | ---: | ---: | ---: | ---: | --- |
-| 12h All companies US | 20 | **33.4 ms** | **37.7 ms** | 57.4 ms | 50 rows + 3 watch rows |
-| 24h All companies US | 20 | **38.1 ms** | **41.9 ms** | 119.1 ms | 50 rows + 3 watch rows |
-| 24h, no account at all | 20 | 3.4 ms | 4.0 ms | 4.1 ms | store read alone |
+| 12h All companies US | 20 | **34.3 ms** | **41.5 ms** | 59.3 ms | 50 rows + 3 watch rows |
+| 24h All companies US | 20 | **33.5 ms** | **37.6 ms** | 95.8 ms | 50 rows + 3 watch rows |
+| 24h, no account at all | 20 | 3.1 ms | 3.7 ms | 3.9 ms | store read alone |
 
 **Warm target 500 ms: PASS, by more than a factor of twelve.** And the split
-matters: the store read is 3.4 ms of it and the per-account `watch_rows` build
+matters: the store read is 3.1 ms of it and the per-account `watch_rows` build
 is the other ~30 ms. The store is not the cost of a warm read; the account's
-own pinned rows are.
+own pinned rows are. Neither depends on the held index, which is why these
+numbers barely moved when it was dropped.
 
 **Step 3 — the first-ever miss, in three parts.** A `sort=lean` 24h key that
 had never been built, with a producer daemon **already running** so its
@@ -278,22 +282,31 @@ interpreter start is not counted — the real producer is a long-lived loop.
 
 | | |
 | --- | ---: |
-| (a) the reader answers `pending` | **8.3 ms** |
-| (b) enqueue → `state='ready'` | **5,242 ms** (producer build 5,139 ms) |
-| (c) until a reader can SEE that board | **5,282.5 ms** |
-| the follow-up ready read itself | 32.1 ms |
+| (a) the reader answers `pending` | **8.8 ms** |
+| (b) enqueue → `state='ready'` | **6,856.6 ms** (producer build 6,740 ms) |
+| (c) until a reader can SEE that board | **6,901.5 ms** |
+| the follow-up ready read itself | 36.1 ms |
 
-**(a) IS NOT A BOARD.** It is an 8.3 ms acknowledgement that no result exists
-yet. Reporting 8.3 ms as a cold success would be the same lie in a new place.
+**(a) IS NOT A BOARD.** It is an 8.8 ms acknowledgement that no result exists
+yet. Reporting 8.8 ms as a cold success would be the same lie in a new place.
 
-**(c) 5.28 s is the cold number, against a 2 s target. It FAILS**, and moving
-the build off the request path does not shorten it — that is exactly what
-Part I.8 predicted and what Part V.1 asks Codex to rule on. It is under the
-8,000 ms client abort, which the deployed synchronous path also was; what
-changes is that the wait no longer occupies a web worker.
+**(c) 6.90 s is the cold number, against a 2 s target. It FAILS by a factor
+of three and a half**, and moving the build off the request path does not
+shorten it — that is exactly what Part I.8 predicted and what Part V.1 asks
+Codex to rule on.
+
+**And a line the earlier, index-present run hid.** With the held index this
+same number was 5.28 s. Without it, **6.90 s against a client abort of
+8,000 ms leaves 1.1 s of margin.** A single unwarmed selection on a busier
+database, or one queued behind another build, exceeds the abort. That is not
+an argument for the index — the index is worth about a second of a build that
+now happens in the background — it is an argument that **`pending` plus
+client-side polling is not optional for unwarmed keys**, because the
+alternative is a request that sometimes dies in the browser. The screenshot in
+S8 step 3 is the other half of that argument.
 
 **Step 4 — two processes race one missing key.** Two reader subprocesses
-released at the same wall-clock instant (`2026-09-10T18:09:49.085861`, both).
+released at the same wall-clock instant (`2026-09-10T19:36:35.477095`, both).
 
 | | |
 | --- | ---: |
