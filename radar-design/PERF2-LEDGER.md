@@ -13,8 +13,8 @@ appended to `CODEX-DECISIONS.md`.
 | S2 cross-process reuse and cold miss | **Done** — `run_s2_reuse.py`. Warm PASSES; cold FAILS the 2 s target, as designed |
 | S3 refresh capacity | **Done** — `run_s3_capacity.py`. 120 s fits, 49% duty cycle |
 | S4 semantics parity | **Done** — `run_s4_parity.py`. 12/12 identical; two of Part I.1's five predictions were wrong |
-| S5 account isolation | Not started |
-| S6 bounded failure | Not started |
+| S5 account isolation | **Done** — `run_s5_isolation.py`. No leak |
+| S6 bounded failure | **Done** — `run_s6_failure.py`. One design defect found and fixed |
 | S7 restart, empty, expired | Not started |
 | S8 filter switching and browser | Not started |
 | S9 ingest contention | Not started |
@@ -448,3 +448,152 @@ changed by four, which is the entire pool above the limit. The mechanism is
 stored board makes it **fail**, as it must, and a set comparison — which is
 what a weaker test would have used — does **not** catch that swap. Both
 printed by the script.
+
+---
+
+### S5 — private data stays private
+
+`radar-design/perf2-spike/run_s5_isolation.py`, one run, 2026-09-10. Two
+accounts read one stored key; the two reads also ran as **separate OS
+processes**.
+
+**The test is built so it can fail.** Both watch lists are drawn from tickers
+that are *absent* from the stored blob, checked before the accounts are made —
+a raw-byte search for a ticker that is legitimately on the board would pass
+for the wrong reason.
+
+| | |
+| --- | --- |
+| Stored blob | 10,801 bytes compressed, 128,448 bytes JSON |
+| A watches | `T00000, T00001, T00002` |
+| B watches | `T00003, T00004` |
+| `watching` in the stored payload | **absent** |
+| `watch_rows` in the stored payload | **absent** |
+| Raw-byte search for each of the five tickers | **absent, all five** |
+| Account id or username in the blob | **absent** |
+| A's response | A's three tickers, 3 watch rows, **none of B's** |
+| B's response | B's two tickers, 2 watch rows, **none of A's** |
+| The shared half of the two responses | **IDENTICAL** |
+
+**Teeth:** the same byte search *does* find `T03960`, which is on the board,
+so it is capable of finding something. And the two responses' digests differ
+(`f4f30cd9f9d4` vs `076bc7f4b545`) — proof the per-account half is actually in
+the response and not silently missing.
+
+**No isolation failure.**
+
+---
+
+### S6 — failure is bounded
+
+`radar-design/perf2-spike/run_s6_failure.py`, one run, 2026-09-10. Steps 1 and
+2 use a **20-second lease** rather than `store.py`'s 120: a test cannot wait
+out the real one, and the statement is the same either way. Every reader call
+in this task runs under a tripwire that replaces `board.build` and
+`leaderboard.build_rows` with something that raises — so "the read path never
+builds" is enforced, not asserted.
+
+**Step 1 — kill a producer mid-build.**
+
+| | |
+| --- | --- |
+| Killed | 1.0 s into its build |
+| State immediately after | `building`, `lease_owner=victim`, fence 1 |
+| A second producer claiming before expiry | **blocked**, correctly |
+| A reader meanwhile | got `pending`, **built nothing** |
+| Lease expired and became reclaimable | 18.9 s after the kill (20 s lease) |
+| Rescuer published | fence **2**, 10,981 payload bytes |
+| **Recovery, kill → ready board** | **29.8 s** |
+
+A hung builder cannot poison its key: the lease expires and the reclaim
+increments the fence past it.
+
+**Step 2 — fence an overtaken builder.** Producer 1 claimed at fence 3 and was
+held past its lease. Producer 2 reclaimed at fence 4 and published. Producer 1
+then tried to publish:
+
+| | |
+| --- | --- |
+| Producer 1's publish | **`PUBLISHED False` — zero rows affected** |
+| The row afterwards | producer 2's `as_of`, fence 4 |
+
+**The older result cannot replace the newer one.** This is the second of the
+two defects Codex named in the in-process single-flight, and it is closed by
+one `AND fence = :fence` in the `UPDATE`.
+
+**Step 3 — a build that always raises. THIS FOUND A DEFECT IN PART I.3.**
+
+Part I.3 says a key that has failed `MAX_ATTEMPTS` times "stops being retried
+until a reader asks again, which resets `attempts`". **Readers ask
+constantly** — the island polls. Simulated: thirty minutes of a permanently
+broken key with a reader polling every five seconds.
+
+| Rule | reader polls | **build attempts** | backoff schedule |
+| --- | ---: | ---: | --- |
+| **Part I.3 as written** | 360 | **360** | 30 s, 30 s, 30 s, 30 s, … — never grows |
+| **the park timer (implemented)** | 360 | **6** | 30, 60, 120, 240, 480, 900 s |
+
+Under the plan's own rule the backoff does not exist: every poll resets
+`attempts` to zero and the next producer pass rebuilds the broken key
+immediately. That is the unbounded duplicated work Codex's ruling forbids,
+reintroduced through the reset clause.
+
+**The deviation, and it is in `store.py`:**
+- `enqueue` records demand (`requested_at`, `request_count`) and **never**
+  touches `attempts` or `next_attempt_at`. A key inside a live backoff keeps
+  its state; the queue index picks it up when the backoff expires.
+- `attempts` is clamped at `MAX_ATTEMPTS` by the claim, and resets **only** on
+  a successful publish.
+- At `MAX_ATTEMPTS` the key is **parked**: `next_attempt_at = now + 900 s`,
+  a retry *rate* rather than a stop. Recovery still needs no manual step, and
+  no number of readers can make it faster.
+
+The rest of the step, under the fix: backoff grows monotonically, `attempts`
+clamps at 6, `claim` returns `None` inside a backoff so **nothing builds
+unclaimed**, and throughout all 360 polls the reader got the last good board —
+50 rows, 364 s old, `stale=true`, **zero builds on the read path**.
+
+**Step 4 — producer outage longer than `MAX_AGE`.**
+
+| Into the outage | What the reader got | Age it reported | Rows |
+| ---: | --- | ---: | ---: |
+| 60 s | fresh board | 60 s | 50 |
+| 360 s | **stale board** | 360 s | 50 |
+| 3,540 s | **stale board** | 3,540 s | 50 |
+| 3,660 s | `pending` | n/a | 0 |
+
+Every reported age is the **real** age, to under two seconds. Past
+`HARD_MAX_AGE` the board is correctly treated as missing rather than served as
+an hour-old description of a rolling window. **No web-path build was started
+at any point** — the tripwire would have raised. The producer coming back
+returned the key to `ready` with **no manual step**.
+
+**Step 5 — no long transactions.** Every transaction on the engine during one
+produce cycle, timed by SQLAlchemy `begin`/`commit`/`rollback` events with its
+first statement recorded.
+
+| Duration | End | First statement |
+| ---: | --- | --- |
+| **4.128 s** | rollback | `SELECT radar_bucket_sources.ticker …` |
+| 0.003 s | commit | `SELECT state FROM radar_board_results …` |
+| 0.002 s | commit | `UPDATE radar_board_results SET state='ready', payload=… ` |
+| 0.002 s | commit | `UPDATE radar_board_results SET state='building', lease_owner=…` |
+| 0.001 s | rollback | `SELECT key_hash FROM radar_board_results WHERE …` |
+
+| | |
+| --- | ---: |
+| Longest transaction touching `radar_board_results` | **0.003 s** |
+| Longest transaction of any kind | **4.128 s** |
+
+**The claim commits before the build and the publish opens its own
+transaction after it. Nothing holds a transaction across `board.build`** —
+which is what Codex's ruling requires.
+
+**But a finding the plan does not mention: the build itself is one 4.1-second
+read transaction.** The ORM session opens on its first `SELECT` and does not
+close until the session does, so every produce cycle pins a read view on
+`radar_bucket_sources` for the length of a build. On the target that is a
+history-list cost paid every 120 seconds by the warm sweep, against a table
+ingest is writing to. It is not a blocker and it is not new — the deployed
+synchronous path does exactly the same thing on a web worker — but it is real
+and it belongs in the release package's list of things to watch.

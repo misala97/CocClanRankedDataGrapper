@@ -92,7 +92,8 @@ def main():
         assert claim.fence == 1, claim.fence
         payload, build_ms = producer.build_and_serialize(probe, now)
         blob = store.compress(producer.payload_bytes(payload))
-        assert store.publish(engine, claim, blob, now, dt.datetime.utcnow(),
+        assert store.publish(engine, claim, blob, now,
+                             now + dt.timedelta(milliseconds=build_ms),
                              build_ms)
         back = store.read(engine, key_hash, now)
         assert back.state == 'ready'

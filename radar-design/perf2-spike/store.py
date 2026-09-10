@@ -35,6 +35,20 @@ HARD_MAX_AGE = 3600         # past this a stored board is treated as missing
 # margin, or a healthy builder gets fenced out by its own slowness.
 LEASE_SECONDS = 120
 MAX_ATTEMPTS = 6
+# After MAX_ATTEMPTS the key is PARKED: retried at most once per this many
+# seconds, forever, rather than "stopped until a reader asks again".
+#
+# Part I.3 says a key that has failed MAX_ATTEMPTS times "stops being retried
+# until a reader asks again, which resets `attempts`". MEASURED in S6 step 3:
+# that rule has no backoff at all, because readers ask constantly -- the
+# island polls -- so every poll resets `attempts` to 0 and the next sweep
+# rebuilds the broken key immediately. Twelve reader polls produced twelve
+# build attempts. The park timer is the fix, and it is a deviation from
+# Part I.3 that the ledger records with the number.
+PARK_SECONDS = 900
+# Flipped to True by run_s6_failure.py ONLY, to reproduce Part I.3's literal
+# rule and count what it costs. Nothing else touches it.
+ENQUEUE_RESETS_ATTEMPTS = False
 
 # Bounds (Part I.2). Warm keys are never evicted.
 MAX_ON_DEMAND_KEYS = 128
@@ -189,8 +203,13 @@ def enqueue(engine, key_hash, key_json, now, warm=False):
         # the payload and its age, not from the state. A `building` key is
         # left alone: a reader must not interrupt a build in flight.
         #
-        # `attempts` is reset because a reader asking again is fresh demand,
-        # which is what un-parks a key that hit MAX_ATTEMPTS (Part I.3).
+        # DEMAND IS RECORDED; THE BACKOFF IS NOT TOUCHED. A key inside a live
+        # backoff keeps its `failed` state and its `next_attempt_at`, and the
+        # queue index picks it up when that expires -- no reader can shorten
+        # it. `attempts` resets on a successful publish and nowhere else.
+        reset = """,
+              attempts = 0,
+              next_attempt_at = NULL""" if ENQUEUE_RESETS_ATTEMPTS else ''
         conn.execute(sa.text("""
             INSERT INTO %s
               (key_hash, key_json, payload_version, state, warm,
@@ -199,13 +218,16 @@ def enqueue(engine, key_hash, key_json, now, warm=False):
             ON DUPLICATE KEY UPDATE
               requested_at = :now,
               request_count = request_count + 1,
-              warm = GREATEST(warm, :w),
-              attempts = 0,
-              next_attempt_at = NULL,
-              state = CASE WHEN state = 'building' THEN 'building'
-                           ELSE 'pending' END
-        """ % TABLE), {'k': key_hash, 'j': key_json, 'v': PAYLOAD_VERSION,
-                       'w': 1 if warm else 0, 'now': now})
+              warm = GREATEST(warm, :w)%s,
+              state = CASE
+                        WHEN state = 'building' THEN 'building'
+                        WHEN next_attempt_at IS NOT NULL
+                             AND next_attempt_at > :now THEN state
+                        ELSE 'pending'
+                      END
+        """ % (TABLE, reset)),
+            {'k': key_hash, 'j': key_json, 'v': PAYLOAD_VERSION,
+             'w': 1 if warm else 0, 'now': now})
         state = conn.execute(sa.text(
             'SELECT state FROM %s WHERE key_hash = :k' % TABLE),
             {'k': key_hash}).scalar()
@@ -263,10 +285,11 @@ def claim(engine, owner, now, key_hash=None):
                 UPDATE %s
                    SET state = 'building', lease_owner = :me,
                        lease_expires_at = :expires, fence = fence + 1,
-                       attempts = attempts + 1
+                       attempts = LEAST(attempts + 1, :maxa)
                  WHERE key_hash = :k AND %s
             """ % (TABLE, where)),
                 {'me': owner, 'k': candidate, 'now': now,
+                 'maxa': MAX_ATTEMPTS,
                  'expires': now + dt.timedelta(seconds=LEASE_SECONDS)})
             if result.rowcount != 1:
                 continue
@@ -313,16 +336,17 @@ def fail(engine, claim_, message, now):
 
     `payload` is deliberately untouched. The last good result keeps being
     served -- marked stale, with its real age -- while the key sits in
-    `failed` with a growing backoff. At MAX_ATTEMPTS the backoff stops
-    (`next_attempt_at` NULL) so the key is no longer retried until a reader
-    asks again, which resets `attempts` in `enqueue`.
+    `failed` with a growing backoff. At MAX_ATTEMPTS the key is PARKED at
+    `PARK_SECONDS`, which is a retry RATE rather than a stop: see the note on
+    PARK_SECONDS for the measurement that ruled out Part I.3's version.
     """
     with engine.begin() as conn:
         attempts = conn.execute(sa.text(
             'SELECT attempts FROM %s WHERE key_hash = :k' % TABLE),
             {'k': claim_.key_hash}).scalar() or 1
-        nxt = (None if attempts >= MAX_ATTEMPTS
-               else now + dt.timedelta(seconds=backoff(attempts)))
+        nxt = now + dt.timedelta(
+            seconds=(PARK_SECONDS if attempts >= MAX_ATTEMPTS
+                     else backoff(attempts)))
         result = conn.execute(sa.text("""
             UPDATE %s
                SET state = 'failed',

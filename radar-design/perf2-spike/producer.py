@@ -86,15 +86,19 @@ def serve_once(engine, owner, now, *, key_hash=None, query_cls=None,
         payload, build_ms = build_and_serialize(query, as_of)
         blob = store.compress(payload_bytes(payload))
     except Exception as exc:                            # noqa: BLE001
-        store.fail(engine, claim, '%s: %s' % (type(exc).__name__, exc),
-                   dt.datetime.utcnow())
+        # ONE CLOCK. `now` and not `utcnow()`: mixing them put a backoff five
+        # hours into the future the first time this ran under a simulated
+        # clock, and the same mixing in the real producer would make every
+        # timestamp in the row disagree with the one the reader compares
+        # against.
+        store.fail(engine, claim, '%s: %s' % (type(exc).__name__, exc), now)
         return claim.key_hash
 
     if pause_before_publish:
         time.sleep(pause_before_publish)
 
-    published = store.publish(engine, claim, blob, as_of,
-                              dt.datetime.utcnow(), build_ms,
+    built_at = now + dt.timedelta(milliseconds=build_ms)
+    published = store.publish(engine, claim, blob, as_of, built_at, build_ms,
                               producer_revision=revision)
     if not published:
         # Overtaken while we built. Their result is newer than ours.
@@ -140,7 +144,21 @@ def main():
     ap.add_argument('--fail-with')
     ap.add_argument('--pause-before-publish', type=float, default=0.0)
     ap.add_argument('--hang', type=float, default=0.0,
-                    help='sleep after claiming, before building (S6)')
+                    help='claim, sleep this long, THEN build and try to '
+                         'publish -- the overtaken builder of S6 step 2')
+    ap.add_argument('--lease', type=float, default=None,
+                    help='override store.LEASE_SECONDS (S6 only; the real '
+                         'lease is minutes and a test cannot wait for it)')
+    ap.add_argument('--advance', action='store_true',
+                    help='let `now` track the wall clock from --now, which '
+                         'is what a real producer does and what makes a '
+                         'lease actually expire')
+    ap.add_argument('--wall',
+                    help='the caller\'s wall-clock instant at the moment it '
+                         'passed --now. Without this the child\'s simulated '
+                         'clock would start only once its imports finish, '
+                         'and it would sit seconds behind the parent\'s -- '
+                         'which is long enough to miss a short lease.')
     ap.add_argument('--poll', type=float, default=0.0,
                     help='run as a daemon loop for this many seconds, '
                          'claiming whatever is queued -- the shape the real '
@@ -149,7 +167,18 @@ def main():
     ap.add_argument('--poll-interval', type=float, default=0.25)
     args = ap.parse_args()
 
-    now = dt.datetime.fromisoformat(args.now)
+    base = dt.datetime.fromisoformat(args.now)
+    wall_ref = (dt.datetime.fromisoformat(args.wall) if args.wall
+                else dt.datetime.now())
+
+    def clock():
+        if not args.advance:
+            return base
+        return base + (dt.datetime.now() - wall_ref)
+
+    now = base
+    if args.lease is not None:
+        store.LEASE_SECONDS = args.lease
     app = _app()
     with app.app_context():
         from extensions import db
@@ -171,7 +200,7 @@ def main():
             print('READY', flush=True)
             until = time.perf_counter() + args.poll
             while time.perf_counter() < until:
-                key_hash = serve_once(engine, args.owner, now,
+                key_hash = serve_once(engine, args.owner, clock(),
                                       query_cls=Query,
                                       fail_with=args.fail_with,
                                       pause_before_publish=(
@@ -183,14 +212,24 @@ def main():
             return
 
         if args.hang:
-            claim = store.claim(engine, args.owner, now, key_hash=args.key)
+            claim = store.claim(engine, args.owner, clock(),
+                                key_hash=args.key)
             print('CLAIMED %s fence %d' % (claim.key_hash[:12], claim.fence),
                   flush=True)
             time.sleep(args.hang)
+            query = keys.query_from_json(claim.key_json, Query)
+            payload, build_ms = build_and_serialize(query, clock())
+            blob = store.compress(payload_bytes(payload))
+            at = clock()
+            ok = store.publish(engine, claim, blob, at,
+                               at + dt.timedelta(milliseconds=build_ms),
+                               build_ms)
+            print('PUBLISHED %s' % ok, flush=True)
             return
 
         for _ in range(max(args.loops, 0)):
-            key_hash = serve_once(engine, args.owner, now, key_hash=args.key,
+            key_hash = serve_once(engine, args.owner, clock(),
+                                  key_hash=args.key,
                                   query_cls=Query, fail_with=args.fail_with,
                                   pause_before_publish=args.pause_before_publish)
             if key_hash is None:
