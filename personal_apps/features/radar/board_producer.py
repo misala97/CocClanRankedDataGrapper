@@ -36,13 +36,26 @@ whole life of the process.
 with the exception's TYPE (never its message -- that is where a ticker, a
 query or an account id would arrive in a column), backs off, and goes on
 serving the board it published last time. Six failures park it for fifteen
-minutes, which is a rate rather than a stop.
+minutes, which is a rate rather than a stop. What fails AFTER a successful
+build -- the publish, the log line, the heartbeat -- is the database's failure
+and not the key's, so it is logged and nothing is written down against the
+key; the lease expires on its own and the key comes back.
+
+*A database that is down is one incident, not two a second.* The loop does not
+exit when a tick raises, but it does back off: consecutive failures double the
+wait from twice the poll interval up to thirty seconds, and a tick that
+completes puts the count back to zero. The first failure of a run carries the
+traceback and every one after it is a single line saying how many there have
+been and when the next attempt is -- because at the idle rate a minute of
+outage is a hundred and twenty tracebacks, and the hundred and twentieth says
+nothing the first did not.
 """
 import datetime as dt
 import json
 import logging
 import os
 import socket
+import time
 import zlib
 from time import perf_counter
 
@@ -67,6 +80,14 @@ COMPRESSION = 6
 
 # How long an idle loop waits before asking for work again.
 DEFAULT_POLL_INTERVAL = 0.5
+
+# The longest a failing loop waits between attempts. Consecutive failures
+# double the wait from twice the poll interval up to this; without a cap the
+# doubling reaches an hour inside a dozen failures, and a producer that has
+# stopped asking is indistinguishable from one that has died. Thirty seconds
+# is a rate a recovering database can carry and a delay an operator will sit
+# through.
+MAX_BACKOFF_SECONDS = 30.0
 
 # How often the loop evicts, retires and reports. Not per tick: at a half
 # second that would be four housekeeping transactions a second against the
@@ -197,8 +218,21 @@ def serve_once(engine, ns, owner, now_fn, *, prefer, revision=None):
     closed before `publish` opens one of its own, so a build and a write never
     hold two connections at once, and a failure never leaves a transaction
     open across the backoff.
+
+    Three separate spans of risk, each with its own answer, because they are
+    not the same event:
+
+    * the round-trip guard, whose failure is not an exception at all,
+    * the build, whose failure is the key's own and is recorded on the key,
+    * everything after the build, whose failure is the DATABASE's and must not
+      be written down as this key having failed to build.
     """
     revision = revision or board_namespace.describe()['revision']
+    # The same truncation `Loop.__init__` applies. `lease_owner` is
+    # VARCHAR(64) and the fence compares the stored value to this one, so an
+    # owner the column silently shortened would fence itself out of its own
+    # publish -- and this function is callable without a `Loop`.
+    owner = owner[:_OWNER_WIDTH]
     claimed_at = now_fn()
     claim = board_store.claim(engine, ns, owner, claimed_at, prefer=prefer)
     if claim is None:
@@ -209,6 +243,11 @@ def serve_once(engine, ns, owner, now_fn, *, prefer, revision=None):
                   max(0.0, (claimed_at - claim.enqueued_at).total_seconds()))
     started = perf_counter()
     try:
+        # Outside every `except` below, so the guard's failure is recorded
+        # exactly once. Inside one, a `_record_failure` that itself raised
+        # would be caught and recorded a SECOND time under a different error
+        # name, and the row would end up saying the key failed for whatever
+        # went wrong while writing down that it failed.
         if not board_keys.round_trips(claim.key_hash, claim.key_json):
             logger.error('board key does not reproduce its own hash key=%s',
                          claim.key_hash[:board_metrics.KEY_WIDTH])
@@ -217,33 +256,46 @@ def serve_once(engine, ns, owner, now_fn, *, prefer, revision=None):
                             build_ms=_elapsed(started))
             return claim.key_hash
 
-        query = board_keys.query_from_json(claim.key_json)
         try:
+            query = board_keys.query_from_json(claim.key_json)
             blob, as_of, built_at, build_ms, payload_bytes = build_blob(
                 query, now=now_fn)
+        except Exception as exc:
+            # Broad on purpose, and narrow in SCOPE. One key's data being
+            # wrong is not a reason for the other seven to stop being built,
+            # and the traceback goes to the log while only the exception's
+            # type goes into the row.
+            logger.exception('board build failed key=%s class=%s',
+                             claim.key_hash[:board_metrics.KEY_WIDTH], cls)
+            _record_failure(engine, ns, claim, owner, type(exc).__name__,
+                            now_fn, cls=cls, queue_wait=queue_wait,
+                            build_ms=_elapsed(started))
+            return claim.key_hash
         finally:
             db.session.remove()
 
-        published = board_store.publish(
-            engine, ns, claim, blob, as_of=as_of, built_at=built_at,
-            build_ms=build_ms, producer_revision=revision)
-        board_metrics.log_build(
-            key=claim.key_hash, cls=cls, queue_wait=queue_wait,
-            build_ms=build_ms, payload_bytes=payload_bytes,
-            result='published' if published else 'overtaken')
-        if published:
-            stamped = now_fn()
-            board_store.heartbeat(engine, ns, owner, stamped,
-                                  success_at=stamped)
-    except Exception as exc:
-        # Broad on purpose. One key's data being wrong is not a reason for the
-        # other seven to stop being built, and the traceback goes to the log
-        # while only the exception's type goes into the row.
-        logger.exception('board build failed key=%s class=%s',
-                         claim.key_hash[:board_metrics.KEY_WIDTH], cls)
-        _record_failure(engine, ns, claim, owner, type(exc).__name__, now_fn,
-                        cls=cls, queue_wait=queue_wait,
-                        build_ms=_elapsed(started))
+        try:
+            published = board_store.publish(
+                engine, ns, claim, blob, as_of=as_of, built_at=built_at,
+                build_ms=build_ms, producer_revision=revision)
+            board_metrics.log_build(
+                key=claim.key_hash, cls=cls, queue_wait=queue_wait,
+                build_ms=build_ms, payload_bytes=payload_bytes,
+                result='published' if published else 'overtaken')
+            if published:
+                stamped = now_fn()
+                board_store.heartbeat(engine, ns, owner, stamped,
+                                      success_at=stamped)
+        except Exception:
+            # The board was BUILT. Whatever failed here -- the publish, the
+            # log line, the success heartbeat -- is not the key's fault, and
+            # calling `fail` would count an attempt against a key that built
+            # perfectly well and back it off for thirty seconds because the
+            # database blinked. The lease is what protects the row: it expires
+            # on its own and the key becomes claimable again, which is the
+            # same recovery an interrupted producer gets.
+            logger.exception('board publish failed key=%s class=%s',
+                             claim.key_hash[:board_metrics.KEY_WIDTH], cls)
     finally:
         db.session.remove()
     return claim.key_hash
@@ -267,6 +319,17 @@ def _record_failure(engine, ns, claim, owner, error, now_fn, *, cls,
 def _elapsed(started):
     """Milliseconds since a `perf_counter` reading, as a whole number."""
     return int(round((perf_counter() - started) * 1000))
+
+
+def _monotonic():
+    """`time.perf_counter`, for measuring an INTERVAL rather than a duration.
+
+    Named apart from the `perf_counter` `_elapsed` reads so that a test which
+    pins one of the two does not silently move the other: a build's duration
+    and the housekeeping interval are unrelated questions that happen to want
+    the same clock.
+    """
+    return time.perf_counter()
 
 
 # --- readiness --------------------------------------------------------------
@@ -375,26 +438,56 @@ class Loop:
 
         A tick that raises is logged and retried. A database that blinked is
         not a reason for the only process that builds boards to exit.
+
+        But consecutive failures BACK OFF, doubling from twice the poll
+        interval up to `MAX_BACKOFF_SECONDS`, and one tick that completes puts
+        the count back to zero. Retrying a down database twice a second is
+        both the least kind thing to do to a server that is trying to come
+        back and the noisiest way to report one problem: at the idle rate, an
+        outage of a minute is a hundred and twenty tracebacks in the service
+        log, and the hundred and twentieth says nothing the first did not. So
+        the first failure carries the traceback and every failure after it is
+        one line saying how many there have been and when the next attempt is.
         """
         logger.info('board producer running owner=%s poll_interval=%.2fs',
                     self.owner, self.poll_interval)
+        failures = 0
         while not stop_event.is_set():
             try:
                 served = self.tick()
             except Exception:
-                logger.exception('board producer tick failed')
+                failures += 1
+                wait = min(self.poll_interval * 2 ** failures,
+                           MAX_BACKOFF_SECONDS)
+                message = ('board producer tick failed failures=%d '
+                           'next_wait=%.1fs')
+                if failures == 1:
+                    logger.exception(message, failures, wait)
+                else:
+                    logger.info(message, failures, wait)
+                # The tick's own `remove()` may be what did not happen.
                 db.session.remove()
-                served = None
+                stop_event.wait(wait)
+                continue
+            failures = 0
             if served is None:
                 stop_event.wait(self.poll_interval)
         logger.info('board producer stopped owner=%s', self.owner)
 
     def _housekeeping(self, now):
-        """Eviction, retirement and one line about the queue, once a minute."""
+        """Eviction, retirement and one line about the queue, once a minute.
+
+        The MINUTE is monotonic; `now` is the wall clock and is only what the
+        three calls below are asked about. A wall clock that stepped forward
+        under NTP would otherwise run the housekeeping early, and one that
+        stepped back would suspend it for as long as the step -- on a producer
+        whose whole job is to keep running unattended.
+        """
+        elapsed = _monotonic()
         if (self._housekept_at is not None and
-                (now - self._housekept_at).total_seconds() < HOUSEKEEPING_SECONDS):
+                elapsed - self._housekept_at < HOUSEKEEPING_SECONDS):
             return
-        self._housekept_at = now
+        self._housekept_at = elapsed
         evicted = board_store.evict(self.engine, self.ns, now)
         retired = board_store.retire_namespaces(self.engine, self.ns, now)
         queue = board_store.queue_summary(self.engine, self.ns, now)

@@ -94,8 +94,17 @@ def _key(value):
 
 
 def _seconds(value):
-    """A duration to one decimal, or `-` for a state that has none."""
-    return '-' if value is None else f'{float(value):.1f}'
+    """A duration to one decimal, or `-` for a state that has none.
+
+    Clamped at zero. Every duration on these lines is a difference between two
+    WALL clocks -- `cache_age` is now minus a stored `as_of`, `queue_age` is
+    now minus an `enqueued_at` -- and the two readings need not have come from
+    the same machine or from a machine whose clock never stepped sideways.
+    `cache_age=-0.5` is a board built half a second into the future, which is
+    not a thing an operator can act on and not a thing a dashboard parsing
+    `\\d+\\.\\d` can even read.
+    """
+    return '-' if value is None else f'{max(0.0, float(value)):.1f}'
 
 
 def _count(value):

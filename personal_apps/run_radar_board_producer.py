@@ -22,7 +22,6 @@ once this exits 0, because the alternative is every viewer on the site meeting
 `pending` at the same moment.
 """
 import argparse
-import datetime as dt
 import json
 import logging
 import signal
@@ -35,14 +34,12 @@ from features.radar import board_namespace, board_producer
 
 logger = logging.getLogger('radar.board')
 
-
-def _utcnow():
-    """Naive UTC, the convention every datetime in this codebase is stored in.
-
-    `datetime.utcnow()` is deprecated and slated for removal, and it printed a
-    warning into the service log on every cycle.
-    """
-    return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+# The producer's own clock, not a copy of it. Two definitions of "now" in a
+# process whose stored `as_of` is the whole point of the cache is one more than
+# it can have: `--readiness` compares a stamp this file reads against one the
+# loop wrote, and the day one of them grew a timezone the other would still
+# look right.
+_utcnow = board_producer.utcnow
 
 
 def _stop_on_signals(stop):

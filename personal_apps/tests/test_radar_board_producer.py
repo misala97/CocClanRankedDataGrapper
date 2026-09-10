@@ -106,12 +106,20 @@ def fake_build(monkeypatch, *, clock=None, advance=0, raises=None, before=None):
     `as_of` from `built_at`. `before` runs at the top of the build, which is
     how the overtaken test gets a second producer in edgeways.
 
+    It does read through `db.session` once, and that one statement is not
+    decoration. The real `board.build` is four ORM queries, so a real build
+    leaves the session holding an open read transaction -- and closing that
+    before the publish opens its own is the reason `serve_once` removes the
+    session twice. A fake that touched no session would let that removal be
+    deleted with every test still passing.
+
     Returns the call log.
     """
     calls = []
 
     def build(sources, now, **kwargs):
         calls.append((tuple(sources), now, tuple(sorted(kwargs.items()))))
+        db.session.execute(sa.text('select 1')).scalar()
         if before is not None:
             before()
         if clock is not None and advance:
@@ -251,6 +259,20 @@ def test_the_warm_set_matches_the_number_readiness_compares_against():
     assert len(board_producer.warm_queries(NOW)) == board_store.limits().warm_limit
 
 
+def test_the_eight_warm_hashes_do_not_move_with_the_clock():
+    """The standing keys are the same eight at every hour of the day.
+
+    They have to be. A key hash that carried the moment it was derived would
+    mean the warm sweep adopting eight NEW rows on every tick, the previous
+    eight aging out of the freshness window with nothing ever rebuilding them,
+    and a readiness gate that could never open -- while `parse_query` takes a
+    `now` and is entitled to use it, which is exactly why this is asserted
+    rather than assumed.
+    """
+    assert board_producer.warm_keys(NOW) == board_producer.warm_keys(
+        NOW + seconds(6 * 60 * 60))
+
+
 # --- one job ----------------------------------------------------------------
 
 def test_serve_once_claims_builds_publishes_and_the_board_reads_back(
@@ -295,6 +317,55 @@ def test_the_stored_payload_carries_the_rooted_sources_and_the_ops_stamp(
     assert payload['generated_at'] == NOW.isoformat() + 'Z'
     # Viewer-invariant: nothing per account is ever compressed into the blob.
     assert 'watching' not in payload and 'watch_rows' not in payload
+
+
+@pytest.mark.parametrize('args, warm', [
+    ({'market': 'us', 'segment': '', 'window': '12'}, True),
+    # NOT warm, and here because the warm eight cannot pin the rooting: their
+    # sources are the whole of SOURCES, every one of which is already its own
+    # root, so `sorted({source_root(s) for s in sources})` is the identity on
+    # them and a `build_blob` that dropped the rooting would still agree.
+    # One subreddit is where the two paths could differ and must not.
+    ({'market': 'us', 'sources': 'reddit:wallstreetbets'}, False),
+], ids=['a standing board', 'a sub-source selection'])
+def test_the_blob_is_the_payload_the_request_path_would_have_served(
+        producer, monkeypatch, args, warm):
+    """The two paths to a board, compared field for field.
+
+    This is the whole premise of the shared cache: a reader handed a stored
+    blob must be handed what the synchronous path would have built for it. The
+    two are separate code -- `build_payload` parses, builds, roots and
+    serializes; `build_blob` does the same four things from a `Query` -- and
+    nothing but this test forces them to stay the same. A rooting rule added
+    to one, a field `serialize` grows that only one of them stamps, and the
+    shared path serves a board subtly unlike the one it replaced, to everyone,
+    silently.
+
+    Three fields are expected to differ, and each is named rather than
+    skipped: `watching` and `watch_rows` are per ACCOUNT and are the reason
+    the blob is viewer-invariant at all, and `ops_collected_at` exists only
+    because a stored payload's frozen ops summaries need an age.
+    """
+    fake_build(monkeypatch)
+    # A cache of this test's own, so a board built by the fake cannot be
+    # served to a later test asking the same selection for real.
+    monkeypatch.setattr(api, 'board_cache', {})
+
+    query = api.parse_query(args, now=NOW)
+    assert (board_keys.canonical(query) in board_producer.warm_keys(NOW)) is warm
+
+    served = api.build_payload(args, now=NOW, user_id=None)
+    blob, _, _, _, _ = board_producer.build_blob(query, now=Clock())
+    stored = json.loads(zlib.decompress(blob))
+
+    assert served.pop('watching') == []
+    assert served.pop('watch_rows') == []
+    assert stored.pop('ops_collected_at') == NOW.isoformat() + 'Z'
+
+    # Both through the same encoder: the blob is JSON on the way into the
+    # column and the request path is JSON on the way to the browser, so the
+    # comparison is of content and not of which Python type carried it.
+    assert json.loads(json.dumps(served, sort_keys=True, default=str)) == stored
 
 
 def test_as_of_is_the_clock_at_the_start_of_the_build(producer, monkeypatch):
@@ -415,8 +486,13 @@ def test_the_preference_survives_a_class_that_had_nothing(producer, monkeypatch)
     assert loop.next_class == 'warm', 'a starved preference must not rotate'
 
 
+SUSTAINED_TICKS = 80
+SUSTAINED_REFRESH = 10
+SUSTAINED_BUILD = 0.5
+
+
 def test_a_sustained_mixed_run_starves_neither_class(producer, monkeypatch):
-    """Forty builds with a new viewer arriving on every one of them.
+    """Eighty builds with a new viewer arriving on every one of them.
 
     Two bounds, and they pull against each other. The standing boards must not
     age past twice their refresh interval, which costs the queue a slot every
@@ -428,10 +504,21 @@ def test_a_sustained_mixed_run_starves_neither_class(producer, monkeypatch):
     takes leaves the queue one deeper for the rest of the run, and no fixed
     wait can hold. What alternation actually promises is that the queue gets
     at least every other build, and that is the bound asserted.
+
+    EIGHTY ticks and not forty, because the warm half of this test has to be
+    able to fail. Forty ticks of a half-second build is twenty seconds of
+    simulated time, and `age <= 2 * refresh` is twenty seconds -- so no
+    arrangement of those forty ticks could have breached it, and the bound was
+    decoration. Forty seconds is four refresh intervals, which is long enough
+    for a standing board to age past the bound if the sweep ever stops
+    re-enqueueing it. The count is asserted for the same reason: two warm
+    builds is what a run gets from adopting the keys ONCE, and correct
+    behaviour rebuilds each of the two around ticks 0, 2, ~20, ~22, ~40, ~42
+    and ~60, ~62.
     """
-    monkeypatch.setenv('RADAR_BOARD_REFRESH_SECONDS', '10')
+    monkeypatch.setenv('RADAR_BOARD_REFRESH_SECONDS', str(SUSTAINED_REFRESH))
     clock = Clock()
-    fake_build(monkeypatch, clock=clock, advance=0.5)
+    fake_build(monkeypatch, clock=clock, advance=SUSTAINED_BUILD)
     warm = warm_subset(monkeypatch, 2)
     warm_hashes = {board_keys.canonical(query)[0] for query in warm}
 
@@ -440,7 +527,7 @@ def test_a_sustained_mixed_run_starves_neither_class(producer, monkeypatch):
     warm_ages = []
     admitted_at = {}
     waits = []
-    for index in range(40):
+    for index in range(SUSTAINED_TICKS):
         pair = demand_key(index)
         producer.admit(pair, now=clock.now)
         admitted_at[pair[0]] = (index, _pending_demand(producer))
@@ -456,9 +543,15 @@ def test_a_sustained_mixed_run_starves_neither_class(producer, monkeypatch):
             if stored is not None and stored.as_of is not None:
                 warm_ages.append((clock.now - stored.as_of).total_seconds())
 
-    assert served_classes.count('warm') >= 2, 'the warm sweep never ran'
-    assert max(warm_ages) <= 2 * 10, (
-        f'a standing board aged to {max(warm_ages)}s past a 10s refresh')
+    # Four, not two: two is what adopting the keys once and never coming back
+    # for them would produce, and forty seconds is four refresh intervals.
+    assert served_classes.count('warm') >= 4, (
+        f'the warm sweep ran {served_classes.count("warm")} times in '
+        f'{SUSTAINED_TICKS * SUSTAINED_BUILD}s of a '
+        f'{SUSTAINED_REFRESH}s refresh')
+    assert max(warm_ages) <= 2 * SUSTAINED_REFRESH, (
+        f'a standing board aged to {max(warm_ages)}s past a '
+        f'{SUSTAINED_REFRESH}s refresh')
     assert all(wait <= 2 * position for wait, position in waits), (
         f'a viewer waited more than two builds per place in line: {waits}')
     # The mechanism behind that bound, asserted directly.
@@ -568,6 +661,77 @@ def test_a_builder_that_lost_its_lease_publishes_nothing(producer, monkeypatch,
     assert any('result=published' in line for line in lines)
 
 
+def test_serve_once_claims_under_an_owner_the_column_can_hold(producer,
+                                                              monkeypatch):
+    """`lease_owner` is VARCHAR(64) and the fence compares stored to held.
+
+    An owner longer than the column is shortened on the way in and matches
+    nothing on the way out, so a builder would fence itself out of its own
+    publish -- every board discarded as overtaken, by its own name. Under a
+    strict `sql_mode` it does not even get that far. `Loop.__init__` truncates;
+    `serve_once` is callable without a `Loop` and has to do the same.
+    """
+    clock = Clock()
+    fake_build(monkeypatch)
+    pair = demand_key(0)
+    producer.admit(pair)
+    long_owner = 'a-hostname-nobody-should-have-chosen:' * 4
+    assert len(long_owner) > board_producer._OWNER_WIDTH
+
+    assert board_producer.serve_once(
+        producer.engine, producer.ns, long_owner, clock,
+        prefer='demand', revision=REVISION) == pair[0]
+
+    stored = producer.read(pair[0])
+    assert stored.payload is not None, (
+        'the publish was fenced out by the builder\'s own name')
+    assert stored.queue_state == 'idle'
+    health = board_store.health(producer.engine, producer.ns)
+    assert health['producer_owner'] == long_owner[:board_producer._OWNER_WIDTH]
+
+
+def test_a_database_that_blinked_after_the_build_is_not_the_keys_fault(
+        producer, monkeypatch, caplog):
+    """A `publish` that raises must not mark the key as having failed to build.
+
+    The board was built, and built correctly. Counting an attempt against the
+    key and backing it off for thirty seconds would punish the selection for
+    the database's moment, and six of those moments would park a perfectly
+    good standing board for fifteen minutes. What protects the row is the
+    lease: it expires on its own and the key becomes claimable again, which is
+    the same recovery a producer killed mid-build gets.
+    """
+    clock = Clock()
+    fake_build(monkeypatch)
+    pair = demand_key(0)
+    producer.admit(pair)
+
+    def explode(*args, **kwargs):
+        raise RuntimeError('the connection went away')
+
+    monkeypatch.setattr(board_store, 'publish', explode)
+
+    with caplog.at_level(logging.INFO, logger='radar.board'):
+        assert producer.serve(clock, prefer='demand') == pair[0]
+
+    stored = producer.read(pair[0])
+    assert stored.queue_state == 'building', (
+        'a failing publish was written down as a failing build')
+    assert stored.last_error is None, 'the database blinking became the key\'s error'
+    assert stored.next_attempt_at is None, 'a built board was backed off'
+    # One, and that one is `claim`'s own counter -- which the next successful
+    # publish sets back to zero. `fail` was not called, which is the claim
+    # being made: it is `fail` that turns a count into thirty seconds of
+    # backoff and, at six, into fifteen minutes of parking.
+    assert stored.attempts == 1
+    assert stored.lease_expires_at is not None, (
+        'nothing is left to make the key claimable again')
+    assert any('board publish failed' in record.getMessage()
+               for record in caplog.records), 'the failure went unlogged'
+    assert board_store.health(producer.engine,
+                              producer.ns)['producer_error'] is None
+
+
 # --- transactions -----------------------------------------------------------
 
 class _Depth:
@@ -633,6 +797,15 @@ def test_an_idle_tick_leaves_nothing_open(producer, monkeypatch):
 
 
 def test_no_job_leaves_a_transaction_open_behind_it(producer, monkeypatch):
+    """Nothing open after a job, and nothing NESTED during one.
+
+    `depth.peak == 1` is the load-bearing half. `serve_once` removes the
+    session in a `finally` around the build itself and not only at the end, so
+    that the build's own read transaction is closed before `publish` opens one
+    of its own. Without that inner removal the two overlap: a peak of two,
+    which is one pooled connection and one open read view held for the length
+    of a build, on every job, on the one process that builds every board.
+    """
     clock = Clock()
     fake_build(monkeypatch)
     warm_subset(monkeypatch, 1)
@@ -643,6 +816,9 @@ def test_no_job_leaves_a_transaction_open_behind_it(producer, monkeypatch):
         for _ in range(3):
             loop.tick(NOW)
             assert depth.open == 0
+            assert depth.peak == 1, (
+                f'a serving tick nested {depth.peak} transactions, so the '
+                f'build held one open across the publish')
             assert session_transaction() is None
 
     broken_build(monkeypatch)
@@ -650,6 +826,8 @@ def test_no_job_leaves_a_transaction_open_behind_it(producer, monkeypatch):
     with _Depth(producer.engine) as depth:
         loop.tick(NOW)
         assert depth.open == 0, 'a failed job left a transaction open'
+        assert depth.peak == 1, (
+            f'a failing tick nested {depth.peak} transactions')
     assert session_transaction() is None
 
 
@@ -685,6 +863,98 @@ def test_shutdown_waits_for_the_build_in_flight_and_no_longer(producer,
     stored = producer.read(key_hash)
     assert stored is not None and stored.payload is not None, (
         'the build in flight was abandoned rather than finished')
+
+
+# --- a database that is down ------------------------------------------------
+
+def scripted_loop(producer, monkeypatch, script, *, poll_interval=0.5):
+    """A loop whose `tick` follows a script, and whose waits are recorded.
+
+    `stop_event.wait` is replaced rather than shortened: the point is the
+    sequence of durations the loop ASKS for, and waiting them out would make
+    this test take the sum of them.
+    """
+    stop = threading.Event()
+    waits = []
+    steps = iter(script)
+
+    def tick():
+        step = next(steps)
+        if step == 'fail':
+            raise RuntimeError('the database is down')
+        if step == 'stop':
+            stop.set()
+            return 'a' * 64
+        return None if step == 'idle' else 'a' * 64
+
+    def wait(timeout=None):
+        waits.append(timeout)
+        return stop.is_set()
+
+    loop = producer.loop(Clock(), poll_interval=poll_interval)
+    monkeypatch.setattr(loop, 'tick', tick)
+    monkeypatch.setattr(stop, 'wait', wait)
+    return loop, stop, waits
+
+
+def test_a_failing_tick_backs_off_instead_of_retrying_twice_a_second(
+        producer, monkeypatch, caplog):
+    """A database that is down must not be polled at the idle rate forever.
+
+    The failure mode this fixes is a whole service log: half a second apart,
+    a full traceback each time, for as long as the outage lasts -- which is
+    both the noisiest way to report one problem and the least kind thing to do
+    to the database that is trying to come back. So consecutive failures
+    double the wait up to a cap, and one completed tick puts it back.
+    """
+    loop, stop, waits = scripted_loop(
+        producer, monkeypatch,
+        # Three failures, one tick that completes with nothing to do, then one
+        # more failure -- which must start the curve again, not continue it.
+        ['fail', 'fail', 'fail', 'idle', 'fail', 'stop'])
+
+    with caplog.at_level(logging.INFO, logger='radar.board'):
+        loop.run(stop)
+
+    assert waits == [1.0, 2.0, 4.0, 0.5, 1.0], (
+        'the backoff is 2x the poll interval, doubling, and reset by a tick '
+        f'that completed: {waits}')
+
+    failed = [record for record in caplog.records
+              if 'tick failed' in record.getMessage()]
+    # One line per failed tick, no more: four failures, four lines. Half a
+    # second apart with a traceback each, a minute of outage is a hundred and
+    # twenty tracebacks that all say the same thing.
+    lines = [record.getMessage() for record in failed]
+    assert len(lines) == 4
+    assert 'failures=1' in lines[0] and 'next_wait=1.0s' in lines[0]
+    assert 'failures=3' in lines[2] and 'next_wait=4.0s' in lines[2]
+    assert 'failures=1' in lines[3] and 'next_wait=1.0s' in lines[3], (
+        'a tick that completed did not reset the count')
+
+    # A traceback opens each RUN of failures and nothing after it. Two runs
+    # here, because the successful tick in the middle ended the first one --
+    # and a fresh outage is a fresh incident, worth a fresh traceback.
+    with_traceback = [index for index, record in enumerate(failed)
+                      if record.exc_info is not None]
+    assert with_traceback == [0, 3], (
+        'the traceback belongs to the first failure of an outage and to no '
+        f'other: {with_traceback}')
+
+
+def test_the_backoff_is_capped_so_a_long_outage_is_still_polled(
+        producer, monkeypatch):
+    """Doubling without a cap reaches an hour, and a producer that has stopped
+    asking is indistinguishable from one that has died. Thirty seconds is a
+    rate a recovering database can carry and a delay an operator will sit
+    through."""
+    loop, stop, waits = scripted_loop(
+        producer, monkeypatch, ['fail', 'fail', 'stop'], poll_interval=20)
+
+    loop.run(stop)
+
+    assert waits == [board_producer.MAX_BACKOFF_SECONDS] * 2, (
+        f'40s and 80s were asked for uncapped: {waits}')
 
 
 # --- readiness --------------------------------------------------------------
@@ -759,24 +1029,44 @@ def test_the_namespace_row_carries_the_producers_health(producer, monkeypatch):
     assert failed['producer_success_at'] == NOW, 'the last success still stands'
 
 
-def test_housekeeping_runs_on_a_minute_and_says_what_the_queue_holds(
+def queue_lines(caplog):
+    return len([record for record in caplog.records
+                if record.getMessage().startswith('board queue ')])
+
+
+def test_housekeeping_runs_on_a_minute_of_monotonic_time(
         producer, monkeypatch, caplog):
+    """Sixty seconds by a clock that only goes forwards, not by the wall.
+
+    The wall clock is what the three housekeeping calls are asked about --
+    which rows have expired, which generations are stale -- but it is not what
+    decides that a minute has passed. NTP steps a server's wall clock, and a
+    step forward would run the housekeeping early while a step back would
+    suspend it for the length of the step, on a process whose whole job is to
+    keep going unattended for weeks.
+
+    So the wall clock here jumps ten minutes forward and then back to where it
+    started, and the housekeeping ignores both: it runs on the first tick and
+    again when the MONOTONIC reading says sixty seconds, not before.
+    """
     clock = Clock()
     fake_build(monkeypatch)
     warm_subset(monkeypatch, 1)
+    elapsed = iter([1000.0, 1059.0, 1060.0])
+    monkeypatch.setattr(board_producer, '_monotonic', lambda: next(elapsed))
     loop = producer.loop(clock)
 
     with caplog.at_level(logging.INFO, logger='radar.board'):
         loop.tick(NOW)
-        queue_lines = [record.getMessage() for record in caplog.records
-                       if record.getMessage().startswith('board queue ')]
-        assert len(queue_lines) == 1
-        loop.tick(NOW + seconds(59))
-        assert len([record for record in caplog.records
-                    if record.getMessage().startswith('board queue ')]) == 1
-        loop.tick(NOW + seconds(60))
-        assert len([record for record in caplog.records
-                    if record.getMessage().startswith('board queue ')]) == 2
+        assert queue_lines(caplog) == 1
+        # Ten wall-clock minutes later, fifty-nine monotonic seconds later.
+        loop.tick(NOW + seconds(600))
+        assert queue_lines(caplog) == 1, (
+            'a wall clock that jumped forward ran the housekeeping early')
+        # The wall clock steps back to where it began; the interval is up.
+        loop.tick(NOW)
+        assert queue_lines(caplog) == 2, (
+            'a wall clock that stepped back suspended the housekeeping')
 
 
 # --- metrics ----------------------------------------------------------------
@@ -830,6 +1120,32 @@ def test_the_metrics_lines_are_the_documented_shape_and_name_nobody(
     for line in lines:
         for forbidden in ('user', '?', '/radar', 'http', '@', '&'):
             assert forbidden not in line, line
+
+
+def test_a_duration_never_renders_negative(caplog):
+    """A board built half a second into the future is not a thing to report.
+
+    Every duration on these lines is the difference of two WALL clocks read at
+    different moments, and possibly on different machines: `cache_age` is now
+    minus a stored `as_of`, `queue_age` now minus an `enqueued_at`. A step
+    under NTP puts a minus sign in a field a dashboard parses as `\\d+\\.\\d`,
+    and `cache_age=-0.5` is a number nobody can act on. Zero is the honest
+    floor: the board is as new as it is possible to be.
+    """
+    with caplog.at_level(logging.INFO, logger='radar.board'):
+        board_metrics.log_read(demand='poll', cls='warm', key='a' * 64,
+                               outcome='ready', cache_age=-0.5,
+                               queue_age=-12.25, read_ms=3, account_ms=1)
+        board_metrics.log_build(key='a' * 64, cls='warm', queue_wait=-0.5,
+                                build_ms=1, payload_bytes=1,
+                                result='published')
+
+    lines = [record.getMessage() for record in caplog.records]
+    assert 'cache_age=0.0' in lines[0] and 'queue_age=0.0' in lines[0], lines[0]
+    assert 'queue_wait=0.0' in lines[1], lines[1]
+    assert '-' not in lines[0].replace('board read ', ''), lines[0]
+    assert READ_LINE.fullmatch(lines[0]), lines[0]
+    assert BUILD_LINE.fullmatch(lines[1]), lines[1]
 
 
 def test_a_metrics_field_outside_its_vocabulary_is_refused():
