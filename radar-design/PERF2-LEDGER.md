@@ -18,7 +18,7 @@ appended to `CODEX-DECISIONS.md`.
 | S7 restart, empty, expired | **Done** — `run_s7_lifecycle.py`. All four |
 | S8 filter switching and browser | **Done** — `run_s8_switching.py`, `run_s8_browser.py`. Warm PASSES; the `pending` render is a FALSE EMPTY STATE |
 | S9 ingest contention | **Done** — `run_s9_contention.py`. Producer costs the write +7%; the write costs the producer far more |
-| T1 worker threading (prepare only) | Not started |
+| T1 worker threading (prepare only) | **Done** - `run_t1_workers.py`. The claim is CONFIRMED: 7,602 ms against 9 ms. Recommendation is still DO NOT ship it yet |
 | T2 access-log proposal (prepare only) | Not started |
 | Independent read-only review | Not started |
 | Deployment | **Not authorized.** Full product implementation follows Codex's review of this return. |
@@ -851,3 +851,132 @@ pool.**
 **Not measured here:** APScheduler's actual behaviour under load, the scoring
 pass, retention and partition maintenance, or the Reddit fetch loop. This box
 runs neither the real ingest cycle nor MariaDB.
+
+---
+
+## Part III — Task T1: two sync processes against two threaded processes
+
+`radar-design/perf2-spike/run_t1_workers.py` and `t1_worker.py`, one run,
+2026-09-10, on the deployed schema.
+
+**THIS IS A MODEL, NOT GUNICORN, AND EVERY NUMBER BELOW CARRIES THAT.**
+gunicorn does not run on Windows and there is no WSL on this machine.
+`t1_worker.py` serves the **real, unmodified** WSGI app behind a semaphore
+that lets exactly N requests execute concurrently and queues the rest: two
+processes at one thread each models `--workers 2` with no `--threads`, and two
+at two threads each models `--workers 2 --threads 2`. **Nothing about
+gunicorn's arbiter, worker lifecycle, graceful reload, signal handling or
+request timeouts is measured**, and it cannot be checked here.
+
+The app runs on its **deployed synchronous board path**, deliberately: the
+worker-configuration question is about the code that runs today, not about the
+store.
+
+**Step 2 — non-Radar responsiveness under two board builds.** Two concurrent
+board builds, one per process, while `/` (the app overview: one user lookup,
+one template render) is requested round-robin every 100 ms.
+
+| Model | idle median | **load median** | load p95 | load max |
+| --- | ---: | ---: | ---: | ---: |
+| 2 processes x 1 thread | 11 ms | **7,602 ms** | 12,452 ms | 12,452 ms |
+| 2 processes x 2 threads | 12 ms | **9 ms** | 384 ms | 1,373 ms |
+
+The two board builds themselves took 7.6 s and 20.1 s in both models — the
+20.1 s is a DE 12h board on pages that process had not touched.
+
+**THE CLAIM — "two sync workers mean two board builds block the whole of
+personal_apps" — IS CONFIRMED, and by a wider margin than it was stated.** A
+request that costs 11 ms idle costs **7.6 seconds** while two boards build, and
+its worst case, 12.5 s, is longer than either build because it waited behind
+one and then behind the other. With two threads per process the same request is
+**9 ms — indistinguishable from idle.**
+
+**Step 3 — the connection pool.**
+
+| Model | worker A peak | worker B peak | of the 5 + 10 pool |
+| --- | ---: | ---: | ---: |
+| 2 processes x 1 thread | 1 | 1 | 6% |
+| 2 processes x 2 threads | 2 | 2 | **13%** |
+
+Peak requests actually executing per process: 1 and 1 against 2 and 2. Peak
+queued behind the gate: 1 in both. **The pool is nowhere near exhaustion** —
+two threaded workers reach 2 of 15 connections. Codex's concern that
+`--threads` "raises potential DB concurrency" is real in principle and is not
+the binding constraint at this thread count.
+
+**Step 4 — memory.** Windows working set, the local analogue of RSS.
+
+| Model | at rest (A / B) | under two builds (A / B) |
+| --- | --- | --- |
+| 2 processes x 1 thread | 124 MB / 124 MB | 204 MB / **574 MB** |
+| 2 processes x 2 threads | 124 MB / 124 MB | 205 MB / **544 MB** |
+
+Threading costs nothing measurable in memory here. The 574 MB peak belongs to
+the *build*, not to the worker model — a board build's intermediate row sets
+are half a gigabyte in this process, in both models, which is a fact about
+`board.build` and worth its own line in any capacity plan.
+
+**Step 5 — module-level mutable state a second thread would newly share.**
+Read from the code; each entry names its file and line.
+
+| Where | Name | Thread-safe? |
+| --- | --- | --- |
+| `routes/api.py:447` | `board_cache` | **Guarded** by `_board_lock`. Build happens outside the lock, so two threads can build the same key and the second write wins — duplicated work, not corruption. |
+| `leaderboard.py:112` | `sigma_cache` | **NO LOCK.** `if any(key[3] != today ...): sigma_cache.clear()` then reads and writes. A clear racing a read is a `KeyError` or a lost entry. **This one can raise.** |
+| `coverage.py:45` | `_cache` | Guarded by its own `_lock`. Safe. |
+| `market_data.py:900` | `_OPS_MEMO` | **NO LOCK.** Two threads can both miss and both run the 89 ms query. Wasteful, not incorrect. |
+| `llm_sentiment.py:1178` | `_gauge_cache` | **NO LOCK.** Same shape: duplicated work, last write wins. |
+| `sentiment.py:59` | `_active_cache` | **NO LOCK.** Two threads can both load the classifier artifact; the `warned` flag can warn twice. |
+| `sentiment.py:128` | `_KNOWN` | **NO LOCK.** `{at, tickers}` written field by field; a reader can see a new `at` with the old `tickers`. |
+| `judge_config.py:114` | `_active` | **NO LOCK.** Four fields written together on reload; a reader between two writes sees a mixed configuration. |
+| `market_data.py:201` | `_THROTTLE` | No lock, but daemon-side only. Not newly shared by `--threads`. |
+| `extraction.py:62` | `_NAME_INDEX_CACHE` | No lock, daemon-side only. |
+| `buckets.py:169` | `BUCKET_WRITE_LOCK` | A lock, not state. Daemon-side. |
+
+**Three are on the web request path and unguarded, and only one of them can
+raise: `leaderboard.sigma_cache`.** It appears 7 times in `leaderboard.py` and
+is reached through `_quote_sigmas`, which `build_rows` calls on **every** board
+build. Two threads in one process are the first thing in this codebase that
+has ever been able to race it.
+
+**Step 6 — the recommendation.**
+
+> **Do not set `--threads` until `leaderboard.sigma_cache` is guarded.** The
+> responsiveness case is overwhelming — 7,602 ms against 9 ms — and the pool
+> and memory objections do not survive measurement. What does survive is one
+> unlocked module dict that every board build clears and repopulates on the
+> request path. The fix is a lock, it is one line, and **it is a code change
+> that is not in this authorization.** Sequence it before the flag, not after.
+
+**The exact reversible unit change, as text. NOT APPLIED, NOT AUTHORIZED:**
+
+```
+# the personal_apps unit's ExecStart
+-  gunicorn --workers 2 --bind 127.0.0.1:5001 app:app
++  gunicorn --workers 2 --threads 2 --worker-class gthread \
++      --bind 127.0.0.1:5001 app:app
+```
+
+`--threads` is **ignored by the `sync` worker class**, so `--worker-class
+gthread` has to move with it or the change is a silent no-op. The reversal is
+deleting the two added flags plus `systemctl daemon-reload && systemctl
+restart personal_apps`; it costs one restart, and in-process state
+(`board_cache`, `sigma_cache`, the ops memos) is lost on both sides of it —
+which is exactly what the result store removes as a concern.
+
+The command line is taken from `PERF1-LEDGER.md`'s recorded process table
+(`gunicorn --workers 2 --bind 127.0.0.1:5001 app:app`, PIDs 121328 / 121352 /
+121355) and **was not read off the running unit file**: no ssh, no contact
+with the target in this workstream. The unit's other directives are unknown
+here, and whoever prepares the release package must diff this against the real
+unit before using it.
+
+**One defect in this task's own instrumentation, recorded because the first
+run reported nonsense.** `t1_worker.py`'s memory probe called
+`GetProcessMemoryInfo` without `argtypes`/`restype`, so ctypes truncated the
+process HANDLE on 64-bit Windows and every reading came back 0. And the parent
+held each worker's stderr as a pipe while Werkzeug logged a line per request
+into it; Windows' 4 KB pipe buffer filled and **the first worker deadlocked
+mid-write.** Both are fixed in the committed scripts — the log is silenced at
+the source and the parent no longer pipes worker stderr. The numbers above are
+from the run after both fixes.

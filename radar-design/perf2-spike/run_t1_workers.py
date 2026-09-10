@@ -81,7 +81,8 @@ def run_model(threads, cookie, src, label):
     procs = [subprocess.Popen(
         [sys.executable, os.path.join(SPIKE_DIR, 't1_worker.py'),
          '--port', str(port), '--threads', str(threads)],
-        cwd=APP_DIR, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        cwd=APP_DIR, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        text=True)
         for port in PORTS]
     out = {}
     try:
@@ -320,11 +321,10 @@ def recommendation(one, two, results):
 
   THE EXACT REVERSIBLE UNIT CHANGE, AS TEXT. NOT APPLIED, NOT AUTHORIZED:
 
-      # /etc/systemd/system/personal_apps.service
-      -ExecStart=/srv/personal_apps/venv/bin/gunicorn --workers 2 \\
-      -    --bind 127.0.0.1:8001 app:app
-      +ExecStart=/srv/personal_apps/venv/bin/gunicorn --workers 2 --threads 2 \\
-      +    --worker-class gthread --bind 127.0.0.1:8001 app:app
+      # the personal_apps unit's ExecStart
+      -  gunicorn --workers 2 --bind 127.0.0.1:5001 app:app
+      +  gunicorn --workers 2 --threads 2 --worker-class gthread \\
+      +      --bind 127.0.0.1:5001 app:app
 
   `--threads` is ignored by the `sync` worker class, so `--worker-class
   gthread` has to move with it or the change is a silent no-op. The reversal

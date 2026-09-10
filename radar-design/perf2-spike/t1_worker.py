@@ -40,13 +40,27 @@ class _Counters(ctypes.Structure):
                 ('PeakPagefileUsage', ctypes.c_size_t)]
 
 
+# argtypes and restype are NOT optional here. Without them ctypes passes the
+# process HANDLE as a 32-bit int on 64-bit Windows, the call fails silently
+# and every reading comes back 0 -- which is exactly what the first run of
+# this task reported.
+_psapi = ctypes.WinDLL('psapi')
+_psapi.GetProcessMemoryInfo.argtypes = [ctypes.wintypes.HANDLE,
+                                        ctypes.POINTER(_Counters),
+                                        ctypes.wintypes.DWORD]
+_psapi.GetProcessMemoryInfo.restype = ctypes.wintypes.BOOL
+_kernel32 = ctypes.WinDLL('kernel32')
+_kernel32.GetCurrentProcess.restype = ctypes.wintypes.HANDLE
+
+
 def working_set():
     """Windows' working set, the local analogue of RSS. (current, peak)."""
     counters = _Counters()
     counters.cb = ctypes.sizeof(counters)
-    ctypes.windll.psapi.GetProcessMemoryInfo(
-        ctypes.windll.kernel32.GetCurrentProcess(), ctypes.byref(counters),
-        counters.cb)
+    ok = _psapi.GetProcessMemoryInfo(_kernel32.GetCurrentProcess(),
+                                     ctypes.byref(counters), counters.cb)
+    if not ok:
+        raise ctypes.WinError(ctypes.get_last_error())
     return counters.WorkingSetSize, counters.PeakWorkingSetSize
 
 
@@ -121,7 +135,16 @@ def main():
     ap.add_argument('--threads', type=int, required=True)
     args = ap.parse_args()
 
+    import logging
+
     from werkzeug.serving import make_server
+
+    # Werkzeug logs one line per request to stderr. With the parent holding
+    # stderr as a PIPE and Windows' 4 KB pipe buffer, a few hundred requests
+    # fill it and the worker DEADLOCKS mid-write -- which is what the first
+    # run of this task did. Silenced at the source rather than papered over
+    # with a bigger pipe.
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
     from app import app
     gate = Gate(app.wsgi_app, args.threads)
