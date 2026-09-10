@@ -126,15 +126,20 @@ def _posts(ticker, sources, since, now):
     covers both a decided even-handed read and a mention nothing has
     scored yet; the tallies make the same collapse. `judged_by` says who
     decided that tone: 'model', 'lexicon', or None when nothing has.
-    `label` NAMES that model when there is one -- 'Claude' for an Anthropic
-    id, 'model' for anything this build cannot identify, and None whenever
-    judged_by is not 'model'.
+    `label` NAMES that decider -- 'Claude' for an Anthropic id, 'model' for a
+    backend this build cannot identify, 'not judged yet' for a mention still
+    waiting for the judging pass, and 'wording' for one a model has already
+    read without leaving a lean.
     """
     sources = expand_sources_for_history(sources)
     base = (db.session.query(RadarPost, RadarMention.lexicon_sentiment,
                              RadarMention.llm_sentiment,
                              RadarMention.sentiment_attitude,
-                             RadarMention.sentiment_tone_model)
+                             RadarMention.sentiment_tone_model,
+                             # Whether anything has READ this mention, which is
+                             # a different question from who decided its tone
+                             # -- see _judged_label.
+                             RadarMention.sentiment_judged_at)
             .join(RadarMention, RadarMention.post_id == RadarPost.id)
             .filter(RadarMention.ticker == ticker,
                     RadarPost.source.in_(list(sources)),
@@ -145,8 +150,9 @@ def _posts(ticker, sources, since, now):
     rows = base.order_by(RadarPost.created_utc.desc()).limit(POST_LIMIT).all()
     posts = [(post, _tone_of(local, legacy, attitude) or 'neutral',
               _judged_by(local, legacy, attitude),
-              _judged_label(_judged_by(local, legacy, attitude), tone_model))
-             for post, local, legacy, attitude, tone_model in rows]
+              _judged_label(_judged_by(local, legacy, attitude), tone_model,
+                            judged_at))
+             for post, local, legacy, attitude, tone_model, judged_at in rows]
     return posts, base.count()
 
 
@@ -210,20 +216,34 @@ def _judged_by(local, legacy, attitude):
     return None
 
 
-def _judged_label(judged_by, tone_model):
-    """The name to print beside a model-decided tone.
+def _judged_label(judged_by, tone_model, judged_at=None):
+    """What to print beside the tone: who decided it, or that nobody has yet.
 
-    Resolved from the recorded id through pure registry metadata -- the
-    payload used to carry no information about WHO at all and the component
-    printed the literal 'Claude', which stops being true the moment a
-    second backend can write tone. None unless judged_by is 'model', so the
-    three-valued judged_by contract that drives tone precedence is
-    untouched.
+    For a model read this resolves the recorded id through pure registry
+    metadata -- the payload used to carry no information about WHO at all and
+    the component printed the literal 'Claude', which stops being true the
+    moment a second backend can write tone.
+
+    For everything else it answers a question the surface was getting wrong.
+    The lexicon scores EVERY mention at ingest, so `judged_by` is 'lexicon'
+    from the moment a mention exists, and the row read 'wording' whether the
+    wording score was the final word or merely the only thing that had run so
+    far. Those are different facts and a reader could not tell them apart:
+    measured on the live board 2026-09-10, 100% of mentions under ten minutes
+    old were unjudged and 0.0% beyond forty, so 'wording' on a fresh post
+    almost always meant "the encoder has not reached this yet".
+
+    `sentiment_judged_at` is what separates them and the only thing that can.
+    `judged_by` itself is deliberately NOT changed: it drives the tone
+    precedence, and the tone on screen really is the wording score's read, so
+    the label must not claim otherwise.
     """
-    if judged_by != 'model':
+    if judged_by == 'model':
+        from . import judge_backends
+        return judge_backends.backend_label(tone_model)
+    if judged_by is None:
         return None
-    from . import judge_backends
-    return judge_backends.backend_label(tone_model)
+    return 'wording' if judged_at is not None else 'not judged yet'
 
 
 def breakdown_for(ticker, sources, since, now):
