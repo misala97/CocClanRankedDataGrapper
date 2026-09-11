@@ -37,7 +37,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 3 producer | **complete** | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) | approved after one fix round |
 | 4 read path, flag, API | **complete** | `9097621`, `6752492` | approved after one fix round |
 | 5 old board client | round 4 re-reviewed: **needs fixes**; round 5 queued behind Task 6 | `0ed59e2`, `2b90885`, `17128b8`, `52af950` | round 4 resolved its seven items; one confirmed Important |
-| 6 hub client | open | | |
+| 6 hub client | implemented; review: **needs fixes**; fix queued behind Task 5 round 5 | `103b8ba` | three Important, eight Minor |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | open | | |
 | 9 suites + release package | open | | |
@@ -326,6 +326,37 @@ where no board exists. Round 5 waits for the Task 6 implementer, to keep one
 implementation worker at a time.
 
 **Stopping rule, agreed with the owner on 2026-09-11.** Round 5 is the last automatic round for Task 5. Its re-review may block only on a critical or important finding that round 5 itself introduced, or on a direct violation of the PERF2 ruling. Every other finding is carried to the whole-branch review. If a blocker remains after round 5, work stops and the owner decides, with a recommendation such as simplifying the old board request handling rather than patching it again.
+
+### Task 6 — hub client (review: needs fixes, fix queued)
+
+`103b8ba`. The whole radar suite ran clean three times at 641 tests, the root
+suite at 403, and the typecheck and build pass; on the old code the new tests
+failed 37 of 45. The reviewer found the waiting machinery careful: requests
+the page drives itself never double up, every Retry joins a request already
+out with `cancelRefetch: false`, a key change abandons the old answer, the
+placeholder board is replaced by Loading, and the compile-only null guards are
+gone. The pages taking `BoardPayload | null` plus a stand-in, instead of
+`ReadyBoard`, was accepted, because it keeps Human chatter's filters usable
+while waiting.
+
+| Finding | Severity | Disposition |
+| --- | --- | --- |
+| the flag-off hub no longer re-reads every 60 s or on returning to the tab; the implementer read the fresh-bound ruling as forbidding it, but that ruling only forbids an automatic request AT or past the bound, and flag-off is meant to behave as it always has | Important | fix: one visible-only read at arrival + 60 s, armed only while inside the fresh bound |
+| a pending or busy shell whose polls fail still says "Calculating", and after 30 s gives the wrong diagnosis | Important | fix: show the reason and one Retry, keep polling |
+| a timed-out or rate-limited board request is auto-retried twice, and on flag-off each retry starts another synchronous build | Important (pre-existing, inside this task's request ruling) | fix: never auto-retry `timeout` or `busy` |
+| top bar shows the previous market while placeholder data is on screen; two `poll=1` edge cases; an owed expiry refetch lost on a failed request; the mark's cache update clears the error; hints name controls a page lacks; a copied age helper; one vacuous test; a pre-existing stuck `marking` flag | Minor ×8 | fix in the same round where small; the last one may be carried |
+
+The same stopping rule as Task 5 applies: this is Task 6's one fix round; its
+re-review may block only on something the round itself broke or on a direct
+violation of the PERF2 ruling, and anything else is carried to the
+whole-branch review.
+
+**Second interruption, 2026-09-11.** The API session limit stopped the Task 5
+round-5 fixer mid-run. Its uncommitted edits in three `static/radar/src/board`
+files measured `tsc` clean and 220 of 220 old-board tests passing, with no
+report; they were backed up to the session scratchpad as
+`perf3/round5-partial-20260911-171255.patch` and handed to a continuation
+fixer, told to verify each finding against them before finishing.
 
 ### Task 7 — parity (approved)
 
