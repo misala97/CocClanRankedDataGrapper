@@ -1,70 +1,73 @@
-# CURRENT — PERF3 paused after Task 5's fix, 2026-09-11
+# CURRENT — PERF3: Tasks 1–7 complete, Task 8 in review, Task 9 HELD for the owner's go (2026-09-11)
 
-Claude implements under the PERF2 ruling; Codex owns planning. Paused at the
-owner's request. **Nothing is merged, pushed, deployed or configured on the
-VPS**; the deployed SHA is still `4221196`. No agent is running.
+Claude implements under the PERF2 ruling; Codex owns planning. **Nothing is
+merged, pushed, deployed or configured on the VPS**; the deployed SHA is still
+`4221196`. The owner asked that Task 9 not start until he says so, after his
+usage limit resets.
 
 | | |
 | --- | --- |
 | Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` |
 | Branch | `codex/radar-perf3`, from `afe1246` |
-| Code HEAD | `2b90885`; the commit after it carries only this handoff, the ledger and the plan amendments |
-| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (Task 8 carries two 2026-09-11 amendments); ledger `PERF3-LEDGER.md` |
-| Controller scratch | `.superpowers/sdd/`: task briefs 1–9, implementer reports 1–5, review packages, `progress.md`. Working files, not committed. |
-| Tests DB | `personal_apps_radar_perf3`, stamp `b7e3f9c1a2d4`, te1 clone with 29 FKs. Its board data ends 2026-09-01, so real-clock boards there are empty. |
-| Scale DB | `personal_apps_radar_perf3_scale`, stamp `b7e3f9c1a2d4`, 9,269,184 bucket rows. Its data ends 2026-09-10 12:00 UTC and must be aligned by Task 8 Step 0 before any timing. |
-| MariaDB | The portable 10.11.14 rehearsal server is STOPPED. The restart command is in the ledger; it is needed only if the store or migration changes. |
+| HEAD | the commit carrying this handoff; the last code commit is `6ecba5a` (Task 8b) |
+| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (Task 8 carries two 2026-09-11 amendments, Task 9 one); ledger `PERF3-LEDGER.md` |
+| Controller scratch | `.superpowers/sdd/`: task briefs 1–9, implementer reports 1–8b, review packages, `progress.md` (the running log, including owner decisions). Working files, not committed. |
+| Tests DB | `personal_apps_radar_perf3`, stamp `b7e3f9c1a2d4`, te1 clone with 29 FKs; its board data ends 2026-09-01, so real-clock boards there are empty |
+| Scale DB | `personal_apps_radar_perf3_scale`, stamp `b7e3f9c1a2d4`; Task 8 ALIGNED its data forward by whole days so real-clock windows are full. Re-run `personal_apps/scratchpad/perf3/align_scale_fixture.py` before any new timing, through `scale_env.py` |
+| MariaDB | the portable 10.11.14 rehearsal server is STOPPED; restart command in the ledger; needed only if the store or migration changes |
 
-| Task | State |
-| --- | --- |
-| 1 key + namespace | complete, reviewed |
-| 2 store + migration | complete, reviewed; MariaDB rehearsal 54/54 |
-| 3 producer | complete, reviewed |
-| 4 read path, flag, API | complete, reviewed |
-| 5 old board client | `0ed59e2` plus fix `2b90885`; **the fix has not been re-reviewed** |
-| 6 hub client | open; brief ready |
-| 7 parity | open; brief ready |
-| 8 scale verification + browser | open; brief ready, amended |
-| 9 suites + release package | open; brief ready |
-| whole-branch review | open |
+| Task | State | Commits |
+| --- | --- | --- |
+| 1 key + namespace | complete | `a5017e7`, `20429d0`, `a188bb3` |
+| 2 store + migration | complete; MariaDB rehearsal 54/54 | `0eba6a4`, `c2d0ca9`, `c199d06` |
+| 3 producer | complete | `fd810c1`, `55f0d7f` |
+| 4 read path, flag, API | complete | `9097621`, `6752492` |
+| 5 old board client | complete after five fix rounds, under the owner's stopping rule | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` |
+| 6 hub client | complete after one fix round, same rule | `103b8ba`, `d429378` |
+| 7 parity | complete | `29cc2ac` |
+| 8 scale verification + browser | implemented; **review running or just returned — see the ledger's Task 8 section** | `9fa42aa` (8a), `6ecba5a` (8b) |
+| 9 suites + release package | **HELD until the owner's go**; brief ready and amended (telemetry) | |
+| whole-branch review | open; the carried lists from Tasks 1–8 are in the ledger | |
 
-**Immediate next action:** an independent read-only re-review of `2b90885`
-against Task 5's findings I1–I3, M1–M8, M10, M12 and M13. The package comes
-from `review-package 6752492 2b90885` in the subagent-driven-development
-skill's scripts. The re-review must rule on the fixer's decision to apply the
-client-clock fresh bound to shared boards only; the ledger's Task 5 section
-has the reasoning.
+**Immediate next action.** If the Task 8 review's verdict is not yet in the
+ledger, record it. Then WAIT for the owner. On his go: Task 9 (full backend
+suite with every failure classified, the frontend suites and builds, the
+app-level request-timing log behind `PERSONAL_REQUEST_TIMING_LOG` (off by
+default), `PERF3-RELEASE.md` with the producer unit, deploy-script additions,
+flag sequencing, readiness gate, telemetry, rollback and resource numbers, and
+this handoff); then one whole-branch read-only review over the carried lists,
+one fix wave, and the return to Codex. Any fix round the Task 8 review asks for
+also waits for the owner's go.
 
-**Then Task 6 (hub),** with three things its brief does not say:
+**Owner decisions in force.** One implementation worker at a time, a separate
+review per task, full proof runs ("do it properly"). The stopping rule for
+Tasks 5 and 6 (one last fix round; a re-review blocks only on what that round
+introduced or on a ruling violation) is recorded in the ledger.
 
-- I4 from Task 5's review: the hub now renders "Nothing cleared the floor"
-  over a pending shell, because compile-only null guards treat `rows: null`
-  as an empty list.
-- The hub's board query uses `keepPreviousData`, which shows the previous
-  selection's board under the new selection's filters. Ruling applied:
-  render the Loading state while `isPlaceholderData`, as `Research.tsx`
-  already does, rather than an unmarked previous board.
-- The client-clock fresh bound and `poll=1` on refetches of pending, busy and
-  stale boards, matching whatever the re-review settles for the old board.
+**Open decisions for Codex from Task 8's evidence** (ledger, Task 8 section):
+the 120 s fresh bound fails under write contention (worst 142.8 s, about 7%
+stale, because the refresh target equals the bound); after an empty store the
+warm boards rebuild in `key_hash` order, so a reader can wait about 44 s; a
+restarted worker's first read p95 is 769 ms; the cold goal stays unmet
+(about 5.8 s); the Discover tab asks for a cold duplicate of a warm board. The
+core win holds: beside two cold boards a non-Radar request stayed under 79 ms
+with the flag on against 9.5 s with it off, in the two-process MODEL. A new
+old-board defect for the fix wave: a board arriving after a wait moves focus to
+the detail panel and scrolls a phone reader about 4,219 px from the list.
 
-**Test evidence.** At `2b90885`, per the fixer: radar vitest 584/584, root
-vitest 403/403, `tsc` exit 0, `npm run build` passes. Backend at `6752492`,
-per its fixer: 255 passed across the ten board, store, API and migration
-suites. The whole backend suite has not been run on this branch yet; that is
-Task 9. `test_radar_projection_migration.py` skips here by design, because it
-pins the database name `personal_apps_radar_wt`.
+**Test evidence so far.** Radar vitest 681/681 three runs in a row and root
+403/403 at `d429378` (no frontend code changed since); parity 63 cases at
+`29cc2ac`; 255 backend tests across the board, store, API and migration suites
+at `6752492`. The whole backend suite has not been run on this branch; that is
+Task 9.
 
-**Traps.** `app.py` calls `load_dotenv(override=True)`, so an environment
-variable cannot pick the database; Task 8's amendment names the launcher that
-can. The session broke once on an expired login token, and the ledger records
-what it cost.
-
-**Carried to the whole-branch review or the release package:** every
-admission writes the namespace row (measure it in Task 8); a `publish` that
-raises holds a queue slot for the length of the lease (runbook); a blank-line
-style nit in `board_producer.py`; `canonical` raises `TypeError` for a
-hand-built `Query` with non-iterable sources, which `round_trips` never
-reaches.
+**Traps.** `app.py` loads `.env` with `override=True`, so an environment
+variable cannot pick the database: scale scripts go through
+`scratchpad/perf3/scale_env.py`, which also pins the build revision
+(`PERF3_REVISION`) and patches the fixture's placeholder subreddit names. Two
+session breaks so far (an expired login token, then the API session limit);
+the ledger records what each cost. Never print `.env`: an earlier listing put
+real credentials into this session's transcript, and the owner was told.
 
 **Protected:** `personal_apps_radar_perf1`; the `radar-perf2` worktree and
 Codex's uncommitted edits there; every other worktree; the planning
