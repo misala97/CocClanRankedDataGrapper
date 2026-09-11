@@ -28,8 +28,8 @@ from flask import jsonify, request
 from auth import admin_required, login_required
 from extensions import db
 
-from .. import activity, board_namespace, board_store, llm_sentiment
-from .. import market_data, observations, spend
+from .. import activity, board_namespace, board_producer, board_store
+from .. import llm_sentiment, market_data, observations, spend
 from . import api
 from ._blueprint import radar_bp
 
@@ -126,11 +126,15 @@ def _board_results(now):
             'success_at': activity.iso_z(control.get('producer_success_at')),
             'error': control.get('producer_error'),
         },
-        # Against the number of standing boards this build DERIVES, not the
-        # number of warm rows the table happens to hold -- a ninth standing
-        # selection must read as one short, never as ready.
+        # Against the number of standing boards this build DERIVES -- the
+        # cross product of markets, segments and windows `warm_queries` walks
+        # -- which is the same number `readiness` reports under this name, and
+        # not the `warm_limit` constant that happens to agree with it today. A
+        # ninth standing selection has to read as one short here the moment it
+        # is added, rather than as a full house the operator has no reason to
+        # look at.
         'warm_ready': queue['warm_ready'],
-        'warm_total': board_store.limits().warm_limit,
+        'warm_total': len(board_producer.warm_queries(now)),
         'queue': {name: queue[name]
                   for name in ('pending', 'building', 'failed_due')},
         'on_demand_rows': queue['on_demand_rows'],

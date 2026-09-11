@@ -341,15 +341,22 @@ def test_the_blob_is_the_payload_the_request_path_would_have_served(
     shared path serves a board subtly unlike the one it replaced, to everyone,
     silently.
 
-    Two kinds of field are expected to differ, and each is named rather than
-    skipped. `watching` and `watch_rows` are per ACCOUNT, which is the reason
-    the blob is viewer-invariant at all. And the ENVELOPE -- how this
-    particular copy of the board was delivered, how old it is and when to ask
-    again -- is added by whichever path answered, on top of the board; the
-    blob is the board itself, so it carries none of it. `ops_collected_at` is
-    in the envelope for the request path and in the blob for the producer, and
-    is compared: it is the one field that has to mean the same instant in both
-    places, because a payload's frozen ops summaries are dated by it.
+    One kind of field is expected to differ, and it is named rather than
+    skipped: the ENVELOPE -- how this particular copy of the board was
+    delivered, how old it is and when to ask again -- is added by whichever
+    path answered, on top of the board. The blob is the board itself, so it
+    carries none of it. `ops_collected_at` is in the envelope for the request
+    path and in the blob for the producer, and is compared: it is the one
+    field that has to mean the same instant in both places, because a
+    payload's frozen ops summaries are dated by it.
+
+    `watching` and `watch_rows` are per ACCOUNT -- the reason the blob is
+    viewer-invariant at all -- and are compared rather than subtracted. Both
+    paths now add them out of the one helper `api.account_fields`, which is
+    what a reader of a stored blob gets on top of it, so putting that helper's
+    answer on the blob here compares what a viewer would actually be handed
+    from either side. For `user_id=None` it is the empty marks of a board
+    nobody has claimed.
     """
     fake_build(monkeypatch)
     # A cache of this test's own, so a board built by the fake cannot be
@@ -363,8 +370,9 @@ def test_the_blob_is_the_payload_the_request_path_would_have_served(
     blob, _, _, _, _ = board_producer.build_blob(query, now=Clock())
     stored = json.loads(zlib.decompress(blob))
 
-    assert served.pop('watching') == []
-    assert served.pop('watch_rows') == []
+    account = api.account_fields(query, NOW, None)
+    assert account == {'watching': [], 'watch_rows': []}
+    stored.update(account)
     assert stored.pop('ops_collected_at') == NOW.isoformat() + 'Z'
     envelope = {name: served.pop(name)
                 for name in board_shared.ENVELOPE_KEYS if name in served}
@@ -968,6 +976,34 @@ def test_the_backoff_is_capped_so_a_long_outage_is_still_polled(
         f'40s and 80s were asked for uncapped: {waits}')
 
 
+def test_an_outage_of_hours_does_not_kill_the_producer_from_inside(
+        producer, monkeypatch):
+    """The cap is on the WAIT, and that is not where the arithmetic happens.
+
+    `poll_interval * 2 ** failures` is computed before `min` ever sees it, and
+    `2 ** 1024` is past the largest float there is: at the thousand and
+    twenty-fourth consecutive failure the multiplication raises OverflowError
+    -- inside the except handler that exists to keep this loop alive, so it
+    propagates out of `run` and the only process that builds boards exits.
+
+    Half a second apart, that is about eight and a half hours of a database
+    being down: a long outage over an unattended weekend, which is precisely
+    the situation the backoff was written for. So the EXPONENT is capped as
+    well, and the five thousandth failure asks for the same thirty seconds the
+    sixth did.
+    """
+    failures = 5000
+    loop, stop, waits = scripted_loop(
+        producer, monkeypatch, ['fail'] * failures + ['stop'])
+
+    loop.run(stop)
+
+    assert len(waits) == failures, f'the loop stopped waiting: {len(waits)}'
+    # A half-second interval doubles into the cap at the sixth failure.
+    assert waits[:6] == [1.0, 2.0, 4.0, 8.0, 16.0, 30.0]
+    assert set(waits[5:]) == {board_producer.MAX_BACKOFF_SECONDS}
+
+
 # --- readiness --------------------------------------------------------------
 
 def test_readiness_names_the_standing_boards_that_are_missing(producer,
@@ -1151,7 +1187,10 @@ def test_a_duration_never_renders_negative(caplog):
                                 build_ms=1, payload_bytes=1,
                                 result='published')
 
-    lines = [record.getMessage() for record in caplog.records]
+    # This logger's own records, like the line-shape test above: another
+    # library logging inside the block would otherwise become `lines[0]`.
+    lines = [record.getMessage() for record in caplog.records
+             if record.name == 'radar.board']
     assert 'cache_age=0.0' in lines[0] and 'queue_age=0.0' in lines[0], lines[0]
     assert 'queue_wait=0.0' in lines[1], lines[1]
     assert '-' not in lines[0].replace('board read ', ''), lines[0]

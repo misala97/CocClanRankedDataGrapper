@@ -525,6 +525,28 @@ def build_payload(args, now=None, user_id=None, poll=False):
     return board_shared.read_payload(db.engine, args, now, user_id, poll=poll)
 
 
+def account_fields(query, now, user_id):
+    """The caller's own marks, to be added on top of a board that has none.
+
+    One function, because both paths add this half and it is the half no cache
+    can ever answer: a stored board is viewer-invariant -- which is the whole
+    reason one of them can answer everybody -- so a reader's marks are fetched
+    per request and never compressed into the payload. Two copies of this
+    would be two chances for the same account to see a different mark
+    depending on which path served the board.
+
+    `user_id=None` is a board nobody has claimed: no marks, and so no pinned
+    rows to build for them.
+    """
+    watching = watch.tickers_for(user_id) if user_id is not None else []
+    return {
+        'watching': watching,
+        'watch_rows': [_row(entry) for entry in board_mod.build_pinned_rows(
+            watching, query.sources, now, window_hours=query.window,
+            market=query.market)] if watching else [],
+    }
+
+
 def build_payload_direct(args, now=None, user_id=None):
     """Validated query -> serialized board, built right here. Never the store.
 
@@ -557,11 +579,7 @@ def build_payload_direct(args, now=None, user_id=None):
     # first click silently discarded the concrete selection.
     board.sources = sorted({source_root(s) for s in query.sources})
     payload = serialize(board)
-    watching = watch.tickers_for(user_id) if user_id is not None else []
-    payload['watching'] = watching
-    payload['watch_rows'] = [_row(entry) for entry in board_mod.build_pinned_rows(
-        watching, query.sources, now, window_hours=query.window,
-        market=query.market)] if watching else []
+    payload.update(account_fields(query, now, user_id))
     payload.update(_direct_envelope(board.generated_at, now))
     return payload
 
@@ -612,6 +630,12 @@ def board():
     already waiting for. It is read here rather than in `parse_query`, which
     reads named keys only and must go on ignoring it: `poll` is not part of
     the question, so two requests that differ only by it are one cache key.
+
+    That literal `'1'` and nothing else. This parameter is written by our own
+    client rather than typed by an operator, so the four spellings of yes the
+    environment flag accepts would buy nothing here -- and the cost of reading
+    a stray `poll=true` as a poll is a real request that stops counting as
+    one, on the counter eviction ranks keys by.
     """
     try:
         return jsonify(build_payload(request.args, user_id=current_user().id,

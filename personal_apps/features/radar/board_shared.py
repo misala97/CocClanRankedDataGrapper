@@ -46,7 +46,7 @@ from time import perf_counter
 import sqlalchemy as sa
 
 from . import board as board_mod
-from . import board_keys, board_metrics, board_namespace, board_store, watch
+from . import board_keys, board_metrics, board_namespace, board_store
 from .config import SOURCES, source_root
 from .market_calendars import session_state
 
@@ -117,11 +117,17 @@ def disposition(result, now, limits):
     written as `>` for that reason: a board exactly `fresh_seconds` old is
     still fresh, and one exactly `hard_expiry_seconds` old is still worth
     serving under a stale mark.
+
+    The age has a floor of zero, the same one `queue_age` and every duration on
+    the metrics line have. A board stamped later than this reader's clock is
+    two hosts disagreeing about the time, not a board that has not happened
+    yet, and a negative age would reach the head of the page as "-0.4s ago"
+    and a dashboard as a number it parses as positive.
     """
     if (result is None or result.payload is None or result.as_of is None
             or result.payload_version != board_namespace.PAYLOAD_VERSION):
         return 'missing', None
-    age = (now - result.as_of).total_seconds()
+    age = max(0.0, (now - result.as_of).total_seconds())
     if age > limits.hard_expiry_seconds:
         return 'missing', age
     if age > limits.fresh_seconds:
@@ -159,7 +165,8 @@ def read_payload(engine, args, now, user_id, *, poll=False):
 
     if kind == 'missing':
         payload, outcome, queue_age = _wait_for_a_build(
-            engine, ns, key_hash, key_json, query, now, bounds, poll=poll)
+            engine, ns, key_hash, key_json, query, now, bounds, stored=stored,
+            poll=poll)
         _log(demand=poll, cls=cls, key=key_hash, outcome=outcome,
              cache_age=None, queue_age=queue_age, started=started,
              account_ms=0)
@@ -206,35 +213,34 @@ def _serve(stored, kind, age, bounds):
         # back; a fresh one has nothing to wait for and says so with null.
         'retry_after_ms': BACKED_OFF_MS if kind == 'stale' else None,
         'queue_age_seconds': None,
+        # The row's own instant, overriding whatever the blob carries. The
+        # producer writes the same value into both -- the ops summaries frozen
+        # inside a payload are read at the start of the build `as_of` names --
+        # and the row is the copy this response's age is already measured
+        # against. Deferring to the blob would let a payload from some other
+        # build put an age on those figures that the board around them does
+        # not have.
+        'ops_collected_at': _iso(stored.as_of),
     })
-    # The producer stamps this into the blob, and the payload version is what
-    # guarantees it is there. The default is the same instant by definition --
-    # the ops summaries inside a payload were read at the start of its build.
-    payload.setdefault('ops_collected_at', _iso(stored.as_of))
     return payload
 
 
 def _add_account(payload, query, now, user_id):
     """The caller's own marks, on top of the viewer-invariant board.
 
-    Exactly what `build_payload` has always done, in the same order and with
-    the same arguments -- this is the half of a board response that no cache
-    can ever answer, and the two paths must not drift into computing it
-    differently.
+    The same function the synchronous path calls rather than a copy of it.
+    This is the half of a board response no cache can ever answer, and it is
+    the half a reader of a stored board most needs to be identical: two
+    implementations would be two chances for one account to see a different
+    mark depending on which path happened to serve it.
     """
-    api = _api()
-    watching = watch.tickers_for(user_id) if user_id is not None else []
-    payload['watching'] = watching
-    payload['watch_rows'] = [
-        api._row(entry) for entry in board_mod.build_pinned_rows(
-            watching, query.sources, now, window_hours=query.window,
-            market=query.market)] if watching else []
+    payload.update(_api().account_fields(query, now, user_id))
 
 
 # --- when there is nothing to serve -----------------------------------------
 
 def _wait_for_a_build(engine, ns, key_hash, key_json, query, now, bounds, *,
-                      poll):
+                      stored, poll):
     """Ask for the board, and describe the wait. Returns (payload, outcome,
     queue_age).
 
@@ -244,7 +250,21 @@ def _wait_for_a_build(engine, ns, key_hash, key_json, query, now, bounds, *,
     failures, which is a wait on a clock and not on a queue, so it gets the
     same slower rate and says `failed` so the surface can tell the reader why.
     Anything else is an ordinary place in line.
+
+    `stored` is the row as it was FOUND, before the admission below moved it,
+    and `failed` on the shell is that row's queue state. It is the answer to
+    "why am I being shown nothing", and the honest answer for a key whose
+    backoff has just elapsed -- re-queued here, at the ordinary rate -- is
+    still that its last build failed. A viewer six attempts into a broken key
+    deserves to be told that rather than "loading" for the seventh time.
+
+    It says what the ROW says, and no more than that: once this admission has
+    re-queued a failed key it is `pending`, nothing has failed since, and the
+    next read reports `failed: false`. The field is the state of the key, not a
+    memory of its history -- a memory is what `attempts` and `last_error` are
+    for, and they are the operator's to read, not the viewer's.
     """
+    failed = stored is not None and stored.queue_state == 'failed'
     state = board_store.admit(engine, ns, key_hash, key_json, now, poll=poll)
     if state == 'busy':
         return (_waiting(query, now, bounds, pending=False, failed=False,
@@ -267,7 +287,7 @@ def _wait_for_a_build(engine, ns, key_hash, key_json, query, now, bounds, *,
     position = _queue_position(engine, ns, enqueued_at)
     retry = PENDING_BASE_MS + PENDING_STEP_MS * min(position,
                                                     PENDING_MAX_POSITION)
-    return (_waiting(query, now, bounds, pending=True, failed=False,
+    return (_waiting(query, now, bounds, pending=True, failed=failed,
                      retry_after_ms=retry, queue_age=queue_age),
             'pending', queue_age)
 

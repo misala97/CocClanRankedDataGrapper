@@ -197,18 +197,21 @@ def limits(env=os.environ):
 def ensure_namespace(engine, ns, now, *, revision, payload_version):
     """Introduce this generation, or say it is still here.
 
-    Idempotent, and called by the producer on every tick. The update arm
-    rewrites the revision and the payload version rather than only stamping the
-    clock, because a producer is authoritative about its own namespace: the row
-    may have been adopted by a reader that had no idea which build answers here
-    (`_adopt` leaves `producer_revision` NULL on purpose), and an update that
-    only moved `last_seen_at` would leave that NULL standing for the whole life
-    of the generation, with the admin surface reporting no revision at all.
+    Idempotent, and called on every producer tick and once per process by the
+    read path. Either of them may be the caller that introduces a generation,
+    and either may name its revision: a namespace *is* a revision --
+    `board_namespace` derives the name from the payload version, the build
+    revision and the configuration -- so a reader answering inside generation N
+    shares that revision with the producer of N by construction, and cannot
+    write a value the producer would disagree with. Two processes putting
+    different revisions in one control row cannot happen: they would be two
+    namespaces.
 
-    Rewriting is safe because a namespace *is* a revision: `board_namespace`
-    derives the name from the payload version, the build revision and the
-    configuration, so two producers writing different values into one control
-    row cannot happen -- they would be two namespaces.
+    The update arm rewrites the revision and the payload version rather than
+    only stamping the clock. A row may have been created by `_adopt`, which
+    leaves `producer_revision` NULL, and an update that only moved
+    `last_seen_at` would leave that NULL standing for the whole life of the
+    generation, with the admin surface reporting no revision at all.
 
     `created_at` is never touched. It is when this generation first appeared,
     which no later tick knows better than the first one did.

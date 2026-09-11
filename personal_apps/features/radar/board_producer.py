@@ -370,6 +370,23 @@ def readiness(engine, ns, now):
 
 # --- the loop ---------------------------------------------------------------
 
+# The most times the backoff doubles. The cap on the WAIT is not where this
+# arithmetic happens: `poll_interval * 2 ** failures` is evaluated before `min`
+# can see it, and `2 ** 1024` is past the largest float there is, so the
+# thousand and twenty-fourth consecutive failure raises OverflowError -- inside
+# the except handler whose entire job is to keep this loop alive. At a half
+# second between attempts that is under nine hours of a database being down: a
+# long outage over an unattended weekend, which is precisely what the backoff
+# was written for. Sixteen doublings pass `MAX_BACKOFF_SECONDS` from any
+# interval an operator would set, so nothing below the cap changes.
+BACKOFF_MAX_DOUBLINGS = 16
+
+
+def _backoff(poll_interval, failures):
+    """How long to wait after `failures` consecutive failed ticks."""
+    return min(poll_interval * 2 ** min(failures, BACKOFF_MAX_DOUBLINGS),
+               MAX_BACKOFF_SECONDS)
+
 class Loop:
     """The producer's tick, its fairness, and its shutdown.
 
@@ -458,8 +475,7 @@ class Loop:
                 served = self.tick()
             except Exception:
                 failures += 1
-                wait = min(self.poll_interval * 2 ** failures,
-                           MAX_BACKOFF_SECONDS)
+                wait = _backoff(self.poll_interval, failures)
                 message = ('board producer tick failed failures=%d '
                            'next_wait=%.1fs')
                 if failures == 1:

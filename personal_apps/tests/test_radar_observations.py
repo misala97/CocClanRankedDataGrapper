@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
-from features.radar import observations
+from features.radar import board_shared, observations
 from features.radar.config import SOURCES
 from models import RadarBoardObservation
 
@@ -135,6 +135,38 @@ def test_account_state_and_operational_counters_never_enter_the_archive(
             assert forbidden not in stored, forbidden
         assert stored['rows'] == [{'ticker': 'AAA'}]
         assert stored['excluded'] == {'floor': 2}
+
+
+def test_how_a_board_was_delivered_never_enters_the_archive(
+        app_context, monkeypatch):
+    """The envelope describes THIS copy of a board -- whether it came out of a
+    shared store, how old it was when it was handed over, when to ask again.
+    Every field of it is a constant of the capture path: a board the recorder
+    built itself, at this instant, from no cache, with nothing to come back
+    for. An archive of them would store the same dozen values on every row for
+    years and file them as evidence.
+
+    `generated_at` is not part of the envelope and stays. It is the board's own
+    stamp -- the one field here that says something about the world rather than
+    about the delivery -- and an observation without it could not be ordered
+    against the ingest that produced it.
+    """
+    def with_envelope(args, **kwargs):
+        payload = fake_payload(args, **kwargs)
+        payload.update({name: 'delivered'
+                        for name in board_shared.ENVELOPE_KEYS})
+        return payload
+
+    monkeypatch.setattr(observations, 'build_payload_direct', with_envelope)
+    observations.capture(BASE.replace(minute=3))
+
+    for market in ('us', 'de'):
+        stored = _stored(BASE).payload_json[market]
+        assert not board_shared.ENVELOPE_KEYS & set(stored), (
+            'the archive kept how the board was delivered: '
+            f'{sorted(board_shared.ENVELOPE_KEYS & set(stored))}')
+        assert stored['generated_at'] == '2019-03-04T09:59:00Z'
+        assert stored['rows'] == [{'ticker': 'AAA'}]
 
 
 def test_the_board_is_never_asked_for_a_caller(app_context, monkeypatch):

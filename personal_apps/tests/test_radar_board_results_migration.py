@@ -246,21 +246,29 @@ def test_a_four_thousand_character_key_and_a_twelve_kilobyte_blob_round_trip(
         disposable, sql_mode):
     """The claim TEXT is here for. Under `sql_mode=''` a too-narrow column
     truncates and warns instead of failing, which is how a corrupted key would
-    reach production without anything raising; under the server's own strict
-    mode it would raise instead. Both have to store four thousand characters.
+    reach production without anything raising; under strict mode it would raise
+    instead. Both have to store four thousand characters.
 
     On a connection of this test's own, with the mode set explicitly and put
     back afterwards. `SET SESSION` on a pooled connection outlives the test
     that set it -- and while it did, the strict case was quietly running under
     the permissive case's leftover mode, so the half of this test that matters
     most had never actually run.
+
+    The strict mode is named rather than copied from `@@GLOBAL.sql_mode`. A
+    server configured permissively would have made this case a second
+    permissive run that still passed, and one configured with some other strict
+    variant would have tested that variant instead -- on a test whose subject
+    is the columns, not the host. `STRICT_TRANS_TABLES` is what the production
+    server runs and what the MariaDB rehearsal sets, so it is what is asserted
+    against here.
     """
     key_hash, key_json = _long_key()
     assert len(key_json) > 3500, f'the fixture key is only {len(key_json)}'
     assert board_keys.round_trips(key_hash, key_json)
-    # A literal rather than a bind, because the strict case's mode is the
-    # server's own global setting and that is not a value to pass in.
-    wanted = "''" if sql_mode == 'permissive' else '@@GLOBAL.sql_mode'
+    # A literal rather than a bind: `SET SESSION sql_mode` takes an expression,
+    # and a parameter marker is not one.
+    wanted = "''" if sql_mode == 'permissive' else "'STRICT_TRANS_TABLES'"
 
     connection = db.engine.connect()
     restore = None
@@ -275,8 +283,8 @@ def test_a_four_thousand_character_key_and_a_twelve_kilobyte_blob_round_trip(
         if sql_mode == 'permissive':
             assert effective == '', f'wanted no sql_mode at all, got {effective!r}'
         else:
-            assert 'STRICT_TRANS_TABLES' in effective, (
-                f'the server default is not strict: {effective!r}')
+            assert effective == 'STRICT_TRANS_TABLES', (
+                f'the session did not take the mode asked for: {effective!r}')
 
         connection.execute(sa.text(
             'insert into radar_board_results '

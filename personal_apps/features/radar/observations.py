@@ -37,7 +37,9 @@ self-evidently something that was seen.
 Account state never enters the archive. `build_payload_direct`'s serializer
 also reads spend and the operational summaries as a side effect of building any
 board; those are live health rather than research evidence, and a watching list
-is somebody's private mark. Both are stripped before storage.
+is somebody's private mark. Both are stripped before storage, and so is the
+delivery envelope every board response now carries: how one copy of a board
+reached one reader says nothing about the world that board described.
 
 The board is BUILT here, never read from the shared result store, whatever
 `RADAR_BOARD_SHARED_RESULTS` says. An archive of what two selections showed at
@@ -57,6 +59,7 @@ from sqlalchemy.orm import Session
 from extensions import db
 from models import RadarBoardObservation
 
+from . import board_shared
 from .config import SOURCES, expand_sources
 from .routes.api import build_payload_direct
 
@@ -73,8 +76,16 @@ LIMIT = 50
 # Read as a side effect of serializing any board, and none of it belongs in a
 # research archive: the first two are the caller's own marks, the rest are
 # operational health that the admin surface reads live.
+#
+# The delivery envelope goes with them. Every field of it -- whether the board
+# came from a shared store, how old it was when it was handed over, when to ask
+# again -- is a constant of this path: a board the recorder built itself, at
+# this instant, from no cache, with nothing to come back for. Storing the same
+# dozen values on every row for years would not make them evidence. What stays
+# is `generated_at`, which is not part of the envelope: it is the board's own
+# stamp, the one field here that describes the world rather than the delivery.
 EXCLUDED = frozenset({'watching', 'watch_rows', 'spend', 'sentiment_ops',
-                      'market_data_ops'})
+                      'market_data_ops'}) | board_shared.ENVELOPE_KEYS
 
 _TRUTHY = {'1', 'true', 'yes', 'on'}
 

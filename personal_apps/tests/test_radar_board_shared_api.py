@@ -33,8 +33,9 @@ import sqlalchemy as sa
 from app import app as flask_app
 from extensions import db
 from features.radar import (board as board_mod, board_keys, board_namespace,
-                            board_shared, board_store, leaderboard,
-                            observations, watch)
+                            board_producer, board_shared, board_store,
+                            leaderboard, observations, watch)
+from features.radar.market_calendars import session_state
 from features.radar.routes import api
 
 DISPOSABLE = 'personal_apps_radar_perf3'
@@ -111,8 +112,15 @@ class _Shared:
                  'built_at': built_at or as_of, 'rev': REVISION})
         return key_hash
 
-    def fail(self, args, *, now, error='RuntimeError', ns=None):
-        """The row a failed build leaves: backed off, payload untouched."""
+    def fail(self, args, *, now, error='RuntimeError', ns=None, retry_in=30):
+        """The row a failed build leaves: backed off, payload untouched.
+
+        `retry_in` is how far the backoff reaches past `now`. Negative is a
+        backoff that has ELAPSED -- the key is still in the `failed` state its
+        last build left it in, and the next admission will re-queue it. That is
+        a different situation from a parked key and the two answer differently,
+        so the fixture has to be able to produce both.
+        """
         ns = ns or self.ns
         query = api.parse_query(args, now=NOW)
         key_hash, key_json = board_keys.canonical(query)
@@ -128,7 +136,35 @@ class _Shared:
                 ' next_attempt_at = :retry, last_error = :error,'
                 ' enqueued_at = :now'),
                 {'ns': ns, 'k': key_hash, 'j': key_json, 'now': now,
-                 'retry': now + seconds(30), 'error': error})
+                 'retry': now + seconds(retry_in), 'error': error})
+        return key_hash
+
+    def building(self, args, *, now, as_of=None, ns=None):
+        """The row a claim leaves behind: `building`, leased, maybe payloadless.
+
+        `as_of=None` is a key nobody has ever published -- the first build of a
+        selection, in flight. With an `as_of` it is a rebuild of a board that
+        already exists, which is the state the store spends most of its life
+        in and the one where a reader must go on serving what it has.
+        """
+        ns = ns or self.ns
+        query = api.parse_query(args, now=NOW)
+        key_hash, key_json = board_keys.canonical(query)
+        blob = None if as_of is None else blob_for(query, as_of=as_of)
+        with self.engine.begin() as connection:
+            connection.execute(sa.text(
+                'insert into radar_board_results'
+                ' (namespace, key_hash, key_json, payload_version, queue_state,'
+                '  warm, payload, payload_bytes, as_of, built_at, enqueued_at,'
+                '  requested_at, request_count, attempts, lease_owner,'
+                '  lease_token, lease_expires_at)'
+                " values (:ns, :k, :j, 1, 'building', 0, :blob, :size, :as_of,"
+                "         :as_of, :now, :now, 1, 0, 'somehost:42', 'tok',"
+                '         :lease)'
+            ).bindparams(sa.bindparam('blob', type_=sa.LargeBinary)),
+                {'ns': ns, 'k': key_hash, 'j': key_json, 'blob': blob,
+                 'size': None if blob is None else len(blob), 'as_of': as_of,
+                 'now': now, 'lease': now + seconds(120)})
         return key_hash
 
     def seed_pending(self, count, *, base=NOW):
@@ -164,7 +200,18 @@ def blob_for(query, *, as_of, rows=None):
     with a stored blob, and `test_radar_board_producer.py` is where the blob's
     own fidelity to `build_payload` is pinned. Every key the client reads is
     here, with `ops_collected_at` stamped as `build_blob` stamps it.
+
+    The session and the boundary are the three fields a serialized board
+    DERIVES rather than echoes, and they are derived here the way `board.build`
+    derives them -- from the same two functions, with the same Tradegate-first
+    MIC. A fake that named a session out of the air would make the shell-versus-
+    board comparison below assert a difference the producer never produces.
     """
+    mic = 'XGAT' if query.market == 'de' else None
+    session = session_state(query.market, as_of.replace(tzinfo=dt.timezone.utc),
+                            mic=mic)
+    label, boundary_at = board_mod._next_boundary(query.market, as_of, session,
+                                                  mic=mic)
     payload = {
         'generated_at': as_of.isoformat() + 'Z',
         'ops_collected_at': as_of.isoformat() + 'Z',
@@ -172,12 +219,12 @@ def blob_for(query, *, as_of, rows=None):
         'display_timezone': 'Europe/Berlin',
         'market_venue': ('Tradegate-first Germany' if query.market == 'de'
                          else 'US markets'),
-        'next_boundary_label': 'closes',
-        'next_boundary_at': as_of.isoformat() + 'Z',
+        'next_boundary_label': label,
+        'next_boundary_at': api._iso_z(boundary_at),
         'sources': sorted({api.source_root(s) for s in query.sources}),
         'all_sources': list(api.SOURCES),
         'segments': list(query.segments),
-        'session': 'regular',
+        'session': session,
         'min_venues': query.min_venues,
         'sort': query.sort,
         'dir': query.direction,
@@ -263,6 +310,13 @@ def read(shared, args=None, *, now=NOW, user_id=None, poll=False):
                                          now, user_id, poll=poll)
 
 
+def _embedded(html, element_id):
+    """The payload a server-rendered page put in the document."""
+    return json.loads(re.search(
+        rf'<script type="application/json" id="{element_id}">(.*?)</script>',
+        html, re.S).group(1))
+
+
 # --- the tripwire -----------------------------------------------------------
 
 def test_a_miss_is_a_pending_answer_and_never_a_build(shared, client):
@@ -294,6 +348,8 @@ def test_a_miss_is_a_pending_answer_and_never_a_build(shared, client):
     for absent in ('spend', 'sentiment_ops', 'market_data_ops'):
         assert absent not in payload
     assert payload['ops_collected_at'] is None
+    # The whole envelope, on the state that has the least to say.
+    assert board_shared.ENVELOPE_KEYS <= set(payload)
 
 
 def test_a_poll_asks_again_without_counting_as_a_new_request(shared, client):
@@ -311,28 +367,68 @@ def test_a_poll_asks_again_without_counting_as_a_new_request(shared, client):
     assert again['enqueued_at'] == first['enqueued_at']
 
 
+def test_only_the_literal_poll_1_is_read_as_a_poll(shared, client):
+    """`poll=true` is a request, and is counted as one.
+
+    The route compares against `'1'` exactly. Widening that to the flag
+    vocabulary the environment uses would be a kindness to nobody -- this
+    parameter is written by our own client, not by an operator -- and the cost
+    of guessing wrong in the other direction is a viewer's repeat polls
+    silently inflating `request_count`, which is what eviction ranks by.
+    """
+    assert client.get('/radar/api/board?market=us').status_code == 200
+    key_hash, _ = board_keys.canonical(api.parse_query({'market': 'us'},
+                                                       now=NOW))
+    assert shared.row(key_hash)['request_count'] == 1
+
+    assert client.get('/radar/api/board?market=us&poll=true').status_code == 200
+    assert shared.row(key_hash)['request_count'] == 2
+
+
 def test_the_server_rendered_pages_embed_the_pending_envelope(shared, client):
     """Both surfaces are the same payload, so both learn `pending` at once --
     including the one whose first paint is the document itself."""
     board_html = client.get('/radar/').get_data(as_text=True)
-    embedded = json.loads(re.search(
-        r'<script type="application/json" id="radar-data">(.*?)</script>',
-        board_html, re.S).group(1))
+    embedded = _embedded(board_html, 'radar-data')
     assert embedded['pending'] is True and embedded['rows'] is None
 
     hub_html = client.get('/radar/hub/').get_data(as_text=True)
-    shell = json.loads(re.search(
-        r'<script type="application/json" id="radar-hub-data">(.*?)</script>',
-        hub_html, re.S).group(1))
+    shell = _embedded(hub_html, 'radar-hub-data')
     assert shell['board']['pending'] is True
     assert shell['board']['rows'] is None
     assert shell['board']['shared'] is True
 
 
+@pytest.mark.parametrize('path, element_id, unwrap', [
+    ('/radar/', 'radar-data', lambda embedded: embedded),
+    ('/radar/hub/', 'radar-hub-data', lambda embedded: embedded['board']),
+], ids=['board', 'hub'])
+def test_a_query_the_parser_refuses_still_never_builds(
+        shared, client, path, element_id, unwrap):
+    """`?window=nonsense` raises BadQuery, and both pages answer it by asking
+    for the DEFAULT board instead of erroring.
+
+    That second ask goes through the dispatcher like the first, which is the
+    part worth a test: a fallback wired to the synchronous function would build
+    a board on a web worker -- the one thing the flag exists to stop -- and
+    would do it on exactly the request a person makes by mistyping in the
+    address bar, where nobody would think to look for it.
+    """
+    response = client.get(path + '?window=nonsense')
+    assert response.status_code == 200
+
+    payload = unwrap(_embedded(response.get_data(as_text=True), element_id))
+    assert payload['pending'] is True and payload['rows'] is None
+    assert payload['shared'] is True
+    # The default board: the fallback asked with no arguments at all.
+    assert payload['window_hours'] == 12
+
+
 # --- disposition, at the exact boundaries -----------------------------------
 
 def test_a_board_just_inside_the_freshness_bound_is_ready(shared):
-    shared.publish({'market': 'us'}, as_of=NOW - seconds(119.999))
+    as_of = NOW - seconds(119.999)
+    shared.publish({'market': 'us'}, as_of=as_of, built_at=as_of + seconds(7))
     payload = read(shared)
 
     assert payload['pending'] is False and payload['busy'] is False
@@ -341,14 +437,33 @@ def test_a_board_just_inside_the_freshness_bound_is_ready(shared):
     assert payload['age_seconds'] == pytest.approx(119.999, abs=0.001)
     assert payload['rows'] == [{'ticker': 'AAA'}, {'ticker': 'BBB'}]
     assert payload['generated_at'] == payload['as_of']
+    # The row's own two clock readings, both on the wire. `built_at` is the
+    # later one -- seven seconds of build sit between them -- so a payload that
+    # reported one for the other would say a board took no time to make.
+    assert payload['as_of'] == as_of.isoformat() + 'Z'
+    assert payload['built_at'] == (as_of + seconds(7)).isoformat() + 'Z'
     assert payload['fresh_seconds'] == 120.0
     assert payload['hard_expiry_seconds'] == 600.0
     assert payload['retry_after_ms'] is None
     assert payload['queue_age_seconds'] is None
     assert payload['ops_collected_at'] == payload['as_of']
+    assert board_shared.ENVELOPE_KEYS <= set(payload)
     # Served, not enqueued: a fresh board is not work.
     assert shared.row(board_keys.canonical(
         api.parse_query({'market': 'us'}, now=NOW))[0])['queue_state'] == 'idle'
+
+
+def test_a_board_stamped_in_the_future_is_no_younger_than_new(shared):
+    """Two hosts' clocks, one of them ahead. A board whose `as_of` is later
+    than this reader's `now` is not evidence of anything except NTP, and the
+    honest floor is zero: a negative age renders as `-0.4s ago` on the head and
+    lands in a metrics field a dashboard parses as a positive number.
+    """
+    shared.publish({'market': 'us'}, as_of=NOW + seconds(3))
+    payload = read(shared)
+
+    assert payload['age_seconds'] == 0.0
+    assert payload['stale'] is False and payload['pending'] is False
 
 
 @pytest.mark.parametrize('age, stale, pending, why', [
@@ -393,6 +508,72 @@ def test_a_stale_board_is_served_with_its_true_age_and_a_retry(shared):
     assert payload['age_seconds'] == pytest.approx(300.0, abs=0.001)
     assert payload['retry_after_ms'] == 5000
     assert payload['queue_age_seconds'] is None
+    assert board_shared.ENVELOPE_KEYS <= set(payload)
+
+
+def test_the_ops_stamp_is_the_rows_own_as_of(shared):
+    """`ops_collected_at` dates the frozen spend and ingest figures inside a
+    payload, and the row is what knows when this board was read: the summaries
+    were collected at the start of the build that wrote it.
+
+    Taken from the row rather than from the blob, even though the producer
+    writes the same instant into both. A payload that arrived with some other
+    stamp -- a blob written by a build that has since been corrected, a hand
+    edit -- would otherwise put an age on the operational figures that the
+    board they belong to does not have.
+    """
+    as_of = NOW - seconds(10)
+    query = api.parse_query({'market': 'us'}, now=NOW)
+    key_hash, _ = board_keys.canonical(query)
+    blob = zlib.compress(json.dumps(
+        {**json.loads(zlib.decompress(blob_for(query, as_of=as_of))),
+         'ops_collected_at': '1999-01-01T00:00:00Z'}).encode(), 6)
+    shared.publish({'market': 'us'}, as_of=as_of)
+    with shared.engine.begin() as connection:
+        connection.execute(sa.text(
+            'update radar_board_results set payload = :blob'
+            ' where namespace = :ns and key_hash = :k'
+        ).bindparams(sa.bindparam('blob', type_=sa.LargeBinary)),
+            {'blob': blob, 'ns': shared.ns, 'k': key_hash})
+
+    payload = read(shared)
+    assert payload['ops_collected_at'] == as_of.isoformat() + 'Z'
+    assert payload['ops_collected_at'] == payload['as_of']
+
+
+def test_the_shell_and_the_board_describe_the_same_selection(shared):
+    """One question, two answers, and the client draws the same controls from
+    either. The shell computes the echo from the parsed query; the board
+    carries whatever the producer serialized into the blob. Every field that
+    is the QUESTION rather than the answer has to agree, or a board arriving
+    after a pending shell would silently redraw the chips, the window buttons
+    or the market clock the reader was already looking at.
+
+    The key sets differ by exactly the three frozen operational summaries,
+    which are built INTO a payload and which a shell was never built to have.
+
+    Published at the instant the shell was computed for, so that a difference
+    in the echo is a difference in how the two paths DERIVE it rather than
+    however many seconds of clock separate a build from a read.
+    """
+    args = {'market': 'de', 'window': '24', 'segment': 'large',
+            'sources': 'reddit:wallstreetbets'}
+    shell = read(shared, args)
+    assert shell['pending'] is True
+
+    shared.publish(args, as_of=NOW)
+    board = read(shared, args)
+    assert board['pending'] is False
+
+    assert set(board) - set(shell) == {'spend', 'sentiment_ops',
+                                       'market_data_ops'}
+    assert set(shell) - set(board) == set()
+    for field in ('market', 'window_hours', 'segments', 'sources',
+                  'all_sources', 'min_venues', 'sort', 'dir',
+                  'display_timezone', 'market_venue', 'session',
+                  'next_boundary_label', 'next_boundary_at', 'triplet_hours',
+                  'series_hours', 'lead_count'):
+        assert shell[field] == board[field], field
 
 
 def test_a_payload_from_another_shape_is_not_read_at_all(shared):
@@ -437,6 +618,70 @@ def test_a_failing_key_with_no_board_waits_at_the_slower_rate(shared):
     assert payload['retry_after_ms'] == 5000
     assert payload['queue_age_seconds'] == pytest.approx(0.0, abs=0.001)
     assert shared.row(key_hash)['queue_state'] == 'failed'
+    assert board_shared.ENVELOPE_KEYS <= set(payload)
+
+
+def test_a_pending_shell_says_the_last_build_of_this_key_failed(shared):
+    """`failed` on a pending envelope is the row's queue state, not the
+    backoff's.
+
+    A key whose backoff has ELAPSED is re-queued by the admission this read
+    performs -- an ordinary place in line, at the ordinary retry rate -- but
+    the reason it is empty is still that its last build failed, and that is
+    what the surface needs in order to say something truer than "loading" to
+    somebody who has been waiting through six attempts.
+
+    The second read is the other half of the contract. By then the row is
+    `pending`: the failure is over, nothing has failed since, and `failed`
+    goes back to false. It says what the row says, which is the only rule that
+    cannot drift.
+    """
+    key_hash = shared.fail({'market': 'us'}, now=NOW, retry_in=-5)
+    first = read(shared)
+
+    assert first['pending'] is True and first['rows'] is None
+    assert first['failed'] is True, 'the shell forgot why it is empty'
+    # Queued, not parked: the ordinary pending curve and not the 5 s backoff.
+    assert first['retry_after_ms'] == 1000
+    assert shared.row(key_hash)['queue_state'] == 'pending'
+
+    second = read(shared)
+    assert second['pending'] is True
+    assert second['failed'] is False, (
+        'a re-queued key is no longer a failed one')
+
+
+# --- a key being built ------------------------------------------------------
+
+def test_a_board_being_rebuilt_is_served_while_the_rebuild_runs(shared):
+    """`building` is somebody working, not a reason to show nobody anything.
+    The board underneath is whatever was last published, with its true age."""
+    shared.building({'market': 'us'}, now=NOW, as_of=NOW - seconds(300))
+    payload = read(shared)
+
+    assert payload['rows'] is not None
+    assert payload['pending'] is False and payload['failed'] is False
+    assert payload['stale'] is True, 'a five-minute-old board is stale'
+    assert payload['age_seconds'] == pytest.approx(300.0, abs=0.001)
+
+
+def test_a_first_build_in_flight_is_a_pending_answer_that_waits_for_it(shared):
+    """Nothing published yet and a builder already on it: the answer is the
+    pending shell, and the admission must leave the claim alone. Re-queueing a
+    key that is being built would make a second producer eligible for work
+    that is already in flight, and counting a poll as a request would let a
+    viewer who waits by asking outrank one who waits by waiting."""
+    key_hash = shared.building({'market': 'us'}, now=NOW)
+    before = shared.row(key_hash)
+
+    payload = read(shared, poll=True)
+
+    assert payload['pending'] is True and payload['rows'] is None
+    assert payload['failed'] is False
+    after = shared.row(key_hash)
+    assert after['queue_state'] == 'building'
+    assert after['request_count'] == before['request_count']
+    assert after['lease_expires_at'] == before['lease_expires_at']
 
 
 # --- the queue --------------------------------------------------------------
@@ -471,6 +716,7 @@ def test_a_full_queue_answers_busy_and_writes_nothing(shared):
     assert payload['rows'] is None
     assert payload['retry_after_ms'] == 5000
     assert payload['queue_age_seconds'] is None
+    assert board_shared.ENVELOPE_KEYS <= set(payload)
     assert len(shared.rows()) == before
 
 
@@ -605,6 +851,11 @@ def test_the_flag_off_is_todays_payload_with_the_envelope_on_top(monkeypatch):
     the fields that describe how it was delivered -- so the client has one
     shape to render whichever path answered."""
     monkeypatch.delenv('RADAR_BOARD_SHARED_RESULTS', raising=False)
+    # A cache of this test's own. `board_cache` is process-global, so a fake
+    # board left in the real one would be served to a later test asking the
+    # same selection for real -- and the memo assertion below would pass or
+    # fail on what some other test had already built.
+    monkeypatch.setattr(api, 'board_cache', {})
     builds = _counting_build(monkeypatch)
 
     with flask_app.app_context():
@@ -690,6 +941,24 @@ def test_ops_reports_the_producer_and_its_queue(shared, client):
     assert results['warm_ready'] == 0
     assert results['queue'] == {'pending': 3, 'building': 0, 'failed_due': 0}
     assert results['on_demand_rows'] == 3
+
+
+def test_ops_counts_the_standing_boards_this_build_derives(shared, client,
+                                                           monkeypatch):
+    """`warm_total` is how many standing selections the producer HAS, which is
+    the number `warm_ready` is short of.
+
+    Derived rather than read off a limit: the eight come from a cross product
+    of markets, segments and windows, and a ninth added to that cross product
+    must make the operations page read "8 of 12" rather than a full house it
+    is two thirds of. A constant that agreed with the derivation today is a
+    constant that would go on agreeing after the derivation moved.
+    """
+    monkeypatch.setattr(board_producer, 'WARM_WINDOWS', (4, 12, 24))
+
+    results = client.get('/radar/api/ops').get_json()['board_results']
+    assert results['warm_total'] == 12
+    assert results['warm_ready'] == 0
 
 
 def test_ops_still_answers_when_the_shared_tables_are_not_there(
