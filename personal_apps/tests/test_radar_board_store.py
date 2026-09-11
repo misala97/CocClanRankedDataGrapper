@@ -960,6 +960,92 @@ def test_due_warm_names_the_stale_warm_keys_oldest_first(store):
         'a warm key inside the refresh interval, or an on-demand key, is due')
 
 
+# --- two generations at once ------------------------------------------------
+
+def test_a_generation_is_blind_to_another_generations_queue(store):
+    """The producer's side of the namespace rule, which nothing pinned.
+
+    Rollout and rollback are the two moments when two generations are live at
+    once, and that window is the whole reason the namespace exists. The reader
+    side is covered (test_radar_board_shared_api: a board another generation
+    stored is invisible); this is the other half the ruling asks for in as many
+    words -- "test simultaneous v1/v2 readers and producers, not only a reader
+    rejecting an old blob".
+
+    Every statement in the store carries `WHERE namespace = :ns`, so this is a
+    proof rather than a suspicion. It is worth having as a test because the
+    failure it would catch is silent: one generation quietly serving the other
+    one's boards, during a deploy, to readers who cannot tell.
+    """
+    bounds = board_store.limits()
+    theirs = store.namespace()
+
+    # One of everything a producer looks for, all of it in the other
+    # generation: a claimable on-demand row, a warm row that has never been
+    # built, and enough idle on-demand rows to be over the eviction bound on
+    # their own.
+    demand = key('theirs-demand')
+    board_store.admit(store.engine, theirs, *demand, NOW)
+    warm = key('theirs-warm')
+    board_store.refresh_warm(store.engine, theirs, [warm], NOW)
+    store.seed(bounds.max_on_demand + 5, prefix='theirs-idle-', ns=theirs)
+    before = len(store.rows(theirs))
+
+    # This generation has an empty queue, whatever the other one is holding.
+    assert board_store.claim(store.engine, store.ns, 'mine', NOW,
+                             prefer='demand') is None
+    assert board_store.claim(store.engine, store.ns, 'mine', NOW,
+                             prefer='warm') is None
+    assert board_store.due_warm(store.engine, store.ns, NOW) == []
+    assert board_store.queue_summary(store.engine, store.ns, NOW) == {
+        'pending': 0, 'building': 0, 'failed_due': 0, 'on_demand_rows': 0,
+        'warm_ready': 0}
+    assert board_store.evict(store.engine, store.ns, NOW) == 0
+    assert board_store.refresh_warm(store.engine, store.ns, [], NOW) == 0
+
+    # And the other generation kept every row it had.
+    assert len(store.rows(theirs)) == before
+    assert board_store.due_warm(store.engine, theirs, NOW) == [warm[0]]
+    assert board_store.queue_summary(store.engine, theirs, NOW) == {
+        'pending': 2, 'building': 0, 'failed_due': 0,
+        'on_demand_rows': bounds.max_on_demand + 6, 'warm_ready': 0}
+    # The eviction this generation refused to do is the other one's to do, so
+    # the zero above is a namespace scope and not an eviction that cannot run.
+    assert board_store.evict(store.engine, theirs, NOW) == 6
+
+
+def test_a_claim_from_one_generation_cannot_publish_or_fail_in_another(store):
+    """The fence is namespace, key, owner and token together.
+
+    A producer holding a live lease in one generation is the nearest thing
+    there is to an authorised writer, and it must still be refused everywhere
+    but its own: through a rollback the two producers run side by side on the
+    same keys, and a publish that crossed would put one build's board under the
+    other generation's name.
+    """
+    theirs = store.namespace()
+    pair = key('same-key-both-sides')
+    board_store.admit(store.engine, theirs, *pair, NOW)
+    store.admit(pair)
+    held = board_store.claim(store.engine, theirs, 'theirs', NOW,
+                             prefer='demand')
+    assert held is not None
+
+    assert board_store.publish(store.engine, store.ns, held, b'board',
+                               as_of=NOW, built_at=NOW, build_ms=1,
+                               producer_revision=REVISION) is False
+    assert board_store.fail(store.engine, store.ns, held, 'RuntimeError',
+                            NOW) is False
+
+    mine = store.read(pair[0])
+    assert mine.queue_state == 'pending', "another generation's claim wrote here"
+    assert mine.payload is None and mine.attempts == 0
+    # And the claim still works where it belongs.
+    assert board_store.publish(store.engine, theirs, held, b'board',
+                               as_of=NOW, built_at=NOW, build_ms=1,
+                               producer_revision=REVISION) is True
+
+
 # --- retirement, health and the summary ------------------------------------
 
 def test_retire_namespaces_removes_only_the_generation_nothing_has_touched(

@@ -751,6 +751,92 @@ def test_a_database_that_blinked_after_the_build_is_not_the_keys_fault(
                               producer.ns)['producer_error'] is None
 
 
+# --- two producers at once --------------------------------------------------
+
+# The build the OTHER generation says it is. Different from REVISION on
+# purpose: the column each row carries is what makes "whose board is this"
+# something to assert rather than something to believe.
+OTHER_REVISION = 'c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0'
+
+
+def test_two_producers_on_one_database_publish_only_into_their_own(
+        producer, monkeypatch):
+    """A rollout and a rollback both run two producers side by side.
+
+    That window is what the namespace was introduced for, and until now every
+    test in this file built one namespace and one Loop, so nothing proved the
+    ruling's "old and new producers must claim only their own namespace" for
+    the producer at all. Two Loops, two generations, one database, one set of
+    warm keys -- and a key only one of them was asked for.
+    """
+    clock = Clock()
+    fake_build(monkeypatch)
+    warm_hash, _ = board_keys.canonical(warm_subset(monkeypatch, 1)[0])
+    theirs_ns = producer.namespace()
+    mine = producer.loop(clock)
+    theirs = board_producer.Loop(producer.engine, ns=theirs_ns,
+                                 owner='owner-2', revision=OTHER_REVISION,
+                                 now_fn=clock)
+    # One viewer, asking the other generation for a board.
+    theirs_only = demand_key(0)
+    board_store.admit(producer.engine, theirs_ns, *theirs_only, NOW)
+
+    # This producer's tick: its own warm board, and nothing of theirs.
+    assert mine.tick(NOW) == warm_hash
+    assert board_store.read(producer.engine, theirs_ns,
+                            theirs_only[0]).queue_state == 'pending'
+    assert board_store.read(producer.engine, theirs_ns, warm_hash) is None, (
+        'a producer swept warm keys into a generation that is not its own')
+
+    # Theirs: the same warm key, built and published under their own name.
+    assert theirs.tick(NOW) == warm_hash
+    for namespace, revision in ((producer.ns, REVISION),
+                                (theirs_ns, OTHER_REVISION)):
+        with producer.engine.connect() as connection:
+            row = connection.execute(sa.text(
+                'select * from radar_board_results'
+                ' where namespace = :ns and key_hash = :k'),
+                {'ns': namespace, 'k': warm_hash}).mappings().one()
+        assert row['queue_state'] == 'idle'
+        assert row['payload'] is not None
+        assert row['producer_revision'] == revision, (
+            'one generation published under the other one\'s revision')
+
+    # Nothing is left for this producer: the only work outstanding is theirs.
+    assert mine.tick(NOW) is None
+    assert theirs.tick(NOW) == theirs_only[0]
+    assert board_store.read(producer.engine, producer.ns,
+                            theirs_only[0]) is None, (
+        'a key admitted in one generation appeared in the other')
+
+
+def test_a_producer_never_reclaims_a_lease_held_in_another_generation(
+        producer, monkeypatch):
+    """An expired lease is the one row any producer may take, and even that
+    is namespace-scoped: a generation whose builder died is its own to
+    recover, and a rollback must not hand its half-built keys to the other
+    side."""
+    clock = Clock()
+    fake_build(monkeypatch)
+    warm_subset(monkeypatch, 0)
+    theirs_ns = producer.namespace()
+    pair = demand_key(0)
+    board_store.admit(producer.engine, theirs_ns, *pair, NOW)
+    abandoned = board_store.claim(producer.engine, theirs_ns, 'owner-2', NOW,
+                                  prefer='demand')
+    assert abandoned is not None
+
+    # Well past the lease, when any producer in that generation would reclaim.
+    expired = NOW + seconds(board_store.limits().lease_seconds + 60)
+    clock.now = expired
+
+    assert producer.loop(clock).tick(expired) is None, (
+        'a producer reclaimed a lease that belonged to another generation')
+    row = board_store.read(producer.engine, theirs_ns, pair[0])
+    assert row.queue_state == 'building'
+    assert board_store.read(producer.engine, producer.ns, pair[0]) is None
+
+
 # --- transactions -----------------------------------------------------------
 
 class _Depth:

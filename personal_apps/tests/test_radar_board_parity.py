@@ -320,7 +320,12 @@ def _seed():
 
     # The pre-split root, under the stamp it was written with: counted by
     # the series and the tone, invisible to every score.
-    bucket(TICKERS[PRE_SPLIT], 195, 'reddit', mentions=7, expected=1.0,
+    #
+    # NINE, and not the seven it was. PT02's last-hour bucket also holds
+    # seven, so a read that dropped that bucket and counted this one instead
+    # summed to the same total -- and this is the only test of the
+    # source-version rule. Nine makes the two readings different numbers.
+    bucket(TICKERS[PRE_SPLIT], 195, 'reddit', mentions=9, expected=1.0,
            variance=2.0, stamp=OLD_STAMP, z=9.9)
     post(TICKERS[PRE_SPLIT], 9, 150, 'reddit', lexicon=0.6)
     # A feed that was down: a row, but not a measurement.
@@ -721,10 +726,13 @@ def test_the_fixture_is_adversarial(store):
         XGAT_HISTORY)
 
     # The source-version rule is exercised: PT02's pre-split root bucket is in
-    # its 11:00 series point and nowhere in its score.
+    # its 11:00 series point and nowhere in its score. Nine is the root
+    # bucket's and seven the last hour's, so each number below names exactly
+    # one bucket and a read that swapped them is a different total.
     pre_split = us[TICKERS[PRE_SPLIT]]
     series = {point['hour']: point['count'] for point in pre_split['series']}
-    assert series['2026-01-20T11:00:00Z'] == 7
+    assert series['2026-01-20T11:00:00Z'] == 9, (
+        'the root reddit bucket is missing from the series')
     assert pre_split['mentions'] == 12 + 23 + 34 + 7, (
         'the root reddit bucket reached the scored read')
     assert 'reddit' not in pre_split['sources']
@@ -953,7 +961,13 @@ def test_a_failing_enrichment_fails_the_request_on_both_paths(
         monkeypatch.setattr(api, 'board_cache', {})
         _forget_memos()
 
-    flask_app.config['TESTING'] = True
+    # Through monkeypatch, so it is put back. Set outright, it leaked into
+    # every test that ran after this one in the session: under TESTING an
+    # unhandled exception propagates to the caller instead of being rendered
+    # as the 500 a production worker answers, which is a different contract
+    # for every later test that asks a route what it does when something
+    # breaks.
+    monkeypatch.setitem(flask_app.config, 'TESTING', True)
     with flask_app.test_client() as client:
         with client.session_transaction() as flask_session:
             flask_session['user_id'] = seeded[BROKEN[0]]
