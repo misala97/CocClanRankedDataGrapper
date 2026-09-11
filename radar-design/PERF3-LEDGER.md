@@ -38,7 +38,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 4 read path, flag, API | **complete** | `9097621`, `6752492` | approved after one fix round |
 | 5 old board client | re-reviewed: **needs fixes**; round 3 queued | `0ed59e2`, `2b90885` | I1, I2 and eleven minors resolved; I3 half done |
 | 6 hub client | open | | |
-| 7 parity | implemented; review pending | `29cc2ac` | |
+| 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | open | | |
 | 9 suites + release package | open | | |
 | whole-branch review | open | | |
@@ -239,6 +239,32 @@ the reader just clicked; an aborted poll zeroes the server's retry floor
 once; one misleading comment. Round 3 waits for the Task 7 implementer, to
 keep one implementation worker at a time. The same ruling binds the hub in
 Task 6.
+
+### Task 7 — parity (approved)
+
+`29cc2ac`, one test file, no application code. 63 cases pass in 29 s; with
+three neighbour suites, 175 of 175 in both orders and no rows left behind.
+Deliberately breaking the producer made 49 cases fail when the sort was
+dropped and 5 when segments were deduplicated the PERF2 way. The reviewer
+checked seven named risks against the application code and found no critical
+or important issue: the digest strips only the envelope keys; the fixture's
+adversarial properties are asserted, not assumed; the stored side is an
+independent build through admit, claim, `round_trips`, `build_blob` and
+publish, read back at the same instant; cleanup deletes the fixture's exact
+tickers, so real listings sharing its prefix are safe; the long key stores
+1,044 characters and round-trips; the source and segment proofs compare both
+the key and the payload; and the omitted-market case pins which market each
+clock resolves to. The implementer's three concerns were judged sound.
+
+| Finding | Severity | Disposition |
+| --- | --- | --- |
+| the membership self-check asserts less than was measured; divergence's top 50 equals the default ranking's, so its matrix cases cannot see a limit-before-sort regression | Minor (partly plan-mandated) | carried: assert every key except divergence moves the cut, and say why divergence cannot |
+| the pre-split score check sums two buckets of the same count, so one wrong reading also gives the expected total | Minor | carried: give the root bucket a distinct count |
+| namespaces left by an aborted run are never swept | Minor | carried |
+| `== 37` ties the long-key test to today's subreddit count | Minor | carried: compare with `api.MAX_SOURCES` |
+| `default=str` in the digest could hide a wire-format difference | Minor (plan-mandated) | carried; low risk, since `serialize` formats every instant |
+| the failing-account test sets `TESTING` without restoring it | Minor | carried |
+| **every new PERF3 suite pins the database `personal_apps_radar_perf3` and skips on any other**, so after a merge they would skip silently on the dev database and anywhere else | Minor here, branch-wide | **carried to the whole-branch review**, which must decide what those guards should be |
 
 ## Measurements
 
