@@ -2,10 +2,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { envelope } from '../fixtures'
 import { Controls } from './Controls'
 import type { BoardPayload, Selection } from '../types'
 
 const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
+  ...envelope(),
   generated_at: '2026-08-22T19:00:00Z',
   market: 'us', display_timezone: 'Europe/Berlin',
   market_venue: 'US markets', next_boundary_label: 'closes',

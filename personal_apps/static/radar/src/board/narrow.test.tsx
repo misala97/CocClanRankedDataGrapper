@@ -7,6 +7,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { envelope } from '../fixtures'
 import { BoardPage } from './BoardPage'
 import type { BoardPayload, Detail, MarketQuote, Row } from '../types'
 
@@ -40,6 +41,7 @@ function row(over: Partial<Row> = {}): Row {
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
+    ...envelope(),
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
     market_venue: 'US markets', next_boundary_label: 'closes',

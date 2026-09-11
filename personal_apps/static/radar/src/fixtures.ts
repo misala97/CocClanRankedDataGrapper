@@ -37,8 +37,36 @@ export function row(over: Partial<Row> = {}): Row {
   }
 }
 
+/** The delivery fields every board response carries, in the shape a worker
+ *  that built its own board writes them: shared with nobody, waiting for
+ *  nothing, and as old as the instant it was built.
+ *
+ *  Exported because four other suites keep their own payload factory -- each
+ *  for its own reason -- and none of them is about the envelope. Spreading
+ *  this keeps them describing what they are actually testing.
+ */
+export type Envelope = Pick<BoardPayload,
+  'shared' | 'pending' | 'busy' | 'stale' | 'failed' | 'as_of' | 'built_at'
+  | 'age_seconds' | 'fresh_seconds' | 'hard_expiry_seconds' | 'retry_after_ms'
+  | 'queue_age_seconds' | 'ops_collected_at'>
+
+export function envelope(over: Partial<Envelope> = {}): Envelope {
+  return {
+    shared: false, pending: false, busy: false, stale: false, failed: false,
+    as_of: '2026-08-22T19:00:00Z', built_at: '2026-08-22T19:00:00Z',
+    age_seconds: 0,
+    // board_store.Bounds' own defaults, so a fixture cannot quietly disagree
+    // with the server about when a board goes stale or stops counting.
+    fresh_seconds: 120, hard_expiry_seconds: 600,
+    retry_after_ms: null, queue_age_seconds: null,
+    ops_collected_at: '2026-08-22T19:00:00Z',
+    ...over,
+  }
+}
+
 export function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
+    ...envelope(),
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
     market_venue: 'US markets', next_boundary_label: 'closes',

@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { Controls } from '../board/Controls'
+import { envelope } from '../fixtures'
 import { ListPane } from './ListPane'
 import type { BoardPayload, Row, Selection } from '../types'
 
@@ -32,6 +33,7 @@ const selection: Selection = {
 }
 
 const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
+  ...envelope(),
   generated_at: '2026-08-22T19:00:00Z',
   market: 'us', display_timezone: 'Europe/Berlin',
   market_venue: 'US markets', next_boundary_label: 'closes',

@@ -47,9 +47,12 @@ export function Chatter({ board, selection, sort = null, onOpen, onSelect,
   // Sorting outlives a refresh because it is applied to whatever `board.rows`
   // currently is, rather than stored as a reordered copy that would go stale.
   const rows = useMemo(() => {
+    // Null is a board nobody has built yet, which this page has nothing to
+    // order and nothing to filter -- the same nothing as an empty one.
+    const served = board.rows ?? []
     const matching = needle
-      ? board.rows.filter((row) => matches(row, needle))
-      : board.rows
+      ? served.filter((row) => matches(row, needle))
+      : served
     return sortRows(matching, sort)
   }, [board.rows, needle, sort])
 
@@ -70,7 +73,7 @@ export function Chatter({ board, selection, sort = null, onOpen, onSelect,
         <Filters board={board} selection={selection} onChange={onSelect} />
       ) : null}
 
-      {board.rows.length === 0
+      {(board.rows ?? []).length === 0
         ? <EmptyBoard excluded={excluded} />
         : (
           <Panel board={board} rows={rows} filter={filter}
@@ -111,7 +114,7 @@ function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
   sort: ChatterSort | null
   onSort?: (next: ChatterSort | null) => void
 }) {
-  const total = board.rows.length
+  const total = (board.rows ?? []).length
   const shown = rows.length
   // Somewhere for focus to land when the control holding it unmounts -- see
   // SortNote's reset.
@@ -824,7 +827,8 @@ function contextLine(board: BoardPayload): string {
 
 /** The board's own build time, in the timezone the reader lives in. A board
  *  with no visible age is one nobody can tell is stale. */
-function stamp(iso: string): string {
+function stamp(iso: string | null): string {
+  if (iso === null) return 'time unknown'
   try {
     return `${new Date(iso).toLocaleTimeString('en-GB',
       { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Berlin`

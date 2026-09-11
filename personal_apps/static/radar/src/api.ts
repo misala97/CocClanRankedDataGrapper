@@ -137,11 +137,20 @@ function statusReason(status: number, write = false): keyof typeof REASON_TEXT {
   return 'network'
 }
 
+/** The board for a selection.
+ *
+ *  `poll` is the client saying it is asking AGAIN about a board it is already
+ *  waiting for. The server reads it to leave demand and the queue position
+ *  alone -- a viewer who polls twelve times is one viewer, and counting each
+ *  poll would let a single open tab outrank a key twelve people asked for.
+ *  It rides outside `queryFor` deliberately: it is not part of the question,
+ *  so two requests that differ only by it are one cache key. */
 export async function fetchBoard(
   selection: Selection, signal?: AbortSignal,
+  { poll = false }: { poll?: boolean } = {},
 ): Promise<BoardPayload> {
   return getJson<BoardPayload>(
-    `/radar/api/board?${queryFor(selection)}`, signal)
+    `/radar/api/board?${queryFor(selection)}${poll ? '&poll=1' : ''}`, signal)
 }
 
 /** One ticker's panel.

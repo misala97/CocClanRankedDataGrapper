@@ -5,56 +5,131 @@ import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
 import { Search } from '../board/Search'
 import { defaultDirection } from '../api'
-import { formatMarketTime, humanAge, plural, stampTime } from '../format'
+import { formatMarketTime, humanAge, plural } from '../format'
+import { DELAYED_AFTER_MS } from '../pending'
 import { Widen } from '../Widen'
 import { SpendMark } from './Spend'
 import { TickerRow, scoredAgainstPrice } from './TickerRow'
 import type { BoardPayload, Mark, Row, Selection, SortKey } from '../types'
 
-/** When the always-visible UTC stamp becomes a stale-board warning.
+/** An age at the resolution the state it describes actually moves at.
  *
- *  The island fetches on a control change and never on a clock, so the stamp
- *  itself is always useful and the reload action becomes useful once a tab
- *  has plausibly been left behind. */
-const STALE_MINUTES = 15
-
-/** When this board was built, always; a reload control once it is stale.
- *
- *  `generated_at` is the request time rather than the last ingest, so it
- *  answers exactly one question and it is the question the reader has: is
- *  what I am looking at from this visit or from the one before lunch.
+ *  Seconds below a minute, because this line ticks every second and a board
+ *  that has just arrived saying "0 min ago" cannot be watched getting older.
+ *  `humanAge` takes over past ninety minutes, where its units -- hours, then
+ *  days -- are the ones a person would pick and the seconds stopped meaning
+ *  anything hours ago.
  */
-function Age({ iso }: { iso: string }) {
+function boardAge(seconds: number): string {
+  if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s`
+  const minutes = Math.floor(seconds / 60)
+  return minutes < 90 ? `${minutes}m` : humanAge(seconds)
+}
+
+/** How old the board on screen is, right now.
+ *
+ *  The server's age plus the time this page has held the answer. Neither half
+ *  is enough on its own: a stored board can be a minute old before it is ever
+ *  sent, and a tab left open adds an afternoon to whatever it was sent as.
+ *  Null when there is no board to be old -- a waiting shell has no age, and
+ *  inventing one would be the freshness stamp's one unforgivable lie.
+ */
+function ageNow(payload: BoardPayload, received: number): number | null {
+  if (payload.age_seconds === null || payload.age_seconds === undefined) {
+    return null
+  }
+  return payload.age_seconds + Math.max(0, (Date.now() - received) / 1000)
+}
+
+/** When this board was calculated -- always, in as many words.
+ *
+ *  It used to print the build time as a clock ("updated 16:46 CEST") and turn
+ *  amber after fifteen minutes, which was the right shape for an island that
+ *  only ever fetched when a control moved. A shared board can be older than
+ *  this tab is, can be being rebuilt while it is read, and can outlive the
+ *  window it names -- so the corner says the AGE, which is the number all
+ *  three of those states are about, and adds what is being done about it.
+ */
+function AgeLine({ payload, received }: {
+  payload: BoardPayload
+  received: number
+}) {
   // The page has no other reason to re-render while it sits untouched, which
-  // is precisely the situation this warns about -- computed once at mount it
-  // would be permanently zero minutes old. One timer for the whole board.
+  // is precisely the situation this describes. One timer for the whole board,
+  // at the resolution the line is printed in.
   const [, tick] = useState(0)
   useEffect(() => {
-    const timer = setInterval(() => tick((n) => n + 1), 60_000)
+    const timer = setInterval(() => tick((n) => n + 1), 1000)
     return () => clearInterval(timer)
   }, [])
 
-  const at = new Date(iso).getTime()
-  if (Number.isNaN(at)) return null
-  const minutes = Math.floor((Date.now() - at) / 60_000)
-  const stale = minutes >= STALE_MINUTES
-  const age = minutes < 120 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`
-  // Fresh states the build time; stale states the age instead -- the age is
-  // the actionable number, and both never share the line since a masthead
-  // corner does not fit "117m old · 16:46 CEST · Reload".
+  const age = ageNow(payload, received)
+  if (age === null) return null
+  // Past the hard expiry the age itself has stopped being worth printing:
+  // the rows describe a rolling window that has moved, and the page has
+  // already gone to ask for a board that describes this one.
+  if (age > payload.hard_expiry_seconds) {
+    return (
+      <span className="age expired">
+        <b>Expired, recalculating</b>
+      </span>
+    )
+  }
   return (
-    <span className="age">
-      {stale ? <b>{age} old</b>
-             : <>updated <time dateTime={iso}>{stampTime(iso)}</time></>}
-      {stale && (
-        <>
-          {' '}
-          <button type="button" onClick={() => window.location.reload()}>
-            Reload
-          </button>
-        </>
-      )}
+    <span className={payload.stale ? 'age stale' : 'age'}>
+      Calculated {boardAge(age)} ago
+      {payload.failed
+        // A verdict on the queue, not on these rows: they are the last board
+        // that built. Said in place of "refreshing" rather than beside it,
+        // because a refresh that is failing is not one that is happening.
+        ? <> · <b>Last refresh failed</b></>
+        : payload.stale ? <> · <b>refreshing</b></> : null}
     </span>
+  )
+}
+
+/** What the rows area says while there are no rows to put in it.
+ *
+ *  Its own component for its own clock: how long the reader has been waiting
+ *  is measured from when this mounted, which is when the board stopped being
+ *  on screen -- not from the last answer, since a poll answering "still
+ *  pending" every two seconds would keep resetting a wait that is not
+ *  resetting at all.
+ */
+function Waiting({ payload, onRetry }: {
+  payload: BoardPayload
+  onRetry?: () => void
+}) {
+  const [, tick] = useState(0)
+  const since = useRef(Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const delayed = Date.now() - since.current >= DELAYED_AFTER_MS
+  // Busy is not a queue: the generation is refusing work, so there is no
+  // position to be near the front of and nothing to be patient about.
+  const busy = payload.busy
+  return (
+    <p className="none pending" role="status">
+      {busy ? <b>The board is busy with other selections.</b>
+        : delayed ? <b>Still calculating…</b>
+        : <b>Calculating this board…</b>}
+      {(busy || delayed) && (
+        <span className="pointer">
+          {busy
+            ? 'It is building boards other readers asked for first.'
+            : 'A board nobody has asked for recently is built from scratch.'}
+          {' '}
+          Change the window or the feeds to ask for one that may already be
+          built.
+        </span>
+      )}
+      {(busy || delayed) && onRetry && (
+        <button type="button" onClick={onRetry}>Retry</button>
+      )}
+    </p>
   )
 }
 
@@ -184,7 +259,10 @@ function Status({ payload, shared, quoteTokens }: {
   shared: Mark[]
   quoteTokens: string[]
 }) {
-  const count = payload.rows.length
+  // Null, not zero: nobody has counted yet. "0 tickers" over a board that is
+  // still being built is a measurement nobody made, and it would be the one
+  // number on the line that is not a fact.
+  const count = payload.rows === null ? null : payload.rows.length
   // Either way the line must not say "30d baselines" while every row
   // disagrees; that was the bug the shared-marks logic exists to fix.
   const thinBaseline = thinBaselineOf(shared)
@@ -215,13 +293,13 @@ function Status({ payload, shared, quoteTokens }: {
     ...(closed
       ? [{ key: 'mode', cls: 'mode', node: 'ranked by chatter' as ReactNode }]
       : []),
-    {
+    ...(count === null ? [] : [{
       key: 'count',
       // The baselines claim only when the board could actually survey it:
       // universalMarks() answers nothing under two rows, so a one-row board
       // saying "30d baselines" beside a row marked provisional was the head
       // contradicting its own list. Seen live 2026-08-30, one SPCX row.
-      node: count < 2
+      node: (count < 2
         ? <>{count} {plural(count, 'ticker', 'tickers')}</>
         : (
           <>
@@ -230,8 +308,8 @@ function Status({ payload, shared, quoteTokens }: {
               ? <span className="shared">{UNIVERSAL[thinBaseline]}</span>
               : '30d baselines'}
           </>
-        ),
-    },
+        )) as ReactNode,
+    }]),
     ...rest.map((mark) => ({
       key: mark, cls: 'shared', node: UNIVERSAL[mark] as ReactNode,
     })),
@@ -420,14 +498,22 @@ export function SortCols({ selection, onChange }: {
  *  spend) arrives as a slot rather than being rendered here, because below
  *  900px the page places it after the panel instead -- see BoardPage.
  */
-export function ListPane({ payload, selection, selected, busy, onSelect,
-                          onChange, account, watching = [], onToggleWatch }: {
+export function ListPane({ payload, received, selection, selected, busy,
+                          onSelect, onChange, onRetry, account, watching = [],
+                          onToggleWatch }: {
   payload: BoardPayload
+  /** When this page received that payload, so the age on screen can keep
+   *  moving between answers. Defaults to now for the suites that render this
+   *  pane on its own. */
+  received?: number
   selection: Selection
   selected: string | null
   busy: boolean
   onSelect: (ticker: string) => void
   onChange: (next: Selection) => void
+  /** Ask again, now. Offered in the states where the wait has gone on long
+   *  enough that a reader wants a button rather than patience. */
+  onRetry?: () => void
   /** The footer matter, when this pane is where it belongs. */
   account?: ReactNode
   /** The reader's marks and how to flip one; rendered as the Watching tier
@@ -435,6 +521,11 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   watching?: string[]
   onToggleWatch?: (ticker: string) => void
 }) {
+  // No board at all, as opposed to a board with nothing on it. The two states
+  // have opposite meanings and, before the shared result, only one of them
+  // could happen.
+  const rows = payload.rows ?? []
+  const waiting = payload.rows === null
   // Watched rows come from the server (`watch_rows`, built whatever the
   // floor said) -- and, until the refetch after a star lands, from the
   // board's own rows, so a fresh mark moves up at once. One row per ticker,
@@ -443,10 +534,10 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
   const served = payload.watch_rows ?? []
   const watchRows = [
     ...served.filter((r) => marked.has(r.ticker)),
-    ...payload.rows.filter((r) => marked.has(r.ticker)
+    ...rows.filter((r) => marked.has(r.ticker)
       && !served.some((w) => w.ticker === r.ticker)),
   ].sort((a, b) => watching.indexOf(a.ticker) - watching.indexOf(b.ticker))
-  const ranked = payload.rows.filter((r) => !marked.has(r.ticker))
+  const ranked = rows.filter((r) => !marked.has(r.ticker))
   // The universal marks/quote facts are lifted to the header only when
   // every row actually ON SCREEN carries them -- the watched rows included,
   // not just the ranked ones the server counted them over.
@@ -498,12 +589,12 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
         <div className="brand">
           <h1>Radar</h1>
           <MarketSwitch selection={selection} onChange={onChange} />
-          <Search rows={payload.rows} watching={watching}
+          <Search rows={rows} watching={watching}
                   onPick={onSelect} onToggleWatch={onToggleWatch} />
           {/* Ops at a glance, in the corner the eye already checks for
               freshness: today's tone spend, then the stamp. */}
           <SpendMark payload={payload} />
-          <Age iso={payload.generated_at} />
+          <AgeLine payload={payload} received={received ?? Date.now()} />
         </div>
         <Status payload={payload} shared={shared}
                 quoteTokens={quoteShared.tokens} />
@@ -526,6 +617,24 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
             -- Score and Lean drifted ~20px off the cells under them. One grid
             on one width, and it stays put on a long board. */}
         <SortCols selection={selection} onChange={onChange} />
+        {waiting ? (
+          // No rows, and no pretending otherwise. The controls above stay
+          // exactly where they were: a reader who is tired of waiting can
+          // ask a different question, which is often a question the store
+          // has already answered for somebody else.
+          payload.failed ? (
+            // The builds for this selection are failing, not merely slow.
+            // An `.oops` rather than the calm waiting line, because "this is
+            // taking a while" would be the wrong thing to keep saying.
+            <p className="oops busy" role="alert">
+              <b>This board could not be built.</b> Radar is still retrying.
+              {onRetry && (
+                <button type="button" onClick={onRetry}>Retry</button>
+              )}
+            </p>
+          ) : <Waiting payload={payload} onRetry={onRetry} />
+        ) : (
+        <>
         {watchRows.length > 0 && (
           <p className="tier watching">
             <b>Watching</b>
@@ -565,7 +674,7 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
             {chatter.rows.map(renderRow)}
           </>
         )}
-        {payload.rows.length === 0 && (
+        {rows.length === 0 && (
           // Where the first row would have been, not as a footnote under an
           // empty frame: on this board it is the entire answer.
           //
@@ -580,6 +689,8 @@ export function ListPane({ payload, selection, selected, busy, onSelect,
               <span className="pointer"><Widen /></span>
             )}
           </p>
+        )}
+        </>
         )}
         {account}
       </div>

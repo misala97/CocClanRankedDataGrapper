@@ -21,7 +21,7 @@ export function Overview({ board, onOpen, onGo }: {
   onOpen: (ticker: string) => void
   onGo: (page: 'chatter' | 'watching') => void
 }) {
-  const candidates = board.rows.slice(0, LEAD)
+  const candidates = (board.rows ?? []).slice(0, LEAD)
   const marks = board.watch_rows
   const excluded = Object.values(board.excluded ?? {})
     .reduce((total, count) => total + count, 0)
@@ -221,7 +221,8 @@ function priceText(row: Row): string {
   return `${price.trim()}${move}`
 }
 
-function stamp(iso: string): string {
+function stamp(iso: string | null): string {
+  if (iso === null) return 'time unknown'
   try {
     return `${new Date(iso).toLocaleTimeString('en-GB',
       { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Berlin`

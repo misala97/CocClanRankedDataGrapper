@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BoardUnavailable, fetchBoard } from './api'
 import { BoardPage } from './board/BoardPage'
+import { envelope } from './fixtures'
 import { Boundary } from './Broken'
 import { parsePayload } from './embedded'
 import { Identity } from './detail/Identity'
@@ -55,6 +56,7 @@ function row(over: Partial<Row> = {}): Row {
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
+    ...envelope(),
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
     market_venue: 'US markets', next_boundary_label: 'closes',
@@ -544,28 +546,29 @@ describe('a post nobody sized', () => {
 })
 
 describe('how old the board is', () => {
-  it('always says when the board was updated, in Berlin time', () => {
-    vi.setSystemTime(new Date('2026-08-22T19:05:00Z'))
-    render(<BoardPage initial={payload()} />)
+  // The corner used to print the build time as a clock and turn amber after
+  // fifteen minutes. That was right for an island that only ever fetched when
+  // a control moved; a shared board can be older than this tab is, so the
+  // corner states the AGE -- which is what every one of these states is
+  // about -- and what is being done about it.
+  it('always says how long ago the board was calculated', () => {
+    render(<BoardPage initial={payload({ age_seconds: 180 })} />)
 
-    expect(screen.getByText('21:00 CEST').closest('.age'))
-      .toHaveTextContent('updated 21:00 CEST')
-    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
-    vi.useRealTimers()
+    expect(document.querySelector('.age'))
+      .toHaveTextContent('Calculated 3m ago')
+    expect(screen.queryByText(/updated/)).toBeNull()
   })
 
-  it('says so once a tab has been left open', async () => {
-    // The island fetches on a control change and never on a clock, so a board
-    // from before lunch looks exactly like a live one.
-    vi.setSystemTime(new Date('2026-08-22T22:00:00Z'))
-    render(<BoardPage initial={payload()} />)
+  it('stops printing an age that has stopped being true', async () => {
+    // A board from before lunch used to look exactly like a live one. Past
+    // its hard expiry it is not merely old: its rows describe a rolling
+    // window that moved hours ago, so the page says so and goes to get one
+    // that describes this window.
+    render(<BoardPage initial={payload({ age_seconds: 10_800 })} />)
 
-    expect(await screen.findByText(/3h old/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
-    // Stale states the age INSTEAD of the build stamp -- the age is the
-    // actionable number, and the masthead corner does not fit both.
-    expect(screen.queryByText(/updated/)).toBeNull()
-    vi.useRealTimers()
+    expect(document.querySelector('.age')).toHaveTextContent(/Expired/)
+    await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls
+      .some((call) => String(call[0]).includes('/api/board'))).toBe(true))
   })
 })
 

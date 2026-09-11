@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import { envelope } from '../fixtures'
 import { ListPane, splitTiers } from './ListPane'
 import type { BoardPayload, Row, Selection } from '../types'
 
@@ -30,6 +31,7 @@ const selection: Selection = {
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
+    ...envelope(),
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
     market_venue: 'US markets', next_boundary_label: 'closes',

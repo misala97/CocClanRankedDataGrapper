@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { defaultDirection, fetchSearch, queryFor, setWatch } from './api'
+import {
+  defaultDirection, fetchBoard, fetchSearch, queryFor, setWatch,
+} from './api'
 import { resetCsrfCache } from './csrf'
 import type { Selection } from './types'
 
@@ -14,6 +16,27 @@ beforeEach(() => {
   resetCsrfCache()
 })
 afterEach(() => { vi.unstubAllGlobals(); document.head.innerHTML = '' })
+
+describe('the board request', () => {
+  it('marks a repeat ask as a poll, and an ordinary one not at all', async () => {
+    // The server reads `poll=1` to leave demand and the queue position alone:
+    // a viewer that polls twelve times is one viewer, and counting each poll
+    // would let a single open tab outrank a board twelve people asked for.
+    const spy = vi.fn(async (_url: string) => ({
+      ok: true, redirected: false, status: 200, json: async () => ({}),
+    }))
+    vi.stubGlobal('fetch', spy)
+
+    await fetchBoard(baseSelection)
+    await fetchBoard(baseSelection, undefined, { poll: true })
+
+    expect(String(spy.mock.calls[0]![0])).not.toContain('poll=')
+    expect(String(spy.mock.calls[1]![0])).toContain('&poll=1')
+    // And it rides outside the question, so the two are one cache key.
+    expect(String(spy.mock.calls[1]![0]).replace('&poll=1', ''))
+      .toBe(String(spy.mock.calls[0]![0]))
+  })
+})
 
 describe('search', () => {
   it('asks for the query and unwraps the matches', async () => {

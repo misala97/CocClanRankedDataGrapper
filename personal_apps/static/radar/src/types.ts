@@ -276,7 +276,11 @@ export interface Row {
 export type Session = 'premarket' | 'regular' | 'afterhours' | 'closed'
 
 export interface BoardPayload {
-  generated_at: string
+  /** When this board was BUILT, by whoever built it. Null on a waiting shell:
+   *  there is no board, so there is no instant to name, and "calculated just
+   *  now" about one that does not exist is the one thing a freshness stamp
+   *  must never say. */
+  generated_at: string | null
   market: Market
   display_timezone: 'Europe/Berlin'
   /** Selected market context, stated once above its rows. */
@@ -301,7 +305,12 @@ export interface BoardPayload {
   triplet_hours: number[]
   series_hours: number
   lead_count: number
-  rows: Row[]
+  /** Null is not empty. Empty means nothing was loud enough in this window,
+   *  which is a real and different answer; null means nobody has built this
+   *  board yet, and a surface that could not tell the two apart would draw
+   *  "no movement" over a cache miss. Null only ever arrives with `pending`
+   *  or `busy` set. */
+  rows: Row[] | null
   /** What the eligibility floor and the breadth filter left out, by reason.
    *  Without it a quiet board and a stopped ingest look identical. */
   excluded: Record<string, number>
@@ -330,6 +339,70 @@ export interface BoardPayload {
       over_ceiling: number
     }
   }
+  /** The market-data cycles, when the server put them on the board. Absent
+   *  on a waiting shell for the same reason `spend` is: these are frozen
+   *  into a payload at build time and a shell was never built. */
+  market_data_ops?: OpsPayload['market_data']
+
+  // --- how this answer was delivered ---------------------------------------
+  //
+  // Every response carries all of it -- the shared store's, and the one a
+  // worker built for itself -- so the surface renders one shape rather than
+  // telling a missing field from a false one. Named field for field in
+  // features/radar/board_shared.ENVELOPE_KEYS.
+
+  /** Read from the store somebody else writes, rather than built here. */
+  shared: boolean
+  /** No board yet; one is queued or being built. `rows` is null. */
+  pending: boolean
+  /** The generation is refusing work. Nothing was queued, and the client is
+   *  being asked to slow down rather than to wait in line. `rows` is null. */
+  busy: boolean
+  /** The board below is past its freshness bound and a refresh is queued.
+   *  Still a board, and still worth reading. */
+  stale: boolean
+  /** The attempt to build a NEWER board failed. A verdict on the queue, not
+   *  on the rows: with rows present they are the last good board. */
+  failed: boolean
+  /** When the board was published, and when its build finished. Null while
+   *  there is nothing to describe. */
+  as_of: string | null
+  built_at: string | null
+  /** How old the board was when the server answered. The surface adds its
+   *  own elapsed time on top rather than re-deriving this from a stamp. */
+  age_seconds: number | null
+  /** The bounds the age is read against: fresh below the first, worth
+   *  serving under a stale mark below the second, and past the second it
+   *  misdescribes the rolling window it names. */
+  fresh_seconds: number
+  hard_expiry_seconds: number
+  /** The server's own read of when to come back, in milliseconds. It knows
+   *  the queue; the client's schedule does not, so this is a floor and never
+   *  a ceiling. Null when there is nothing to come back for. */
+  retry_after_ms: number | null
+  /** How long this key has been in the queue. Null when it is not in one. */
+  queue_age_seconds: number | null
+  /** When the ops summaries inside this payload were read. */
+  ops_collected_at: string | null
+}
+
+/** A board with rows in it: what every part of the surface that draws a list
+ *  is entitled to assume, and what a waiting shell is not. */
+export type ReadyBoard = BoardPayload & {
+  rows: Row[]
+  as_of: string
+  generated_at: string
+}
+
+/** Whether this answer is a board at all.
+ *
+ *  Rows AND the two stamps, not `!pending`: a shell is recognised by what it
+ *  is missing rather than by a flag, so a payload from an older deployment
+ *  that carries neither flag nor rows is still handled as the absence it is.
+ */
+export function isReady(payload: BoardPayload): payload is ReadyBoard {
+  return payload.rows !== null && payload.as_of !== null
+    && payload.generated_at !== null
 }
 
 /** The board's sort keys, in the order the header reads left to right. Same

@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { loadPayload } from './embedded'
+import { loadPayload, parsePayload } from './embedded'
 
 const board = '{"rows":[],"market":"de"}'
 
@@ -63,5 +63,24 @@ describe('the opening board', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline') }))
 
     expect(await loadPayload()).toBeNull()
+  })
+})
+
+describe('a document that was served while the board was being built', () => {
+  const shell = '{"rows":null,"pending":true,"busy":false,"market":"us"}'
+
+  it('opens on the waiting shell rather than on nothing at all', () => {
+    // `rows` is normally the check, because it is what the page IS. A null
+    // one under `pending` is the store saying "there is no board yet" in as
+    // many words -- an answer, with a selection to draw and a line to say --
+    // and rejecting it would replace a page that says "calculating" with a
+    // page that says nothing.
+    expect(parsePayload(shell)?.pending).toBe(true)
+    expect(parsePayload(shell)?.rows).toBeNull()
+  })
+
+  it('still refuses a null board that claims nobody is building one', () => {
+    expect(parsePayload('{"rows":null,"market":"us"}')).toBeNull()
+    expect(parsePayload('{"rows":null,"pending":false,"busy":false}')).toBeNull()
   })
 })

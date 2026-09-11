@@ -16,19 +16,29 @@ import type { BoardPayload } from './types'
  *
  *  `rows` is the check because it is what the page IS. A payload without it
  *  is not a thin board; it is not a board.
+ *
+ *  The one exception is a NULL `rows` under `pending` or `busy`, which is the
+ *  shared store saying "there is no board yet" in as many words. That is an
+ *  answer, and the surface has something to draw for it -- the selection it
+ *  echoes back, and a line saying what is happening -- so rejecting it here
+ *  would replace a page that says "calculating" with a page that says
+ *  nothing at all. A null `rows` with neither flag is still not a board.
  */
 export function parsePayload(text: string | null | undefined): BoardPayload | null {
   try {
     const parsed = JSON.parse(text ?? '') as unknown
     if (!parsed || typeof parsed !== 'object') return null
-    if (!Array.isArray((parsed as BoardPayload).rows)) return null
+    const board = parsed as Partial<BoardPayload>
+    const waiting = board.pending === true || board.busy === true
+    if (!Array.isArray(board.rows) && !(board.rows === null && waiting)) {
+      return null
+    }
     // Older server-rendered documents omitted these fields. Keep them usable
     // at the boundary rather than letting legacy embeds create an untyped
     // third market inside the page.
-    const embedded = parsed as Partial<BoardPayload>
     return {
       ...(parsed as BoardPayload),
-      market: embedded.market === 'de' ? 'de' : 'us',
+      market: board.market === 'de' ? 'de' : 'us',
       display_timezone: 'Europe/Berlin',
     }
   } catch {

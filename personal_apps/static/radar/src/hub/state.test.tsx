@@ -86,7 +86,7 @@ describe('when a refresh fails', () => {
     // Data that was true a minute ago beats a blank page -- as long as the
     // surface says when it was true, which is what the stamp is for.
     expect(screen.getByTestId('market')).toHaveTextContent('us')
-    expect(screen.getByTestId('stamp')).toHaveTextContent(initial.generated_at)
+    expect(screen.getByTestId('stamp')).toHaveTextContent(initial.generated_at!)
   })
 
   it('stops retrying what cannot come good', async () => {

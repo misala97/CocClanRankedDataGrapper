@@ -357,7 +357,8 @@ function useVisible(): boolean {
   return visible
 }
 
-function berlinStamp(iso: string): string | null {
+function berlinStamp(iso: string | null): string | null {
+  if (iso === null) return null
   try {
     return `${new Date(iso).toLocaleTimeString('en-GB',
       { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Berlin`

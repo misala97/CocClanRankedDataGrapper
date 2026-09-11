@@ -484,6 +484,14 @@ body {
 }
 
 .brand .age b { color: var(--warn); font-weight: 600; }
+/* `· refreshing` is not a warning. A stale board is being rebuilt behind the
+   reader and every row on screen is still the last real one; amber here would
+   put a caution on figures that do not deserve it. */
+.brand .age.stale b { color: var(--ink-2); }
+/* Past the hard expiry it does earn the amber: the rows describe a rolling
+   window that has moved on, so the age has stopped being worth printing and
+   the page has already gone to ask for a board that describes this one. */
+.brand .age.expired b { color: var(--warn); }
 .brand .age button {
   font: inherit; font-size: var(--t-xs);
   margin-left: var(--s2); padding: 1px 8px;
@@ -987,6 +995,24 @@ body {
 }
 .none .pointer { color: var(--muted); font-size: 12.5px; }
 .none .pointer b { color: var(--ink-2); font-weight: 600; }
+
+/* Waiting for a board somebody else is building. The same slot as the empty
+   board, and deliberately the same quiet register: nothing is wrong, and a
+   spinner where the rows go would say something is. The controls above stay
+   exactly where the reader left them, which is the way out -- another
+   selection is often one the store has already answered. */
+.none.pending { color: var(--muted); }
+.none.pending b { color: var(--ink-2); font-weight: 600; }
+.none.pending button {
+  font: inherit; font-size: var(--t-xs); display: inline-block;
+  margin-top: var(--s3); padding: 2px 10px;
+  border: 1px solid var(--rule); border-radius: var(--r-pill);
+  background: var(--raise); color: var(--ink-2); cursor: pointer;
+}
+.none.pending button:hover { color: var(--ink); }
+.none.pending button:focus-visible {
+  outline: 2px solid var(--mark); outline-offset: 1px;
+}
 
 /* ------------------------------------------------------- the mark glossary -
    PRODUCT.md: the marks are load-bearing rather than metadata. The rows
@@ -1494,6 +1520,15 @@ body {
   font: inherit; margin-left: 10px; border: 1px solid var(--rule);
   background: var(--raise); border-radius: var(--r-pill);
   padding: 2px 10px; cursor: pointer;
+}
+/* The same message, inside the rows scroller rather than across the top of
+   the page: this one is about the board the reader is waiting for and not
+   about the page, and it belongs where that board would have been. The grid
+   placement above is for the two-pane grid and would take it out of the flow
+   of the list, so it is undone here. */
+.oops.busy {
+  grid-row: auto; grid-column: auto;
+  margin: var(--s4) var(--s6); border-radius: var(--r);
 }
 
 /* ------------------------------------------------------------- the press --
