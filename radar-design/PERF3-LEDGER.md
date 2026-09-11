@@ -736,6 +736,7 @@ All in `personal_apps/scratchpad/perf3/`, run from `personal_apps/`.
 | `profile_watch_perf3.py` | Step 3 / decision 7: the per-account half |
 | `two_workers_perf3.py` | Step 2 / decision 8: the non-Radar request, MODEL, flag on and off |
 | `ledger_tables_perf3.py` | the tables below, derived from the scripts' saved JSON |
+| `request_timing_overhead.py` | Task 9a: the request-timing hooks' cost per request, on against off, through the Flask test client; no database |
 
 ### Step 1: the shared path at production scale
 
@@ -1623,3 +1624,46 @@ after each run the account `perf3_browser` and its marks were deleted, and so
 was every on-demand board the run had caused (13 in run 1, 4 in run 2, 2 in run
 3; rows of other namespaces left: 0). The aligned fixture is untouched; the
 store holds this namespace's eight warm boards.
+
+### Request timing (Task 9a)
+
+`personal_apps/request_timing.py`, installed from `app.py`, registers nothing
+unless `PERSONAL_REQUEST_TIMING_LOG` is `1`, `true`, `yes` or `on`. On, it
+writes one stdout line per request on `app.request` --
+`request method=GET route=/radar/api/ticker/<ticker> status=200 bytes=2048 ms=41.3`,
+the route a rule TEMPLATE, `<unmatched>` or `<static>`, never a path value,
+query string, cookie, header, address or account -- and hangs the same handler
+on `radar.board`, with propagation cut on both. Tests:
+`tests/test_request_timing.py`, 32.
+
+**The gap it closes, confirmed before any change.** The web process configures
+no handler for `radar.board`: `app.py` sets up none, and gunicorn 26.2.0's
+`glogging.Logger.setup` touches only `gunicorn.error` and `gunicorn.access`.
+So the logger inherits the root's WARNING, and every `board read` line has
+been dropped before it was formatted; only the producer's lines, after its
+own `basicConfig`, reached journald.
+`test_a_freshly_imported_app_drops_every_board_line_with_the_variable_unset`
+shows it (a fresh interpreter importing `app`: INFO disabled, no handler at
+INFO, `log_read` prints nothing) and passed on the unchanged code. **With the
+variable unset -- the default, and the state the release deploys with -- that
+is still true.**
+
+**Overhead.** `personal_apps/scratchpad/perf3/request_timing_overhead.py`,
+run from `personal_apps/`: two minimal Flask apps with the same cheap dynamic
+route, one installed on and one off (no hooks); per round 1,000 requests to
+each through the Flask test client, alternating, after 200 warm-up pairs; the
+enabled handler writing to `os.devnull`, a write and a flush per line. Windows
+11, Python 3.12.6, Flask 3.1.3, no database. Microseconds per request:
+
+| round | off median | off p95 | on median | on p95 | on - off, median | on - off, p95 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 172.9 | 219.1 | 219.3 | 293.3 | +46.4 | +74.2 |
+| 2 | 174.6 | 468.0 | 222.2 | 598.4 | +47.6 | +130.4 |
+| 3 | 172.1 | 283.7 | 219.3 | 341.3 | +47.2 | +57.6 |
+
+About **47 us per request at the median**, steady across rounds; the p95
+difference moves with the machine (round 2's p95 rose for both apps alike).
+That is under 0.1% of the fastest ready read above (`read_payload` p95
+70-73 ms). Not modelled: journald's side of the line (a socket write on
+Linux, and its rate limit), gunicorn, MariaDB. Retention is journald's and is
+not verified here: the target's journald settings are unread.

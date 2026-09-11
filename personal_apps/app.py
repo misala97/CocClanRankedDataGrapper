@@ -65,6 +65,14 @@ app.register_blueprint(gym_bp)
 app.register_blueprint(radar_bp)
 app.register_blueprint(showoff_bp)
 
+# A timing line per request, keyed by route template, and radar.board's read
+# lines on stdout beside it. Registers nothing unless PERSONAL_REQUEST_TIMING_LOG
+# is set -- see request_timing.py. Called here, ahead of the app's own hooks
+# below, so its clock starts before the login gate and its after_request,
+# registered first, runs last.
+import request_timing
+request_timing.install(app)
+
 # Gym templates call {{ vite_asset('exercise') }} for the content-hashed bundle
 # built by `npm run build`. Raises rather than returning an empty src when the
 # build has not run -- see vite_assets.py and DEPLOY_FRONTEND.md.
