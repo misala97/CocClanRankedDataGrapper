@@ -1,18 +1,75 @@
-# CURRENT — PERF3 in progress (Claude implementing under the PERF2 ruling)
+# CURRENT — PERF3 paused after Task 5's fix, 2026-09-11
+
+Claude implements under the PERF2 ruling; Codex owns planning. Paused at the
+owner's request. **Nothing is merged, pushed, deployed or configured on the
+VPS**; the deployed SHA is still `4221196`. No agent is running.
 
 | | |
 | --- | --- |
 | Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` |
-| Branch | `codex/radar-perf3`, from `afe1246`; first commit `4f8ad5f` carries Codex's ruling edits |
-| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md`; ledger `PERF3-LEDGER.md` |
-| Databases | tests: `personal_apps_radar_perf3` (te1 clone, 29 FKs, stamp `a7c31f0b52d4`); timings: `personal_apps_radar_perf3_scale` (perf1 clone minus spike tables) |
-| Protected | `personal_apps_radar_perf1` (not modified), the `radar-perf2` worktree and its uncommitted Codex edits, every other worktree, the planning checkout's dirty files, `.env` files |
-| Deployed | still `4221196`; nothing here is merged, pushed, deployed or configured on the VPS |
+| Branch | `codex/radar-perf3`, from `afe1246` |
+| Code HEAD | `2b90885`; the commit after it carries only this handoff, the ledger and the plan amendments |
+| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (Task 8 carries two 2026-09-11 amendments); ledger `PERF3-LEDGER.md` |
+| Controller scratch | `.superpowers/sdd/`: task briefs 1–9, implementer reports 1–5, review packages, `progress.md`. Working files, not committed. |
+| Tests DB | `personal_apps_radar_perf3`, stamp `b7e3f9c1a2d4`, te1 clone with 29 FKs. Its board data ends 2026-09-01, so real-clock boards there are empty. |
+| Scale DB | `personal_apps_radar_perf3_scale`, stamp `b7e3f9c1a2d4`, 9,269,184 bucket rows. Its data ends 2026-09-10 12:00 UTC and must be aligned by Task 8 Step 0 before any timing. |
+| MariaDB | The portable 10.11.14 rehearsal server is STOPPED. The restart command is in the ledger; it is needed only if the store or migration changes. |
 
-Read `PERF3-LEDGER.md` for task status, findings and numbers before touching
-code. The ledger's task table names the commits; `git log` is the truth if
-they disagree. Continue from the first task the ledger does not mark
-complete. This block is replaced by Task 9 with the finished handoff.
+| Task | State |
+| --- | --- |
+| 1 key + namespace | complete, reviewed |
+| 2 store + migration | complete, reviewed; MariaDB rehearsal 54/54 |
+| 3 producer | complete, reviewed |
+| 4 read path, flag, API | complete, reviewed |
+| 5 old board client | `0ed59e2` plus fix `2b90885`; **the fix has not been re-reviewed** |
+| 6 hub client | open; brief ready |
+| 7 parity | open; brief ready |
+| 8 scale verification + browser | open; brief ready, amended |
+| 9 suites + release package | open; brief ready |
+| whole-branch review | open |
+
+**Immediate next action:** an independent read-only re-review of `2b90885`
+against Task 5's findings I1–I3, M1–M8, M10, M12 and M13. The package comes
+from `review-package 6752492 2b90885` in the subagent-driven-development
+skill's scripts. The re-review must rule on the fixer's decision to apply the
+client-clock fresh bound to shared boards only; the ledger's Task 5 section
+has the reasoning.
+
+**Then Task 6 (hub),** with three things its brief does not say:
+
+- I4 from Task 5's review: the hub now renders "Nothing cleared the floor"
+  over a pending shell, because compile-only null guards treat `rows: null`
+  as an empty list.
+- The hub's board query uses `keepPreviousData`, which shows the previous
+  selection's board under the new selection's filters. Ruling applied:
+  render the Loading state while `isPlaceholderData`, as `Research.tsx`
+  already does, rather than an unmarked previous board.
+- The client-clock fresh bound and `poll=1` on refetches of pending, busy and
+  stale boards, matching whatever the re-review settles for the old board.
+
+**Test evidence.** At `2b90885`, per the fixer: radar vitest 584/584, root
+vitest 403/403, `tsc` exit 0, `npm run build` passes. Backend at `6752492`,
+per its fixer: 255 passed across the ten board, store, API and migration
+suites. The whole backend suite has not been run on this branch yet; that is
+Task 9. `test_radar_projection_migration.py` skips here by design, because it
+pins the database name `personal_apps_radar_wt`.
+
+**Traps.** `app.py` calls `load_dotenv(override=True)`, so an environment
+variable cannot pick the database; Task 8's amendment names the launcher that
+can. The session broke once on an expired login token, and the ledger records
+what it cost.
+
+**Carried to the whole-branch review or the release package:** every
+admission writes the namespace row (measure it in Task 8); a `publish` that
+raises holds a queue slot for the length of the lease (runbook); a blank-line
+style nit in `board_producer.py`; `canonical` raises `TypeError` for a
+hand-built `Query` with non-iterable sources, which `round_trips` never
+reaches.
+
+**Protected:** `personal_apps_radar_perf1`; the `radar-perf2` worktree and
+Codex's uncommitted edits there; every other worktree; the planning
+checkout's dirty files; every `.env`. No deployment carries exist yet; the
+release package is Task 9.
 
 ---
 

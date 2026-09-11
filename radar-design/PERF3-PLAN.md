@@ -1023,6 +1023,64 @@ DISTINCT list exactly as `perf2-spike/selections.py` explains, and say so
 beside every number. `flask db upgrade` is run once on the scale database
 by the controller before this task and recorded.
 
+**Amendment, 2026-09-11 -- an environment variable cannot select the
+database.** Found while migrating the scale database. `app.py` calls
+`load_dotenv(override=True)`, so the worktree `.env`
+(`PERSONAL_DB_NAME="personal_apps_radar_perf3"`) silently overwrites any
+`PERSONAL_DB_NAME` a script sets in its environment, and `find_dotenv()` also
+asserts when a script arrives on stdin. The sentence above is therefore wrong
+as written. Every Task 8 script and every subprocess it starts goes through
+`personal_apps/scratchpad/perf3/scale_env.py`, which (1) loads the worktree
+`.env` by explicit path WITHOUT override, for the credentials; (2) replaces
+`dotenv.load_dotenv` with a no-op before `app` is imported; (3) sets
+`PERSONAL_DB_NAME=personal_apps_radar_perf3_scale`; (4) asserts
+`db.engine.url.database` after import and refuses anything else. Scripts
+import it first (`import scale_env; scale_env.bind()`); subprocesses (the
+producer, the web-model workers, `serve_perf3.py`) are launched as
+`py -3.12 scratchpad/perf3/scale_env.py <script.py> [args...]`, which applies
+the same four steps and runs the target with `runpy.run_path` and the
+remaining argv. Never edit `.env` for this. The migration of the scale
+database to `b7e3f9c1a2d4` was done this way by the controller.
+
+**Amendment, 2026-09-11 (second) -- align the scale fixture with the wall
+clock before anything is measured.** The perf1-derived fixture's data ends at
+`2026-09-10 12:00` UTC (buckets and quotes; mention events start at
+`2026-09-08 13:00`), and every process on the shared path reads the real
+clock, so a board built today sees a partial or empty window. At
+`2026-09-11 00:55` UTC a 24h window held 201,504 rows instead of about 405,000,
+and a 12h window held none. Every board query is bounded above by `now`
+(`leaderboard.py:183-184`; `board.py:200-201`, `259-260`, `315-316`,
+`383-384`; `coverage.py:60-61`), so rows dated after the measuring clock are
+invisible to any window, and extending the fixture forward is safe. The test
+database is no substitute: its buckets end at `2026-09-01 18:15`, so every
+board there is empty at the real clock. All of Task 8, the browser runs
+included, therefore runs on the aligned scale database.
+
+**Step 0, before Step 1:** `personal_apps/scratchpad/perf3/align_scale_fixture.py`,
+through `scale_env`, idempotent and re-runnable before each measurement
+session:
+
+1. Copy the most recent 24-hour slice of `radar_bucket_sources`,
+   `radar_mention_events` and `radar_quotes` forward by whole days (+1 d, +2 d,
+   ...) until the data reaches at least 24 h beyond the moment the script runs.
+   Whole-day shifts keep the 15-minute grid and the weekday pattern.
+2. Delete the same number of the OLDEST whole days from `radar_bucket_sources`
+   only, so the table keeps about 23 days and about 9.27 M rows, the target's
+   shape. The other two tables hold only a day or two of history and lose
+   nothing.
+3. Keep every primary key unique, read each table's key from
+   `information_schema` before writing, and touch no other table.
+4. Print the row counts before and after, the new data span per table, the
+   rows inside the 24h and 12h windows at the current clock, and re-run the
+   preflight (index set, buffer pool).
+
+**Limits stated beside every Task 8 number.** The fixture has no
+`radar_posts`, so tone and the `lean` sort do no real work at scale; any `lean`
+timing is a lower bound. The fixture has one `app_user`; the watch-profile
+accounts are created by the scripts and deleted afterwards. The source names
+are the fixture's placeholders (`reddit:sub00`..`sub32`), spelled as its own
+DISTINCT list, as `perf2-spike/selections.py` explains.
+
 - [ ] **Step 1: `measure_perf3.py`**, n = 20 each, reported separately as
       median / p95 / max:
       (a) ready read through `read_payload` with an account watching three
