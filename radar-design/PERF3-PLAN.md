@@ -1201,6 +1201,22 @@ prepared and OFF by default:
 - Rollback is unsetting the variable and restarting the web unit. Logs are
   left where they are; nothing deletes a log directory.
 
+**Amendment, 2026-09-11 (third) -- the build revision file lives at the
+repository root, and the VPS does not need one.** Verified in the code while
+preparing Task 9b. `board_namespace.build_revision()` resolves, in order, the
+`RADAR_BUILD_REVISION` environment variable, then a `BUILD_REVISION` file at
+the REPOSITORY ROOT (`_repo_root()` is `Path(__file__).resolve().parents[3]`,
+which on the VPS is `/root/coc-stats`), then git's own files. The line
+`git rev-parse HEAD > personal_apps/BUILD_REVISION` in Step 2 below therefore
+names the wrong directory. More important, the VPS deploy checkout is a git
+repository that `update_coc.sh` resets to `origin/main`, so the git fallback
+already yields the deployed commit with no file at all. The release package
+recommends writing NO `BUILD_REVISION` file on the VPS, and states the trap:
+the file outranks git, is untracked, and survives `git reset --hard`, so a
+file written once and not rewritten on every deploy would pin an old revision
+and keep old cached boards alive across code changes. Only a deploy that
+ships without `.git` needs the file, and then it must be rewritten every time.
+
 - [ ] **Step 1: the backend suites, whole**, on `personal_apps_radar_perf3`:
       `PYTHONPATH=. py -3.12 -m pytest tests -q -p no:cacheprovider
       2>&1 | tee ../radar-design/perf3-release/pytest-full.txt`. Classify

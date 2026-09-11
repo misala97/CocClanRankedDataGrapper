@@ -150,6 +150,8 @@ and `SystemKeepFree=` to 15%, each capped at 4G. `MaxRetentionSec=` defaults to
 messages per 30 s by default, scaled up by free disk space. None of the
 target's own journald settings have been read.
 
+**The build revision file, corrected (2026-09-11).** `board_namespace.build_revision()` reads a `BUILD_REVISION` file at the repository root (`/root/coc-stats` on the VPS), not in `personal_apps/` as the plan said. The VPS checkout is a git repository, so the git fallback already yields the deployed commit, and a file written once would outrank git and pin an old revision across deploys. The plan carries the correction as an amendment, and the release package recommends writing no file.
+
 ## Findings and rulings
 
 Every reviewer finding, its severity and its disposition. Minor findings are
