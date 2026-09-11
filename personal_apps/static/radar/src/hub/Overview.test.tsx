@@ -16,14 +16,14 @@ function show(board: BoardPayload, handlers: {
 }
 
 describe('the overview', () => {
-  it('leads with the market context and when the board was built', () => {
+  it('leads with the market context and how long ago the board was calculated', () => {
     show(payload())
     expect(screen.getByText(/US markets/)).toBeVisible()
-    // The stamp is not decoration: it is what makes the numbers under it
-    // readable as of a moment rather than as of now.
-    // Exact, and in Berlin. An alternation that also accepted the raw UTC
-    // hour would pass with the conversion broken.
-    expect(screen.getByText(/built 21:00 Berlin/)).toBeVisible()
+    // The age is not decoration: it is what makes the numbers under it
+    // readable as of a moment rather than as of now. Always stated, inside
+    // the fresh bound too, in the old board's words (ruling §5).
+    expect(screen.getByText(/Calculated 0s ago/)).toBeVisible()
+    expect(document.body.textContent).not.toMatch(/built/)
   })
 
   it('greets nobody and narrates nothing', () => {
@@ -93,7 +93,7 @@ describe('the overview', () => {
     const allowed = new Set([
       '9', '7', '20', '30',            // the rows' own authors and mentions
       '10.00', '1.2', '3.3',           // one row's price, move and ratio
-      '21', '00',                      // the build stamp
+      '0',                             // the age: calculated 0s ago
       '4',                             // the window, in hours
       '3', '2',                        // inside the server's own phrase
     ])

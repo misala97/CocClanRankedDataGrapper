@@ -1175,6 +1175,34 @@
 .rh-skeleton.large { height: 180px; }
 .rh-skeleton.half { width: 48%; }
 
+/* A board somebody else is building. The waiting notices stand where the
+   page's rows would, under its heading and controls; the Retry keeps to the
+   end of the line, away from the words it follows. */
+.rh-wait p { margin-top: 4px; }
+.rh-wait .rh-retry { margin-left: auto; flex: none; }
+
+/* When the board was calculated, in the heading's context line. The age is
+   the line's own muted text; the word after it carries the state. "not
+   refreshed", "Last refresh failed" and "Expired" are cautions and take the
+   amber. "refreshing" is not -- a queued refresh is no caution on rows that
+   are still the last real ones -- so it keeps the line's colour, on the
+   token rather than the line, where it cannot quiet the others. */
+.rh-age { font-variant-numeric: tabular-nums; }
+.rh-age b { color: var(--amber); font-weight: 600; }
+.rh-age b.queued { color: inherit; }
+.rh-age button {
+  margin-left: 8px;
+  padding: 1px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.rh-age button:hover { background: var(--wash); }
+.rh-age button:focus-visible { outline: 2px solid var(--sage); outline-offset: 1px; }
+
 /* --- responsive --------------------------------------------------------- */
 
 @media (max-width: 1250px) {

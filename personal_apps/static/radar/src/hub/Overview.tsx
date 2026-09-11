@@ -11,28 +11,52 @@
 // same account are not two people, and the board carries nothing that could
 // tell the difference -- so "47 people talking today" would be a number nobody
 // measured.
-import type { BoardPayload, Row } from '../types'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+
+import { isReady } from '../types'
+import type { BoardPayload, ReadyBoard, Row } from '../types'
+import { AgeLine } from './PageState'
 
 const LEAD = 3
 const MARKS = 5
 
-export function Overview({ board, onOpen, onGo }: {
-  board: BoardPayload
+export function Overview({ board, received, stalled = false, onRetry,
+                          standIn, onOpen, onGo }: {
+  /** This selection's answer: a board, a waiting shell, or null while
+   *  nothing for it has answered yet. Only a built board has candidates and
+   *  marks to show; anything else is `standIn`, under the same heading. */
+  board: BoardPayload | null
+  /** When the page received the board, so its age keeps moving. Defaults to
+   *  when this mounted, for the suites that render the page on its own. */
+  received?: number
+  /** Nothing is fetching a replacement for an expired board. */
+  stalled?: boolean
+  onRetry?: () => void
+  /** What stands where the panels would, for anything but a built board. */
+  standIn?: ReactNode
   onOpen: (ticker: string) => void
   onGo: (page: 'chatter' | 'watching') => void
 }) {
-  const candidates = (board.rows ?? []).slice(0, LEAD)
-  const marks = board.watch_rows
-  const excluded = Object.values(board.excluded ?? {})
-    .reduce((total, count) => total + count, 0)
+  const [mounted] = useState(() => Date.now())
+  const ready = board !== null && isReady(board) ? board : null
 
   return (
     <>
       <div className="rh-heading">
         <div>
-          <p className="rh-datestamp">
-            {board.market_venue} · {sessionWord(board)} · built {stamp(board.generated_at)}
-          </p>
+          {board ? (
+            <p className="rh-datestamp">
+              {board.market_venue} · {sessionWord(board)}
+              {ready ? (
+                <>
+                  {' · '}
+                  <AgeLine board={ready} received={received ?? mounted}
+                           stalled={stalled} onRetry={onRetry} />
+                </>
+              ) : null}
+            </p>
+          ) : null}
           <h1>Radar</h1>
           <p>
             What is unusually discussed right now, and the companies you
@@ -42,6 +66,27 @@ export function Overview({ board, onOpen, onGo }: {
         </div>
       </div>
 
+      {ready === null ? standIn
+        : <Panels board={ready} onOpen={onOpen} onGo={onGo} />}
+    </>
+  )
+}
+
+/** The two readings of a built board: what is loud, and what is marked. A
+ *  waiting shell has neither -- its `watch_rows` is a placeholder, not the
+ *  account's list, and telling a reader with marks that they have none is
+ *  the mistake the Watching panel is built to avoid. */
+function Panels({ board, onOpen, onGo }: {
+  board: ReadyBoard
+  onOpen: (ticker: string) => void
+  onGo: (page: 'chatter' | 'watching') => void
+}) {
+  const candidates = board.rows.slice(0, LEAD)
+  const marks = board.watch_rows
+  const excluded = Object.values(board.excluded ?? {})
+    .reduce((total, count) => total + count, 0)
+
+  return (
       <div className="rh-twocol">
         <section className="rh-panel rh-pad" aria-labelledby="rh-lead-head">
           <div className="rh-sectionhead">
@@ -121,7 +166,6 @@ export function Overview({ board, onOpen, onGo }: {
           ) : null}
         </section>
       </div>
-    </>
   )
 }
 
@@ -219,14 +263,4 @@ function priceText(row: Row): string {
     : ` ${row.price_move > 0 ? '+' : ''}${(row.price_move * 100).toFixed(1)}%`
   const price = symbol ? `${symbol}${value}` : `${value} ${row.quote.currency ?? ''}`
   return `${price.trim()}${move}`
-}
-
-function stamp(iso: string | null): string {
-  if (iso === null) return 'time unknown'
-  try {
-    return `${new Date(iso).toLocaleTimeString('en-GB',
-      { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Berlin`
-  } catch {
-    return 'time unknown'
-  }
 }

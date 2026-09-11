@@ -17,8 +17,10 @@
 // concrete feed identifiers and the exact tone counts -- inside a detail the
 // reader opens, rather than as prose every row has to carry.
 import { useId, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 
-import type { BoardPayload, Row, Selection } from '../types'
+import { isReady } from '../types'
+import type { BoardPayload, ReadyBoard, Row, Selection } from '../types'
 import { sourcePresentation, tonePresentation } from './chatterPresentation'
 import type { SourcePresentation, TonePresentation } from './chatterPresentation'
 import {
@@ -26,62 +28,111 @@ import {
 } from './chatterSort'
 import type { ChatterSort, SortKey } from './chatterSort'
 import { Filters } from './Filters'
-import { Empty } from './PageState'
+import { AgeLine, Empty } from './PageState'
 
-export function Chatter({ board, selection, sort = null, onOpen, onSelect,
-                         onSort }: {
-  board: BoardPayload
+export function Chatter({ board, vocabulary, selection, sort = null,
+                         received, stalled = false, onRetry, standIn, onOpen,
+                         onSelect, onSort }: {
+  /** This selection's answer: a board, a waiting shell, or null while
+   *  nothing for it has answered yet. Only a built board has rows to list;
+   *  anything else is `standIn`, under the same heading and controls. */
+  board: BoardPayload | null
+  /** Where the filters read the server's vocabulary -- which feeds it offers
+   *  -- while this selection has not answered. Any board will do: the
+   *  vocabulary is the server's, not the selection's. */
+  vocabulary?: BoardPayload
   selection: Selection
   /** Null is Radar order: the response exactly as it arrived. Held by the hub
    *  rather than here, so leaving for Research and coming back does not throw
    *  the reader's ordering away. */
   sort?: ChatterSort | null
+  /** When the page received the board, so its age keeps moving. Defaults to
+   *  when this mounted, for the suites that render the page on its own. */
+  received?: number
+  /** Nothing is fetching a replacement for an expired board. */
+  stalled?: boolean
+  onRetry?: () => void
+  /** What stands where the list would, for anything but a built board. */
+  standIn?: ReactNode
   onOpen: (ticker: string) => void
   onSelect?: (next: Selection) => void
   onSort?: (next: ChatterSort | null) => void
 }) {
+  // Held here rather than in the list, which unmounts while a new selection
+  // loads: the text filter is a view over whichever board is current, and
+  // outlives a filter change the way the ordering does.
   const [filter, setFilter] = useState('')
+  const [mounted] = useState(() => Date.now())
+  const ready = board !== null && isReady(board) ? board : null
+  const offered = board ?? vocabulary
+
+  return (
+    <>
+      <div className="rh-heading">
+        <div>
+          {board ? (
+            <p className="rh-datestamp">
+              {contextLine(board)}
+              {ready ? (
+                <>
+                  {' · '}
+                  <AgeLine board={ready} received={received ?? mounted}
+                           stalled={stalled} onRetry={onRetry} />
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          <h1>Human chatter</h1>
+          <p>Find unusual discussion, then inspect the evidence.</p>
+        </div>
+      </div>
+
+      {/* In every state, and at the same place in the tree: a reader waiting
+          on one question may ask another, and controls that remounted when
+          an answer landed would drop their focus and fold their disclosure. */}
+      {onSelect && offered ? (
+        <Filters board={offered} selection={selection} onChange={onSelect} />
+      ) : null}
+
+      {ready === null ? standIn : (
+        <Listing board={ready} filter={filter} onFilter={setFilter}
+                 onOpen={onOpen} sort={sort} onSort={onSort} />
+      )}
+    </>
+  )
+}
+
+/** A built board's rows, or its measured emptiness. */
+function Listing({ board, filter, onFilter, onOpen, sort, onSort }: {
+  board: ReadyBoard
+  filter: string
+  onFilter: (next: string) => void
+  onOpen: (ticker: string) => void
+  sort: ChatterSort | null
+  onSort?: (next: ChatterSort | null) => void
+}) {
   const needle = filter.trim().toLowerCase()
   // Filter first, then order what survived. Both are views over the response:
   // neither fetches, and neither can add a company the server did not send.
   // Sorting outlives a refresh because it is applied to whatever `board.rows`
   // currently is, rather than stored as a reordered copy that would go stale.
   const rows = useMemo(() => {
-    // Null is a board nobody has built yet, which this page has nothing to
-    // order and nothing to filter -- the same nothing as an empty one.
-    const served = board.rows ?? []
     const matching = needle
-      ? served.filter((row) => matches(row, needle))
-      : served
+      ? board.rows.filter((row) => matches(row, needle))
+      : board.rows
     return sortRows(matching, sort)
   }, [board.rows, needle, sort])
 
   const excluded = Object.values(board.excluded ?? {})
     .reduce((total, count) => total + count, 0)
 
-  return (
-    <>
-      <div className="rh-heading">
-        <div>
-          <p className="rh-datestamp">{contextLine(board)}</p>
-          <h1>Human chatter</h1>
-          <p>Find unusual discussion, then inspect the evidence.</p>
-        </div>
-      </div>
-
-      {onSelect ? (
-        <Filters board={board} selection={selection} onChange={onSelect} />
-      ) : null}
-
-      {(board.rows ?? []).length === 0
-        ? <EmptyBoard excluded={excluded} />
-        : (
-          <Panel board={board} rows={rows} filter={filter}
-                 onFilter={setFilter} onOpen={onOpen}
-                 sort={sort} onSort={onSort} />
-        )}
-    </>
-  )
+  return board.rows.length === 0
+    ? <EmptyBoard excluded={excluded} />
+    : (
+      <Panel board={board} rows={rows} filter={filter}
+             onFilter={onFilter} onOpen={onOpen}
+             sort={sort} onSort={onSort} />
+    )
 }
 
 function EmptyBoard({ excluded }: { excluded: number }) {
@@ -106,7 +157,7 @@ function EmptyBoard({ excluded }: { excluded: number }) {
 }
 
 function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
-  board: BoardPayload
+  board: ReadyBoard
   rows: Row[]
   filter: string
   onFilter: (next: string) => void
@@ -114,7 +165,7 @@ function Panel({ board, rows, filter, onFilter, onOpen, sort, onSort }: {
   sort: ChatterSort | null
   onSort?: (next: ChatterSort | null) => void
 }) {
-  const total = (board.rows ?? []).length
+  const total = board.rows.length
   const shown = rows.length
   // Somewhere for focus to land when the control holding it unmounts -- see
   // SortNote's reset.
@@ -816,25 +867,14 @@ function matches(row: Row, needle: string): boolean {
     || (row.name ?? '').toLowerCase().includes(needle)
 }
 
-/** Both halves from the payload's own echo. Taking the venue from the board
- *  and the window from the request meant that, while a new window loaded, the
- *  previous window's rows sat under a heading naming the new one. */
+/** Both halves from the payload's own echo -- a waiting shell's included,
+ *  which is the selection being built. Taking the venue from the board and
+ *  the window from the request meant that, while a new window loaded, the
+ *  previous window's rows sat under a heading naming the new one. The age
+ *  follows it (AgeLine), and only for a board that exists. */
 function contextLine(board: BoardPayload): string {
   const hours = board.window_hours
   return `${board.market_venue} · last ${hours} ${hours === 1 ? 'hour' : 'hours'}`
-    + ` · built ${stamp(board.generated_at)}`
-}
-
-/** The board's own build time, in the timezone the reader lives in. A board
- *  with no visible age is one nobody can tell is stale. */
-function stamp(iso: string | null): string {
-  if (iso === null) return 'time unknown'
-  try {
-    return `${new Date(iso).toLocaleTimeString('en-GB',
-      { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })} Berlin`
-  } catch {
-    return 'time unknown'
-  }
 }
 
 function Cell({ label, className, testId, children }: {

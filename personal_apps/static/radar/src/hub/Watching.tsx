@@ -9,13 +9,21 @@
 // The mark itself is per account. Nothing here is cached in the browser: a
 // watch list in localStorage survives a sign-out, and the next reader on the
 // same machine would see it.
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+
 import { BoardUnavailable } from '../api'
-import type { BoardPayload, Row } from '../types'
-import { Empty } from './PageState'
+import { isReady } from '../types'
+import type { BoardPayload, ReadyBoard, Row } from '../types'
+import { AgeLine, Empty } from './PageState'
 
 export function Watching({ board, onOpen, watching: adopted, onToggleWatch,
-                           pending, watchError }: {
-  board: BoardPayload
+                           pending, watchError, received, stalled = false,
+                           onRetry, standIn }: {
+  /** This selection's answer: a board, a waiting shell, or null while
+   *  nothing for it has answered yet. The marks ride on a built board; a
+   *  waiting shell carries none, and says so through `standIn`. */
+  board: BoardPayload | null
   onOpen: (ticker: string) => void
   /** The server's last answer, when one has landed since this board was
    *  fetched. Authoritative immediately; the rows follow on the refetch. */
@@ -26,21 +34,34 @@ export function Watching({ board, onOpen, watching: adopted, onToggleWatch,
    *  navigation, which is the out-of-order landing they exist to prevent. */
   pending?: string | null
   watchError?: unknown
+  /** When the page received the board, so its age keeps moving. Defaults to
+   *  when this mounted, for the suites that render the page on its own. */
+  received?: number
+  /** Nothing is fetching a replacement for an expired board. */
+  stalled?: boolean
+  onRetry?: () => void
+  /** What stands where the list would, for anything but a built board. */
+  standIn?: ReactNode
 }) {
-  // The server's answer is the whole list, and it is authoritative the moment
-  // it lands -- before the board refetch that brings the matching rows. Until
-  // then the rows already in hand are filtered to it, so a removed company
-  // leaves immediately instead of lingering for a network round trip.
-  const watching = adopted ?? board.watching
-  const rows = board.watch_rows === undefined || watching === undefined
-    ? board.watch_rows
-    : board.watch_rows.filter((row) => watching.includes(row.ticker))
+  const [mounted] = useState(() => Date.now())
+  const ready = board !== null && isReady(board) ? board : null
 
   return (
     <>
       <div className="rh-heading">
         <div>
-          <p className="rh-datestamp">{board.market_venue}</p>
+          {board ? (
+            <p className="rh-datestamp">
+              {board.market_venue}
+              {ready ? (
+                <>
+                  {' · '}
+                  <AgeLine board={ready} received={received ?? mounted}
+                           stalled={stalled} onRetry={onRetry} />
+                </>
+              ) : null}
+            </p>
+          ) : null}
           <h1>Watching</h1>
           <p>
             The companies you marked, whether or not they are loud today. A
@@ -52,14 +73,30 @@ export function Watching({ board, onOpen, watching: adopted, onToggleWatch,
 
       {watchError ? <WriteFailed error={watchError} /> : null}
 
-      <Body board={board} rows={rows} onOpen={onOpen}
-            pending={pending ?? null} onRemove={onToggleWatch} />
+      {ready === null ? standIn : (
+        <Body board={ready} rows={markedRows(ready, adopted)} onOpen={onOpen}
+              pending={pending ?? null} onRemove={onToggleWatch} />
+      )}
     </>
   )
 }
 
+/** The marked rows of a built board.
+ *
+ *  The server's answer is the whole list, and it is authoritative the moment
+ *  it lands -- before the board refetch that brings the matching rows. Until
+ *  then the rows already in hand are filtered to it, so a removed company
+ *  leaves immediately instead of lingering for a network round trip. */
+function markedRows(board: ReadyBoard,
+                    adopted: string[] | undefined): Row[] | undefined {
+  const watching = adopted ?? board.watching
+  return board.watch_rows === undefined || watching === undefined
+    ? board.watch_rows
+    : board.watch_rows.filter((row) => watching.includes(row.ticker))
+}
+
 function Body({ board, rows, onOpen, onRemove, pending }: {
-  board: BoardPayload
+  board: ReadyBoard
   rows: Row[] | undefined
   onOpen: (ticker: string) => void
   onRemove?: (ticker: string) => void

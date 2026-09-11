@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { BoardUnavailable } from '../api'
+import { isReady } from '../types'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
 import { Activity } from './Activity'
 import { Admin } from './Admin'
@@ -20,7 +21,8 @@ import { Chatter } from './Chatter'
 import type { ChatterSort } from './chatterSort'
 import { Overview } from './Overview'
 import {
-  Forbidden, Loading, Missing, SignedOut, StaleNotice, Unavailable,
+  Busy, FailedNotice, Forbidden, Loading, Missing, Pending, SignedOut,
+  StaleNotice, Unavailable,
 } from './PageState'
 import { Research } from './Research'
 import { Watching } from './Watching'
@@ -29,7 +31,9 @@ import {
   hashFor, isInPageAnchor, readRoute, readSelection, readSpan, urlFor,
 } from './navigation'
 import type { HubRoute } from './navigation'
-import { selectionOf, useBoard, useWatchMutation } from './queries'
+import {
+  owesABoard, selectionOf, useBoard, useWatchMutation,
+} from './queries'
 import './hub.css'
 
 /** Only destinations this release actually renders. An empty page behind a
@@ -134,6 +138,13 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   }, [selection, span])
 
   const title = titleFor(route)
+  // The board on screen, when a refresh of it has failed. Never the previous
+  // selection's (react-query's placeholder), and never a waiting shell: a
+  // shell has no last answer to fall back on, and says what is happening in
+  // its own words.
+  const shown = board.isPlaceholderData ? undefined : board.data
+  const banner = shown !== undefined && isReady(shown) && board.isError
+    ? shown : null
 
   return (
     <div className="rh">
@@ -218,15 +229,17 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
               aria-label={title}>
           {/* Data that was true a minute ago beats a blank page, as long as
               the surface says the refresh failed and when it last succeeded. */}
-          {board.data && board.isError
+          {banner
             ? <StaleNotice error={board.error}
-                           since={berlinStamp(board.data.generated_at)} />
+                           since={berlinStamp(banner.generated_at)}
+                           onRetry={board.retry} />
             : null}
           {expired
             ? <SignedOut />
             : <Page route={route} board={board} selection={selection}
                     span={span} title={title} visible={visible}
-                    isAdmin={isAdmin} go={go}
+                    isAdmin={isAdmin} go={go} vocabulary={initial}
+                    bannerUp={banner !== null}
                     sort={sort} onSort={setSort} />}
         </main>
       </div>
@@ -241,7 +254,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
  *  from a measured emptiness.
  */
 function Page({ route, board, selection, span, title, visible, isAdmin, go,
-                sort, onSort }: {
+                vocabulary, bannerUp, sort, onSort }: {
   route: HubRoute
   board: ReturnType<typeof useBoard>
   selection: Selection
@@ -251,13 +264,23 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
   isAdmin: boolean
   go: (route: HubRoute, selection?: Selection, span?: PanelSpan,
        options?: { keepFocus?: boolean }) => void
+  /** Where the filters read the server's vocabulary while this selection
+   *  has no board of its own yet. */
+  vocabulary: BoardPayload
+  /** The failure notice is up, with a Retry of its own. */
+  bannerUp: boolean
   sort: ChatterSort | null
   onSort: (next: ChatterSort | null) => void
 }) {
   // Declared before any early return, because hooks are.
   const watch = useWatchMutation()
   const [marking, setMarking] = useState<string | null>(null)
-  const watching = board.data?.watching
+  // The reader's marks. A waiting shell carries none -- its `watching: []` is
+  // a placeholder, not this account's list -- so they are known from a built
+  // board or from the last mark's own answer, and otherwise not at all: a
+  // Watch button offered then would call a marked company unmarked.
+  const watching = board.data !== undefined && isReady(board.data)
+    ? board.data.watching : watch.data
   // A refusal belongs to the page it happened on. Without this the red
   // "could not be saved" banner followed the reader to another company.
   const here = route.page === 'research' ? route.ticker : route.page
@@ -312,30 +335,56 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
     )
   }
 
-  // Overview, Human chatter and Watching are three readings of one board.
+  // Overview, Human chatter and Watching are three readings of one board --
+  // and each is drawn in every state that board can be in, under its own
+  // heading and controls. What changes is only what stands where the rows
+  // would, decided here, once, before any page reads a row.
   if (route.page === 'overview' || route.page === 'chatter'
       || route.page === 'watching') {
-    if (!board.data) {
-      return board.isError
-        ? <Unavailable error={board.error} retry={() => void board.refetch()} />
-        : <Loading label={`Loading ${title.toLowerCase()}…`} />
+    // The answer for THIS selection. Placeholder data is the previous
+    // selection's board, kept by react-query while the new one loads;
+    // drawing it would put one question's rows under another's filters.
+    const answer = board.isPlaceholderData ? undefined : board.data
+    const standIn = answer === undefined
+      ? (board.isError
+        ? <Unavailable error={board.error} retry={board.retry} />
+        : <Loading label={`Loading ${title.toLowerCase()}…`} />)
+      : isReady(answer) ? null
+      // A shell. Failing builds first: "this is taking a while" is the wrong
+      // thing to keep saying about a key whose builds are failing.
+      : answer.failed ? <FailedNotice onRetry={board.retry} />
+      : answer.busy ? <Busy onRetry={board.retry} />
+      : <Pending delayed={board.delayed} onRetry={board.retry} />
+    const freshness = {
+      received: board.received,
+      // Nothing is fetching a replacement: the last request failed, none is
+      // out, and nothing is waiting to ask again. An expired board must not
+      // go on promising a recalculation the page has stopped attempting.
+      stalled: board.isError && board.fetchStatus === 'idle'
+        && !(answer !== undefined
+             && owesABoard(answer, board.received, Date.now())),
+      // One Retry on the page: the failure notice's, while it is up.
+      onRetry: bannerUp ? undefined : board.retry,
     }
+    const shown = answer ?? null
     const open = (ticker: string) => go({ page: 'research', ticker })
     if (route.page === 'overview') {
-      return <Overview board={board.data} onOpen={open}
-                       onGo={(page) => go({ page })} />
+      return <Overview board={shown} {...freshness} standIn={standIn}
+                       onOpen={open} onGo={(page) => go({ page })} />
     }
     if (route.page === 'watching') {
       return (
-        <Watching board={board.data} onOpen={open} watching={watch.data}
+        <Watching board={shown} {...freshness} standIn={standIn}
+                  onOpen={open} watching={watch.data}
                   onToggleWatch={onToggleWatch} pending={marking}
                   watchError={watch.error} />
       )
     }
     return (
-      <Chatter board={board.data} selection={selection} onOpen={open}
-              onSelect={(next) => go(route, next)}
-              sort={sort} onSort={onSort} />
+      <Chatter board={shown} vocabulary={board.data ?? vocabulary}
+               selection={selection} {...freshness} standIn={standIn}
+               onOpen={open} onSelect={(next) => go(route, next)}
+               sort={sort} onSort={onSort} />
     )
   }
 
