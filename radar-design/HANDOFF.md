@@ -1,4 +1,4 @@
-# CURRENT — PERF3: the fix wave is in; one independent review, then the return to Codex (2026-09-12)
+# CURRENT — PERF3: reviewed, fixed, and ready to return to Codex (2026-09-12)
 
 Claude implements under the PERF2 ruling; Codex owns planning. **Nothing is
 merged, pushed, deployed or configured on the VPS**; the deployed SHA is still
@@ -9,7 +9,7 @@ is a proposal, not a change.
 | --- | --- |
 | Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` (a git worktree) |
 | Branch | `codex/radar-perf3`, from `afe1246` (`personal_apps/` there is byte-identical to the deployed `4221196`) |
-| HEAD | the commit carrying this handoff, on top of `98459d8` (the fix wave's last). The wave is `dba911a..98459d8`, seven commits. `git log` is the truth |
+| HEAD | the commit carrying this handoff, on top of `fec7feb` (the re-review's two fixes). The wave is `dba911a..98459d8`, seven commits; `fec7feb` follows it. `git log` is the truth |
 | Dirty files | none tracked. Untracked and ignored: the worktree `.env` (names the tests database; never print it), `node_modules`, `static/*/dist` (rebuilt by the fix wave), `.superpowers/` (controller scratch, never committed) |
 | Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (four amendments); ledger `PERF3-LEDGER.md`; release package `PERF3-RELEASE.md` |
 | Controller scratch | `.superpowers/sdd/`: task briefs, implementer reports 1–9b, the whole-branch review (`review-whole-branch-report.md`), the fix wave's report (`fix-wave-report.md`), `progress.md` |
@@ -31,17 +31,18 @@ is a proposal, not a change.
 | 9b suites, release package | done | `ed96885` |
 | whole-branch review | done: **ready to return with fixes, no Critical** | `dba911a` (ledger section) |
 | **fix wave** | **done**: every "fix before the return" item closed | `267811d`, `21c3591`, `a1c5a9e`, `add355d`, `27fb905`, `360066f`, `98459d8` |
-| the wave's independent re-review | **next** | |
+| the wave's re-review | **done**, narrow by the owner's quota decision: three commits of eight read; two Important, both fixed | `fec7feb`, and the commit carrying this handoff |
 
 **Immediate next action.**
 
-1. One independent read-only review of the fix wave, `dba911a..HEAD`, by a
-   model that did not write it. Its subject is what this wave introduced and
-   any ruling violation, not a re-litigation of the whole branch: the
-   whole-branch review at `dba911a` already returned "ready with fixes, no
-   Critical", and its "Carry to Codex" list is deliberately untouched.
-2. The return to Codex: the exact SHA, the ledger, `PERF3-RELEASE.md` and the
-   local preview below.
+**The return to Codex** -- the exact SHA, this ledger, `PERF3-RELEASE.md`
+and the local preview below. Nothing else is owed by this session. The one
+piece of work on this branch that was never independently reviewed is five of
+the fix wave's eight commits: the owner scoped the re-review to the three that
+carry behavioural risk because the weekly quota was nearly gone, and the
+ledger's "Narrow re-review of the fix wave" section records exactly which
+commits were read and which were not. Codex decides whether that gap is worth
+closing before acting.
 
 Nothing is deployed, and nothing in the package is authorized.
 
@@ -80,7 +81,7 @@ not carry the tables they need, and run everywhere else. So:
 - both migration suites now restore the schema to `head`, not to their own
   revision, so neither leaves the database short for whatever runs next.
 
-**Suite results at `98459d8`** (all run after the last commit):
+**Suite results at `98459d8`** (all run after that commit; `fec7feb` then re-ran the two migration suites with the store suite -- 76 passed -- and the limits tests, 17 passed):
 
 - **The seven focused backend suites, one pass**, on
   `personal_apps_radar_perf3`: `cd personal_apps && PYTHONPATH=. py -3.12 -m

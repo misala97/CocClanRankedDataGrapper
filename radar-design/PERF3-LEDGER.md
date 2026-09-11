@@ -2212,3 +2212,74 @@ All seven suites ran in one pass for the first time: 238 passed.
   for the `settling` gate on Retry and the expiry refetch, and left the
   hidden-tab star refetch untested. Recommendation 4 of the review is therefore
   two thirds done.
+
+## Narrow re-review of the fix wave, 2026-09-12
+
+Scoped deliberately: the owner's remaining weekly quota was about 5%, so
+instead of reviewing all eight commits of the wave this review read the three
+that carry behavioural risk -- `a1c5a9e` (the hub debounce and the no-resend
+change), `add355d` (the `limits()` validation) and `360066f` (the database
+guard) -- and left the other five (the red test, the client copy, the new
+tests, the text and the trivia) unreviewed. That is recorded here as a known
+gap, not as coverage. Verdict: **with fixes**, no Critical. Both fixes are in
+`fec7feb`.
+
+**Confirmed correct, with the checks named.** The debounce sits after the
+surface and before the key, so controls, the address bar and the notices stay
+immediate and only the request waits; a burst sends exactly one request
+carrying the final value, a change the reader takes back sends nothing at all,
+and `unsettled` feeds `answer`, `refetchInterval` and the wait alike -- so the
+previous board is never shown as current during the window and an older
+in-flight answer cannot paint over a newer selection. Retry still works and an
+error is not a dead end. The query key is untouched: timing only. The mark
+refetch is delayed rather than skipped, so a settle answered from cache still
+gets it. The reviewer could not construct a leak or a negative count in
+`endSettle`, including under StrictMode double-invocation. On `limits()`: no
+raise on the flag-off path for unset, whitespace, `abc`, `-5`, `0`, `120.5`,
+`120s`, `0x20`, `1e400`, `nan`, `-inf` or a 23-digit value; the loud failure
+moved intact to `validate_limits()` at the producer's only entry point; and --
+the check that mattered most, because the owner forbade touching any bound in
+this wave -- **every default is byte-identical to `add355d^`**: 120/600/120/120
+seconds, 32/128/8, `max_attempts=6`, park 900, retire 86400.
+
+**Important 1, fixed in `fec7feb`.** `tests/test_radar_board_results_migration.py:91`
+called `radar_disposable.require()` with no table at all, so the half of the
+adopted decision that says "run wherever the two tables exist" was missing
+from the one suite whose failure mode is schema loss rather than row loss: on
+any database not on the two-name denylist the fixture went straight to an
+unconditional `_at_revision('head')` and the tests then dropped below the
+board-result tables. A mis-set `PERSONAL_DB_NAME` -- a typo, a leftover
+export, a staging clone -- would have been migrated and partially dropped with
+nothing checked. It now requires `radar_ingest_runs`, the table its sibling
+requires, which predates the revision under test and so survives the
+downgrade. Both migration modules still run in one pass: 76 passed.
+
+**Minor, also fixed in `fec7feb`.** `nan` and `inf` are numbers and every
+comparison against `nan` answers False, so both passed the new validation; the
+value then reached the payload, where `json.dumps` writes a bare `NaN` or
+`Infinity` and `JSON.parse` refuses the whole body -- the flag-off path would
+not have failed, it would have served a board no client could read. Refused
+now by name, on the default, and pinned by three new parameters in
+`test_a_limit_the_environment_got_wrong_is_ignored_by_readers`.
+
+**Important 2, carried to Codex.** The guard's whole surface is a two-name
+denylist (`personal_apps`, `coc_stats`), and nothing warns when it is narrower
+than the machine it runs on: a developer or CI runner whose working database
+carries real data under another name -- a per-branch clone, a staging
+database, a second checkout -- would have the row-level suites run against it,
+and (before Important 1 was fixed) the migration suite downgrade its schema.
+This is the accepted cost of the inversion the whole-branch review
+recommended and the controller adopted, so it is a decision to confirm rather
+than a defect. The reviewer's cheap proposal, not implemented: also refuse
+when the bound database holds rows the suites never write -- one count query
+turning "not on the denylist" into "demonstrably not somebody's data".
+
+**Carried, minor.** `21c3591` does not typecheck without `a1c5a9e` (fifteen
+seconds apart, correct together, so HEAD is fine) -- a bisect or a partial
+revert would break, and it shows `tsc` gates the branch and not each commit.
+During the 250 ms window the hub can show the previous key's `Unavailable`
+for a quarter second before flipping to `Loading`. `refreshAfterMark` costs
+one extra request when a mark and a control change overlap, a deliberate
+divergence from `BoardPage.refetchMarks` because `watch_rows` can only be
+filtered, not extended. And the row-level suites' damage on a wrongly bound
+database is bounded by synthetic tickers and namespace-scoped cleanup.
