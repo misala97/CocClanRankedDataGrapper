@@ -1,4 +1,4 @@
-# CURRENT — PERF3: Tasks 1–7 complete, Task 8 in review, Task 9 HELD for the owner's go (2026-09-11)
+# CURRENT — PERF3: Tasks 1–8 done and reviewed, Task 9 HELD for the owner's go (2026-09-11)
 
 Claude implements under the PERF2 ruling; Codex owns planning. **Nothing is
 merged, pushed, deployed or configured on the VPS**; the deployed SHA is still
@@ -25,12 +25,12 @@ usage limit resets.
 | 5 old board client | complete after five fix rounds, under the owner's stopping rule | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` |
 | 6 hub client | complete after one fix round, same rule | `103b8ba`, `d429378` |
 | 7 parity | complete | `29cc2ac` |
-| 8 scale verification + browser | implemented; **review running or just returned — see the ledger's Task 8 section** | `9fa42aa` (8a), `6ecba5a` (8b) |
+| 8 scale verification + browser | reviewed: the evidence is honest; its one Important (an idle-producer ready verdict) is fixed in the ledger; an optional ready series under load awaits the owner's go | `9fa42aa` (8a), `6ecba5a` (8b) |
 | 9 suites + release package | **HELD until the owner's go**; brief ready and amended (telemetry) | |
 | whole-branch review | open; the carried lists from Tasks 1–8 are in the ledger | |
 
-**Immediate next action.** If the Task 8 review's verdict is not yet in the
-ledger, record it. Then WAIT for the owner. On his go: Task 9 (full backend
+**Immediate next action.** Task 8's review is recorded in the ledger, with
+six open decisions for Codex. WAIT for the owner. On his go: Task 9 (full backend
 suite with every failure classified, the frontend suites and builds, the
 app-level request-timing log behind `PERSONAL_REQUEST_TIMING_LOG` (off by
 default), `PERF3-RELEASE.md` with the producer unit, deploy-script additions,

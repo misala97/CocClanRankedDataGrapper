@@ -39,7 +39,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 5 old board client | **complete** | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` | approved after five fix rounds; minors carried |
 | 6 hub client | **complete** | `103b8ba`, `d429378` | approved after one fix round; minors carried |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
-| 8 scale verification + browser | implemented; review pending | `9fa42aa`, `6ecba5a` | |
+| 8 scale verification + browser | reviewed: evidence honest; one Important fixed in the ledger; an optional ready series under load awaits the owner | `9fa42aa`, `6ecba5a` | one Important (ledger), eight Minor |
 | 9 suites + release package | open | | |
 | whole-branch review | open | | |
 
@@ -405,7 +405,7 @@ report; they were backed up to the session scratchpad as
 `perf3/round5-partial-20260911-171255.patch` and handed to a continuation
 fixer, told to verify each finding against them before finishing.
 
-### Task 8 — production-scale verification (implemented, review pending)
+### Task 8 — production-scale verification (reviewed; the one Important fixed in the ledger)
 
 Delivered as two dispatches, so a session limit could cost less: 8a measured
 (`9fa42aa`, eleven scripts and the `## Measurements` section), 8b checked both
@@ -422,6 +422,58 @@ review follows. What the evidence surfaces for Codex:
 | the old board's detail panel takes focus when a board arrives after a wait | on a 390×844 phone it scrolls the reader about 4,219 px away from the list; new with the pending path | carried to the whole-branch review |
 | the Discover tab asks for a board spelled differently from the warm default | a cold second key with the same rows | open: warm that spelling too, or have the client send the default spelling |
 | the old board's view tabs read "0" while a board is pending | the shell carries empty `segment_counts` | carried (Minor) |
+
+**The review of 8a and 8b.** The reviewer read all twelve scripts in full
+and checked ten named risks. The evidence is honest and correctly guarded:
+the subreddit patch and its 100% coverage check run before every
+measurement; every process in a run resolved one namespace and a mismatch
+aborts the run; a pending answer structurally cannot enter a board
+statistic; the alignment kept unique keys and reconciles to 9,269,184 rows;
+no script can reach another database; the failed 120 s criterion and the
+unmet cold goal are returned plainly with correct causes; every browser
+check asserts what the ledger says, and the in-page hidden emulation reaches
+both clients' real visibility code. **One Important, fixed here in the
+ledger:** the ready verdict was an idle-producer figure presented without
+that condition; reads issued as a build starts reached p95 492 ms. The
+verdict row and both prose passages now say so. Measuring a ready series
+under load is new work, so it waits for the owner's go.
+
+**Carried from Task 8 (Minor):** the preflight blocks of most runs live only
+in uncommitted logs; worker memory under contention was not reported,
+though `two_workers_perf3.py` records the peaks; the empty-store sample was
+measured with warm processes, so a deploy adds a cold producer (prewarm
+60.7 s); the read at publication is unchecked and shares a worker; the old
+board's detail pane says "Nothing on the board to look at." while a board is
+pending, which check 1 did not look for; two screenshot pairs are
+byte-identical renders presented as separate evidence; the first paint is
+not asserted to be the waiting copy; the write restore has no checksum; and
+two scripts hard-code the revision default and the 120/600 s limits.
+
+**Open decisions for Codex surfaced by the evidence:**
+
+1. **The fresh bound.** Under (f)'s load the producer spent about 52% on
+   on-demand builds and 32% on warm work. The reviewer's arithmetic, not a
+   measurement: a 100 s refresh target raises the warm share to about 42%,
+   about 94% in total, so lowering the refresh target alone likely makes
+   lateness worse. Headroom points to a second producer, cheaper builds, or
+   less on-demand work.
+2. **Every deploy is an empty store.** The namespace is the build revision,
+   so each release puts readers into the empty-store state with a cold
+   producer on top. The readiness gate covers the first rollout only; decide
+   whether routine deploys wait for the new namespace's `--readiness` before
+   the web workers switch, and whether warm keys a reader is waiting for
+   should jump the `key_hash` order.
+3. **The ready target in steady state:** must p95 <= 500 ms hold while the
+   producer is building?
+4. **A restarted worker's first read** (p95 769 ms): accept it as a
+   once-per-worker cost, warm the caches on boot, or narrow the target.
+5. **The hub has no debounce:** browser check 2 sent one request per control
+   change, and every cold intermediate became an admitted build nobody sees.
+   Together with the cold Discover duplicate, this is a client and
+   key-contract decision.
+6. **The per-account rule at 25 marks** (150 ms median): decide whether it
+   must hold beside a building producer; measured with the producer stopped,
+   p95 reached 150-165 ms.
 
 ### Task 7 — parity (approved)
 
@@ -480,7 +532,7 @@ table in this section:
 
 | criterion (PERF2 ruling, Task 8 brief) | measured | verdict |
 | --- | --- | --- |
-| ready read, p95 <= 500 ms | `read_payload` p95 70-73 ms; over HTTP p95 118-140 ms; 25 watched tickers: whole read p95 185 ms | **met** |
+| ready read, p95 <= 500 ms | `read_payload` p95 70-73 ms; over HTTP p95 118-140 ms; 25 watched tickers: whole read p95 185 ms -- all with the producer idle | **met with the producer idle**; reads issued as a build starts reached p95 492 ms, max 623 ms, and no ready series was taken under load |
 | ready read, first request of a freshly started worker | a board 20 of 20, but p95 769 ms (median 666 ms) | **not met** -- the restart cost |
 | first missing result within 2 s (kept as an UNMET goal) | empty store: median 22.8 s, p95 42.8 s; cold on-demand: median 5.8-8.4 s, p95 8.2-9.4 s; 0 of 60 within 2 s | **UNMET**, as ruled; the build alone is about 5 s |
 | the eight warm keys within the 120 s fresh bound, with headroom, under contention | age when replaced median 126 s, p95 148 s, max 159 s (f); p95 140 s, max 143 s (g); about 7% of warm samples stale | **FAILED** |
@@ -701,7 +753,15 @@ Tickers ['T03947', 'T02561', 'T02522'] (the US 24h board's top three); the US Al
 
 First read per process and window, outside the n (the first read with watches in a process meets its caches empty): read_payload 12h 566.4 ms, web5081 12h 896.9 ms, web5082 12h 729.5 ms, read_payload 24h 97.6 ms, web5081 24h 108.3 ms, web5082 24h 126.9 ms.
 
-Ready reads meet the ruling's p95 <= 500 ms ready-response
+**Scope, added after the Task 8 review.** Every read in this table was
+taken right after the prewarm, with the producer idle. The only reads taken
+as a build begins are (b)'s "read issued at publication": n=20, p95 492 ms,
+max 623 ms, on a one-thread worker shared with the client's own poll, so
+that figure is confounded as well. No ready series was taken during the
+(f) or (g) load, when the producer was building 84-85% of the time, so
+whether p95 <= 500 ms holds in steady state is unproven.
+
+With the producer idle, ready reads meet the ruling's p95 <= 500 ms ready-response
 target with a wide margin -- `read_payload` p95 70-73 ms, over HTTP 118-140 ms
 through a loopback web-model worker (the HTTP figure adds WSGI, JSON encoding
 of the decompressed board and the transfer). Both include the per-account half
@@ -773,7 +833,8 @@ age), never `pending` -- which is what the shared path promises. But that
 first read is slow: median 666 ms, p95 769 ms, max 774 ms, against 107 ms for
 the second read in the same process. **The ruling's <= 500 ms p95
 ready-response target is therefore NOT met for the first read of a freshly
-started worker**, while every steady read in (a) meets it by a wide margin.
+started worker**, while every steady read in (a), taken with the producer
+idle, meets it by a wide margin.
 The cost is the new process meeting its caches empty -- the account's pinned
 rows (Step 3) among them, and coverage.py's covered-slot cache, whose first
 call is a full scan -- and every gunicorn worker a deploy restarts pays it
