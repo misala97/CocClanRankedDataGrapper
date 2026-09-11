@@ -39,7 +39,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 5 old board client | **complete** | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` | approved after five fix rounds; minors carried |
 | 6 hub client | **complete** | `103b8ba`, `d429378` | approved after one fix round; minors carried |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
-| 8 scale verification + browser | open | | |
+| 8 scale verification + browser | implemented; review pending | `9fa42aa`, `6ecba5a` | |
 | 9 suites + release package | open | | |
 | whole-branch review | open | | |
 
@@ -404,6 +404,24 @@ files measured `tsc` clean and 220 of 220 old-board tests passing, with no
 report; they were backed up to the session scratchpad as
 `perf3/round5-partial-20260911-171255.patch` and handed to a continuation
 fixer, told to verify each finding against them before finishing.
+
+### Task 8 — production-scale verification (implemented, review pending)
+
+Delivered as two dispatches, so a session limit could cost less: 8a measured
+(`9fa42aa`, eleven scripts and the `## Measurements` section), 8b checked both
+boards in a real browser (`6ecba5a`). Their tables are under Measurements; the
+review follows. What the evidence surfaces for Codex:
+
+| Finding | Evidence | Status |
+| --- | --- | --- |
+| **the 120 s fresh bound fails under representative write contention** | worst warm age 142.8 s, about 7% of warm samples stale; the 600 s hard expiry holds; the write itself was not slowed | a failed criterion, returned as the ruling requires rather than hidden with a larger limit. Cause: the refresh target and the fresh bound are both 120 s, so any build time or delay crosses the bound. Refreshing earlier would fix it at more producer duty; that is Codex's decision |
+| after an empty store the eight warm boards rebuild in `key_hash` order, not in the order readers ask | a reader of one of them waited up to about 44 s (median 22.8 s, p95 42.8 s) | open; ordering warm work by waiting readers first is the obvious remedy |
+| a restarted web worker's first read misses the 500 ms ready target | p95 769 ms (imports and pool set-up), against 70–73 ms p95 for ready reads | reported apart, as the ruling asks |
+| the cold goal stays unmet | build-to-usable median about 5.8 s; 0 of 60 within 2 s | UNMET, preserved |
+| **the core win holds** | a non-Radar request beside two cold boards, in the two-process MODEL (not gunicorn): worst 78.7 ms with the flag on, 9,522 ms with it off | the web workers no longer build |
+| the old board's detail panel takes focus when a board arrives after a wait | on a 390×844 phone it scrolls the reader about 4,219 px away from the list; new with the pending path | carried to the whole-branch review |
+| the Discover tab asks for a board spelled differently from the warm default | a cold second key with the same rows | open: warm that spelling too, or have the client send the default spelling |
+| the old board's view tabs read "0" while a board is pending | the shell carries empty `segment_counts` | carried (Minor) |
 
 ### Task 7 — parity (approved)
 
