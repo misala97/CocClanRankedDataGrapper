@@ -486,8 +486,12 @@ body {
 .brand .age b { color: var(--warn); font-weight: 600; }
 /* `· refreshing` is not a warning. A stale board is being rebuilt behind the
    reader and every row on screen is still the last real one; amber here would
-   put a caution on figures that do not deserve it. */
-.brand .age.stale b { color: var(--ink-2); }
+   put a caution on figures that do not deserve it.
+
+   On the token, not on the line: `Last refresh failed` renders in that same
+   stale line and IS a caution, and quieting it by association would take the
+   one state that wants the reader's eye out of the colour that gets it. */
+.brand .age b.queued { color: var(--ink-2); }
 /* Past the hard expiry it does earn the amber: the rows describe a rolling
    window that has moved on, so the age has stopped being worth printing and
    the page has already gone to ask for a board that describes this one. */
@@ -1525,8 +1529,12 @@ body {
    the page: this one is about the board the reader is waiting for and not
    about the page, and it belongs where that board would have been. The grid
    placement above is for the two-pane grid and would take it out of the flow
-   of the list, so it is undone here. */
-.oops.busy {
+   of the list, so it is undone here.
+
+   `inline` for where it sits. It was `busy` until 2026-09-11, which named a
+   state this banner is never in -- the busy generation has its own quiet
+   paragraph, and this one says the builds failed. */
+.oops.inline {
   grid-row: auto; grid-column: auto;
   margin: var(--s4) var(--s6); border-radius: var(--r);
 }

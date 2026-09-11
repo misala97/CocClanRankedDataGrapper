@@ -5,9 +5,9 @@ import { Boundary } from '../Broken'
 import { DetailPane } from '../detail/DetailPane'
 import { Account } from '../list/Account'
 import { ListPane, universalMarks } from '../list/ListPane'
-import { Poller, SLOW_MS } from '../pending'
+import { Poller, SLOW_MS, pastFresh, untilExpired, untilStale } from '../pending'
 import { useNarrow } from './narrow'
-import type { BoardPayload, Selection } from '../types'
+import type { BoardPayload, Row, Selection } from '../types'
 
 /** The board: a list of what deserves attention beside one ticker in depth.
  *
@@ -76,19 +76,30 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [question, setQuestion] = useState(0)
   const poller = useRef<Poller | null>(null)
   if (poller.current === null) poller.current = new Poller()
+  // How many answers this page has taken. The two clocks further down are
+  // each armed for ONE answer and stand down once another has landed -- which
+  // an answer can do in the instant before React re-renders to disarm them,
+  // and a clock that fired then would act on a board that is already gone.
+  const answers = useRef(0)
+  // The reader's own request while one is out: a retry, the refetch after a
+  // mark, the one a moved control sends. Never a poll's.
+  const own = useRef<Promise<number | null> | null>(null)
 
-  const load = useCallback(async (next: Selection, ticker: string | null,
-                                  preserveTicker = false, poll = false)
+  const fetchAndShow = useCallback(async (next: Selection,
+                                          ticker: string | null,
+                                          preserveTicker: boolean,
+                                          poll: boolean)
       : Promise<number | null> => {
-    // A poll belongs to the board on screen; anything else replaces it, and
-    // takes the wait with it. Stopped here rather than in the effect below
-    // so a poll for the OLD selection cannot go out during the debounce and
-    // abort the request the reader is actually waiting for. The counter is
-    // what lets the effect notice: a new question earns a fresh schedule.
-    if (!poll) {
-      poller.current?.stop()
-      setQuestion((n) => n + 1)
-    }
+    // The board as it stands, read before the ask rather than after it: what
+    // an answer is compared against is the board it was asked about.
+    const was = { asOf: current.current.asOf, rows: current.current.rows }
+    // NOT where the wait is ended or restarted. A fetch is one more ask about
+    // the same question -- a retry, the refetch after a mark, the one the
+    // expiry timer sends when no wait is running -- and the wait's back-off
+    // belongs to the question, not to the number of times it has been asked.
+    // Only a new selection (the debounced effect below, which ends the old
+    // wait the moment a control moves) and an answer that settles it (further
+    // down) move the wait.
     const generation = (asked.current += 1)
     inflight.current?.abort()
     const controller = new AbortController()
@@ -99,14 +110,16 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     try {
       const fresh = await fetchBoard(next, controller.signal, { poll })
       if (generation !== asked.current) return null
+      const at = Date.now()
+      answers.current += 1
       setPayload(fresh)
-      setReceived(Date.now())
+      setReceived(at)
       setError(null)
       // The wait ends here rather than in the effect below. The effect runs a
       // React commit later, and the poller schedules its next ask the moment
       // this function returns -- so a board that arrived would still be
       // followed by one more pointless request.
-      if (!(fresh.pending || fresh.busy || fresh.stale)) poller.current?.stop()
+      if (!owesABoard(fresh, at)) poller.current?.stop()
       // Selection follows filtering, but a market change is different: the
       // company identity stays the same even when its new market board does
       // not rank it. The detail endpoint can still show its marked fallback.
@@ -118,9 +131,21 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       const stillThere = rows.some((row) => row.ticker === ticker)
       const nextTicker = (preserveTicker || stillThere) ? ticker
         : (rows[0]?.ticker ?? null)
-      setSelected(nextTicker)
-      writeUrl(next, nextTicker)
-      return fresh.retry_after_ms ?? null
+      // A poll that brings the same board back has changed nothing to
+      // select and nothing to write down. Doing it anyway rewrites the
+      // history entry the reader is standing on every few seconds, for as
+      // long as the wait lasts, over a board that has not moved.
+      if (!(poll && sameBoard(was, fresh))) {
+        setSelected(nextTicker)
+        writeUrl(next, nextTicker)
+      }
+      // The floor under the next ask. The server's own whenever it named one;
+      // five seconds for a board that is stale only by this page's clock,
+      // which the server answered before it was and so gave no floor for --
+      // and the refresh being waited on takes as long as a build takes, not
+      // the second the schedule opens with.
+      return fresh.retry_after_ms
+        ?? ((fresh.stale || pastFresh(fresh, at, at)) ? SLOW_MS : null)
     } catch (problem) {
       if (controller.signal.aborted || generation !== asked.current) return null
       // The previous board stays on screen. A failed refresh is a reason to
@@ -135,20 +160,121 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     }
   }, [])
 
+  // Every board request goes out through here. The reader's own is
+  // remembered for as long as it is out, so a poll that comes due meanwhile
+  // can wait for its answer instead of sending a second request (`begin`).
+  const load = useCallback((next: Selection, ticker: string | null,
+                            preserveTicker = false, poll = false)
+      : Promise<number | null> => {
+    const answer = fetchAndShow(next, ticker, preserveTicker, poll)
+    if (!poll) {
+      own.current = answer
+      void answer.finally(() => {
+        if (own.current === answer) own.current = null
+      })
+    }
+    return answer
+  }, [fetchAndShow])
+
   // What the poller asks for, read at the moment it asks rather than closed
   // over: the schedule outlives several renders, and a poll must always
   // describe the selection that is on screen now.
   const current = useRef({ selection, selected,
-                           retryAfterMs: payload.retry_after_ms })
+                           retryAfterMs: payload.retry_after_ms,
+                           asOf: payload.as_of, rows: payload.rows })
   current.current = { selection, selected,
-                      retryAfterMs: payload.retry_after_ms }
+                      retryAfterMs: payload.retry_after_ms,
+                      asOf: payload.as_of, rows: payload.rows }
   const retry = useCallback(() => {
     void load(current.current.selection, current.current.selected, true)
   }, [load])
 
-  // Three states, one behaviour: keep asking. Pending and busy have no board
-  // to show, stale has one that is being replaced -- and in all three there
-  // is an answer coming that nothing on this page would otherwise go and get.
+  // How a wait begins, wherever it begins: the polling effect, or the fresh
+  // bound's own clock.
+  const begin = useCallback((wait: Poller) => {
+    wait.start(
+      // A poll that comes due while the reader's own request is out waits
+      // for that answer instead of sending another. Sent, it would abort the
+      // reader's request -- a retry, a moved control -- so the one board was
+      // asked for twice, and the controls were left marked busy by a request
+      // nothing remained to finish.
+      () => own.current ?? load(current.current.selection,
+                                current.current.selected, false, true),
+      current.current.retryAfterMs)
+    // A tab that was already in the background when this began -- a session
+    // restored behind other windows, a link opened in a new tab -- never
+    // fires a visibilitychange, so the state is read rather than waited for.
+    // The hub's useVisible() reads it at mount for the same reason, and
+    // getting it wrong here is a poll of a shared queue on behalf of a tab
+    // nobody has looked at yet.
+    if (typeof document !== 'undefined'
+        && document.visibilityState === 'hidden') wait.pause()
+  }, [load])
+
+  // Freshness is a BOUND, not a verdict. `stale` is what the server saw at
+  // the instant it answered; `fresh_seconds` is how long that answer is good
+  // for, and a page holding one crosses it with nothing on the wire to say
+  // so. A tab left open over lunch would otherwise sit on a board the store
+  // stopped considering current forty minutes ago, because the only thing
+  // that ever asked was a reader touching a control.
+  const [passedFresh, setPassedFresh] = useState(
+    () => pastFresh(initial, Date.now()))
+  useEffect(() => {
+    const left = untilStale(payload, received)
+    const past = left !== null && left < 0
+    setPassedFresh(past)
+    if (left === null || past) return
+    const armed = answers.current
+    const timer = setTimeout(() => {
+      if (answers.current !== armed) return
+      setPassedFresh(true)
+      // The wait begins on this clock, not on the render the line above asks
+      // for. When a request goes out is the bound's business, and a renderer
+      // is free to batch and defer a commit for as long as it likes; the
+      // polling effect adopts the wait it finds running instead of starting
+      // a second one.
+      const wait = poller.current
+      if (wait && !wait.running) begin(wait)
+    }, left)
+    return () => clearTimeout(timer)
+  }, [payload, received, begin])
+
+  // Past its hard expiry a board stops being old and starts being wrong: the
+  // rows describe a rolling window that has moved on, and the counts under
+  // them are answers to a question about a different span of hours. The
+  // client clock is what notices, because a tab left open all afternoon asks
+  // the server nothing at all.
+  //
+  // When a wait is running -- and on a shared board one always is by then,
+  // since the fresh bound comes first -- the refetch IS the wait's next ask,
+  // sent now: expiry and the refresh the wait is after are one question, and
+  // asking it beside the wait was two requests, whichever went second
+  // aborting the other. The wait's schedule carries on from its place.
+  const refetched = useRef<string | null>(null)
+  useEffect(() => {
+    const left = untilExpired(payload, received)
+    if (left === null) return
+    // Asking again for a board that arrives past its own expiry is right
+    // once and a hot loop twice: the store never serves one (a row that old
+    // reads as missing), but a deployment that did would otherwise have this
+    // page fetching as fast as the network allows.
+    const again = left <= 0 && refetched.current === payload.as_of
+    const armed = answers.current
+    const timer = setTimeout(() => {
+      if (answers.current !== armed) return
+      refetched.current = payload.as_of
+      const wait = poller.current
+      if (wait?.running) wait.askNow()
+      else void load(current.current.selection, current.current.selected, true)
+    }, again ? SLOW_MS : Math.max(0, left))
+    return () => clearTimeout(timer)
+  }, [payload, received, load])
+
+  // Four states, one behaviour: keep asking. Pending and busy have no board
+  // to show, stale has one that is being replaced, and a board that has
+  // outlived its own fresh bound on this page's clock is in the same
+  // position with nobody having told it -- in all four there is an answer
+  // coming that nothing else on this page would go and get.
   //
   // Keyed on the STATE rather than on the payload: a poll that answers
   // "still pending" produces a new payload object every few seconds, and
@@ -156,15 +282,19 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // of how long the reader has been waiting -- so it would never slow down
   // and never admit the wait is long.
   const waiting = payload.pending || payload.busy || payload.stale
+    || passedFresh
   useEffect(() => {
     const wait = poller.current
     if (!wait) return
     if (!waiting) { wait.stop(); return }
-    wait.start(() => load(current.current.selection,
-                          current.current.selected, false, true),
-               current.current.retryAfterMs)
+    // Adopted rather than restarted when the fresh bound's clock has already
+    // begun it: a restart would take back the step it has just taken. Every
+    // other way into this branch finds the poller stopped -- by the cleanup
+    // below, by the `!waiting` branch that ran last, or by the selection
+    // change that asked a new question.
+    if (!wait.running) begin(wait)
     return () => wait.stop()
-  }, [waiting, question, load])
+  }, [waiting, question, begin])
 
   // A hidden tab is polling a queue on behalf of nobody. Coming back asks
   // once immediately, because the answer is usually already waiting.
@@ -177,29 +307,6 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     return () => document.removeEventListener('visibilitychange', change)
   }, [])
 
-  // Past its hard expiry a board stops being old and starts being wrong: the
-  // rows describe a rolling window that has moved on, and the counts under
-  // them are answers to a question about a different span of hours. The
-  // client clock is what notices, because a tab left open all afternoon asks
-  // the server nothing at all.
-  const refetched = useRef<string | null>(null)
-  useEffect(() => {
-    if (payload.rows === null || payload.age_seconds === null) return
-    if (!Number.isFinite(payload.hard_expiry_seconds)) return
-    const left = payload.hard_expiry_seconds * 1000
-      - payload.age_seconds * 1000 - (Date.now() - received)
-    // Asking again for a board that arrives past its own expiry is right
-    // once and a hot loop twice: the store never serves one (a row that old
-    // reads as missing), but a deployment that did would otherwise have this
-    // page fetching as fast as the network allows.
-    const again = left <= 0 && refetched.current === payload.as_of
-    const timer = setTimeout(() => {
-      refetched.current = payload.as_of
-      void load(current.current.selection, current.current.selected, true)
-    }, again ? SLOW_MS : Math.max(0, left))
-    return () => clearTimeout(timer)
-  }, [payload, received, load])
-
   const previousMarket = useRef(initial.market)
   // Remembered across a burst: a market flip followed within the debounce by
   // a source toggle must still preserve the ticker the way a market flip does.
@@ -208,6 +315,17 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     if (first.current) { first.current = false; return }
     if (previousMarket.current !== selection.market) marketPending.current = true
     previousMarket.current = selection.market
+    // The old question is over HERE, where the reader left it, and not 250ms
+    // later when the request for the new one goes out. The wait belonged to
+    // a selection nobody is on any more: its next poll must not go out, and
+    // the answer to the poll already in flight must not land -- it would
+    // draw the board the reader stopped waiting for under the controls they
+    // just moved, which no abort can prevent for a response already sent.
+    // The counter is also what re-arms: a new question earns a fresh
+    // schedule, and nothing else in this file resets one.
+    poller.current?.stop()
+    asked.current += 1
+    setQuestion((n) => n + 1)
     // Coalesced. Every toggle used to fire its own request and abort the
     // last; five quick clicks queued five board builds on the server and the
     // fifth waited past the 8s timeout -- "The board did not answer in time"
@@ -351,6 +469,26 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       {narrow && <div className="account">{account}</div>}
     </div>
   )
+}
+
+/** Whether an answer leaves this page with something still to go and get.
+ *
+ *  `received` is when it arrived, which is the whole of how long this page
+ *  has held it at the moment it is asked. */
+function owesABoard(board: BoardPayload, received: number): boolean {
+  return board.pending || board.busy || board.stale
+    || pastFresh(board, received, received)
+}
+
+/** Whether two answers are the same board: the same build, listing the same
+ *  rows in the same order. What a poll that brought nothing new looks like,
+ *  and what a poll answering "still pending" looks like too. */
+function sameBoard(was: { asOf: string | null; rows: Row[] | null },
+                   fresh: BoardPayload): boolean {
+  if (was.asOf !== fresh.as_of) return false
+  if (was.rows === null || fresh.rows === null) return was.rows === fresh.rows
+  return was.rows.length === fresh.rows.length
+    && was.rows.every((row, at) => row.ticker === fresh.rows![at]!.ticker)
 }
 
 /** Which ticker the page opens on.

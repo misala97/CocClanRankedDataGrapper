@@ -4,9 +4,9 @@ import type { KeyboardEvent, ReactNode } from 'react'
 import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
 import { Search } from '../board/Search'
-import { defaultDirection } from '../api'
+import { defaultDirection, queryFor } from '../api'
 import { formatMarketTime, humanAge, plural } from '../format'
-import { DELAYED_AFTER_MS } from '../pending'
+import { DELAYED_AFTER_MS, ageAt, pastFresh, untilExpired } from '../pending'
 import { Widen } from '../Widen'
 import { SpendMark } from './Spend'
 import { TickerRow, scoredAgainstPrice } from './TickerRow'
@@ -24,21 +24,6 @@ function boardAge(seconds: number): string {
   if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s`
   const minutes = Math.floor(seconds / 60)
   return minutes < 90 ? `${minutes}m` : humanAge(seconds)
-}
-
-/** How old the board on screen is, right now.
- *
- *  The server's age plus the time this page has held the answer. Neither half
- *  is enough on its own: a stored board can be a minute old before it is ever
- *  sent, and a tab left open adds an afternoon to whatever it was sent as.
- *  Null when there is no board to be old -- a waiting shell has no age, and
- *  inventing one would be the freshness stamp's one unforgivable lie.
- */
-function ageNow(payload: BoardPayload, received: number): number | null {
-  if (payload.age_seconds === null || payload.age_seconds === undefined) {
-    return null
-  }
-  return payload.age_seconds + Math.max(0, (Date.now() - received) / 1000)
 }
 
 /** When this board was calculated -- always, in as many words.
@@ -63,27 +48,43 @@ function AgeLine({ payload, received }: {
     return () => clearInterval(timer)
   }, [])
 
-  const age = ageNow(payload, received)
+  // One reading of the clock for everything this line says, through the same
+  // functions BoardPage acts on, so the line and the page cannot disagree
+  // about what is being done for the board on screen.
+  const now = Date.now()
+  const age = ageAt(payload, received, now)
   if (age === null) return null
   // Past the hard expiry the age itself has stopped being worth printing:
   // the rows describe a rolling window that has moved, and the page has
   // already gone to ask for a board that describes this one.
-  if (age > payload.hard_expiry_seconds) {
+  const expiry = untilExpired(payload, received, now)
+  if (expiry !== null && expiry < 0) {
     return (
       <span className="age expired">
         <b>Expired, recalculating</b>
       </span>
     )
   }
+  // `stale` is what the server saw when it answered; the fresh bound is how
+  // long that answer was good for. A page that has held a shared board past
+  // it is looking at the same thing a stale flag describes, and saying so
+  // only when the server happened to notice first would make the line a
+  // report on when this tab last asked. The same reading the page polls on,
+  // so the word is never printed over a board nothing is going to fetch.
+  const stale = payload.stale || pastFresh(payload, received, now)
   return (
-    <span className={payload.stale ? 'age stale' : 'age'}>
+    <span className={stale ? 'age stale' : 'age'}>
       Calculated {boardAge(age)} ago
       {payload.failed
         // A verdict on the queue, not on these rows: they are the last board
         // that built. Said in place of "refreshing" rather than beside it,
         // because a refresh that is failing is not one that is happening.
         ? <> · <b>Last refresh failed</b></>
-        : payload.stale ? <> · <b>refreshing</b></> : null}
+        // Its own class rather than the line's: the quiet treatment belongs
+        // to this word and not to everything the line can end with, and a
+        // stale board whose rebuilds are ALSO failing says both -- one of
+        // them a caution.
+        : stale ? <> · <b className="queued">refreshing</b></> : null}
     </span>
   )
 }
@@ -95,6 +96,12 @@ function AgeLine({ payload, received }: {
  *  on screen -- not from the last answer, since a poll answering "still
  *  pending" every two seconds would keep resetting a wait that is not
  *  resetting at all.
+ *
+ *  Mounted under a key of the question being waited for (see the render
+ *  below), because the converse is just as wrong: a reader who has just
+ *  changed the window has waited no time at all for the board they are now
+ *  waiting for, and "Still calculating…" would be describing somebody
+ *  else's half minute.
  */
 function Waiting({ payload, onRetry }: {
   payload: BoardPayload
@@ -626,13 +633,23 @@ export function ListPane({ payload, received, selection, selected, busy,
             // The builds for this selection are failing, not merely slow.
             // An `.oops` rather than the calm waiting line, because "this is
             // taking a while" would be the wrong thing to keep saying.
-            <p className="oops busy" role="alert">
+            //
+            // `inline` names where it is, not what it says: the same banner
+            // as the page-level one, placed inside the rows scroller because
+            // this one is about the board and not about the page.
+            <p className="oops inline" role="alert">
               <b>This board could not be built.</b> Radar is still retrying.
               {onRetry && (
                 <button type="button" onClick={onRetry}>Retry</button>
               )}
             </p>
-          ) : <Waiting payload={payload} onRetry={onRetry} />
+          ) : (
+            // Keyed on the question: a new selection is a new wait, and the
+            // thirty seconds this component counts are how long THIS one has
+            // taken. Remounting is the whole of the reset.
+            <Waiting key={queryFor(selection)} payload={payload}
+                     onRetry={onRetry} />
+          )
         ) : (
         <>
         {watchRows.length > 0 && (

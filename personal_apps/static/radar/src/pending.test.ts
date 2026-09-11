@@ -5,16 +5,18 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { DELAYED_AFTER_MS, Poller, nextDelay } from './pending'
+import { payload } from './fixtures'
+import { DELAYED_AFTER_MS, Poller, ageAt, nextDelay, pastFresh, untilExpired,
+         untilStale } from './pending'
 
-/** The jitter, taken out. Half of a symmetric spread is the spread's middle,
- *  so every schedule value below is the number the schedule actually names. */
-const MIDDLE = () => 0.5
+/** The jitter, taken out. The spread only ever adds, so its bottom is the
+ *  number the schedule -- or the server's floor -- actually names. */
+const NO_SPREAD = () => 0
 
 describe('how soon to ask again', () => {
   it('walks the schedule while the wait is still young', () => {
     const walk = [0, 1, 2, 3, 4, 5].map(
-      (attempt) => nextDelay(attempt, 0, null, MIDDLE))
+      (attempt) => nextDelay(attempt, 0, null, NO_SPREAD))
 
     expect(walk).toEqual([1000, 1500, 2000, 3000, 3000, 3000])
   })
@@ -23,35 +25,50 @@ describe('how soon to ask again', () => {
     // Not a punishment for waiting: past thirty seconds the answer is
     // dominated by whatever the producer is doing, and a three-second poll
     // only adds requests to a queue that is already the bottleneck.
-    expect(nextDelay(0, DELAYED_AFTER_MS, null, MIDDLE)).toBe(5000)
-    expect(nextDelay(9, 45_000, null, MIDDLE)).toBe(5000)
-    expect(nextDelay(9, DELAYED_AFTER_MS - 1, null, MIDDLE)).toBe(3000)
+    expect(nextDelay(0, DELAYED_AFTER_MS, null, NO_SPREAD)).toBe(5000)
+    expect(nextDelay(9, 45_000, null, NO_SPREAD)).toBe(5000)
+    expect(nextDelay(9, DELAYED_AFTER_MS - 1, null, NO_SPREAD)).toBe(3000)
   })
 
   it('never asks sooner than the server said to', () => {
     // `retry_after_ms` is the server's own read of the queue -- twelfth in
     // line is a longer wait than the schedule can know about.
-    expect(nextDelay(0, 0, 5000, MIDDLE)).toBe(5000)
-    expect(nextDelay(0, 0, 5000, () => 0)).toBe(5000)
+    expect(nextDelay(0, 0, 5000, NO_SPREAD)).toBe(5000)
     // Below the schedule it is not a ceiling: the client's own back-off wins.
-    expect(nextDelay(3, 0, 1000, MIDDLE)).toBe(3000)
+    expect(nextDelay(3, 0, 1000, NO_SPREAD)).toBe(3000)
   })
 
-  it('spreads every delay by a fifth either way, so a crowd does not march', () => {
+  it('spreads every delay upward, so a crowd does not march', () => {
     // Twenty viewers admitted in the same second must not come back in the
     // same second. The spread is what turns one queue into a trickle.
-    expect(nextDelay(0, 0, null, () => 0)).toBe(800)
+    expect(nextDelay(0, 0, null, NO_SPREAD)).toBe(1000)
     expect(nextDelay(0, 0, null, () => 1)).toBe(1200)
     for (let i = 0; i < 200; i += 1) {
       const delay = nextDelay(1, 0, null)
-      expect(delay).toBeGreaterThanOrEqual(1200)
+      expect(delay).toBeGreaterThanOrEqual(1500)
       expect(delay).toBeLessThanOrEqual(1800)
     }
+  })
+
+  it('still spreads a crowd the server has put a floor under', () => {
+    // The floor is exactly when a crowd is most in step: every client in a
+    // refused generation was handed the same number in the same second.
+    // Clamping after the jitter collapsed them all back onto it -- the one
+    // case the spread exists for was the one case it did nothing in.
+    expect(nextDelay(0, 0, 5000, () => 1)).toBe(6000)
+    const delays = new Set<number>()
+    for (let i = 0; i < 200; i += 1) {
+      const delay = nextDelay(0, 0, 5000)
+      expect(delay).toBeGreaterThanOrEqual(5000)
+      expect(delay).toBeLessThanOrEqual(6000)
+      delays.add(delay)
+    }
+    expect(delays.size).toBeGreaterThan(1)
   })
 })
 
 describe('the poller', () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.spyOn(Math, 'random').mockReturnValue(0.5) })
+  beforeEach(() => { vi.useFakeTimers(); vi.spyOn(Math, 'random').mockReturnValue(0) })
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
   it('asks again on the schedule until it is stopped', async () => {
@@ -99,9 +116,52 @@ describe('the poller', () => {
     poller.resume()
     await vi.advanceTimersByTimeAsync(0)
     expect(ask).toHaveBeenCalledTimes(2)
-    // And the schedule carries on from there rather than stopping.
-    await vi.advanceTimersByTimeAsync(5000)
+    // And the schedule carries on from WHERE IT WAS rather than restarting:
+    // half a minute of waiting has already happened, so the next ask is five
+    // seconds out and emphatically not one.
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(ask).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(4000)
     expect(ask).toHaveBeenCalledTimes(3)
+  })
+
+  it('comes back from a hidden tab as one chain, never two', async () => {
+    // Hidden and shown again WHILE a poll is in flight. The poll that is
+    // already out IS the ask a resume would make, and making it again leaves
+    // two schedules running over the same shared queue for as long as the
+    // wait lasts -- one more for every flick to another tab and back.
+    const poller = new Poller()
+    let settle!: (value: null) => void
+    let held = true
+    const ask = vi.fn(() => {
+      if (!held) return Promise.resolve(null)
+      held = false
+      return new Promise<null>((resolve) => { settle = resolve })
+    })
+
+    poller.start(ask)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(ask).toHaveBeenCalledTimes(1)
+
+    poller.pause()
+    poller.resume()
+    await vi.advanceTimersByTimeAsync(0)
+    // Exactly the one ask in flight, and nothing scheduled beside it.
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
+
+    settle(null)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ask).toHaveBeenCalledTimes(1)
+    // One timer behind it, at the schedule's next step and not two of them.
+    expect(vi.getTimerCount()).toBe(1)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(ask).toHaveBeenCalledTimes(2)
+
+    // 4500, 7500, 10500, 13500, 16500, 19500, 22500 -- one chain's worth of
+    // the schedule, over twenty seconds a doubled one would spend twice.
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(ask).toHaveBeenCalledTimes(9)
   })
 
   it('drops an answer that belongs to a wait it has already left', async () => {
@@ -138,5 +198,107 @@ describe('the poller', () => {
 
     expect(ask).toHaveBeenCalledTimes(2)
     poller.stop()
+  })
+
+  it('asks at once when told to, as its own next ask', async () => {
+    // A board passing its hard expiry is a reason to hear from the server
+    // sooner than the schedule would. Asked through the wait, that is one
+    // request and one chain: the step that was due is replaced, not doubled.
+    const poller = new Poller()
+    const ask = vi.fn()
+
+    poller.start(ask)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(ask).toHaveBeenCalledTimes(1)
+
+    poller.askNow()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ask).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(1)
+    // The schedule's third step from here (2000ms), and nothing at 2500,
+    // where the second step it replaced would have fallen.
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(ask).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(ask).toHaveBeenCalledTimes(3)
+    poller.stop()
+  })
+
+  it('never asks beside an ask already out, nor for a hidden tab', async () => {
+    const poller = new Poller()
+    let settle!: (value: null) => void
+    const ask = vi.fn(() => new Promise<null>((resolve) => { settle = resolve }))
+
+    poller.start(ask)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(ask).toHaveBeenCalledTimes(1)
+
+    // Its answer is the one a second ask would have fetched.
+    poller.askNow()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ask).toHaveBeenCalledTimes(1)
+
+    settle(null)
+    await vi.advanceTimersByTimeAsync(0)
+    // Hidden, it waits to be looked at -- and then asks at once, as a
+    // returning tab always does.
+    poller.pause()
+    poller.askNow()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(ask).toHaveBeenCalledTimes(1)
+    poller.resume()
+    expect(ask).toHaveBeenCalledTimes(2)
+    poller.stop()
+  })
+})
+
+describe('how long a board on screen stays good', () => {
+  const at = Date.parse('2026-08-22T19:00:00Z')
+
+  it('adds the time this page has held a board to the age it was sent with', () => {
+    const board = payload({ shared: true, age_seconds: 30 })
+
+    expect(ageAt(board, at, at)).toBe(30)
+    expect(ageAt(board, at, at + 90_000)).toBe(120)
+  })
+
+  it('dates a document that carries no age by its build stamp', () => {
+    // Cached from before the envelope: the stamp is all there is.
+    const board = payload({ age_seconds: null,
+                            generated_at: '2026-08-22T18:57:00Z' })
+
+    expect(ageAt(board, at, at)).toBe(180)
+  })
+
+  it('calls a shared board stale strictly past its bound, as the server does', () => {
+    // board_shared.disposition: a board exactly `fresh_seconds` old is still
+    // fresh. The page's clock reads the same boundary the same way.
+    const board = payload({ shared: true, age_seconds: 110,
+                            fresh_seconds: 120 })
+
+    expect(untilStale(board, at, at)).toBe(10_000)
+    expect(pastFresh(board, at, at + 10_000)).toBe(false)
+    expect(pastFresh(board, at, at + 10_001)).toBe(true)
+  })
+
+  it('never calls a board stale that has no store behind it', () => {
+    // A board a worker built for itself: nothing is queued to refresh it,
+    // and asking again would build another.
+    const board = payload({ shared: false, age_seconds: 500,
+                            fresh_seconds: 120 })
+
+    expect(untilStale(board, at, at)).toBeNull()
+    expect(pastFresh(board, at, at)).toBe(false)
+    // The hard expiry is every board's: past it the window has moved on.
+    expect(untilExpired(board, at, at)).toBe(100_000)
+  })
+
+  it('has nothing to say about a board nobody has built yet', () => {
+    const shell = payload({ shared: true, pending: true, rows: null,
+                            age_seconds: null, generated_at: null })
+
+    expect(ageAt(shell, at, at)).toBeNull()
+    expect(untilStale(shell, at, at)).toBeNull()
+    expect(untilExpired(shell, at, at)).toBeNull()
   })
 })

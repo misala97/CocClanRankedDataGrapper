@@ -10,7 +10,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { detail, payload, row } from '../fixtures'
+import { detail, envelope, payload, row } from '../fixtures'
 import type { BoardPayload, Detail } from '../types'
 import { BoardPage } from './BoardPage'
 
@@ -30,6 +30,15 @@ function waiting(over: Partial<BoardPayload> = {}): BoardPayload {
 /** A board that was read from the store rather than built here. */
 function served(over: Partial<BoardPayload> = {}): BoardPayload {
   return payload({ shared: true, ...over })
+}
+
+/** A board as a deployment from before the envelope embedded one: every
+ *  delivery field absent -- not false, not null -- which is the shape a
+ *  browser's cache can still hand the page. */
+function preEnvelope(over: Partial<BoardPayload> = {}): BoardPayload {
+  const board: Record<string, unknown> = { ...payload(over) }
+  for (const field of Object.keys(envelope())) delete board[field]
+  return board as unknown as BoardPayload
 }
 
 const ok = (body: unknown) => ({
@@ -76,8 +85,9 @@ function visibility(state: 'hidden' | 'visible') {
 
 beforeEach(() => {
   vi.useFakeTimers()
-  // The jitter, taken out: every delay below is the schedule's own number.
-  vi.spyOn(Math, 'random').mockReturnValue(0.5)
+  // The jitter, taken out: the spread only adds, so every delay below is the
+  // schedule's own number (or the server's floor, where it asked for one).
+  vi.spyOn(Math, 'random').mockReturnValue(0)
   vi.setSystemTime(new Date('2026-08-22T19:00:00Z'))
   // The wait continues unless a test says otherwise: a stub that answered
   // a board would end every one of these on the first poll.
@@ -172,6 +182,49 @@ describe('a board that is still being calculated', () => {
     expect(screen.getByRole('link', { name: /NEW/ })).toBeInTheDocument()
   })
 
+  it('never paints a board under a selection nobody is on any more', async () => {
+    // The debounce is a quarter of a second in which the reader has already
+    // moved on and the request for the new question has not gone out yet. A
+    // poll answer that lands inside it belongs to a question nobody is
+    // asking, and drawing it would put its rows under the new window's label
+    // -- so the old wait has to be over when the control moves, not when the
+    // new request is sent.
+    let landPoll!: (board: BoardPayload) => void
+    const held = new Promise<BoardPayload>((resolve) => { landPoll = resolve })
+    stubFetch((url) => {
+      if (url.includes('poll=1')) return held
+      if (url.includes('window=24')) {
+        return served({ window_hours: 24, rows: [row({ ticker: 'NEW' })] })
+      }
+      return waiting({ window_hours: 12 })
+    })
+    render(<BoardPage initial={waiting({ window_hours: 12 })} />)
+
+    await advance(1000)
+    expect(boardCalls()).toHaveLength(1)
+    expect(boardCalls()[0]).toContain('poll=1')
+
+    await click(screen.getByRole('button', { name: /Change window/i }))
+    await click(screen.getByRole('button', { name: '24h' }))
+    // Mid-debounce, the board the reader stopped waiting for arrives.
+    await advance(100)
+    landPoll(served({ window_hours: 12, rows: [row({ ticker: 'OLD' })] }))
+    await advance(50)
+
+    expect(screen.queryByRole('link', { name: /OLD/ })).toBeNull()
+    expect(rowCount()).toBe(0)
+    // Nor has anything else gone out in the meantime: the old wait is over,
+    // and the new question has not been asked yet.
+    expect(boardCalls()).toHaveLength(1)
+
+    // And the new question goes out when the burst settles, as it always did.
+    await advance(200)
+    expect(boardCalls()).toHaveLength(2)
+    expect(boardCalls()[1]).toContain('window=24')
+    expect(boardCalls()[1]).not.toContain('poll=1')
+    expect(screen.getByRole('link', { name: /NEW/ })).toBeInTheDocument()
+  })
+
   it('names the new window while the new board is still being calculated', async () => {
     stubFetch(() => waiting({ window_hours: 12 }))
     render(<BoardPage initial={waiting()} />)
@@ -233,6 +286,90 @@ describe('a board that is still being calculated', () => {
 
     expect(boardCalls().length).toBeGreaterThan(asked)
   })
+
+  it('keeps its place in the back-off when the reader retries', async () => {
+    // A retry is an extra ask, not a new wait. Restarting the schedule would
+    // put a reader who has been waiting half a minute -- and has just been
+    // told so -- back on the one-second poll the wait opened with, so the
+    // longer they wait the more of the queue they take.
+    render(<BoardPage initial={waiting()} />)
+    await advance(35_000)
+    const asked = boardCalls().length
+
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    await advance(50)
+    expect(boardCalls()).toHaveLength(asked + 1)
+
+    // Nothing at a second; the wait is still on its five.
+    await advance(1200)
+    expect(boardCalls()).toHaveLength(asked + 1)
+    await advance(4000)
+    expect(boardCalls()).toHaveLength(asked + 2)
+  })
+
+  it('lets a slow retry answer instead of asking over the top of it', async () => {
+    // The wait keeps its schedule through a retry (above), so its next ask
+    // can come due while the retry is still out. Sending it aborted the
+    // reader's own request -- one board asked for twice -- and left the
+    // controls marked busy, pointer events off, by a request nothing
+    // remained to finish.
+    let answerRetry!: (board: BoardPayload) => void
+    const retried = new Promise<BoardPayload>((resolve) => {
+      answerRetry = resolve
+    })
+    stubFetch((url) => (url.includes('poll=1') ? waiting() : retried))
+    render(<BoardPage initial={waiting()} />)
+    await advance(35_000)
+    const asked = boardCalls().length
+
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    // Past the moment the schedule's next ask came due (36.5s): it waited
+    // for the retry's answer rather than sending one of its own.
+    await advance(3000)
+    expect(boardCalls()).toHaveLength(asked + 1)
+    expect(document.querySelector('.controls'))
+      .toHaveAttribute('aria-busy', 'true')
+
+    answerRetry(waiting())
+    await advance(0)
+    expect(document.querySelector('.controls'))
+      .toHaveAttribute('aria-busy', 'false')
+    // And the wait carries on from there, on its own five seconds.
+    await advance(5000)
+    expect(boardCalls()).toHaveLength(asked + 2)
+  })
+
+  it('starts the wait over when the reader asks a different question', async () => {
+    // The thirty seconds are how long THIS wait has lasted. A new selection
+    // is a new wait, and telling a reader who has just changed the window
+    // that it is "still" calculating describes somebody else's patience.
+    stubFetch(() => waiting({ window_hours: 12 }))
+    render(<BoardPage initial={waiting()} />)
+    await advance(35_000)
+    expect(waitingLine()).toHaveTextContent('Still calculating')
+
+    await click(screen.getByRole('button', { name: /Change window/i }))
+    await click(screen.getByRole('button', { name: '12h' }))
+    await advance(300)
+
+    expect(waitingLine()).toHaveTextContent('Calculating this board')
+    expect(waitingLine()).not.toHaveTextContent('Still calculating')
+  })
+
+  it('opens no wait in a tab that was already hidden when it mounted', async () => {
+    // A tab restored in the background fires no visibilitychange at all, so
+    // the state has to be read rather than waited for -- the same reading
+    // the hub's own useVisible() does.
+    visibility('hidden')
+    render(<BoardPage initial={waiting()} />)
+
+    await advance(30_000)
+    expect(boardCalls()).toHaveLength(0)
+
+    await act(async () => { visibility('visible') })
+    await advance(0)
+    expect(boardCalls()).toHaveLength(1)
+  })
 })
 
 describe('a board that is busy with other selections', () => {
@@ -273,6 +410,8 @@ describe('a board with a refresh queued behind it', () => {
 
     expect(rowCount()).toBeGreaterThan(0)
     expect(ageLine()).toHaveTextContent('Calculated 3m ago · refreshing')
+    expect(document.querySelector('.age b.queued'))
+      .toHaveTextContent('refreshing')
   })
 
   it('asks every five seconds until the refresh lands', async () => {
@@ -290,6 +429,59 @@ describe('a board with a refresh queued behind it', () => {
     expect(ageLine()).toHaveTextContent('Calculated 0s ago')
     expect(ageLine()).not.toHaveTextContent('refreshing')
 
+    await advance(30_000)
+    expect(boardCalls()).toHaveLength(2)
+  })
+
+  it('leaves the address bar alone when a poll brings the same board', async () => {
+    // replaceState on a five-second cadence, for a board that has not
+    // changed, is a page rewriting its own history entry all afternoon.
+    stubFetch(() => stale())
+    const wrote = vi.spyOn(window.history, 'replaceState')
+    render(<BoardPage initial={stale()} />)
+
+    await advance(5000)
+
+    expect(boardCalls()).toHaveLength(1)
+    expect(wrote).not.toHaveBeenCalled()
+  })
+})
+
+describe('a board that goes stale while this page is holding it', () => {
+  it('passes the fresh bound on its own clock and goes to look', async () => {
+    // `fresh_seconds` is the server's bound, not the server's verdict: a
+    // board sent as fresh crosses it a minute later with nothing on the wire
+    // to say so, and a tab left open would sit on it for the afternoon.
+    let fresher = false
+    stubFetch(() => (fresher
+      ? served({ as_of: '2026-08-22T19:02:00Z',
+                 built_at: '2026-08-22T19:02:00Z' })
+      : served({ age_seconds: 130 })))
+    render(<BoardPage initial={served({ age_seconds: 110,
+                                        fresh_seconds: 120 })} />)
+
+    expect(ageLine()).toHaveTextContent('Calculated 1m ago')
+    expect(ageLine()).not.toHaveTextContent('refreshing')
+
+    await advance(11_000)
+
+    expect(ageLine()).toHaveTextContent('refreshing')
+    expect(boardCalls()).toHaveLength(1)
+    expect(boardCalls()[0]).toContain('poll=1')
+
+    // Every five seconds from there, not the schedule's opening steps. That
+    // answer said `stale: false` -- it was sent before the store would have
+    // said otherwise -- so the server named no floor, and the refresh behind
+    // it takes as long as a build does.
+    await advance(4000)
+    expect(boardCalls()).toHaveLength(1)
+    fresher = true
+    await advance(1000)
+    expect(boardCalls()).toHaveLength(2)
+
+    expect(ageLine()).toHaveTextContent('Calculated 0s ago')
+    expect(ageLine()).not.toHaveTextContent('refreshing')
+    // A board that is fresh again sends nothing until it is not.
     await advance(30_000)
     expect(boardCalls()).toHaveLength(2)
   })
@@ -322,6 +514,68 @@ describe('a board that has outlived the window it names', () => {
     expect(ageLine()).toHaveTextContent(/Expired/i)
     expect(boardCalls()).toHaveLength(1)
   })
+
+  it('asks once when it expires with a refresh already queued', async () => {
+    // Expiry and the refresh it is waiting for are the same question, and
+    // asking it twice in the same instant is two builds of one board.
+    stubFetch(() => waiting())
+    render(<BoardPage initial={served({ stale: true, age_seconds: 599,
+                                        hard_expiry_seconds: 600,
+                                        retry_after_ms: 1000 })} />)
+
+    await advance(1100)
+
+    expect(boardCalls()).toHaveLength(1)
+  })
+
+  it('asks once when it expires while a poll is already out', async () => {
+    // The other order: the wait's poll went out first and has not answered
+    // when the board expires. That poll's answer IS the refetch; a second
+    // request sent beside it aborted the first and built the board twice.
+    stubFetch(() => new Promise(() => {}))
+    render(<BoardPage initial={served({ stale: true, age_seconds: 598.5,
+                                        hard_expiry_seconds: 600,
+                                        retry_after_ms: 1000 })} />)
+
+    await advance(2000)
+
+    expect(ageLine()).toHaveClass('expired')
+    expect(boardCalls()).toHaveLength(1)
+    expect(boardCalls()[0]).toContain('poll=1')
+  })
+
+  it('stands down when a poll has just answered as it expires', async () => {
+    // The poll lands a moment before the expiry clock fires -- after the
+    // answer, before the render that would have disarmed the clock. The
+    // board it was armed for is already gone, and asking again is a second
+    // request for an answer the page already has.
+    stubFetch(() => waiting())
+    render(<BoardPage initial={served({ stale: true, age_seconds: 598.9,
+                                        hard_expiry_seconds: 600,
+                                        retry_after_ms: 1000 })} />)
+
+    await advance(1200)
+
+    expect(boardCalls()).toHaveLength(1)
+    expect(rowCount()).toBe(0)
+  })
+
+  it('leaves a hidden tab asleep when its board expires', async () => {
+    // Nobody is reading an expired board in a background tab, and coming
+    // back asks at once anyway. A refetch here that also woke the wait left
+    // it polling a shared queue on behalf of nobody until the tab returned.
+    render(<BoardPage initial={served({ stale: true, age_seconds: 590,
+                                        hard_expiry_seconds: 600,
+                                        retry_after_ms: 5000 })} />)
+    await act(async () => { visibility('hidden') })
+
+    await advance(30_000)
+    expect(boardCalls()).toHaveLength(0)
+
+    await act(async () => { visibility('visible') })
+    await advance(0)
+    expect(boardCalls()).toHaveLength(1)
+  })
 })
 
 describe('a board whose rebuilds are failing', () => {
@@ -331,6 +585,10 @@ describe('a board whose rebuilds are failing', () => {
 
     expect(rowCount()).toBeGreaterThan(0)
     expect(ageLine()).toHaveTextContent('Last refresh failed')
+    // A failure is not a queued refresh, and must not be quieted into one:
+    // the class that takes `refreshing` out of the caution colour is the
+    // refreshing token's own, never the whole line's.
+    expect(document.querySelector('.age b.queued')).toBeNull()
   })
 
   it('says so plainly when there is no board underneath it', async () => {
@@ -341,6 +599,10 @@ describe('a board whose rebuilds are failing', () => {
     const oops = document.querySelector('.rows .oops')
     expect(oops).toHaveTextContent(/could not be built/i)
     expect(oops?.querySelector('button')).toHaveTextContent('Retry')
+    // Named for where it sits, not for a state it is never in: the busy
+    // generation has its own quiet paragraph.
+    expect(oops).toHaveClass('inline')
+    expect(oops).not.toHaveClass('busy')
     expect(waitingLine()).toBeNull()
     expect(screen.queryByText(/Nothing cleared the bar/)).toBeNull()
   })
@@ -358,6 +620,23 @@ describe('a board that is simply empty', () => {
 })
 
 describe('a board from a server that never heard of the shared store', () => {
+  it('dates itself by its build stamp when it carries no age', async () => {
+    // A document cached in a browser from before the envelope existed: no
+    // age anywhere in it -- none of its fields at all -- and the build stamp
+    // the corner used to print sitting right there. Printing nothing is the
+    // worse answer.
+    vi.setSystemTime(new Date('2026-08-22T19:03:00Z'))
+    render(<BoardPage initial={preEnvelope({
+      generated_at: '2026-08-22T19:00:00Z' })} />)
+
+    expect(ageLine()).toHaveTextContent('Calculated 3m ago')
+    // And nothing claims a refresh that a server without the store could
+    // not be doing.
+    expect(ageLine()).not.toHaveTextContent('refreshing')
+    await advance(60_000)
+    expect(boardCalls()).toHaveLength(0)
+  })
+
   it('renders exactly as it always did, and polls for nothing', async () => {
     render(<BoardPage initial={payload()} />)
 
@@ -366,7 +645,12 @@ describe('a board from a server that never heard of the shared store', () => {
     expect(ageLine()).not.toHaveTextContent('refreshing')
     expect(waitingLine()).toBeNull()
 
-    await advance(60_000)
+    // Past the fresh bound too. A board a worker built for itself has no
+    // store behind it and no refresh queued: asking again would build
+    // another, and "refreshing" would be saying something false.
+    await advance(150_000)
     expect(boardCalls()).toHaveLength(0)
+    expect(ageLine()).toHaveTextContent('Calculated 2m ago')
+    expect(ageLine()).not.toHaveTextContent('refreshing')
   })
 })

@@ -9,7 +9,10 @@
 // admitted in the same second do not come back in the same second.
 //
 // Nothing here touches the DOM or React. The wait is arithmetic plus a
-// timer, and both are testable without rendering anything.
+// timer, and so is how long a board on screen stays good; all of it is
+// testable without rendering anything.
+
+import type { BoardPayload } from './types'
 
 /** The client's own back-off, in milliseconds, by attempt.
  *
@@ -30,9 +33,10 @@ export const DELAYED_AFTER_MS = 30_000
  *  that has been waiting a while and a server that is busy agree. */
 export const SLOW_MS = 5000
 
-/** A fifth either way. Enough to spread a crowd admitted together across a
+/** A fifth, upward. Enough to spread a crowd admitted together across a
  *  couple of seconds, small enough that the schedule still means what it
- *  says. */
+ *  says -- and one-sided, so the spread can be applied to a number that is a
+ *  floor without ever going under it. */
 const JITTER = 0.2
 
 /** How long to wait before asking again.
@@ -40,7 +44,8 @@ const JITTER = 0.2
  *  `retryAfterMs` is a FLOOR and never a ceiling: the server knows the queue
  *  -- twelfth in line is a longer wait than any client-side schedule can
  *  guess -- while the client knows how long this particular reader has been
- *  looking at a spinner. Whichever asks for more patience wins.
+ *  looking at a spinner. Whichever asks for more patience wins, and the
+ *  spread then applies to the winner.
  *
  *  `random` is a parameter so the schedule can be read back in a test as the
  *  numbers it names, rather than as a range.
@@ -50,10 +55,13 @@ export function nextDelay(attempt: number, waitedMs: number,
                           random: () => number = Math.random): number {
   const step = waitedMs >= DELAYED_AFTER_MS ? SLOW_MS
     : SCHEDULE[Math.min(Math.max(attempt, 0), SCHEDULE.length - 1)] ?? SLOW_MS
-  const spread = 1 - JITTER + 2 * JITTER * random()
-  // Clamped after the jitter, not before: jittering a floor downwards would
-  // undercut the very number the server sent to protect the queue.
-  return Math.max(Math.round(step * spread), retryAfterMs ?? 0)
+  // The floor first, then the spread over it. Clamping afterwards annihilated
+  // the jitter in the one case it exists for: every client in a refused
+  // generation is handed the same `retry_after_ms` in the same second, and a
+  // Math.max against it collapsed all of them back onto that number exactly.
+  // A one-sided spread is what lets both be true at once.
+  const base = Math.max(step, retryAfterMs ?? 0)
+  return Math.round(base * (1 + JITTER * random()))
 }
 
 /** What one poll does. A number it returns is the server's own
@@ -80,6 +88,11 @@ export class Poller {
   private since = 0
   private floor: number | null = null
   private paused = false
+  // Whether an ask is out right now. A poll is in flight for most of the
+  // interval between two of them, so it is the likeliest thing to be true
+  // when anything else asks this object to act -- and an ask that is already
+  // out is an ask, whatever prompted the second one.
+  private inFlight = false
 
   /** Whether a wait is in progress. */
   get running(): boolean {
@@ -102,6 +115,7 @@ export class Poller {
     this.since = Date.now()
     this.floor = retryAfterMs
     this.paused = false
+    this.inFlight = false
     this.schedule(this.generation)
   }
 
@@ -111,10 +125,11 @@ export class Poller {
     this.clear()
     this.fn = null
     this.paused = false
+    this.inFlight = false
   }
 
   /** The tab is hidden. Polling a shared queue on behalf of nobody is load
-   *  with no reader at the end of it. */
+   *  with no reader at the end of it. The schedule keeps its place. */
   pause(): void {
     if (this.fn === null || this.paused) return
     this.paused = true
@@ -122,10 +137,36 @@ export class Poller {
   }
 
   /** The tab is back. One ask immediately -- the board may well have been
-   *  built while the tab was away -- and then the schedule as before. */
+   *  built while the tab was away -- and then the schedule as before.
+   *
+   *  Unless an ask is ALREADY out. A hide and a show during one in-flight
+   *  poll used to fire a second ask here, and each of the two answers then
+   *  scheduled a poll of its own: two chains over the same queue for as long
+   *  as the wait lasted, and one more for every flick to another tab and
+   *  back. The ask that is out re-schedules itself when it resolves, which
+   *  is the one chain there is. */
   resume(): void {
     if (this.fn === null || !this.paused) return
     this.paused = false
+    if (this.inFlight) return
+    void this.fire(this.generation)
+  }
+
+  /** Ask now, as the wait's own next ask rather than beside it.
+   *
+   *  For the rest of the page, when it has a reason to hear from the server
+   *  sooner than the schedule would -- a board passing its hard expiry is the
+   *  one there is. Asking THROUGH the wait is what keeps that one request: an
+   *  ask sent beside the wait's is two builds of one board, and whichever of
+   *  the two went second aborted the other. The schedule then carries on from
+   *  its place, as it does after any ask.
+   *
+   *  Nothing when an ask is already out, whose answer is the one this would
+   *  have fetched, and nothing for a hidden tab, which asks the moment it is
+   *  looked at again. */
+  askNow(): void {
+    if (this.fn === null || this.paused || this.inFlight) return
+    this.clear()
     void this.fire(this.generation)
   }
 
@@ -147,6 +188,7 @@ export class Poller {
     if (generation !== this.generation || this.fn === null) return
     this.timer = null
     this.attempt += 1
+    this.inFlight = true
     let answer: number | null | void = null
     try {
       answer = await this.fn()
@@ -154,9 +196,92 @@ export class Poller {
       // One unreachable answer is not the end of the wait. The schedule is
       // the back-off; a throw simply has no retry floor to offer.
       answer = null
+    } finally {
+      // Only ever its own. A fire left over from a wait that has since been
+      // stopped or restarted must not clear a flag that now describes the
+      // ask the CURRENT wait has out.
+      if (generation === this.generation) this.inFlight = false
     }
     if (generation !== this.generation) return
     this.floor = typeof answer === 'number' ? answer : null
+    // Paused while this was out: the schedule declines, and resume() fires
+    // then -- there is nothing in flight for it to defer to any more.
     this.schedule(generation)
   }
+}
+
+// --- how long a board on screen stays good ----------------------------------
+//
+// The server says how old a board was when it answered and how long a board
+// is good for; only this page knows how long it has held one since. Every
+// part of the surface that reads a board's age -- the line that prints it,
+// the wait that goes to fetch a fresher one, the timer that takes an expired
+// one down -- reads it from here, so the line can never say "refreshing"
+// about a board nothing is going to fetch.
+
+/** How old a board is at `now`, in seconds, on this page's clock.
+ *
+ *  The server's age plus the time this page has held the answer. Neither half
+ *  is enough on its own: a stored board can be a minute old before it is ever
+ *  sent, and a tab left open adds an afternoon to whatever it was sent as.
+ *
+ *  A document served before the envelope existed, and cached in a browser
+ *  since, carries no age at all -- but it carries the build stamp the age
+ *  used to be printed from, read against this machine's clock because there
+ *  is no other. Null only when there is no board to be old: a waiting shell
+ *  has neither, and inventing an age for it would be the freshness stamp's
+ *  one unforgivable lie. */
+export function ageAt(board: BoardPayload, received: number,
+                      now: number = Date.now()): number | null {
+  if (typeof board.age_seconds === 'number'
+      && Number.isFinite(board.age_seconds)) {
+    return board.age_seconds + Math.max(0, now - received) / 1000
+  }
+  if (board.generated_at) {
+    const built = Date.parse(board.generated_at)
+    if (Number.isFinite(built)) return Math.max(0, now - built) / 1000
+  }
+  return null
+}
+
+/** Milliseconds until a board on screen passes its fresh bound -- negative
+ *  once it has -- or null for a board with no such bound to pass.
+ *
+ *  Only a SHARED board has one. `stale` is the store's verdict at the instant
+ *  it answered, and this is the same verdict carried forward on the page's
+ *  clock: a board the store has stopped calling current looks that way here
+ *  too, whether or not anything asked it since. A board a worker built for
+ *  itself has no store behind it and nothing queued to refresh it -- asking
+ *  again builds another, which is exactly the cost the shared store exists
+ *  to take away -- so it is never asked about on a timer. */
+export function untilStale(board: BoardPayload, received: number,
+                           now: number = Date.now()): number | null {
+  if (board.shared !== true || board.rows === null) return null
+  if (!Number.isFinite(board.fresh_seconds)) return null
+  const age = ageAt(board, received, now)
+  return age === null ? null : (board.fresh_seconds - age) * 1000
+}
+
+/** Whether a board has outlived its fresh bound on this page's clock.
+ *
+ *  Strictly past, as the server reads it: a board exactly `fresh_seconds` old
+ *  is still fresh (board_shared.disposition). */
+export function pastFresh(board: BoardPayload, received: number,
+                          now: number = Date.now()): boolean {
+  const left = untilStale(board, received, now)
+  return left !== null && left < 0
+}
+
+/** Milliseconds until a board passes its hard expiry -- negative once it has
+ *  -- or null when it has no bound or no age to read one against.
+ *
+ *  Unlike the fresh bound this one is every board's: past it the rows
+ *  describe a rolling window that has moved on, whoever built them. */
+export function untilExpired(board: BoardPayload, received: number,
+                             now: number = Date.now()): number | null {
+  if (board.rows === null || !Number.isFinite(board.hard_expiry_seconds)) {
+    return null
+  }
+  const age = ageAt(board, received, now)
+  return age === null ? null : (board.hard_expiry_seconds - age) * 1000
 }

@@ -134,6 +134,18 @@ describe('expanding retained posts', () => {
   })
 })
 
+describe('the age line', () => {
+  it('quiets the refreshing token, never the line a failure is printed in', () => {
+    // `.age.stale b` once took every bold token on a stale line out of the
+    // caution colour -- and a stale board whose rebuilds are failing prints
+    // "Last refresh failed" on that same line, the one thing on it that wants
+    // the reader's eye. The quiet treatment is the refreshing token's own.
+    expect(rules).toMatch(
+      /\.brand \.age b\.queued \{[^}]*color:\s*var\(--ink-2\)/)
+    expect(rules).not.toMatch(/\.age\.stale\s+b\b/)
+  })
+})
+
 describe('printing from a narrow viewport', () => {
   it('does not print controls that only make sense on a panning screen', () => {
     // Width media queries still match while Chromium renders print media. At
