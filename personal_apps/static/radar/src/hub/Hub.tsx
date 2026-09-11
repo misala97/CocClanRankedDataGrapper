@@ -142,7 +142,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   // selection's (react-query's placeholder), and never a waiting shell: a
   // shell has no last answer to fall back on, and says what is happening in
   // its own words.
-  const shown = board.isPlaceholderData ? undefined : board.data
+  const shown = board.answer
   const banner = shown !== undefined && isReady(shown) && board.isError
     ? shown : null
   // The market the top bar names is the one the reader is on. Placeholder
@@ -359,7 +359,7 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
     // The answer for THIS selection. Placeholder data is the previous
     // selection's board, kept by react-query while the new one loads;
     // drawing it would put one question's rows under another's filters.
-    const answer = board.isPlaceholderData ? undefined : board.data
+    const answer = board.answer
     // Only Human chatter has the window and feed controls the waiting
     // notices point a tired reader at.
     const controls = route.page === 'chatter'
@@ -370,7 +370,8 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
       : isReady(answer) ? null
       // A shell. Failing builds first: "this is taking a while" is the wrong
       // thing to keep saying about a key whose builds are failing.
-      : answer.failed ? <FailedNotice onRetry={board.retry} />
+      : answer.failed
+        ? <FailedNotice failing={board.failing} onRetry={board.retry} />
       // Asks that keep failing are said in the shell's own notice, with the
       // page's one Retry: there is no board for "Showing the last answer" to
       // be about.

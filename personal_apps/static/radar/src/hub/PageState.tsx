@@ -219,12 +219,20 @@ export function Busy({ failing = null, controls = false, onRetry }: {
  *  no earlier board to show instead. Red and an alert rather than the calm
  *  waiting line, because "this is taking a while" would be the wrong thing to
  *  keep saying. */
-export function FailedNotice({ onRetry }: { onRetry?: () => void }) {
+export function FailedNotice({ failing = null, onRetry }: {
+  /** Why this page's own asks about the board keep failing, as for Pending.
+   *  Whose failure the reader is looking at: without it a reader whose every
+   *  ask was erroring read the server's retries and nothing about this
+   *  page's silence. */
+  failing?: string | null
+  onRetry?: () => void
+}) {
   return (
     <div className="rh-notice red rh-wait" role="alert">
       <div>
         <strong>This board could not be built.</strong>
-        <p>Radar is still retrying.</p>
+        <p>{failing !== null ? `${failing} Still trying.`
+          : 'Radar is still retrying.'}</p>
       </div>
       {onRetry ? <RetryButton onRetry={onRetry} /> : null}
     </div>

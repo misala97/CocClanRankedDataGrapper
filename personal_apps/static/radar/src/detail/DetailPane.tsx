@@ -73,8 +73,9 @@ function legendFor(chart: DetailChart): { price: string; chatter: string } {
  *  generated dashboard reaches for, and it makes a section heading and a
  *  column header look like the same kind of thing.
  */
-export function DetailPane({ ticker, selection, windowHours, hasRows,
-                            baselineDays, fallBack, watching, onToggleWatch }: {
+export function DetailPane({ ticker, selection, windowHours, listing,
+                            readerPicked, baselineDays, fallBack, watching,
+                            onToggleWatch }: {
   ticker: string | null
   selection: Selection
   windowHours: number
@@ -82,9 +83,15 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
    *  the chart opens on. From the board payload, because the span has to be
    *  chosen before the panel's own request goes out. */
   baselineDays: number | null
-  /** Whether the list beside this has anything in it. An empty panel next to
-   *  an empty board must not invite a selection there is nothing to make. */
-  hasRows: boolean
+  /** What the list beside this has: rows to pick from, a board that was built
+   *  and came back empty, or no board yet. An empty panel next to an empty
+   *  board must not invite a selection there is nothing to make -- and next to
+   *  a board nobody has built yet it must not report an emptiness nobody has
+   *  measured. */
+  listing: 'rows' | 'empty' | 'unbuilt'
+  /** Whether the reader chose the ticker on screen, or the page did (see
+   *  BoardPage). Focus follows only their choice. */
+  readerPicked: boolean
   /** Another ticker on the board that is worth trying, and how to get to it.
    *  Named rather than described: "the top of the board" was the label until
    *  the escape had to stop pointing at the top row (see BoardPage), and a
@@ -145,12 +152,21 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     if (!detail || detail.identity.ticker !== ticker) return
     if (focused.current === ticker) return
     focused.current = ticker
+    // For a ticker the READER chose, and no other. Seeding the ref with the
+    // opening ticker above was the whole of this rule while no page could
+    // open without rows; a page that opens on a waiting shell has none to
+    // seed with, so when the board arrived and the top row was picked FOR the
+    // reader the panel took focus -- 4,219px of scroll away from the list
+    // they were watching, at 390x844 (browser check, run 3). The ref is still
+    // written, so the reader's next pick is a different ticker and moves
+    // focus normally.
+    if (!readerPicked) return
     // Not `preventScroll`. On desktop the panel is already in view so this
     // does nothing; below 900px the panel sits ~1500px down the document and
     // scrolling to it is exactly what was missing -- tapping a row used to
     // change nothing on screen at all.
     landing.current?.focus()
-  }, [detail, ticker])
+  }, [detail, ticker, readerPicked])
 
   useEffect(() => {
     if (!drawn || !chartScroller.current) return
@@ -198,10 +214,15 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
       <main className="detail empty">
         <p role="status">
           {/* Inviting a selection from a list with nothing in it was the
-              wording the empty board actually shipped with. */}
-          {hasRows
+              wording the empty board actually shipped with. A board nobody
+              has built yet is neither: reporting it as nothing to look at is
+              an emptiness nobody has measured, which is the one thing the
+              pending states exist to stop the surface saying. */}
+          {listing === 'rows'
             ? 'Select a ticker to see what it has been doing.'
-            : 'Nothing on the board to look at.'}
+            : listing === 'empty'
+              ? 'Nothing on the board to look at.'
+              : 'The board is still being calculated.'}
         </p>
       </main>
     )

@@ -5,8 +5,8 @@ import { Boundary } from '../Broken'
 import { DetailPane } from '../detail/DetailPane'
 import { Account } from '../list/Account'
 import { ListPane, universalMarks } from '../list/ListPane'
-import { Poller, SLOW_MS, pastFresh, refreshDue, refreshes, untilExpired,
-         untilStale } from '../pending'
+import { Poller, SETTLE_MS, SLOW_MS, pastFresh, refreshDue, refreshes,
+         untilExpired, untilStale } from '../pending'
 import { useNarrow } from './narrow'
 import type { BoardPayload, Row, Selection } from '../types'
 
@@ -18,10 +18,6 @@ import type { BoardPayload, Row, Selection } from '../types'
  *  the previous surface unreadable -- every fact the tool knew had to fit
  *  there, because there was nowhere to hand anything off to.
  */
-/** How long a burst of control changes has to go quiet before one request
- *  goes out for all of them. */
-const SETTLE_MS = 250
-
 /** How one request ended. `shown` put its answer on screen and names the
  *  floor for the next ask; `failed` left the last board up and said so;
  *  `dropped` was aborted or superseded -- something newer took its place,
@@ -65,6 +61,13 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   })
   const [selected, setSelected] = useState<string | null>(
     () => initialTicker(initial))
+  // Whether the reader chose the ticker on screen, or the page did. The panel
+  // moves focus only for a choice the reader made (see DetailPane): a board
+  // arriving after a wait picks the top row for a reader who chose nothing,
+  // and focus following it scrolled a phone reader off the list they were
+  // watching. The page opens on a ticker it chose too -- `?t=` or the top row
+  // -- so this starts false.
+  const [readerPicked, setReaderPicked] = useState(false)
   // The caller's marks. Optimistic: the star flips before the server
   // answers, the server's list replaces it, and a refusal undoes that one
   // flip. Mutations run one at a time, in order -- a queue, never parallel
@@ -229,6 +232,8 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       // long as the wait lasts, over a board that has not moved.
       if (!(poll && sameBoard(was, fresh))) {
         setSelected(nextTicker)
+        // Whoever asked, this is the page choosing, not the reader.
+        if (nextTicker !== reader) setReaderPicked(false)
         writeUrl(next, nextTicker)
       }
       return { kind: 'shown', floor }
@@ -299,6 +304,11 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // have (`keepOnRetry`): a Retry of a failed change of window lets go of a
   // ticker the new board does not list, as that change would have.
   const retry = useCallback(() => {
+    // Not inside the quarter second a moved control owns. The request that
+    // change is about to send asks the question on screen, which is what this
+    // would ask -- and on the flag-off path the extra one is another
+    // synchronous build of the board the first is already making.
+    if (settling.current) return
     void (own.current
       ?? load(current.current.selection, keepOnRetry.current))
   }, [load])
@@ -326,7 +336,14 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     const owed = () => landed.current && queued.current.length === 0
       && !settling.current
     if (!owed()) return
-    while (own.current) await own.current
+    let last: Outcome | null = null
+    while (own.current) last = await own.current
+    // Never on top of a request that just failed. The abort stopped this page
+    // listening, not the server building: on the flag-off path that board is
+    // still being made, and asking again is the second concurrent synchronous
+    // build this slice exists to remove. The mark is on screen either way --
+    // the star flipped when it landed -- and the next answer carries its row.
+    if (last !== null && last.kind === 'failed') return
     if (owed()) void load(current.current.selection, keepOnRetry.current)
   }, [load])
 
@@ -421,6 +438,13 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       const wait = poller.current
       if (wait?.running) { wait.askNow(); return }
       if (hidden()) { owed.current = refetch; return }
+      // Nor inside the quarter second a moved control owns, for the reason
+      // Retry is not: the request that change sends is a board for the
+      // question on screen, which is the one this wants, and a second one is
+      // another synchronous build on the flag-off path. Dropped rather than
+      // owed -- a changed question has a new expiry, and a change whose own
+      // request fails says so in the banner, with its Retry.
+      if (settling.current) return
       // Joined, as a poll is, when the reader's own request is already out:
       // its answer is the one this would fetch. Otherwise asked as a Retry
       // is, keeping the ticker as what it repeats would have.
@@ -534,6 +558,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [tap, setTap] = useState(0)
   const select = useCallback((ticker: string) => {
     setSelected(ticker)
+    setReaderPicked(true)
     setTap((n) => n + 1)
     writeUrl(selection, ticker)
   }, [selection])
@@ -657,7 +682,9 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       <Boundary label="The panel" resetKey={selected ?? 'none'}>
         <DetailPane ticker={selected} selection={selection}
                     windowHours={payload.window_hours}
-                    hasRows={rows.length > 0}
+                    readerPicked={readerPicked}
+                    listing={payload.rows === null ? 'unbuilt'
+                      : rows.length > 0 ? 'rows' : 'empty'}
                     baselineDays={rows.find(
                       (r) => r.ticker === selected)?.baseline_days ?? null}
                     fallBack={elsewhere

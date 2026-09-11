@@ -671,7 +671,14 @@ export function ListPane({ payload, received, selection, selected, busy,
             // as the page-level one, placed inside the rows scroller because
             // this one is about the board and not about the page.
             <p className="oops inline" role="alert">
-              <b>This board could not be built.</b> Radar is still retrying.
+              <b>This board could not be built.</b>{' '}
+              {/* Whose failure the reader is looking at. Without this the
+                  branch said "Radar is still retrying." to a reader whose own
+                  asks were all erroring -- the server's retries described,
+                  and this page's silence about its own. */}
+              {failing !== null
+                ? `${failing} Still trying.`
+                : 'Radar is still retrying.'}
               {onRetry && (
                 <button type="button" onClick={onRetry}>Retry</button>
               )}

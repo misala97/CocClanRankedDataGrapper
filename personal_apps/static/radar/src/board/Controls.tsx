@@ -65,6 +65,14 @@ export function Controls({ payload, selection, busy, onChange }: {
   onChange: (next: Selection) => void
 }) {
   const counts = payload.segment_counts
+  // Nobody has counted yet. A waiting shell carries an empty mapping
+  // (board_shared._selection_echo), and reading a missing count as 0 put
+  // "All 0 · Discover 0 · Large 0" above "Calculating this board…" -- the
+  // same lie the status line beside it already refuses to tell. The tabs stay
+  // where they are and keep working, because asking a different question is
+  // what a reader tired of waiting is meant to be able to do; only the
+  // numbers go.
+  const counted = payload.rows !== null
   // Folded by default and not persisted: a reader who changes a filter every
   // visit can leave it open for the visit.
   const [open, setOpen] = useState(false)
@@ -119,13 +127,13 @@ export function Controls({ payload, selection, busy, onChange }: {
           const count = counts[key] ?? 0
           return (
             <button key={key} type="button" aria-pressed={active}
-                    className={count ? 't' : 't nil'}
+                    className={!counted || count ? 't' : 't nil'}
                     onClick={() => onChange({
                       ...selection,
                       segments: toggleSegment(selection.segments, value),
                     })}>
               {segmentLabel(key)}
-              <span className="n">{count}</span>
+              <Count n={count} counted={counted} />
             </button>
           )
         })}
@@ -144,14 +152,14 @@ export function Controls({ payload, selection, busy, onChange }: {
             const pressed = !discoverInForce
               && selection.segments.includes(member)
             const count = counts[member] ?? 0
-            const cls = ['t', count ? '' : 'nil',
+            const cls = ['t', !counted || count ? '' : 'nil',
                          discoverInForce ? 'covered' : '']
               .filter(Boolean).join(' ')
             return (
               <button key={member} type="button" aria-pressed={pressed}
                       className={cls} onClick={() => pressMember(member)}>
                 {segmentLabel(member)}
-                <span className="n">{count}</span>
+                <Count n={count} counted={counted} />
               </button>
             )
           })}
@@ -218,18 +226,28 @@ export function Controls({ payload, selection, busy, onChange }: {
             <button type="button" className="t"
                     aria-pressed={selection.minVenues === 1}
                     onClick={() => onChange({ ...selection, minVenues: 1 })}>
-              any <span className="n">{payload.venue_counts.any ?? 0}</span>
+              any <Count n={payload.venue_counts.any ?? 0} counted={counted} />
             </button>
             <button type="button" className="t"
                     aria-pressed={selection.minVenues === 2}
                     onClick={() => onChange({ ...selection, minVenues: 2 })}>
-              2+ <span className="n">{payload.venue_counts.multi ?? 0}</span>
+              2+ <Count n={payload.venue_counts.multi ?? 0} counted={counted} />
             </button>
           </div>
         </div>
       )}
     </div>
   )
+}
+
+/** How many rows a tab would show, or the fact that nobody has counted.
+ *
+ *  An em dash where the number would be, with the reason said for a reader
+ *  who cannot see it. Not a zero: zero is a measurement, and over a board
+ *  that is still being built it is a measurement nobody made. */
+function Count({ n, counted }: { n: number; counted: boolean }) {
+  return counted ? <span className="n">{n}</span>
+    : <span className="n uncounted" aria-label="not calculated yet">—</span>
 }
 
 /** The tab takes the label's first word -- "4chan", not "4chan /biz/". The

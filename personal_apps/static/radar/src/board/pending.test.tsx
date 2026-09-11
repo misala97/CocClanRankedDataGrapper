@@ -1237,3 +1237,230 @@ describe('a request that fails while the board is being calculated', () => {
     expect(waitingLine()).not.toHaveTextContent('Still trying.')
   })
 })
+
+describe('focus when a board arrives on the page own account', () => {
+  // The seeding in DetailPane ("the FIRST panel does not steal focus") was the
+  // whole of this rule while no page could open without rows: the opening
+  // ticker went into the ref, and the only focus move left was a row the
+  // reader picked. A page that opens on a waiting shell has no opening ticker
+  // to seed with, so when the board arrived and the top row was selected FOR
+  // the reader, the panel took focus -- and at 390x844, where the panel sits
+  // under the whole list, that scrolled the reader 4,219px away from the list
+  // they were watching (browser check, run 3).
+  const panel = () => document.querySelector('main.detail')
+
+  it('leaves focus alone for the top row the arriving board picks', async () => {
+    stubFetch((url) => (url.includes('poll=1')
+      ? served({ rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' })] })
+      : waiting()))
+    render(<BoardPage initial={waiting()} />)
+    expect(document.activeElement).toBe(document.body)
+
+    await advance(1000)     // the poll brings the board
+    await advance(100)      // and the panel's own request answers
+
+    expect(rowCount()).toBe(2)
+    expect(panel()).toBeInTheDocument()
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('moves focus to the panel for a row the reader picks', async () => {
+    // The other half of the rule, and the reason this is not fixed by never
+    // focusing: activating a row is silent to a screen reader otherwise --
+    // focus stays on the link, and the only route to the answer is tabbing
+    // past every remaining row.
+    const board = () => served({
+      rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' })] })
+    stubFetch(board)
+    render(<BoardPage initial={board()} />)
+    await advance(100)
+    expect(document.activeElement).toBe(document.body)
+
+    await click(screen.getByRole('link', { name: /BBB/ }))
+    await advance(100)
+
+    expect(document.activeElement).toBe(panel())
+  })
+
+  it('moves focus for a row the reader picks after the board arrived', async () => {
+    // The auto-selection must not disarm the reader's own: the row the page
+    // chose is the one focus stays away from, and the next one the reader
+    // chooses is theirs.
+    stubFetch((url) => (url.includes('poll=1')
+      ? served({ rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' })] })
+      : waiting()))
+    render(<BoardPage initial={waiting()} />)
+    await advance(1100)
+    expect(document.activeElement).toBe(document.body)
+
+    await click(screen.getByRole('link', { name: /BBB/ }))
+    await advance(100)
+
+    expect(document.activeElement).toBe(panel())
+  })
+})
+
+describe('what a pending shell says where its numbers would be', () => {
+  // Absence rendered as a measured zero is the defect class this whole slice
+  // exists to remove. The status line already refuses ("'0 tickers' over a
+  // board that is still being built is a measurement nobody made"); the view
+  // tabs and the panel's empty state were still saying none.
+  const views = () => document.querySelector('.tabs.views')
+
+  it('does not report a count for a view nobody has counted', async () => {
+    render(<BoardPage initial={waiting()} />)
+
+    expect(views()).not.toHaveTextContent('All 0')
+    expect(views()!.querySelectorAll('.n')[0])
+      .toHaveAttribute('aria-label', 'not calculated yet')
+  })
+
+  it('counts the views again once the board is there', async () => {
+    render(<BoardPage initial={served()} />)
+
+    expect(views()!.querySelectorAll('.n')[0])
+      .not.toHaveAttribute('aria-label')
+  })
+
+  it('says the board is not calculated yet rather than that it is empty', async () => {
+    render(<BoardPage initial={waiting()} />)
+
+    const empty = document.querySelector('main.detail.empty')
+    expect(empty).not.toHaveTextContent('Nothing on the board to look at')
+    expect(empty).toHaveTextContent(/still being calculated/i)
+  })
+
+  it('still says an empty board is empty', async () => {
+    render(<BoardPage initial={served({ rows: [] })} />)
+
+    expect(document.querySelector('main.detail.empty'))
+      .toHaveTextContent('Nothing on the board to look at')
+  })
+})
+
+describe('a parked board whose own asks are failing', () => {
+  // The envelope carries `failed`, and the failed branch renders its own
+  // banner -- but the branch never received the note about THIS page's asks
+  // failing, so a reader whose polls were all erroring read the same sentence
+  // as a reader whose parked board was being retried normally.
+  it('says the asks are failing, not only that the board is parked', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/api/ticker/')) return Promise.resolve(ok(detail()))
+      return Promise.resolve({ ok: false, redirected: false, status: 503,
+                               json: async () => ({}) })
+    }))
+    render(<BoardPage initial={waiting({ failed: true,
+                                         retry_after_ms: 5000 })} />)
+
+    expect(screen.getByRole('alert'))
+      .toHaveTextContent('This board could not be built.')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Still trying.')
+
+    // Two failed polls in a row is the wait itself failing, and the parked
+    // banner is where this page has to say so.
+    await advance(5000)
+    await advance(5000)
+
+    expect(screen.getByRole('alert'))
+      .toHaveTextContent('The board answered with an error. Still trying.')
+  })
+})
+
+describe('the extra request a control change used to leave behind', () => {
+  // Every re-send is another synchronous board build on the flag-off path,
+  // which is production until the flag flips. Inside the debounce there is
+  // already a request coming for the question the reader just asked.
+  const moveWindow = async () => {
+    await click(screen.getByRole('button', { name: /Change window/i }))
+    await click(screen.getByRole('button', { name: '12h' }))
+  }
+
+  it('does not send a Retry inside the quarter second a control change owns', async () => {
+    stubFetch(() => served({ shared: false }))
+    render(<BoardPage initial={served({ shared: false, age_seconds: 599 })} />)
+    await advance(0)
+    const before = boardCalls().length
+
+    await moveWindow()
+    await click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(boardCalls()).toHaveLength(before)
+
+    await advance(300)
+
+    expect(boardCalls()).toHaveLength(before + 1)
+    expect(boardCalls()[before]).toContain('window=12')
+  })
+
+  it('does not let an expiry refetch fire inside it either', async () => {
+    stubFetch(() => served({ shared: false }))
+    // A tenth of a second short of the hard expiry, so the expiry clock comes
+    // due inside the quarter second the control change opens.
+    render(<BoardPage initial={served({ shared: false, age_seconds: 599.9 })} />)
+    await advance(0)
+    const before = boardCalls().length
+
+    await moveWindow()
+    await advance(300)
+
+    expect(boardCalls()).toHaveLength(before + 1)
+    expect(boardCalls()[before]).toContain('window=12')
+  })
+})
+
+describe('the refetch a mark is owed, while the reader own request is out', () => {
+  // The abort stopped this page listening, not the server building. On the
+  // flag-off path the request that failed is still making the board, and
+  // asking again on top of it is the second concurrent synchronous build this
+  // slice exists to remove.
+  const star = () => screen.getAllByRole('button', { name: /^Watch AAA$/ })[0]!
+
+  /** A flag-off board one second short of its hard expiry, whose expiry
+   *  refetch is held open until the test says how it ends. */
+  function held() {
+    let end!: (answer: unknown) => void
+    const board = new Promise((resolve) => { end = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/api/ticker/')) return ok(detail())
+      if (url.includes('/api/watch/')) return ok({ watching: ['AAA'] })
+      return board
+    }))
+    return end
+  }
+
+  it('does not ask again on top of a request that fails', async () => {
+    const end = held()
+    render(<BoardPage initial={served({ shared: false, age_seconds: 599 })} />)
+
+    // The expiry refetch goes out and is still out when the mark lands.
+    await advance(1100)
+    expect(boardCalls()).toHaveLength(1)
+
+    await click(star())
+    await advance(10)
+    expect(boardCalls()).toHaveLength(1)
+
+    end({ ok: false, redirected: false, status: 503, json: async () => ({}) })
+    await advance(100)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('answered with an error')
+    expect(boardCalls()).toHaveLength(1)
+  })
+
+  it('asks again once a request that answered has landed', async () => {
+    const end = held()
+    render(<BoardPage initial={served({ shared: false, age_seconds: 599 })} />)
+
+    await advance(1100)
+    expect(boardCalls()).toHaveLength(1)
+
+    await click(star())
+    await advance(10)
+    expect(boardCalls()).toHaveLength(1)
+
+    end(ok(served({ shared: false, watching: ['AAA'] })))
+    await advance(100)
+
+    expect(boardCalls()).toHaveLength(2)
+  })
+})
