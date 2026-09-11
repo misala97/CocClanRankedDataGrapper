@@ -1,78 +1,111 @@
-# CURRENT — PERF3: Tasks 1–8 done and reviewed, Task 9 HELD for the owner's go (2026-09-11)
+# CURRENT — PERF3: Tasks 1–9 done, ready for the whole-branch review; nothing deployed (2026-09-11)
 
 Claude implements under the PERF2 ruling; Codex owns planning. **Nothing is
 merged, pushed, deployed or configured on the VPS**; the deployed SHA is still
-`4221196`. The owner asked that Task 9 not start until he says so, after his
-usage limit resets.
+`4221196` and the target's migration head `a7c31f0b52d4`. The release package
+is a proposal, not a change.
 
 | | |
 | --- | --- |
-| Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` |
-| Branch | `codex/radar-perf3`, from `afe1246` |
-| HEAD | the commit carrying this handoff; the last code commit is `6ecba5a` (Task 8b) |
-| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (Task 8 carries two 2026-09-11 amendments, Task 9 one); ledger `PERF3-LEDGER.md` |
-| Controller scratch | `.superpowers/sdd/`: task briefs 1–9, implementer reports 1–8b, review packages, `progress.md` (the running log, including owner decisions). Working files, not committed. |
-| Tests DB | `personal_apps_radar_perf3`, stamp `b7e3f9c1a2d4`, te1 clone with 29 FKs; its board data ends 2026-09-01, so real-clock boards there are empty |
-| Scale DB | `personal_apps_radar_perf3_scale`, stamp `b7e3f9c1a2d4`; Task 8 ALIGNED its data forward by whole days so real-clock windows are full. Re-run `personal_apps/scratchpad/perf3/align_scale_fixture.py` before any new timing, through `scale_env.py` |
-| MariaDB | the portable 10.11.14 rehearsal server is STOPPED; restart command in the ledger; needed only if the store or migration changes |
+| Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` (a git worktree) |
+| Branch | `codex/radar-perf3`, from `afe1246` (`personal_apps/` there is byte-identical to the deployed `4221196`) |
+| HEAD | the commit carrying this handoff, `docs(radar): PERF3 suites classified, the release delta, and the handoff`, on top of `3062ed9`. The last code commit is `e3aedfb` (Task 9a). `git log` is the truth |
+| Dirty files | none tracked. Untracked and ignored: the worktree `.env` (names the tests database; never print it), `node_modules`, `static/*/dist` (rebuilt by Task 9b), `.superpowers/` (controller scratch, never committed) |
+| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (two amendments to Task 8, two to Task 9); ledger `PERF3-LEDGER.md`; release package `PERF3-RELEASE.md` |
+| Controller scratch | `.superpowers/sdd/`: task briefs, implementer reports 1–9b, review packages, `progress.md` (the running log, including owner decisions) |
+| Tests DB | `personal_apps_radar_perf3`: stamp `b7e3f9c1a2d4`, re-read after Task 9b's runs; te1 clone with 29 FKs and gym data; no radar posts; its board data ends 2026-09-01 |
+| Scale DB | `personal_apps_radar_perf3_scale`: stamp `b7e3f9c1a2d4`, aligned forward by Task 8 to 2026-09-13 12:00 UTC. Re-run `scratchpad/perf3/align_scale_fixture.py` through `scale_env.py` before any timing or preview after that |
+| MariaDB | the portable 10.11.14 rehearsal server is STOPPED. The restart command is in the ledger. Needed only if the store or migration changes |
 
 | Task | State | Commits |
 | --- | --- | --- |
 | 1 key + namespace | complete | `a5017e7`, `20429d0`, `a188bb3` |
 | 2 store + migration | complete; MariaDB rehearsal 54/54 | `0eba6a4`, `c2d0ca9`, `c199d06` |
-| 3 producer | complete | `fd810c1`, `55f0d7f` |
+| 3 producer | complete | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) |
 | 4 read path, flag, API | complete | `9097621`, `6752492` |
 | 5 old board client | complete after five fix rounds, under the owner's stopping rule | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` |
 | 6 hub client | complete after one fix round, same rule | `103b8ba`, `d429378` |
 | 7 parity | complete | `29cc2ac` |
-| 8 scale verification + browser | reviewed: the evidence is honest; its one Important (an idle-producer ready verdict) is fixed in the ledger; an optional ready series under load awaits the owner's go | `9fa42aa` (8a), `6ecba5a` (8b) |
-| 9 suites + release package | **HELD until the owner's go**; brief ready and amended (telemetry) | |
-| whole-branch review | open; the carried lists from Tasks 1–8 are in the ledger | |
+| 8 scale verification + browser | reviewed: the evidence is honest; its one Important is fixed in the ledger; six decisions go to Codex | `9fa42aa` (8a), `6ecba5a` (8b); ledger `7dc682e`, `c423b33` |
+| 9a request-timing line | approved by a read-only review | `e3aedfb`; the revision correction is `3062ed9` |
+| 9b suites, release package, handoff | done; it goes to the whole-branch review | the commit carrying this handoff |
+| whole-branch review | **next** | |
 
-**Immediate next action.** Task 8's review is recorded in the ledger, with
-six open decisions for Codex. WAIT for the owner. On his go: Task 9 (full backend
-suite with every failure classified, the frontend suites and builds, the
-app-level request-timing log behind `PERSONAL_REQUEST_TIMING_LOG` (off by
-default), `PERF3-RELEASE.md` with the producer unit, deploy-script additions,
-flag sequencing, readiness gate, telemetry, rollback and resource numbers, and
-this handoff); then one whole-branch read-only review over the carried lists,
-one fix wave, and the return to Codex. Any fix round the Task 8 review asks for
-also waits for the owner's go.
+Ledger and handoff commits in between: `4f8ad5f`, `ae4c0fa`, `84a0e7f`,
+`96150b1`, `97caa98`, `d905cf6`, `b2b7626`, `4a3196f`, `0d3e72d`, `0b50952`,
+`caa92bb`, `b685df9`.
+
+**Immediate next action.**
+
+1. One independent read-only review of the whole branch, `afe1246..HEAD`, by the most capable non-Fable model, using `superpowers:requesting-code-review`'s template. It works through the carried lists in the ledger (Tasks 1, 3, 5, 6, 7, 8) and Task 9b's one failure caused by this branch.
+2. ONE fix wave, its re-review, and the ledger's review section.
+3. The return to Codex: the exact SHA, the ledger, `PERF3-RELEASE.md` and the local preview below.
+
+Nothing is deployed, and nothing in the package is authorized.
+
+**Suite results at `3062ed9`** (PERF3-LEDGER, "Task 9b"):
+
+- **Backend, whole:** `cd personal_apps && PYTHONPATH=. py -3.12 -m pytest tests -q -p no:cacheprovider` on `personal_apps_radar_perf3`. Of 2,967 tests: **6 failed, 2,956 passed, 5 skipped, 0 errors**, in 8 min 16 s. The full output is in `radar-design/perf3-release/pytest-full.txt`. The five skips are the `test_radar_projection_migration.py` tests, which are pinned to `personal_apps_radar_wt`.
+  - **(a) caused by this branch, 1 failure:** `tests/test_radar_activity.py::test_the_migration_adds_and_removes_only_its_own_two_tables`, assertion at `tests/test_radar_activity.py:396-397`. The named downgrade to `b3d9e1f5a274` now also drops this branch's `radar_board_namespaces` and `radar_board_results`. The test's hard-coded set does not name them. It is a test expectation that predates `b7e3f9c1a2d4`; no application code is wrong. It goes to the fix wave.
+  - **(b) pre-existing, 5 failures.** Each fails identically at `4221196`, run in a temporary detached worktree that has since been removed:
+    - `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet`: the fixture has no radar posts, so there is no legacy cohort to print.
+    - `test_radar_trial_writes.py::test_a_lexicon_tone_carries_no_model_name`: stale since `e88e00b` relabelled a lexicon tone "wording".
+    - Three `test_radar_yahoo.py::test_daily_closes_*` tests: their pinned dates fell out of the provider's window on 2026-09-09, so they now fail everywhere.
+  - **(c) and (d):** none.
+- **Frontend:** root vitest **403/403** (32 files); radar vitest **681/681** (43 files); `npx tsc --noEmit` clean; `npm run build` clean. The radar bundle names are the ones Task 8b verified.
+- **PERF2's suite narrative, reconciled from its raw log, not re-run:** 17 failed = 10 gym + 6 radar + 1 extractor diagnostic; 30 errors, all gym; 9 skips = 5 projection-migration + 4 gym.
+
+**The release package** (`PERF3-RELEASE.md`, a proposal):
+
+- Migration `b7e3f9c1a2d4`: additive, run by the upgrade `update_coc.sh` already does.
+- `perf3-release/radar_board_producer.service`: not installed. Three of its lines must be reconciled against the unread `personal_apps_web.service`.
+- Two lines for `update_coc.sh`, added only after the unit is installed, because the script runs under `set -e`.
+- No `BUILD_REVISION` file on the VPS.
+- First rollout: deploy with the flag off, start the producer, and wait for `--readiness` to exit 0. Then set `RADAR_BOARD_SHARED_RESULTS=on` in `/root/coc-stats/.env`, restart the web unit, and verify through `/radar/api/ops`. `.env` is the one place for both flags, because `app.py` calls `load_dotenv(override=True)`.
+- Telemetry prepared, and off.
+- Rollback: the flag off in `.env`, then a web restart.
+- Resource numbers, the target reads the owner must authorize, and the open risks and nine decisions for Codex.
+
+**The local preview**, for the return. The version in Task 9's brief would not work. It ran the producer with plain `py -3.12`, which the worktree `.env` binds to the TESTS database, while `serve_perf3.py` binds the SCALE database, so the two would never share a board. Both have to go through the launcher:
+
+```
+cd C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3/personal_apps
+py -3.12 scratchpad/perf3/scale_env.py run_radar_board_producer.py                  # terminal 1
+py -3.12 scratchpad/perf3/scale_env.py scratchpad/perf3/serve_perf3.py --port 5071  # terminal 2
+```
+
+Then open `http://127.0.0.1:5071/radar/` and `/radar/hub/`. `scale_env` turns the flag on and pins one revision for both processes. The pages need a signed-in session, as any local run does. Port 5001 is the owner's own instance.
 
 **Owner decisions in force.** One implementation worker at a time, a separate
-review per task, full proof runs ("do it properly"). The stopping rule for
-Tasks 5 and 6 (one last fix round; a re-review blocks only on what that round
-introduced or on a ruling violation) is recorded in the ledger.
+review per task, and full proof runs ("do it properly"). The stopping rule for
+Tasks 5 and 6 is recorded in the ledger: one last fix round, and a re-review
+blocks only on what that round introduced or on a ruling violation.
 
-**Open decisions for Codex from Task 8's evidence** (ledger, Task 8 section):
-the 120 s fresh bound fails under write contention (worst 142.8 s, about 7%
-stale, because the refresh target equals the bound); after an empty store the
-warm boards rebuild in `key_hash` order, so a reader can wait about 44 s; a
-restarted worker's first read p95 is 769 ms; the cold goal stays unmet
-(about 5.8 s); the Discover tab asks for a cold duplicate of a warm board. The
-core win holds: beside two cold boards a non-Radar request stayed under 79 ms
-with the flag on against 9.5 s with it off, in the two-process MODEL. A new
-old-board defect for the fix wave: a board arriving after a wait moves focus to
-the detail panel and scrolls a phone reader about 4,219 px from the list.
+**Open decisions for Codex.** Task 8's six are in the ledger's Task 8 section.
+The release package adds three: where the flags live, the readiness-ordered
+deploy, and what the revision should cover. `PERF3-RELEASE.md` §10 lists all
+nine.
 
-**Test evidence so far.** Radar vitest 681/681 three runs in a row and root
-403/403 at `d429378` (no frontend code changed since); parity 63 cases at
-`29cc2ac`; 255 backend tests across the board, store, API and migration suites
-at `6752492`. The whole backend suite has not been run on this branch; that is
-Task 9.
+**Traps.**
 
-**Traps.** `app.py` loads `.env` with `override=True`, so an environment
-variable cannot pick the database: scale scripts go through
-`scratchpad/perf3/scale_env.py`, which also pins the build revision
-(`PERF3_REVISION`) and patches the fixture's placeholder subreddit names. Two
-session breaks so far (an expired login token, then the API session limit);
-the ledger records what each cost. Never print `.env`: an earlier listing put
-real credentials into this session's transcript, and the owner was told.
+- `app.py` loads `.env` with `override=True`. An environment variable therefore cannot pick the database, and every process that imports `app` takes every key in that file over its unit's environment.
+  - Scale scripts go through `scratchpad/perf3/scale_env.py`, which also pins the build revision (`PERF3_REVISION`) and patches the fixture's placeholder subreddit names.
+  - The same rule decides where the release's flags live.
+- `test_radar_activity.py`'s migration round trip drops and recreates every radar table in the tests database each time it runs.
+- The three `test_radar_yahoo.py` failures now fail on every machine.
+- Never print `.env`. An earlier listing put real credentials into a transcript, and the owner was told.
 
-**Protected:** `personal_apps_radar_perf1`; the `radar-perf2` worktree and
-Codex's uncommitted edits there; every other worktree; the planning
-checkout's dirty files; every `.env`. No deployment carries exist yet; the
-release package is Task 9.
+**Protected:**
+
+- `personal_apps_radar_perf1` (PERF1's evidence, stamp `c4e17b90d3f2`) and the dev database `personal_apps`;
+- the `radar-perf2` worktree, with Codex's uncommitted edits there, and every other worktree;
+- the planning checkout `C:/Users/michi/Desktop/CodingStuff` and its dirty files;
+- every `.env`;
+- `.superpowers/`, which is never committed;
+- the raw PERF2 suite log in session `db04c240`'s scratchpad, which was read but not moved.
+
+No deployment carry has been executed; the release package is the proposal for
+them.
 
 ---
 

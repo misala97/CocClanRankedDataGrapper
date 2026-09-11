@@ -40,14 +40,14 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 6 hub client | **complete** | `103b8ba`, `d429378` | approved after one fix round; minors carried |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | reviewed: evidence honest; one Important fixed in the ledger; an optional ready series under load awaits the owner | `9fa42aa`, `6ecba5a` | one Important (ledger), eight Minor |
-| 9 suites + release package | open | | |
-| whole-branch review | open | | |
+| 9 suites + release package | **complete**: 9a the request-timing line; 9b the whole suites with every failure classified (one caused by this branch, a test expectation), the release package and the handoff | `e3aedfb` (9a), `3062ed9` (the build-revision correction), and the commit carrying this row (9b) | 9a approved by a read-only review; 9b goes to the whole-branch review |
+| whole-branch review | **next** | | |
 
 ## Databases, as they now stand
 
 | Database | Stamp | How it got there |
 | --- | --- | --- |
-| `personal_apps_radar_perf3` (tests) | `b7e3f9c1a2d4` | te1 clone at `a7c31f0b52d4`, then `flask db upgrade` in Task 2 Step 7. The migration tests downgrade and re-upgrade in-process and leave it at the head. |
+| `personal_apps_radar_perf3` (tests) | `b7e3f9c1a2d4` | te1 clone at `a7c31f0b52d4`, then `flask db upgrade` in Task 2 Step 7. The migration tests downgrade and re-upgrade in-process and leave it at the head. Re-read after Task 9b's whole suite and again after its re-runs (21:38 UTC): `b7e3f9c1a2d4`, with all four radar tables present. |
 | `personal_apps_radar_perf3_scale` (timings) | `b7e3f9c1a2d4` | perf1 dump, minus the spike's `radar_board_results` and the `perf_numbers`/`perf_write_numbers` helpers. The dump carried PERF1's stamp `c4e17b90d3f2`. The physical schema was checked against `a7c31f0b52d4` first: the six projection columns are on `radar_ingest_runs`, and `ix_radar_bucket_sources_agg` is absent. The stamp was then reset **on this clone only**, and the clone was upgraded through a launcher that stops `app.py`'s `load_dotenv(override=True)` from re-pointing it at the test database. Result: 9,269,184 `radar_bucket_sources` rows; indexes `PRIMARY`, `ix_radar_bucket_sources_start`, `ix_radar_bucket_sources_coverage`; buffer pool 2560 MB. |
 | `personal_apps_radar_perf1` | `c4e17b90d3f2` | **not modified**; still PERF1's evidence fixture. |
 
@@ -151,6 +151,36 @@ messages per 30 s by default, scaled up by free disk space. None of the
 target's own journald settings have been read.
 
 **The build revision file, corrected (2026-09-11).** `board_namespace.build_revision()` reads a `BUILD_REVISION` file at the repository root (`/root/coc-stats` on the VPS), not in `personal_apps/` as the plan said. The VPS checkout is a git repository, so the git fallback already yields the deployed commit, and a file written once would outrank git and pin an old revision across deploys. The plan carries the correction as an amendment, and the release package recommends writing no file.
+
+**Re-verified for the release package, 2026-09-11 (Task 9b).**
+
+*The build revision*, in `board_namespace.py` at this commit:
+
+- `build_revision()` (62-92) takes `RADAR_BUILD_REVISION` (78-81), then a `BUILD_REVISION` file at `_repo_root()` (83-86), then git (88-90), and raises `ConfigError` when none of them yields a revision. A value that is present but is not a revision is refused, not skipped (`_configured`, 196-209).
+- `_repo_root()` is `Path(__file__).resolve().parents[3]` (176-181): the repository root, `/root/coc-stats` on the VPS.
+- The git fallback reads `.git`, `HEAD`, loose refs and `packed-refs` itself, with no subprocess (212-298).
+- `BUILD_REVISION` is not in `.gitignore`, so `git status` would list one as untracked, and `git reset --hard` would leave it in place.
+
+*Where a flag's value comes from:*
+
+- `app.py:12` calls `load_dotenv(override=True)`.
+- python-dotenv 1.2.2's `find_dotenv()` (`dotenv/main.py:332-372`, `usecwd=False`) walks up from the calling file's own directory, `personal_apps/`, not from the working directory. So every process that imports `app` takes the first `.env` found at or above `personal_apps/`, and every key in that file wins over the process's unit environment.
+- The long-running importers are the web (`gunicorn ... app:app`), `run_radar_board_producer.py:31`, `run_radar_ingest.py:29` and `run_gym_notifier.py:6`.
+
+*Who reads what:*
+
+- `RADAR_BOARD_SHARED_RESULTS` is read only by `routes/api.py:490-500`, per call, which serves `build_payload` and `/radar/api/ops`.
+- Capture builds its boards directly and never reads it (`observations.py:44-49`).
+- `board_metrics` has exactly two writers: `board_shared.py:433` for reads, and `board_producer.py:282,316` for builds. `radar_ingest` and the notifier write neither.
+
+*The request-timing line*, against Flask 3.1.3 and Werkzeug 3.1.8 as installed here:
+
+- `ms` runs from the first `before_request` hook to the last `after_request` hook. URL matching and opening the session happen earlier, when the request context is pushed (`flask/ctx.py:404`); saving the session happens after the hooks (`flask/app.py:1322`); the body is sent after `wsgi_app` returns.
+- `bytes` is the Content-Length as `after_request` sees it, and Werkzeug sends no body at all for HEAD, 1xx, 204 and 304 (`werkzeug/wrappers/response.py:536-538`), so such a line reports a size that was never sent.
+- Flask's own `Exception on <path> [<METHOD>]` (`flask/app.py:876`) writes a raw request path to stderr on any unhandled exception, and journald keeps it. That predates this branch.
+- Gunicorn 26.2.0's `--capture-output`, together with an error log that is a file, `dup2`s stdout and stderr into that file (`gunicorn/glogging.py:211-217`).
+
+The last four points came from the Task 9a review; the citations were checked here.
 
 ## Findings and rulings
 
@@ -502,6 +532,91 @@ clock resolves to. The implementer's three concerns were judged sound.
 | `default=str` in the digest could hide a wire-format difference | Minor (plan-mandated) | carried; low risk, since `serialize` formats every instant |
 | the failing-account test sets `TESTING` without restoring it | Minor | carried |
 | **every new PERF3 suite pins the database `personal_apps_radar_perf3` and skips on any other**, so after a merge they would skip silently on the dev database and anywhere else | Minor here, branch-wide | **carried to the whole-branch review**, which must decide what those guards should be |
+
+## Task 9b — the suites, whole, every failure classified
+
+**The backend, whole.** The run took place on 2026-09-11, 21:13:18-21:21:44 UTC, at `3062ed9` (the code is as of `e3aedfb`), on `personal_apps_radar_perf3`:
+
+```
+cd personal_apps && PYTHONPATH=. py -3.12 -m pytest tests -q -p no:cacheprovider 2>&1 | tee ../radar-design/perf3-release/pytest-full.txt
+6 failed, 2956 passed, 5 skipped, 2138 warnings in 496.63s (0:08:16)
+```
+
+- **Counts and database.** 2,967 tests were collected and there were no errors. The worktree `.env` names the tests database and sets neither `PERSONAL_REQUEST_TIMING_LOG` nor `RADAR_BOARD_SHARED_RESULTS`. That was checked by counting matching lines, without printing any.
+- **The output** is kept in full at `radar-design/perf3-release/pytest-full.txt`.
+- **Skips.** The skips and failures were matched to node ids by aligning the run's progress characters with the `pytest --collect-only` order: 2,967 characters against 2,967 ids. The five skips are the `test_radar_projection_migration.py` tests, which are pinned to `personal_apps_radar_wt`, as in the baseline before any code change.
+- **Warnings.** The warnings summary mentions 173 `DeprecationWarning` and 13 `LegacyAPIWarning`.
+
+**Every failure, classified:**
+
+| # | Test | Assertion | Class | Evidence and cause |
+| --- | --- | --- | --- | --- |
+| 1 | `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet` | `tests/test_diagnose_extractor_feedback.py:103`: `'LEGACY-POLICY cohort' in out` | (b) pre-existing | Same assertion at `4221196`. The script prints the legacy cohort only `if legacy:` (`scripts/diagnose_extractor_feedback.py:410`), and this database holds no radar posts, so the population of both cohorts is 0. The test's own docstring says it runs "against the live restore". Fixture data, not code |
+| 2 | `test_radar_activity.py::test_the_migration_adds_and_removes_only_its_own_two_tables` | `tests/test_radar_activity.py:396-397`: `set(before) - set(after_down) == {'radar_ingest_runs', 'radar_board_observations'}`; the left side also held `radar_board_namespaces` and `radar_board_results` | **(a) caused by this branch** | `b7e3f9c1a2d4` stacks on `a7c31f0b52d4` (`migrations/versions/b7e3f9c1a2d4_add_radar_board_results.py:34-35`). The test's named downgrade to `BEFORE_THESE_TABLES` (`b3d9e1f5a274`) therefore now drops this branch's two tables too, and its hard-coded set predates them. No application code is wrong.<br><br>Its `finally` block upgraded back to head. Re-read after the suite and again after the re-runs: stamp `b7e3f9c1a2d4`, all four radar tables present.<br><br>At `4221196` the test fails earlier, for the reason the dispatch anticipated: `alembic.util.exc.CommandError: Can't locate revision identified by 'b7e3f9c1a2d4'`, then `SystemExit: 1` from flask_migrate. The error is raised by the downgrade, before any DDL and before the `try` that would upgrade.<br><br>**For the fix wave (the test only):** snapshot the schema at head for the round-trip check, and take the step's own difference between `a7c31f0b52d4` and `BEFORE_THESE_TABLES`, so that a revision stacked later cannot break it again |
+| 3 | `test_radar_trial_writes.py::test_a_lexicon_tone_carries_no_model_name` | `tests/test_radar_trial_writes.py:725`: `[('lexicon', 'wording')] == [('lexicon', None)]` | (b) pre-existing | Same assertion at `4221196`. This is a stale test in the deployed code, not a data problem.<br><br>`e88e00b` ("not judged yet" is not the same claim as "wording", 2026-09-10) is `4221196`'s second parent. It changed `_judged_label` (`features/radar/detail_panel.py:219-246`) to label a lexicon tone 'wording' once judged and 'not judged yet' before that. Until then, the label was None for anything but a model (`e88e00b^:features/radar/detail_panel.py:223-224`).<br><br>`e88e00b` updated `test_radar_detail.py` and `Posts.test.tsx`, but not this test, which was last changed in `45a7e39` (2026-09-08). The test writes and judges its own rows, dated 2027-01-01, so no fixture enters it |
+| 4 | `test_radar_yahoo.py::test_daily_closes_use_the_split_only_close_series_not_adjclose` | `tests/test_radar_yahoo.py:127`: `[] == [(2026-08-31, 100.0), (2026-09-01, 101.0)]` | (b) pre-existing | Same assertion at `4221196`. The cause is the wall clock.<br><br>`YahooProvider.daily_closes` keeps only bars dated on or after `now - (days + 3)` days, in UTC (`features/radar/prices/yahoo.py:309-312`). The tests pin their bars to 2026-08-31 and 2026-09-01 (`day1 = 1788170400`) with `days=5`, and freeze no clock. From 2026-09-09 the floor was past 2026-08-31, and from 2026-09-10 it was past both dates, so all three tests now see `[]`.<br><br>The input is a fake HTTP payload, not fixture data. These three now fail on every machine |
+| 5 | `test_radar_yahoo.py::test_daily_closes_survive_a_split_shaped_series` | `tests/test_radar_yahoo.py:142`: `IndexError` on `closes[0]` | (b) pre-existing | as row 4 |
+| 6 | `test_radar_yahoo.py::test_daily_closes_deduplicate_by_date_and_sort_oldest_first` | `tests/test_radar_yahoo.py:153`: `0 == 2` | (b) pre-existing | as row 4 |
+
+**Totals by class:**
+
+- (a) 1;
+- (b) 5;
+- (c) none as a separate class. Two of the (b) causes are environmental, and are stated as such: the fixture's missing radar posts, and the wall clock;
+- (d) 0.
+
+**The proof runs, from the session scratchpad:**
+
+1. **The six alone, on this branch:** `6 failed, 5 warnings in 3.41s`, with the same six assertions. They are deterministic, not an effect of test order.
+2. **The six at the deployed baseline `4221196`**, in a temporary detached worktree (`git worktree add --detach`). The worktree `.env` was copied in without being printed, and a check in that tree printed `personal_apps_radar_perf3`. Result: `6 failed, 3 warnings in 3.63s`. Five failed with the identical assertion, and the migration test failed as row 2 describes.
+3. **Cleanup.** The copied `.env` was deleted, then the worktree was removed with `git worktree remove`. There was no long-path problem, because that tree had no `node_modules`. `git worktree list` no longer shows it.
+
+The same baseline tree supplied the `--collect-only` order for the PERF2 reconciliation below.
+
+**The frontend**, at the same HEAD. The four commands ran one after another, after the backend suite, 21:23:11-21:23:51 UTC:
+
+| Command, run from `personal_apps/` | Result |
+| --- | --- |
+| `npx vitest run` | 32 files, **403 passed** |
+| `npx vitest run -c vite.radar.config.ts` | 43 files, **681 passed** |
+| `npx tsc --noEmit` | exit 0, no output |
+| `npm run build` | exit 0; Vite 7.3.6, two builds of 134 and 116 modules |
+
+Neither vitest log has an `act()` warning, an unhandled error or a stderr block. The radar bundles came out under the names Task 8b verified byte for byte: `board-BbirrnOH.js`, `hub-BiVrB4HX.js`, `hub-BaOZANf0.css`, `embedded-Do395cc6.js`. So no client file has changed since `d429378`, and the counts equal the ones recorded there.
+
+**The PERF2 suite narrative, reconciled once from its captured output.** Codex asked for this: "'17 gym failures' alongside separately listed Radar failures".
+
+**Where the log is.** The PERF2 run's raw log survives outside any repository: `pytest_full.log`, in the scratchpad of Claude session `db04c240-37aa-4ec8-9069-c13e825e72a3`. It is 168,356 bytes, sha256 `0c1198660c74b12d9d14e6056911d888e0bd4ce3ace82dcc1f02664ee5c99291`. Its summary line is PERF2's quoted `17 failed, 2650 passed, 9 skipped, 1737 warnings, 30 errors in 2308.43s`. It was read, not re-run.
+
+**How it was read.** Its 2,706 progress characters were aligned with `--collect-only` of the `4221196` tree: 2,706 ids, since PERF2's `personal_apps/` was byte-identical to that tree. Each failure and error was then read through the first assertion line of its section.
+
+| Group | Failed | Errors | Skipped | Cause, as the log shows it |
+| --- | ---: | ---: | ---: | --- |
+| gym suites | 10 | 30 | 4 | the fixture, `personal_apps_radar_perf1`, held no gym data. All 44 pass in Task 9b's run, on a database with gym data |
+| radar suites | 6 | 0 | 5 | see below; the 5 skips are the projection-migration pin |
+| extractor diagnostic | 1 | 0 | 0 | the fixture has no radar posts, as in row 1 above |
+| **total** | **17** | **30** | **9** | |
+
+Against PERF2's text:
+
+- **The message table** ("17 / 13 / 5 / 4 / 1") counts the **40 gym tests, failures and errors together**, not the failures:
+  - its 17 "needs at least one exercise" are the seventeen setup ERRORS of `test_gym_routes_smoke.py`;
+  - its 13 "needs an exercise" are setup errors too: 9 in `test_gym_mutation_json.py` and 4 in `test_gym_session_json.py`;
+  - its 5 "needs at least one gym exercise" are failures in `test_gym_exercise_detail_json.py`;
+  - its "4" row names three messages ("needs sessions", "a finished session owned by the admin", "an exercise owned by the admin") and omits the fourth, "the dev database needs gym exercises" (`test_every_exercise_builds_a_valid_payload`);
+  - its 1 is "more than eight ranked lifts".
+- **The seventeen failures** were 10 gym, 6 radar and 1 extractor diagnostic, so "17 gym failures" was wrong. The likely origin is the two seventeens coinciding; that is an inference.
+- **"The four radar failures, named" names six.** The seventeenth failure, `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet`, is named nowhere in that ledger.
+- **The causes, re-read:**
+  - the migration test: the fixture's `c4e17b90d3f2` stamp, as stated;
+  - `test_panel_chart_states_its_basis`: `assert 404 == 200` on the synthetic fixture. It passes on Task 9b's database;
+  - `test_a_lexicon_tone_carries_no_model_name` and the three `test_daily_closes_*`: PERF2 called them "data-shape assertions against a synthetic fixture", and they are not. The first has been stale since `e88e00b`, and the three follow the wall clock. All four fail identically here, on a database with real data.
+- **The nine skips** are the five projection-migration tests and four gym tests. These four run and pass in Task 9b's suite:
+  - `test_gym_equipment.py::test_seed_left_unilateral_flags_alone`;
+  - `test_gym_exercise_detail_json.py::test_an_explicit_position_is_honoured`;
+  - `test_gym_push_pruning.py::test_replacing_cannot_reach_another_users_subscription`;
+  - `test_gym_schemas.py::test_matches_real_chart_geometry`.
+- **Right as recorded:** PERF2's headline counts, and "30 of the 30 errors are gym" (17 + 9 + 4).
 
 ## Measurements
 
