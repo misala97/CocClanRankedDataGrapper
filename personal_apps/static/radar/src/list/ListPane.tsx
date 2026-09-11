@@ -6,7 +6,7 @@ import { MarketSwitch } from '../board/MarketSwitch'
 import { Search } from '../board/Search'
 import { defaultDirection, queryFor } from '../api'
 import { formatMarketTime, humanAge, plural } from '../format'
-import { DELAYED_AFTER_MS, ageAt, pastFresh, refreshes, untilExpired }
+import { DELAYED_AFTER_MS, ageAt, pastFresh, refreshDue, untilExpired }
   from '../pending'
 import { Widen } from '../Widen'
 import { SpendMark } from './Spend'
@@ -93,12 +93,17 @@ function AgeLine({ payload, received, stalled = false, onRetry }: {
         // that built. Printed in place of "refreshing", never beside it -- a
         // refresh that is failing is not one that is happening -- so a stale
         // board whose rebuilds are failing says only this, in the caution
-        // colour, because it is the one state here that wants the reader's eye.
+        // colour. Not alone in it: "not refreshed" and "Expired" wear the same
+        // amber. Only "refreshing" is quiet (`.age b.queued`, radar.css).
         ? <> · <b>Last refresh failed</b></>
         : !stale ? null
-        // The store has a refresh queued and the page is waiting on it. Its
-        // own class, not the line's: the quiet treatment belongs to this word.
-        : refreshes(payload) ? <> · <b className="queued">refreshing</b></>
+        // The store has a refresh queued and the page is waiting on it --
+        // asked by the rule the page waits by (`refreshDue`), so the word can
+        // neither claim a refresh the page is not waiting on nor deny one it
+        // is. Its own class, not the line's: the quiet treatment belongs to
+        // this word.
+        : refreshDue(payload, received, now)
+          ? <> · <b className="queued">refreshing</b></>
         // A board a worker built for itself. Nothing is queued behind it and
         // nothing asks on its behalf, so the word claims no refresh, and the
         // ask it would take -- a synchronous build -- is the reader's to make.
@@ -525,6 +530,7 @@ export function SortCols({ selection, onChange }: {
  */
 export function ListPane({ payload, received, selection, selected, busy,
                           onSelect, onChange, onRetry, stalled = false,
+                          retryInBanner = false,
                           account, watching = [], onToggleWatch }: {
   payload: BoardPayload
   /** When this page received that payload, so the age on screen can keep
@@ -543,6 +549,10 @@ export function ListPane({ payload, received, selection, selected, busy,
   /** Nothing is fetching a replacement for the board on screen: the last
    *  request failed and no wait is running. */
   stalled?: boolean
+  /** The page's failure banner is up, with a Retry of its own. The age line
+   *  then offers none: two buttons a few pixels apart for one request is
+   *  one too many. */
+  retryInBanner?: boolean
   /** The footer matter, when this pane is where it belongs. */
   account?: ReactNode
   /** The reader's marks and how to flip one; rendered as the Watching tier
@@ -624,7 +634,8 @@ export function ListPane({ payload, received, selection, selected, busy,
               freshness: today's tone spend, then the stamp. */}
           <SpendMark payload={payload} />
           <AgeLine payload={payload} received={received ?? Date.now()}
-                   stalled={stalled} onRetry={onRetry} />
+                   stalled={stalled}
+                   onRetry={retryInBanner ? undefined : onRetry} />
         </div>
         <Status payload={payload} shared={shared}
                 quoteTokens={quoteShared.tokens} />

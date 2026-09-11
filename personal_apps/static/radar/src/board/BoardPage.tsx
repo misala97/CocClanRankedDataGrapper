@@ -110,7 +110,6 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const own = useRef<Promise<Outcome> | null>(null)
 
   const fetchAndShow = useCallback(async (next: Selection,
-                                          ticker: string | null,
                                           preserveTicker: boolean,
                                           poll: boolean)
       : Promise<Outcome> => {
@@ -156,21 +155,28 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       // asking, and an ask already on its timer must not undercut that answer.
       if (!owesABoard(fresh, at)) poller.current?.stop()
       else poller.current?.guide(floor)
+      // The ticker an answer is about is the one on screen NOW, whoever
+      // asked. The reader goes on clicking while a request is out -- a poll,
+      // a Retry, the refetch after a mark or at expiry, a moved control --
+      // and an answer that restored the ticker it was sent with put back a
+      // row the reader had already left.
+      //
       // Selection follows filtering, but a market change is different: the
       // company identity stays the same even when its new market board does
       // not rank it. The detail endpoint can still show its marked fallback.
+      // A Retry and the two refetches keep it the same way (`preserveTicker`):
+      // each asks again about the board the reader is already reading.
       //
-      // A poll is different again. It is the page asking on the reader's
-      // behalf while the reader goes on reading, so the ticker it answers
-      // about is the one on screen NOW -- a row clicked while it was out
-      // included -- and that ticker stays, listed in this build or not, as it
-      // would through a market switch. Only a reader with no ticker yet is
-      // handed the top row.
+      // A poll is the page asking on the reader's behalf, so its ticker
+      // stays, listed in this build or not, as it would through a market
+      // switch. Only a reader with no ticker yet is handed the top row.
       //
-      // Any other answer that is a waiting shell has no rows, so it holds no
-      // ticker: the panel empties with the list rather than describing a
-      // company the board beside it has stopped listing.
-      const reader = poll ? current.current.selected : ticker
+      // Which leaves one answer that can take the ticker away: a change to
+      // any control but the market. The ticker stays only if the new board
+      // lists it -- and a waiting shell lists nothing, so there the panel
+      // empties with the list rather than describing a company the board
+      // beside it has stopped listing.
+      const reader = current.current.selected
       const rows = fresh.rows ?? []
       const keep = poll ? reader !== null
         : (preserveTicker || rows.some((row) => row.ticker === reader))
@@ -203,10 +209,10 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // Every board request goes out through here. The reader's own is
   // remembered for as long as it is out, so a poll that comes due meanwhile
   // can wait for its answer instead of sending a second request (`begin`).
-  const load = useCallback((next: Selection, ticker: string | null,
-                            preserveTicker = false, poll = false)
+  const load = useCallback((next: Selection, preserveTicker = false,
+                            poll = false)
       : Promise<Outcome> => {
-    const answer = fetchAndShow(next, ticker, preserveTicker, poll)
+    const answer = fetchAndShow(next, preserveTicker, poll)
     if (!poll) {
       own.current = answer
       void answer.finally(() => {
@@ -225,8 +231,15 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   current.current = { selection, selected,
                       retryAfterMs: payload.retry_after_ms,
                       asOf: payload.as_of, rows: payload.rows }
+  // Every Retry on the page, whichever button it is. Joined, as a poll and
+  // the expiry refetch are, when the reader's own request is already out:
+  // an abort stops this page listening and does not stop the server, so a
+  // board a worker builds for itself was built once more for every extra
+  // click -- abort-and-resend, which the debounce on the controls exists to
+  // prevent. A poll is never the reader's own, so a Retry over one still
+  // goes out.
   const retry = useCallback(() => {
-    void load(current.current.selection, current.current.selected, true)
+    void (own.current ?? load(current.current.selection, true))
   }, [load])
 
   // How a wait begins, wherever it begins: the polling effect, or the fresh
@@ -238,8 +251,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       // reader's request -- a retry, a moved control -- so the one board was
       // asked for twice, and the controls were left marked busy by a request
       // nothing remained to finish.
-      () => (own.current ?? load(current.current.selection,
-                                 current.current.selected, false, true))
+      () => (own.current ?? load(current.current.selection, false, true))
         .then(floorOf),
       current.current.retryAfterMs)
     // A tab that was already in the background when this began -- a session
@@ -323,8 +335,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       if (hidden()) { owed.current = refetch; return }
       // Joined, as a poll is, when the reader's own request is already out:
       // its answer is the one this would fetch.
-      void (own.current
-        ?? load(current.current.selection, current.current.selected, true))
+      void (own.current ?? load(current.current.selection, true))
         .then((outcome) => {
           if (outcome.kind === 'failed' && answers.current === armed) {
             owed.current = refetch
@@ -409,11 +420,12 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     const timer = setTimeout(() => {
       const marketChanged = marketPending.current
       marketPending.current = false
-      void load(selection, selected, marketChanged)
+      void load(selection, marketChanged)
     }, SETTLE_MS)
     return () => clearTimeout(timer)
-    // Deliberately not keyed on `selected`: picking a ticker is a client-side
-    // change that must not refetch the board.
+    // Not keyed on the ticker: picking one is a client-side change that must
+    // not refetch the board, and the answer reads whichever is on screen
+    // when it lands.
   }, [selection, load])
 
   // A tap counter rather than a flag on `selected`: tapping the row that is
@@ -450,11 +462,11 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
           // last accepted mutation brings them in (or takes them out). Memo
           // hit. A refused flip alone changes nothing, so nothing to fetch.
           landed.current = false
-          void load(selection, selected, true)
+          void load(selection, true)
         }
       }
     })
-  }, [mark, selection, selected, load])
+  }, [mark, selection, load])
 
   const narrow = useNarrow()
   const page = useRef<HTMLDivElement>(null)
@@ -518,8 +530,10 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       {error && (
         <p className="oops" role="alert">
           <b>{error.message}</b> Showing the last board that loaded.
-          <button type="button"
-                  onClick={() => void load(selection, selected)}>Retry</button>
+          {/* The page's one Retry while this is up (the age line drops its
+              own), and the same guarded ask as every other: it joins a
+              request already out, and it keeps the ticker. */}
+          <button type="button" onClick={retry}>Retry</button>
         </p>
       )}
       <Boundary label="The list">
@@ -527,6 +541,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                   selected={selected}
                   busy={busy} onSelect={select} onChange={setSelection}
                   onRetry={retry} stalled={stalled}
+                  retryInBanner={error !== null}
                   account={narrow ? null : account}
                   watching={watching} onToggleWatch={toggleWatch} />
       </Boundary>

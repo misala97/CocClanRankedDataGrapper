@@ -488,9 +488,10 @@ body {
    reader and every row on screen is still the last real one; amber here would
    put a caution on figures that do not deserve it.
 
-   On the token, not on the line: `Last refresh failed` renders in that same
-   stale line and IS a caution, and quieting it by association would take the
-   one state that wants the reader's eye out of the colour that gets it. */
+   On the token, not on the line: `Last refresh failed` and `not refreshed`
+   render in that same stale line and ARE cautions, and quieting them by
+   association would take the states that want the reader's eye out of the
+   colour that gets it. */
 .brand .age b.queued { color: var(--ink-2); }
 /* Past the hard expiry it does earn the amber: the rows describe a rolling
    window that has moved on, so the age has stopped being worth printing and

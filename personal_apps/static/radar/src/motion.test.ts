@@ -138,8 +138,9 @@ describe('the age line', () => {
   it('quiets the refreshing token, never the line a failure is printed in', () => {
     // `.age.stale b` once took every bold token on a stale line out of the
     // caution colour -- and a stale board whose rebuilds are failing prints
-    // "Last refresh failed" on that same line, the one thing on it that wants
-    // the reader's eye. The quiet treatment is the refreshing token's own.
+    // "Last refresh failed" on that same line, as a board nothing refreshes
+    // prints "not refreshed": both want the reader's eye. The quiet
+    // treatment is the refreshing token's own.
     expect(rules).toMatch(
       /\.brand \.age b\.queued \{[^}]*color:\s*var\(--ink-2\)/)
     expect(rules).not.toMatch(/\.age\.stale\s+b\b/)

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -26,10 +26,23 @@ beforeEach(() => {
   stubFetch()
   window.history.replaceState(null, '', '/radar/')
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 
 const boardCalls = () => vi.mocked(fetch).mock.calls
   .map((c) => String(c[0])).filter((u) => u.includes('/api/board'))
+
+/** For a test whose answer depends on the controls' quarter-second debounce:
+ *  on vitest's fake clock that time passes only when the test says so, and a
+ *  loaded machine cannot stretch the gap between two clicks past it.
+ *  user-event drives a clock of its own and deadlocks against the fake one,
+ *  so those tests click with a plain event. */
+const advance = (ms: number) =>
+  act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+const click = (element: Element) =>
+  act(async () => { fireEvent.click(element) })
 
 describe('the two panes', () => {
   it('renders the peak chatter hour in Radar\'s Berlin timezone', async () => {
@@ -189,15 +202,30 @@ describe('the controls', () => {
   })
 
   it('keeps the selected company when the other market board omits it', async () => {
+    /* On the fake clock, so the German board has answered by the time this
+       looks. On the real one every assertion here was already true before
+       the debounce let that request out -- `t=BBB` was the row click's own
+       doing -- and the test usually ended first, the board it is named for
+       never asked for. */
+    vi.useFakeTimers()
     render(<BoardPage initial={payload()} />)
-    await screen.findByText(/AAA is being discussed/)
-    await userEvent.click(screen.getByRole('link', { name: /BBB/ }))
+    await advance(0)
+    expect(screen.getByText(/AAA is being discussed/)).toBeInTheDocument()
+    await click(screen.getByRole('link', { name: /BBB/ }))
 
     stubFetch(payload({ market: 'de', market_venue: 'Xetra',
       rows: [row({ ticker: 'AAA' })] }))
-    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+    await click(screen.getByRole('radio', { name: 'Germany' }))
+    await advance(300)
 
-    await waitFor(() => expect(window.location.search).toContain('t=BBB'))
+    expect(boardCalls()).toEqual([
+      '/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=4&segment=&market=de'])
+    // The German board is on screen, and BBB is not on it...
+    expect(document.querySelectorAll('.row')).toHaveLength(1)
+    // ...but the reader is still on BBB: in the address bar the answer
+    // wrote, and in the panel, which now asks about it on the German market.
+    expect(window.location.search).toContain('market=de')
+    expect(window.location.search).toContain('t=BBB')
     expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
       .some((url) => url.includes('/api/ticker/BBB?') && url.includes('market=de')))
       .toBe(true)
@@ -260,17 +288,29 @@ describe('the controls', () => {
     /* Every toggle used to fire its own fetch, aborting the previous one.
        Five quick clicks queued five board builds on the server and the last
        waited past the 8s timeout -- "The board did not answer in time"
-       during ordinary toggling (critique, 2026-09-01). */
+       during ordinary toggling (critique, 2026-09-01).
+
+       On the fake clock. Against the real one this raced the debounce: on a
+       loaded machine two clicks could land more than a quarter second apart,
+       the first change went out alone, and the test failed about half of
+       the whole-suite runs. */
+    vi.useFakeTimers()
     render(<BoardPage initial={payload()} />)
 
-    await userEvent.click(screen.getByRole('button', { name: /change/i }))
-    await userEvent.click(screen.getByRole('button', { name: /4chan/ }))
-    await userEvent.click(screen.getByRole('button', { name: /Reddit/ }))
+    await click(screen.getByRole('button', { name: /change/i }))
+    await click(screen.getByRole('button', { name: /4chan/ }))
+    await advance(200)
+    await click(screen.getByRole('button', { name: /Reddit/ }))
+    // Four hundred milliseconds into the burst and nothing has gone out:
+    // each change starts the quiet period over.
+    await advance(200)
+    expect(boardCalls()).toHaveLength(0)
 
-    await waitFor(() => expect(boardCalls()).toHaveLength(1))
+    await advance(50)
+    expect(boardCalls()).toHaveLength(1)
     expect(boardCalls()[0]).toContain('sources=bluesky&')
     // And nothing else arrives later.
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await advance(10_000)
     expect(boardCalls()).toHaveLength(1)
   })
 

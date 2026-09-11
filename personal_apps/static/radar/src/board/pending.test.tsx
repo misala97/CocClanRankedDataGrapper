@@ -447,6 +447,24 @@ describe('a board with a refresh queued behind it', () => {
     expect(boardCalls()).toHaveLength(1)
     expect(wrote).not.toHaveBeenCalled()
   })
+
+  it('says refreshing whenever the page is waiting on one, whoever built the board', async () => {
+    // The line and the page read one rule. A board the store calls stale is
+    // waited on whatever the flag says, so the word is "refreshing" -- not
+    // "not refreshed", with a Retry beside a wait that is already asking.
+    stubFetch(() => new Promise(() => {}))
+    render(<BoardPage initial={payload({ stale: true, age_seconds: 180,
+                                         retry_after_ms: 5000 })} />)
+
+    expect(document.querySelector('.age b.queued'))
+      .toHaveTextContent('refreshing')
+    expect(ageLine()).not.toHaveTextContent('not refreshed')
+    expect(ageLine()?.querySelector('button')).toBeNull()
+
+    await advance(5000)
+    expect(boardCalls()).toHaveLength(1)
+    expect(boardCalls()[0]).toContain('poll=1')
+  })
 })
 
 describe('a board that goes stale while this page is holding it', () => {
@@ -613,7 +631,9 @@ describe('a board that has outlived the window it names', () => {
     expect(ageLine()).toHaveClass('expired')
     expect(ageLine()).toHaveTextContent('Expired')
     expect(ageLine()).not.toHaveTextContent('recalculating')
-    expect(ageLine()?.querySelector('button')).toHaveTextContent('Retry')
+    // The page's banner says the refetch failed, and its Retry is the one
+    // on offer.
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
 
     // Nothing asks again on a timer...
     await advance(30_000)
@@ -624,7 +644,7 @@ describe('a board that has outlived the window it names', () => {
     await advance(0)
     expect(boardCalls()).toHaveLength(2)
     // ...and so does the button.
-    await click(ageLine()!.querySelector('button')!)
+    await click(screen.getByRole('button', { name: 'Retry' }))
     expect(boardCalls()).toHaveLength(3)
   })
 })
@@ -674,6 +694,33 @@ describe('a poll that lands while the reader is reading', () => {
     expect(screen.getByRole('link', { name: /EEE/ })).toBeInTheDocument()
     expect(selectedRow()).toBeNull()
     expect(window.location.search).toContain('t=AAA')
+  })
+})
+
+describe('a refetch that lands while the reader is reading', () => {
+  // Not only a poll: a Retry, the refetch after a mark and the one an expired
+  // board sends are all out while the reader goes on clicking, and the answer
+  // to each is about the ticker on screen when it lands.
+  const selectedRow = () => document.querySelector('.row.on')
+
+  it('keeps the row the reader clicked while an expired board was being refetched', async () => {
+    let land!: (board: BoardPayload) => void
+    stubFetch(() => new Promise<BoardPayload>((resolve) => { land = resolve }))
+    render(<BoardPage initial={payload({ age_seconds: 599 })} />)
+    expect(selectedRow()).toHaveTextContent('AAA')
+
+    await advance(1100)
+    expect(boardCalls()).toHaveLength(1)
+    expect(boardCalls()[0]).not.toContain('poll=1')
+    await click(screen.getByRole('link', { name: /BBB/ }))
+    expect(selectedRow()).toHaveTextContent('BBB')
+
+    land(payload())
+    await advance(0)
+
+    expect(ageLine()).toHaveTextContent('Calculated 0s ago')
+    expect(selectedRow()).toHaveTextContent('BBB')
+    expect(window.location.search).toContain('t=BBB')
   })
 })
 
@@ -863,5 +910,57 @@ describe('a board at exactly its fresh bound', () => {
       .toHaveTextContent('refreshing')
     expect(boardCalls()).toHaveLength(1)
     expect(boardCalls()[0]).toContain('poll=1')
+  })
+})
+
+describe('a Retry while the reader\'s own request is out', () => {
+  // An abort stops this page listening; it does not stop the server. A board
+  // a worker builds for itself is built to the end whoever stopped waiting
+  // for it, so a Retry that aborted the request already out and sent another
+  // was one more synchronous build per click -- the pattern the debounce on
+  // the controls was put in to stop.
+  it('joins the request already out instead of sending another', async () => {
+    const sent: AbortSignal[] = []
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/ticker/')) return Promise.resolve(ok(detail()))
+      if (init?.signal) sent.push(init.signal)
+      return new Promise(() => {})
+    }))
+    render(<BoardPage initial={payload()} />)
+    await advance(150_000)
+    expect(ageLine()).toHaveTextContent('not refreshed')
+
+    await click(ageLine()!.querySelector('button')!)
+    await click(ageLine()!.querySelector('button')!)
+
+    expect(boardCalls()).toHaveLength(1)
+    expect(sent[0]?.aborted).toBe(false)
+  })
+
+  it('offers one Retry once an expired board has failed to refetch, and it asks once', async () => {
+    // The page's banner and the age line each offered one, a few pixels
+    // apart, and they did different things: the banner's aborted whatever
+    // was out and let the ticker go, the line's joined and kept it.
+    let failing = true
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/api/ticker/')) return Promise.resolve(ok(detail()))
+      if (failing) {
+        return Promise.resolve({ ok: false, redirected: false, status: 503,
+                                 json: async () => ({}) })
+      }
+      return new Promise(() => {})
+    }))
+    render(<BoardPage initial={payload({ age_seconds: 599 })} />)
+
+    await advance(1100)
+    expect(boardCalls()).toHaveLength(1)
+    expect(screen.getByRole('alert')).toHaveTextContent('answered with an error')
+    expect(ageLine()).toHaveTextContent('Expired')
+    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1)
+
+    failing = false
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    expect(boardCalls()).toHaveLength(2)
   })
 })
