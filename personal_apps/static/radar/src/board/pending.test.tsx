@@ -62,6 +62,19 @@ function stubFetch(board: (url: string) => BoardPayload | Promise<unknown>) {
   return spy
 }
 
+/** Board requests fail while `down()` says so and answer `board(url)` after;
+ *  the panel's own requests always answer. */
+function flaky(down: () => boolean, board: (url: string) => BoardPayload) {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url.includes('/api/ticker/')) {
+      return ok(detail(url.split('/api/ticker/')[1]!.split('?')[0]!))
+    }
+    return down()
+      ? { ok: false, redirected: false, status: 503, json: async () => ({}) }
+      : ok(board(url))
+  }))
+}
+
 const boardCalls = () => vi.mocked(fetch).mock.calls
   .map((c) => String(c[0])).filter((u) => u.includes('/api/board'))
 
@@ -962,5 +975,265 @@ describe('a Retry while the reader\'s own request is out', () => {
     await click(screen.getByRole('button', { name: 'Retry' }))
     await click(screen.getByRole('button', { name: 'Retry' }))
     expect(boardCalls()).toHaveLength(2)
+  })
+})
+
+describe('the ticker an asked-again board lands on', () => {
+  // A Retry, or a refetch, asks the question on screen again. Its answer
+  // treats the reader's ticker as the answer it repeats would have: it keeps
+  // one the reader has, and hands a reader with none the top row.
+  const selectedRow = () => document.querySelector('.row.on')
+  const twelve = () => payload({
+    window_hours: 12, rows: [row({ ticker: 'ZZZ' }), row({ ticker: 'YYY' })],
+  })
+  const moveWindow = async () => {
+    await click(screen.getByRole('button', { name: /Change window/i }))
+    await click(screen.getByRole('button', { name: '12h' }))
+    await advance(300)
+  }
+
+  it('hands a reader with no ticker the top row of the first board a Retry brings', async () => {
+    let built = false
+    stubFetch((url) => (!url.includes('window=12') ? payload()
+      : built ? served({ window_hours: 12,
+                         rows: [row({ ticker: 'NEW' }), row({ ticker: 'TWO' })] })
+      : waiting({ pending: false, busy: true, retry_after_ms: 5000,
+                  queue_age_seconds: null, window_hours: 12 })))
+    render(<BoardPage initial={payload()} />)
+    await advance(0)
+
+    await moveWindow()
+    // A shell lists nothing, so the panel empties with the list.
+    expect(rowCount()).toBe(0)
+    expect(window.location.search).not.toMatch(/[?&]t=/)
+
+    built = true
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    await advance(0)
+
+    expect(selectedRow()).toHaveTextContent('NEW')
+    expect(window.location.search).toContain('t=NEW')
+    await advance(0)
+  })
+
+  it('lets a Retry of a failed change of window drop a ticker the new board does not list', async () => {
+    let down = true
+    flaky(() => down, twelve)
+    render(<BoardPage initial={payload()} />)
+    await advance(0)
+
+    await moveWindow()
+    expect(screen.getByRole('alert'))
+      .toHaveTextContent('Showing the last board that loaded.')
+    expect(selectedRow()).toHaveTextContent('AAA')
+
+    down = false
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    await advance(0)
+
+    // As the change would have, had it answered: the reader's ticker is not
+    // on the twelve-hour board, so the top row is.
+    expect(selectedRow()).toHaveTextContent('ZZZ')
+    expect(window.location.search).toContain('t=ZZZ')
+    await advance(0)
+  })
+
+  it('keeps the ticker again once the change has had its answer', async () => {
+    // What a failed change leaves is for the answer it still owes. Once one
+    // has landed, asking again is asking about the board on screen, and
+    // keeps the reader's ticker, listed in the new build or not.
+    let answer: 'down' | 'listed' | 'dropped' = 'down'
+    flaky(() => answer === 'down', () => payload({
+      window_hours: 12,
+      rows: answer === 'listed'
+        ? [row({ ticker: 'AAA' }), row({ ticker: 'ZZZ' })]
+        : [row({ ticker: 'ZZZ' }), row({ ticker: 'YYY' })],
+    }))
+    render(<BoardPage initial={payload()} />)
+    await advance(0)
+
+    await moveWindow()
+    answer = 'listed'
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    await advance(0)
+    expect(selectedRow()).toHaveTextContent('AAA')
+
+    // Past the fresh bound, a board a worker built offers its own Retry.
+    answer = 'dropped'
+    await advance(150_000)
+    await click(ageLine()!.querySelector('button')!)
+    await advance(0)
+
+    expect(screen.getByRole('link', { name: /ZZZ/ })).toBeInTheDocument()
+    expect(selectedRow()).toBeNull()
+    expect(window.location.search).toContain('t=AAA')
+  })
+
+  it('lets the refetch of an expired board after a failed change of window drop it too', async () => {
+    let down = true
+    flaky(() => down, twelve)
+    render(<BoardPage initial={payload({ age_seconds: 590 })} />)
+    await advance(0)
+
+    await moveWindow()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(selectedRow()).toHaveTextContent('AAA')
+
+    down = false
+    // The four-hour board passes its expiry; the refetch asks about twelve.
+    await advance(10_000)
+    expect(boardCalls()).toHaveLength(2)
+    expect(boardCalls()[1]).toContain('window=12')
+    expect(selectedRow()).toHaveTextContent('ZZZ')
+    await advance(0)
+  })
+})
+
+describe('a request that fails while the board is being calculated', () => {
+  it('does not say a board is showing when none is', async () => {
+    flaky(() => true, () => payload())
+    render(<BoardPage initial={waiting({
+      pending: false, busy: true, retry_after_ms: 5000, queue_age_seconds: null,
+    })} />)
+
+    await click(screen.getByRole('button', { name: 'Retry' }))
+    await advance(0)
+
+    expect(screen.getByRole('alert'))
+      .toHaveTextContent('The board answered with an error.')
+    expect(screen.getByRole('alert'))
+      .not.toHaveTextContent('Showing the last board')
+  })
+
+  it('leaves a failed poll to the waiting line while the wait goes on', async () => {
+    // The wait asks again on its own, and "Calculating this board…" is
+    // already what the reader is reading. An alert beside it for one poll
+    // that did not answer reports a failure the next poll may not have --
+    // and here the next one answers.
+    let down = true
+    flaky(() => down, () => waiting())
+    render(<BoardPage initial={waiting()} />)
+
+    await advance(1000)
+    expect(boardCalls()).toEqual([expect.stringContaining('poll=1')])
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(waitingLine()).toHaveTextContent('Calculating this board')
+    expect(waitingLine()).not.toHaveTextContent('answered with an error')
+    expect(waitingLine()?.querySelector('button')).toBeNull()
+
+    down = false
+    await advance(1500)
+    expect(boardCalls()).toHaveLength(2)
+    await advance(2000)
+    expect(boardCalls()).toHaveLength(3)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(waitingLine()).toHaveTextContent('Calculating this board')
+    expect(waitingLine()).not.toHaveTextContent('answered with an error')
+  })
+
+  it('says so in the waiting line once the polls keep failing, and keeps asking', async () => {
+    // Two in a row is not a blip. Saying nothing then leaves "Calculating
+    // this board…" -- and after thirty seconds a diagnosis of the queue --
+    // over a wait whose every ask is failing. The line the reader is
+    // reading says why and offers the Retry, and the wait goes on asking;
+    // still no alert, because the page is still waiting, not reporting a
+    // board it failed to show.
+    let down = true
+    flaky(() => down, () => served())
+    render(<BoardPage initial={waiting()} />)
+
+    await advance(1000)
+    expect(waitingLine()).not.toHaveTextContent('answered with an error')
+    await advance(1500)
+    expect(boardCalls()).toHaveLength(2)
+    expect(waitingLine()).toHaveTextContent('Calculating this board')
+    expect(waitingLine())
+      .toHaveTextContent('The board answered with an error. Still trying.')
+    expect(waitingLine()?.querySelector('button')).toHaveTextContent('Retry')
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    await advance(2000)
+    expect(boardCalls()).toHaveLength(3)
+    expect(waitingLine()).toHaveTextContent('Still trying.')
+
+    // The reader's own Retry failing is the banner's to say -- once, with
+    // the page's one Retry.
+    await click(waitingLine()!.querySelector('button')!)
+    await advance(0)
+    expect(boardCalls()).toHaveLength(4)
+    expect(boardCalls()[3]).not.toContain('poll=1')
+    expect(screen.getByRole('alert'))
+      .toHaveTextContent('The board answered with an error.')
+    expect(waitingLine()).not.toHaveTextContent('Still trying.')
+    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1)
+
+    // And the next poll that answers takes all of it away.
+    down = false
+    await advance(3000)
+    expect(boardCalls()).toHaveLength(5)
+    expect(rowCount()).toBeGreaterThan(0)
+    expect(waitingLine()).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    await advance(0)
+  })
+
+  it('takes the note away when a poll answers, and counts afresh', async () => {
+    // The note is about asks that are failing now. A poll that answers --
+    // even with "still calculating" -- ends that, and one failure after it
+    // is a blip again, not the third in a row.
+    let down = true
+    flaky(() => down, () => waiting())
+    render(<BoardPage initial={waiting()} />)
+
+    await advance(1000)
+    await advance(1500)
+    expect(waitingLine()).toHaveTextContent('Still trying.')
+
+    down = false
+    await advance(2000)
+    expect(boardCalls()).toHaveLength(3)
+    expect(waitingLine()).toHaveTextContent('Calculating this board')
+    expect(waitingLine()).not.toHaveTextContent('Still trying.')
+
+    down = true
+    await advance(3000)
+    expect(boardCalls()).toHaveLength(4)
+    expect(waitingLine()).not.toHaveTextContent('Still trying.')
+    await advance(3000)
+    expect(boardCalls()).toHaveLength(5)
+    expect(waitingLine()).toHaveTextContent('Still trying.')
+
+    // Past thirty seconds the line admits the wait is long, and the reason
+    // it gives is the failing asks -- not a queue it cannot see.
+    await advance(25_000)
+    expect(waitingLine()).toHaveTextContent('Still calculating')
+    expect(waitingLine())
+      .toHaveTextContent('The board answered with an error. Still trying.')
+    expect(waitingLine()).not.toHaveTextContent('built from scratch')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('forgets the failures of a question the reader has left', async () => {
+    // A new selection is a new wait, and nothing has failed for it yet.
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/api/ticker/')) return Promise.resolve(ok(detail()))
+      if (url.includes('window=12')) return new Promise(() => {})
+      return Promise.resolve({ ok: false, redirected: false, status: 503,
+                               json: async () => ({}) })
+    }))
+    render(<BoardPage initial={waiting()} />)
+    await advance(1000)
+    await advance(1500)
+    expect(boardCalls()).toHaveLength(2)
+    expect(waitingLine()).toHaveTextContent('Still trying.')
+
+    await click(screen.getByRole('button', { name: /Change window/i }))
+    await click(screen.getByRole('button', { name: '12h' }))
+    await advance(300)
+
+    expect(boardCalls()).toHaveLength(3)
+    expect(boardCalls()[2]).toContain('window=12')
+    expect(waitingLine()).toHaveTextContent('Calculating this board')
+    expect(waitingLine()).not.toHaveTextContent('Still trying.')
   })
 })

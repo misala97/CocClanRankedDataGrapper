@@ -70,17 +70,22 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // flip. Mutations run one at a time, in order -- a queue, never parallel
   // requests: with two in flight, a late failure could restore a snapshot
   // that predates the later success (Codex's review of 26cc82d). The
-  // board's payload carries the list too; it is trusted only while nothing
-  // is in flight, and one refetch follows the last mutation.
+  // board's payload carries the list too. It is trusted only while no flip
+  // is queued, and only from a request asked after the last mark landed:
+  // one asked before can carry the server's list from before the mark, and
+  // would take the star back. One refetch follows the last mutation
+  // (`refetchMarks`).
   const [watching, setWatching] = useState<string[]>(initial.watching ?? [])
   const marks = useRef<string[]>(initial.watching ?? [])   // the same list, readable now
   const queue = useRef<Promise<void>>(Promise.resolve())
   const queued = useRef<{ ticker: string; on: boolean }[]>([])
-  const landed = useRef(false)   // a mutation the server accepted since the last refetch
+  // A mark the server accepted that no board request has asked with yet.
+  // Every request clears it as it goes out, whoever sends it.
+  const landed = useRef(false)
+  // The request number current when the last mark landed: an answer to a
+  // request numbered at or below it was asked before the mark.
+  const markedAt = useRef(0)
   const mark = useCallback((next: string[]) => { marks.current = next; setWatching(next) }, [])
-  useEffect(() => {
-    if (queued.current.length === 0) mark(payload.watching ?? [])
-  }, [payload, mark])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<BoardUnavailable | null>(null)
   const inflight = useRef<AbortController | null>(null)
@@ -108,6 +113,24 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // The reader's own request while one is out: a retry, the refetch after a
   // mark, the one a moved control sends. Never a poll's.
   const own = useRef<Promise<Outcome> | null>(null)
+  // Whether asking the question on screen again keeps a ticker the answer
+  // does not list. It does while the board on screen answers that question.
+  // A change to any control but the market that FAILED leaves the old board
+  // up and the question's first answer still owed: a Retry or a refetch then
+  // asks what the change asked, and treats the ticker as the change would
+  // have. Set by the request that failed; reset by any answer that lands.
+  const keepOnRetry = useRef(true)
+  // A control has moved and the request it sends has not gone out yet.
+  const settling = useRef(false)
+  // Polls over a waiting shell that have failed in a row, and -- once that
+  // is more than one -- what the last of them said. One ask that did not
+  // answer is a blip the next may not have; two in a row is the wait
+  // failing, and the waiting line says so (`failing`, ListPane.tsx) while
+  // the wait goes on asking. Never an alert: the page is still waiting, not
+  // reporting a board it failed to show. Cleared by any answer that lands,
+  // and by a new question, which has failed nothing yet.
+  const misses = useRef(0)
+  const [missed, setMissed] = useState<string | null>(null)
 
   const fetchAndShow = useCallback(async (next: Selection,
                                           preserveTicker: boolean,
@@ -124,6 +147,8 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     // wait the moment a control moves) and an answer that settles it (further
     // down) move the wait.
     const generation = (asked.current += 1)
+    // Whatever marks have landed, this request asks with them.
+    landed.current = false
     inflight.current?.abort()
     const controller = new AbortController()
     inflight.current = controller
@@ -138,6 +163,16 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       setPayload(fresh)
       setReceived(at)
       setError(null)
+      misses.current = 0
+      setMissed(null)
+      // Whatever this repeated, the question on screen has an answer now,
+      // and asking it again keeps the reader's ticker.
+      keepOnRetry.current = true
+      // The marks it carries, when no flip is queued behind them and it was
+      // asked after the last one landed.
+      if (queued.current.length === 0 && generation > markedAt.current) {
+        mark(fresh.watching ?? [])
+      }
       // The floor under the next ask. The server's own whenever it named one;
       // five seconds for a board that is stale only by this page's clock,
       // which the server answered before it was and so gave no floor for --
@@ -165,21 +200,28 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       // company identity stays the same even when its new market board does
       // not rank it. The detail endpoint can still show its marked fallback.
       // A Retry and the two refetches keep it the same way (`preserveTicker`):
-      // each asks again about the board the reader is already reading.
+      // each asks again about the board the reader is already reading --
+      // unless that board is the one a failed change left up, when each asks
+      // what the change asked and keeps the ticker only as the change would
+      // have (`keepOnRetry`).
       //
       // A poll is the page asking on the reader's behalf, so its ticker
       // stays, listed in this build or not, as it would through a market
-      // switch. Only a reader with no ticker yet is handed the top row.
+      // switch.
       //
       // Which leaves one answer that can take the ticker away: a change to
       // any control but the market. The ticker stays only if the new board
       // lists it -- and a waiting shell lists nothing, so there the panel
       // empties with the list rather than describing a company the board
       // beside it has stopped listing.
+      //
+      // Keeping is for a ticker the reader has. A reader with none -- a
+      // shell emptied the panel, or the page opened on one -- is handed the
+      // top row by the first answer that brings rows, whoever asked.
       const reader = current.current.selected
       const rows = fresh.rows ?? []
-      const keep = poll ? reader !== null
-        : (preserveTicker || rows.some((row) => row.ticker === reader))
+      const keep = reader !== null && (poll || preserveTicker
+        || rows.some((row) => row.ticker === reader))
       const nextTicker = keep ? reader : (rows[0]?.ticker ?? null)
       // A poll that brings the same board back has changed nothing to
       // select and nothing to write down. Doing it anyway rewrites the
@@ -194,6 +236,22 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       if (controller.signal.aborted || generation !== asked.current) {
         return DROPPED
       }
+      // A poll over a waiting shell. The wait asks again on its own, and the
+      // waiting line is already what the reader reads: an alert beside
+      // "Calculating this board…" for one ask that did not answer reports a
+      // failure the next ask may not have. The second in a row is said, in
+      // that line (`missed`). Over a board, a failed poll is still said in
+      // the banner -- nothing else would say its refresh is not arriving.
+      if (poll && was.rows === null) {
+        misses.current += 1
+        if (misses.current > 1) {
+          setMissed((problem as BoardUnavailable).message)
+        }
+        return FAILED
+      }
+      // What a Retry of this request keeps. A poll is never retried as
+      // itself, so it leaves the rule where it was.
+      if (!poll) keepOnRetry.current = preserveTicker
       // The previous board stays on screen. A failed refresh is a reason to
       // say so, not a reason to throw away data that is still true.
       setError(problem as BoardUnavailable)
@@ -204,7 +262,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
         if (!poll) setBusy(false)
       }
     }
-  }, [])
+  }, [mark])
 
   // Every board request goes out through here. The reader's own is
   // remembered for as long as it is out, so a poll that comes due meanwhile
@@ -237,9 +295,39 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // board a worker builds for itself was built once more for every extra
   // click -- abort-and-resend, which the debounce on the controls exists to
   // prevent. A poll is never the reader's own, so a Retry over one still
-  // goes out.
+  // goes out. Its answer treats the ticker as the request it repeats would
+  // have (`keepOnRetry`): a Retry of a failed change of window lets go of a
+  // ticker the new board does not list, as that change would have.
   const retry = useCallback(() => {
-    void (own.current ?? load(current.current.selection, true))
+    void (own.current
+      ?? load(current.current.selection, keepOnRetry.current))
+  }, [load])
+
+  // The refetch a landed mark is owed: one board request that asks with it,
+  // so its watched row comes in (or goes out) and the list the board carries
+  // agrees with the star.
+  //
+  // About the board on screen when it goes out, read then, never the one the
+  // star was clicked under: a control can move while a mark is out, and a
+  // refetch of the board the reader had left painted it under the controls
+  // they had moved to, and wrote its query back into the address bar.
+  //
+  // After the reader's own request, never over it. An abort stops this page
+  // listening, not the server building -- a board a worker builds for itself
+  // is built to the end either way. Nor joined: that request may have been
+  // asked before the mark landed, and its answer would not carry it.
+  //
+  // Owed only while nothing else will ask with the mark: not once any
+  // request has gone out since it landed, not while a flip is still queued
+  // (the refetch follows the last one), and not while a moved control is
+  // inside its quarter second -- the request it sends goes out after the
+  // mark, and carries it.
+  const refetchMarks = useCallback(async () => {
+    const owed = () => landed.current && queued.current.length === 0
+      && !settling.current
+    if (!owed()) return
+    while (own.current) await own.current
+    if (owed()) void load(current.current.selection, keepOnRetry.current)
   }, [load])
 
   // How a wait begins, wherever it begins: the polling effect, or the fresh
@@ -334,8 +422,10 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       if (wait?.running) { wait.askNow(); return }
       if (hidden()) { owed.current = refetch; return }
       // Joined, as a poll is, when the reader's own request is already out:
-      // its answer is the one this would fetch.
-      void (own.current ?? load(current.current.selection, true))
+      // its answer is the one this would fetch. Otherwise asked as a Retry
+      // is, keeping the ticker as what it repeats would have.
+      void (own.current
+        ?? load(current.current.selection, keepOnRetry.current))
         .then((outcome) => {
           if (outcome.kind === 'failed' && answers.current === armed) {
             owed.current = refetch
@@ -412,17 +502,28 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     poller.current?.stop()
     asked.current += 1
     setQuestion((n) => n + 1)
+    // Nor is the old wait's failing the new one's: nothing has been asked
+    // about the new question yet, let alone failed.
+    misses.current = 0
+    setMissed(null)
+    // Until the request below goes out, a mark that lands is owed nothing:
+    // that request asks after it, and carries it (`refetchMarks`).
+    settling.current = true
     // Coalesced. Every toggle used to fire its own request and abort the
     // last; five quick clicks queued five board builds on the server and the
     // fifth waited past the 8s timeout -- "The board did not answer in time"
     // during ordinary toggling (critique, 2026-09-01). Short enough that a
     // single click still feels immediate.
     const timer = setTimeout(() => {
+      settling.current = false
       const marketChanged = marketPending.current
       marketPending.current = false
       void load(selection, marketChanged)
     }, SETTLE_MS)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      settling.current = false
+    }
     // Not keyed on the ticker: picking one is a client-side change that must
     // not refetch the board, and the answer reads whichever is on screen
     // when it lands.
@@ -446,6 +547,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       try {
         const fresh = await setWatch(ticker, on)
         landed.current = true
+        markedAt.current = asked.current
         // The server's list is the truth up to this flip; flips still
         // queued behind it were made after, so they stay applied on top.
         mark(queued.current.filter((q) => q !== flip).reduce(
@@ -457,16 +559,13 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
         mark(on ? marks.current.filter((t) => t !== ticker) : [...marks.current, ticker])
       } finally {
         queued.current = queued.current.filter((q) => q !== flip)
-        if (queued.current.length === 0 && landed.current) {
-          // The watched rows are built server-side; one refetch after the
-          // last accepted mutation brings them in (or takes them out). Memo
-          // hit. A refused flip alone changes nothing, so nothing to fetch.
-          landed.current = false
-          void load(selection, true)
-        }
+        // The watched rows are built server-side; one refetch after the
+        // last accepted mutation brings them in (or takes them out). Memo
+        // hit. A refused flip alone changes nothing, so nothing to fetch.
+        void refetchMarks()
       }
     })
-  }, [mark, selection, load])
+  }, [mark, refetchMarks])
 
   const narrow = useNarrow()
   const page = useRef<HTMLDivElement>(null)
@@ -529,10 +628,14 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
           most needs to keep reading the board that is still on screen. */}
       {error && (
         <p className="oops" role="alert">
-          <b>{error.message}</b> Showing the last board that loaded.
+          <b>{error.message}</b>
+          {/* Only over a board. A waiting shell is no board at all, and
+              "the last board that loaded" is then one nobody can see. */}
+          {payload.rows !== null && ' Showing the last board that loaded.'}
           {/* The page's one Retry while this is up (the age line drops its
               own), and the same guarded ask as every other: it joins a
-              request already out, and it keeps the ticker. */}
+              request already out, and it keeps the ticker as the request
+              it repeats would have. */}
           <button type="button" onClick={retry}>Retry</button>
         </p>
       )}
@@ -542,6 +645,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
                   busy={busy} onSelect={select} onChange={setSelection}
                   onRetry={retry} stalled={stalled}
                   retryInBanner={error !== null}
+                  failing={error === null ? missed : null}
                   account={narrow ? null : account}
                   watching={watching} onToggleWatch={toggleWatch} />
       </Boundary>

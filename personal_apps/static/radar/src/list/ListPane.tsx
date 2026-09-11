@@ -126,8 +126,10 @@ function AgeLine({ payload, received, stalled = false, onRetry }: {
  *  waiting for, and "Still calculating…" would be describing somebody
  *  else's half minute.
  */
-function Waiting({ payload, onRetry }: {
+function Waiting({ payload, failing = null, onRetry }: {
   payload: BoardPayload
+  /** Why the wait's own asks keep failing, when two in a row have. */
+  failing?: string | null
   onRetry?: () => void
 }) {
   const [, tick] = useState(0)
@@ -146,7 +148,14 @@ function Waiting({ payload, onRetry }: {
       {busy ? <b>The board is busy with other selections.</b>
         : delayed ? <b>Still calculating…</b>
         : <b>Calculating this board…</b>}
-      {(busy || delayed) && (
+      {failing !== null ? (
+        // The asks themselves are failing, and that is what there is to say.
+        // A reading of the queue -- busy, or a board built from scratch --
+        // describes a wait this page cannot see just now, and after thirty
+        // seconds it would be the wrong diagnosis. Said here, not in an
+        // alert: the wait goes on asking.
+        <span className="pointer">{failing} Still trying.</span>
+      ) : (busy || delayed) && (
         <span className="pointer">
           {busy
             ? 'It is building boards other readers asked for first.'
@@ -156,7 +165,7 @@ function Waiting({ payload, onRetry }: {
           built.
         </span>
       )}
-      {(busy || delayed) && onRetry && (
+      {(busy || delayed || failing !== null) && onRetry && (
         <button type="button" onClick={onRetry}>Retry</button>
       )}
     </p>
@@ -530,7 +539,7 @@ export function SortCols({ selection, onChange }: {
  */
 export function ListPane({ payload, received, selection, selected, busy,
                           onSelect, onChange, onRetry, stalled = false,
-                          retryInBanner = false,
+                          retryInBanner = false, failing = null,
                           account, watching = [], onToggleWatch }: {
   payload: BoardPayload
   /** When this page received that payload, so the age on screen can keep
@@ -553,6 +562,11 @@ export function ListPane({ payload, received, selection, selected, busy,
    *  then offers none: two buttons a few pixels apart for one request is
    *  one too many. */
   retryInBanner?: boolean
+  /** Why the wait's own asks keep failing, once two in a row have. Said in
+   *  the waiting line, which goes on asking. Null while the banner is up:
+   *  a failure of the reader's own request is the banner's to say, with the
+   *  page's one Retry. */
+  failing?: string | null
   /** The footer matter, when this pane is where it belongs. */
   account?: ReactNode
   /** The reader's marks and how to flip one; rendered as the Watching tier
@@ -682,7 +696,7 @@ export function ListPane({ payload, received, selection, selected, busy,
             // thirty seconds this component counts are how long THIS one has
             // taken. Remounting is the whole of the reset.
             <Waiting key={queryFor(selection)} payload={payload}
-                     onRetry={onRetry} />
+                     failing={failing} onRetry={onRetry} />
           )
         ) : (
         <>
