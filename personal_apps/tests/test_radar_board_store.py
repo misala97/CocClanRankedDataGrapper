@@ -171,21 +171,96 @@ def test_the_limits_are_the_documented_defaults_and_move_with_the_environment(
     assert changed.max_on_demand == 128, 'an untouched limit moved'
 
 
-def test_a_limit_that_is_not_a_number_is_refused_by_name(monkeypatch):
-    """Loudly, and naming the variable. Falling back to the default would let
-    a typo in a deploy silently restore a bound the operator meant to move --
-    the one failure mode where being quiet is worse than not starting."""
+def test_a_limit_the_environment_got_wrong_is_refused_by_name(monkeypatch):
+    """Loudly, and naming the variable -- in the process an operator starts.
+
+    This used to be `limits()` itself raising, on the argument that falling
+    back to a default would let a typo silently restore a bound the operator
+    meant to move. That argument still holds for the producer, and it is where
+    the check now lives. It stopped holding for `limits()` once the reader
+    path began calling it: `_direct_envelope` reads it on every synchronous
+    build, so a typo took down `/radar/` and `/radar/api/board` WITH THE FLAG
+    OFF -- the rollback path, and the one path that must not depend on a knob
+    only the shared path uses. See the read-path test below.
+    """
     monkeypatch.setenv('RADAR_BOARD_MAX_QUEUE', 'thirty-two')
     with pytest.raises(board_namespace.ConfigError) as refused:
-        board_store.limits()
+        board_store.validate_limits()
     assert 'RADAR_BOARD_MAX_QUEUE' in str(refused.value)
     assert 'thirty-two' in str(refused.value)
 
     monkeypatch.setenv('RADAR_BOARD_MAX_QUEUE', '32')
     monkeypatch.setenv('RADAR_BOARD_LEASE_SECONDS', 'two minutes')
     with pytest.raises(board_namespace.ConfigError) as refused:
-        board_store.limits()
+        board_store.validate_limits()
     assert 'RADAR_BOARD_LEASE_SECONDS' in str(refused.value)
+
+
+@pytest.mark.parametrize('name, raw', [
+    # Not a number at all.
+    ('RADAR_BOARD_FRESH_SECONDS', 'abc'),
+    ('RADAR_BOARD_MAX_QUEUE', 'thirty-two'),
+    # A number, and not a bound. Zero admitted jobs is not a tighter queue, it
+    # is a queue that answers `busy` for ever; a lease of zero seconds has
+    # expired before the builder reads it.
+    ('RADAR_BOARD_MAX_QUEUE', '0'),
+    ('RADAR_BOARD_MAX_ON_DEMAND', '-1'),
+    ('RADAR_BOARD_LEASE_SECONDS', '0'),
+    # A negative duration is not a shorter one: -5 marks every board stale the
+    # instant it is built.
+    ('RADAR_BOARD_FRESH_SECONDS', '-5'),
+    ('RADAR_BOARD_HARD_EXPIRY_SECONDS', '-1'),
+    ('RADAR_BOARD_REFRESH_SECONDS', '-0.5'),
+    ('RADAR_BOARD_PARK_SECONDS', '-900'),
+    ('RADAR_BOARD_NAMESPACE_RETIRE_SECONDS', '-1'),
+    ('RADAR_BOARD_MAX_ATTEMPTS', '-6'),
+])
+def test_a_limit_the_environment_got_wrong_is_ignored_by_readers(
+        monkeypatch, name, raw):
+    """Every reader answers, on the default, whatever the variable says.
+
+    Both of these used to get through. A non-numeric value raised out of
+    `limits()` uncaught; a nonsense-but-numeric one was obeyed, so
+    `RADAR_BOARD_MAX_QUEUE=0` answered every on-demand admission `busy` for
+    ever and `RADAR_BOARD_FRESH_SECONDS=-5` marked every board stale.
+    """
+    monkeypatch.setenv(name, raw)
+    assert board_store.limits() == board_store.Limits()
+
+
+def test_the_flag_off_envelope_survives_any_value_of_the_tuning_variables(
+        monkeypatch):
+    """The rollback path, which must not depend on a knob it does not use.
+
+    `_direct_envelope` reads `limits()` for the two bounds it reports, so the
+    new parsing runs on every synchronous build. A 500 here is `/radar/`,
+    `/radar/hub/` and `/radar/api/board` down with the flag off.
+    """
+    from features.radar.routes import api
+
+    monkeypatch.setenv('RADAR_BOARD_FRESH_SECONDS', 'abc')
+    monkeypatch.setenv('RADAR_BOARD_MAX_QUEUE', '0')
+    envelope = api._direct_envelope(NOW, NOW + seconds(30))
+    assert envelope['shared'] is False
+    assert envelope['fresh_seconds'] == board_store.Limits().fresh_seconds
+    assert envelope['hard_expiry_seconds'] == (
+        board_store.Limits().hard_expiry_seconds)
+    assert envelope['age_seconds'] == 30
+
+
+def test_a_limit_the_environment_got_wrong_is_said_once_in_the_log(
+        monkeypatch, caplog):
+    """Said, because a reader silently running on defaults is its own trap --
+    and said once per value, because `limits()` runs on every request."""
+    monkeypatch.setattr(board_store, '_COMPLAINED', set())
+    monkeypatch.setenv('RADAR_BOARD_MAX_QUEUE', '0')
+    with caplog.at_level('ERROR', logger='features.radar.board_store'):
+        for _ in range(3):
+            board_store.limits()
+    said = [record for record in caplog.records
+            if 'RADAR_BOARD_MAX_QUEUE' in record.getMessage()]
+    assert len(said) == 1
+    assert '0' in said[0].getMessage()
 
 
 # --- admission -------------------------------------------------------------

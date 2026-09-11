@@ -39,12 +39,15 @@ inside a transaction would hold row locks for the length of a build.
 """
 import dataclasses
 import datetime as dt
+import logging
 import os
 import secrets
 
 import sqlalchemy as sa
 
 from . import board_namespace
+
+logger = logging.getLogger(__name__)
 
 RESULTS = 'radar_board_results'
 NAMESPACES = 'radar_board_namespaces'
@@ -178,18 +181,84 @@ def limits(env=os.environ):
     against a process that is about to talk to a database, so the cost is
     nothing, and it means an operator who changes `RADAR_BOARD_MAX_QUEUE` gets
     the new bound on the next request instead of on the next restart.
+
+    A value this cannot use is SAID and then ignored, and the default stands.
+    This used to raise, on the argument that a silent fallback would quietly
+    restore a bound the operator meant to move. That argument stopped holding
+    once the reader path began calling it: `routes/api._direct_envelope` reads
+    it on every synchronous build, so one mistyped tuning variable answered
+    `/radar/`, `/radar/hub/` and `/radar/api/board` with a 500 WITH THE FLAG
+    OFF -- taking down the path the whole rollout falls back to, over a knob
+    only the shared path uses. The loud refusal is kept where an operator is
+    watching for it: `validate_limits`, at the producer's startup.
     """
-    overrides = {}
+    overrides, refused = _read(env)
+    for name, raw, reason in refused:
+        if (name, raw) in _COMPLAINED:
+            continue
+        _COMPLAINED.add((name, raw))
+        logger.error('radar board limit ignored, using the default: %s',
+                     reason)
+    return Limits(**overrides)
+
+
+def validate_limits(env=os.environ):
+    """Raise unless every tuning variable the environment sets is usable.
+
+    For a process an operator starts and watches. A producer that came up on
+    defaults because one variable was misspelled would run the wrong schedule
+    for as long as nobody noticed, and there is nothing to lose by refusing to
+    start: no reader is waiting on it, and the deploy that set the variable is
+    the one being run. Readers take the opposite trade (`limits`).
+    """
+    _, refused = _read(env)
+    if refused:
+        raise board_namespace.ConfigError(
+            '; '.join(reason for _, _, reason in refused))
+
+
+# Limits that must be greater than zero. A bound of zero is not a tighter
+# bound: `max_queue = 0` answers every on-demand admission `busy` for ever,
+# `max_on_demand = 0` evicts every row as fast as it is written, and a lease
+# of zero seconds has expired before the builder holding it reads it. Every
+# other limit is a duration or a count where zero is coherent -- a refresh of
+# zero is always due, a park of zero retries at once -- and only a negative
+# value is not: -5 seconds of freshness marks every board stale the instant it
+# is built.
+_POSITIVE = frozenset({'max_queue', 'max_on_demand', 'lease_seconds'})
+
+# Values already complained about, so a bad one is said once rather than on
+# every request. Bounded by the number of distinct values the environment
+# holds, which is at most one per variable per process.
+_COMPLAINED = set()
+
+
+def _refuse(field, name, cast, raw):
+    """Why this value cannot be used, or None."""
+    try:
+        value = cast(raw)
+    except ValueError:
+        return f'{name} is not a number: {raw[:40]!r}'
+    if field in _POSITIVE and value <= 0:
+        return f'{name} must be greater than zero: {raw[:40]!r}'
+    if field not in _POSITIVE and value < 0:
+        return f'{name} cannot be negative: {raw[:40]!r}'
+    return None
+
+
+def _read(env):
+    """Every override the environment asks for, and every one it got wrong."""
+    overrides, refused = {}, []
     for field, name, cast in _ENVIRONMENT:
         raw = (env.get(name) or '').strip()
         if not raw:
             continue
-        try:
+        reason = _refuse(field, name, cast, raw)
+        if reason is None:
             overrides[field] = cast(raw)
-        except ValueError as problem:
-            raise board_namespace.ConfigError(
-                f'{name} is not a number: {raw[:40]!r}') from problem
-    return Limits(**overrides)
+        else:
+            refused.append((name, raw, reason))
+    return overrides, refused
 
 
 # --- the generation's control row -------------------------------------------

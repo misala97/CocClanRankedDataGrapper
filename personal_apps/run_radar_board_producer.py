@@ -30,7 +30,7 @@ import threading
 
 from app import app
 from extensions import db
-from features.radar import board_namespace, board_producer
+from features.radar import board_namespace, board_producer, board_store
 
 logger = logging.getLogger('radar.board')
 
@@ -83,6 +83,14 @@ def main(argv=None):
     # revision it is, and the loudest possible answer to that is the right
     # one: the namespace is an identity, and there is no default identity.
     described = board_namespace.describe()
+
+    # Also uncaught, and for the reason the readers now do the opposite. A
+    # reader that met a mistyped tuning variable used to answer 500 -- on the
+    # flag-off path too, which is the rollback -- so it logs and uses the
+    # default. Nothing is waiting on this process, an operator is watching it
+    # start, and a producer running the wrong schedule because one variable
+    # was misspelled is worse than one that refuses to run.
+    board_store.validate_limits()
 
     with app.app_context():
         engine = db.engine
