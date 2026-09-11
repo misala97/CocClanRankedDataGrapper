@@ -1965,3 +1965,250 @@ per-account rule at 25 marks beside a building producer; release section 10's
 decisions 7-9; a publish that raises leaving its row `building` until the
 lease expires; and the remainders already recorded under Tasks 1 and 5 to 9a
 in this ledger.
+## Fix wave, 2026-09-12 (dba911a..98459d8, 7 commits)
+
+The whole-branch review's "fix before the return" list, closed. Nothing from
+"Carry to Codex" was touched: the 120 s fresh bound, the refresh target, every
+queue and limit DEFAULT, threading, capture, the held index `c4e17b90d3f2` and
+the Discover key spelling are exactly as the review found them.
+
+**Verification, all of it after the last commit.** Backend, the seven focused
+suites in one pass on `personal_apps_radar_perf3`: `tests/test_radar_board_store.py
+tests/test_radar_board_producer.py tests/test_radar_board_shared_api.py
+tests/test_radar_board_parity.py tests/test_radar_board_results_migration.py
+tests/test_radar_activity.py tests/test_radar_projection_migration.py -q
+-p no:cacheprovider` -> **238 passed** in 47.8 s. Frontend: radar vitest
+**700/700** (43 files, 681 before this wave), root vitest **403/403**,
+`npx tsc --noEmit` clean, `npm run build` clean. The whole backend suite was
+NOT re-run: Task 9b classified it, and the one branch-caused failure in it is
+item 1 below.
+
+### 1. The branch's one red test -- `267811d`
+
+`tests/test_radar_activity.py:396` named the revision BELOW the migration it
+tests and downgraded straight to it, which was enough while one revision sat
+above. This branch stacks two, so the walk dropped four tables and the
+assertion of "its own two" failed on a property that is still true. Reproduced
+first: `Running downgrade b7e3f9c1a2d4 -> a7c31f0b52d4`, `a7c31f0b52d4 ->
+d82f9afb5898`, `d82f9afb5898 -> b3d9e1f5a274`, extra items
+`radar_board_namespaces`, `radar_board_results`.
+
+Fixed by naming BOTH ends of the step: the walk stops at `d82f9afb5898` and
+fingerprints there, then takes the single step under test. The delta is that
+migration's however much the chain grows above it, and the round trip back to
+head is still checked against head's own fingerprint. 19 passed.
+
+### 2. The two client honesty defects -- `21c3591`
+
+**(a) Focus steal.** `DetailPane` seeded its focus marker with the opening
+ticker, which was the whole of "the first panel does not steal focus" while no
+page could open without rows. A page waiting for a board has no opening ticker,
+so when the board arrived and `BoardPage` picked the top row FOR the reader the
+panel took focus and scrolled. `BoardPage` now says whether the ticker on
+screen is the reader's choice (`readerPicked`, set by `select` and cleared by
+any answer that changes the ticker), and the panel moves focus only for one
+that is. A click still moves it, which is the half of the rule that makes
+activating a row audible at all.
+
+Proved in a real browser, not only in unit tests:
+`personal_apps/scratchpad/perf3/browser_focus_check.py` (new; python-playwright,
+headless Chromium, 390x844), which serves the real `templates/radar/board.html`
+shell, the real `static/radar/` assets and the real built bundle with the board
+API stubbed -- first answer `_waiting`'s shell, then a ready board of 50 rows.
+No database and no producer: what is under test is the client.
+
+| moment | before (HEAD's bundle) | after |
+| --- | --- | --- |
+| pending | scroll 0, focus `body` | scroll 0, focus `body` |
+| rows arrived | **scroll 4,402, focus `main.detail`** | **scroll 0, focus `body`** |
+| 4 s later, detail loaded | scroll 4,402, focus `main.detail` | scroll 0, focus `body` |
+| the reader clicks row 3 | scroll 4,404, focus `main.detail` | scroll 4,409, focus `main.detail` |
+
+The ledger's own run 3 measured 4,219 px on the scale fixture's board; 4,402 px
+here is the same defect on a 50-row board of this harness's row height.
+
+**(b) The parked board's copy.** The `failed` branch of BOTH clients rendered
+its own banner but never received the note about THIS page's asks failing, so a
+reader whose every poll was erroring read the same sentence as one whose parked
+board was being retried normally. `ListPane`'s `.oops inline` and the hub's
+`FailedNotice` now both take `failing`. Each test was checked against the
+unfixed component and fails there.
+
+**(c) Item 8, the pending shell's copy**, shipped in the same commit because it
+is the same defect class. The panel said "Nothing on the board to look at." and
+the view tabs printed a dimmed `0` for every view, over a board nobody had
+built. `DetailPane` now takes `listing: 'rows' | 'empty' | 'unbuilt'` and says
+"The board is still being calculated."; `Controls` prints an em dash with
+`aria-label="not calculated yet"` where a count would be, and stops dimming a
+tab for a zero nobody measured. The venue counts (`any`/`multi`), which the
+server also sends as literal zeroes on a shell, are fixed the same way -- not
+named by the review, same lie, same render pass. Browser: pending shows
+`All— Discover— Large— IPO— Funds—`, five `not calculated yet` markers, and the
+panel's own sentence; once the board lands, `All50 … ` and none.
+
+### 3. The flag-off request items -- `a1c5a9e`
+
+- **No auto-resend on server or network errors while `shared === false`.**
+  react-query resent a failed board request twice (`hub/queries.retryBoard`).
+  On the path where a worker builds its own board the failed request is still
+  building, so a resend is a second synchronous build of it. `useBoard` now
+  reads the flag off the board it holds -- seeded from the embedded payload,
+  kept current by every answer -- and suppresses the automatic resend there.
+  The shared path still resends, where a resend is only a read; both halves are
+  pinned by a test.
+- **The star's refetch, after the reader's own request failed.** Old board
+  (`BoardPage.refetchMarks`) and hub (`queries.refreshAfterMark`): both waited
+  for the request in flight and then asked again whatever it answered. Neither
+  does now. The mark is on screen either way -- the star flipped when it landed
+  -- and the next answer brings its row.
+- **Retry and the expiry refetch inside the 250 ms a control change owns.**
+  Both are now gated on `settling`, as the ledger's `:379` prescribed. Dropped
+  rather than owed: a changed question has a new expiry, and a change whose own
+  request fails says so in the banner with its Retry.
+
+### 4. The hub's missing debounce -- `a1c5a9e`
+
+`SETTLE_MS = 250` moved to `pending.ts`, so both surfaces read one number
+rather than each keeping one, and `useBoard` debounces the selection BEFORE it
+becomes a query key (`useSettled`). Six control changes 200 ms apart now send
+one request for the question the reader stopped on; a change taken back inside
+the window sends none.
+
+Three consequences worth recording, because they are behaviour and not
+plumbing:
+
+- While the settle runs, `useBoard` reports no answer for the question on
+  screen (`answer`, which the hub reads in place of its own
+  `isPlaceholderData` check). Without that the previous selection's rows would
+  stand under the new selection's labels for a quarter second, which ruling §1
+  forbids and which browser check 2 recorded the hub as never doing. The old
+  board does show its old rows there; the hub keeps the stronger behaviour.
+- The old question's wait sends nothing during the settle, matching the old
+  board's `poller.stop()` at the moment a control moves.
+- The refetch a mark is owed WAITS the settle out rather than skipping it. The
+  old board can skip, because its debounced request always goes out and carries
+  the mark; the hub's may be answered from cache and never go out at all, and
+  the mark would then have no refetch. `whenSettled()` resolves from an effect
+  rather than from the timer, so the waiter wakes after the new key is the
+  active one.
+
+Eight existing hub tests changed a control and read the result 50 ms later;
+each now advances past the quarter second. One (`refetches the board the reader
+is on, never the one they left`) could have passed vacuously under the new
+timing and gained an assertion that a request actually went out.
+
+### 5. The limits guard -- `add355d`
+
+`routes/api._direct_envelope` reads `board_store.limits()`, so the shared
+path's environment parsing runs on every synchronous build. A non-numeric value
+raised `ConfigError` out of it uncaught -- a 500 on `/radar/`, `/radar/hub/`
+and `/radar/api/board` WITH THE FLAG OFF, which is the rollback path -- and
+nonsense-but-numeric values passed in silence (`MAX_QUEUE=0` answers every
+on-demand admission busy for ever; `FRESH_SECONDS=-5` marks every board stale).
+
+**Decision: both, not either.** Readers log once and stand on the default; the
+producer validates the same variables at startup and refuses to run. The
+reasoning is that the two processes want opposite trades. A reader must never
+be taken down by a knob it does not use, and the flag-off path must not depend
+on the shared path's tuning at all. A producer has nobody waiting on it, an
+operator watching it start, and a real cost to running the wrong schedule
+quietly -- which is the argument the existing test's docstring made for the
+raise, and it is still right THERE. `run_radar_board_producer.py` calls
+`board_store.validate_limits()` beside the namespace check that already kills
+startup for the same kind of reason.
+
+`limits()` now rejects a non-positive `max_queue`, `max_on_demand` or
+`lease_seconds` and any negative duration or count, says so once per value
+(`_COMPLAINED`, because it runs on every request), and returns the default.
+The existing test that asserted the raise from `limits()` was rewritten, not
+deleted: it points at `validate_limits` and its docstring records why the
+argument stopped applying to readers.
+
+### 6. The three test items -- `27fb905`
+
+- **Cross-generation isolation, the producer's side** (the ruling's "test
+  simultaneous v1/v2 readers and producers, not only a reader rejecting an old
+  blob"). Four tests: a generation blind to another's claimable, warm and
+  evictable rows (`claim`, `due_warm`, `queue_summary`, `evict`, `refresh_warm`,
+  and the other generation's own `evict` still removing 6, so the zero is a
+  scope and not a broken eviction); a live claim refused both `publish` and
+  `fail` outside its own namespace, and accepted inside it; two `Loop`s on two
+  namespaces against one database, publishing the same warm key into their own
+  rows under their own `producer_revision`, with a key admitted in one never
+  appearing in the other; and an expired lease that stays its own generation's
+  to reclaim. **Mutation-checked:** with `namespace = :ns` removed from
+  `claim`'s candidate SELECT and its claiming UPDATE all four fail; with it
+  removed from `queue_summary` and `due_warm` the first one does.
+- **The parity pre-split check** summed two buckets that both held seven --
+  PT02's last-hour bucket and its pre-split root -- so a read that dropped one
+  and counted the other gave the same total, and it is the only test of the
+  source-version rule. The root bucket holds nine now; the series asserts nine
+  and the score asserts 12+23+34+7. Mutation-checked: `expand_sources` made to
+  include the pre-split root gives `85 != 76`.
+- **`TESTING` restored.** The failing-enrichment test set `flask_app.config
+  ['TESTING'] = True` outright, which changed how every later test in the
+  session saw an unhandled exception. It goes through `monkeypatch.setitem`.
+
+### 7. The test-database guards, branch-wide -- `360066f`
+
+New `personal_apps/tests/radar_disposable.py`, used by all six suites. The rule
+is inverted as the review recommended: SKIP only on a database somebody works
+in (`personal_apps`, which is both the dev and the deployed name, and
+`coc_stats`), **`pytest.fail`** where the database is disposable but the tables
+are missing, and RUN otherwise. A denylist and not an allowlist on purpose --
+an allowlist is the pin this replaces and its failure mode is the silent skip.
+Two tests pin the guard itself, without touching a database.
+
+Two things had to be settled with it:
+
+- **`test_radar_projection_migration.py`'s `_wt` pin** is gone. Those five
+  tests, skipped in Task 9b's whole-suite run because they named a different
+  disposable database from the five newer suites, now run.
+- **Both migration suites restore to `head`, not to their own revision.** The
+  older one downgrades below the board-result tables; coming back only as far
+  as `a7c31f0b52d4` left the database a revision short for everything after it.
+  That, and not only the two names, is what made running them together
+  impossible.
+- **`test_radar_board_shared_api.py`'s one unguarded test** (the flag-off
+  envelope) now requests a `disposable` fixture that is the guard alone --
+  neither the flag nor a namespace, which is what that test is about.
+
+All seven suites ran in one pass for the first time: 238 passed.
+
+### 9. Text and trivia -- `98459d8`
+
+- `PERF3-RELEASE.md` §5: the log-hygiene sentence now covers the lines it NAMES
+  and says that the traceback beside them can carry a statement and its bound
+  parameters (`board_producer.py:269,298` are `logger.exception`), the way §5
+  already does for Flask's own line.
+- `PERF3-RELEASE.md` §6: "a complete behavioural rollback" is marked complete
+  on the SERVER and not on the screen, with the clause pointing at §4.2 step 2.
+- `PERF3-PLAN.md`: a fourth dated amendment records that flag-off is
+  byte-for-byte on the server and not on the screen, beside the other four
+  rather than edited into line 92. The file list's
+  `perf3-release/BUILD_REVISION.md` is struck through and explained: the third
+  amendment superseded it and it does not exist.
+- `board_producer.py`: the second blank line before `class Loop`.
+- `scratchpad/perf3/perf3_common.py`: `truncate_store` and `delete_on_demand`
+  check the database name themselves (`_only_the_scale_database`) instead of
+  trusting the engine they are handed.
+- `scratchpad/perf3/rehearse_board_results_mariadb.py`: the `DROP DATABASE`
+  guard is an allowlist (`ALLOWED_SCHEMAS`), not a denylist.
+
+### Deliberately not done
+
+- Nothing on the "Carry to Codex" list, and in particular no change to the
+  120 s fresh bound, the refresh target, or any queue or limit DEFAULT. The
+  failed criterion is returned as the review returned it.
+- **Minor 10** (the producer's idle control-row writes), **Minor 11** (the
+  retry hint being a floor) and **Minor 13** (Task 9a's three knowns) are left
+  where the review routed them: to Codex.
+- The whole backend suite was not re-run. Task 9b classified it; the only
+  branch-caused failure in it is item 1, which is fixed and verified in its own
+  module.
+- The three paths Task 5 marked "correct by construction" (the `settling` reset
+  path, the star's refetch while hidden, poll failures over a parked board) are
+  not all covered: this wave added tests for the parked-board poll failures and
+  for the `settling` gate on Retry and the expiry refetch, and left the
+  hidden-tab star refetch untested. Recommendation 4 of the review is therefore
+  two thirds done.

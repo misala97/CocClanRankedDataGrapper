@@ -1,4 +1,4 @@
-# CURRENT — PERF3: Tasks 1–9 done, ready for the whole-branch review; nothing deployed (2026-09-11)
+# CURRENT — PERF3: the fix wave is in; one independent review, then the return to Codex (2026-09-12)
 
 Claude implements under the PERF2 ruling; Codex owns planning. **Nothing is
 merged, pushed, deployed or configured on the VPS**; the deployed SHA is still
@@ -9,11 +9,11 @@ is a proposal, not a change.
 | --- | --- |
 | Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` (a git worktree) |
 | Branch | `codex/radar-perf3`, from `afe1246` (`personal_apps/` there is byte-identical to the deployed `4221196`) |
-| HEAD | the commit carrying this handoff, `docs(radar): PERF3 suites classified, the release delta, and the handoff`, on top of `3062ed9`. The last code commit is `e3aedfb` (Task 9a). `git log` is the truth |
-| Dirty files | none tracked. Untracked and ignored: the worktree `.env` (names the tests database; never print it), `node_modules`, `static/*/dist` (rebuilt by Task 9b), `.superpowers/` (controller scratch, never committed) |
-| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (two amendments to Task 8, two to Task 9); ledger `PERF3-LEDGER.md`; release package `PERF3-RELEASE.md` |
-| Controller scratch | `.superpowers/sdd/`: task briefs, implementer reports 1–9b, review packages, `progress.md` (the running log, including owner decisions) |
-| Tests DB | `personal_apps_radar_perf3`: stamp `b7e3f9c1a2d4`, re-read after Task 9b's runs; te1 clone with 29 FKs and gym data; no radar posts; its board data ends 2026-09-01 |
+| HEAD | the commit carrying this handoff, on top of `98459d8` (the fix wave's last). The wave is `dba911a..98459d8`, seven commits. `git log` is the truth |
+| Dirty files | none tracked. Untracked and ignored: the worktree `.env` (names the tests database; never print it), `node_modules`, `static/*/dist` (rebuilt by the fix wave), `.superpowers/` (controller scratch, never committed) |
+| Binding | `PERF2-CODEX-RULING.md`; plan `PERF3-PLAN.md` (four amendments); ledger `PERF3-LEDGER.md`; release package `PERF3-RELEASE.md` |
+| Controller scratch | `.superpowers/sdd/`: task briefs, implementer reports 1–9b, the whole-branch review (`review-whole-branch-report.md`), the fix wave's report (`fix-wave-report.md`), `progress.md` |
+| Tests DB | `personal_apps_radar_perf3`: stamp `b7e3f9c1a2d4`; te1 clone with 29 FKs and gym data; no radar posts; its board data ends 2026-09-01. The suites no longer pin its NAME — see "the database guard" below |
 | Scale DB | `personal_apps_radar_perf3_scale`: stamp `b7e3f9c1a2d4`, aligned forward by Task 8 to 2026-09-13 12:00 UTC. Re-run `scratchpad/perf3/align_scale_fixture.py` through `scale_env.py` before any timing or preview after that |
 | MariaDB | the portable 10.11.14 rehearsal server is STOPPED. The restart command is in the ledger. Needed only if the store or migration changes |
 
@@ -21,39 +21,85 @@ is a proposal, not a change.
 | --- | --- | --- |
 | 1 key + namespace | complete | `a5017e7`, `20429d0`, `a188bb3` |
 | 2 store + migration | complete; MariaDB rehearsal 54/54 | `0eba6a4`, `c2d0ca9`, `c199d06` |
-| 3 producer | complete | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) |
+| 3 producer | complete | `fd810c1`, `55f0d7f` (+ `6752492`) |
 | 4 read path, flag, API | complete | `9097621`, `6752492` |
-| 5 old board client | complete after five fix rounds, under the owner's stopping rule | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` |
-| 6 hub client | complete after one fix round, same rule | `103b8ba`, `d429378` |
+| 5 old board client | complete after five fix rounds | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` |
+| 6 hub client | complete after one fix round | `103b8ba`, `d429378` |
 | 7 parity | complete | `29cc2ac` |
-| 8 scale verification + browser | reviewed: the evidence is honest; its one Important is fixed in the ledger; six decisions go to Codex | `9fa42aa` (8a), `6ecba5a` (8b); ledger `7dc682e`, `c423b33` |
-| 9a request-timing line | approved by a read-only review | `e3aedfb`; the revision correction is `3062ed9` |
-| 9b suites, release package, handoff | done; it goes to the whole-branch review | the commit carrying this handoff |
-| whole-branch review | **next** | |
-
-Ledger and handoff commits in between: `4f8ad5f`, `ae4c0fa`, `84a0e7f`,
-`96150b1`, `97caa98`, `d905cf6`, `b2b7626`, `4a3196f`, `0d3e72d`, `0b50952`,
-`caa92bb`, `b685df9`.
+| 8 scale verification + browser | reviewed; six decisions go to Codex | `9fa42aa`, `6ecba5a`; ledger `7dc682e`, `c423b33` |
+| 9a request-timing line | approved by a read-only review | `e3aedfb`, `3062ed9` |
+| 9b suites, release package | done | `ed96885` |
+| whole-branch review | done: **ready to return with fixes, no Critical** | `dba911a` (ledger section) |
+| **fix wave** | **done**: every "fix before the return" item closed | `267811d`, `21c3591`, `a1c5a9e`, `add355d`, `27fb905`, `360066f`, `98459d8` |
+| the wave's independent re-review | **next** | |
 
 **Immediate next action.**
 
-1. One independent read-only review of the whole branch, `afe1246..HEAD`, by the most capable non-Fable model, using `superpowers:requesting-code-review`'s template. It works through the carried lists in the ledger (Tasks 1, 3, 5, 6, 7, 8) and Task 9b's one failure caused by this branch.
-2. ONE fix wave, its re-review, and the ledger's review section.
-3. The return to Codex: the exact SHA, the ledger, `PERF3-RELEASE.md` and the local preview below.
+1. One independent read-only review of the fix wave, `dba911a..HEAD`, by a
+   model that did not write it. Its subject is what this wave introduced and
+   any ruling violation, not a re-litigation of the whole branch: the
+   whole-branch review at `dba911a` already returned "ready with fixes, no
+   Critical", and its "Carry to Codex" list is deliberately untouched.
+2. The return to Codex: the exact SHA, the ledger, `PERF3-RELEASE.md` and the
+   local preview below.
 
 Nothing is deployed, and nothing in the package is authorized.
 
-**Suite results at `3062ed9`** (PERF3-LEDGER, "Task 9b"):
+**What the fix wave changed** (ledger, "Fix wave, 2026-09-12"; full report at
+`.superpowers/sdd/fix-wave-report.md`):
 
-- **Backend, whole:** `cd personal_apps && PYTHONPATH=. py -3.12 -m pytest tests -q -p no:cacheprovider` on `personal_apps_radar_perf3`. Of 2,967 tests: **6 failed, 2,956 passed, 5 skipped, 0 errors**, in 8 min 16 s. The full output is in `radar-design/perf3-release/pytest-full.txt`. The five skips are the `test_radar_projection_migration.py` tests, which are pinned to `personal_apps_radar_wt`.
-  - **(a) caused by this branch, 1 failure:** `tests/test_radar_activity.py::test_the_migration_adds_and_removes_only_its_own_two_tables`, assertion at `tests/test_radar_activity.py:396-397`. The named downgrade to `b3d9e1f5a274` now also drops this branch's `radar_board_namespaces` and `radar_board_results`. The test's hard-coded set does not name them. It is a test expectation that predates `b7e3f9c1a2d4`; no application code is wrong. It goes to the fix wave.
-  - **(b) pre-existing, 5 failures.** Each fails identically at `4221196`, run in a temporary detached worktree that has since been removed:
-    - `test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet`: the fixture has no radar posts, so there is no legacy cohort to print.
-    - `test_radar_trial_writes.py::test_a_lexicon_tone_carries_no_model_name`: stale since `e88e00b` relabelled a lexicon tone "wording".
-    - Three `test_radar_yahoo.py::test_daily_closes_*` tests: their pinned dates fell out of the provider's window on 2026-09-09, so they now fail everywhere.
-  - **(c) and (d):** none.
-- **Frontend:** root vitest **403/403** (32 files); radar vitest **681/681** (43 files); `npx tsc --noEmit` clean; `npm run build` clean. The radar bundle names are the ones Task 8b verified.
-- **PERF2's suite narrative, reconciled from its raw log, not re-run:** 17 failed = 10 gym + 6 radar + 1 extractor diagnostic; 30 errors, all gym; 9 skips = 5 projection-migration + 4 gym.
+- the branch's one red test, which asserted a property of the whole migration
+  chain rather than of its own step;
+- an arriving board no longer takes focus from a reader who chose nothing
+  (measured in a browser: 4,402 px of scroll at 390x844 before, 0 after, with
+  the reader's own click still moving focus), and a pending shell no longer
+  reports zeroes it never measured;
+- a parked board says whose failure the reader is looking at, in both clients;
+- nothing auto-resends a failed board request on the flag-off path, and the
+  star's refetch, Retry and the expiry refetch no longer add a build on top of
+  one that is already running;
+- the hub debounces a burst of control changes to one request, on the old
+  board's own 250 ms, applied before the selection becomes a query key;
+- a mistyped or nonsensical tuning variable can no longer 500 the flag-off
+  path, and the producer refuses to start on one;
+- the producer side of cross-generation isolation is pinned by four tests, the
+  parity suite's pre-split check discriminates, and `TESTING` is restored;
+- **the database guard, branch-wide** — see below;
+- two release sentences, a fourth plan amendment, and three small guards.
+
+**The database guard (new, and it changes how the suites are run).**
+`personal_apps/tests/radar_disposable.py`. The six radar suites no longer pin a
+database NAME. They skip only on `personal_apps` (both the dev and the deployed
+name) and `coc_stats`, **fail** where the bound database is disposable but does
+not carry the tables they need, and run everywhere else. So:
+
+- point `PERSONAL_DB_NAME` at any disposable clone and they run;
+- `test_radar_projection_migration.py`'s five long-standing silent skips are
+  gone — it no longer pins `personal_apps_radar_wt`, and both migration suites
+  can run in one pass;
+- both migration suites now restore the schema to `head`, not to their own
+  revision, so neither leaves the database short for whatever runs next.
+
+**Suite results at `98459d8`** (all run after the last commit):
+
+- **The seven focused backend suites, one pass**, on
+  `personal_apps_radar_perf3`: `cd personal_apps && PYTHONPATH=. py -3.12 -m
+  pytest tests/test_radar_board_store.py tests/test_radar_board_producer.py
+  tests/test_radar_board_shared_api.py tests/test_radar_board_parity.py
+  tests/test_radar_board_results_migration.py tests/test_radar_activity.py
+  tests/test_radar_projection_migration.py -q -p no:cacheprovider` →
+  **238 passed** in 47.8 s.
+- **Frontend:** radar vitest **700/700** (681 before the wave), root vitest
+  **403/403**, `npx tsc --noEmit` clean, `npm run build` clean.
+- **The whole backend suite was NOT re-run.** Task 9b classified it at
+  `3062ed9`: 6 failed, 2,956 passed, 5 skipped. Of those, the single
+  branch-caused failure is fixed by `267811d` and the five skips are gone with
+  the guard. The other five failures are pre-existing and each fails
+  identically at `4221196`: `test_diagnose_extractor_feedback.py`'s read-only
+  run, `test_radar_trial_writes.py`'s lexicon label, and three
+  `test_radar_yahoo.py::test_daily_closes_*` whose pinned dates fell out of the
+  provider's window on 2026-09-09. Expect **5 failures and 0 skips** from a
+  fresh whole-suite run; nobody has taken one since.
 
 **The release package** (`PERF3-RELEASE.md`, a proposal):
 
@@ -63,10 +109,12 @@ Nothing is deployed, and nothing in the package is authorized.
 - No `BUILD_REVISION` file on the VPS.
 - First rollout: deploy with the flag off, start the producer, and wait for `--readiness` to exit 0. Then set `RADAR_BOARD_SHARED_RESULTS=on` in `/root/coc-stats/.env`, restart the web unit, and verify through `/radar/api/ops`. `.env` is the one place for both flags, because `app.py` calls `load_dotenv(override=True)`.
 - Telemetry prepared, and off.
-- Rollback: the flag off in `.env`, then a web restart.
+- Rollback: the flag off in `.env`, then a web restart. Complete on the SERVER; the client still marks a board stale at 120 s and the hub still re-reads once a minute (§4.2 step 2, and the plan's fourth amendment).
 - Resource numbers, the target reads the owner must authorize, and the open risks and nine decisions for Codex.
 
-**The local preview**, for the return. The version in Task 9's brief would not work. It ran the producer with plain `py -3.12`, which the worktree `.env` binds to the TESTS database, while `serve_perf3.py` binds the SCALE database, so the two would never share a board. Both have to go through the launcher:
+**The local preview**, for the return. Both processes must go through the
+launcher, or the producer binds the TESTS database while the server binds the
+SCALE one and they never share a board:
 
 ```
 cd C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3/personal_apps
@@ -74,24 +122,33 @@ py -3.12 scratchpad/perf3/scale_env.py run_radar_board_producer.py              
 py -3.12 scratchpad/perf3/scale_env.py scratchpad/perf3/serve_perf3.py --port 5071  # terminal 2
 ```
 
-Then open `http://127.0.0.1:5071/radar/` and `/radar/hub/`. `scale_env` turns the flag on and pins one revision for both processes. The pages need a signed-in session, as any local run does. Port 5001 is the owner's own instance.
+Then open `http://127.0.0.1:5071/radar/` and `/radar/hub/`. `scale_env` turns
+the flag on and pins one revision for both processes. The pages need a signed-in
+session, as any local run does. Port 5001 is the owner's own instance.
+
+For the client alone, with no database and no producer, the fix wave's browser
+harness serves the real shell, assets and bundle against a stubbed API:
+
+```
+cd personal_apps && py -3.12 scratchpad/perf3/browser_focus_check.py
+```
 
 **Owner decisions in force.** One implementation worker at a time, a separate
 review per task, and full proof runs ("do it properly"). The stopping rule for
-Tasks 5 and 6 is recorded in the ledger: one last fix round, and a re-review
-blocks only on what that round introduced or on a ruling violation.
+Tasks 5 and 6 is recorded in the ledger.
 
-**Open decisions for Codex.** Task 8's six are in the ledger's Task 8 section.
-The release package adds three: where the flags live, the readiness-ordered
-deploy, and what the revision should cover. `PERF3-RELEASE.md` §10 lists all
-nine.
+**Open decisions for Codex.** Task 8's six are in the ledger's Task 8 section;
+`PERF3-RELEASE.md` §10 lists nine. The whole-branch review's "Carry to Codex"
+list is in the ledger's review section and the fix wave did not touch any of
+it — in particular the 120 s fresh bound, which FAILS by construction and whose
+remedies are capacity decisions.
 
 **Traps.**
 
 - `app.py` loads `.env` with `override=True`. An environment variable therefore cannot pick the database, and every process that imports `app` takes every key in that file over its unit's environment.
   - Scale scripts go through `scratchpad/perf3/scale_env.py`, which also pins the build revision (`PERF3_REVISION`) and patches the fixture's placeholder subreddit names.
   - The same rule decides where the release's flags live.
-- `test_radar_activity.py`'s migration round trip drops and recreates every radar table in the tests database each time it runs.
+- `test_radar_activity.py` and the two migration suites drop and recreate radar tables in the bound database each time they run, and now do so wherever the guard lets them. Both migration suites end at `head`.
 - The three `test_radar_yahoo.py` failures now fail on every machine.
 - Never print `.env`. An earlier listing put real credentials into a transcript, and the owner was told.
 
