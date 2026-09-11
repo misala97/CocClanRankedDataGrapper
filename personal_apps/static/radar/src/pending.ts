@@ -66,7 +66,8 @@ export function nextDelay(attempt: number, waitedMs: number,
 
 /** What one poll does. A number it returns is the server's own
  *  `retry_after_ms` for the answer that just arrived, and becomes the floor
- *  for the next delay; anything else means there was nothing to go on. */
+ *  for the next delay; anything else means that ask had nothing to go on --
+ *  aborted, dropped, unreachable -- and the floor already in force stands. */
 export type PollFn = () =>
   number | null | void | Promise<number | null | void>
 
@@ -170,6 +171,26 @@ export class Poller {
     void this.fire(this.generation)
   }
 
+  /** The server's floor, from an answer this wait did not ask for itself.
+   *
+   *  A Retry, the refetch after a mark, the first read of a new selection:
+   *  each is answered by the same queue the wait is asking, and when that
+   *  answer says "not for five seconds" the ask already on the timer must
+   *  not go out after one and a half. The timer is set again from now,
+   *  because the answer that named the floor is the latest word there is;
+   *  the schedule itself keeps its place.
+   *
+   *  Nothing to go on keeps the floor in force. An ask that is out sets its
+   *  timer when it answers, and a hidden tab asks the moment it is back --
+   *  neither has a timer here to move. */
+  guide(retryAfterMs: number | null): void {
+    if (this.fn === null || typeof retryAfterMs !== 'number') return
+    this.floor = retryAfterMs
+    if (this.timer === null) return
+    this.clear()
+    this.schedule(this.generation)
+  }
+
   private clear(): void {
     if (this.timer !== null) {
       clearTimeout(this.timer)
@@ -203,7 +224,12 @@ export class Poller {
       if (generation === this.generation) this.inFlight = false
     }
     if (generation !== this.generation) return
-    this.floor = typeof answer === 'number' ? answer : null
+    // Only a number moves the floor. An ask that came back with nothing --
+    // aborted by the reader's own Retry, dropped, unreachable -- learned
+    // nothing about the queue, and zeroing the floor on its account put the
+    // next ask on the schedule's own step under a server that had asked for
+    // five seconds.
+    if (typeof answer === 'number') this.floor = answer
     // Paused while this was out: the schedule declines, and resume() fires
     // then -- there is nothing in flight for it to defer to any more.
     this.schedule(generation)
@@ -247,19 +273,30 @@ export function ageAt(board: BoardPayload, received: number,
 /** Milliseconds until a board on screen passes its fresh bound -- negative
  *  once it has -- or null for a board with no such bound to pass.
  *
- *  Only a SHARED board has one. `stale` is the store's verdict at the instant
+ *  Every board with rows has one, whoever built it: ruling §5 lets a board
+ *  between the fresh bound and the hard expiry stay on screen ONLY as stale,
+ *  with no exception by path. `stale` is the store's verdict at the instant
  *  it answered, and this is the same verdict carried forward on the page's
- *  clock: a board the store has stopped calling current looks that way here
- *  too, whether or not anything asked it since. A board a worker built for
- *  itself has no store behind it and nothing queued to refresh it -- asking
- *  again builds another, which is exactly the cost the shared store exists
- *  to take away -- so it is never asked about on a timer. */
+ *  clock: a board past the bound looks that way here whether or not anything
+ *  asked about it since. What is DONE about such a board is a different
+ *  question, and `refreshes` answers it. */
 export function untilStale(board: BoardPayload, received: number,
                            now: number = Date.now()): number | null {
-  if (board.shared !== true || board.rows === null) return null
-  if (!Number.isFinite(board.fresh_seconds)) return null
+  if (board.rows === null || !Number.isFinite(board.fresh_seconds)) return null
   const age = ageAt(board, received, now)
   return age === null ? null : (board.fresh_seconds - age) * 1000
+}
+
+/** Whether anything stands behind a board to refresh it.
+ *
+ *  A shared board has the store and its producer: past the fresh bound a
+ *  refresh is queued, and waiting for it is the page's whole job. A board a
+ *  worker built for itself has neither. Nothing is queued, and asking again
+ *  builds another synchronously -- exactly the cost the shared store exists
+ *  to take away -- so it is marked past the bound, says nothing is
+ *  refreshing it, and is never asked about on a timer. */
+export function refreshes(board: BoardPayload): boolean {
+  return board.shared === true
 }
 
 /** Whether a board has outlived its fresh bound on this page's clock.
@@ -270,6 +307,15 @@ export function pastFresh(board: BoardPayload, received: number,
                           now: number = Date.now()): boolean {
   const left = untilStale(board, received, now)
   return left !== null && left < 0
+}
+
+/** Whether a board on screen has a refresh coming that this page should wait
+ *  for: one the store has queued (`stale`), or one the fresh bound has made
+ *  due on this page's clock -- for a board with something behind it to do
+ *  the refreshing. */
+export function refreshDue(board: BoardPayload, received: number,
+                           now: number = Date.now()): boolean {
+  return board.stale || (refreshes(board) && pastFresh(board, received, now))
 }
 
 /** Milliseconds until a board passes its hard expiry -- negative once it has

@@ -5,7 +5,8 @@ import { Boundary } from '../Broken'
 import { DetailPane } from '../detail/DetailPane'
 import { Account } from '../list/Account'
 import { ListPane, universalMarks } from '../list/ListPane'
-import { Poller, SLOW_MS, pastFresh, untilExpired, untilStale } from '../pending'
+import { Poller, SLOW_MS, pastFresh, refreshDue, refreshes, untilExpired,
+         untilStale } from '../pending'
 import { useNarrow } from './narrow'
 import type { BoardPayload, Row, Selection } from '../types'
 
@@ -20,6 +21,29 @@ import type { BoardPayload, Row, Selection } from '../types'
 /** How long a burst of control changes has to go quiet before one request
  *  goes out for all of them. */
 const SETTLE_MS = 250
+
+/** How one request ended. `shown` put its answer on screen and names the
+ *  floor for the next ask; `failed` left the last board up and said so;
+ *  `dropped` was aborted or superseded -- something newer took its place,
+ *  and it has nothing to report, not even a failure. */
+type Outcome =
+  | { kind: 'shown'; floor: number | null }
+  | { kind: 'failed' }
+  | { kind: 'dropped' }
+const FAILED: Outcome = { kind: 'failed' }
+const DROPPED: Outcome = { kind: 'dropped' }
+
+/** What a wait learns from a request: the server's floor, when it named one. */
+function floorOf(outcome: Outcome): number | null {
+  return outcome.kind === 'shown' ? outcome.floor : null
+}
+
+/** Whether nobody is looking at this tab. Read rather than waited for: a tab
+ *  restored in the background never fires a visibilitychange at all. */
+function hidden(): boolean {
+  return typeof document !== 'undefined'
+    && document.visibilityState === 'hidden'
+}
 
 export function BoardPage({ initial }: { initial: BoardPayload }) {
   const [payload, setPayload] = useState(initial)
@@ -83,13 +107,13 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const answers = useRef(0)
   // The reader's own request while one is out: a retry, the refetch after a
   // mark, the one a moved control sends. Never a poll's.
-  const own = useRef<Promise<number | null> | null>(null)
+  const own = useRef<Promise<Outcome> | null>(null)
 
   const fetchAndShow = useCallback(async (next: Selection,
                                           ticker: string | null,
                                           preserveTicker: boolean,
                                           poll: boolean)
-      : Promise<number | null> => {
+      : Promise<Outcome> => {
     // The board as it stands, read before the ask rather than after it: what
     // an answer is compared against is the board it was asked about.
     const was = { asOf: current.current.asOf, rows: current.current.rows }
@@ -109,28 +133,48 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     if (!poll) setBusy(true)
     try {
       const fresh = await fetchBoard(next, controller.signal, { poll })
-      if (generation !== asked.current) return null
+      if (generation !== asked.current) return DROPPED
       const at = Date.now()
       answers.current += 1
       setPayload(fresh)
       setReceived(at)
       setError(null)
+      // The floor under the next ask. The server's own whenever it named one;
+      // five seconds for a board that is stale only by this page's clock,
+      // which the server answered before it was and so gave no floor for --
+      // and the refresh being waited on takes as long as a build takes, not
+      // the second the schedule opens with.
+      const floor = fresh.retry_after_ms
+        ?? (refreshDue(fresh, at, at) ? SLOW_MS : null)
       // The wait ends here rather than in the effect below. The effect runs a
       // React commit later, and the poller schedules its next ask the moment
       // this function returns -- so a board that arrived would still be
       // followed by one more pointless request.
+      //
+      // Otherwise the wait hears the floor, whoever asked. A Retry, or the
+      // first read of a new selection, is answered by the queue the wait is
+      // asking, and an ask already on its timer must not undercut that answer.
       if (!owesABoard(fresh, at)) poller.current?.stop()
+      else poller.current?.guide(floor)
       // Selection follows filtering, but a market change is different: the
       // company identity stays the same even when its new market board does
       // not rank it. The detail endpoint can still show its marked fallback.
       //
-      // A waiting shell has no rows at all, so it holds no ticker: the panel
-      // empties with the list rather than describing a company the board
-      // beside it has stopped listing.
+      // A poll is different again. It is the page asking on the reader's
+      // behalf while the reader goes on reading, so the ticker it answers
+      // about is the one on screen NOW -- a row clicked while it was out
+      // included -- and that ticker stays, listed in this build or not, as it
+      // would through a market switch. Only a reader with no ticker yet is
+      // handed the top row.
+      //
+      // Any other answer that is a waiting shell has no rows, so it holds no
+      // ticker: the panel empties with the list rather than describing a
+      // company the board beside it has stopped listing.
+      const reader = poll ? current.current.selected : ticker
       const rows = fresh.rows ?? []
-      const stillThere = rows.some((row) => row.ticker === ticker)
-      const nextTicker = (preserveTicker || stillThere) ? ticker
-        : (rows[0]?.ticker ?? null)
+      const keep = poll ? reader !== null
+        : (preserveTicker || rows.some((row) => row.ticker === reader))
+      const nextTicker = keep ? reader : (rows[0]?.ticker ?? null)
       // A poll that brings the same board back has changed nothing to
       // select and nothing to write down. Doing it anyway rewrites the
       // history entry the reader is standing on every few seconds, for as
@@ -139,19 +183,15 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
         setSelected(nextTicker)
         writeUrl(next, nextTicker)
       }
-      // The floor under the next ask. The server's own whenever it named one;
-      // five seconds for a board that is stale only by this page's clock,
-      // which the server answered before it was and so gave no floor for --
-      // and the refresh being waited on takes as long as a build takes, not
-      // the second the schedule opens with.
-      return fresh.retry_after_ms
-        ?? ((fresh.stale || pastFresh(fresh, at, at)) ? SLOW_MS : null)
+      return { kind: 'shown', floor }
     } catch (problem) {
-      if (controller.signal.aborted || generation !== asked.current) return null
+      if (controller.signal.aborted || generation !== asked.current) {
+        return DROPPED
+      }
       // The previous board stays on screen. A failed refresh is a reason to
       // say so, not a reason to throw away data that is still true.
       setError(problem as BoardUnavailable)
-      return null
+      return FAILED
     } finally {
       if (inflight.current === controller) {
         inflight.current = null
@@ -165,7 +205,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // can wait for its answer instead of sending a second request (`begin`).
   const load = useCallback((next: Selection, ticker: string | null,
                             preserveTicker = false, poll = false)
-      : Promise<number | null> => {
+      : Promise<Outcome> => {
     const answer = fetchAndShow(next, ticker, preserveTicker, poll)
     if (!poll) {
       own.current = answer
@@ -198,8 +238,9 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       // reader's request -- a retry, a moved control -- so the one board was
       // asked for twice, and the controls were left marked busy by a request
       // nothing remained to finish.
-      () => own.current ?? load(current.current.selection,
-                                current.current.selected, false, true),
+      () => (own.current ?? load(current.current.selection,
+                                 current.current.selected, false, true))
+        .then(floorOf),
       current.current.retryAfterMs)
     // A tab that was already in the background when this began -- a session
     // restored behind other windows, a link opened in a new tab -- never
@@ -207,8 +248,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     // The hub's useVisible() reads it at mount for the same reason, and
     // getting it wrong here is a poll of a shared queue on behalf of a tab
     // nobody has looked at yet.
-    if (typeof document !== 'undefined'
-        && document.visibilityState === 'hidden') wait.pause()
+    if (hidden()) wait.pause()
   }, [load])
 
   // Freshness is a BOUND, not a verdict. `stale` is what the server saw at
@@ -217,6 +257,11 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // so. A tab left open over lunch would otherwise sit on a board the store
   // stopped considering current forty minutes ago, because the only thing
   // that ever asked was a reader touching a control.
+  //
+  // Every board crosses it, whoever built it -- the line marks each one
+  // stale past it. Only a shared board is WAITED on from here: nothing is
+  // queued behind a board a worker built for itself, and asking about it on
+  // a timer would only build another synchronously, in every open tab.
   const [passedFresh, setPassedFresh] = useState(
     () => pastFresh(initial, Date.now()))
   useEffect(() => {
@@ -234,7 +279,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       // polling effect adopts the wait it finds running instead of starting
       // a second one.
       const wait = poller.current
-      if (wait && !wait.running) begin(wait)
+      if (wait && !wait.running && refreshes(payload)) begin(wait)
     }, left)
     return () => clearTimeout(timer)
   }, [payload, received, begin])
@@ -250,7 +295,17 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // sent now: expiry and the refresh the wait is after are one question, and
   // asking it beside the wait was two requests, whichever went second
   // aborting the other. The wait's schedule carries on from its place.
+  //
+  // With no wait -- a board a worker built for itself, which nothing asks
+  // about on a timer -- the refetch is this one request, and it goes out for
+  // a reader who is looking. A hidden tab owes it instead, as does a tab
+  // whose refetch failed: each answer arms the next expiry, so a refetch sent
+  // from the background was a synchronous build every ten minutes for as
+  // long as the tab stayed open, and a failed one armed nothing at all.
   const refetched = useRef<string | null>(null)
+  // The refetch this page owes, paid when the reader next looks at the tab
+  // (the visibility handler below) and dropped once any board lands.
+  const owed = useRef<(() => void) | null>(null)
   useEffect(() => {
     const left = untilExpired(payload, received)
     if (left === null) return
@@ -260,21 +315,36 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     // page fetching as fast as the network allows.
     const again = left <= 0 && refetched.current === payload.as_of
     const armed = answers.current
-    const timer = setTimeout(() => {
+    const refetch = () => {
       if (answers.current !== armed) return
       refetched.current = payload.as_of
       const wait = poller.current
-      if (wait?.running) wait.askNow()
-      else void load(current.current.selection, current.current.selected, true)
-    }, again ? SLOW_MS : Math.max(0, left))
-    return () => clearTimeout(timer)
+      if (wait?.running) { wait.askNow(); return }
+      if (hidden()) { owed.current = refetch; return }
+      // Joined, as a poll is, when the reader's own request is already out:
+      // its answer is the one this would fetch.
+      void (own.current
+        ?? load(current.current.selection, current.current.selected, true))
+        .then((outcome) => {
+          if (outcome.kind === 'failed' && answers.current === armed) {
+            owed.current = refetch
+          }
+        })
+    }
+    const timer = setTimeout(refetch, again ? SLOW_MS : Math.max(0, left))
+    return () => {
+      clearTimeout(timer)
+      if (owed.current === refetch) owed.current = null
+    }
   }, [payload, received, load])
 
   // Four states, one behaviour: keep asking. Pending and busy have no board
-  // to show, stale has one that is being replaced, and a board that has
-  // outlived its own fresh bound on this page's clock is in the same
+  // to show, stale has one that is being replaced, and a shared board that
+  // has outlived its own fresh bound on this page's clock is in the same
   // position with nobody having told it -- in all four there is an answer
-  // coming that nothing else on this page would go and get.
+  // coming that nothing else on this page would go and get. A board a worker
+  // built for itself has none coming: past the bound it is marked, and
+  // asking again is the reader's call.
   //
   // Keyed on the STATE rather than on the payload: a poll that answers
   // "still pending" produces a new payload object every few seconds, and
@@ -282,7 +352,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // of how long the reader has been waiting -- so it would never slow down
   // and never admit the wait is long.
   const waiting = payload.pending || payload.busy || payload.stale
-    || passedFresh
+    || (passedFresh && refreshes(payload))
   useEffect(() => {
     const wait = poller.current
     if (!wait) return
@@ -297,11 +367,16 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   }, [waiting, question, begin])
 
   // A hidden tab is polling a queue on behalf of nobody. Coming back asks
-  // once immediately, because the answer is usually already waiting.
+  // once immediately, because the answer is usually already waiting -- and
+  // pays whatever the tab owes: an expired board's refetch that came due
+  // while nobody was looking, or failed while somebody was.
   useEffect(() => {
     const change = () => {
-      if (document.visibilityState === 'hidden') poller.current?.pause()
-      else poller.current?.resume()
+      if (hidden()) { poller.current?.pause(); return }
+      poller.current?.resume()
+      const refetch = owed.current
+      owed.current = null
+      refetch?.()
     }
     document.addEventListener('visibilitychange', change)
     return () => document.removeEventListener('visibilitychange', change)
@@ -427,6 +502,12 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     <Account payload={payload} shared={universalMarks(rows)} />
   )
 
+  // Nothing is fetching a replacement for the board on screen: the last
+  // request failed, none is out, and no wait is running to ask again. The
+  // age line reads it for an expired board, which must not go on promising a
+  // recalculation the page has stopped attempting.
+  const stalled = error !== null && !busy && !waiting
+
   return (
     <div className="page" ref={page}>
       {/* Placed in the grid explicitly rather than left to auto-flow. As a
@@ -445,7 +526,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
         <ListPane payload={payload} received={received} selection={selection}
                   selected={selected}
                   busy={busy} onSelect={select} onChange={setSelection}
-                  onRetry={retry}
+                  onRetry={retry} stalled={stalled}
                   account={narrow ? null : account}
                   watching={watching} onToggleWatch={toggleWatch} />
       </Boundary>
@@ -476,8 +557,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
  *  `received` is when it arrived, which is the whole of how long this page
  *  has held it at the moment it is asked. */
 function owesABoard(board: BoardPayload, received: number): boolean {
-  return board.pending || board.busy || board.stale
-    || pastFresh(board, received, received)
+  return board.pending || board.busy || refreshDue(board, received, received)
 }
 
 /** Whether two answers are the same board: the same build, listing the same

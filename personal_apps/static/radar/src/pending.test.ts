@@ -6,8 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { payload } from './fixtures'
-import { DELAYED_AFTER_MS, Poller, ageAt, nextDelay, pastFresh, untilExpired,
-         untilStale } from './pending'
+import { DELAYED_AFTER_MS, Poller, ageAt, nextDelay, pastFresh, refreshes,
+         untilExpired, untilStale } from './pending'
 
 /** The jitter, taken out. The spread only ever adds, so its bottom is the
  *  number the schedule -- or the server's floor -- actually names. */
@@ -250,6 +250,50 @@ describe('the poller', () => {
     expect(ask).toHaveBeenCalledTimes(2)
     poller.stop()
   })
+
+  it('keeps the server\'s floor through an answer that had nothing to say', async () => {
+    // An ask the reader's Retry aborted answers nothing at all. That is no
+    // reason to forget what the server said the time before: dropping the
+    // floor put the next ask on the schedule's own step, under a server that
+    // had asked for five seconds.
+    const poller = new Poller()
+    const said: (number | null)[] = [5000, null]
+    const ask = vi.fn(async () => said.shift() ?? null)
+
+    poller.start(ask)
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(ask).toHaveBeenCalledTimes(2)
+
+    // The second answer said nothing; the first one's floor stands.
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(ask).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(ask).toHaveBeenCalledTimes(3)
+    poller.stop()
+  })
+
+  it('takes a floor from an answer it did not ask for itself', async () => {
+    // A Retry, or the first read of a new selection, is answered by the same
+    // queue this wait is asking. When that answer says "not for five
+    // seconds", the ask already on the timer must not go out after one and a
+    // half -- and five seconds are counted from the answer that said so.
+    const poller = new Poller()
+    const ask = vi.fn(async () => 1000)
+
+    poller.start(ask, 1000)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(ask).toHaveBeenCalledTimes(1)
+
+    // Due at 2500 on the schedule; a busy answer lands at 1200.
+    await vi.advanceTimersByTimeAsync(200)
+    poller.guide(5000)
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(ask).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(ask).toHaveBeenCalledTimes(2)
+    poller.stop()
+  })
 })
 
 describe('how long a board on screen stays good', () => {
@@ -270,27 +314,34 @@ describe('how long a board on screen stays good', () => {
     expect(ageAt(board, at, at)).toBe(180)
   })
 
-  it('calls a shared board stale strictly past its bound, as the server does', () => {
-    // board_shared.disposition: a board exactly `fresh_seconds` old is still
-    // fresh. The page's clock reads the same boundary the same way.
-    const board = payload({ shared: true, age_seconds: 110,
-                            fresh_seconds: 120 })
+  it.each([true, false])(
+    'calls a board stale strictly past its bound, as the server does (shared: %s)',
+    (shared) => {
+      // board_shared.disposition: a board exactly `fresh_seconds` old is
+      // still fresh. The page's clock reads the same boundary the same way,
+      // on both paths -- the bound is the ruling's, not the store's.
+      const board = payload({ shared, age_seconds: 110, fresh_seconds: 120 })
 
-    expect(untilStale(board, at, at)).toBe(10_000)
-    expect(pastFresh(board, at, at + 10_000)).toBe(false)
-    expect(pastFresh(board, at, at + 10_001)).toBe(true)
-  })
+      expect(untilStale(board, at, at)).toBe(10_000)
+      expect(pastFresh(board, at, at + 10_000)).toBe(false)
+      expect(pastFresh(board, at, at + 10_001)).toBe(true)
+    })
 
-  it('never calls a board stale that has no store behind it', () => {
-    // A board a worker built for itself: nothing is queued to refresh it,
-    // and asking again would build another.
-    const board = payload({ shared: false, age_seconds: 500,
-                            fresh_seconds: 120 })
+  it('marks a board stale whoever built it, and waits only on the store', () => {
+    // Ruling §5: between the fresh bound and the hard expiry a board may stay
+    // on screen ONLY as stale, with no exception by path -- and the flag-off
+    // path is production until the flag flips. What a board a worker built
+    // for itself lacks is anything behind it: nothing is queued to refresh
+    // it, and asking again would build another. Marked, never waited on.
+    const direct = payload({ shared: false, age_seconds: 500,
+                             fresh_seconds: 120 })
 
-    expect(untilStale(board, at, at)).toBeNull()
-    expect(pastFresh(board, at, at)).toBe(false)
+    expect(untilStale(direct, at, at)).toBe(-380_000)
+    expect(pastFresh(direct, at, at)).toBe(true)
+    expect(refreshes(direct)).toBe(false)
+    expect(refreshes(payload({ shared: true }))).toBe(true)
     // The hard expiry is every board's: past it the window has moved on.
-    expect(untilExpired(board, at, at)).toBe(100_000)
+    expect(untilExpired(direct, at, at)).toBe(100_000)
   })
 
   it('has nothing to say about a board nobody has built yet', () => {

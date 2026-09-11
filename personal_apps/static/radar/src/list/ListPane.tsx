@@ -6,7 +6,8 @@ import { MarketSwitch } from '../board/MarketSwitch'
 import { Search } from '../board/Search'
 import { defaultDirection, queryFor } from '../api'
 import { formatMarketTime, humanAge, plural } from '../format'
-import { DELAYED_AFTER_MS, ageAt, pastFresh, untilExpired } from '../pending'
+import { DELAYED_AFTER_MS, ageAt, pastFresh, refreshes, untilExpired }
+  from '../pending'
 import { Widen } from '../Widen'
 import { SpendMark } from './Spend'
 import { TickerRow, scoredAgainstPrice } from './TickerRow'
@@ -35,9 +36,13 @@ function boardAge(seconds: number): string {
  *  window it names -- so the corner says the AGE, which is the number all
  *  three of those states are about, and adds what is being done about it.
  */
-function AgeLine({ payload, received }: {
+function AgeLine({ payload, received, stalled = false, onRetry }: {
   payload: BoardPayload
   received: number
+  /** Nothing is fetching a replacement: the last request failed and no wait
+   *  is running. Only an expired board has anything to say about it. */
+  stalled?: boolean
+  onRetry?: () => void
 }) {
   // The page has no other reason to re-render while it sits untouched, which
   // is precisely the situation this describes. One timer for the whole board,
@@ -54,6 +59,8 @@ function AgeLine({ payload, received }: {
   const now = Date.now()
   const age = ageAt(payload, received, now)
   if (age === null) return null
+  const retry = onRetry
+    ? <button type="button" onClick={onRetry}>Retry</button> : null
   // Past the hard expiry the age itself has stopped being worth printing:
   // the rows describe a rolling window that has moved, and the page has
   // already gone to ask for a board that describes this one.
@@ -61,30 +68,41 @@ function AgeLine({ payload, received }: {
   if (expiry !== null && expiry < 0) {
     return (
       <span className="age expired">
-        <b>Expired, recalculating</b>
+        {stalled
+          // Unless that ask failed and nothing else is asking. Promising a
+          // recalculation then is the line describing work the page is not
+          // doing; the next ask is the reader's, or the next look at the tab.
+          ? <><b>Expired</b>{retry}</>
+          : <b>Expired, recalculating</b>}
       </span>
     )
   }
   // `stale` is what the server saw when it answered; the fresh bound is how
-  // long that answer was good for. A page that has held a shared board past
-  // it is looking at the same thing a stale flag describes, and saying so
-  // only when the server happened to notice first would make the line a
-  // report on when this tab last asked. The same reading the page polls on,
-  // so the word is never printed over a board nothing is going to fetch.
+  // long that answer was good for. A page that has held a board past it is
+  // looking at the same thing a stale flag describes, and saying so only
+  // when the server happened to notice first would make the line a report on
+  // when this tab last asked. Every board, whoever built it: ruling §5 lets
+  // one past the bound stay on screen ONLY as stale. What is being done
+  // about it is the part that differs, and the word after the age says which.
   const stale = payload.stale || pastFresh(payload, received, now)
   return (
     <span className={stale ? 'age stale' : 'age'}>
       Calculated {boardAge(age)} ago
       {payload.failed
         // A verdict on the queue, not on these rows: they are the last board
-        // that built. Said in place of "refreshing" rather than beside it,
-        // because a refresh that is failing is not one that is happening.
+        // that built. Printed in place of "refreshing", never beside it -- a
+        // refresh that is failing is not one that is happening -- so a stale
+        // board whose rebuilds are failing says only this, in the caution
+        // colour, because it is the one state here that wants the reader's eye.
         ? <> · <b>Last refresh failed</b></>
-        // Its own class rather than the line's: the quiet treatment belongs
-        // to this word and not to everything the line can end with, and a
-        // stale board whose rebuilds are ALSO failing says both -- one of
-        // them a caution.
-        : stale ? <> · <b className="queued">refreshing</b></> : null}
+        : !stale ? null
+        // The store has a refresh queued and the page is waiting on it. Its
+        // own class, not the line's: the quiet treatment belongs to this word.
+        : refreshes(payload) ? <> · <b className="queued">refreshing</b></>
+        // A board a worker built for itself. Nothing is queued behind it and
+        // nothing asks on its behalf, so the word claims no refresh, and the
+        // ask it would take -- a synchronous build -- is the reader's to make.
+        : <> · <b>not refreshed</b>{retry}</>}
     </span>
   )
 }
@@ -506,8 +524,8 @@ export function SortCols({ selection, onChange }: {
  *  900px the page places it after the panel instead -- see BoardPage.
  */
 export function ListPane({ payload, received, selection, selected, busy,
-                          onSelect, onChange, onRetry, account, watching = [],
-                          onToggleWatch }: {
+                          onSelect, onChange, onRetry, stalled = false,
+                          account, watching = [], onToggleWatch }: {
   payload: BoardPayload
   /** When this page received that payload, so the age on screen can keep
    *  moving between answers. Defaults to now for the suites that render this
@@ -519,8 +537,12 @@ export function ListPane({ payload, received, selection, selected, busy,
   onSelect: (ticker: string) => void
   onChange: (next: Selection) => void
   /** Ask again, now. Offered in the states where the wait has gone on long
-   *  enough that a reader wants a button rather than patience. */
+   *  enough that a reader wants a button rather than patience, and beside a
+   *  board that nothing else is going to ask about. */
   onRetry?: () => void
+  /** Nothing is fetching a replacement for the board on screen: the last
+   *  request failed and no wait is running. */
+  stalled?: boolean
   /** The footer matter, when this pane is where it belongs. */
   account?: ReactNode
   /** The reader's marks and how to flip one; rendered as the Watching tier
@@ -601,7 +623,8 @@ export function ListPane({ payload, received, selection, selected, busy,
           {/* Ops at a glance, in the corner the eye already checks for
               freshness: today's tone spend, then the stamp. */}
           <SpendMark payload={payload} />
-          <AgeLine payload={payload} received={received ?? Date.now()} />
+          <AgeLine payload={payload} received={received ?? Date.now()}
+                   stalled={stalled} onRetry={onRetry} />
         </div>
         <Status payload={payload} shared={shared}
                 quoteTokens={quoteShared.tokens} />
