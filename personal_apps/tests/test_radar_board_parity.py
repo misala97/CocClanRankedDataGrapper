@@ -49,12 +49,11 @@ from features.radar import (board as board_mod, board_keys, board_namespace,
                             coverage, leaderboard, watch)
 from features.radar.config import (DEFAULT_SEGMENT, REDDIT_SUBS,
                                    source_config_version)
+import radar_disposable
 from features.radar.routes import api
 from models import (AppUser, RadarBucketSource, RadarDailyClose,
                     RadarInstrument, RadarMention, RadarPost, RadarQuote,
                     RadarWatch, TickerUniverse)
-
-DISPOSABLE = 'personal_apps_radar_perf3'
 
 # A Tuesday in January, where the test database holds no radar data at all.
 # Coverage is decided across EVERY ticker by design, so a clock overlapping
@@ -424,8 +423,8 @@ def seeded():
     here, which is what makes sharing them safe.
     """
     with flask_app.app_context():
-        if db.engine.url.database != DISPOSABLE:
-            pytest.skip(f'not the disposable database: {db.engine.url.database}')
+        radar_disposable.require('radar_board_results',
+                                 'radar_board_namespaces')
         _wipe()
         try:
             accounts = _seed()
@@ -496,13 +495,6 @@ def store(seeded, monkeypatch):
     """A namespace of this test's own, a private board memo, frozen ops."""
     with flask_app.app_context():
         engine = db.engine
-        with engine.connect() as connection:
-            if not connection.execute(sa.text(
-                    "show tables like 'radar_board_results'")).first():
-                pytest.fail('radar_board_results is missing: run '
-                            'PYTHONPATH=. FLASK_APP=app.py py -3.12 -m flask '
-                            'db upgrade first')
-
         name = 'perf3parity-' + secrets.token_hex(20)
         monkeypatch.setattr(board_namespace, 'namespace', lambda: name)
         monkeypatch.setattr(board_namespace, 'describe', lambda: {

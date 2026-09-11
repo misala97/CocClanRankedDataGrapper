@@ -26,11 +26,11 @@ from alembic.script import ScriptDirectory
 from app import app as flask_app
 from extensions import db
 from features.radar import board_keys
+import radar_disposable
 from models import RadarBoardNamespace, RadarBoardResult
 
 REVISION = 'b7e3f9c1a2d4'
 PREVIOUS = 'a7c31f0b52d4'
-DISPOSABLE = 'personal_apps_radar_perf3'
 
 NEW_TABLES = {'radar_board_namespaces', 'radar_board_results'}
 NEW_INDEXES = {'ix_radar_board_results_queue',
@@ -79,14 +79,19 @@ def _downgrade(revision):
 
 @pytest.fixture
 def disposable():
-    """Refuses to touch anything but the disposable clone, and puts the
-    revision back whatever the test did to it."""
+    """Refuses to touch a database somebody works in (`radar_disposable`),
+    and puts the schema back whatever the test did to it.
+
+    Back to HEAD, not to this suite's own revision. A downgrade here removes
+    the tables every other radar suite needs, and returning only as far as the
+    revision under test would leave the database behind for whatever runs
+    next -- which is exactly the trap the two pinned names used to hide.
+    """
     with flask_app.app_context():
-        if db.engine.url.database != DISPOSABLE:
-            pytest.skip(f'not the disposable database: {db.engine.url.database}')
-        _at_revision(REVISION)
+        radar_disposable.require()
+        _at_revision('head')
         yield
-        _at_revision(REVISION)
+        _at_revision('head')
 
 
 def _tables(connection):

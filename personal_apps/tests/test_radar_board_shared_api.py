@@ -36,9 +36,8 @@ from features.radar import (board as board_mod, board_keys, board_namespace,
                             board_producer, board_shared, board_store,
                             leaderboard, observations, watch)
 from features.radar.market_calendars import session_state
+import radar_disposable
 from features.radar.routes import api
-
-DISPOSABLE = 'personal_apps_radar_perf3'
 
 # One fixed instant, naive UTC -- the convention every timestamp in these
 # tables is written in. A Thursday, inside the US regular session.
@@ -267,19 +266,25 @@ def no_building(monkeypatch):
 
 
 @pytest.fixture
+def disposable():
+    """The database guard, without the flag or a namespace.
+
+    For the flag-OFF test below, which wants neither -- and which, before
+    this, was the one test in this file that ran against whatever database
+    happened to be bound.
+    """
+    with flask_app.app_context():
+        radar_disposable.require()
+        yield
+
+
+@pytest.fixture
 def shared(monkeypatch):
     """The flag on, a namespace of this test's own, and a clean memo."""
     with flask_app.app_context():
-        if db.engine.url.database != DISPOSABLE:
-            pytest.skip(f'not the disposable database: {db.engine.url.database}')
+        radar_disposable.require('radar_board_results',
+                                 'radar_board_namespaces')
         engine = db.engine
-        with engine.connect() as connection:
-            if not connection.execute(sa.text(
-                    "show tables like 'radar_board_results'")).first():
-                pytest.fail('radar_board_results is missing: run '
-                            'PYTHONPATH=. FLASK_APP=app.py py -3.12 -m flask '
-                            'db upgrade first')
-
         name = 'perf3read-' + secrets.token_hex(20)
         monkeypatch.setenv('RADAR_BOARD_SHARED_RESULTS', 'on')
         monkeypatch.setattr(board_namespace, 'namespace', lambda: name)
@@ -846,7 +851,8 @@ def test_capture_reads_nothing_from_the_store_even_with_the_flag_on(
 
 # --- the flag off -----------------------------------------------------------
 
-def test_the_flag_off_is_todays_payload_with_the_envelope_on_top(monkeypatch):
+def test_the_flag_off_is_todays_payload_with_the_envelope_on_top(
+        disposable, monkeypatch):
     """Byte for byte the board the synchronous path has always built, plus
     the fields that describe how it was delivered -- so the client has one
     shape to render whichever path answered."""

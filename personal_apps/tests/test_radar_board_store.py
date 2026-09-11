@@ -28,9 +28,8 @@ import sqlalchemy as sa
 
 from app import app as flask_app
 from extensions import db
+import radar_disposable
 from features.radar import board_keys, board_namespace, board_store
-
-DISPOSABLE = 'personal_apps_radar_perf3'
 
 # One fixed instant. Naive UTC, the way every timestamp in these tables is.
 NOW = dt.datetime(2026, 9, 10, 12, 0, 0)
@@ -124,17 +123,15 @@ class _Store:
 
 @pytest.fixture
 def store():
-    """A namespace of this test's own, on the disposable database only."""
+    """A namespace of this test's own, on any database that is not somebody's.
+
+    The guard is `radar_disposable`, branch-wide: it skips only where these
+    tests must not write, and fails where they may but the schema is behind.
+    """
     with flask_app.app_context():
-        if db.engine.url.database != DISPOSABLE:
-            pytest.skip(f'not the disposable database: {db.engine.url.database}')
+        radar_disposable.require('radar_board_results',
+                                 'radar_board_namespaces')
         engine = db.engine
-        with engine.connect() as connection:
-            if not connection.execute(sa.text(
-                    "show tables like 'radar_board_results'")).first():
-                pytest.fail('radar_board_results is missing: run '
-                            'PYTHONPATH=. FLASK_APP=app.py py -3.12 -m flask '
-                            'db upgrade first')
         owned = _Store(engine)
         try:
             yield owned
@@ -147,6 +144,50 @@ def store():
                     connection.execute(sa.text(
                         'delete from radar_board_namespaces'
                         ' where namespace = :ns'), {'ns': name})
+
+
+# --- the database guard ----------------------------------------------------
+
+def _bound_to(monkeypatch, database, *, migrated=True):
+    """The guard, asked about a database without going near one."""
+    import types
+    monkeypatch.setattr(radar_disposable, 'db', types.SimpleNamespace(
+        engine=types.SimpleNamespace(
+            url=sa.engine.url.make_url(f'mysql+pymysql://u@localhost/{database}'))))
+    monkeypatch.setattr(radar_disposable, '_has', lambda table: migrated)
+
+
+def test_the_guard_never_lets_a_suite_write_to_a_working_database(monkeypatch):
+    """The one outcome that must be impossible. Every suite in this file
+    inserts and deletes rows, and the parity suite wipes sixty tickers."""
+    for database in ('personal_apps', 'PERSONAL_APPS', 'coc_stats'):
+        _bound_to(monkeypatch, database)
+        with pytest.raises(BaseException) as refused:
+            radar_disposable.require('radar_board_results')
+        assert type(refused.value).__name__ == 'Skipped'
+        assert 'working database' in str(refused.value)
+
+
+def test_the_guard_runs_on_any_other_database_and_says_so_when_it_cannot(
+        monkeypatch):
+    """Inverted from the pin it replaces: a name it does not recognise is a
+    disposable one, and a disposable one whose schema is behind FAILS rather
+    than skipping. A suite that skips silently on every machine but one is a
+    suite nobody is running -- which is what happened to
+    test_radar_projection_migration for a whole generation."""
+    _bound_to(monkeypatch, 'personal_apps_radar_perf3')
+    assert radar_disposable.require('radar_board_results') == (
+        'personal_apps_radar_perf3')
+
+    _bound_to(monkeypatch, 'personal_apps_some_clone')
+    assert radar_disposable.require() == 'personal_apps_some_clone'
+
+    _bound_to(monkeypatch, 'personal_apps_radar_perf3', migrated=False)
+    with pytest.raises(BaseException) as refused:
+        radar_disposable.require('radar_board_results')
+    assert type(refused.value).__name__ == 'Failed'
+    assert 'radar_board_results' in str(refused.value)
+    assert 'db upgrade' in str(refused.value)
 
 
 # --- limits ----------------------------------------------------------------

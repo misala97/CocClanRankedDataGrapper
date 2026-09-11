@@ -20,11 +20,11 @@ from alembic.config import Config
 
 from app import app as flask_app
 from extensions import db
+import radar_disposable
 from features.radar import activity
 
 REVISION = 'a7c31f0b52d4'
 PREVIOUS = 'd82f9afb5898'
-DISPOSABLE = 'personal_apps_radar_wt'
 
 # Before Radar existed. The suite's other modules blanket-delete this range.
 BASE = dt.datetime(2019, 7, 3, 9, 0)
@@ -66,16 +66,26 @@ def _alembic() -> Config:
 
 @pytest.fixture
 def disposable():
-    """Refuses to touch anything but the disposable clone. A migration test
-    that ran against the shared dev database would be a very expensive way to
-    learn that the guard was missing."""
+    """Refuses to touch a database somebody works in (`radar_disposable`).
+
+    A migration test that ran against the shared dev database would be a very
+    expensive way to learn the guard was missing -- but the name it used to
+    pin, `personal_apps_radar_wt`, was a different disposable name from the
+    one the newer suites pinned, so the two migration modules could never run
+    in the same pass and these five tests were skipped on the machine they
+    were written on.
+
+    The restore goes to HEAD, not to this suite's own revision. Its tests
+    downgrade below the board-result tables; coming back only as far as
+    a7c31f0b52d4 would leave the database a revision short for every suite
+    that runs after it.
+    """
     with flask_app.app_context():
-        if db.engine.url.database != DISPOSABLE:
-            pytest.skip(f'not the disposable database: {db.engine.url.database}')
+        radar_disposable.require('radar_ingest_runs')
         _clear()
         yield
-        # Back to the head the branch expects, whatever the test did.
-        _at_revision(REVISION)
+        # Back to head, whatever the test did -- see above.
+        _at_revision('head')
         _clear()
 
 

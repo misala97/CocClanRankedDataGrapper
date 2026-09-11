@@ -37,9 +37,8 @@ from features.radar import board as board_mod
 from features.radar import (board_keys, board_metrics, board_producer,
                             board_shared, board_store)
 from features.radar.config import DEFAULT_SEGMENT, SOURCES
+import radar_disposable
 from features.radar.routes import api
-
-DISPOSABLE = 'personal_apps_radar_perf3'
 
 # One fixed instant. Naive UTC, the way every timestamp in these tables is.
 NOW = dt.datetime(2026, 9, 10, 12, 0, 0)
@@ -206,10 +205,11 @@ class _Producer:
 
 @pytest.fixture
 def producer():
-    """A namespace of this test's own, on the disposable database only."""
+    """A namespace of this test's own, on any database that is not somebody's
+    (`radar_disposable`)."""
     with flask_app.app_context():
-        if db.engine.url.database != DISPOSABLE:
-            pytest.skip(f'not the disposable database: {db.engine.url.database}')
+        radar_disposable.require('radar_board_results',
+                                 'radar_board_namespaces')
         engine = db.engine
         owned = _Producer(engine)
         try:
