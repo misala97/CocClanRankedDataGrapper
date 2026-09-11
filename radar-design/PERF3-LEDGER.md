@@ -36,7 +36,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 2 tables, migration, store | **complete** | `0eba6a4`, `c2d0ca9`, `c199d06` | approved after one fix round; carried items closed in `c199d06` |
 | 3 producer | **complete** | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) | approved after one fix round |
 | 4 read path, flag, API | **complete** | `9097621`, `6752492` | approved after one fix round |
-| 5 old board client | re-reviewed: **needs fixes**; round 3 queued | `0ed59e2`, `2b90885` | I1, I2 and eleven minors resolved; I3 half done |
+| 5 old board client | round 3 re-reviewed: **needs fixes**; round 4 in progress | `0ed59e2`, `2b90885`, `17128b8` | round 3 resolved its six items; one new Important |
 | 6 hub client | open | | |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | open | | |
@@ -203,7 +203,7 @@ reason.
 | `/api/ops` catches only `ProgrammingError` (table missing), not an outage | concern, ruled | kept: the ops page reads the database earlier anyway, so an outage fails it there, and catching it here would only mislabel an outage as a missing table |
 | server facts the client review asked for | answered | a parked answer is `{pending: true, busy: false, failed: true, rows: null}`; every pending/busy shell carries `venue_counts: {any: 0, multi: 0}` and `segment_counts: {}` |
 
-### Task 5 — old board client (re-reviewed: needs fixes, round 3 queued)
+### Task 5 — old board client (round 3 re-reviewed: needs fixes, round 4 in progress)
 
 Review of `0ed59e2`: **needs fixes.**
 
@@ -259,6 +259,45 @@ the reader just clicked; an aborted poll zeroes the server's retry floor
 once; one misleading comment. Round 3 waits for the Task 7 implementer, to
 keep one implementation worker at a time. The same ruling binds the hub in
 Task 6.
+
+**Round 3, `17128b8`, and its re-review.** Round 3 resolved all six items it
+was given. Every board with rows is now marked stale past `fresh_seconds` on
+the page's clock: shared boards say "refreshing" and poll, flag-off boards say
+"not refreshed" and offer Retry without any automatic request. A hidden
+flag-off tab defers its expiry refetch to the next visible transition, a
+failed refetch no longer claims "recalculating", a poll keeps the reader's
+ticker, and an aborted poll no longer drops the server's retry floor. The
+re-review found one new Important: the "not refreshed" Retry had no guard
+against a request already out, so repeated clicks aborted and resent, and on
+the flag-off path each resend starts a synchronous build the client's abort
+cannot cancel. Minor: non-poll answers still restored the ticker they were
+sent with; the expired-and-failed state showed two Retry buttons that behaved
+differently; two comments were wrong; the age line should pick its word with
+`refreshDue`. All of these went to round 4.
+
+**The flaky test, measured.** `BoardPage.test.tsx` "the controls > coalesces
+a burst of control changes into one request" failed intermittently in the
+whole radar suite. Six whole-suite runs on each tree, alternating, in a
+temporary worktree of the deployed baseline with its own `npm ci`:
+
+| Tree | Clean runs | Failures of that test |
+| --- | --- | --- |
+| deployed baseline `4221196` (532 tests) | 6 of 6 | 0 |
+| this branch at `17128b8` (596 tests) | 3 of 6 | 3 |
+
+Each failure was a request sent mid-burst with an intermediate selection:
+`expected '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=&market=us'
+to contain 'sources=bluesky&'`. The test races the real 250 ms debounce
+against real-time simulated clicks, so it was timing-sensitive before this
+branch; the re-review traced the extra full-page render per toggle that round
+2 added inside that window, when it moved the poll-question bump into the
+selection effect. The measurement settles the size: from never to half the
+time. Round 4 makes the test deterministic with fake timers, keeps its three
+assertions, audits the file for other races against the debounce, and must
+show ten consecutive clean whole-suite runs. The temporary worktree was
+removed; its cleanup first failed on a Windows path-length limit inside
+`node_modules` and was finished with a long-path delete after checking the
+tree held no links into real data.
 
 ### Task 7 — parity (approved)
 
