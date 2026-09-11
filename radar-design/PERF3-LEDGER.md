@@ -1784,3 +1784,21 @@ That is under 0.1% of the fastest ready read above (`read_payload` p95
 70-73 ms). Not modelled: journald's side of the line (a socket write on
 Linux, and its rate limit), gunicorn, MariaDB. Retention is journald's and is
 not verified here: the target's journald settings are unread.
+
+### Task 9a — request timing (approved)
+
+`e3aedfb`. The reviewer confirmed the gap the controller suspected: nothing
+gave the `radar.board` logger a handler in the web process, so every read
+metric was dropped under gunicorn; a fresh-interpreter import of the real app
+proves it, and that test passed on the unchanged code first. It checked every
+safety claim against the Flask, Werkzeug and gunicorn source and ran the 32
+tests itself. No critical or important finding. Carried to the fix wave: the
+byte count reads Content-Length before Werkzeug strips it, so 304, 204, 1xx
+and HEAD lines report a body that was never sent; no test pins the hook order
+in `app.py`; no test covers a typed route converter. Carried to the release
+text and already sent to Task 9b: the stdout line carries the logger-name
+prefix and `ms` spans only the hooks; Flask's own `Exception on <path>` line
+writes raw paths to stderr, so the journal does carry path values on errors;
+`--capture-output` would redirect stdout away from journald; a `.env` entry
+switches the log on in the producer as well as the web process.
+
