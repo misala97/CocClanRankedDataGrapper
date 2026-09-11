@@ -1163,6 +1163,44 @@ git commit -m "perf(radar): the shared path measured at production scale -- read
   deploy addition)
 - Modify: `radar-design/PERF3-LEDGER.md`, `radar-design/HANDOFF.md`
 
+**Amendment, 2026-09-11 -- telemetry, as the ruling actually asks for it.**
+The PERF2 access-log proposal is not carried unchanged. Codex's telemetry
+ruling: "Path without query strings can still contain identifiers in dynamic
+routes: use safe route labels/redaction where necessary rather than claiming
+%(U)s guarantees no identifying data", and "Verify target Gunicorn version and
+systemd ExecStart percent escaping before presenting a paste-ready unit
+delta." Gunicorn's access-log atoms cannot print a route template, so a safe
+label has to come from the application. Task 9 therefore adds the following,
+prepared and OFF by default:
+
+- `personal_apps/request_timing.py`, registered from `app.py`. When
+  `PERSONAL_REQUEST_TIMING_LOG` is truthy (`1`, `true`, `yes`, `on`), it
+  writes one INFO line per request on logger `app.request`: the method, the
+  matched route TEMPLATE (`request.url_rule.rule`, for example
+  `/radar/api/ticker/<ticker>`; `<unmatched>` for a request no rule matched;
+  every static asset folded into one `<static>` label), the status, the
+  response bytes when known, and elapsed milliseconds from a monotonic clock.
+  It never writes the path's values, the query string, cookies, headers, the
+  client address or any account identifier. When the variable is off, no hook
+  is registered at all.
+- Tests: off by default emits nothing and registers no hook; on, a request to
+  `/radar/api/ticker/NVDA?window=24` logs the template and never `NVDA` or
+  `window`; an unmatched path logs `<unmatched>`; a static asset logs
+  `<static>`; the enabled hook's overhead is measured over 1,000 requests
+  through the Flask test client and recorded in the ledger.
+- It goes to stdout, so journald keeps it. The ledger's facts section records
+  systemd v255's journald defaults; the release package states that the
+  target's own journald settings are unread and must be checked
+  (`journalctl --disk-usage`, `/etc/systemd/journald.conf` and its `.d`
+  drop-ins) before relying on them.
+- The gunicorn access log stays documented as the alternative only: every `%`
+  doubled inside `ExecStart=`, the format quoted as one argument, the
+  identifier caveat stated, and the gunicorn version marked unverified on the
+  target (26.2.0 locally, where a sync worker with `threads > 1` becomes
+  gthread).
+- Rollback is unsetting the variable and restarting the web unit. Logs are
+  left where they are; nothing deletes a log directory.
+
 - [ ] **Step 1: the backend suites, whole**, on `personal_apps_radar_perf3`:
       `PYTHONPATH=. py -3.12 -m pytest tests -q -p no:cacheprovider
       2>&1 | tee ../radar-design/perf3-release/pytest-full.txt`. Classify

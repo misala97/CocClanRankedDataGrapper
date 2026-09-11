@@ -130,6 +130,26 @@ deferred, as the ruling decided.
 readable, a screenshot written, in 3.5 s. Task 8's browser runs need no
 setup.
 
+**systemd unit escaping, from systemd v255's own documentation.** Ubuntu
+24.04 ships systemd 255. The text was fetched from the systemd repository at
+tag `v255` (`man/systemd.service.xml`, `man/standard-specifiers.xml`), because
+freedesktop.org refuses automated fetches. `ExecStart=` "accepts % specifiers
+as described in systemd.unit(5)", and the specifier table says "Use %% in
+place of % to specify a single percent sign". The same section says "To pass a
+literal dollar sign, use $$", and a `:` prefix on the executable suppresses
+environment-variable substitution but not specifiers. So gunicorn's access-log
+format, `%(t)s %(m)s %(U)s %(s)s %(B)s %(L)s`, has to be written inside
+`ExecStart=` with every `%` doubled, and quoted as one argument because it
+contains spaces. PERF2's paste-ready delta doubled none of them.
+
+**journald's defaults, same source** (`man/journald.conf.xml` at `v255`).
+`Storage=` defaults to `auto`, which is persistent only when
+`/var/log/journal` exists. `SystemMaxUse=` defaults to 10% of the file system
+and `SystemKeepFree=` to 15%, each capped at 4G. `MaxRetentionSec=` defaults to
+0, which turns time-based deletion off. Rate limiting is per service, 10,000
+messages per 30 s by default, scaled up by free disk space. None of the
+target's own journald settings have been read.
+
 ## Findings and rulings
 
 Every reviewer finding, its severity and its disposition. Minor findings are
