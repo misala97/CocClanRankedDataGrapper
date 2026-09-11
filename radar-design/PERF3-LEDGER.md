@@ -37,7 +37,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 3 producer | **complete** | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) | approved after one fix round |
 | 4 read path, flag, API | **complete** | `9097621`, `6752492` | approved after one fix round |
 | 5 old board client | **complete** | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` | approved after five fix rounds; minors carried |
-| 6 hub client | implemented; review: **needs fixes**; fix queued behind Task 5 round 5 | `103b8ba` | three Important, eight Minor |
+| 6 hub client | **complete** | `103b8ba`, `d429378` | approved after one fix round; minors carried |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | open | | |
 | 9 suites + release package | open | | |
@@ -350,7 +350,7 @@ complete.
 - when the reader's own request fails (including the 8 s timeout on a slow flag-off build) the star's refetch re-asks at once;
 - untested but correct by construction: the `settling` reset path, the star's refetch while hidden, poll failures over a parked board.
 
-### Task 6 — hub client (review: needs fixes, fix queued)
+### Task 6 — hub client (complete, approved after one fix round)
 
 `103b8ba`. The whole radar suite ran clean three times at 641 tests, the root
 suite at 403, and the typecheck and build pass; on the old code the new tests
@@ -373,6 +373,30 @@ The same stopping rule as Task 5 applies: this is Task 6's one fix round; its
 re-review may block only on something the round itself broke or on a direct
 violation of the PERF2 ruling, and anything else is carried to the
 whole-branch review.
+
+**The fix round, `d429378`, approved under the stopping rule.** All eleven
+findings were fixed, including the pre-existing stuck `marking` flag, which
+took a few lines. The flag-off hub again re-reads its board once, a minute
+after it arrives, while visible and only inside the fresh bound; a failing
+wait shows its reason and one Retry and keeps polling; a timed-out or
+rate-limited request is never resent; and `poll=1` now follows the old
+board's single rule. Beyond the list, the fixer turned off react-query's
+refetch on reconnect, which was another way a request could go out past the
+bound. Radar suite 681 of 681 in three runs in a row, root 403, typecheck and
+build clean. The re-review traced every finding through the code and through
+query-core where it mattered, ran nothing because a timing measurement was
+running, and found nothing the round introduced above Minor and no ruling
+violation.
+
+**Carried from Task 6 to the whole-branch review:**
+
+- the minute's read, if sent while the browser reports offline, is paused and goes out on reconnect without re-checking the fresh bound;
+- a star gives the board a new object with the same arrival time, which can re-arm the minute's read and send a second read for one arrival after a failed read and a failed mark refetch;
+- the failure count is not reset on a selection change, so returning to a selection shows its old "Still trying." until its first answer lands;
+- the reader-asks marker has no try/finally, so a mark refetch paused offline could go out as `poll=1`;
+- pre-existing: the reader's own asks are still resent twice on server or network errors, and on a flag-off board past its bound each resend is another synchronous build;
+- the reader's own failed Retry over a shell is announced as a polite status, where the old board uses an alert;
+- with reconnect refetching off, a first read that failed while the browser still reported online no longer recovers by itself on reconnect.
 
 **Second interruption, 2026-09-11.** The API session limit stopped the Task 5
 round-5 fixer mid-run. Its uncommitted edits in three `static/radar/src/board`
