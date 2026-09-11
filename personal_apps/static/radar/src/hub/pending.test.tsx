@@ -339,7 +339,10 @@ describe('a board that is still being calculated', () => {
     expect(boardCalls()[0]).toContain('window=4')
 
     await choose(screen.getByLabelText(/window/i), '12')
-    await advance(50)
+    // Past the quarter second a moved control owns (queries.useSettled): the
+    // request for the new question goes out when the reader stops moving.
+    await advance(300)
+    await advance(1)
 
     expect(boardCalls().at(-1)).toContain('window=12')
     expect(boardCalls().at(-1)).not.toContain('poll=1')
@@ -438,7 +441,8 @@ describe('a board that is still being calculated', () => {
     expect(notice()).toHaveTextContent('Still trying.')
 
     await choose(screen.getByLabelText(/window/i), '12')
-    await advance(50)
+    await advance(300)
+    await advance(1)
     expect(notice()).toHaveTextContent('Calculating this board')
     expect(notice()).not.toHaveTextContent('Still trying.')
 
@@ -457,7 +461,8 @@ describe('a board that is still being calculated', () => {
     expect(notice()).toHaveTextContent('Still calculating')
 
     await choose(screen.getByLabelText(/window/i), '12')
-    await advance(50)
+    await advance(300)
+    await advance(1)
 
     expect(notice()).toHaveTextContent('Calculating this board')
     expect(notice()).not.toHaveTextContent('Still calculating')
@@ -551,7 +556,7 @@ describe('a board that is busy with other selections', () => {
     mount(waiting(), '#chatter')
 
     await choose(screen.getByLabelText(/window/i), '12')
-    await advance(50)
+    await advance(300)
     expect(boardCalls()).toHaveLength(1)
     expect(boardCalls()[0]).not.toContain('poll=1')
 
@@ -1043,17 +1048,150 @@ describe('a mark while the board is on screen', () => {
     await click(screen.getByRole('button', { name: 'Watch' }))
     await click(screen.getByRole('button', { name: /back to the list/i }))
     await choose(screen.getByLabelText(/window/i), '12')
-    await advance(50)
+    // Past the quarter second the change owns, so the ask this test is about
+    // is a real one and not one the settle has swallowed.
+    await advance(300)
     const before = boardCalls().length
 
     answerMark(ok({ watching: ['AAA'] }))
-    await advance(50)
+    await advance(300)
 
     // One more ask, for the window on screen; nothing about four hours, and
     // nothing drawn from it.
+    expect(boardCalls().length).toBeGreaterThan(before)
     expect(boardCalls().slice(before).every((url) => url.includes('window=12')))
       .toBe(true)
     expect(contextLine()).toHaveTextContent('last 12 hours')
     expect(listed()).toEqual([])
+  })
+})
+
+describe('a burst of control changes', () => {
+  // Measured as six requests for six changes against the old board's one
+  // (browser check 2). Not merely wasted work: each one is admitted and
+  // occupies the 32-job cap the ruling set, so one reader dragging a control
+  // can push another reader's real request to busy -- and on the flag-off
+  // path each is a synchronous build.
+  const setWindow = (hours: string) =>
+    choose(screen.getByLabelText(/window/i), hours)
+  const setSize = (segment: string) =>
+    choose(screen.getByLabelText(/size/i), segment)
+
+  it('sends one request for the question the reader stopped on', async () => {
+    stubFetch(() => served())
+    mount(served(), '#chatter')
+    await advance(400)
+    const before = boardCalls().length
+
+    // Six changes 200 ms apart, alternating window and size: browser check
+    // 2's own burst.
+    await setWindow('12'); await advance(200)
+    await setSize('discover'); await advance(200)
+    await setWindow('24'); await advance(200)
+    await setSize('large'); await advance(200)
+    await setWindow('1'); await advance(200)
+    await setSize('all'); await advance(200)
+
+    expect(boardCalls()).toHaveLength(before)
+
+    await advance(100)
+
+    expect(boardCalls()).toHaveLength(before + 1)
+    expect(boardCalls()[before]).toContain('window=1')
+    expect(boardCalls()[before]).toContain('segment=&')
+  })
+
+  it('keeps the controls themselves immediate', async () => {
+    // The debounce is on the request, not on the surface: a reader who has
+    // moved a control must see it moved.
+    stubFetch(() => served())
+    mount(served(), '#chatter')
+    await advance(400)
+
+    await setWindow('12')
+
+    expect(screen.getByLabelText(/window/i)).toHaveValue('12')
+    expect(window.location.search).toContain('window=12')
+  })
+
+  it('still sends one request for a single change', async () => {
+    stubFetch(() => served())
+    mount(served(), '#chatter')
+    await advance(400)
+    const before = boardCalls().length
+
+    await setWindow('12')
+    await advance(300)
+
+    expect(boardCalls()).toHaveLength(before + 1)
+    expect(boardCalls()[before]).toContain('window=12')
+  })
+
+  it('sends nothing at all for a change the reader takes back', async () => {
+    stubFetch(() => served())
+    mount(served(), '#chatter')
+    await advance(400)
+    const before = boardCalls().length
+
+    await setWindow('12')
+    await advance(100)
+    await setWindow('4')
+    await advance(400)
+
+    expect(boardCalls()).toHaveLength(before)
+  })
+})
+
+describe('a request that failed on the flag-off path', () => {
+  // A build the client aborted keeps running server-side, so a resend is a
+  // second synchronous build of the board the first is still making. Flag-off
+  // is production until the flag flips.
+  const reads = () => boardCalls().filter((url) => !url.includes('poll=1'))
+
+  it('is not sent again by itself', async () => {
+    answering(503)
+    // A tenth of a second short of its hard expiry, so the page's own refetch
+    // goes out (and is not resent, being the page's) and leaves a Retry.
+    mount(payload({ shared: false, age_seconds: 599.9 }))
+    await advance(1100)
+    expect(reads()).toHaveLength(1)
+
+    await click(retryButtons()[0]!)
+    await advance(20_000)
+
+    expect(reads()).toHaveLength(2)
+  })
+
+  it('is still resent on the shared path, where a resend is a read', async () => {
+    answering(503)
+    mount(waiting())
+    // Two failed polls in a row is the wait failing, which is what puts the
+    // Retry on screen.
+    await advance(1000)
+    await advance(2000)
+    const before = reads().length
+
+    await click(retryButtons()[0]!)
+    await advance(20_000)
+
+    expect(reads()).toHaveLength(before + 3)
+  })
+})
+
+describe('a parked board whose own asks are failing, on the hub', () => {
+  it('says the asks are failing, not only that the board is parked', async () => {
+    answering(503)
+    mount(waiting({ failed: true, retry_after_ms: 5000 }))
+
+    expect(notice()).toHaveTextContent('This board could not be built.')
+    expect(notice()).not.toHaveTextContent('Still trying.')
+
+    await advance(5000)
+    await advance(1)
+    await advance(5000)
+    await advance(1)
+
+    expect(notice())
+      .toHaveTextContent('The board answered with an error. Still trying.')
   })
 })

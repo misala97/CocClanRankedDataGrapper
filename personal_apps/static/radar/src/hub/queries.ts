@@ -18,8 +18,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { fetchBoard, fetchDetail, fetchSearch, queryFor, setWatch } from '../api'
 import {
-  DELAYED_AFTER_MS, SLOW_MS, nextDelay, refreshDue, refreshes, untilExpired,
-  untilStale,
+  DELAYED_AFTER_MS, SETTLE_MS, SLOW_MS, nextDelay, refreshDue, refreshes,
+  untilExpired, untilStale,
 } from '../pending'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
 
@@ -238,13 +238,87 @@ const SCHEDULED = new WeakSet<object>()
  *  second later is exactly what it refused. */
 const NOT_RESENT = new Set(['timeout', 'busy'])
 
-function retryBoard(count: number, error: unknown): boolean {
+function retryBoard(count: number, error: unknown, flagOff: boolean): boolean {
   if (typeof error === 'object' && error !== null && SCHEDULED.has(error)) {
     return false
   }
   const reason = (error as { reason?: string })?.reason
   if (reason !== undefined && NOT_RESENT.has(reason)) return false
+  // Nothing goes out again by itself where a worker builds its own board. The
+  // reasons left here are a server error and an unreachable one, and neither
+  // says the build stopped: the request failed, and the board it asked for is
+  // still being made on a sync worker. A resend is then a second synchronous
+  // build of the same board -- the block this slice exists to remove,
+  // reintroduced through the error path. The reader's Retry is still theirs.
+  if (flagOff) return false
   return retry(count, error)
+}
+
+// --- the quarter second a moved control owns ----------------------------------
+
+/** Board selections whose request has not gone out yet, counted across the
+ *  page: a control moved, and the settle it opened is still running.
+ *
+ *  The refetch a mark is owed waits on it, as the old board's does
+ *  (`BoardPage.refetchMarks`): sent now it would ask the selection the reader
+ *  has already left, and every admitted build occupies one of the thirty-two
+ *  slots another reader needs. Waited for rather than skipped, because the
+ *  request the control change sends may be answered from the cache and never
+ *  go out at all -- and the mark would then have no refetch at all. */
+let settling = 0
+let waiters: (() => void)[] = []
+
+/** Resolves once no control change is inside its quarter second. Immediately,
+ *  which is the usual case. */
+function whenSettled(): Promise<void> {
+  if (settling === 0) return Promise.resolve()
+  return new Promise((resolve) => { waiters.push(resolve) })
+}
+
+function endSettle(): void {
+  settling -= 1
+  if (settling > 0) return
+  const woken = waiters
+  waiters = []
+  for (const wake of woken) wake()
+}
+
+/** The selection the board is actually asked for: this one, a quarter second
+ *  after the reader stops moving controls.
+ *
+ *  The old board's debounce, at the point the hub turns a selection into a
+ *  query key. The surface itself is not debounced -- the chips, the selects
+ *  and the address bar follow the reader immediately, as they always did --
+ *  only the request. Six control changes were measured as six admitted builds
+ *  here against the old board's one (browser check 2), and a build admitted
+ *  for a selection nobody is on any more still holds one of the thirty-two
+ *  slots the ruling allows. */
+function useSettled(selection: Selection): Selection {
+  const key = queryFor(selection)
+  const [settled, setSettled] = useState(selection)
+  // Whether this page has counted itself into `settling`.
+  const owed = useRef(false)
+  const release = useCallback(() => {
+    if (!owed.current) return
+    owed.current = false
+    endSettle()
+  }, [])
+  useEffect(() => {
+    // Released from an effect rather than from the timer, so whoever waited
+    // wakes only once the settled selection has been committed and its query
+    // is the one on screen. Reached immediately by a reader who moved a
+    // control and moved it back inside the quarter second: the question never
+    // changed, so nothing is asked and nothing was ever owed.
+    if (queryFor(settled) === key) { release(); return }
+    if (!owed.current) { owed.current = true; settling += 1 }
+    // Re-armed, not stacked: every further change inside the window replaces
+    // this timer, and the burst counts as the one settle it is.
+    const timer = setTimeout(() => setSettled(selection), SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [key, selection, settled, release])
+  // A page that leaves mid-settle owes nothing.
+  useEffect(() => release, [release])
+  return settled
 }
 
 /** Why a board request is going out, when the page knows: the reader's own
@@ -282,6 +356,14 @@ function hidden(): boolean {
 /** react-query's result for the current selection's board, and the three
  *  things about it only this page knows. */
 export type BoardQuery = UseQueryResult<BoardPayload, unknown> & {
+  /** The board this page holds FOR THE SELECTION ON SCREEN, or undefined
+   *  while nothing it holds answers that question: a request for a new key is
+   *  in flight and react-query is keeping the previous board as placeholder
+   *  data, or the reader has just moved a control and the quarter second
+   *  before its request has not run out. Both are the Loading state, and
+   *  neither may be drawn -- the previous selection's rows under the new
+   *  selection's labels is what the cold contract forbids. */
+  answer: BoardPayload | undefined
   /** When this page received the board it holds: the clock its age, its
    *  fresh bound and its expiry are read on. */
   received: number
@@ -298,10 +380,25 @@ export type BoardQuery = UseQueryResult<BoardPayload, unknown> & {
   retry: () => void
 }
 
-export function useBoard(selection: Selection, initial?: BoardPayload,
+export function useBoard(asked: Selection, initial?: BoardPayload,
                          visible = true): BoardQuery {
   const client = useQueryClient()
+  // Before anything here becomes a query key, and so before anything here
+  // sends a request.
+  const selection = useSettled(asked)
   const key = queryFor(selection)
+  // The reader has moved a control and the request for it has not gone out
+  // yet. Nothing on screen answers the question they are now asking, so this
+  // page holds no board for it -- exactly as it holds none while a request
+  // for a new key is in flight. Without this the rows of the question they
+  // left would stand under the controls they just moved, which is the one
+  // thing the cold contract forbids (ruling §1), and the old question's wait
+  // would go on polling a selection nobody is on.
+  const unsettled = queryFor(asked) !== key
+  // Whether a worker builds this page's boards for itself. The flag is the
+  // server's, so every board on the page agrees about it; the embedded board
+  // seeds it and every answer keeps it current.
+  const flagOff = useRef(initial?.shared === false)
   // The embedded board seeds only the key it was actually built for. Handing
   // it to another key would present a board built under one filter as the
   // answer to a different one -- as real data, with a fresh timestamp, once,
@@ -370,6 +467,7 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
       const { why, poll } = sending.current
       try {
         const answer = await fetchBoard(selection, signal, { poll })
+        flagOff.current = answer.shared === false
         const running = mine()
         if (running) hear(running, answer, Date.now())
         if (misses.current.key === key) misses.current = unmissed(key)
@@ -405,7 +503,7 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
     staleTime: REFRESH_MS,
     refetchInterval: (current) => {
       const board = current.state.data
-      if (board === undefined) return false
+      if (board === undefined || unsettled) return false
       const now = Date.now()
       const received = current.state.dataUpdatedAt
       wait.current = nextWait(wait.current, key, board, received, now)
@@ -433,11 +531,11 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
     // `data` while `status` turns to error -- which is what StaleNotice
     // renders beside.
     placeholderData: keepPreviousData,
-    retry: retryBoard,
+    retry: (count, error) => retryBoard(count, error, flagOff.current),
   })
 
   const { refetch } = query
-  const answer = query.isPlaceholderData ? undefined : query.data
+  const answer = query.isPlaceholderData || unsettled ? undefined : query.data
   const received = query.dataUpdatedAt
 
   const ask = useCallback(() => {
@@ -580,7 +678,7 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
       : 'The board did not answer.')
     : null
 
-  return { ...query, received, delayed, failing, retry: ask }
+  return { ...query, answer, received, delayed, failing, retry: ask }
 }
 
 export function useDetail(ticker: string | null, selection: Selection,
@@ -659,10 +757,23 @@ export function useWatchMutation(onSettled?: () => void) {
  */
 async function refreshAfterMark(client: QueryClient): Promise<void> {
   const boards = { queryKey: [ROOT, 'board'] }
-  const onScreen = client.getQueryCache().findAll({ ...boards, type: 'active' })
   await client.invalidateQueries({ ...boards, refetchType: 'none' })
+  // A moved control still owes its request: asking now would ask the
+  // selection the reader has already left, so the refetch waits the quarter
+  // second out and then asks whatever is on screen.
+  await whenSettled()
+  const onScreen = client.getQueryCache().findAll({ ...boards, type: 'active' })
   await Promise.all(onScreen.map(async (query) => {
-    await query.promise?.catch(() => undefined)
+    const inflight = query.promise
+    if (inflight !== undefined) {
+      await inflight.catch(() => undefined)
+      // Never on top of a request that just failed. The abort stopped this
+      // page listening, not the server building: where a worker builds its
+      // own board that one is still being made, and asking again is a second
+      // concurrent synchronous build. The list is already adopted, so the
+      // mark is on screen either way; the next answer brings its rows.
+      if (client.getQueryState(query.queryKey)?.status === 'error') return
+    }
     // The reader's own ask, as a Retry is: a read, never a poll.
     const key = String(query.queryKey[2])
     READER_ASKS.add(key)

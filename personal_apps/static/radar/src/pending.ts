@@ -33,6 +33,18 @@ export const DELAYED_AFTER_MS = 30_000
  *  that has been waiting a while and a server that is busy agree. */
 export const SLOW_MS = 5000
 
+/** How long a burst of control changes has to go quiet before one request
+ *  goes out for all of them.
+ *
+ *  Here rather than in one surface, because both of them need it and a second
+ *  number would be a second thing to reason about. Five quick toggles used to
+ *  queue five builds on the old board, the fifth waiting past the 8 s timeout
+ *  (critique, 2026-09-01); the hub was then measured sending one request per
+ *  change where the old board sent one for six (browser check 2), and every
+ *  one of those is an admitted build occupying the queue another reader
+ *  needs. Short enough that a single click still feels immediate. */
+export const SETTLE_MS = 250
+
 /** A fifth, upward. Enough to spread a crowd admitted together across a
  *  couple of seconds, small enough that the schedule still means what it
  *  says -- and one-sided, so the spread can be applied to a number that is a
