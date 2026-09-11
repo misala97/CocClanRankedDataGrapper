@@ -1120,3 +1120,427 @@ point about per-account enrichment. Run 1 skipped the whole-read series: its
 guard refused a stored board 92 s old, stricter than the fresh bound needed.
 Run 2 waits, with the producer running, for a board under 60 s old instead.
 Both runs' per-account tables are given; run 2 is the one reported above.
+
+### Browser: both boards in a real browser (Task 8b)
+
+Task 8's Step 4 and the browser half of Step 5, dispatched after Task 8a.
+One script, `scratchpad/perf3/browser_perf3.py`, on the same aligned scale
+database, through the same launcher and under the same limits as everything
+above in this section.
+
+**What ran.** python-playwright 1.61.0 driving headless Chromium
+149.0.7827.55, at 1440x900 except the phone shots (390x844). The real app,
+served by `serve_perf3.py` as one web-model process with two request threads
+-- the concurrency of the deployed two sync workers; a MODEL, not gunicorn --
+on port 5090 with the flag on (5091 with it off, check 7), and the real
+`run_radar_board_producer.py` beside it, started, stopped and restarted by the
+script as each check needs. Nothing was mocked: every page and every board
+answer came from those two processes and the store they share. The session
+cookie was minted with the app's own signing serializer for a disposable
+account, `perf3_browser`, created with no marks and deleted afterwards with
+its marks; no password was typed anywhere.
+
+**One revision for every process.** The dispatch pins `RADAR_BUILD_REVISION`
+to the HEAD this run started from, `caa92bb`, and `scale_env.py` had Task 8a's
+revision written into it. It now takes the pin from `PERF3_REVISION`, which the
+script sets before the launcher is imported and every child inherits; the
+launcher's own default is still Task 8a's revision, so Task 8a's scripts run as
+they did. That is the one change to a Task 8a file. Every process printed
+namespace `8d69315904e6dbc1f5d3a62bf79f248f0a71393350f6a844f15e3cf478cfa485`
+(fingerprint `3586f78497044d4d`) and the script refused any other. Between
+`0b50952` and `caa92bb` only scratchpad scripts and this ledger changed, so the
+application under test is the one Task 8a measured.
+
+**The bundle under test is the reviewed source.** `static/radar/dist` is
+untracked, and it was built 72 s before the last client commit (`d429378`) was
+made. A fresh `vite build -c vite.radar.config.ts` of HEAD into a scratch
+directory produced byte-identical files -- `board-BbirrnOH.js`,
+`hub-BiVrB4HX.js`, `hub-BaOZANf0.css`, `embedded-Do395cc6.js` and the
+manifest -- so both pages ran exactly the code Tasks 5 and 6 committed.
+
+**How the page is read.** An init script, installed in every page before the
+page's own scripts run, wraps `fetch` -- every request, and a digest of every
+board answer (the selection it echoes, `as_of`, its flags, its ticker list),
+on the page's own clock -- and a MutationObserver records every distinct state
+the page paints: the ticker rows, the waiting notice, the age line, the
+context line, the controls, the busy flag. Times are the page's
+`performance.now()`, counted from navigation start, so no number depends on
+how often the script looked. Two of them are defined once, here:
+
+- *time to rows*: navigation start to the first ticker row in the DOM;
+- *time to usable*: navigation start to the first moment the board can be
+  used -- rows, no waiting notice, an age line, nothing in flight and, on the
+  old board, the selected ticker's detail panel settled -- followed by an idle
+  main thread (`requestIdleCallback`).
+
+On the hub every check uses Human chatter (`/radar/hub/?…#chatter`), the page
+that carries the window and size controls and lists every row; Overview shows
+the same waiting notice under its own heading.
+
+**Hidden is emulated, and why.** Headless Chromium reports `visible` for a page
+whatever is done to it. Probed in both headless modes before the script was
+written: bringing a second page to the front, CDP focus emulation off,
+`Page.setWebLifecycleState`, a minimised window -- `document.visibilityState`
+stayed `visible` every time. So the init script overrides the
+`visibilityState` and `hidden` getters and dispatches a bubbling
+`visibilitychange`, which is what the old board's Poller, the hub's
+`useVisible` and react-query's focusManager all read. What check 3 proves is
+how both pages act on that signal, not that a browser sends it.
+
+Preflight, as the run printed it:
+
+```
+PREFLIGHT  browser_perf3 (Task 8b): both boards in a real browser
+  database     personal_apps_radar_perf3_scale   engine 8.0.46   alembic b7e3f9c1a2d4
+  buffer pool  2560 MB (target 2560 MB)
+  indexes      deployed three
+  rows         9,269,184 radar_bucket_sources; 0 radar_posts; 1 app_user; 0 radar_watch
+  span         radar_bucket_sources   2026-08-21 13:00:00 -> 2026-09-13 12:00:00
+  span         radar_mention_events   2026-09-08 13:00:00 -> 2026-09-13 12:59:00
+  span         radar_quotes           2026-09-09 13:00:00 -> 2026-09-13 12:00:00
+  residue      3 radar_mention_events rows dated more than 7 days ahead (test residue; untouched)
+  window rows  24h 403,008   12h 201,504   at 2026-09-11 19:44:46 UTC
+  reddit       REDDIT_SUBS patched: 33 names; warm-set coverage 403,008 of 403,008 = 100%
+  namespace    8d69315904e6dbc1f5d3a62bf79f248f0a71393350f6a844f15e3cf478cfa485  revision caa92bba99b8  fingerprint 3586f78497044d4d
+  store        8 radar_board_results rows, 1 namespaces
+```
+
+#### What the checks found
+
+Three runs, all with this script in this environment on 2026-09-11: **run
+1**, every check (19:44-19:56 UTC); **run 2**, checks 3, 6 and the phone shots
+again, after the fix to the hidden check's clock described below; **run 3**,
+the phone shots once more, after a fix to when the phone check measures (also
+below). The screenshots of checks 3 and 6 are run 2's, the phone shots are
+run 3's, and every other screenshot is run 1's.
+
+| check | old board `/radar/` | hub `/radar/hub/` | what decided it |
+| --- | --- | --- | --- |
+| 1 empty store | PASS | PASS | the pending copy first (0.31 s / 0.08 s): no row, no "Nothing cleared", no stamp; rows at 18.8 s, usable at 22.3 s / 18.8 s |
+| 2 rapid switching, from a ready board | PASS | PASS | final rows = `read_payload`'s for the final selection, 50 of 50, same order; no paint of another selection's rows |
+| 2 rapid switching, from a pending board | PASS | PASS | the same, with a poll in flight when the burst began |
+| 3 hidden tab while pending | run 1 FAIL (the harness's clock, see below); run 2 PASS | run 1 PASS; run 2 PASS | no poll in 10 s hidden; one poll on return |
+| 4 stale to fresh | PASS | PASS | "Calculated 5m ago · refreshing" at load; cleared by a poll at 5.9 s / 11.4 s, no reload |
+| 5 hard-expired | PASS | PASS | the pending state, not the 700 s board; rebuilt board by poll at 8.7 s / 8.6 s |
+| 6 delayed | PASS, both runs | PASS, both runs | at 31 s "Still calculating…", the reason, the way out and Retry; after the producer started, rows with no reload |
+| 7 flag off | PASS | PASS | old: "not refreshed" with Retry at 120.0 s, no request in 140 s; hub: one read 60.0 s after arrival, and 125.7 s after the next |
+| 8 the star | PASS, A and B | not applicable | address bar and final board on the new selection; every request after the move was for it; the mark kept |
+| phone, 390x844 | PASS | PASS | a pending and a ready shot each; the old board's page jumps 4,219 px to its panel when the panel loads (finding 2) |
+
+**1, empty store.** Both store tables truncated, then the page opened on
+`us/all/24h`, a warm key. The document came back in 106 ms (old board) and
+26 ms (hub) carrying the pending shell (`pending: true`, `rows: null`), and the
+first thing painted was the waiting copy: "Calculating this board…", no row, no
+empty-board sentence, no age line, no ticker count on the old board's status
+line. The producer rebuilt the eight warm keys in `key_hash` order and this key
+was third both times, published 16.4 s and 15.7 s after the TRUNCATE; both
+pages had rows at 18.8 s, each after seven `poll=1` asks and nothing else. Time
+to usable was 22.3 s on the old board -- 3.4 s after its rows, spent on the
+detail panel of the ticker it selected -- and 18.8 s on the hub, which has no
+panel. As third in the rebuild, neither page reached 30 s, so the delayed copy
+was not seen here: Task 8a's eighth key (`de/all/12h`) waits about 44 s, past
+it. Check 6 shows the delayed state on its own.
+
+**2, rapid switching.** Six changes 200 ms apart (measured 188-220 ms),
+alternating window and segment, twice per page: from a ready `us/all/12h` to
+`us/discover/24h`, and from a pending `us/fund/4h`, with its poll in flight, to
+`us/all/24h`. On both pages the final rows were exactly `read_payload`'s for
+the final selection -- 50 of 50 in the same order, the answer on screen with
+the store's own `as_of` -- and the rendered context named 24 hours: the hub's
+context line ("US markets · last 24 hours"), the old board's tier caption
+("chatter vs the 24h price move"). Every paint after the first change was held
+against its moment: on the hub, every set of rows on screen was the answer to
+the selection its own controls showed then; on the old board, only the board it
+already had (marked busy once the request was out) or the final board, and
+nothing after the final one. No violation in the four runs. The two clients
+take the burst differently, as designed: the old board's 250 ms debounce sent
+nothing inside the burst and one request after it (then four polls, when the
+final key was cold), while the hub asked once per change -- six requests, each
+for its own selection, none a poll -- and drew only the current key's answer.
+
+**3, hidden tab while pending.** With the producer stopped, so the wait could
+not end, each page opened on a cold key, polled once, and was hidden for 10 s,
+then shown. Run 2: neither page asked anything while hidden (0 board requests in the
+10.02 s, none in flight at the hide), and each asked exactly once on
+return, a `poll=1`: the old board 0.2 ms after the stamp taken before the
+`visibilitychange` dispatch -- from inside the handler, as
+`Poller.resume()` does -- and the hub 1.7 ms after it, from the effect
+that follows the dispatch. Both were still waiting afterwards, with no row
+and no stamp (`8b-3-old-hidden-returned.png`,
+`8b-3-hub-hidden-returned.png`). Run 1's old-board FAIL and its cause are
+set out below.
+
+**4, stale to fresh.** A warm row aged to 300 s by moving its `as_of` and
+`built_at` back together. Both pages loaded the stale board with "Calculated 5m
+ago · refreshing" -- the embedded answer `stale: true`, age 300.1 s -- while the
+store queued the refresh and the producer rebuilt it. The pages' polls, at the
+server's 5 s floor, brought the new board in: the marker cleared at 5.9 s on the
+old board (one poll) and 11.4 s on the hub (two), with no reload and no request
+that was not a poll.
+
+**5, hard-expired.** A warm row aged to 700 s is past the 600 s hard expiry,
+and the store answers it as missing. Both pages opened on the pending shell, not
+on the old board -- no rows, no stamp, "Calculating this board…" -- and the
+rebuilt board arrived by poll after 8.7 s and 8.6 s.
+
+**6, delayed.** With the producer stopped, a cold key (DE Large 4h on the old
+board, DE Large 1h on the hub) was open on both pages at once. At 31 s both
+said "Still calculating…", why ("A board nobody has asked for recently is built
+from scratch."), the way out ("Change the window or the feeds to ask for one
+that may already be built.") and offered Retry. The producer was then started
+(5.2 s to its namespace line) and the boards arrived with no reload -- the
+page's own time origin unchanged -- 44.7 s (old board) and 56.7 s (hub) after it
+was spawned in run 1. Most of that is the restarted producer's own queue: all
+eight warm keys were overdue after more than a minute without a producer, and a
+fresh process's first 4h and 1h builds are the slow ones Task 8a measured
+(12-16 s). Run 1's "poll gaps after 30 s" is empty because the script took it at
+the 31 s mark, when one poll at most had happened; run 2 measures the cadence
+from 30 s until the board: the old board's polls
+came 5,050-5,978 ms apart (seven gaps) and the hub's 5,070-6,017 ms (ten) --
+the schedule's 5 s plus up to a fifth of jitter; the hub times each ask from
+the previous answer, so a gap also carries that answer's round trip -- and
+the boards arrived 39.8 s and 55.9 s after the producer was spawned, again
+with no reload.
+
+**7, flag off.** The server restarted with `RADAR_BOARD_SHARED_RESULTS=off` and
+no producer: today's deployment. Both embedded boards said `shared: false`,
+built in the request. The old board crossed its 120 s bound on its own clock at
+120.0 s and then read "Calculated 2m ago · not refreshed" with a Retry, marked
+stale, and sent no board request at all in the 140 s it was watched, the last
+20 s past the bound. The hub read its board again 59.96 s after arrival -- a
+read, not a poll -- which the server answered with a new synchronous build in
+5.7 s; that answer armed the next minute, and the next read went out at
+125.67 s. One read per arrival, as the hub always read its board.
+
+**8, the star (old board).** The mark's PUT was held in flight by route
+interception and released on cue. A: star on `us/all/24h`, window moved to 12 h
+149 ms later, the mark released 1.6 s after that, with the 12 h board already
+up. B: star on `us/all/12h`, window moved to 24 h, the mark released 195 ms
+later, inside the controls' 250 ms debounce. Both times the address bar ended
+on the new query (`window=12`, then `window=24`), every board request after the
+move was for the new selection (A: the debounced read, then the mark's
+refetch; B: the one debounced read, which carried the mark), the final rows
+were the new selection's with the starred tickers in Watching, and the star
+stayed on.
+
+**Phone, 390x844.** A pending and a ready screenshot per page, on cold keys
+with the producer running. Rows arrived at 22.4 s (old board) and 8.8 s (hub)
+in run 3 -- which ran this first, on a producer whose first 4h build is the
+slow one Task 8a measured -- and at 8.6 s and 8.7 s in run 1. Both pages drew
+the waiting state and then the board in their stacked layouts. The hub's page
+stayed where it was; the old board's jumped to its detail panel when the
+panel's detail loaded, 3.5 s after the rows: finding 2. Since run 3 the check
+measures at that moment; run 2 measured 1.5 s after the rows, before the
+detail had loaded, and saw nothing move.
+
+**Check 3, old board: a failure of the harness, found, corrected and re-run.**
+The full run recorded FAIL for the old board's hidden check -- one poll counted
+"while hidden" and none "on return" -- and PASS for the hub. The cause was the
+script's clock, not the page. `setHidden` stamped the moment AFTER
+`dispatchEvent` returned, but a listener runs inside the dispatch, and the old
+board's `Poller.resume()` sends its poll synchronously from the
+`visibilitychange` handler (`resume` -> `fire` -> `load` -> `fetch`, no await
+before the request). That poll therefore started before the "visible" stamp and
+was counted as sent while hidden; the hub asks from a React effect, after the
+dispatch, and was counted correctly. The script now stamps both sides of every
+dispatch and classifies against the stamp taken before it, and saves each
+request's time relative to the hide. Re-run (run 2): the old board sent no
+board request in the 10.02 s it was hidden and exactly one `poll=1` on return,
+0.2 ms after the stamp, from inside the handler; the hub, again, none while
+hidden and one on return 1.7 ms after the stamp, from its effect. That is run
+1's "one while hidden, none on return" exactly, read with the right clock. The
+full run's own numbers stay in its table below, as printed.
+
+**Findings the checks were not written to catch.** Each was seen in this run's
+own screenshots or numbers, none changes a verdict above, and each is carried
+to the whole-branch review.
+
+1. **The Discover tab asks for a cold duplicate of a warm board.** The old
+   board's Discover tab and the hub's Discover size both send
+   `segment=discover`. The producer keeps `DEFAULT_SEGMENT`,
+   `discover,mid,micro,unknown`, warm, and segments enter the key verbatim
+   (Task 1), so these are two keys: `091c0c1b805c`, not warm, and
+   `7bb7964cf50c`, warm. Read side by side in this run, the two hold the same
+   rows in the same order (US, 24h). A reader who opens the default board,
+   moves off it and comes back through the tab is served an on-demand board --
+   pending, then a build -- for a board the producer already keeps warm. Check
+   2's ready start ends on this key, which is why the old board's final rows
+   landed 8.5 s after the last change there against 0.4 s from the pending
+   start, whose final key is warm. Canonicalising the group before keying, or
+   warming the tab's spelling, would remove the duplicate; both change the key
+   contract and neither is made here.
+2. **On a phone, a board arriving after a wait moves the reader to the detail
+   panel.** `DetailPane` hands focus to its panel whenever the detail of a new
+   ticker loads, deliberately without `preventScroll` (DetailPane.tsx:144-153),
+   and starts its memory at the page's opening ticker "so the FIRST panel does
+   not steal focus from the top of the document on page load"
+   (DetailPane.tsx:122-126). A page that opens on a waiting shell has no opening
+   ticker. When the board arrives and the top row is selected, the first panel
+   does take focus, and at 390x844, where the panel sits under the whole list,
+   the page scrolls to it. Measured in run 3, on the old board at 390x844:
+   while pending the page sat at the top (scroll 0, focus on the body, the
+   panel's top 404 px down); when the rows arrived it had not moved (scroll 0,
+   the panel now 3,941 px down, under the list); 3.5 s later, when the
+   panel's detail loaded, it was at scroll 4,219 px with focus on
+   `main.detail` and the panel's top 278 px above the viewport --
+   `8b-m-old-ready-390.png` is that moment. (Run 1's phone shot, taken 0.8 s
+   after the rows, happened to catch the same jump; run 2 measured at 1.5 s,
+   before the detail had loaded, and saw nothing -- hence run 3.) Before
+   PERF3 no page opened without rows, so this arrives with the pending path;
+   on a desk the same focus move happens without the scroll.
+3. **The old board's view tabs read zero while pending.** A waiting shell
+   carries `segment_counts: {}` (board_shared.py:397) and the tabs render a
+   missing count as a dimmed 0: "All 0 · Discover 0 · Large 0 …" above
+   "Calculating this board…" (`8b-1-old-empty-pending.png`,
+   `8b-5-old-expired-pending.png`, `8b-6-old-delayed.png`,
+   `8b-m-old-pending-390.png`). The status line beside them prints no count on
+   purpose -- "'0 tickers' over a board that is still being built is a
+   measurement nobody made" (ListPane.tsx:286-289) -- and the tabs say exactly
+   that. The hub's Size select carries no counts and is not affected.
+4. **Two small visual notes.** At 1440x900 the old board's age line wraps onto
+   three lines in its corner once "refreshing" is added ("Calculated / 5m ago ·
+   / refreshing", `8b-4-old-stale-refreshing.png`). The hub's top bar prints the
+   session value raw, "Tradegate-first Germany · afterhours"
+   (`8b-6-hub-delayed.png`), where the old board says "after hours".
+
+#### The numbers, as the script printed them
+
+Every figure above is in these tables, printed by `browser_perf3.py --tables`
+from each run's saved JSON. The JSON and the producer and server logs are kept
+under `%TEMP%/radar-perf3-task8b/{full1,rerun2,rerun3}/`, not committed. Times
+are the page's own clock unless a column says otherwise; a "case" is the
+check's own title.
+
+##### Run 1, check 1: empty store
+
+| page | case | document ms | pending copy at s | time to rows s | time to usable s | delayed copy at s | board requests while waiting | age line on arrival | rebuild position of 8 | published s after TRUNCATE | build ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| old | empty store -> us/all/24h | 106 | 0.31 | 18.82 | 22.25 | n/a | 7 | Calculated 7s ago | 3 | 16.4 | 5170 |
+| hub | empty store -> us/all/24h | 26 | 0.08 | 18.78 | 18.82 | n/a | 7 | Calculated 8s ago | 3 | 15.7 | 4978 |
+
+##### Run 1, check 2: rapid switching
+
+| page | case | change intervals ms | board requests from the first change on | ...of them poll=1 | same order as the final answer | start and final boards distinguishable by rows | window in the rendered context line | rows on screen / in read_payload | same order as read_payload | paints after the first change | final rows painted ms after the last change |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| old | six changes 200 ms apart from a ready board (us/all/12h -> us/discover/24h) | 217, 188, 203, 203, 200 | 5 | 4 | yes | yes | 24 | 50 / 50 | yes | 10 | 8483 |
+| hub | six changes 200 ms apart from a ready board (us/all/12h -> us/discover/24h) | 220, 189, 197, 209, 200 | 6 | 0 | yes | yes | 24 | 50 / 50 | yes | 12 | n/a |
+| old | six changes 200 ms apart from a pending board (us/fund/4h -> us/all/24h) | 202, 202, 207, 198, 208 | 1 | 0 | yes | yes | 24 | 50 / 50 | yes | 10 | 378 |
+| hub | six changes 200 ms apart from a pending board (us/fund/4h -> us/all/24h) | 212, 201, 206, 198, 189 | 6 | 0 | yes | yes | 24 | 50 / 50 | yes | 12 | n/a |
+
+##### Run 1, check 3: hidden tab
+
+| page | case | polls before hiding | poll in flight at the hide | board requests during 10 s hidden | ...of them poll=1 | board requests within 1.5 s of visible | first request after visible ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| old | hidden while pending (us/recent_ipo/4h) | 1 | no | 1 | 1 | 0 | n/a |
+| hub | hidden while pending (us/recent_ipo/1h) | 1 | no | 0 | 0 | 1 | 2 |
+
+- FAILED [old] 1 board request(s) while hidden
+
+- FAILED [old] 0 request(s) on return, not one
+
+##### Run 1, check 4: stale to fresh
+
+| page | case | embedded age s | age line at load | marker cleared at s | age line after | board requests until then | refreshed board as_of |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| old | stale to fresh (us/all/24h) | 300.1 | Calculated 5m ago · refreshing | 5.88 | Calculated 5s ago | 1 | 2026-09-11T19:48:26.444110Z |
+| hub | stale to fresh (us/all/12h) | 300.1 | Calculated 5m ago · refreshing | 11.44 | Calculated 10s ago | 2 | 2026-09-11T19:48:43.937666Z |
+
+##### Run 1, check 5: hard-expired
+
+| page | case | time to rows s | age line then |
+| --- | --- | --- | --- |
+| old | hard-expired (us/all/12h) | 8.72 | Calculated 8s ago |
+| hub | hard-expired (us/all/24h) | 8.61 | Calculated 8s ago |
+
+##### Run 1, check 6: delayed
+
+| page | case | waited s | waiting copy | poll gaps after 30 s ms | producer start to namespace line s | rows s after the producer was spawned | rows s after it logged its namespace |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| old | delayed, producer stopped, then started (de/large/4h) | 31.25 | Still calculating…A board nobody has asked for recently is built from scratch. Change the window or the feeds to ask for one that may already be built.Retry | (none) | 5.2 | 44.74 | 39.42 |
+| hub | delayed, producer stopped, then started (de/large/1h) | 31.14 | Still calculating…A board nobody has asked for recently is built from scratch. Change the window or the feeds to ask for one that may already be built.Retry | (none) | 5.2 | 56.71 | 51.51 |
+
+##### Run 1, check 7: flag off
+
+| page | case | embedded shared / age s | "not refreshed" at page-clock age s | age line | board requests from load to +20 s past the bound | observed s after arrival | board reads at s after arrival | first read answered s later | its answer: shared / age s | hub age line now |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| old | flag off: past 120 s on the page clock (us/all/24h) | False / 0.0 | 120.0 | Calculated 2m ago · not refreshedRetry | 0 | 140.18 | n/a | n/a | n/a | n/a |
+| hub | flag off: one re-read about 60 s after arrival (us/all/12h) | False / 0 | n/a | n/a | n/a | n/a | 59.96, 125.67 | 5.71 | False / 0 | Calculated 13s ago |
+
+##### Run 1, check 8: the star
+
+| page | case | starred | filter moved ms after the star | mark held ms (star to release) | mark released ms after the filter moved | on screen when released | address bar | board requests after the filter moved |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| old | star A: the mark lands after the new board is up (us/all/24h -> us/all/12h) | T03947 | 149 | 1748 | 1599 | 50 rows, controls 12h/All, busy False | window=12 segment='' t=T00543 | us/all/12h@314ms, us/all/12h@1623ms |
+| old | star B: the mark lands inside the controls' debounce (us/all/12h -> us/all/24h) | T01929 | 143 | 337 | 195 | 51 rows, controls 24h/All, busy False | window=24 segment='' t=T02561 | us/all/24h@331ms |
+
+##### Run 1, check m: phone, 390x844
+
+| page | case | time to rows s |
+| --- | --- | --- |
+| old | 390x844 (us/mid/4h) | 8.63 |
+| hub | 390x844 (us/micro/4h) | 8.67 |
+
+##### Run 2, check 3: hidden tab
+
+| page | case | hidden for s | polls before hiding | poll in flight at the hide | board requests during 10 s hidden | ...of them poll=1 | board requests within 1.5 s of visible | first request after visible ms | sent inside the visibilitychange handler |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| old | hidden while pending (us/recent_ipo/4h) | 10.02 | 1 | no | 0 | 0 | 1 | 0.2 | yes |
+| hub | hidden while pending (us/recent_ipo/1h) | 10.02 | 1 | no | 0 | 0 | 1 | 1.7 | no |
+
+##### Run 2, check 6: delayed
+
+| page | case | waited s | waiting copy | producer start to namespace line s | poll gaps from 30 s until the board ms | rows s after the producer was spawned | rows s after it logged its namespace |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| old | delayed, producer stopped, then started (de/large/4h) | 31.28 | Still calculating…A board nobody has asked for recently is built from scratch. Change the window or the feeds to ask for one that may already be built.Retry | 5.2 | 5943, 5235, 5050, 5905, 5116, 5907, 5978 | 39.75 | 34.47 |
+| hub | delayed, producer stopped, then started (de/large/1h) | 31.12 | Still calculating…A board nobody has asked for recently is built from scratch. Change the window or the feeds to ask for one that may already be built.Retry | 5.2 | 5991, 5925, 6017, 5390, 5635, 5070, 5139, 5465, 5104, 5713 | 55.85 | 50.65 |
+
+##### Run 3, check m: phone, 390x844
+
+| page | case | while pending: scroll, focus, panel top | time to rows s | right after the rows: scroll, focus, panel top | usable s after the rows | panel settled: scroll, focus, panel top |
+| --- | --- | --- | --- | --- | --- | --- |
+| old | 390x844 (us/mid/4h) | {'y': 0, 'active': 'BODY.', 'panel_top': 404} | 22.35 | {'y': 0, 'active': 'BODY.', 'panel_top': 3941} | 3.51 | {'y': 4219, 'active': 'MAIN.detail', 'panel_top': -278} |
+| hub | 390x844 (us/micro/4h) | {'y': 0, 'active': 'BODY.', 'panel_top': None} | 8.81 | {'y': 0, 'active': 'BODY.', 'panel_top': None} | 0.04 | {'y': 0, 'active': 'BODY.', 'panel_top': None} |
+
+#### Screenshots
+
+30 files in `radar-design/perf3-shots/`, each viewed before it was relied on;
+1440x900 unless the name says 390.
+
+| file | run | what it shows |
+| --- | --- | --- |
+| `8b-1-hub-empty-pending.png` | run 1 | empty store: the pending copy, no rows, no stamp |
+| `8b-1-hub-empty-ready.png` | run 1 | empty store: the board arrived, with its age line |
+| `8b-1-old-empty-pending.png` | run 1 | empty store: the pending copy, no rows, no stamp |
+| `8b-1-old-empty-ready.png` | run 1 | empty store: the board arrived, with its age line |
+| `8b-2-hub-switch-pending-final.png` | run 1 | after six changes from a pending board: us/all/24h |
+| `8b-2-hub-switch-ready-final.png` | run 1 | after six changes from a ready board: us/discover/24h |
+| `8b-2-old-switch-pending-final.png` | run 1 | after six changes from a pending board: us/all/24h |
+| `8b-2-old-switch-ready-final.png` | run 1 | after six changes from a ready board: us/discover/24h |
+| `8b-3-hub-hidden-returned.png` | run 2 | hidden 10 s while pending, then visible: still pending |
+| `8b-3-old-hidden-returned.png` | run 2 | hidden 10 s while pending, then visible: still pending |
+| `8b-4-hub-stale-cleared.png` | run 1 | the producer's refresh landed: the marker cleared, no reload |
+| `8b-4-hub-stale-refreshing.png` | run 1 | a warm board aged to 300 s: "Calculated 5m ago · refreshing" |
+| `8b-4-old-stale-cleared.png` | run 1 | the producer's refresh landed: the marker cleared, no reload |
+| `8b-4-old-stale-refreshing.png` | run 1 | a warm board aged to 300 s: "Calculated 5m ago · refreshing" |
+| `8b-5-hub-expired-pending.png` | run 1 | a warm board aged to 700 s: the pending state, not the board |
+| `8b-5-hub-expired-rebuilt.png` | run 1 | the rebuilt board arrived by poll |
+| `8b-5-old-expired-pending.png` | run 1 | a warm board aged to 700 s: the pending state, not the board |
+| `8b-5-old-expired-rebuilt.png` | run 1 | the rebuilt board arrived by poll |
+| `8b-6-hub-delayed.png` | run 2 | producer stopped, 31 s: the delayed copy and its Retry |
+| `8b-6-hub-recovered.png` | run 2 | the producer started: the board arrived with no reload |
+| `8b-6-old-delayed.png` | run 2 | producer stopped, 31 s: the delayed copy and its Retry |
+| `8b-6-old-recovered.png` | run 2 | the producer started: the board arrived with no reload |
+| `8b-7-hub-flagoff-reread.png` | run 1 | flag off: the hub after its minute's re-read |
+| `8b-7-old-flagoff-not-refreshed.png` | run 1 | flag off, past 120 s on the page clock: "not refreshed" with Retry |
+| `8b-8-old-star-A.png` | run 1 | star A: the new selection, the mark kept, the address bar on the new query |
+| `8b-8-old-star-B.png` | run 1 | star B: the new selection, the mark kept, the address bar on the new query |
+| `8b-m-hub-pending-390.png` | run 3 | phone, 390x844: pending |
+| `8b-m-hub-ready-390.png` | run 3 | phone, 390x844: where the page is once the board and its panel have arrived |
+| `8b-m-old-pending-390.png` | run 3 | phone, 390x844: pending |
+| `8b-m-old-ready-390.png` | run 3 | phone, 390x844: where the page is once the board and its panel have arrived |
+
+**Left as found.** Every server and producer the script started was stopped;
+after each run the account `perf3_browser` and its marks were deleted, and so
+was every on-demand board the run had caused (13 in run 1, 4 in run 2, 2 in run
+3; rows of other namespaces left: 0). The aligned fixture is untouched; the
+store holds this namespace's eight warm boards.

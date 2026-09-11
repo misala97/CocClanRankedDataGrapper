@@ -52,8 +52,14 @@ WORKTREE = APP_DIR.parent
 ENV_FILE = WORKTREE / '.env'
 
 SCALE_DB = 'personal_apps_radar_perf3_scale'
-# HEAD when Task 8a was dispatched; every process of the run uses it.
-REVISION = '0b50952459fb009a710520f163bc92fcdfd968f6'
+# The one revision every process of a run uses: HEAD when Task 8a was
+# dispatched, unless the parent pins its own through PERF3_REVISION (Task 8b
+# pins the HEAD it started from). Children inherit it with the rest of the
+# parent's environment, so a run cannot straddle two namespaces.
+REVISION = (os.environ.get('PERF3_REVISION')
+            or '0b50952459fb009a710520f163bc92fcdfd968f6')
+if len(REVISION) != 40 or any(c not in '0123456789abcdef' for c in REVISION):
+    raise SystemExit(f'PERF3_REVISION {REVISION!r} is not a full commit hash')
 # Databases a Task 8 process must never be bound to.
 REFUSED = ('personal_apps', 'personal_apps_radar_perf1',
            'personal_apps_radar_perf3')
