@@ -36,7 +36,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 2 tables, migration, store | **complete** | `0eba6a4`, `c2d0ca9`, `c199d06` | approved after one fix round; carried items closed in `c199d06` |
 | 3 producer | **complete** | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) | approved after one fix round |
 | 4 read path, flag, API | **complete** | `9097621`, `6752492` | approved after one fix round |
-| 5 old board client | round 4 re-reviewed: **needs fixes**; round 5 queued behind Task 6 | `0ed59e2`, `2b90885`, `17128b8`, `52af950` | round 4 resolved its seven items; one confirmed Important |
+| 5 old board client | **complete** | `0ed59e2`, `2b90885`, `17128b8`, `52af950`, `27738b2` | approved after five fix rounds; minors carried |
 | 6 hub client | implemented; review: **needs fixes**; fix queued behind Task 5 round 5 | `103b8ba` | three Important, eight Minor |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | open | | |
@@ -203,7 +203,7 @@ reason.
 | `/api/ops` catches only `ProgrammingError` (table missing), not an outage | concern, ruled | kept: the ops page reads the database earlier anyway, so an outage fails it there, and catching it here would only mislabel an outage as a missing table |
 | server facts the client review asked for | answered | a parked answer is `{pending: true, busy: false, failed: true, rows: null}`; every pending/busy shell carries `venue_counts: {any: 0, multi: 0}` and `segment_counts: {}` |
 
-### Task 5 — old board client (round 4 re-reviewed: needs fixes, round 5 queued)
+### Task 5 — old board client (complete, approved after five fix rounds)
 
 Review of `0ed59e2`: **needs fixes.**
 
@@ -326,6 +326,29 @@ where no board exists. Round 5 waits for the Task 6 implementer, to keep one
 implementation worker at a time.
 
 **Stopping rule, agreed with the owner on 2026-09-11.** Round 5 is the last automatic round for Task 5. Its re-review may block only on a critical or important finding that round 5 itself introduced, or on a direct violation of the PERF2 ruling. Every other finding is carried to the whole-branch review. If a blocker remains after round 5, work stops and the owner decides, with a recommendation such as simplifying the old board request handling rather than patching it again.
+
+**Round 5, `27738b2`, approved under the stopping rule.** The first round-5
+fixer died on the API session limit; a second verified its partial edits by
+mutation (14 of 14 failing their tests), finished, and committed both. The
+star's refetch now reads the selection on screen when it sends, waits for the
+reader's own request instead of aborting it, and is skipped while a control
+change is still settling; a Retry gives a reader with no ticker the top row
+and repeats a failed filter change as it would have succeeded; the banner no
+longer claims a previous board over a waiting shell; and a second failed poll
+in a row says so inside the waiting line. Whole radar suite 655 of 655 in five
+of five runs, root 403, typecheck and build clean. The re-review found nothing
+that round 5 introduced above Minor and no ruling violation, so Task 5 is
+complete.
+
+**Carried from Task 5 to the whole-branch review:**
+
+- a poll landing after a failed non-market filter change still keeps a ticker the new board does not list;
+- a Retry or the expiry refetch within 250 ms of a control change sends one extra request (one extra synchronous build on flag-off); gating both on `settling` fixes it;
+- a busy or delayed Waiting Retry can sit beside the banner's Retry;
+- the star's refetch has no hidden-tab gate, so it can send one request for the correct selection from a hidden tab;
+- a parked board whose polls fail now says only "Radar is still retrying." because its branch never receives the failure note;
+- when the reader's own request fails (including the 8 s timeout on a slow flag-off build) the star's refetch re-asks at once;
+- untested but correct by construction: the `settling` reset path, the star's refetch while hidden, poll failures over a parked board.
 
 ### Task 6 — hub client (review: needs fixes, fix queued)
 
