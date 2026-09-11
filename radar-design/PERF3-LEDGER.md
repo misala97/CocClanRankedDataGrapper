@@ -40,7 +40,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 6 hub client | **complete** | `103b8ba`, `d429378` | approved after one fix round; minors carried |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | reviewed: evidence honest; one Important fixed in the ledger; an optional ready series under load awaits the owner | `9fa42aa`, `6ecba5a` | one Important (ledger), eight Minor |
-| 9 suites + release package | **complete**: 9a the request-timing line; 9b the whole suites with every failure classified (one caused by this branch, a test expectation), the release package and the handoff | `e3aedfb` (9a), `3062ed9` (the build-revision correction), and the commit carrying this row (9b) | 9a approved by a read-only review; 9b goes to the whole-branch review |
+| 9 suites + release package | **complete**: 9a the request-timing line; 9b the whole suites with every failure classified (one caused by this branch, a test expectation), the release package and the handoff | `e3aedfb` (9a), `3062ed9` (the build-revision correction), and the commit carrying this row (9b) | 9a approved by a read-only review; 9b goes to the whole-branch review 9a approved by a read-only review; 9b and the whole branch reviewed 2026-09-12 -- **with fixes** |
 | whole-branch review | **next** | | |
 
 ## Databases, as they now stand
@@ -1802,3 +1802,166 @@ writes raw paths to stderr, so the journal does carry path values on errors;
 `--capture-output` would redirect stdout away from journald; a `.env` entry
 switches the log on in the producer as well as the web process.
 
+## Whole-branch review, 2026-09-12 (afe1246..0ba285b, 38 commits)
+
+Read-only, on the full 1.47 MB package, against the ruling, the plan with its
+four amendments, this ledger and the release package. Full report (untracked,
+so this section is the durable record):
+`.superpowers/sdd/review-whole-branch-report.md`. The reviewer's own checks:
+`git diff --stat 4221196 afe1246 -- personal_apps/` is empty, `b7e3f9c1a2d4`
+is the only revision naming `a7c31f0b52d4` as parent, `c4e17b90d3f2` is
+absent, and one focused store run (7 passed). Verdict: **ready to return to
+Codex with fixes. No Critical finding** -- nothing that would corrupt a board,
+cross accounts, publish under a stale fence, or take production down on the
+proposed deploy.
+
+**What it credited.** The three load-bearing properties are properties of the
+database rather than of Python: every statement scoped by namespace; publish
+and fail fenced on namespace, key, owner, token and `queue_state='building'`;
+admission and eviction inside one transaction opening with `SELECT ... FOR
+UPDATE` on the control row, with a refused admission rolling back so `busy`
+writes nothing. Disposition read off the payload, never the queue state. The
+key keeps every echoed dimension, with `BadKey` instead of `assert` so
+`python -O` cannot strip the guard. The namespace refuses to guess. The
+producer's clock discipline, the metrics' closed vocabularies, the tripwire
+fixture, and the honesty of the evidence -- the failed 120 s bound, the unmet
+2 s goal, the corrected idle-producer ready verdict, the RECONCILE lines --
+were all named as strengths. No credential in any added or changed file,
+scratchpad scripts and the 116 KB `pytest-full.txt` included.
+
+**Important 1 -- producer-side cross-generation isolation is unpinned by any
+test.** Every `claim`/`publish`/`fail`/`evict`/`refresh_warm`/`due_warm` call
+in `tests/test_radar_board_store.py` passes `store.ns` (about forty sites);
+`tests/test_radar_board_producer.py:167,174` builds one namespace per test.
+Only the reader side is covered (`tests/test_radar_board_shared_api.py:725`).
+The ruling asks in as many words to "test simultaneous v1/v2 readers and
+producers, not only a reader rejecting an old blob". The code is correct by
+construction, so this is a missing proof of the exact property rollout and
+rollback depend on. Fix: one store test seeding generation B and asserting A's
+`claim`, `due_warm`, `queue_summary` and `evict` ignore it; one producer test
+running two `Loop`s on two namespaces against one database.
+
+**Important 2 -- a tuning typo takes the board down on the flag-OFF path.**
+`routes/api.py:602` (`_direct_envelope`) calls `board_store.limits()`, so the
+new environment parsing now runs on every synchronous build. Verified by
+execution: `RADAR_BOARD_FRESH_SECONDS=abc` raises `ConfigError` out of
+`board_store.limits()` (`:187-191`), uncaught -- a 500 on `/radar/api/board`,
+`/radar/` and `/radar/hub/` with the flag off, which is the rollback path.
+Nonsense-but-numeric values pass silently: `RADAR_BOARD_MAX_QUEUE=0` makes
+every on-demand admission `busy` forever, `RADAR_BOARD_FRESH_SECONDS=-5` makes
+every board stale. Fix: validate in `limits()` (reject non-positive
+`max_queue`, `max_on_demand`, `lease_seconds`, negative durations) and
+log-and-default, or have `_direct_envelope` fall back to `Limits()`.
+
+**Important 3 -- an arriving board scrolls a phone reader about 4,219 px to
+the detail panel.** `static/radar/src/detail/DetailPane.tsx:122-126` seeds
+`focused.current` with the opening ticker so the first panel does not steal
+focus; `:144-153` then focuses the panel deliberately without `preventScroll`.
+A page opening on a waiting shell has no opening ticker, so the ref starts
+null; when the board arrives `BoardPage.tsx:221-225` auto-selects the top row
+and the panel takes focus and scrolls. Measured: 0 while pending, 4,219 px
+with focus on `main.detail` 3.5 s after the rows. A new accessibility
+regression from this slice, on the 390x844 layout. Fix: seed `focused.current`
+with the first auto-selected ticker, or pass `{ preventScroll: true }` when
+the selection was not the reader's click.
+
+**Important 4 -- on the flag-off path a failed or timed-out request is still
+re-sent, and each re-send is another synchronous build** (this ledger's
+`:382`, `:429`). Flag-off is production until the flag flips, and a build the
+client aborted keeps running server-side, so one timeout becomes three
+concurrent builds -- the block this slice exists to remove, reintroduced
+through the error path. Fix: no auto-resend on server or network errors while
+`shared === false`; gate the star's refetch on the reader's own request having
+settled.
+
+**Important 5 -- the hub sends one request per control change** (`:1456`: six
+requests for six changes, against one debounced request on the old board).
+Not merely wasted work: admitted builds occupy the 32-job cap the ruling set,
+so one reader dragging a control can push another reader to `busy`. The
+debounce needs no key-contract decision; the Discover spelling does. Fix: the
+old board's 250 ms debounce, before the selection becomes a query key.
+
+**Important 6 -- a parked board tells the reader nothing.** The server answers
+a key inside its failure backoff with `failed: true`
+(`board_shared.py:282-285`, `_waiting:319-350`), but the old board's waiting
+branch never reads it and says only "Radar is still retrying." (`:381`).
+Ruling section 1 makes the failed state mandatory in both clients. Fix: branch
+the waiting copy on `failed`, as the ready path already does.
+
+**The ruling, walked item by item.** Every requirement met where the ledger
+already records it, with three exceptions, all already known: cross-generation
+isolation is met in code but **not met as a test** (Important 1); the <= 500 ms
+p95 ready target is met only with the producer idle; and retention is
+journald's, whose settings on the target are unread and scheduled as a
+pre-deploy read. The seven decisions, the versioning and correctness
+amendments, the telemetry ruling and PERF3's seven phases are otherwise met,
+each at a named file and line in the report.
+
+**Minor findings added by this review.** The release package overstates its own
+log hygiene at `PERF3-RELEASE.md:257` -- "None of these lines carries a query,
+the JSON of a key, a user or a path" sits directly above a list including the
+first failure with its traceback, and `board_producer.py:269,298` use
+`logger.exception`, so a SQLAlchemy error carries the failing statement and
+its bound parameters. `:290`'s "a complete behavioural rollback" is
+server-complete, not screen-complete: with the flag off the new client still
+marks a board stale at 120 s and the hub still re-reads once a minute, which
+section 4.2 step 2 discloses but section 6 does not point at. `PERF3-PLAN.md:92-95`
+still says flag-off keeps today's path "byte-for-byte", which the Task 5
+re-review superseded. The producer writes the control row up to six times a
+second when idle (`Loop.tick:420-424`, all inside the row lock web workers
+admit under; measured negligible at load, unmeasured idle with two workers).
+`board_shared._queue_position:295-316` is a floor, not an estimate. The
+planned `radar-design/perf3-release/BUILD_REVISION.md` does not exist -- the
+third amendment superseded it. `tests/test_radar_board_shared_api.py:849` does
+not request the `shared` fixture, so it is the one test in that file that
+would run against a developer's `personal_apps` unnoticed.
+`scratchpad/perf3/perf3_common.py:387-405` asserts nothing in the destructive
+helper itself and trusts the engine it is handed, and
+`scratchpad/perf3/rehearse_board_results_mariadb.py:114-128` guards its
+`DROP DATABASE` with a denylist rather than an allowlist, both mitigated by
+the call sites and the loopback and engine checks. `board_producer.py:388-390`
+still has one blank line where PEP 8 wants two.
+
+**The test-database guard, decided branch-wide.** Five suites hard-code
+`personal_apps_radar_perf3` and **skip** elsewhere, all at fixture level:
+`test_radar_board_store.py:33,129-130`, `test_radar_board_producer.py:42,211-212`,
+`test_radar_board_shared_api.py:41,273-274`,
+`test_radar_board_results_migration.py:33,85-86` and
+`test_radar_board_parity.py:57,422-423`. After a merge they skip silently
+forever. The trap is already proven one generation back:
+`test_radar_projection_migration.py:27` pins `personal_apps_radar_wt`, so the
+two migration suites can never both run in one pass -- Task 9b's five skips
+are that entire suite (`pytest-full.txt:1186`). Meanwhile `tests/conftest.py`
+has no pin and defaults to the production-named `personal_apps`. The reviewer's
+recommendation, adopted: keep a guard but invert its failure mode -- run
+wherever the two tables exist and the database is not the dev or production
+name, and `pytest.fail` (as `test_radar_board_shared_api.py:279` already does
+for a missing table) rather than skip when the database looks disposable but
+is not migrated -- and settle the `_wt` pin in the same pass.
+
+**Fix before the return.** The red test
+(`tests/test_radar_activity.py:396-397`, the hard-coded table set omitting
+this branch's two tables); the cross-generation producer test (Important 1);
+the `limits()` validation (Important 2); the focus steal (Important 3); the
+flag-off resends and the Retry-or-expiry refetch that fires within 250 ms of a
+control change (Important 4 and `:379`); the hub debounce (Important 5); the
+parked copy (Important 6); the parity suite's pre-split score check
+(`:529` -- it sums two buckets of equal count, so a wrong reading gives the
+expected total, and it is the only proof of the source-version rule); the
+parity suite setting `TESTING` without restoring it (`:533`); the
+test-database guards branch-wide; the pending shell's detail pane reading
+"Nothing on the board to look at." and its view tabs reading 0 (`:480`,
+`:1588-1596`, both "absent rendered as measured", the defect class this slice
+exists to remove); the two release sentences; and the missing blank line.
+
+**Carry to Codex.** The Discover tab's cold duplicate key (a key-contract
+decision); the 120 s fresh bound, which fails by construction and whose
+remedies are capacity decisions -- the reviewer states plainly that changing
+it now would convert a measured result into an untested tuning change on the
+way to Codex; every deploy starting on an empty store, and rebuild order
+ignoring which warm key a reader awaits; the restarted worker's first read at
+p95 769 ms; the ready target under load, whose measurement is new work; the
+per-account rule at 25 marks beside a building producer; release section 10's
+decisions 7-9; a publish that raises leaving its row `building` until the
+lease expires; and the remainders already recorded under Tasks 1 and 5 to 9a
+in this ledger.
