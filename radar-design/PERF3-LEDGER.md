@@ -36,9 +36,9 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 2 tables, migration, store | **complete** | `0eba6a4`, `c2d0ca9`, `c199d06` | approved after one fix round; carried items closed in `c199d06` |
 | 3 producer | **complete** | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) | approved after one fix round |
 | 4 read path, flag, API | **complete** | `9097621`, `6752492` | approved after one fix round |
-| 5 old board client | implemented; fix committed, **not yet re-reviewed** | `0ed59e2`, `2b90885` | review of `0ed59e2`: needs fixes (I1–I3) |
+| 5 old board client | re-reviewed: **needs fixes**; round 3 queued | `0ed59e2`, `2b90885` | I1, I2 and eleven minors resolved; I3 half done |
 | 6 hub client | open | | |
-| 7 parity | open | | |
+| 7 parity | implemented; review pending | `29cc2ac` | |
 | 8 scale verification + browser | open | | |
 | 9 suites + release package | open | | |
 | whole-branch review | open | | |
@@ -109,6 +109,27 @@ Fable 5.1). Every commit through `6752492` survived. Two things did not:
   handed to a second fixer to finish.
 - The portable MariaDB process.
 
+## Facts settled from source, not assumed
+
+**Gunicorn and `--threads`.** The PERF2 ledger said `--threads` is ignored by
+the sync worker class, and Codex's ruling asked for the version's own source
+to settle that before it is repeated. For the version installed here it is
+wrong. Gunicorn 26.2.0's `Config.worker_class` (`gunicorn/config.py:122-128`)
+substitutes `gunicorn.workers.gthread.ThreadWorker` whenever the configured
+class is `sync` and `threads > 1`; `worker_class_str` (`config.py:110-119`)
+reports `gthread` in the same case; and the `threads` setting's own
+documentation (`config.py:791-795`) says the gthread worker "will be used
+instead". So on 26.2.0, `--threads 2` alone changes the worker model. It is
+not a silent no-op, and adding `--worker-class gthread` beside it is redundant
+rather than required. The target's gunicorn version has never been read, so
+this settles the statement for 26.2.0 only. The threading change itself stays
+deferred, as the ruling decided.
+
+**The browser.** python-playwright 1.61 launches headless Chromium
+149.0.7827.55 on this machine: a 390×844 page, `document.visibilityState`
+readable, a screenshot written, in 3.5 s. Task 8's browser runs need no
+setup.
+
 ## Findings and rulings
 
 Every reviewer finding, its severity and its disposition. Minor findings are
@@ -162,7 +183,7 @@ reason.
 | `/api/ops` catches only `ProgrammingError` (table missing), not an outage | concern, ruled | kept: the ops page reads the database earlier anyway, so an outage fails it there, and catching it here would only mislabel an outage as a missing table |
 | server facts the client review asked for | answered | a parked answer is `{pending: true, busy: false, failed: true, rows: null}`; every pending/busy shell carries `venue_counts: {any: 0, multi: 0}` and `segment_counts: {}` |
 
-### Task 5 — old board client (fix committed, re-review pending)
+### Task 5 — old board client (re-reviewed: needs fixes, round 3 queued)
 
 Review of `0ed59e2`: **needs fixes.**
 
@@ -200,6 +221,24 @@ things for the re-review to judge:
 
 **Paused** on 2026-09-11 at the owner's request, after `2b90885`, with this
 ledger and the handoff committed. No agent is running.
+
+**Re-review of `2b90885`, 2026-09-11: needs fixes.** Resolved: I1, I2,
+M1–M8, M10, M12, M13, and both regressions the interrupted edits had carried.
+**I3 is half done, and the reviewer ruled on the fixer's narrowing.** Not
+polling a flag-off board is compliant: nothing stands behind it to refresh,
+and a poll would only trigger a synchronous build. Not MARKING it stale is not
+compliant: ruling §5 says a board between the fresh bound and hard expiry may
+remain visible "ONLY as stale", with no exception by path, and flag-off is
+production until the flag flips. Required: every board with rows is marked
+stale past `fresh_seconds` on the page's clock; shared boards keep the
+automatic wait and "refreshing"; flag-off boards say "not refreshed" and offer
+Retry, with no automatic request at the bound. New minors: a hidden flag-off
+tab refetches about every ten minutes; a failed expiry refetch leaves
+"recalculating" on screen with nothing recalculating; a poll can undo a row
+the reader just clicked; an aborted poll zeroes the server's retry floor
+once; one misleading comment. Round 3 waits for the Task 7 implementer, to
+keep one implementation worker at a time. The same ruling binds the hub in
+Task 6.
 
 ## Measurements
 
