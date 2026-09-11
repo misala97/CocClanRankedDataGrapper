@@ -28,9 +28,16 @@ from extensions import db
 from features.radar import activity
 from models import RadarBoardObservation, RadarIngestRun
 
-# The revision before radar_ingest_runs and radar_board_observations existed.
-# Named, so this file keeps testing the same thing however many revisions are
-# later stacked above d82f9afb5898.
+# The revision that adds radar_ingest_runs and radar_board_observations, and
+# the one immediately before it. Both are named so this file keeps testing the
+# same single step however many revisions are later stacked above
+# d82f9afb5898: the test steps down TO d82f9afb5898 first and takes its
+# fingerprint there, so the delta it asserts is that one migration's and not
+# the whole chain's. Naming only the lower bound was not enough -- once
+# a7c31f0b52d4 and b7e3f9c1a2d4 were stacked above, a single downgrade to the
+# lower bound dropped four tables and the assertion of "its own two" failed
+# while the property it names was still true.
+THESE_TABLES = 'd82f9afb5898'
 BEFORE_THESE_TABLES = 'b3d9e1f5a274'
 
 
@@ -377,22 +384,33 @@ def test_the_migration_adds_and_removes_only_its_own_two_tables(app_context):
     taken before and after, and a pre-existing row is counted, so a migration
     that quietly rebuilt or emptied a neighbour would be caught.
 
-    The target is named rather than left as "one step back". Once another
-    revision was stacked on top of this one, a bare downgrade() stopped
-    reaching the point where these tables do not exist, and the test began
-    asserting something it was no longer doing.
+    Both ends of the step are named rather than left as "one step back" or as
+    "down to the floor". Once another revision was stacked on top of this one,
+    a bare downgrade() stopped reaching the point where these tables do not
+    exist; and once two were, a downgrade straight to the floor removed their
+    tables too and the assertion counted four. So the walk stops at this
+    migration's own revision first, fingerprints there, and only then takes the
+    single step under test -- the delta is that migration's, whatever else the
+    chain has grown above it.
     """
     from flask_migrate import downgrade, upgrade
 
-    before = _schema_fingerprint()
+    at_head = _schema_fingerprint()
     watches_before = db.session.execute(
         sa.text('select count(*) from radar_watch')).scalar()
-    assert 'radar_ingest_runs' in before
+    assert 'radar_ingest_runs' in at_head
 
-    with _logging_preserved():
-        downgrade(revision=BEFORE_THESE_TABLES)
-    after_down = _schema_fingerprint()
     try:
+        with _logging_preserved():
+            downgrade(revision=THESE_TABLES)
+        before = _schema_fingerprint()
+        assert 'radar_ingest_runs' in before
+        assert 'radar_board_observations' in before
+
+        with _logging_preserved():
+            downgrade(revision=BEFORE_THESE_TABLES)
+        after_down = _schema_fingerprint()
+
         assert set(before) - set(after_down) == {
             'radar_ingest_runs', 'radar_board_observations'}
         assert set(after_down) - set(before) == set()
@@ -401,7 +419,7 @@ def test_the_migration_adds_and_removes_only_its_own_two_tables(app_context):
         with _logging_preserved():
             upgrade()          # to head, whatever is stacked above
 
-    assert _schema_fingerprint() == before
+    assert _schema_fingerprint() == at_head
     assert db.session.execute(
         sa.text('select count(*) from radar_watch')).scalar() == watches_before
 
