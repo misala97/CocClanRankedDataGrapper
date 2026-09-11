@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -27,6 +27,9 @@ beforeEach(() => {
 
 afterEach(() => {
   window.history.replaceState(null, '', '/radar/hub/')
+  // Each test's spies are its own. Without this a spy outlived its test, and
+  // the requests one test made were read back as another test's first.
+  vi.restoreAllMocks()
 })
 
 describe('the shell', () => {
@@ -233,6 +236,38 @@ describe('the shell', () => {
     // Still in flight; the control is refused rather than queued.
     await userEvent.click(screen.getByRole('button', { name: /removing/i }))
     expect(setWatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('frees the mark once a write the reader walked away from lands', async () => {
+    // Leaving the page resets the write's refusal, which detaches the write
+    // from the page -- and react-query then drops what the page asked to be
+    // told when it settled. The write settling is what frees the next mark.
+    const marked = (tickers: string[]) => {
+      const p = payload({ rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' })] })
+      p.watching = tickers
+      p.watch_rows = tickers.map((ticker) => row({ ticker }))
+      return p
+    }
+    let land!: (watching: string[]) => void
+    vi.spyOn(api, 'setWatch')
+      .mockReturnValue(new Promise((resolve) => { land = resolve }))
+    vi.spyOn(api, 'fetchBoard').mockResolvedValue(marked(['BBB']))
+
+    window.history.replaceState(null, '', '/radar/hub/#watching')
+    mount({ initial: marked(['AAA', 'BBB']) })
+    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
+    await userEvent.click(screen.getByRole('link', { name: 'Human chatter' }))
+
+    await act(async () => {
+      land(['BBB'])
+      await new Promise((resolve) => { setTimeout(resolve, 0) })
+    })
+    await userEvent.click(screen.getByRole('link', { name: 'Watching' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /stop watching BBB/i }))
+        .toBeEnabled()
+    })
   })
 
   it('never fetches a board of feeds the reader did not pick', async () => {

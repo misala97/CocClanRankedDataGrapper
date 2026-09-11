@@ -31,12 +31,14 @@ const ROOT = 'radar-hub'
  *  hidden tab polling a dashboard nobody is reading is a request the reader
  *  did not ask for.
  *
- *  The board is not refreshed on this clock any more. It carries bounds of
- *  its own (ruling §5): a shared board is asked about again from the moment
- *  it passes its fresh bound, and a board a worker built for itself is never
- *  asked about on a timer at all -- asking again would build another,
- *  synchronously, in every open tab. What remains of this figure for the
- *  board is how long a cached answer counts as current when the reader comes
+ *  The board carries bounds of its own as well (ruling §5). A shared board
+ *  is not read on this clock: it is asked about again from the moment it
+ *  passes its fresh bound, as a wait. A board a worker built for itself is
+ *  read on it -- once per answer, for a reader who is looking, as the hub
+ *  always read its board -- and only while that read falls inside the fresh
+ *  bound (`refreshAt`): at or past it, asking again would build another
+ *  synchronously, in every open tab, and the ask is the reader's. The figure
+ *  is also how long a cached answer counts as current when the reader comes
  *  back to its selection. */
 export const REFRESH_MS = 60_000
 
@@ -201,20 +203,74 @@ export function nextWait(wait: Wait | null, key: string, board: BoardPayload,
   return same && wait.since === at ? wait : beginWait(key, board, at, random)
 }
 
-/** A request this page sent on its own schedule -- a poll, or the refetch a
- *  board's hard expiry is owed -- and that failed. It is not retried behind
+/** When a board a worker built for itself is read again on the page's own
+ *  account: `REFRESH_MS` after it arrived, as the hub always read its board
+ *  -- or null, for no such read.
+ *
+ *  Only while that instant is inside the board's fresh bound, strictly: at
+ *  or past the bound nothing automatic goes out for a board with nothing
+ *  queued behind it (ruling §5), because the read is a synchronous build.
+ *  The line marks it "not refreshed" from there, and the ask is the
+ *  reader's. A shared board has none: its wait begins at the bound. */
+export function refreshAt(board: BoardPayload,
+                          received: number): number | null {
+  if (refreshes(board)) return null
+  const left = untilStale(board, received, received)
+  if (left === null) return null
+  const at = received + REFRESH_MS
+  return at < received + left ? at : null
+}
+
+/** A request this page sent on its own schedule -- a poll, the refetch a
+ *  board's hard expiry is owed, or the minute's read of a board a worker
+ *  built for itself -- and that failed. It is not retried behind
  *  the reader's back: the schedule is the back-off for a poll, and a failed
  *  expiry refetch is owed to the reader's next look at the tab or to their
  *  Retry. On the flag-off path each retry would be another synchronous build
  *  of the board the last one was still building. */
 const SCHEDULED = new WeakSet<object>()
 
+/** Never sent again behind the reader's back, whoever asked -- the reader's
+ *  own Retry included. A request that timed out has stopped this page
+ *  listening, not the server building: on the path where a worker builds its
+ *  own board, a resend is a second synchronous build of a board the first may
+ *  still be building. A 429 is the server's own rate limit, and a resend one
+ *  second later is exactly what it refused. */
+const NOT_RESENT = new Set(['timeout', 'busy'])
+
 function retryBoard(count: number, error: unknown): boolean {
   if (typeof error === 'object' && error !== null && SCHEDULED.has(error)) {
     return false
   }
+  const reason = (error as { reason?: string })?.reason
+  if (reason !== undefined && NOT_RESENT.has(reason)) return false
   return retry(count, error)
 }
+
+/** Why a board request is going out, when the page knows: the reader's own
+ *  ask, the refetch a board's hard expiry is owed, or the minute's read of a
+ *  board a worker built for itself (`refreshAt`). Otherwise it is the page's
+ *  own schedule. */
+type Why = 'reader' | 'expiry' | 'refresh' | null
+
+/** Boards the reader is about to ask for from outside `useBoard` -- the
+ *  refetch a mark is owed -- by `queryFor` key. Set around the one call that
+ *  sends the request and cleared as soon as that call returns: react-query
+ *  starts a request inside the call, so the request reads it there, and a
+ *  call that joined a request already out leaves nothing behind for the
+ *  next. */
+const READER_ASKS = new Set<string>()
+
+/** Failed asks about a waiting shell, for one selection (`useBoard`). */
+interface Misses {
+  key: string
+  /** The page's own polls that have failed in a row. */
+  polls: number
+  /** Whether the reader's own ask was among them. */
+  reader: boolean
+}
+
+const unmissed = (key: string): Misses => ({ key, polls: 0, reader: false })
 
 /** Whether nobody is looking at this tab. Read rather than waited for: a tab
  *  restored in the background never fires a visibilitychange at all. */
@@ -231,6 +287,11 @@ export type BoardQuery = UseQueryResult<BoardPayload, unknown> & {
   received: number
   /** A board being built has been waited on for DELAYED_AFTER_MS. */
   delayed: boolean
+  /** Why this page's asks about a waiting shell keep failing -- two of its
+   *  own polls in a row, or the reader's own ask -- or null. The notice
+   *  standing in for the shell says it: a shell has no last answer for the
+   *  failure notice to fall back on, and the wait goes on asking. */
+  failing: string | null
   /** The reader's own ask, now. Joins a request already out rather than
    *  sending another: an abort stops this page listening and does not stop
    *  the server, so abort-and-resend is a second build of one board. */
@@ -251,27 +312,33 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
 
   // The wait for the board on screen, keyed by its selection.
   const wait = useRef<Wait | null>(null)
-  // What the next request is, when the page knows: the reader's own ask, or
-  // the refetch a board's hard expiry is owed. Otherwise it is the page's
-  // schedule, and a poll whenever the board on screen owes one.
-  const next = useRef<'reader' | 'expiry' | null>(null)
+  // What the next request is, when the page knows (`Why`): the reader's own
+  // ask, the refetch a board's hard expiry is owed, or the minute's read.
+  // Otherwise it is the page's schedule, and a poll whenever a wait is
+  // running for the board on screen.
+  const next = useRef<Why>(null)
   // The selection the last request was for. The first request for a
   // selection is its READ -- a new question, and new demand -- whatever is
   // cached for it. The embedded board was the seed selection's read.
   const sentFor = useRef<string | null>(seed ? key : null)
+  // The request going out, as it was decided when it first went: react-query
+  // resends a request the server failed (`retryBoard`), and a resend is the
+  // same request asked for the same reason -- a Retry resent is still the
+  // reader's own. Every attempt at one request carries one signal.
+  const sending = useRef<{ signal: AbortSignal | null; why: Why;
+                           poll: boolean }>({ signal: null, why: null,
+                                              poll: false })
+  // Asks about a waiting shell that have failed since the last answer, for
+  // the selection they were about: how many of the page's own polls in a
+  // row, and whether one was the reader's own. One poll that did not answer
+  // is a blip the next may not have; two in a row is the wait failing. The
+  // reader who asked is owed the reason at once. Any answer that lands clears
+  // it, and a new selection has failed nothing yet.
+  const misses = useRef<Misses>(unmissed(key))
 
   const query = useQuery({
     queryKey: boardKey(selection),
     queryFn: async ({ signal }) => {
-      const held = client.getQueryState<BoardPayload>(boardKey(selection))
-      const why = next.current
-      next.current = null
-      const first = sentFor.current !== key
-      sentFor.current = key
-      // Asking AGAIN about a board this page is already waiting for, which
-      // the server reads to leave demand and the queue position alone.
-      const poll = !first && why !== 'reader' && held?.data !== undefined
-        && owesABoard(held.data, held.dataUpdatedAt, Date.now())
       // Only this selection's wait hears about this request, and only once it
       // has begun. A request for a selection the reader has left may still
       // answer, and has nothing to tell the question that replaced it; a
@@ -282,14 +349,30 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
         return running !== null && running.key === key
           && running.since <= Date.now() ? running : null
       }
-      if (poll) {
-        const running = mine()
-        if (running) running.attempt += 1
+      if (sending.current.signal !== signal) {
+        const why: Why = READER_ASKS.has(key) ? 'reader' : next.current
+        next.current = null
+        const first = sentFor.current !== key
+        sentFor.current = key
+        // One rule, the old board's: poll=1 is this page asking AGAIN, on
+        // its own schedule, about a board it is already waiting for -- which
+        // the server reads to leave demand and the queue position alone. The
+        // reader's own asks, a Retry and the refetch after a mark, are reads:
+        // new demand. So is the first request for a selection, whoever sends
+        // it.
+        const poll = !first && why !== 'reader' && mine() !== null
+        sending.current = { signal, why, poll }
+        if (poll) {
+          const running = mine()
+          if (running) running.attempt += 1
+        }
       }
+      const { why, poll } = sending.current
       try {
         const answer = await fetchBoard(selection, signal, { poll })
         const running = mine()
         if (running) hear(running, answer, Date.now())
+        if (misses.current.key === key) misses.current = unmissed(key)
         return answer
       } catch (error) {
         // Aborted is abandoned -- a key change, an unmount -- and says
@@ -297,8 +380,18 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
         if (!signal.aborted) {
           const running = mine()
           if (running) hear(running, null, Date.now())
-          if ((poll || why === 'expiry') && typeof error === 'object'
-              && error !== null) {
+          // Counted over a waiting shell only: a board with rows says a
+          // failed refresh in the notice above it, and a selection with no
+          // answer yet says it where its rows would be.
+          const held = client.getQueryState<BoardPayload>(boardKey(selection))
+          if (held?.data !== undefined && held.data.rows === null) {
+            const was = misses.current.key === key ? misses.current
+              : unmissed(key)
+            misses.current = poll ? { ...was, polls: was.polls + 1 }
+              : { ...was, reader: true }
+          }
+          if ((poll || why === 'expiry' || why === 'refresh')
+              && typeof error === 'object' && error !== null) {
             SCHEDULED.add(error)
           }
         }
@@ -326,6 +419,12 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
     // only when the board owes one. The client's default would refetch any
     // board past its staleTime, flag-off boards included.
     refetchOnWindowFocus: false,
+    // Nor is a connection coming back the reader asking. The client's
+    // default refetches a board past its staleTime when the network returns:
+    // for a board a worker built for itself, past its fresh bound, that is
+    // an automatic synchronous build the ruling forbids. A wait's own polls,
+    // and a request paused while offline, carry on by themselves.
+    refetchOnReconnect: false,
     // Governs a KEY CHANGE: react-query keeps the previous board as
     // placeholder data while the one for a new filter loads. The page never
     // draws it (`isPlaceholderData` is the Loading state), because that is
@@ -377,9 +476,13 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
       if (state?.dataUpdatedAt !== received) return
       expiredAsked.current = stamp
       // An ask already out is this one: its answer describes the window as
-      // it is now.
-      if (state.fetchStatus !== 'idle') return
-      if (hidden()) { owed.current = refetchAtExpiry; return }
+      // it is now. Until it lands the refetch stays owed, since that ask may
+      // fail; an answer takes it away (the cleanup below). A hidden tab owes
+      // it as well.
+      if (state.fetchStatus !== 'idle' || hidden()) {
+        owed.current = refetchAtExpiry
+        return
+      }
       next.current = 'expiry'
       void refetch({ cancelRefetch: false }).then((result) => {
         if (result.isError
@@ -397,6 +500,41 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
     }
   }, [answer, received, key, client, selection, refetch])
 
+  // A board a worker built for itself, read again a minute after it arrived
+  // (`refreshAt`) -- as the hub always read its board -- for a reader who is
+  // looking. Nothing is queued behind such a board, so nothing else will.
+  // Once per answer: the answer arms the next minute, and a read that failed
+  // is not sent again on the page's account, least of all at the bound. A
+  // tab hidden at the minute owes the read, and pays it only if the reader
+  // is back inside the bound.
+  useEffect(() => {
+    if (answer === undefined) return
+    const at = refreshAt(answer, received)
+    if (at === null) return
+    const bound = received + (untilStale(answer, received, received) ?? 0)
+    const read = () => {
+      const state = client.getQueryState(boardKey(selection))
+      // Armed for one answer, as the expiry is.
+      if (state?.dataUpdatedAt !== received) return
+      // Nothing at or past the bound, however late this runs.
+      if (Date.now() >= bound) return
+      // An ask already out is this read: its answer is the board it would
+      // bring. Until it lands the read stays owed, since that ask may fail;
+      // an answer takes it away (the cleanup below).
+      if (state.fetchStatus !== 'idle' || hidden()) {
+        owed.current = read
+        return
+      }
+      next.current = 'refresh'
+      void refetch({ cancelRefetch: false })
+    }
+    const timer = setTimeout(read, Math.max(0, at - Date.now()))
+    return () => {
+      clearTimeout(timer)
+      if (owed.current === read) owed.current = null
+    }
+  }, [answer, received, client, selection, refetch])
+
   // Back from a hidden tab: one ask at once for a board this page is waiting
   // on -- it may well have been built while nobody was looking -- and the
   // schedule carries on from its place. Otherwise, whatever the tab owes.
@@ -405,14 +543,18 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
     const was = looked.current
     looked.current = visible
     if (!visible || was) return
-    const pay = owed.current
-    owed.current = null
     const state = client.getQueryState<BoardPayload>(boardKey(selection))
+    // An ask already out is the one this would send. Whatever the tab owes
+    // stays owed until an answer lands: that ask may yet fail, and the next
+    // look pays it then. An answer that lands takes it away (the clocks'
+    // own cleanup, above).
     if (state?.data === undefined || state.fetchStatus !== 'idle') return
     if (owesABoard(state.data, state.dataUpdatedAt, Date.now())) {
       void refetch({ cancelRefetch: false })
       return
     }
+    const pay = owed.current
+    owed.current = null
     pay?.()
   }, [visible, client, selection, refetch])
 
@@ -431,7 +573,14 @@ export function useBoard(selection: Selection, initial?: BoardPayload,
   }, [building, key, answer])
   const delayed = building && late !== null && late === wait.current
 
-  return { ...query, received, delayed, retry: ask }
+  const miss = misses.current
+  const failing = query.isError && answer !== undefined && answer.rows === null
+    && miss.key === key && (miss.reader || miss.polls > 1)
+    ? (query.error instanceof Error ? query.error.message
+      : 'The board did not answer.')
+    : null
+
+  return { ...query, received, delayed, failing, retry: ask }
 }
 
 export function useDetail(ticker: string | null, selection: Selection,
@@ -459,9 +608,13 @@ export function useDetail(ticker: string | null, selection: Selection,
  *  Every cached board takes the list, because `watching` and `watch_rows`
  *  ride on the board payload and are now out of date in each of them.
  */
-export function useWatchMutation() {
+export function useWatchMutation(onSettled?: () => void) {
   const client = useQueryClient()
   return useMutation({
+    // However the write ends, told through the mutation's own options: they
+    // outlive the page that started it. `reset()` detaches a write from its
+    // page, and react-query then drops the callbacks a `mutate` call carried.
+    onSettled: () => { onSettled?.() },
     mutationFn: ({ ticker, on }: { ticker: string; on: boolean }) =>
       setWatch(ticker, on),
     onSuccess: (watching) => {
@@ -478,12 +631,15 @@ export function useWatchMutation() {
         // waiting shell's `watch_rows` is empty, and stays so.
         const rows = board.watch_rows?.filter(
           (row) => watching.includes(row.ticker))
-        // WHEN the board arrived is not the list's to change. Its age line
-        // and its wait are both counted from it, and a mark that reset it
-        // would make a two-minute-old board read as new.
-        client.setQueryData<BoardPayload>(
-          cached.queryKey, { ...board, watching, watch_rows: rows },
-          { updatedAt: cached.state.dataUpdatedAt })
+        // The list, and nothing else about the board. WHEN it arrived is not
+        // the list's to change: its age line and its wait are both counted
+        // from it, and a mark that reset it would make a two-minute-old
+        // board read as new. Nor is a failure beside it: a refresh that
+        // failed is still the latest word on the board, and setQueryData
+        // records the list as a successful answer -- the failure notice
+        // went, and an expired board claimed a recalculation, until the
+        // refetch below settled.
+        cached.setState({ data: { ...board, watching, watch_rows: rows } })
       }
       void refreshAfterMark(client)
     },
@@ -507,9 +663,14 @@ async function refreshAfterMark(client: QueryClient): Promise<void> {
   await client.invalidateQueries({ ...boards, refetchType: 'none' })
   await Promise.all(onScreen.map(async (query) => {
     await query.promise?.catch(() => undefined)
-    await client.refetchQueries(
+    // The reader's own ask, as a Retry is: a read, never a poll.
+    const key = String(query.queryKey[2])
+    READER_ASKS.add(key)
+    const sent = client.refetchQueries(
       { queryKey: query.queryKey, exact: true, type: 'active' },
       { cancelRefetch: false })
+    READER_ASKS.delete(key)
+    await sent
   }))
 }
 

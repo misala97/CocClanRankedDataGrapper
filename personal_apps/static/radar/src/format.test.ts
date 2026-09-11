@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
-import { UNKNOWN, count, dayStamp, decodeEntities, divergence, exchangeLabel,
-         formatMarketDate, formatPrice, formatQuoteAge, money, move, postStamp,
-         rowPrice, segmentLabel, signed, sourceLabel, stampTime, zscore }
+import { UNKNOWN, boardAge, count, dayStamp, decodeEntities, divergence,
+         exchangeLabel, formatMarketDate, formatPrice, formatQuoteAge, money,
+         move, postStamp, rowPrice, segmentLabel, signed, sourceLabel,
+         stampTime, zscore }
   from './format'
+
+describe('a board\'s age on its age line', () => {
+  // Both surfaces print it through this one formatter (list/ListPane.tsx,
+  // hub/PageState.tsx), so they never state one age two ways.
+  it('counts seconds, then minutes, then hours and days', () => {
+    expect(boardAge(0)).toBe('0s')
+    expect(boardAge(59.9)).toBe('59s')
+    expect(boardAge(60)).toBe('1m')
+    expect(boardAge(89 * 60 + 59)).toBe('89m')
+    expect(boardAge(90 * 60)).toBe('1h')
+    expect(boardAge(3 * 86_400)).toBe('3d')
+    // A clock a second behind the server's is not a board from the future.
+    expect(boardAge(-2)).toBe('0s')
+  })
+})
 
 describe('an unknown never renders as a zero', () => {
   // The single rule PRODUCT.md is most insistent about. A row with no quote,

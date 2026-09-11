@@ -331,3 +331,45 @@ export function untilExpired(board: BoardPayload, received: number,
   const age = ageAt(board, received, now)
   return age === null ? null : (board.hard_expiry_seconds - age) * 1000
 }
+
+/** What a board's age line says at `now`, decided once for both surfaces;
+ *  each prints it in its own markup (list/ListPane.tsx, hub/PageState.tsx).
+ *
+ *  Read through the same functions the pages act on, so the line can neither
+ *  claim a refresh the page is not waiting on nor deny one it is. */
+export type AgeReading =
+  /** Past the hard expiry: the rows describe a rolling window that has moved
+   *  on, and the age has stopped being worth printing. */
+  | { expired: true }
+  | {
+    expired: false
+    /** How old the board is, in seconds, on this page's clock. */
+    seconds: number
+    /** Called stale by the store, or past its fresh bound on this page's
+     *  clock -- whoever built it (ruling §5). */
+    stale: boolean
+    /** The word after the age, when there is one: the queue's rebuilds are
+     *  failing, a refresh the page is waiting on, or nothing refreshing a
+     *  board a worker built for itself. */
+    note: 'failed' | 'refreshing' | 'not refreshed' | null
+  }
+
+/** The age line's reading of a board, or null for a board nobody has built:
+ *  inventing an age for a waiting shell would be the freshness stamp's one
+ *  unforgivable lie. */
+export function readAge(board: BoardPayload, received: number,
+                        now: number = Date.now()): AgeReading | null {
+  const seconds = ageAt(board, received, now)
+  if (seconds === null) return null
+  const expiry = untilExpired(board, received, now)
+  if (expiry !== null && expiry < 0) return { expired: true }
+  const stale = board.stale || pastFresh(board, received, now)
+  // `failed` is a verdict on the queue, not on these rows: they are the last
+  // board that built. It stands in place of "refreshing", never beside it --
+  // a refresh that is failing is not one that is happening.
+  const note = board.failed ? 'failed'
+    : !stale ? null
+    : refreshDue(board, received, now) ? 'refreshing'
+    : 'not refreshed'
+  return { expired: false, seconds, stale, note }
+}

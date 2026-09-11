@@ -145,6 +145,13 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   const shown = board.isPlaceholderData ? undefined : board.data
   const banner = shown !== undefined && isReady(shown) && board.isError
     ? shown : null
+  // The market the top bar names is the one the reader is on. Placeholder
+  // data is the previous selection's board -- after a market switch, the
+  // previous MARKET's, session and all -- so a board speaks for the bar only
+  // when it is this market's. Until one is, the bar names the market the
+  // reader chose and claims no session for it.
+  const context = [board.data, initial].find(
+    (candidate) => candidate?.market === selection.market) ?? null
 
   return (
     <div className="rh">
@@ -220,8 +227,12 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
           </button>
           <Search onOpen={(ticker) => go({ page: 'research', ticker })} />
           <p className="rh-session">
-            <span className={`rh-dot${(board.data ?? initial).session === 'closed' ? ' closed' : ''}`} />
-            {marketLabel(board.data ?? initial)}
+            {context ? (
+              <>
+                <span className={`rh-dot${context.session === 'closed' ? ' closed' : ''}`} />
+                {marketLabel(context)}
+              </>
+            ) : MARKET_NAME[selection.market]}
           </p>
         </header>
 
@@ -273,8 +284,13 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
   onSort: (next: ChatterSort | null) => void
 }) {
   // Declared before any early return, because hooks are.
-  const watch = useWatchMutation()
   const [marking, setMarking] = useState<string | null>(null)
+  // Freed by the write itself settling, never by a callback handed to one
+  // `mutate` call: leaving a page resets the write's refusal (below), which
+  // detaches the write from this page, and react-query then drops the
+  // callbacks that call carried -- the guard stayed shut until a reload.
+  const settled = useCallback(() => setMarking(null), [])
+  const watch = useWatchMutation(settled)
   // The reader's marks. A waiting shell carries none -- its `watching: []` is
   // a placeholder, not this account's list -- so they are known from a built
   // board or from the last mark's own answer, and otherwise not at all: a
@@ -297,8 +313,7 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
     // answer would restore a list that predates the earlier one.
     if (marking) return
     setMarking(ticker)
-    watch.mutate({ ticker, on: !(watching ?? []).includes(ticker) },
-                 { onSettled: () => setMarking(null) })
+    watch.mutate({ ticker, on: !(watching ?? []).includes(ticker) })
   }
 
   if (route.page === 'missing') {
@@ -345,6 +360,9 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
     // selection's board, kept by react-query while the new one loads;
     // drawing it would put one question's rows under another's filters.
     const answer = board.isPlaceholderData ? undefined : board.data
+    // Only Human chatter has the window and feed controls the waiting
+    // notices point a tired reader at.
+    const controls = route.page === 'chatter'
     const standIn = answer === undefined
       ? (board.isError
         ? <Unavailable error={board.error} retry={board.retry} />
@@ -353,8 +371,14 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
       // A shell. Failing builds first: "this is taking a while" is the wrong
       // thing to keep saying about a key whose builds are failing.
       : answer.failed ? <FailedNotice onRetry={board.retry} />
-      : answer.busy ? <Busy onRetry={board.retry} />
-      : <Pending delayed={board.delayed} onRetry={board.retry} />
+      // Asks that keep failing are said in the shell's own notice, with the
+      // page's one Retry: there is no board for "Showing the last answer" to
+      // be about.
+      : answer.busy
+        ? <Busy failing={board.failing} controls={controls}
+                onRetry={board.retry} />
+      : <Pending delayed={board.delayed} failing={board.failing}
+                 controls={controls} onRetry={board.retry} />
     const freshness = {
       received: board.received,
       // Nothing is fetching a replacement: the last request failed, none is
@@ -458,6 +482,12 @@ export const seedSelection = selectionOf
 function marketLabel(payload: BoardPayload): string {
   const state = payload.session === 'regular' ? 'open' : payload.session
   return `${payload.market_venue} · ${state}`
+}
+
+/** What the top bar calls a market no board of it has answered for yet. */
+const MARKET_NAME: Record<Selection['market'], string> = {
+  us: 'US markets',
+  de: 'Germany',
 }
 
 function Logo() {

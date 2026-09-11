@@ -16,8 +16,8 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { BoardUnavailable } from '../api'
-import { humanAge } from '../format'
-import { ageAt, pastFresh, refreshDue, untilExpired } from '../pending'
+import { boardAge } from '../format'
+import { readAge } from '../pending'
 import type { BoardPayload } from '../types'
 
 export function Loading({ label }: { label: string }) {
@@ -142,6 +142,12 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
   )
 }
 
+/** The way out both waiting notices offer where the page has it. Only Human
+ *  chatter carries the window and feed controls; a hint naming them on
+ *  Overview or Watching would point the reader at nothing. */
+const ELSEWHERE = 'Change the window or the feeds to ask for one that may '
+  + 'already be built.'
+
 /** No board yet: it is queued or being built.
  *
  *  `delayed` is the wait's own clock, kept by the page (queries.useBoard)
@@ -149,23 +155,36 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
  *  last answer, which a poll answering "still pending" every few seconds
  *  would keep resetting. Past it the wait stops being a moment, and the
  *  reader deserves both an admission and a way out. */
-export function Pending({ delayed, onRetry }: {
+export function Pending({ delayed, failing = null, controls = false,
+                          onRetry }: {
   delayed: boolean
+  /** Why this page's asks about the board keep failing (queries.useBoard):
+   *  two of its own polls in a row, or the reader's own ask. */
+  failing?: string | null
+  /** The page has the window and feed controls (`ELSEWHERE`). */
+  controls?: boolean
   onRetry?: () => void
 }) {
   return (
     <div className="rh-notice rh-wait" role="status">
       <div>
         <strong>{delayed ? 'Still calculating…' : 'Calculating this board…'}</strong>
-        {delayed ? (
+        {failing !== null ? (
+          // The asks themselves are failing, and that is what there is to
+          // say. A reading of the queue describes a wait this page cannot see
+          // just now, and after thirty seconds it would be the wrong
+          // diagnosis. Said here rather than in an alert: the wait goes on
+          // asking, and a shell has no last answer to fall back on.
+          <p>{failing} Still trying.</p>
+        ) : delayed ? (
           <p>
             A board nobody has asked for recently is built from scratch.
-            Change the window or the feeds to ask for one that may already be
-            built.
+            {controls ? ` ${ELSEWHERE}` : null}
           </p>
         ) : null}
       </div>
-      {delayed && onRetry ? <RetryButton onRetry={onRetry} /> : null}
+      {(delayed || failing !== null) && onRetry
+        ? <RetryButton onRetry={onRetry} /> : null}
     </div>
   )
 }
@@ -173,15 +192,23 @@ export function Pending({ delayed, onRetry }: {
 /** The generation is refusing work. Busy is not a queue: there is no
  *  position to be near the front of and nothing to be patient about, so it
  *  says why at once and offers the way out at once. */
-export function Busy({ onRetry }: { onRetry?: () => void }) {
+export function Busy({ failing = null, controls = false, onRetry }: {
+  /** Why this page's asks about the board keep failing, as for Pending. */
+  failing?: string | null
+  /** The page has the window and feed controls (`ELSEWHERE`). */
+  controls?: boolean
+  onRetry?: () => void
+}) {
   return (
     <div className="rh-notice rh-wait busy" role="status">
       <div>
         <strong>The board is busy with other selections.</strong>
-        <p>
-          It is building boards other readers asked for first. Change the
-          window or the feeds to ask for one that may already be built.
-        </p>
+        {failing !== null ? <p>{failing} Still trying.</p> : (
+          <p>
+            It is building boards other readers asked for first.
+            {controls ? ` ${ELSEWHERE}` : null}
+          </p>
+        )}
       </div>
       {onRetry ? <RetryButton onRetry={onRetry} /> : null}
     </div>
@@ -202,17 +229,6 @@ export function FailedNotice({ onRetry }: { onRetry?: () => void }) {
       {onRetry ? <RetryButton onRetry={onRetry} /> : null}
     </div>
   )
-}
-
-/** An age at the resolution the state it describes actually moves at:
- *  seconds below a minute, because the line ticks every second; minutes below
- *  ninety; then humanAge's hours and days. The old board's line prints the
- *  same units (list/ListPane.tsx), so the two surfaces never state one age
- *  two ways. */
-export function boardAge(seconds: number): string {
-  if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s`
-  const minutes = Math.floor(seconds / 60)
-  return minutes < 90 ? `${minutes}m` : humanAge(seconds)
 }
 
 /** When this board was calculated -- always, in as many words, and what is
@@ -244,15 +260,15 @@ export function AgeLine({ board, received, stalled = false, onRetry }: {
     return () => clearInterval(timer)
   }, [])
 
-  const now = Date.now()
-  const age = ageAt(board, received, now)
-  if (age === null) return null
+  // The old board's reading of a board (`readAge`), in this surface's own
+  // markup.
+  const reading = readAge(board, received, Date.now())
+  if (reading === null) return null
   const retry = onRetry
     ? <button type="button" onClick={onRetry}>Retry</button> : null
   // Past the hard expiry the age has stopped being worth printing: the rows
   // describe a rolling window that has moved on.
-  const expiry = untilExpired(board, received, now)
-  if (expiry !== null && expiry < 0) {
+  if (reading.expired) {
     return (
       <span className="rh-age expired">
         {stalled
@@ -264,23 +280,24 @@ export function AgeLine({ board, received, stalled = false, onRetry }: {
       </span>
     )
   }
-  const stale = board.stale || pastFresh(board, received, now)
   return (
-    <span className={stale ? 'rh-age stale' : 'rh-age'}>
-      Calculated {boardAge(age)} ago
-      {board.failed
+    <span className={reading.stale ? 'rh-age stale' : 'rh-age'}>
+      Calculated {boardAge(reading.seconds)} ago
+      {reading.note === 'failed'
         // A verdict on the queue, not on these rows: they are the last board
         // that built. In place of "refreshing", never beside it -- a refresh
         // that is failing is not one that is happening.
         ? <> · <b>Last refresh failed</b></>
-        : !stale ? null
         // A refresh the page is waiting on. Its own quiet class: a queued
         // refresh is not a caution on rows that are still the last real ones.
-        : refreshDue(board, received, now)
+        : reading.note === 'refreshing'
           ? <> · <b className="queued">refreshing</b></>
         // Built by a worker for itself: nothing is queued behind it, and the
         // ask it would take -- a synchronous build -- is the reader's.
-        : <> · <b>not refreshed</b>{retry}</>}
+        : reading.note === 'not refreshed'
+          ? <> · <b>not refreshed</b>{retry}</>
+        // Fresh: the age is all there is to say.
+        : null}
     </span>
   )
 }

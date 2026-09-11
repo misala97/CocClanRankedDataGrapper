@@ -5,27 +5,12 @@ import { Controls } from '../board/Controls'
 import { MarketSwitch } from '../board/MarketSwitch'
 import { Search } from '../board/Search'
 import { defaultDirection, queryFor } from '../api'
-import { formatMarketTime, humanAge, plural } from '../format'
-import { DELAYED_AFTER_MS, ageAt, pastFresh, refreshDue, untilExpired }
-  from '../pending'
+import { boardAge, formatMarketTime, humanAge, plural } from '../format'
+import { DELAYED_AFTER_MS, readAge } from '../pending'
 import { Widen } from '../Widen'
 import { SpendMark } from './Spend'
 import { TickerRow, scoredAgainstPrice } from './TickerRow'
 import type { BoardPayload, Mark, Row, Selection, SortKey } from '../types'
-
-/** An age at the resolution the state it describes actually moves at.
- *
- *  Seconds below a minute, because this line ticks every second and a board
- *  that has just arrived saying "0 min ago" cannot be watched getting older.
- *  `humanAge` takes over past ninety minutes, where its units -- hours, then
- *  days -- are the ones a person would pick and the seconds stopped meaning
- *  anything hours ago.
- */
-function boardAge(seconds: number): string {
-  if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s`
-  const minutes = Math.floor(seconds / 60)
-  return minutes < 90 ? `${minutes}m` : humanAge(seconds)
-}
 
 /** When this board was calculated -- always, in as many words.
  *
@@ -54,18 +39,17 @@ function AgeLine({ payload, received, stalled = false, onRetry }: {
   }, [])
 
   // One reading of the clock for everything this line says, through the same
-  // functions BoardPage acts on, so the line and the page cannot disagree
-  // about what is being done for the board on screen.
-  const now = Date.now()
-  const age = ageAt(payload, received, now)
-  if (age === null) return null
+  // functions BoardPage acts on (`readAge`, shared with the hub's line), so
+  // the line and the page cannot disagree about what is being done for the
+  // board on screen.
+  const reading = readAge(payload, received, Date.now())
+  if (reading === null) return null
   const retry = onRetry
     ? <button type="button" onClick={onRetry}>Retry</button> : null
   // Past the hard expiry the age itself has stopped being worth printing:
   // the rows describe a rolling window that has moved, and the page has
   // already gone to ask for a board that describes this one.
-  const expiry = untilExpired(payload, received, now)
-  if (expiry !== null && expiry < 0) {
+  if (reading.expired) {
     return (
       <span className="age expired">
         {stalled
@@ -84,11 +68,10 @@ function AgeLine({ payload, received, stalled = false, onRetry }: {
   // when this tab last asked. Every board, whoever built it: ruling §5 lets
   // one past the bound stay on screen ONLY as stale. What is being done
   // about it is the part that differs, and the word after the age says which.
-  const stale = payload.stale || pastFresh(payload, received, now)
   return (
-    <span className={stale ? 'age stale' : 'age'}>
-      Calculated {boardAge(age)} ago
-      {payload.failed
+    <span className={reading.stale ? 'age stale' : 'age'}>
+      Calculated {boardAge(reading.seconds)} ago
+      {reading.note === 'failed'
         // A verdict on the queue, not on these rows: they are the last board
         // that built. Printed in place of "refreshing", never beside it -- a
         // refresh that is failing is not one that is happening -- so a stale
@@ -96,18 +79,20 @@ function AgeLine({ payload, received, stalled = false, onRetry }: {
         // colour. Not alone in it: "not refreshed" and "Expired" wear the same
         // amber. Only "refreshing" is quiet (`.age b.queued`, radar.css).
         ? <> · <b>Last refresh failed</b></>
-        : !stale ? null
         // The store has a refresh queued and the page is waiting on it --
         // asked by the rule the page waits by (`refreshDue`), so the word can
         // neither claim a refresh the page is not waiting on nor deny one it
         // is. Its own class, not the line's: the quiet treatment belongs to
         // this word.
-        : refreshDue(payload, received, now)
+        : reading.note === 'refreshing'
           ? <> · <b className="queued">refreshing</b></>
         // A board a worker built for itself. Nothing is queued behind it and
         // nothing asks on its behalf, so the word claims no refresh, and the
         // ask it would take -- a synchronous build -- is the reader's to make.
-        : <> · <b>not refreshed</b>{retry}</>}
+        : reading.note === 'not refreshed'
+          ? <> · <b>not refreshed</b>{retry}</>
+        // Fresh: the age is all there is to say.
+        : null}
     </span>
   )
 }

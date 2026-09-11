@@ -12,8 +12,8 @@ import { BoardUnavailable } from '../api'
 import { payload } from '../fixtures'
 import type { BoardPayload, Selection } from '../types'
 import {
-  beginWait, boardInterval, boardKey, hear, nextWait, owesABoard, selectionOf,
-  useBoard, useWatchMutation,
+  beginWait, boardInterval, boardKey, hear, nextWait, owesABoard, refreshAt,
+  selectionOf, useBoard, useWatchMutation,
 } from './queries'
 
 const initial = payload()
@@ -253,7 +253,7 @@ describe('when the board asks again on its own', () => {
       .toBe(5000)
   })
 
-  it('asks nothing on a timer for a board with nothing coming', () => {
+  it('asks nothing on the wait\'s timer for a board with nothing coming', () => {
     // Fresh, whoever built it: the fresh bound's own clock starts any wait.
     for (const shared of [true, false]) {
       const board = payload({ shared })
@@ -261,10 +261,30 @@ describe('when the board asks again on its own', () => {
     }
     // Past the bound and built by a worker for itself: nothing stands behind
     // it to refresh, and asking again would build another synchronously.
-    // Marked stale, never polled.
+    // Marked stale, never polled -- and its minute's read has gone with the
+    // bound.
     const direct = payload({ shared: false, age_seconds: 300 })
     expect(owesABoard(direct, at, at)).toBe(false)
     expect(boardInterval(direct, reading(direct))).toBe(false)
+    expect(refreshAt(direct, at)).toBeNull()
+  })
+
+  it('reads a board a worker built for itself a minute after it arrived, only while that minute is inside its bound', () => {
+    // How the hub always refreshed its board, kept on the path with nothing
+    // queued behind it -- and only inside the fresh bound: nothing automatic
+    // goes out at or past it (ruling §5).
+    expect(refreshAt(payload({ shared: false }), at)).toBe(at + 60_000)
+    expect(refreshAt(payload({ shared: false, age_seconds: 59 }), at))
+      .toBe(at + 60_000)
+    // A minute that ends AT the bound is not inside it.
+    expect(refreshAt(payload({ shared: false, age_seconds: 60 }), at))
+      .toBeNull()
+    expect(refreshAt(payload({ shared: false, age_seconds: 61 }), at))
+      .toBeNull()
+    // A shared board has its wait instead, which begins at the bound; and a
+    // board nobody has built has no minute to be read on.
+    expect(refreshAt(payload({ shared: true }), at)).toBeNull()
+    expect(refreshAt(shell({ shared: false, pending: false }), at)).toBeNull()
   })
 
   it('asks nothing for a hidden tab, beside an ask already out, or with nothing loaded', () => {
@@ -278,7 +298,10 @@ describe('when the board asks again on its own', () => {
 describe('a mark that lands while a board is still being built', () => {
   it('adopts the list into the waiting shell, which stays waiting and as old as it was', async () => {
     const setWatch = vi.spyOn(api, 'setWatch').mockResolvedValue(['AAA'])
-    const fetchBoard = vi.spyOn(api, 'fetchBoard')
+    // The board on screen is another selection's; the shell is only cached.
+    const german = payload({ market: 'de' })
+    const fetchBoard = vi.spyOn(api, 'fetchBoard').mockImplementation(
+      async (asked) => (asked.market === 'de' ? german : shell))
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -287,7 +310,6 @@ describe('a mark that lands while a board is still being built', () => {
       generated_at: null, age_seconds: null, retry_after_ms: 1000,
       watching: [], watch_rows: [],
     })
-    client.setQueryData(boardKey(selection), shell, { updatedAt: 1234 })
     function Mark() {
       const watch = useWatchMutation()
       return (
@@ -297,11 +319,23 @@ describe('a mark that lands while a board is still being built', () => {
         </button>
       )
     }
-    render(
+    const tree = (sel: Selection, seed?: BoardPayload) => (
       <QueryClientProvider client={client}>
+        <Probe selection={sel} initial={seed} />
         <Mark />
-      </QueryClientProvider>,
+      </QueryClientProvider>
     )
+    // The reader asked for the US board and was answered with a shell, then
+    // moved to the German board: the shell stays cached, read by nobody -- an
+    // answered query, with the request it was asked with still on it, so a
+    // refetch of it could go out.
+    const { rerender } = render(tree(selection))
+    await waitFor(() => {
+      expect(client.getQueryData(boardKey(selection))).toEqual(shell)
+    })
+    const arrived = client.getQueryState(boardKey(selection))?.dataUpdatedAt
+    rerender(tree(selectionOf(german), german))
+    const before = fetchBoard.mock.calls.length
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark' }))
     await waitFor(() => {
@@ -315,9 +349,14 @@ describe('a mark that lands while a board is still being built', () => {
     expect(state?.data?.watch_rows).toEqual([])
     // When it arrived is what its age and its wait are counted from, and a
     // mark changes neither.
-    expect(state?.dataUpdatedAt).toBe(1234)
+    expect(state?.dataUpdatedAt).toBe(arrived)
     expect(setWatch).toHaveBeenCalledWith('AAA', true)
-    // Nobody is reading this board, so nothing asks for it now.
-    expect(fetchBoard).not.toHaveBeenCalled()
+    // Only the board on screen is asked for again: nobody is reading the
+    // shell, so nothing asks for it now.
+    await waitFor(() => {
+      expect(fetchBoard.mock.calls.length).toBeGreaterThan(before)
+    })
+    expect(fetchBoard.mock.calls.slice(before).map(([asked]) => asked.market))
+      .toEqual(['de'])
   })
 })

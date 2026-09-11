@@ -329,6 +329,21 @@ export function humanAge(ageSeconds: number | null): string {
   return `${Math.floor(hours / 24)}d`
 }
 
+/** A board's age at the resolution the state it describes actually moves at.
+ *
+ *  Seconds below a minute, because the age line ticks every second and a
+ *  board that has just arrived saying "0 min ago" cannot be watched getting
+ *  older. `humanAge` takes over past ninety minutes, where its units --
+ *  hours, then days -- are the ones a person would pick and the seconds
+ *  stopped meaning anything hours ago. One formatter for both surfaces' age
+ *  lines (list/ListPane.tsx, hub/PageState.tsx), so the two never state one
+ *  age two ways. */
+export function boardAge(seconds: number): string {
+  if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s`
+  const minutes = Math.floor(seconds / 60)
+  return minutes < 90 ? `${minutes}m` : humanAge(seconds)
+}
+
 /** The ratio as the chart-row's short figure: `4.5×`, `40×`.
  *
  *  Same rounding rules as phrasing.py's `_ratio` -- a tenth matters at 3.5

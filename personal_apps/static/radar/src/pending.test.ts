@@ -6,8 +6,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { payload } from './fixtures'
-import { DELAYED_AFTER_MS, Poller, ageAt, nextDelay, pastFresh, refreshes,
-         untilExpired, untilStale } from './pending'
+import { DELAYED_AFTER_MS, Poller, ageAt, nextDelay, pastFresh, readAge,
+         refreshes, untilExpired, untilStale } from './pending'
+
+describe('what the age line says about a board', () => {
+  // One reading for both surfaces' lines (list/ListPane.tsx,
+  // hub/PageState.tsx), each printed in its own markup.
+  const at = Date.parse('2026-08-22T19:00:00Z')
+
+  it('reads a fresh board as its age alone', () => {
+    expect(readAge(payload({ age_seconds: 30 }), at, at + 10_000))
+      .toEqual({ expired: false, seconds: 40, stale: false, note: null })
+  })
+
+  it('says what is done about a board past its bound, by who built it', () => {
+    expect(readAge(payload({ shared: true, age_seconds: 130 }), at, at))
+      .toMatchObject({ stale: true, note: 'refreshing' })
+    expect(readAge(payload({ shared: false, age_seconds: 130 }), at, at))
+      .toMatchObject({ stale: true, note: 'not refreshed' })
+    // A failing queue in place of "refreshing", never beside it.
+    expect(readAge(payload({ shared: true, stale: true, failed: true,
+                             age_seconds: 130 }), at, at))
+      .toMatchObject({ stale: true, note: 'failed' })
+  })
+
+  it('stops printing an age past the hard expiry, and has none for a shell', () => {
+    expect(readAge(payload({ age_seconds: 601 }), at, at))
+      .toEqual({ expired: true })
+    expect(readAge(payload({ rows: null, age_seconds: null,
+                             generated_at: null }), at, at)).toBeNull()
+  })
+})
 
 /** The jitter, taken out. The spread only ever adds, so its bottom is the
  *  number the schedule -- or the server's floor -- actually names. */
