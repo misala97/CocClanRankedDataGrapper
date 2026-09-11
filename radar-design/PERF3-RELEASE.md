@@ -254,7 +254,7 @@ The demand and outcome metrics the ruling asks for therefore exist in production
 - **On failure:** the first failure with its traceback, then `board producer tick failed failures=<n> next_wait=<s>`, backing off to 30 s.
 - **At stop:** `board producer asked to stop signal=15`, then `board producer stopped owner=...`.
 
-A warm build logs `queue_wait=0.0` even when the board is late, so read lateness from the board's age, not from the queue wait (PERF3-LEDGER finding 5). None of these lines carries a query, the JSON of a key, a user or a path.
+A warm build logs `queue_wait=0.0` even when the board is late, so read lateness from the board's age, not from the queue wait (PERF3-LEDGER finding 5). None of the lines NAMED above carries a query, the JSON of a key, a user or a path. **The traceback beside them can.** `board_producer.py:269,298` log the first failure with `logger.exception`, and a SQLAlchemy error's traceback carries the failing statement and its bound parameters -- a key hash and a namespace among them. The same caveat as Flask's own line below: the journal is not free of such values, and this package does not claim that it is.
 
 **What the journal can carry anyway.** Flask's own error line on any unhandled exception, `Exception on <path> [<METHOD>]` (`flask/app.py:876`), writes the raw request path to stderr, and journald keeps it. This predates the branch, and the new module does not forward it. The journal is therefore not free of path values, and this package does not claim that it is.
 
@@ -287,7 +287,7 @@ The process listing read on the target (PERF1-LEDGER, 2026-09-10) is `gunicorn -
 
 ## 6. Rollback
 
-- **Behaviour.** Set `RADAR_BOARD_SHARED_RESULTS=off` in `/root/coc-stats/.env`, the one place it was set, and run `systemctl restart personal_apps_web`. That is a complete behavioural rollback. The web builds every board inside the request again (verified by Task 8b's check 7), and no reader touches the store. Turning the flag off anywhere else changes nothing while `.env` says on.
+- **Behaviour.** Set `RADAR_BOARD_SHARED_RESULTS=off` in `/root/coc-stats/.env`, the one place it was set, and run `systemctl restart personal_apps_web`. That is a complete behavioural rollback ON THE SERVER: the web builds every board inside the request again (verified by Task 8b's check 7), and no reader touches the store. It is not a complete rollback of the SCREEN -- with the flag off the new client still marks a board stale at 120 s on the page's own clock and offers "not refreshed" with a Retry, and the hub still re-reads a worker-built board once a minute. That is deliberate, it is ruling §5's, and section 4.2 step 2 sets it out. Turning the flag off anywhere else changes nothing while `.env` says on.
 - **The producer** can keep running, or be stopped with `systemctl disable --now radar_board_producer`.
   - Left running, it keeps the eight warm boards fresh. That costs about a third of its time: 8 builds of about 5.3 s every 120 s, which is arithmetic from measured builds, not a measurement.
   - If 3.1's lines are in `update_coc.sh`, the next deploy starts it again, so remove those lines first to keep it off.

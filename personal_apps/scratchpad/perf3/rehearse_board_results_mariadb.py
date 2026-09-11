@@ -55,6 +55,9 @@ PORT = os.getenv('REHEARSAL_PORT', '3399')
 USER = os.getenv('REHEARSAL_USER', 'root')
 PASSWORD = os.getenv('REHEARSAL_PASSWORD', '')
 SCHEMA = os.getenv('REHEARSAL_SCHEMA', 'radar_perf3_rehearsal')
+# Every schema name this script is allowed to drop and recreate. Anything
+# else, however harmless it looks, is refused: see the check in `fresh_schema`.
+ALLOWED_SCHEMAS = frozenset({'radar_perf3_rehearsal', 'radar_perf3_rehearsal_2'})
 
 SERVER_URL = f'mysql+pymysql://{USER}:{PASSWORD}@{HOST}:{PORT}/'
 REHEARSAL_URL = SERVER_URL + SCHEMA
@@ -111,9 +114,16 @@ def recreate_schema():
             f'refusing to run against host {HOST!r}: this rehearsal drops and '
             f'recreates its schema and must only reach a disposable server on '
             f'this machine')
-    if SCHEMA in ('personal_apps', 'coc_stats') or SCHEMA.startswith(
-            'personal_apps_radar_perf'):
-        raise SystemExit(f'refusing to use schema {SCHEMA!r}')
+    # An ALLOWLIST, not a list of names to avoid. The denylist this replaces
+    # named the databases that must survive, so any name it had not thought of
+    # -- supplied through REHEARSAL_SCHEMA -- was accepted and then dropped.
+    # The two checks around it (loopback, MariaDB) narrowed the blast radius;
+    # they did not decide which schema this may destroy, and that is the
+    # decision a DROP DATABASE needs made the strict way round.
+    if SCHEMA not in ALLOWED_SCHEMAS:
+        raise SystemExit(
+            f'refusing to drop and recreate schema {SCHEMA!r}: this script '
+            f'may only use {", ".join(sorted(ALLOWED_SCHEMAS))}')
 
     engine = sa.create_engine(SERVER_URL, isolation_level='AUTOCOMMIT')
     with engine.connect() as connection:

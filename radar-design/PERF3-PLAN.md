@@ -1159,8 +1159,11 @@ git commit -m "perf(radar): the shared path measured at production scale -- read
 - Create: `radar-design/PERF3-RELEASE.md`
 - Create: `radar-design/perf3-release/radar_board_producer.service` (proposed
   unit text, NOT installed)
-- Create: `radar-design/perf3-release/BUILD_REVISION.md` (the two-line
-  deploy addition)
+- ~~Create: `radar-design/perf3-release/BUILD_REVISION.md` (the two-line
+  deploy addition)~~ -- superseded by the third amendment below: there is no
+  two-line deploy addition, because the VPS needs no `BUILD_REVISION` file at
+  all. What the file would have said is section 3.2 of the release package.
+  The directory holds `radar_board_producer.service` and `pytest-full.txt`.
 - Modify: `radar-design/PERF3-LEDGER.md`, `radar-design/HANDOFF.md`
 
 **Amendment, 2026-09-11 -- telemetry, as the ruling actually asks for it.**
@@ -1200,6 +1203,19 @@ prepared and OFF by default:
   gthread).
 - Rollback is unsetting the variable and restarting the web unit. Logs are
   left where they are; nothing deletes a log directory.
+
+**Amendment, 2026-09-12 (fourth) -- flag-off is byte-for-byte on the SERVER,
+not on the screen.** The constraint above says the flag unset or `off` "keeps
+today's synchronous memoised path byte-for-byte". That is true of the payload
+the server builds, and the parity work proves it; it is not true of what the
+client does with it. The Task 5 re-review ruled that ruling section 5's
+freshness contract applies with no exception by path
+(PERF3-LEDGER.md:277-293), so with the flag off the new client still marks a
+board stale at 120 s on the page's own clock and offers "not refreshed" with a
+Retry, and the hub still re-reads a worker-built board once a minute. Turning
+the flag off is therefore a complete rollback of the server's behaviour and
+not of the screen's. Release package section 4.2 step 2 sets this out, and
+section 6 now points at it.
 
 **Amendment, 2026-09-11 (third) -- the build revision file lives at the
 repository root, and the VPS does not need one.** Verified in the code while

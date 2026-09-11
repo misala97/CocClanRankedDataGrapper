@@ -384,7 +384,25 @@ def delete_key(engine, ns, key_hash):
             {'ns': ns, 'k': key_hash}).rowcount
 
 
+SCALE_DB = 'personal_apps_radar_perf3_scale'
+
+
+def _only_the_scale_database(engine):
+    """Refuse an engine bound anywhere but the measurement database.
+
+    Inside the destructive helpers rather than at their call sites. Every
+    caller in this directory passes `scale_env.engine()`, which has already
+    refused anything else -- but these two TRUNCATE and DELETE whole tables,
+    and a helper that can empty a database should not be taking anyone's word
+    for which database it is pointed at.
+    """
+    bound = engine.url.database
+    if bound != SCALE_DB:
+        raise SystemExit(f'refusing to empty {bound!r}: only {SCALE_DB}')
+
+
 def truncate_store(engine):
+    _only_the_scale_database(engine)
     with engine.begin() as c:
         c.execute(sa.text('TRUNCATE TABLE radar_board_results'))
         c.execute(sa.text('TRUNCATE TABLE radar_board_namespaces'))
@@ -392,6 +410,7 @@ def truncate_store(engine):
 
 def delete_on_demand(engine, ns):
     """Every on-demand board of the namespace, and every other namespace."""
+    _only_the_scale_database(engine)
     with engine.begin() as c:
         rows = c.execute(sa.text(
             'DELETE FROM radar_board_results WHERE namespace = :ns'

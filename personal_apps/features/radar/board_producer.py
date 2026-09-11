@@ -387,6 +387,7 @@ def _backoff(poll_interval, failures):
     return min(poll_interval * 2 ** min(failures, BACKOFF_MAX_DOUBLINGS),
                MAX_BACKOFF_SECONDS)
 
+
 class Loop:
     """The producer's tick, its fairness, and its shutdown.
 
