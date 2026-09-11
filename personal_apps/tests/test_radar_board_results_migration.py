@@ -88,7 +88,7 @@ def disposable():
     next -- which is exactly the trap the two pinned names used to hide.
     """
     with flask_app.app_context():
-        radar_disposable.require()
+        radar_disposable.require('radar_ingest_runs')
         _at_revision('head')
         yield
         _at_revision('head')

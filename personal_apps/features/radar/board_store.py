@@ -40,6 +40,7 @@ inside a transaction would hold row locks for the length of a build.
 import dataclasses
 import datetime as dt
 import logging
+import math
 import os
 import secrets
 
@@ -239,6 +240,13 @@ def _refuse(field, name, cast, raw):
         value = cast(raw)
     except ValueError:
         return f'{name} is not a number: {raw[:40]!r}'
+    # nan and inf are numbers, and every comparison below answers False for
+    # nan, so they would pass. A non-finite limit reaches the payload and
+    # json.dumps writes a bare NaN or Infinity, which JSON.parse refuses --
+    # the flag-off path would not fail, it would serve a body no client can
+    # read.
+    if isinstance(value, float) and not math.isfinite(value):
+        return f'{name} is not a finite number: {raw[:40]!r}'
     if field in _POSITIVE and value <= 0:
         return f'{name} must be greater than zero: {raw[:40]!r}'
     if field not in _POSITIVE and value < 0:

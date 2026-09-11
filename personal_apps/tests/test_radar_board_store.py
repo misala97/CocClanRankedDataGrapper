@@ -255,6 +255,14 @@ def test_a_limit_the_environment_got_wrong_is_refused_by_name(monkeypatch):
     ('RADAR_BOARD_PARK_SECONDS', '-900'),
     ('RADAR_BOARD_NAMESPACE_RETIRE_SECONDS', '-1'),
     ('RADAR_BOARD_MAX_ATTEMPTS', '-6'),
+    # A number, and not one arithmetic can use. Every comparison against nan
+    # answers False, so nan and inf passed both checks above; the value then
+    # reached the payload, where json.dumps writes a bare NaN or Infinity and
+    # JSON.parse refuses the whole body. The flag-off path would not have
+    # failed -- it would have served a board no client could read.
+    ('RADAR_BOARD_FRESH_SECONDS', 'nan'),
+    ('RADAR_BOARD_FRESH_SECONDS', '1e400'),
+    ('RADAR_BOARD_REFRESH_SECONDS', '-inf'),
 ])
 def test_a_limit_the_environment_got_wrong_is_ignored_by_readers(
         monkeypatch, name, raw):
