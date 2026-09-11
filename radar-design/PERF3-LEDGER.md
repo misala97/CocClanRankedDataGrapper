@@ -36,7 +36,7 @@ disposable name `personal_apps_radar_wt` and skips on any other database.
 | 2 tables, migration, store | **complete** | `0eba6a4`, `c2d0ca9`, `c199d06` | approved after one fix round; carried items closed in `c199d06` |
 | 3 producer | **complete** | `fd810c1`, `55f0d7f` (+ `6752492` for its carried items) | approved after one fix round |
 | 4 read path, flag, API | **complete** | `9097621`, `6752492` | approved after one fix round |
-| 5 old board client | round 3 re-reviewed: **needs fixes**; round 4 in progress | `0ed59e2`, `2b90885`, `17128b8` | round 3 resolved its six items; one new Important |
+| 5 old board client | round 4 re-reviewed: **needs fixes**; round 5 queued behind Task 6 | `0ed59e2`, `2b90885`, `17128b8`, `52af950` | round 4 resolved its seven items; one confirmed Important |
 | 6 hub client | open | | |
 | 7 parity | **complete** | `29cc2ac` | approved first time; minors carried |
 | 8 scale verification + browser | open | | |
@@ -203,7 +203,7 @@ reason.
 | `/api/ops` catches only `ProgrammingError` (table missing), not an outage | concern, ruled | kept: the ops page reads the database earlier anyway, so an outage fails it there, and catching it here would only mislabel an outage as a missing table |
 | server facts the client review asked for | answered | a parked answer is `{pending: true, busy: false, failed: true, rows: null}`; every pending/busy shell carries `venue_counts: {any: 0, multi: 0}` and `segment_counts: {}` |
 
-### Task 5 — old board client (round 3 re-reviewed: needs fixes, round 4 in progress)
+### Task 5 — old board client (round 4 re-reviewed: needs fixes, round 5 queued)
 
 Review of `0ed59e2`: **needs fixes.**
 
@@ -298,6 +298,34 @@ show ten consecutive clean whole-suite runs. The temporary worktree was
 removed; its cleanup first failed on a Windows path-length limit inside
 `node_modules` and was finished with a long-path delete after checking the
 tree held no links into real data.
+
+**Round 4, `52af950`, and its re-review.** Round 4 resolved all seven items:
+every Retry joins the request already out, every answer reads the reader's
+current ticker, the expired-and-failed state shows one Retry, two comments are
+corrected, the age line picks its word with `refreshDue`, and the coalescing
+test runs on the fake clock with its three assertions kept and one added. It
+then ran clean in ten of ten whole-suite runs (600 tests). A second test that
+had never been checking the answer it waited for was converted too.
+
+**The watch refetch, confirmed and blocking.** The fixer reported, and the
+re-review traced from the code, that the refetch after a star uses the
+selection captured when the star was clicked. Change a filter while the
+mark is being saved, and that refetch, holding the newest request number,
+passes the generation check, aborts the new selection's request, paints the
+OLD board under the NEW controls with a fresh stamp, and rewrites the address
+bar to the old query. On the flag-off path nothing asks again until Retry or
+the ten-minute expiry. It predates this branch, but it defeats exactly the
+guarantee this slice added ("never under the new selection's labels"), so it
+is fixed here. Round 5: read the current selection when the queue empties,
+wait for the reader's own request instead of aborting it, and skip the
+refetch while a control change is inside its debounce. Two minors ride along:
+a Retry must select the top row for a reader with no ticker, and must treat a
+failed non-market filter change as that change would have; and the banner
+must not claim "Showing the last board that loaded" over a waiting shell,
+where no board exists. Round 5 waits for the Task 6 implementer, to keep one
+implementation worker at a time.
+
+**Stopping rule, agreed with the owner on 2026-09-11.** Round 5 is the last automatic round for Task 5. Its re-review may block only on a critical or important finding that round 5 itself introduced, or on a direct violation of the PERF2 ruling. Every other finding is carried to the whole-branch review. If a blocker remains after round 5, work stops and the owner decides, with a recommendation such as simplifying the old board request handling rather than patching it again.
 
 ### Task 7 — parity (approved)
 
