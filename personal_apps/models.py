@@ -1746,6 +1746,10 @@ class RadarBoardResult(db.Model):
     # Set when the row ENTERS pending and never moved by a poll, so the
     # producer's oldest-first order is arrival order and not poll order.
     enqueued_at       = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
+    # The first real reader demand while this build is owed. Unlike
+    # `requested_at`, polls never move it; unlike `enqueued_at`, a warm sweep
+    # cannot set it. Successful publication clears it, making priority finite.
+    first_demand_at   = db.Column(MYSQL_DATETIME(fsp=6), nullable=True)
     # Demand, which is what eviction ranks by. Polls move this and not
     # `enqueued_at`: a viewer still watching is a reason to keep the row.
     requested_at      = db.Column(MYSQL_DATETIME(fsp=6), nullable=False)

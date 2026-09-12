@@ -125,7 +125,7 @@ class _Store:
 def store():
     """A namespace of this test's own, on any database that is not somebody's.
 
-    The guard is `radar_disposable`, branch-wide: it skips only where these
+    The guard is `radar_disposable`, branch-wide: it fails closed where these
     tests must not write, and fails where they may but the schema is behind.
     """
     with flask_app.app_context():
@@ -148,46 +148,102 @@ def store():
 
 # --- the database guard ----------------------------------------------------
 
-def _bound_to(monkeypatch, database, *, migrated=True):
+def _bound_to(monkeypatch, database, *, host='localhost', port=3306,
+              migrated=True):
     """The guard, asked about a database without going near one."""
     import types
     monkeypatch.setattr(radar_disposable, 'db', types.SimpleNamespace(
         engine=types.SimpleNamespace(
-            url=sa.engine.url.make_url(f'mysql+pymysql://u@localhost/{database}'))))
+            url=sa.engine.url.make_url(
+                f'mysql+pymysql://u@{host}:{port}/{database}'))))
     monkeypatch.setattr(radar_disposable, '_has', lambda table: migrated)
 
 
-def test_the_guard_never_lets_a_suite_write_to_a_working_database(monkeypatch):
+def _register(tmp_path, monkeypatch, target):
+    registry = tmp_path / 'radar-destructive-targets.json'
+    registry.write_text(json.dumps({
+        'version': 1,
+        'targets': [target],
+    }), encoding='utf-8')
+    monkeypatch.setenv('RADAR_DESTRUCTIVE_TEST_TARGET', target)
+    monkeypatch.setenv('RADAR_DESTRUCTIVE_TEST_REGISTRY', str(registry))
+    return registry
+
+
+def test_the_guard_never_lets_a_suite_write_to_a_working_database(
+        monkeypatch, tmp_path):
     """The one outcome that must be impossible. Every suite in this file
     inserts and deletes rows, and the parity suite wipes sixty tickers."""
     for database in ('personal_apps', 'PERSONAL_APPS', 'coc_stats'):
         _bound_to(monkeypatch, database)
+        _register(tmp_path, monkeypatch, f'localhost:3306/{database}')
         with pytest.raises(BaseException) as refused:
             radar_disposable.require('radar_board_results')
-        assert type(refused.value).__name__ == 'Skipped'
-        assert 'working database' in str(refused.value)
+        assert type(refused.value).__name__ == 'Failed'
+        assert 'protected database' in str(refused.value)
 
 
-def test_the_guard_runs_on_any_other_database_and_says_so_when_it_cannot(
-        monkeypatch):
-    """Inverted from the pin it replaces: a name it does not recognise is a
-    disposable one, and a disposable one whose schema is behind FAILS rather
-    than skipping. A suite that skips silently on every machine but one is a
-    suite nobody is running -- which is what happened to
-    test_radar_projection_migration for a whole generation."""
+def test_the_guard_requires_an_exact_opt_in_and_an_independent_registration(
+        monkeypatch, tmp_path):
+    """A database name that merely looks disposable proves nothing."""
     _bound_to(monkeypatch, 'personal_apps_radar_perf3')
-    assert radar_disposable.require('radar_board_results') == (
-        'personal_apps_radar_perf3')
+    monkeypatch.delenv('RADAR_DESTRUCTIVE_TEST_TARGET', raising=False)
+    monkeypatch.delenv('RADAR_DESTRUCTIVE_TEST_REGISTRY', raising=False)
+    with pytest.raises(BaseException) as absent:
+        radar_disposable.require('radar_board_results')
+    assert type(absent.value).__name__ == 'Failed'
+    assert ('RADAR_DESTRUCTIVE_TEST_TARGET=localhost:3306/'
+            'personal_apps_radar_perf3') in str(absent.value)
 
-    _bound_to(monkeypatch, 'personal_apps_some_clone')
-    assert radar_disposable.require() == 'personal_apps_some_clone'
+    _register(tmp_path, monkeypatch,
+              '127.0.0.1:3306/personal_apps_radar_perf3')
+    with pytest.raises(BaseException) as mismatch:
+        radar_disposable.require('radar_board_results')
+    assert type(mismatch.value).__name__ == 'Failed'
+    assert 'does not match the actual bound target' in str(mismatch.value)
 
+    target = 'localhost:3306/personal_apps_radar_perf3'
+    registry = _register(tmp_path, monkeypatch, target)
+    registry.write_text(json.dumps({
+        'version': 1,
+        'targets': ['localhost:3306/a_different_clone'],
+    }), encoding='utf-8')
+    with pytest.raises(BaseException) as unregistered:
+        radar_disposable.require('radar_board_results')
+    assert type(unregistered.value).__name__ == 'Failed'
+    assert 'is not registered' in str(unregistered.value)
+
+    _register(tmp_path, monkeypatch, target)
+    assert radar_disposable.require('radar_board_results') == target
+
+    # Registration permits baseline data, but not a schema too old to run.
     _bound_to(monkeypatch, 'personal_apps_radar_perf3', migrated=False)
+    _register(tmp_path, monkeypatch, target)
     with pytest.raises(BaseException) as refused:
         radar_disposable.require('radar_board_results')
     assert type(refused.value).__name__ == 'Failed'
     assert 'radar_board_results' in str(refused.value)
     assert 'db upgrade' in str(refused.value)
+
+
+def test_a_refused_target_executes_no_sql(monkeypatch):
+    """Missing opt-in refuses before a connection, so no write or DDL can run."""
+    monkeypatch.delenv('RADAR_DESTRUCTIVE_TEST_TARGET', raising=False)
+    monkeypatch.delenv('RADAR_DESTRUCTIVE_TEST_REGISTRY', raising=False)
+    statements = []
+    with flask_app.app_context():
+        engine = db.engine
+        @sa.event.listens_for(engine, 'before_cursor_execute')
+        def capture(_connection, _cursor, statement, _parameters, _context,
+                    _executemany):
+            statements.append(statement)
+        try:
+            with pytest.raises(BaseException) as refused:
+                radar_disposable.require('radar_board_results')
+            assert type(refused.value).__name__ == 'Failed'
+        finally:
+            sa.event.remove(engine, 'before_cursor_execute', capture)
+    assert statements == []
 
 
 # --- limits ----------------------------------------------------------------
@@ -944,6 +1000,54 @@ def test_refresh_warm_never_disturbs_a_build_in_flight(store):
     row = store.row(pair[0])
     assert row['queue_state'] == 'building'
     assert row['lease_token'] == claim.token
+
+
+def test_a_waiting_warm_key_keeps_its_first_demand_and_jumps_hash_order(store):
+    """An empty-store reader waits for its build, not for hash lottery.
+
+    The mutation this catches is ordering never-built warm rows only by
+    key_hash (the old behavior), or letting every poll rewrite the demand
+    timestamp and promote the loudest waiter.
+    """
+    warm = sorted((key(f'warm-demand-{index}') for index in range(4)),
+                  key=lambda pair: pair[0])
+    board_store.refresh_warm(store.engine, store.ns, warm, NOW)
+    demanded = warm[-1]  # deliberately last under the old key_hash tie-break
+    first = NOW + seconds(3)
+    assert store.admit(demanded, first, warm=True) == 'pending'
+    assert store.row(demanded[0])['first_demand_at'] == first
+
+    assert store.admit(demanded, first + seconds(30), warm=True,
+                       poll=True) == 'pending'
+    assert store.row(demanded[0])['first_demand_at'] == first
+
+    claimed = board_store.claim(store.engine, store.ns, 'owner-1',
+                                first + seconds(31), prefer='warm')
+    assert claimed.key_hash == demanded[0]
+
+
+def test_demanded_warm_priority_does_not_starve_the_rest_of_the_warm_set(store):
+    """Priority is finite: success clears it and every warm key still runs."""
+    warm = sorted((key(f'warm-starvation-{index}') for index in range(4)),
+                  key=lambda pair: pair[0])
+    board_store.refresh_warm(store.engine, store.ns, warm, NOW)
+    demanded = warm[-1]
+    store.admit(demanded, NOW + seconds(1), warm=True)
+
+    order = []
+    for index in range(len(warm)):
+        moment = NOW + seconds(2 + index)
+        claimed = board_store.claim(store.engine, store.ns, 'owner-1', moment,
+                                    prefer='warm')
+        assert claimed is not None
+        order.append(claimed.key_hash)
+        board_store.publish(
+            store.engine, store.ns, claimed, b'board', as_of=moment,
+            built_at=moment, build_ms=1, producer_revision=REVISION)
+
+    assert order[0] == demanded[0]
+    assert set(order) == {pair[0] for pair in warm}
+    assert store.row(demanded[0])['first_demand_at'] is None
 
 
 def test_a_warm_key_whose_build_failed_backs_off_before_it_is_swept_again(

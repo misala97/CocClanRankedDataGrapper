@@ -2283,3 +2283,102 @@ one extra request when a mark and a control change overlap, a deliberate
 divergence from `BoardPage.refetchMarks` because `watch_rows` can only be
 filtered, not extended. And the row-level suites' damage on a wrongly bound
 database is bounded by synthetic tickers and namespace-scoped cleanup.
+
+## PERF3-close, 2026-09-12
+
+Binding brief: `PERF3-CODEX-RULING.md`, section “Claude assignment:
+PERF3-close” and its nine rulings. This is a closure slice only; all earlier
+completed tasks and accepted evidence remain closed.
+
+**Verified start.** Linked worktree
+`C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3`, branch
+`codex/radar-perf3`, HEAD
+`197be30c2c1028c0b46f8110783f1da5e428d481`. Pre-existing dirty ownership:
+Codex's modified `CODEX-DECISIONS.md` and `HANDOFF.md`, untracked
+`PERF3-CODEX-RULING.md`; untracked `cleanup_preview.py` and
+`preview_perf3.py` are protected and will not be read, executed, edited,
+deleted or staged.
+
+**Closure invariants.** Freshness remains fresh=120 s, refresh=120 s and hard
+expiry=600 s. The approximately 7% stale share and the mixed/write cold tail
+(p95 16.6 s, max 22.8 s) remain disclosed; the <=2 s cold goal remains unmet
+and non-blocking under the asynchronous contract. No threading, second
+producer, held index, capture, root promotion, B1/history/PERF1 fixture work,
+deployment or production write is authorized.
+
+The RED/GREEN commands, loaded results, MariaDB recovery results, target-read
+facts, self-review and final Git state are appended here as they are produced;
+no historical suite is re-run merely to change an already-classified count.
+
+### Closure evidence
+
+**Destructive gate.** RED: the focused guard run failed three tests because a
+protected database skipped and an unregistered target was allowed. GREEN:
+3/3 passed after the exact `host:port/database` opt-in plus independently
+provisioned versioned registry was required before any SQL. A real-engine
+listener proved refusal executed zero statements. The same central gate now
+covers all six suites through `radar_disposable`, scale binding/destructive
+helpers, and the MariaDB rehearsal. The registered test database ran both
+migration modules in the 235-test focused pass.
+
+**Demanded warm order.** RED: 2/2 focused tests failed (`first_demand_at`
+missing; hash order won). GREEN: 2/2 passed. A real demand sets the stable
+nullable timestamp once, polls preserve it, demanded warm keys sort first,
+successful publish clears it, and the unchanged producer Loop still
+alternates warm/on-demand. Tests cover empty-store warm adoption,
+deterministic hash-adversarial priority and completion of the remaining warm
+set (no starvation).
+
+**Discover.** Backend shell and real hub RED both sent `segment=discover`.
+GREEN maps only the hub's backend request to
+`discover,mid,micro,unknown`; the visible Discover selection and incoming URL
+stay `segment=discover`, while the old board route is unchanged. The fixed
+2026-01-20 15:00 UTC adversarial 60-company case proved identical direct and
+stored membership; 1 passed in 2.50 s and exercised the separate realistic
+tone/judgment fixture.
+
+**Loaded ready HTTP, fresh run.** Windows/MySQL model, two independent OS web
+processes × one admitted request each, producer active (five normal builds
+completed during the matrix), one 16,792-row live-hour UPDATE plus exact-value
+restore, n=20 for each market/window/watch case. Every response was a board.
+Metrics are n/median/p95/max in ms; account is the server metric; age is s.
+
+| case | HTTP ms | account ms | cache age s |
+| --- | --- | --- | --- |
+| US 12h w0 | 20 / 13.2 / 26.1 / 32.1 | 20 / 1 / 1 / 1 | 20 / 23.95 / 24.20 / 24.20 |
+| US 12h w3 | 20 / 57.0 / **564.8** / 629.5 | 20 / 37 / 553 / 615 | 20 / 25.95 / 26.60 / 26.70 |
+| US 12h w10 | 20 / 70.3 / 132.1 / 145.0 | 20 / 49 / 108 / 117 | 20 / 27.70 / 28.40 / 28.40 |
+| US 12h w25 | 20 / 109.2 / 296.0 / 322.0 | 20 / 92.5 / 284 / 287 | 20 / 30.05 / 31.10 / 31.20 |
+| US 24h w0 | 20 / 11.9 / 30.4 / 30.9 | 20 / 1 / 1 / 1 | 20 / 42.60 / 42.80 / 42.80 |
+| US 24h w3 | 20 / 51.6 / 68.4 / 68.7 | 20 / 39 / 44 / 49 | 20 / 43.45 / 44.10 / 44.10 |
+| US 24h w10 | 20 / 74.5 / 106.8 / 110.3 | 20 / 59.5 / 76 / 79 | 20 / 44.95 / 45.80 / 45.90 |
+| US 24h w25 | 20 / 123.2 / 148.8 / 173.5 | 20 / 108.5 / 130 / 133 | 20 / 47.45 / 48.60 / 48.70 |
+| DE 12h w0 | 20 / 12.8 / 35.0 / 35.0 | 20 / 1 / 1 / 1 | 20 / 83.10 / 83.40 / 83.40 |
+| DE 12h w3 | 20 / 54.4 / 72.6 / 80.7 | 20 / 38.5 / 45 / 46 | 20 / 84.15 / 84.70 / 84.80 |
+| DE 12h w10 | 20 / 68.0 / 87.8 / 88.1 | 20 / 51.5 / 58 / 65 | 20 / 85.60 / 86.30 / 86.40 |
+| DE 12h w25 | 20 / 114.2 / 141.7 / 146.0 | 20 / 95.5 / 112 / 114 | 20 / 87.75 / 88.80 / 88.90 |
+| DE 24h w0 | 20 / 13.8 / 36.9 / 48.1 | 20 / 1 / 2 / 2 | 20 / 38.80 / 39.00 / 39.10 |
+| DE 24h w3 | 20 / 52.7 / 71.5 / 78.3 | 20 / 37.5 / 45 / 48 | 20 / 39.65 / 40.30 / 40.40 |
+| DE 24h w10 | 20 / 79.5 / 89.5 / 91.8 | 20 / 52 / 57 / 57 | 20 / 41.25 / 42.00 / 42.10 |
+| DE 24h w25 | 20 / 115.3 / 134.1 / 136.8 | 20 / 94 / 103 / 105 | 20 / 43.40 / 44.50 / 44.70 |
+
+Fifteen cases met p95 <=500 ms. US/12h/w3 did not; its tail was account
+enrichment during the representative write. This bounded local miss is
+disclosed, not “fixed” by changing freshness or rerunning for a luckier count.
+First and subsequent requests were recorded separately for each web process
+and critical selection (fresh first max 77.5 ms); the accepted restart p95
+769 ms remains separately disclosed.
+
+**MariaDB/recovery.** A no-opt-in run refused before connecting. Registered
+loopback MariaDB 10.11.14 then passed 60/60: partial table state, bounded
+cache-only cleanup, all-DDL-before-stamp verification/stamp, clean upgrade,
+width/blob/sql-mode/store semantics, neighbour preservation,
+downgrade/re-upgrade and retained-migration no-op. The isolated process was
+stopped afterwards.
+
+**Verification.** Focused backend plus both migration suites: 235 passed in
+45.52 s. Radar frontend: 701 passed. `npm run build` (including `tsc`) passed.
+Python compile passed. `git diff --check` found only the pre-existing handoff
+EOF blank, removed while appending the current handoff. Target reads were not
+possible: no target host coordinate or authorized remote execution surface
+was present. Recorded target facts are explicitly historical/conditional.

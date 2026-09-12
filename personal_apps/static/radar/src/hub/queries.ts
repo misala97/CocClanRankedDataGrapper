@@ -49,6 +49,17 @@ export const detailKey = (ticker: string, s: Selection, span: PanelSpan) =>
 
 export const searchKey = (q: string) => [ROOT, 'search', q.trim()] as const
 
+const WARM_DISCOVER = ['discover', 'mid', 'micro', 'unknown'] as const
+
+/** The hub's one reader-facing alias. The URL and control keep the concise
+ * Discover spelling; only the backend question uses its existing warm key. */
+export function requestSelection(selection: Selection): Selection {
+  if (selection.segments.length !== 1 || selection.segments[0] !== 'discover') {
+    return selection
+  }
+  return { ...selection, segments: [...WARM_DISCOVER] }
+}
+
 /** The Selection a board payload was built for, from the server's own echo.
  *
  *  Read from the echo rather than from the URL: the server has already parsed
@@ -385,7 +396,8 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
   const client = useQueryClient()
   // Before anything here becomes a query key, and so before anything here
   // sends a request.
-  const selection = useSettled(asked)
+  const settled = useSettled(asked)
+  const selection = requestSelection(settled)
   const key = queryFor(selection)
   // The reader has moved a control and the request for it has not gone out
   // yet. Nothing on screen answers the question they are now asking, so this
@@ -394,7 +406,7 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
   // left would stand under the controls they just moved, which is the one
   // thing the cold contract forbids (ruling §1), and the old question's wait
   // would go on polling a selection nobody is on.
-  const unsettled = queryFor(asked) !== key
+  const unsettled = queryFor(requestSelection(asked)) !== key
   // Whether a worker builds this page's boards for itself. The flag is the
   // server's, so every board on the page agrees about it; the embedded board
   // seeds it and every answer keeps it current.

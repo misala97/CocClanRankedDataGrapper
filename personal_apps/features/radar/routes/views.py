@@ -15,6 +15,15 @@ from auth import current_user, is_admin, login_required
 
 from ._blueprint import radar_bp
 from .api import BadQuery, build_payload
+from ..config import DEFAULT_SEGMENT
+
+
+def _hub_args(args):
+    """Map the hub's visible Discover choice to the existing warm key."""
+    mapped = args.copy()
+    if mapped.get('segment') == 'discover':
+        mapped['segment'] = DEFAULT_SEGMENT
+    return mapped
 
 
 @radar_bp.route('/')
@@ -53,7 +62,7 @@ def hub_page():
     """
     user_id = current_user().id
     try:
-        payload = build_payload(request.args, user_id=user_id)
+        payload = build_payload(_hub_args(request.args), user_id=user_id)
     except BadQuery:
         payload = build_payload({}, user_id=user_id)
     return render_template('radar/hub.html',

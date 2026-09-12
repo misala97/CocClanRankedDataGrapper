@@ -95,6 +95,16 @@ def test_a_valid_query_reaches_the_embedded_board(client):
     assert shell['board']['window_hours'] == 24
 
 
+def test_the_discover_url_embeds_the_existing_warm_default(client):
+    """Discover remains the reader-facing spelling, but the hub asks for the
+    already-warm backend key instead of creating an equivalent cold key."""
+    response = client.get('/radar/hub/?segment=discover')
+    shell = _shell(response.get_data(as_text=True))
+
+    assert response.request.query_string == b'segment=discover'
+    assert shell['board']['segments'] == ['discover', 'mid', 'micro', 'unknown']
+
+
 def test_the_old_board_route_still_answers(client):
     """The hub is opt-in. /radar/ is the way back and must not have moved."""
     response = client.get('/radar/')

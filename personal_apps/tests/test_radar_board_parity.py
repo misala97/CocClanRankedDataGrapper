@@ -821,6 +821,17 @@ def test_segments_are_keyed_verbatim_and_the_answer_does_not_care(store):
     assert len(answers[''].shared['rows']) == 50
 
 
+def test_discover_and_the_warm_default_have_identical_membership_at_fixed_time(
+        store):
+    """The hub alias may share the warm key only while it selects the same
+    companies; pin that semantic premise independently of client spelling."""
+    discover = parity(store, {'market': 'us', 'segment': 'discover'}, now=NOW)
+    warm = parity(store, {'market': 'us', 'segment': DEFAULT_SEGMENT}, now=NOW)
+
+    assert tickers(discover.direct) == tickers(warm.direct)
+    assert tickers(discover.shared) == tickers(warm.shared)
+
+
 @pytest.mark.parametrize('spellings', [
     ('bluesky,bluesky', 'bluesky'),
     ('reddit,bluesky', 'bluesky,reddit'),

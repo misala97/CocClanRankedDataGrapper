@@ -151,6 +151,7 @@ def test_the_upgrade_creates_exactly_the_two_tables_and_three_indexes(
     assert results['key_json'] == 'text'
     assert results['payload'] == 'mediumblob'
     assert results['lease_token'] == 'varchar(32)'
+    assert results['first_demand_at'] == 'datetime(6)'
     assert results['namespace'] == 'varchar(64)'
     assert namespaces['namespace'] == 'varchar(64)'
 

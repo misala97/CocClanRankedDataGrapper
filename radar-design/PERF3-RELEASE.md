@@ -1,5 +1,88 @@
 # PERF3 release package: a proposal
 
+## Current authoritative execution path (PERF3-close, 2026-09-12)
+
+**Prepared and locally rehearsed; not executed.** This section is the single
+current path and supersedes the historical alternatives/open decisions below,
+which remain only as evidence. No deployment, production write, service
+change, flag change, migration, or restart was performed by PERF3-close.
+
+Immediately before approval, re-read read-only: `/root/update_coc.sh` in full;
+the full SHA at `/root/coc-stats`; both web units; ingest/notifier units; key
+*names only* in `/root/coc-stats/.env`; absence of a nearer
+`personal_apps/.env` and `BUILD_REVISION`; Alembic current; disk; MariaDB
+version; producer-unit presence. Never print secret values. Facts recorded on
+2026-09-11—checkout `4221196`, MariaDB 10.11.14, Alembic `a7c31f0b52d4`,
+gunicorn 26.2.0/two sync workers, 2560 MB pool, no PERF3 flags/producer/timing
+telemetry—are conditional history, not deploy-day facts. This session had no
+target host coordinate or authorized remote execution surface, so none was
+freshened.
+
+1. Take the established verified backup and record the approved full
+   repository SHA. Confirm the shared flag is off/absent and timing logging is
+   absent in `/root/coc-stats/.env`.
+2. Stop **both web units**, then scheduler, notifier, ingest and any producer.
+   Keep both web units stopped through checkout, install, both asset builds,
+   migration and prewarm. There is no old-code/new-checkout mixed window.
+3. Fetch/reset to the approved full SHA. Install/build normally. Write no
+   `BUILD_REVISION` and set no `RADAR_BUILD_REVISION`; full `HEAD` is the
+   generation namespace.
+4. Run the existing migration from `personal_apps`; verify current is exactly
+   `b7e3f9c1a2d4`, its two tables/three indexes exist, and
+   `first_demand_at` is nullable `DATETIME(6)`.
+5. Reconcile/install the producer unit against the freshly read web-unit
+   user, directory, environment, Python and logging conventions. Start it
+   while both web units remain stopped.
+6. Run `run_radar_board_producer.py --readiness` with a **15-minute timeout**.
+   Success requires matching revision/namespace and all warm keys fresh. On
+   timeout or disagreement, keep web stopped, stop the producer, capture its
+   journal/readiness output, and use the recovery rules below. Do not enable
+   the flag or mix generations.
+7. Put `RADAR_BOARD_SHARED_RESULTS=on` only in
+   `/root/coc-stats/.env` (`load_dotenv(override=True)` makes it authoritative),
+   start both web units, then ingest/scheduler/notifier. Verify ops plus US/DE
+   warm boards and both UIs; all revisions must agree.
+8. Observe queue age/staleness/failures, first-worker reads, response latency
+   and account enrichment. `PERSONAL_REQUEST_TIMING_LOG=on` belongs in the
+   same file only after an explicit retention/volume decision; restart both
+   web units and producer if enabled. Bounded gunicorn timing telemetry is
+   recommended before judging target latency.
+
+Do not add web threads, the held index, another producer, capture changes, or
+freshness changes in this rollout.
+
+**Interrupted additive DDL.** MariaDB commits each CREATE independently.
+Inspect before acting. With old stamp/no tables, rerun. With one PERF3 cache
+table, keep consumers stopped, verify its exact name/shape, drop only partial
+PERF3 cache tables, then rerun; preserve every neighbour. With both complete
+tables but old stamp, verify both exact schemas, all three indexes and
+cache-only contents, then stamp `b7e3f9c1a2d4` without replaying CREATE. A new
+stamp with incomplete shape stops the release for reviewed recovery/backup.
+These two interruption shapes, neighbour preservation, clean
+upgrade/downgrade/re-upgrade and a compatible no-op were freshly rehearsed on
+registered disposable MariaDB 10.11.14: 60/60 checks.
+
+**Rollback preparation.** Behavioural rollback sets
+`RADAR_BOARD_SHARED_RESULTS=off` in that same `.env` and restarts both web
+units; the producer can be stopped. Leave the additive cache tables during an
+incident. Any code rollback must be a prepared compatible artifact retaining
+migration `b7e3f9c1a2d4`, so the deployed stamp stays resolvable. Rolling
+directly to code without that migration is forbidden.
+
+Freshness defaults stay 120/120/600 seconds. Accepted unchanged evidence says
+about 7% of warm samples go stale and mixed/write cold p95/max are 16.6/22.8
+seconds; <=2 seconds remains unmet and non-blocking. The fresh loaded two-web-
+process run took n=20 for all US/DE × 12h/24h × 0/3/10/25-watch cases while
+the producer completed five normal builds and a 16,792-row ingest-shaped
+update/restore ran. Fifteen cases met p95 <=500 ms; US/12h/3-watch was p95
+564.8 ms, max 629.5 ms. First-process reads were separated from subsequent
+(fresh max 77.5 ms); the accepted restart p95 769 ms remains separately
+disclosed. The harness models two sync workers on Windows/MySQL, not gunicorn;
+MariaDB correctness transfers, elapsed seconds do not. Scale has no posts, so
+the fixed-time 60-company adversarial parity case separately exercised judged,
+legacy, lexicon, null and excluded tones (2.50 s wall); that is not scale
+latency.
+
 **Nothing in this package has been applied.** No unit is installed, no script is edited and no flag is set. No migration has run outside the disposable databases, and the target was not contacted while this was written. The target is still at `4221196`, on migration head `a7c31f0b52d4`. Merging, pushing, deploying and every step below are separate decisions for the owner. Every command is his to run, after the reads in section 9.
 
 **What would ship** is `codex/radar-perf3` on top of the deployed `4221196`. Leaving out tests and scratch scripts, the application files it touches are:
@@ -366,7 +449,7 @@ All of these are read-only.
 8. **Free disk.** `df -h /`, plus the MariaDB data directory's file system if it is separate.
 9. **No producer unit yet.** `systemctl list-unit-files 'radar_board_producer*'` should list nothing before installation.
 
-## 10. Open risks, and the open decisions for Codex
+## 10. Historical open risks and decisions (superseded by PERF3-close above)
 
 **Risks.**
 

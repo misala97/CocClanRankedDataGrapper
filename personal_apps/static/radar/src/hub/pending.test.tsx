@@ -1077,6 +1077,24 @@ describe('a burst of control changes', () => {
   const setSize = (segment: string) =>
     choose(screen.getByLabelText(/size/i), segment)
 
+  it('keeps Discover visible and bookmarked while asking the warm default key',
+    async () => {
+      stubFetch(() => served({ segments: ['discover', 'mid', 'micro', 'unknown'] }))
+      mount(served(), '#chatter')
+      await advance(400)
+
+      await setSize('discover')
+      expect(screen.getByLabelText(/size/i)).toHaveValue('discover')
+      expect(window.location.search).toContain('segment=discover')
+
+      await advance(300)
+      const request = boardCalls().at(-1)!
+      expect(new URL(request, 'https://radar.test').searchParams.get('segment'))
+        .toBe('discover,mid,micro,unknown')
+      expect(screen.getByLabelText(/size/i)).toHaveValue('discover')
+      expect(window.location.search).toContain('segment=discover')
+    })
+
   it('sends one request for the question the reader stopped on', async () => {
     stubFetch(() => served())
     mount(served(), '#chatter')

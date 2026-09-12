@@ -399,6 +399,11 @@ def _only_the_scale_database(engine):
     bound = engine.url.database
     if bound != SCALE_DB:
         raise SystemExit(f'refusing to empty {bound!r}: only {SCALE_DB}')
+    import destructive_target
+    try:
+        destructive_target.require(engine.url)
+    except destructive_target.DestructiveTargetRefused as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def truncate_store(engine):
@@ -479,3 +484,18 @@ def parse_builds(text):
                     'payload_bytes': int(match['bytes']),
                     'result': match['result']})
     return out
+
+
+def parse_reads(text):
+    """The per-request shared-board metrics emitted by real web processes."""
+    pattern = re.compile(
+        r'board read demand=(?P<demand>\w+) class=(?P<cls>\w+) '
+        r'key=(?P<key>[0-9a-f]+) outcome=(?P<outcome>\w+) '
+        r'cache_age=(?P<age>[-\d.]+|-) queue_age=(?P<queue>[-\d.]+|-) '
+        r'read_ms=(?P<read>\d+) account_ms=(?P<account>\d+)')
+    return [dict(demand=m['demand'], cls=m['cls'], key=m['key'],
+                 outcome=m['outcome'],
+                 cache_age=None if m['age'] == '-' else float(m['age']),
+                 queue_age=None if m['queue'] == '-' else float(m['queue']),
+                 read_ms=int(m['read']), account_ms=int(m['account']))
+            for m in pattern.finditer(text)]

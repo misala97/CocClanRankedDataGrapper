@@ -94,19 +94,27 @@ class Harness:
         return self.webs[index % len(self.webs)]
 
     def account(self):
-        """perf3_m03: an account watching the US 24h board's top three."""
+        """Four disposable accounts spanning the demanded watch cardinalities."""
         args = {'market': 'us', 'segment': '', 'window': '24'}
         key_hash, _ = common.key_of(args)
         stored = board_store.read(self.engine, self.ns, key_hash)
         rows = json.loads(zlib.decompress(stored.payload))['rows']
-        self.tickers = [row['ticker'] for row in rows[:3]]
-        ids = common.create_accounts(self.engine, {'perf3_m03': self.tickers})
+        all_tickers = [row['ticker'] for row in rows[:25]]
+        self.tickers = all_tickers[:3]
+        spec = {f'perf3_m{count:02d}': all_tickers[:count]
+                for count in (0, 3, 10, 25)}
+        ids = common.create_accounts(self.engine, spec)
+        self.accounts = {count: ids[f'perf3_m{count:02d}']
+                         for count in (0, 3, 10, 25)}
+        self.cookies = {count: common.mint_cookie(app, user_id)
+                        for count, user_id in self.accounts.items()}
         self.user_id = ids['perf3_m03']
         self.cookie = common.mint_cookie(app, self.user_id)
 
     def close(self):
         common.stop_all(self.children)
-        removed = common.delete_accounts(self.engine, ['perf3_m03'])
+        removed = common.delete_accounts(
+            self.engine, [f'perf3_m{count:02d}' for count in (0, 3, 10, 25)])
         rows, others = common.delete_on_demand(self.engine, self.ns)
         print(f'\ncleanup: {removed} account(s), {rows} on-demand board(s),'
               f' {others} rows of other namespaces removed; warm boards kept')
@@ -187,66 +195,81 @@ def cold_request(h, args, key_hash, port, *, watch=False, timeout=600):
 # --- (a) ready reads ------------------------------------------------------------
 
 def phase_ready(h):
-    print('\n=== (a) ready reads: an account watching three tickers ===')
-    print(f'    tickers {h.tickers}; reads of the US All board (a warm key)')
-    record = {'tickers': h.tickers, 'windows': {}}
+    print('\n=== (a) loaded ready reads: US/DE x 12/24h x 0/3/10/25 watches ===')
+    record = {'watch_tickers': h.tickers, 'cases': {}}
     # One read per path and window first, OUTSIDE the n. The first board read
     # in a process fills that process's coverage cache with a full scan (and
     # its sigma cache), which is the restart cost (c) measures -- not a steady
     # ready read. Reported here, never dropped silently.
     first = {}
-    for window in (12, 24):
-        args = {'market': 'us', 'segment': '', 'window': str(window)}
-        began = time.perf_counter()
-        board_shared.read_payload(h.engine, args, common.utcnow(), h.user_id)
-        first[f'read_payload {window}h'] = round(
-            (time.perf_counter() - began) * 1000, 1)
-        db.session.remove()
-        for web in h.webs:
-            took, _, _ = common.board(web.port, args, h.cookie)
-            first[f'{web.name} {window}h'] = round(took * 1000, 1)
+    from features.radar.config import DEFAULT_SEGMENT
+    for market in ('us', 'de'):
+        for window in (12, 24):
+            args = {'market': market, 'segment': DEFAULT_SEGMENT,
+                    'window': str(window)}
+            for web in h.webs:
+                took, _, _ = common.board(web.port, args, h.cookies[0])
+                second, _, _ = common.board(web.port, args, h.cookies[0])
+                first[f'{web.name} {market}/{window}h first'] = round(
+                    took * 1000, 1)
+                first[f'{web.name} {market}/{window}h subsequent'] = round(
+                    second * 1000, 1)
     record['first_reads_ms'] = first
     print('    first read per process and window, outside the n (cache fill): '
           + ', '.join(f'{key} {value} ms' for key, value in first.items()))
-    for window in (12, 24):
-        args = {'market': 'us', 'segment': '', 'window': str(window)}
-        direct, kinds = [], []
-        payload = None
-        for _ in range(h.n):
-            began = time.perf_counter()
-            payload = board_shared.read_payload(h.engine, args,
-                                                common.utcnow(), h.user_id)
-            direct.append(time.perf_counter() - began)
-            db.session.remove()
-            if not common.is_board(payload):
-                raise RuntimeError('a ready read answered pending')
-            if payload['watching'] != h.tickers:
-                raise RuntimeError(f"watching {payload['watching']}")
-            kinds.append('stale' if payload['stale'] else 'ready')
-        http, http_kinds = [], []
-        for i in range(h.n):
-            took, status, answer = common.board(h.web(i).port, args, h.cookie)
-            if status != 200 or not common.is_board(answer):
-                raise RuntimeError(f'HTTP ready read: {status}')
-            http.append(took)
-            http_kinds.append('stale' if answer['stale'] else 'ready')
-        entry = {
-            'read_payload_ms': common.triple(direct), 'http_ms': common.triple(http),
-            'ready': kinds.count('ready'), 'stale': kinds.count('stale'),
-            'http_ready': http_kinds.count('ready'),
-            'http_stale': http_kinds.count('stale'),
-            'rows': len(payload['rows']), 'watch_rows': len(payload['watch_rows']),
-            'raw_read_payload_ms': [round(v * 1000, 2) for v in direct],
-            'raw_http_ms': [round(v * 1000, 2) for v in http]}
-        record['windows'][window] = entry
-        p95 = entry['read_payload_ms'][1]
-        print(f'  {window:2d}h read_payload  {common.fmt(direct)}'
-              f"   {entry['ready']} ready / {entry['stale']} stale;"
-              f" {entry['rows']} rows + {entry['watch_rows']} watch rows")
-        print(f'  {window:2d}h over HTTP     {common.fmt(http)}'
-              f"   {entry['http_ready']} ready / {entry['http_stale']} stale")
-        print(f'      p95 {p95:.1f} ms against the ruling\'s <= {READY_TARGET_MS:.0f}'
-              f" ms ready-response target: {'MET' if p95 <= READY_TARGET_MS else 'NOT MET'}")
+    # Keep the real producer busy with ordinary admitted builds, and overlap
+    # one ingest-shaped 20k-row update/restore with the HTTP matrix.
+    for limit in range(60, 82):
+        common.board(h.web(limit).port,
+                     {'market': 'us' if limit % 2 else 'de', 'segment': '',
+                      'window': '24', 'limit': str(limit)}, h.cookies[0])
+    build_mark = len(h.producer.text())
+    writer = common.Child(
+        'writer-ready', common.HERE / 'write_contention_perf3.py',
+        ['--offsets', '0', '--out', h.out / 'writes-ready.json'],
+        h.out / 'writer-ready.log', common.child_env())
+    h.children.append(writer)
+    writer.wait_line('WRITE-PLAN', timeout=120)
+    for market in ('us', 'de'):
+        for window in (12, 24):
+            for watches in (0, 3, 10, 25):
+                args = {'market': market, 'segment': DEFAULT_SEGMENT,
+                        'window': str(window)}
+                values, ages, accounts, outcomes = [], [], [], []
+                for i in range(h.n):
+                    web = h.web(i)
+                    before = len(common.parse_reads(web.text()))
+                    took, status, answer = common.board(
+                        web.port, args, h.cookies[watches])
+                    reads = common.parse_reads(web.text())
+                    metric = reads[-1] if len(reads) > before else None
+                    if (status != 200 or not common.is_board(answer)
+                            or metric is None):
+                        raise RuntimeError(
+                            f'HTTP loaded ready read: {status}, metric={metric}')
+                    values.append(took)
+                    ages.append(metric['cache_age'])
+                    accounts.append(metric['account_ms'])
+                    outcomes.append(metric['outcome'])
+                name = f'{market}-{window}h-watch{watches}'
+                record['cases'][name] = {
+                    'http_ms': common.summary([v * 1000 for v in values]),
+                    'cache_age_s': common.summary(ages),
+                    'account_ms': common.summary(accounts),
+                    'outcomes': {kind: outcomes.count(kind)
+                                 for kind in set(outcomes)},
+                    'raw_http_ms': [round(v * 1000, 2) for v in values]}
+                print(f'  {name:22s} {common.fmt(values)} account '
+                      f'{common.fmt([v / 1000 for v in accounts])} cache-age '
+                      f'{common.fmt(ages, scale=1, unit="s", digits=2)}')
+    writer.wait_line('WRITE-DONE', timeout=900)
+    writer.kill()
+    record['representative_write'] = json.loads(
+        (h.out / 'writes-ready.json').read_text())
+    record['producer_builds_during_matrix'] = common.parse_builds(
+        h.producer.text()[build_mark:])
+    if not record['producer_builds_during_matrix']:
+        raise RuntimeError('producer completed no build during loaded matrix')
     return record
 
 

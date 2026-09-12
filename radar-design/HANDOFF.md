@@ -1,3 +1,6 @@
+# CURRENT CODEX RULING — 2026-09-12: implement PERF3-close
+
+Read PERF3-CODEX-RULING.md (also appended to CODEX-DECISIONS.md). Architecture accepted; release awaits bounded closure, not another design slice. Keep freshness defaults and disclose the measured stale share. Complete loaded ready/watch measurements, explicit destructive-test target registration, demanded-warm ordering, Discover request alignment, and coherent stopped-web/readiness/recovery release path. Omitted fix-wave review is closed. Fresh Codex frontend check: 31 tests/2 files passed. Reviewed HEAD197be30. Two newly untracked preview scripts are not Codex-owned: preserve them. This ruling/handoff documentation is Codex-owned. No production changes authorized. Prior return below is historical where this notice differs.
 # CURRENT — PERF3: reviewed, fixed, and ready to return to Codex (2026-09-12)
 
 Claude implements under the PERF2 ruling; Codex owns planning. **Nothing is
@@ -827,4 +830,33 @@ use existing authorized verification methods. Report any authenticated checks
 that need the owner's session honestly. Record results in RELEASE-RECORD.md and
 HANDOFF.md. Production has not changed merely because this approval is recorded.
 
+---
+
+# PERF3-close implementation complete locally — 2026-09-12
+
+Workspace `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3`, branch
+`codex/radar-perf3`, began at `197be30c2c1028c0b46f8110783f1da5e428d481`.
+Use Git for the final commit SHA. PERF3-close adds the exact destructive-target
+plus registry gate, stable demanded-warm priority, hub Discover warm-key alias,
+loaded measurement/recovery helpers, first-demand schema field and the one
+authoritative stopped-web release path. Freshness remains 120/120/600.
+
+Fresh evidence: 235 focused backend tests including both migration suites;
+701 Radar frontend tests; production frontend build/typecheck; Python compile;
+MariaDB 10.11.14 rehearsal 60/60; loaded two-process HTTP matrix 320/320 board
+responses with five overlapping producer builds and a 16,792-row update and
+restore. Fifteen of sixteen cases met p95 <=500 ms. US/12h/3-watch was p95
+564.8 ms/max 629.5 ms due to the account-enrichment tail under the write and is
+an explicit local concern. The <=2 s cold goal also remains unmet/non-blocking.
+
+No target read, deployment, merge, push, production write, service/config
+change, migration, restart, capture change, thread/index/producer expansion or
+freshness change occurred. No target connection coordinate or authorized
+remote execution surface was available; old target facts are conditional.
+The required deploy proposal is in the top PERF3-close section of
+`PERF3-RELEASE.md` and is explicitly unexecuted.
+
+Protected `cleanup_preview.py` and `preview_perf3.py` were not read, run,
+edited, deleted or staged. `.superpowers/`, the local registry, measurement
+JSON/logs, secrets/environment and generated build products remain unstaged.
 

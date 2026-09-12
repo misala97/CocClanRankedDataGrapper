@@ -22,32 +22,22 @@ And two pinned names cannot both be satisfied by one database, so the two
 migration suites could never run in the same pass however the tests were
 invoked.
 
-So the rule is inverted. A suite runs wherever it CAN:
-
-  * it SKIPS on a database somebody works in -- the local development database
-    and the deployed one share the name `personal_apps`, and `coc_stats` is
-    the other application on the same server. Nothing here may write there,
-    and the name is the one thing about them that is stable.
-  * it FAILS, rather than skipping, on a database that is disposable but does
-    not carry the tables it needs. That is a machine where these tests are
-    meant to run and whose schema is behind: something to fix in one command,
-    not to hide behind a green run.
-  * otherwise it RUNS.
-
-The protection is a denylist and not an allowlist on purpose: an allowlist is
-exactly the pin this replaces, and its failure mode is the silent skip. The
-denylist's failure mode is the opposite -- a new working database would have
-to be named here -- and it is the direction where the mistake is visible.
+The current rule has no implicit disposable names. It fails unless an operator
+opts in to the exact bound host/port/database and a separately provisioned
+registry file names that same tuple. Protected names are refused even if both
+values try to authorize them. The checks happen before table inspection, so a
+refusal executes no SQL at all.
 """
 import pytest
 import sqlalchemy as sa
 
+import destructive_target
 from extensions import db
 
 #: Databases these suites must never touch. `personal_apps` is both the local
 #: development database and the deployed one; `coc_stats` is the other
 #: application sharing the server.
-PROTECTED = frozenset({'personal_apps', 'coc_stats'})
+PROTECTED = destructive_target.PROTECTED_DATABASES
 
 #: What to run against a disposable database whose schema is behind.
 UPGRADE = 'PYTHONPATH=. FLASK_APP=app.py py -3.12 -m flask db upgrade'
@@ -59,17 +49,17 @@ def require(*tables):
     Call inside an application context. Returns the database name, so a caller
     that wants to name it in an assertion can.
     """
+    try:
+        target = destructive_target.require(db.engine.url, protected=PROTECTED)
+    except destructive_target.DestructiveTargetRefused as exc:
+        pytest.fail(str(exc), pytrace=False)
     database = db.engine.url.database or ''
-    if database.lower() in PROTECTED:
-        pytest.skip(
-            f'{database} is a working database and these tests write to it; '
-            'point PERSONAL_DB_NAME at a disposable clone to run them')
     missing = [name for name in tables if not _has(name)]
     if missing:
         pytest.fail(
             f'{database} is disposable but has no {", ".join(missing)}: '
             f'run `{UPGRADE}` against it first')
-    return database
+    return target
 
 
 def _has(table):

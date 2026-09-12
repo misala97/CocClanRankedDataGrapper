@@ -73,7 +73,8 @@ _BACKOFF_CEILING = 900
 
 _RESULT_COLUMNS = (
     'key_hash, key_json, queue_state, warm, payload, payload_version, as_of, '
-    'built_at, build_ms, enqueued_at, requested_at, request_count, attempts, '
+    'built_at, build_ms, enqueued_at, first_demand_at, requested_at, '
+    'request_count, attempts, '
     'next_attempt_at, last_error, lease_expires_at')
 
 _NAMESPACE_COLUMNS = (
@@ -150,6 +151,7 @@ class Result:
     built_at: dt.datetime | None
     build_ms: int | None
     enqueued_at: dt.datetime | None
+    first_demand_at: dt.datetime | None
     requested_at: dt.datetime
     request_count: int
     attempts: int
@@ -436,6 +438,7 @@ def read(engine, ns, key_hash):
         payload=row['payload'], payload_version=row['payload_version'],
         as_of=row['as_of'], built_at=row['built_at'],
         build_ms=row['build_ms'], enqueued_at=row['enqueued_at'],
+        first_demand_at=row['first_demand_at'],
         requested_at=row['requested_at'], request_count=row['request_count'],
         attempts=row['attempts'], next_attempt_at=row['next_attempt_at'],
         last_error=row['last_error'],
@@ -583,12 +586,16 @@ def claim(engine, ns, owner, now, *, prefer='warm'):
         raise ValueError(f"prefer must be 'warm' or 'demand', not {prefer!r}")
     bounds = limits()
     wants_warm = prefer == 'warm'
-    # Warm work is ordered by the age of the board, with the never-built ahead
-    # of everything -- a board nobody has ever produced is infinitely stale, and
-    # `as_of IS NULL` is a real state a warm row sits in until its first build.
+    # Warm work first serves a key a reader is actually waiting on, by that
+    # wait's stable first demand. Inside each demand class it is ordered by the
+    # age of the board, with never-built ahead of everything. Publication
+    # clears first_demand_at, so continuous demand cannot pin one key ahead of
+    # the rest forever. The Loop's warm/on-demand alternation is outside this
+    # ordering and remains unchanged.
     # On-demand work is ordered by arrival, plainly: an admitted row always has
     # an `enqueued_at`, so there is no NULL case to rank.
-    order = ('as_of IS NULL DESC, as_of ASC' if wants_warm
+    order = ('first_demand_at IS NULL ASC, first_demand_at ASC, '
+             'as_of IS NULL DESC, as_of ASC' if wants_warm
              else 'enqueued_at ASC')
 
     with engine.connect() as connection:
@@ -645,6 +652,7 @@ def publish(engine, ns, claim, blob, *, as_of, built_at, build_ms,
                SET queue_state = 'idle', payload = :blob, payload_bytes = :size,
                    as_of = :as_of, built_at = :built_at, build_ms = :build_ms,
                    payload_version = :version, producer_revision = :revision,
+                   first_demand_at = NULL,
                    lease_owner = NULL, lease_token = NULL,
                    lease_expires_at = NULL, attempts = 0, last_error = NULL,
                    next_attempt_at = NULL
@@ -810,13 +818,16 @@ def _admit(connection, ns, key_hash, key_json, now, *, warm, poll, bounds):
     connection.execute(sa.text(f"""
         INSERT INTO {RESULTS}
             (namespace, key_hash, key_json, payload_version, queue_state, warm,
-             enqueued_at, requested_at, request_count)
-        VALUES (:ns, :key, :json, :version, 'pending', :warm, :now, :now,
-                :initial)
+             enqueued_at, first_demand_at, requested_at, request_count)
+        VALUES (:ns, :key, :json, :version, 'pending', :warm, :now,
+                CASE WHEN :initial = 1 THEN :now ELSE NULL END, :now, :initial)
         ON DUPLICATE KEY UPDATE
             requested_at = :now,
             request_count = request_count + :initial,
             warm = GREATEST(warm, :warm),
+            first_demand_at = CASE
+                WHEN :initial = 1 THEN COALESCE(first_demand_at, :now)
+                ELSE first_demand_at END,
             enqueued_at = CASE
                 WHEN queue_state IN ('pending', 'building') THEN enqueued_at
                 WHEN queue_state = 'failed' AND next_attempt_at > :now

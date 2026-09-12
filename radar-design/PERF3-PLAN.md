@@ -1297,3 +1297,53 @@ set RADAR_BOARD_SHARED_RESULTS=on
 PYTHONPATH=. py -3.12 run_radar_board_producer.py            # terminal 1
 PYTHONPATH=. py -3.12 scratchpad/perf3/serve_perf3.py --port 5071   # terminal 2
 ```
+
+---
+
+## PERF3-close — binding closure, 2026-09-12
+
+`PERF3-CODEX-RULING.md` accepts Tasks 1–9 and binds this final, bounded
+closure. This section does not reopen the architecture or change freshness:
+fresh/refresh/hard-expiry remain 120/120/600 seconds.
+
+- [x] Replace the two-name destructive-test denylist with two independent
+      checks made before any write or DDL: an explicit opt-in that exactly
+      matches the bound host, port and database, plus an explicitly
+      provisioned registration. Protected names remain refused, and a
+      mismatch fails with setup instructions. Apply the same gate to all six
+      destructive suites and to destructive scale/MariaDB helpers. Prove a
+      refusal emits zero writes/DDL and one registered database runs both
+      migration suites.
+- [x] Give waiting warm keys precedence within the warm class by a stable
+      first-demand timestamp. Polls never move it; success clears it. Preserve
+      the Loop's warm/on-demand alternation. Prove deterministic order,
+      starvation resistance and the empty-store demanded-key case.
+- [x] At a fixed clock, prove `segment=discover` and the configured default
+      segment select the same companies. Keep the backend key/echo contract,
+      URL and visible Discover control state, but translate the hub's board
+      request to the already-warm default spelling.
+- [x] Measure serialized ready HTTP responses through two independent web
+      processes while one producer continuously builds and representative
+      writes run. For US/DE × 12h/24h and 0/3/10/25 watches, take at least 20
+      samples per critical case and report n, median, p95, max, cache age and
+      account enrichment. Add a bounded realistic tone/judgment supplement or
+      report it separately. Re-prove first-worker versus subsequent requests.
+      Fix only a measured bounded read-path regression.
+- [x] On registered disposable MariaDB, rehearse interrupted additive states:
+      partial tables/indexes and all DDL before the Alembic stamp. Recovery
+      must preserve unrelated tables and refuse cleanup outside the previous
+      revision plus first-deploy empty-cache state. Rehearse the compatible
+      code rollback shape that retains the migration revision.
+- [x] Replace `PERF3-RELEASE.md`'s historical alternatives with one current
+      stopped-web execution path for first and routine rollout: durable log,
+      bounded readiness success/timeout/recovery, explicit service-state
+      restoration, flag rollback first, and compatible full-code rollback as
+      a prepared exception. Qualify target facts unless freshly read.
+- [x] Run focused regressions/build checks, self-review the entire
+      `197be30..working` delta, preserve the two preview scripts untouched and
+      unstaged, update the ledger/handoff/evidence/report, then commit locally.
+
+Stopping point: every item above is proved, or a measured acceptance failure
+needs a new Codex decision. No merge, push, deployment, production write,
+service/configuration change, capture enablement, root promotion, threading,
+held index or unrelated PERF1/B1/history work is part of PERF3-close.

@@ -22,7 +22,10 @@ database, and every Task 8 process goes through this module instead:
    fraction of the rows -- the trap PERF1 had to retract. `expand_sources`
    reads the module global at call time, and the patch happens before `app`
    is imported, so `routes.api.MAX_SOURCES` (bound at import) agrees too;
-5. after the import, `db.engine.url.database` is asserted, and so is the
+5. before the first database connection, the exact host/port/database must
+   pass `RADAR_DESTRUCTIVE_TEST_TARGET` and an independently provisioned
+   registry; after import the engine is checked against the same registration;
+6. after the import, `db.engine.url.database` is asserted, and so is the
    coverage of the warm set's expanded sources over the 24h window.
 
 Two ways in:
@@ -172,6 +175,21 @@ def bind(label=None, *, require_window=True):
         if path not in sys.path:
             sys.path.insert(0, path)
 
+    # The connection settings say where this process points; they do not
+    # authorize touching it. Require the separately supplied opt-in and
+    # registry before fixture_reddit_subs opens the first connection.
+    import sqlalchemy as sa
+    import destructive_target
+    settings = credentials()
+    preflight_url = sa.engine.URL.create(
+        'mysql+pymysql', username=settings['user'],
+        password=settings['password'], host=settings['host'],
+        port=settings['port'], database=SCALE_DB)
+    try:
+        destructive_target.require(preflight_url)
+    except destructive_target.DestructiveTargetRefused as exc:
+        raise SystemExit(str(exc)) from exc
+
     subs = fixture_reddit_subs()
     from features.radar import config
     config.REDDIT_SUBS = subs
@@ -186,6 +204,10 @@ def bind(label=None, *, require_window=True):
     _STATE['engine'] = bound_engine
     if bound != SCALE_DB or bound in REFUSED:
         raise SystemExit(f'bound to {bound!r}, refusing: only {SCALE_DB}')
+    try:
+        destructive_target.require(bound_engine.url)
+    except destructive_target.DestructiveTargetRefused as exc:
+        raise SystemExit(str(exc)) from exc
     _check_bound_names(config, subs)
 
     from features.radar import board_namespace

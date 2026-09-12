@@ -35,6 +35,7 @@ from flask import Flask                                       # noqa: E402
 from flask_migrate import Migrate, downgrade, stamp, upgrade   # noqa: E402
 
 from extensions import db                                      # noqa: E402
+import destructive_target                                      # noqa: E402
 import models                                                  # noqa: E402,F401
 from features.radar import board_keys, board_namespace, board_store  # noqa: E402
 
@@ -124,6 +125,14 @@ def recreate_schema():
         raise SystemExit(
             f'refusing to drop and recreate schema {SCHEMA!r}: this script '
             f'may only use {", ".join(sorted(ALLOWED_SCHEMAS))}')
+
+    # The allowlist limits code paths; it is not operator authorization.
+    # This check uses the parsed target only to compare with an independently
+    # supplied opt-in and registry and runs before the server is contacted.
+    try:
+        destructive_target.require(sa.engine.make_url(REHEARSAL_URL))
+    except destructive_target.DestructiveTargetRefused as exc:
+        raise SystemExit(str(exc)) from exc
 
     engine = sa.create_engine(SERVER_URL, isolation_level='AUTOCOMMIT')
     with engine.connect() as connection:
@@ -230,8 +239,39 @@ def main():
               f'found {sorted(NEW_TABLES & before)}' if NEW_TABLES & before
               else '')
 
-        # --- 2. the upgrade -------------------------------------------------
-        print('\n2. the upgrade, on MariaDB')
+        # MariaDB commits each CREATE independently. Rehearse the two crash
+        # shapes the release runbook must recognize, before the clean path.
+        print('\n2. interrupted additive DDL and bounded recovery')
+        upgrade(revision=REVISION)
+        with db.engine.begin() as connection:
+            connection.execute(sa.text('drop table radar_board_results'))
+        stamp(revision=PREVIOUS)
+        check('partial-DDL crash is represented without touching neighbours',
+              tables() - before == {'radar_board_namespaces'}
+              and 'radar_board_observations' in tables())
+        with db.engine.begin() as connection:
+            connection.execute(sa.text('drop table radar_board_namespaces'))
+        upgrade(revision=REVISION)
+        check('bounded partial recovery recreates exactly both cache tables',
+              tables() - before == NEW_TABLES and stamped() == REVISION)
+
+        # All CREATEs landed but the Alembic stamp did not. Recovery verifies
+        # the exact final shape and stamps it; it must not rerun CREATE TABLE.
+        stamp(revision=PREVIOUS)
+        complete_shape = (NEW_TABLES <= tables()
+                          and NEW_INDEXES <= indexes('radar_board_results'))
+        check('all-DDL-before-stamp crash has the complete expected shape',
+              complete_shape and stamped() == PREVIOUS)
+        if complete_shape:
+            stamp(revision=REVISION)
+        check('verified complete DDL recovers by stamping without data DDL',
+              stamped() == REVISION and tables() - before == NEW_TABLES)
+        downgrade(revision=PREVIOUS)
+        check('interruption rehearsal returns to the clean previous shape',
+              tables() == before and stamped() == PREVIOUS)
+
+        # --- 3. the upgrade -------------------------------------------------
+        print('\n3. the clean upgrade, on MariaDB')
         upgrade(revision=REVISION)
         after = tables()
         check('the new revision is stamped', stamped() == REVISION, stamped())
@@ -250,14 +290,17 @@ def main():
         check('lease_token is varchar(32)',
               shape['lease_token'][0] == 'varchar(32)', shape['lease_token'][0])
         check('timestamps keep microsecond precision',
-              shape['as_of'][0] == 'datetime(6)', shape['as_of'][0])
+              shape['as_of'][0] == 'datetime(6)'
+              and shape['first_demand_at'][0] == 'datetime(6)',
+              f"as_of={shape['as_of'][0]}, "
+              f"first_demand_at={shape['first_demand_at'][0]}")
         control = columns('radar_board_namespaces')
         check('the control row carries the producer fields',
               {'producer_owner', 'producer_seen_at', 'producer_success_at',
                'producer_error'} <= set(control))
 
-        # --- 3. the widths, under both sql_modes ----------------------------
-        print('\n3. the widest legal row, under both sql_modes')
+        # --- 4. the widths, under both sql_modes ----------------------------
+        print('\n4. the widest legal row, under both sql_modes')
         key_hash, key_json = long_key()
         check('the fixture key is the width the column was chosen for',
               len(key_json) > 3500, f'{len(key_json)} characters')
@@ -273,8 +316,8 @@ def main():
             check(f'the insert raised no warning ({label})', not warnings,
                   '; '.join(str(w) for w in warnings))
 
-        # --- 4. the store itself, against this engine -----------------------
-        print('\n4. the store, on MariaDB')
+        # --- 5. the store itself, against this engine -----------------------
+        print('\n5. the store, on MariaDB')
         namespace = 'rehearsal-' + REVISION_STAMP[:20]
         board_store.ensure_namespace(engine, namespace, NOW,
                                      revision=REVISION_STAMP,
@@ -292,8 +335,9 @@ def main():
               repeat == 'pending' and row.request_count == 2,
               f'{repeat}, count={row.request_count}')
         check('ON DUPLICATE KEY UPDATE kept the queue position here too',
-              row.enqueued_at == NOW and row.requested_at == NOW + seconds(30),
-              f'enqueued {row.enqueued_at}, requested {row.requested_at}')
+              row.enqueued_at == NOW and row.requested_at == NOW + seconds(30)
+              and row.first_demand_at == NOW,
+              f'enqueued {row.enqueued_at}, demand {row.first_demand_at}')
         board_store.admit(engine, namespace, key_hash, key_json,
                           NOW + seconds(60), poll=True)
         check('a poll records no request',
@@ -320,6 +364,7 @@ def main():
               and zlib.decompress(result.payload) == BLOB)
         check('publish recorded the build',
               result.queue_state == 'idle' and result.build_ms == 3210
+              and result.first_demand_at is None
               and result.as_of == NOW + seconds(1)
               and result.built_at == NOW + seconds(4),
               f'{result.queue_state}, {result.as_of}, {result.built_at}')
@@ -454,8 +499,8 @@ def main():
         check("the caller's own generation survived retirement",
               bool(board_store.health(engine, namespace)))
 
-        # --- 5. the downgrade, and back up ----------------------------------
-        print('\n5. the downgrade and the re-upgrade')
+        # --- 6. the downgrade, and back up ----------------------------------
+        print('\n6. the downgrade and the re-upgrade')
         with db.engine.connect() as connection:
             archive = connection.execute(sa.text(
                 'select count(*) from radar_board_observations')).scalar()
@@ -483,6 +528,10 @@ def main():
               and NEW_INDEXES <= indexes('radar_board_results'))
         check('the second upgrade leaves the new revision stamped',
               stamped() == REVISION, stamped())
+        final_shape = tables()
+        upgrade(revision=REVISION)
+        check('rollback-compatible code retaining the migration sees a no-op',
+              tables() == final_shape and stamped() == REVISION)
 
     print(f'\n{"FAILURES: " + ", ".join(FAILURES) if FAILURES else "all %d checks passed" % COUNT}')
     return 1 if FAILURES else 0

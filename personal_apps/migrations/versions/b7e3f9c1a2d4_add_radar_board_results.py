@@ -68,6 +68,7 @@ def upgrade():
         sa.Column('payload', mysql.MEDIUMBLOB(), nullable=True),
         sa.Column('payload_bytes', sa.Integer(), nullable=True),
         sa.Column('enqueued_at', mysql.DATETIME(fsp=6), nullable=True),
+        sa.Column('first_demand_at', mysql.DATETIME(fsp=6), nullable=True),
         sa.Column('requested_at', mysql.DATETIME(fsp=6), nullable=False),
         sa.Column('request_count', sa.Integer(), nullable=False,
                   server_default='0'),
