@@ -1,3 +1,75 @@
+# CURRENT — PERF3-close review-fix round is CLOSED (2026-09-12)
+
+**Read this block first. Everything below it is historical where it differs.**
+
+| | |
+| --- | --- |
+| Workspace | `C:/Users/michi/Desktop/CodingStuff-worktrees/radar-perf3` (a git worktree) |
+| Branch | `codex/radar-perf3` — **not merged, not pushed, not moved** |
+| Final HEAD | the commit carrying this handoff |
+| Review-fix delta | `12b3873f0c961ecc7dcd7adec81e12e778c60580` (six findings) then `09621fe0061e2a661bafe0a1b95659e3ab7d9104` (the re-review's four) |
+| Round base | `6f9534bbbe03021608fc01a0e40e5a7b567722de`; closure base `197be30c2c1028c0b46f8110783f1da5e428d481` |
+| Dirty files | none tracked. Untracked: only the two protected preview scripts, `personal_apps/scratchpad/perf3/cleanup_preview.py` and `preview_perf3.py` — never read, executed, edited, deleted or staged by this round |
+| Deployed | still `4221196`, migration head `a7c31f0b52d4`. **Nothing was deployed, migrated, configured or restarted.** All target facts are conditional 2026-09-11 records |
+
+**Verdict: closed.** The six blocking findings against `197be30..6f9534b` are
+resolved, and so are the four blocking findings the scoped re-review raised
+against `6f9534b..12b3873`. Nothing blocking is open.
+
+**Immediate next action: release approval, or Codex's decision on the two
+disclosed numbers below.** Not another design slice, and not another review
+round. The concrete deploy proposal is `radar-design/perf3-release/
+deploy_perf3.sh first|routine FULL_SHA`, prepared and **unexecuted**.
+
+**Evidence, all fresh this round.**
+
+- Registered backend regression, one pass: the seven accepted suites (243,
+  unchanged) plus `test_perf3_release_artifacts.py` (9) and
+  `test_perf3_migration_recovery_policy.py` (4) — **256 passed in 73.99 s**.
+- Registered disposable MariaDB 10.11.14, fresh datadir: **67/67 checks**, up
+  from 60/60. Without the opt-in it refuses before creating an engine. Server
+  stopped afterwards.
+- Loaded ready matrix, corrected: **16/16 critical US/DE × 12h/24h ×
+  0/3/10/25-watch cases, n=20 each, 320 samples, all p95 <=500 ms**, worst p95
+  122.2 ms. Writes were in flight 21.7–24.7 s of each ~28 s case — 370.1 s
+  across a 454 s matrix — and all 66 per-case producer builds landed inside
+  their own case's writer window.
+- Watched-account initialization, measured as itself: first request 793.4 /
+  771.5 ms per worker, subsequent 107.7 / 89.3 ms.
+- Freshness defaults unchanged at **120 / 120 / 600 s**.
+- Raw artifacts: `.superpowers/sdd/perf3-close-fix-measure/` (ignored, local).
+  Full narrative: `PERF3-LEDGER.md`, "Review-fix round, 2026-09-12".
+
+**Two disclosed numbers that are Codex's call, not defects.**
+
+1. 40 of 320 samples (12.5%) answered `stale`, not `ready` — all of
+   US/12h/25-watch and all of DE/24h/0-watch, at cache ages 122–140 s against
+   the 120 s line. Higher than the ~7% recorded earlier, and caused by this
+   harness deliberately holding the producer at its queue cap for the whole
+   matrix. Those boards were still served in ~100–120 ms with their true age
+   reported. No freshness default was touched to improve it.
+2. The once-per-worker watched initialization (~793 ms) remains a disclosed
+   exception, consistent with the accepted restart p95 769 ms.
+
+**Still unmet / still conditional.** The `<=2 s` first-result goal (unmet,
+non-blocking under the accepted asynchronous contract); the accepted mixed/write
+cold p95 16.6 s / max 22.8 s (not re-run); every target fact, because no target
+host coordinate or authorized remote surface was available and no bypass was
+attempted — re-read them read-only, without printing secret values, immediately
+before deploying.
+
+**Two scope facts worth not discovering on deploy day.** `deploy_perf3.sh` has
+no interrupted-migration branch: that recovery policy is rehearsed and
+unit-tested, but on the target it is still the written procedure in
+`PERF3-RELEASE.md`, run by hand with the web units stopped. And none of the
+`PERF3_*` path variables may contain whitespace, because the runner word-splits
+its command variables on purpose so the tests can inject fakes.
+
+**Boundaries honoured:** no merge, push, deployment, production
+migration/configuration/restart, capture enablement, root promotion, threading,
+held index, or B1/TE1/history/PERF1 fixture change. The two protected preview
+scripts were never touched.
+
 # CURRENT CODEX RULING — 2026-09-12: implement PERF3-close
 
 Read PERF3-CODEX-RULING.md (also appended to CODEX-DECISIONS.md). Architecture accepted; release awaits bounded closure, not another design slice. Keep freshness defaults and disclose the measured stale share. Complete loaded ready/watch measurements, explicit destructive-test target registration, demanded-warm ordering, Discover request alignment, and coherent stopped-web/readiness/recovery release path. Omitted fix-wave review is closed. Fresh Codex frontend check: 31 tests/2 files passed. Reviewed HEAD197be30. Two newly untracked preview scripts are not Codex-owned: preserve them. This ruling/handoff documentation is Codex-owned. No production changes authorized. Prior return below is historical where this notice differs.
