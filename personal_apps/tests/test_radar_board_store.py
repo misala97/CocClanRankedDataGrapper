@@ -255,24 +255,22 @@ def test_a_refused_target_executes_no_sql(monkeypatch):
 def test_the_guard_refuses_target_changing_connection_options_before_sql(
         monkeypatch, tmp_path, suffix):
     """The displayed URL path is not the effective PyMySQL target when its
-    query mapping overrides connect arguments or selects a local socket."""
+    query mapping overrides connect arguments or selects a local socket.
+
+    This pins the refusal and its reason. The separate "executes no SQL"
+    property is carried by `test_a_refused_target_executes_no_sql` above, which
+    listens on the REAL bound engine. A listener attached to a throwaway engine
+    here would watch something `require()` never receives -- it would read as
+    proof while asserting nothing, so it is deliberately not written.
+    """
     target = 'localhost:3306/personal_apps_radar_perf3'
     _register(tmp_path, monkeypatch, target)
     url = sa.engine.url.make_url(
         f'mysql+pymysql://u@localhost:3306/personal_apps_radar_perf3{suffix}')
-    statements = []
-    engine = sa.create_engine(url)
-    @sa.event.listens_for(engine, 'before_cursor_execute')
-    def capture(_connection, _cursor, statement, _parameters, _context,
-                _executemany):
-        statements.append(statement)
-    try:
-        with pytest.raises(destructive_target.DestructiveTargetRefused,
-                           match='query|socket|connection option'):
-            destructive_target.require(url)
-    finally:
-        engine.dispose()
-    assert statements == []
+
+    with pytest.raises(destructive_target.DestructiveTargetRefused,
+                       match='query|socket|connection option'):
+        destructive_target.require(url)
 
 
 def test_the_guard_accepts_only_the_apps_exact_non_routing_charset_option(

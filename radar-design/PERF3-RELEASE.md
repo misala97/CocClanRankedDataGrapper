@@ -61,10 +61,28 @@ bypass), and on ANY failure restores the flag, the checkout and every captured
 service state -- leaving both web units stopped and saying so when restoration
 itself could not complete. Its behaviour is pinned by
 `personal_apps/tests/test_perf3_release_artifacts.py`, which drives the real
-script against fake `systemctl`/`git`/`npm`/`pip`/`flask`/`python` commands and
-asserts the stop-before-checkout ordering, the start-after-readiness ordering,
-the preserved exit status (23 for a build failure, 70 for readiness) and the
-restored `.env`.
+script against fake `systemctl`/`git`/`npm`/`pip`/`flask`/`python` commands --
+fakes that can be made to FAIL -- and asserts the stop-before-checkout
+ordering, the start-after-readiness ordering, the preserved exit status (23 for
+a build failure, 70 for readiness, 75 for a post-activation service failure)
+and that unrelated `.env` keys survive every path.
+
+**Its recovery model is the part to read twice.** Before the candidate
+migration has been applied, a failure is fully reversible and the runner resets
+the checkout, reinstalls, rebuilds and restores services. **After the migration
+has been applied the checkout is NOT rolled back.** Older code cannot resolve
+the new stamp, so resetting to it would strand the installation -- the earlier
+draft did exactly that, and left both web units down. The recovery is the one
+this document prescribes: the flag returns to its original value, the schema is
+retained, and the candidate code serves its flag-off path, which is current
+production behaviour. A full code rollback is a separate, separately authorized
+step using `rollback-compatible.json`. And once readiness has passed and the
+flag is on, the runner never rolls the release back: a service that will not
+reach its intended state is reported by name and exits 75.
+
+**The runner does not implement interrupted-migration recovery.** That policy
+is rehearsed and unit-tested (below), but on the target it remains the written
+procedure in this section, executed by hand with the web units stopped.
 
 Do not add web threads, the held index, another producer, capture changes, or
 freshness changes in this rollout.
@@ -121,8 +139,13 @@ that failed. It stays in the ledger as superseded evidence.
 
 The corrected run (`--phase ready --n 20`) measures every critical US/DE ×
 12h/24h × 0/3/10/25-watch case with its OWN writer running across that case:
-**16/16 cases, 20/20 samples each, every sample verified overlapping a live
-writer and a live producer, 320 samples total**. Each case saw 3-5 completed
+**16/16 cases, 20/20 samples each, 320 samples total**, every sample taken
+with that case's writer process and the producer both verified alive. The
+overlap itself is evidenced from the writers' own recorded run windows rather
+than from the sample count: each case's writer was updating and restoring for
+21.7-24.7 s inside a case of about 28 s -- **370.1 s of in-flight writes across
+a 454 s matrix** -- and all 66 per-case producer builds completed inside their
+own case's writer window. Each case saw 3-5 completed
 producer builds (82 across the matrix, warm and on-demand, all published) and
 two full 16,792-row ingest-shaped update/restore cycles. A feeder admitted
 2,989 unique real selections through the store's own contract to keep the

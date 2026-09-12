@@ -122,6 +122,25 @@ class Harness:
 
 # --- one cold request, from the first answer to a board in hand -------------
 
+def _overlap_seconds(started, ended, writes):
+    """Seconds of the measured case window that a real write was in flight.
+
+    `write_overlap_samples` only says the writer PROCESS was alive at each
+    sample, which is a proxy. The writer records the exact wall-clock window of
+    every update/restore run it performed, so the honest number is the
+    intersection of those windows with the window the samples were taken in.
+    """
+    total = 0.0
+    for run in writes.get('runs', ()):
+        begin = dt.datetime.fromisoformat(run['started_utc'])
+        finish = dt.datetime.fromisoformat(run['ended_utc'])
+        low = max(started, begin)
+        high = min(ended, finish)
+        if high > low:
+            total += (high - low).total_seconds()
+    return total
+
+
 def cold_request(h, args, key_hash, port, *, watch=False, timeout=600):
     """Ask once, then poll as the client does, until a real board arrives.
 
@@ -221,7 +240,8 @@ def phase_ready(h):
     # entire phase.  Admission happens through the real store contract; no
     # synthetic producer work or polling shortcut is used.
     stop_feed = threading.Event()
-    feed = {'attempted': 0, 'pending': 0, 'busy': 0, 'parked': 0}
+    feed = {'attempted': 0, 'pending': 0, 'building': 0, 'busy': 0,
+            'parked': 0}
 
     def feeder():
         try:
@@ -306,8 +326,12 @@ def phase_ready(h):
             for window in (12, 24):
                 for watches in (0, 3, 10, 25):
                     name = f'{market}-{window}h-watch{watches}'
+                    if feed.get('error'):
+                        raise RuntimeError(
+                            f"producer feeder failed: {feed['error']}")
                     writer, write_path = start_writer(name)
                     build_before = len(common.parse_builds(h.producer.text()))
+                    case_started = common.utcnow()
                     args = {'market': market, 'segment': DEFAULT_SEGMENT,
                             'window': str(window)}
                     values, ages, accounts, outcomes = [], [], [], []
@@ -333,11 +357,24 @@ def phase_ready(h):
                         ages.append(metric['cache_age'])
                         accounts.append(metric['account_ms'])
                         outcomes.append(metric['outcome'])
+                    # Slice the builds at the end of SAMPLING. Doing it after
+                    # finish_writer would count builds that landed during the
+                    # wait for WRITE-DONE, outside the measured window.
+                    builds = common.parse_builds(
+                        h.producer.text())[build_before:]
+                    case_ended = common.utcnow()
                     writes = finish_writer(writer, write_path)
-                    builds = common.parse_builds(h.producer.text())[build_before:]
                     if not builds:
                         raise RuntimeError(
                             f'{name}: producer completed no build during case')
+                    # Overlap is not the sample count. Compare the case's own
+                    # window against the writer's recorded run windows and
+                    # report the seconds that actually intersect.
+                    overlap_s = _overlap_seconds(case_started, case_ended,
+                                                 writes)
+                    if overlap_s <= 0:
+                        raise RuntimeError(
+                            f'{name}: no measured sample overlapped a write')
                     record['cases'][name] = {
                         'http_ms': common.summary([v * 1000 for v in values]),
                         'cache_age_s': common.summary(ages),
@@ -346,6 +383,9 @@ def phase_ready(h):
                                      for kind in set(outcomes)},
                         'raw_http_ms': [round(v * 1000, 2) for v in values],
                         'write_overlap_samples': overlap_samples,
+                        'write_overlap_seconds': round(overlap_s, 3),
+                        'case_window_utc': [case_started.isoformat(),
+                                            case_ended.isoformat()],
                         'representative_write': writes,
                         'producer_builds': builds,
                     }
@@ -354,6 +394,7 @@ def phase_ready(h):
                           f'cache-age '
                           f'{common.fmt(ages, scale=1, unit="s", digits=2)} '
                           f'overlap={overlap_samples}/{h.n} '
+                          f'({overlap_s:.1f}s of writes) '
                           f'builds={len(builds)}')
     finally:
         stop_feed.set()

@@ -2572,8 +2572,9 @@ weakened and none was renamed away.
   tests/test_radar_projection_migration.py tests/test_radar_hub_page.py
   tests/test_perf3_release_artifacts.py
   tests/test_perf3_migration_recovery_policy.py -q -p no:cacheprovider`
-  -> **251 passed in 60.24 s** (235 before, +8 guard-bypass/registry tests,
-  +8 in the two new files).
+  -> **256 passed in 73.99 s** (235 before; the seven accepted suites are
+  unchanged at 243, +9 release-artifact tests, +4 migration-recovery-policy
+  tests). Collection was checked per file so the arithmetic is not assumed.
 - MariaDB rehearsal without the opt-in: refused before creating an engine,
   naming the actual bound target. With the registered opt-in: **67/67**. The
   portable server was started on a FRESH disposable datadir and stopped again.
@@ -2582,3 +2583,97 @@ weakened and none was renamed away.
   (`board_store.py:109-111`).
 - The two protected untracked preview scripts were never read, executed,
   edited, deleted or staged.
+
+### The scoped re-review of `6f9534b..12b3873`, and what it changed
+
+An independent read-only reviewer read only that delta. It confirmed findings
+1, 3 and 4, the freshness defaults, the wording corrections and that nothing
+improper was committed -- and it found **four blocking defects in
+`deploy_perf3.sh`**, every one of them in the failure handling, plus a list of
+non-blocking ones. All four are fixed, and each now has a test that fails
+without the fix.
+
+1. **A part-applied `git reset` looked like an untouched checkout.** `CHANGED=1`
+   was set AFTER the reset returned, so a reset that failed partway (ENOSPC, a
+   held file, one EPERM path) left `rollback_checkout` believing there was
+   nothing to restore -- and `restore_services` then started BOTH web units on a
+   tree that was part old SHA, part new, with no install and no build. `CHANGED=1`
+   now precedes the reset. Pinned by
+   `test_a_reset_that_fails_partway_is_still_treated_as_a_changed_checkout`,
+   which makes the fake `git reset` fail and asserts the restoring reset ran.
+2. **One failed `systemctl` on the SUCCESS path destroyed a healthy release.**
+   `restore_services yes` was a bare top-level command under `trap ... ERR`, so
+   a single failing `start` re-entered `on_failure`, which turned the flag back
+   off, reset the checkout and re-ran the migration on a release that had
+   already passed readiness. The concrete trigger needed no infrastructure
+   fault: in `routine` mode with the producer captured as `inactive` -- exactly
+   what an operator leaves during an incident -- the restore would STOP the
+   producer it had just made ready, leaving the flag on with nothing building,
+   and the following `is-active` check then exited 3. Now: past activation the
+   ERR trap is lifted, a restoration failure is reported per unit and exits 75,
+   and the producer is marked intended-active in BOTH modes. Two tests pin it.
+3. **The rollback path ran `flask db upgrade` against code that cannot resolve
+   the new stamp.** After the candidate migration had been applied, a failure
+   reset the checkout to the original SHA -- whose tree has no
+   `b7e3f9c1a2d4_add_radar_board_results.py` -- and then ran `db upgrade`, which
+   fails with "Can't locate revision", so recovery was declared incomplete and
+   BOTH web units were left down. It also performed exactly the code rollback
+   `PERF3-RELEASE.md` forbids. The script now tracks `MIGRATED` and, once the
+   migration is applied, does not roll the checkout back at all: recovery is
+   flag-off with the schema retained and the candidate code serving its
+   flag-off path, and a full code rollback is a separate authorized step using
+   `rollback-compatible.json`. Pinned by
+   `test_a_readiness_timeout_keeps_the_migrated_checkout_and_recovers_flag_off`,
+   which asserts the restoring reset never ran, `db upgrade` ran exactly once,
+   and every service including both webs came back.
+4. **The `.env` rewrite never checked `awk`.** A partial `awk` was moved over
+   the real secrets file, and because `on_failure` runs `set +e` the truncation
+   happened during recovery and still reported success -- then started both webs
+   against an `.env` missing its database credentials. `set_flag` now checks
+   awk's status, verifies the surviving line count against the original, treats
+   a failed `chmod --reference` as a refusal rather than a shrug, and preserves
+   the original `export ` form. Pinned by
+   `test_the_env_rewrite_refuses_rather_than_truncating_the_secrets_file`, and
+   every other test now asserts an unrelated key survives.
+
+Also fixed from the non-blocking list: the `first`-mode precondition fails
+closed on `"ON"`, `true`, `1` and `yes`, not only bare lowercase `on`;
+`restore_services` no longer abandons the remaining units at the first failure;
+a failed `first` rollout removes the producer unit file it installed;
+`systemctl cat` output is filtered so an inline `Environment=KEY=value` cannot
+reach the durable log; and the log's writer is waited on so the final lines are
+not lost.
+
+**Two claims the reviewer was right to call out, and how they are now stated.**
+`write_overlap_samples` is a sample COUNT -- it can only ever equal `n`, because
+a sample with a dead writer raises -- so citing it as "verified overlapping"
+was circular. The harness now records each case's own window and computes
+`write_overlap_seconds` from the writer's recorded run windows, and per-case
+builds are sliced at the end of SAMPLING rather than after waiting for
+`WRITE-DONE`. For the run already taken, the same question is answered from the
+raw artifacts: each case's writer window is 21.7-24.7 s inside a case of about
+28 s, **370.1 s of in-flight writes across a 454 s matrix**, and every single
+one of the 66 per-case producer builds falls inside its own case's writer
+window. That is the evidence; the sample count is not.
+
+Two of the new guard tests asserted `statements == []` against a throwaway
+engine that `require()` never receives. That assertion could not fail, so it
+has been removed and the tests now say in as many words that the zero-SQL
+property is carried by `test_a_refused_target_executes_no_sql`, which listens
+on the real bound engine. The rollback-manifest test no longer settles for the
+file existing at that commit: it reads the blob, asserts
+`revision = 'b7e3f9c1a2d4'` and asserts the commit is an ancestor of HEAD.
+
+**Recorded, not fixed** (the reviewer's remaining non-blocking items):
+`recovery_plan`'s `present - NEW_TABLES` branch is unreachable because
+`recovery_snapshot` already intersects, so an unexpected sibling cache object
+would be invisible rather than refused; the `'rebuild'` branch wraps two DROPs
+in `engine.begin()` as though MariaDB made that atomic, which it does not (it is
+re-entrant-safe, so this is cosmetic); the `run()` indirection word-splits, so
+no `PERF3_*` path may contain whitespace, now stated in the script's header;
+and importing the recovery-policy test executes the rehearsal module, which
+mutates `sys.path`. **And the scope fact worth stating plainly: the
+interrupted-migration recovery policy is rehearsed and unit-tested, but it is
+not shipped as a tool the operator can run on the target. `deploy_perf3.sh` has
+no interrupted-migration branch. On the VPS that recovery is still the written
+procedure in `PERF3-RELEASE.md`, executed by hand.**

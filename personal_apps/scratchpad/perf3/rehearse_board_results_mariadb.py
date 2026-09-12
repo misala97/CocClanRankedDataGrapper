@@ -86,6 +86,12 @@ def check(label, condition, detail=''):
     print(f'  {COUNT:2d}. {mark}  {label}' + (f' -- {detail}' if detail else ''))
     if not condition:
         FAILURES.append(f'{COUNT}. {label}')
+        # Raising is deliberate: a failed check must stop before anything
+        # destructive runs on the back of it. Print the ordered report first,
+        # or the raise would throw away the only summary this script produces.
+        print(f'\n{len(FAILURES)} of {COUNT} checks FAILED:')
+        for entry in FAILURES:
+            print(f'  {entry}')
         raise AssertionError(f'{label}: {detail}')
 
 
