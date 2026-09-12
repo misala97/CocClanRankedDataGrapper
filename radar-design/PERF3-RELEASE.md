@@ -48,6 +48,24 @@ freshened.
    web units and producer if enabled. Bounded gunicorn timing telemetry is
    recommended before judging target latency.
 
+Steps 1-8 are implemented by one prepared, **unexecuted** runner,
+`radar-design/perf3-release/deploy_perf3.sh`, which is the artifact to review
+and run rather than a copied snippet. `deploy_perf3.sh first|routine FULL_SHA`
+covers both the first and the routine rollout from one path. It captures every
+affected service's prior active/enabled state before touching anything, writes
+one durable log under `/var/log/perf3-release` (`tee`, so the script's own exit
+status survives), keeps BOTH web units stopped across checkout, install, build,
+migration and prewarm, gates activation on the bounded readiness loop with
+explicit success and timeout branches (timeout exits 70; there is no silent
+bypass), and on ANY failure restores the flag, the checkout and every captured
+service state -- leaving both web units stopped and saying so when restoration
+itself could not complete. Its behaviour is pinned by
+`personal_apps/tests/test_perf3_release_artifacts.py`, which drives the real
+script against fake `systemctl`/`git`/`npm`/`pip`/`flask`/`python` commands and
+asserts the stop-before-checkout ordering, the start-after-readiness ordering,
+the preserved exit status (23 for a build failure, 70 for readiness) and the
+restored `.env`.
+
 Do not add web threads, the held index, another producer, capture changes, or
 freshness changes in this rollout.
 
@@ -58,28 +76,85 @@ PERF3 cache tables, then rerun; preserve every neighbour. With both complete
 tables but old stamp, verify both exact schemas, all three indexes and
 cache-only contents, then stamp `b7e3f9c1a2d4` without replaying CREATE. A new
 stamp with incomplete shape stops the release for reviewed recovery/backup.
-These two interruption shapes, neighbour preservation, clean
-upgrade/downgrade/re-upgrade and a compatible no-op were freshly rehearsed on
-registered disposable MariaDB 10.11.14: 60/60 checks.
+A THIRD shape matters and is now covered: both tables present with only
+SOME of the three indexes created. Recovery therefore compares exact ordered
+column definitions and exact index definitions from `information_schema`, not
+object names. The decision is fail-closed and is taken BEFORE any destructive
+step: `recovery_plan` refuses outright on a wrong stamp, on any nonempty cache
+table, on an established installation already stamped `b7e3f9c1a2d4`, and on
+any shape that is not either exactly the migration's or a strict subset of its
+indexes. Those three interruption shapes, the four refusals with proof that
+each preserved every object and unrelated row byte-for-byte, neighbour
+preservation, clean upgrade/downgrade/re-upgrade and a compatible no-op were
+freshly rehearsed on registered disposable MariaDB 10.11.14: **67/67 checks**
+(the earlier 60/60 predates the partial-index shape and the refusal proofs).
+The decision function itself is unit-tested offline in
+`personal_apps/tests/test_perf3_migration_recovery_policy.py`.
 
 **Rollback preparation.** Behavioural rollback sets
 `RADAR_BOARD_SHARED_RESULTS=off` in that same `.env` and restarts both web
 units; the producer can be stopped. Leave the additive cache tables during an
 incident. Any code rollback must be a prepared compatible artifact retaining
 migration `b7e3f9c1a2d4`, so the deployed stamp stays resolvable. Rolling
-directly to code without that migration is forbidden.
+directly to code without that migration is forbidden. That artifact is
+identified exactly in `radar-design/perf3-release/rollback-compatible.json`:
+commit `197be30c2c1028c0b46f8110783f1da5e428d481`, the accepted pre-close
+application code, which contains
+`personal_apps/migrations/versions/b7e3f9c1a2d4_add_radar_board_results.py`
+at that tree (verified by `git cat-file -e` in the release-artifact test). The
+recovery sequence is: flag off first; only if code must also go back, deploy
+that commit, whose routine `flask db upgrade` resolves against the retained
+`b7e3f9c1a2d4` as a no-op -- rehearsed on MariaDB as check 67.
 
 Freshness defaults stay 120/120/600 seconds. Accepted unchanged evidence says
-about 7% of warm samples go stale and mixed/write cold p95/max are 16.6/22.8
-seconds; <=2 seconds remains unmet and non-blocking. The fresh loaded two-web-
-process run took n=20 for all US/DE × 12h/24h × 0/3/10/25-watch cases while
-the producer completed five normal builds and a 16,792-row ingest-shaped
-update/restore ran. Fifteen cases met p95 <=500 ms; US/12h/3-watch was p95
-564.8 ms, max 629.5 ms. First-process reads were separated from subsequent
-(fresh max 77.5 ms); the accepted restart p95 769 ms remains separately
-disclosed. The harness models two sync workers on Windows/MySQL, not gunicorn;
-MariaDB correctness transfers, elapsed seconds do not. Scale has no posts, so
-the fixed-time 60-company adversarial parity case separately exercised judged,
+mixed/write cold p95/max are 16.6/22.8 seconds; <=2 seconds remains unmet and
+non-blocking.
+
+**The loaded ready matrix was re-run and the first run is superseded.** The
+first run (fifteen of sixteen cases passing, US/12h/3-watch p95 564.8 ms) is
+**confounded, not deleted**: it started ONE writer for the whole matrix, which
+had finished long before most cases ran, so its later cases were not measured
+under writes at all; and it warmed up with the zero-watch account, so the first
+watch-bearing request's one-off process initialization landed inside a case
+instead of being measured as itself. Both defects inflate exactly the one case
+that failed. It stays in the ledger as superseded evidence.
+
+The corrected run (`--phase ready --n 20`) measures every critical US/DE ×
+12h/24h × 0/3/10/25-watch case with its OWN writer running across that case:
+**16/16 cases, 20/20 samples each, every sample verified overlapping a live
+writer and a live producer, 320 samples total**. Each case saw 3-5 completed
+producer builds (82 across the matrix, warm and on-demand, all published) and
+two full 16,792-row ingest-shaped update/restore cycles. A feeder admitted
+2,989 unique real selections through the store's own contract to keep the
+producer genuinely busy (195 admitted, 2,794 refused `busy` at the 32-job cap,
+0 parked).
+
+**All 16 cases met p95 <=500 ms.** Worst p95 122.2 ms (US/12h/25-watch), worst
+max 144.7 ms (DE/24h/25-watch). The earlier 564.8 ms outlier did not reproduce:
+US/12h/3-watch is now p95 69.0 ms. Per-account enrichment medians were 1.0 ms
+at 0 watches rising to 74-80 ms at 25 watches -- **below the 150 ms diagnostic
+trigger in every case**, so the bounded account-aware optimization is not
+indicated.
+
+**First watched request versus subsequent, measured explicitly** under both
+loads, in each independent worker: first 793.4 ms / 771.5 ms (account 771 / 744
+ms), subsequent 107.7 ms / 89.3 ms (account 80 / 79 ms). This is the
+once-per-worker account-helper initialization, and it is consistent with the
+separately accepted restart p95 769 ms. It is a disclosed once-per-worker
+exception, not steady state.
+
+**Disclosed against it:** 40 of the 320 samples (12.5%) answered `stale` rather
+than `ready` -- all of US/12h/25-watch and all of DE/24h/0-watch, at cache ages
+122-140 s against the 120 s fresh line. That is higher than the ~7% recorded
+earlier and it is a consequence of this harness deliberately holding the
+producer at its queue cap for the whole matrix; warm refresh competes with
+2,794 refused on-demand admissions. Stale boards were still served fast and
+still reported their true age. Treat 12.5% as the pessimistic end of the
+disclosed stale share under saturation, not as a regression in the read path.
+
+The harness models two sync workers on Windows/MySQL, not gunicorn; MariaDB
+correctness transfers, elapsed seconds do not. Scale has no posts, so the
+fixed-time 60-company adversarial parity case separately exercised judged,
 legacy, lexicon, null and excluded tones (2.50 s wall); that is not scale
 latency.
 

@@ -751,7 +751,7 @@ def test_a_database_that_blinked_after_the_build_is_not_the_keys_fault(
                               producer.ns)['producer_error'] is None
 
 
-# --- two producers at once --------------------------------------------------
+# --- sequential namespace isolation between two generations -----------------
 
 # The build the OTHER generation says it is. Different from REVISION on
 # purpose: the column each row carries is what makes "whose board is this"
@@ -761,13 +761,21 @@ OTHER_REVISION = 'c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0'
 
 def test_two_producers_on_one_database_publish_only_into_their_own(
         producer, monkeypatch):
-    """A rollout and a rollback both run two producers side by side.
+    """Sequential namespace isolation between two generations.
 
-    That window is what the namespace was introduced for, and until now every
-    test in this file built one namespace and one Loop, so nothing proved the
+    A rollout and a rollback both run two producers against one database, and
+    that window is what the namespace was introduced for. Until now every test
+    in this file built one namespace and one Loop, so nothing proved the
     ruling's "old and new producers must claim only their own namespace" for
     the producer at all. Two Loops, two generations, one database, one set of
     warm keys -- and a key only one of them was asked for.
+
+    The two Loops are ticked SEQUENTIALLY, one after the other, on this
+    thread. That is deliberate: the property under test is that every
+    statement is namespace-fenced, which a sequential interleaving pins
+    exactly. This test is therefore evidence of sequential namespace
+    isolation, NOT of simultaneous execution, and it must not be cited as
+    rollout-concurrency evidence.
     """
     clock = Clock()
     fake_build(monkeypatch)

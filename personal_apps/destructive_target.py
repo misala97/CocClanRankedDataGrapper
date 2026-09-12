@@ -16,6 +16,7 @@ TARGET_ENV = 'RADAR_DESTRUCTIVE_TEST_TARGET'
 REGISTRY_ENV = 'RADAR_DESTRUCTIVE_TEST_REGISTRY'
 REGISTRY_VERSION = 1
 PROTECTED_DATABASES = frozenset({'personal_apps', 'coc_stats'})
+SAFE_QUERY_OPTIONS = {'charset': 'utf8mb4'}
 
 
 class DestructiveTargetRefused(RuntimeError):
@@ -41,6 +42,22 @@ def require(url, *, env=None, protected=PROTECTED_DATABASES) -> str:
     database connection, including before DROP DATABASE on a schema that may
     not exist yet.
     """
+    # MySQL dialects merge URL query values into the driver's connect kwargs;
+    # `?database=...`, `?host=...` and `?unix_socket=...` can therefore route
+    # somewhere other than the tuple rendered from URL attributes. The
+    # application's one non-routing query option is exact and deliberately
+    # allowlisted; everything else fails closed.
+    refused_query = {
+        name: value for name, value in url.query.items()
+        if SAFE_QUERY_OPTIONS.get(name) != value
+    }
+    if refused_query:
+        options = ', '.join(sorted(refused_query))
+        raise DestructiveTargetRefused(
+            f'connection URL query/socket options are unsupported for '
+            f'destructive Radar work ({options}); use only an explicit '
+            'host, port and database URL')
+
     values = os.environ if env is None else env
     actual = target_for(url)
     database = (url.database or '').lower()
@@ -76,8 +93,13 @@ def require(url, *, env=None, protected=PROTECTED_DATABASES) -> str:
         raise DestructiveTargetRefused(
             f'cannot read the provisioned destructive-target registry '
             f'{registry}: {type(exc).__name__}') from exc
-    targets = document.get('targets') if isinstance(document, dict) else None
-    if document.get('version') != REGISTRY_VERSION or not isinstance(targets, list):
+    if not isinstance(document, dict):
+        raise DestructiveTargetRefused(
+            f'{registry} is not a version {REGISTRY_VERSION} Radar '
+            'destructive-target registry (top level must be an object)')
+    targets = document.get('targets')
+    if (document.get('version') != REGISTRY_VERSION
+            or not isinstance(targets, list)):
         raise DestructiveTargetRefused(
             f'{registry} is not a version {REGISTRY_VERSION} Radar '
             'destructive-target registry')

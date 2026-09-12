@@ -1,0 +1,7 @@
+{
+  "commit": "197be30c2c1028c0b46f8110783f1da5e428d481",
+  "description": "Accepted pre-close application code with the PERF3 migration retained",
+  "retained_migration": "personal_apps/migrations/versions/b7e3f9c1a2d4_add_radar_board_results.py",
+  "primary_recovery": "set RADAR_BOARD_SHARED_RESULTS=off in /root/coc-stats/.env and restart both web units; retain schema",
+  "full_code_recovery": "deploy this full commit only after the routine upgrade and flag-off compatibility rehearsal recorded in PERF3 evidence"
+}

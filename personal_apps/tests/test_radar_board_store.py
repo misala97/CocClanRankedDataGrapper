@@ -27,6 +27,7 @@ import pytest
 import sqlalchemy as sa
 
 from app import app as flask_app
+import destructive_target
 from extensions import db
 import radar_disposable
 from features.radar import board_keys, board_namespace, board_store
@@ -244,6 +245,59 @@ def test_a_refused_target_executes_no_sql(monkeypatch):
         finally:
             sa.event.remove(engine, 'before_cursor_execute', capture)
     assert statements == []
+
+
+@pytest.mark.parametrize('suffix', [
+    '?database=personal_apps',
+    '?unix_socket=C%3A%2Fmysql%2Fprotected.sock',
+    '?host=production.internal',
+], ids=['database-override', 'socket-route', 'host-override'])
+def test_the_guard_refuses_target_changing_connection_options_before_sql(
+        monkeypatch, tmp_path, suffix):
+    """The displayed URL path is not the effective PyMySQL target when its
+    query mapping overrides connect arguments or selects a local socket."""
+    target = 'localhost:3306/personal_apps_radar_perf3'
+    _register(tmp_path, monkeypatch, target)
+    url = sa.engine.url.make_url(
+        f'mysql+pymysql://u@localhost:3306/personal_apps_radar_perf3{suffix}')
+    statements = []
+    engine = sa.create_engine(url)
+    @sa.event.listens_for(engine, 'before_cursor_execute')
+    def capture(_connection, _cursor, statement, _parameters, _context,
+                _executemany):
+        statements.append(statement)
+    try:
+        with pytest.raises(destructive_target.DestructiveTargetRefused,
+                           match='query|socket|connection option'):
+            destructive_target.require(url)
+    finally:
+        engine.dispose()
+    assert statements == []
+
+
+def test_the_guard_accepts_only_the_apps_exact_non_routing_charset_option(
+        monkeypatch, tmp_path):
+    target = 'localhost:3306/personal_apps_radar_perf3'
+    _register(tmp_path, monkeypatch, target)
+    url = sa.engine.url.make_url(
+        'mysql+pymysql://u@localhost:3306/personal_apps_radar_perf3'
+        '?charset=utf8mb4')
+
+    assert destructive_target.require(url) == target
+
+
+@pytest.mark.parametrize('document', [[], None, 7, 'target'])
+def test_a_non_object_registry_gets_an_explicit_format_refusal(
+        monkeypatch, tmp_path, document):
+    target = 'localhost:3306/personal_apps_radar_perf3'
+    registry = _register(tmp_path, monkeypatch, target)
+    registry.write_text(json.dumps(document), encoding='utf-8')
+    url = sa.engine.url.make_url(
+        'mysql+pymysql://u@localhost:3306/personal_apps_radar_perf3')
+
+    with pytest.raises(destructive_target.DestructiveTargetRefused,
+                       match='version 1.*registry'):
+        destructive_target.require(url)
 
 
 # --- limits ----------------------------------------------------------------
@@ -1113,17 +1167,22 @@ def test_due_warm_names_the_stale_warm_keys_oldest_first(store):
         'a warm key inside the refresh interval, or an on-demand key, is due')
 
 
-# --- two generations at once ------------------------------------------------
+# --- sequential namespace isolation between two generations -----------------
 
 def test_a_generation_is_blind_to_another_generations_queue(store):
     """The producer's side of the namespace rule, which nothing pinned.
 
-    Rollout and rollback are the two moments when two generations are live at
-    once, and that window is the whole reason the namespace exists. The reader
-    side is covered (test_radar_board_shared_api: a board another generation
-    stored is invisible); this is the other half the ruling asks for in as many
-    words -- "test simultaneous v1/v2 readers and producers, not only a reader
+    Rollout and rollback are the two moments when two generations are live in
+    production, and that window is the whole reason the namespace exists. The
+    reader side is covered (test_radar_board_shared_api: a board another
+    generation stored is invisible); this is the other half of the ruling's
+    "test simultaneous v1/v2 readers and producers, not only a reader
     rejecting an old blob".
+
+    What this test executes is SEQUENTIAL: both generations' rows live in one
+    database and every call below runs one after another on this thread. It is
+    evidence of sequential namespace isolation, not of simultaneous producer
+    execution, and must not be cited as rollout-concurrency evidence.
 
     Every statement in the store carries `WHERE namespace = :ns`, so this is a
     proof rather than a suspicion. It is worth having as a test because the

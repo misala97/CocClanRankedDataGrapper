@@ -39,7 +39,7 @@ import scale_env
 app = scale_env.bind()
 
 from extensions import db                                   # noqa: E402
-from features.radar import board_shared, board_store        # noqa: E402
+from features.radar import board, board_shared, board_store # noqa: E402
 import perf3_common as common                               # noqa: E402
 
 PORTS = (5081, 5082)
@@ -217,57 +217,152 @@ def phase_ready(h):
     record['first_reads_ms'] = first
     print('    first read per process and window, outside the n (cache fill): '
           + ', '.join(f'{key} {value} ms' for key, value in first.items()))
-    # Keep the real producer busy with ordinary admitted builds, and overlap
-    # one ingest-shaped 20k-row update/restore with the HTTP matrix.
-    for limit in range(60, 82):
-        common.board(h.web(limit).port,
-                     {'market': 'us' if limit % 2 else 'de', 'segment': '',
-                      'window': '24', 'limit': str(limit)}, h.cookies[0])
-    build_mark = len(h.producer.text())
-    writer = common.Child(
-        'writer-ready', common.HERE / 'write_contention_perf3.py',
-        ['--offsets', '0', '--out', h.out / 'writes-ready.json'],
-        h.out / 'writer-ready.log', common.child_env())
-    h.children.append(writer)
-    writer.wait_line('WRITE-PLAN', timeout=120)
-    for market in ('us', 'de'):
-        for window in (12, 24):
-            for watches in (0, 3, 10, 25):
-                args = {'market': market, 'segment': DEFAULT_SEGMENT,
-                        'window': str(window)}
-                values, ages, accounts, outcomes = [], [], [], []
-                for i in range(h.n):
-                    web = h.web(i)
-                    before = len(common.parse_reads(web.text()))
-                    took, status, answer = common.board(
-                        web.port, args, h.cookies[watches])
-                    reads = common.parse_reads(web.text())
-                    metric = reads[-1] if len(reads) > before else None
-                    if (status != 200 or not common.is_board(answer)
-                            or metric is None):
+    # Feed the real producer ordinary, unique, admitted selections for the
+    # entire phase.  Admission happens through the real store contract; no
+    # synthetic producer work or polling shortcut is used.
+    stop_feed = threading.Event()
+    feed = {'attempted': 0, 'pending': 0, 'busy': 0, 'parked': 0}
+
+    def feeder():
+        try:
+            index = 0
+            while not stop_feed.is_set():
+                args = {
+                    'market': 'us' if index % 2 else 'de',
+                    'segment': '', 'window': '24',
+                    'limit': str(51 + (index % 50)),
+                    'sort': board.SORT_KEYS[
+                        (index // 50) % len(board.SORT_KEYS)],
+                    'dir': ('asc'
+                            if (index // (50 * len(board.SORT_KEYS))) % 2
+                            else 'desc'),
+                }
+                key_hash, key_json = common.key_of(args)
+                outcome = board_store.admit(
+                    h.engine, h.ns, key_hash, key_json, common.utcnow())
+                feed['attempted'] += 1
+                if outcome in feed:
+                    feed[outcome] += 1
+                index += 1
+                stop_feed.wait(0.15)
+        except Exception as problem:  # surfaced to the main thread below
+            feed['error'] = repr(problem)
+
+    feeder_thread = threading.Thread(target=feeder, daemon=True)
+    feeder_thread.start()
+
+    def start_writer(name):
+        path = h.out / f'writes-{name}.json'
+        child = common.Child(
+            f'writer-{name}', common.HERE / 'write_contention_perf3.py',
+            ['--offsets', '0,0', '--out', path],
+            h.out / f'writer-{name}.log', common.child_env())
+        h.children.append(child)
+        child.wait_line('WRITE-PLAN', timeout=120)
+        return child, path
+
+    def finish_writer(child, path):
+        child.wait_line('WRITE-DONE', timeout=900)
+        child.kill()
+        return json.loads(path.read_text())
+
+    # The earlier run used the zero-watch cookie here and therefore could not
+    # distinguish process initialization from watched-account enrichment.
+    # Preserve those samples above, then explicitly measure the first and next
+    # watch-bearing request in each independent worker while both real loads
+    # are active.
+    watched_writer, watched_path = start_writer('first-watched')
+    watched = []
+    watched_args = {'market': 'us', 'segment': DEFAULT_SEGMENT, 'window': '24'}
+    for web in h.webs:
+        for ordinal in ('first', 'subsequent'):
+            before = len(common.parse_reads(web.text()))
+            took, status, answer = common.board(
+                web.port, watched_args, h.cookies[25])
+            reads = common.parse_reads(web.text())
+            metric = reads[-1] if len(reads) > before else None
+            if (status != 200 or not common.is_board(answer)
+                    or metric is None or not watched_writer.alive()
+                    or not h.producer.alive()):
+                raise RuntimeError(
+                    f'loaded watched initialization: {status}, metric={metric}')
+            watched.append({
+                'worker': web.name, 'ordinal': ordinal,
+                'http_ms': round(took * 1000, 2),
+                'account_ms': metric['account_ms'],
+                'cache_age_s': metric['cache_age'],
+                'outcome': metric['outcome'],
+            })
+    record['watched_initialization'] = watched
+    record['watched_initialization_write'] = finish_writer(
+        watched_writer, watched_path)
+    print('    explicit watched initialization: ' + ', '.join(
+        f"{row['worker']} {row['ordinal']} {row['http_ms']} ms"
+        f" (account {row['account_ms']} ms)" for row in watched))
+
+    matrix_build_mark = len(common.parse_builds(h.producer.text()))
+    try:
+        for market in ('us', 'de'):
+            for window in (12, 24):
+                for watches in (0, 3, 10, 25):
+                    name = f'{market}-{window}h-watch{watches}'
+                    writer, write_path = start_writer(name)
+                    build_before = len(common.parse_builds(h.producer.text()))
+                    args = {'market': market, 'segment': DEFAULT_SEGMENT,
+                            'window': str(window)}
+                    values, ages, accounts, outcomes = [], [], [], []
+                    overlap_samples = 0
+                    for i in range(h.n):
+                        web = h.web(i)
+                        if not writer.alive() or not h.producer.alive():
+                            raise RuntimeError(
+                                f'{name}: load process ended before sample {i}')
+                        before = len(common.parse_reads(web.text()))
+                        took, status, answer = common.board(
+                            web.port, args, h.cookies[watches])
+                        reads = common.parse_reads(web.text())
+                        metric = reads[-1] if len(reads) > before else None
+                        if (status != 200 or not common.is_board(answer)
+                                or metric is None or not writer.alive()
+                                or not h.producer.alive()):
+                            raise RuntimeError(
+                                f'{name}: loaded sample {i}: {status}, '
+                                f'metric={metric}, writer={writer.alive()}')
+                        overlap_samples += 1
+                        values.append(took)
+                        ages.append(metric['cache_age'])
+                        accounts.append(metric['account_ms'])
+                        outcomes.append(metric['outcome'])
+                    writes = finish_writer(writer, write_path)
+                    builds = common.parse_builds(h.producer.text())[build_before:]
+                    if not builds:
                         raise RuntimeError(
-                            f'HTTP loaded ready read: {status}, metric={metric}')
-                    values.append(took)
-                    ages.append(metric['cache_age'])
-                    accounts.append(metric['account_ms'])
-                    outcomes.append(metric['outcome'])
-                name = f'{market}-{window}h-watch{watches}'
-                record['cases'][name] = {
-                    'http_ms': common.summary([v * 1000 for v in values]),
-                    'cache_age_s': common.summary(ages),
-                    'account_ms': common.summary(accounts),
-                    'outcomes': {kind: outcomes.count(kind)
-                                 for kind in set(outcomes)},
-                    'raw_http_ms': [round(v * 1000, 2) for v in values]}
-                print(f'  {name:22s} {common.fmt(values)} account '
-                      f'{common.fmt([v / 1000 for v in accounts])} cache-age '
-                      f'{common.fmt(ages, scale=1, unit="s", digits=2)}')
-    writer.wait_line('WRITE-DONE', timeout=900)
-    writer.kill()
-    record['representative_write'] = json.loads(
-        (h.out / 'writes-ready.json').read_text())
+                            f'{name}: producer completed no build during case')
+                    record['cases'][name] = {
+                        'http_ms': common.summary([v * 1000 for v in values]),
+                        'cache_age_s': common.summary(ages),
+                        'account_ms': common.summary(accounts),
+                        'outcomes': {kind: outcomes.count(kind)
+                                     for kind in set(outcomes)},
+                        'raw_http_ms': [round(v * 1000, 2) for v in values],
+                        'write_overlap_samples': overlap_samples,
+                        'representative_write': writes,
+                        'producer_builds': builds,
+                    }
+                    print(f'  {name:22s} {common.fmt(values)} account '
+                          f'{common.fmt([v / 1000 for v in accounts])} '
+                          f'cache-age '
+                          f'{common.fmt(ages, scale=1, unit="s", digits=2)} '
+                          f'overlap={overlap_samples}/{h.n} '
+                          f'builds={len(builds)}')
+    finally:
+        stop_feed.set()
+        feeder_thread.join(timeout=30)
+    if feed.get('error'):
+        raise RuntimeError(f"producer feeder failed: {feed['error']}")
+    record['producer_feed'] = feed
     record['producer_builds_during_matrix'] = common.parse_builds(
-        h.producer.text()[build_mark:])
+        h.producer.text())[matrix_build_mark:]
     if not record['producer_builds_during_matrix']:
         raise RuntimeError('producer completed no build during loaded matrix')
     return record

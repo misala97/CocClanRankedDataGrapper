@@ -2133,9 +2133,11 @@ argument stopped applying to readers.
   and the other generation's own `evict` still removing 6, so the zero is a
   scope and not a broken eviction); a live claim refused both `publish` and
   `fail` outside its own namespace, and accepted inside it; two `Loop`s on two
-  namespaces against one database, publishing the same warm key into their own
-  rows under their own `producer_revision`, with a key admitted in one never
-  appearing in the other; and an expired lease that stays its own generation's
+  namespaces against one database, **ticked sequentially** -- evidence of
+  sequential namespace isolation, not of simultaneous producer execution, and
+  not citable as rollout-concurrency evidence -- publishing the same warm key
+  into their own rows under their own `producer_revision`, with a key admitted
+  in one never appearing in the other; and an expired lease that stays its own generation's
   to reclaim. **Mutation-checked:** with `namespace = :ns` removed from
   `claim`'s candidate SELECT and its claiming UPDATE all four fail; with it
   removed from `queue_summary` and `due_warm` the first one does.
@@ -2337,7 +2339,9 @@ stay `segment=discover`, while the old board route is unchanged. The fixed
 stored membership; 1 passed in 2.50 s and exercised the separate realistic
 tone/judgment fixture.
 
-**Loaded ready HTTP, fresh run.** Windows/MySQL model, two independent OS web
+**Loaded ready HTTP, fresh run.** *(SUPERSEDED by the review-fix round below:
+this matrix ran one writer for all sixteen cases and warmed up on the zero-watch
+account. Kept as evidence, not as a result.)* Windows/MySQL model, two independent OS web
 processes × one admitted request each, producer active (five normal builds
 completed during the matrix), one 16,792-row live-hour UPDATE plus exact-value
 restore, n=20 for each market/window/watch case. Every response was a board.
@@ -2382,3 +2386,199 @@ Python compile passed. `git diff --check` found only the pre-existing handoff
 EOF blank, removed while appending the current handoff. Target reads were not
 possible: no target host coordinate or authorized remote execution surface
 was present. Recorded target facts are explicitly historical/conditional.
+
+## Review-fix round, 2026-09-12 (on top of `6f9534b`)
+
+An independent read-only review of `197be30..6f9534b` returned six blocking
+issues. This section records their closure. **The loaded matrix above is
+SUPERSEDED and confounded** -- see "Why the first matrix could not answer the
+question" below. It is kept because the comparison is the evidence that the
+correction mattered.
+
+### Why the first matrix could not answer the question
+
+Two defects, both in the harness rather than the product:
+
+1. **One writer for the whole matrix.** `phase_ready` started a single
+   `write_contention_perf3.py` child before the first case and read its result
+   after the last. That child finished its two runs long before most of the
+   sixteen cases executed, so "measured under representative writes" was true
+   of the first case or two and false of the rest. Nothing in the record said
+   which.
+2. **Warm-up used the zero-watch account.** The pre-matrix first/subsequent
+   reads used `cookies[0]`, which touches no watched-account helper. The first
+   request that DID carry watches therefore paid one-off process
+   initialization inside a measured case -- which is precisely the case that
+   failed at p95 564.8 ms, with account enrichment at 553 ms.
+
+Both defects inflate the one failing case, and only that case. The harness now
+starts and finishes a writer PER CASE, asserts the writer and the producer are
+both alive at every single sample, counts the overlap, records that case's own
+completed producer builds, and measures watched initialization explicitly and
+separately before the matrix.
+
+### Corrected loaded ready HTTP matrix
+
+Same Windows/MySQL model: two independent OS web processes, serialized
+round-robin HTTP, one real producer. New in this run: a feeder admitted
+2,989 unique real selections through the store's own contract
+(195 admitted, 2,794 refused `busy` at the 32-job cap,
+0 parked) so the producer was genuinely saturated for the whole
+matrix; 82 builds completed across it,
+warm and on-demand, all published. Every case ran with its own writer doing two
+full 16,792-row live-hour UPDATE plus exact-value restore cycles.
+
+`overlap` is the number of the case's samples taken with that case's writer and
+the producer both verified alive; `builds` is the producer builds completed
+during that case.
+
+| case | HTTP n/med/p95/max ms | account n/med/p95/max ms | cache age n/med/p95/max s | overlap | builds | outcome |
+| --- | --- | --- | --- | --- | --- | --- |
+| US 12h w0 | 20 / 22.3 / 33.5 / 34.5 | 20 / 1.0 / 1.0 / 2.0 | 20 / 53.95 / 54.20 / 54.30 | 20/20 | 4 | ready |
+| US 12h w3 | 20 / 53.0 / 69.0 / 72.3 | 20 / 27.0 / 35.0 / 35.0 | 20 / 82.75 / 83.30 / 83.30 | 20/20 | 3 | ready |
+| US 12h w10 | 20 / 68.6 / 75.1 / 75.2 | 20 / 41.0 / 43.0 / 50.0 | 20 / 110.80 / 111.50 / 111.50 | 20/20 | 5 | ready |
+| US 12h w25 | 20 / 104.3 / 122.2 / 123.3 | 20 / 74.5 / 79.0 / 79.0 | 20 / 139.20 / 140.10 / 140.20 | 20/20 | 4 | stale x20 |
+| US 24h w0 | 20 / 22.8 / 37.1 / 37.3 | 20 / 1.0 / 1.0 / 1.0 | 20 / 52.35 / 52.60 / 52.60 | 20/20 | 4 | ready |
+| US 24h w3 | 20 / 52.7 / 64.9 / 77.5 | 20 / 29.0 / 32.0 / 46.0 | 20 / 82.05 / 82.60 / 82.60 | 20/20 | 4 | ready |
+| US 24h w10 | 20 / 67.3 / 89.0 / 99.0 | 20 / 44.0 / 60.0 / 63.0 | 20 / 110.55 / 111.20 / 111.30 | 20/20 | 4 | ready |
+| US 24h w25 | 20 / 109.8 / 116.0 / 138.3 | 20 / 80.0 / 91.0 / 102.0 | 20 / 15.95 / 16.90 / 17.00 | 20/20 | 5 | ready |
+| DE 12h w0 | 20 / 21.3 / 25.4 / 35.6 | 20 / 1.0 / 1.0 / 1.0 | 20 / 81.50 / 81.80 / 81.80 | 20/20 | 4 | ready |
+| DE 12h w3 | 20 / 51.5 / 55.0 / 55.2 | 20 / 26.0 / 29.0 / 35.0 | 20 / 110.55 / 111.10 / 111.10 | 20/20 | 4 | ready |
+| DE 12h w10 | 20 / 68.3 / 78.3 / 86.5 | 20 / 42.0 / 47.0 / 73.0 | 20 / 14.30 / 15.00 / 15.00 | 20/20 | 4 | ready |
+| DE 12h w25 | 20 / 97.8 / 118.7 / 129.3 | 20 / 74.0 / 97.0 / 101.0 | 20 / 43.55 / 44.50 / 44.60 | 20/20 | 4 | ready |
+| DE 24h w0 | 20 / 35.9 / 40.0 / 41.5 | 20 / 1.0 / 1.0 / 1.0 | 20 / 122.60 / 122.90 / 123.00 | 20/20 | 4 | stale x20 |
+| DE 24h w3 | 20 / 52.2 / 56.7 / 57.2 | 20 / 28.0 / 30.0 / 30.0 | 20 / 27.30 / 27.80 / 27.90 | 20/20 | 5 | ready |
+| DE 24h w10 | 20 / 67.9 / 74.7 / 76.6 | 20 / 44.0 / 45.0 / 63.0 | 20 / 57.95 / 58.60 / 58.70 | 20/20 | 4 | ready |
+| DE 24h w25 | 20 / 105.3 / 116.7 / 144.7 | 20 / 79.0 / 82.0 / 110.0 | 20 / 87.15 / 88.10 / 88.20 | 20/20 | 4 | ready |
+
+**All 16 cases met p95 <=500 ms.** Worst p95 122.2 ms, worst max 144.7 ms. The
+564.8 ms outlier did not reproduce: US/12h/w3 is p95 69.0 ms here. Account
+enrichment medians ran 1.0 ms at zero watches to 74-80 ms at 25 watches, under
+the 150 ms diagnostic trigger in **every** case, so the bounded account-aware
+optimization the ruling conditionally allowed is not indicated and was not
+built.
+
+### Watched-account initialization, measured as itself
+
+Explicitly, in each independent worker, with the writer and producer both live:
+web5081 first 793.4 ms (account 771 ms); web5081 subsequent 107.7 ms (account 80 ms); web5082 first 771.5 ms (account 744 ms); web5082 subsequent 89.3 ms (account 79 ms).
+
+That is the once-per-worker account-helper initialization, consistent with the
+separately accepted restart p95 769 ms, and it is disclosed as an exception
+rather than steady state. The old zero-watch first/subsequent figures are kept
+in the record (`first_reads_ms`) as the cache-fill measurement they actually
+were.
+
+### Disclosed against the corrected run
+
+40 of 320 samples (12.5%) answered `stale`, not
+`ready`: all of US/12h/w25 and all of DE/24h/w0, at cache ages 122-140 s
+against the 120 s fresh line. Higher than the ~7% recorded earlier, and
+explained by this harness holding the producer at its queue cap for the entire
+matrix -- warm refresh competes with 2,794 refused on-demand
+admissions. Those boards were still served in ~100-120 ms and still reported
+their true age. Read it as the pessimistic end of the disclosed stale share
+under saturation; it is not a read-path regression, and freshness defaults were
+not touched to improve it.
+
+Raw evidence: `.superpowers/sdd/perf3-close-fix-measure/` --
+`measure-ready.json` (58 KB, per-case raw samples, per-case write records and
+per-case build lists), `producer.log`, `web5081.log`, `web5082.log`, and one
+`writer-<case>.log` / `writes-<case>.json` pair per case.
+
+### The other five findings
+
+**1. Effective-target bypass in the destructive guard.** The guard rendered its
+tuple from the URL's `host`/`port`/`database` attributes, but the MySQL dialects
+merge a URL's query mapping into the driver's connect kwargs -- so
+`?database=personal_apps`, `?host=production.internal` or a
+`?unix_socket=...` route reaches a DIFFERENT server than the string the guard
+approved and printed. `destructive_target.require` now refuses every query
+option before any other check, with one exact allowlisted non-routing value
+(`charset=utf8mb4`, the application's own). RED/GREEN: three parametrized
+bypass tests plus the charset acceptance test; each bypass test attaches a real
+SQLAlchemy `before_cursor_execute` listener and asserts it observed `[]`, so
+the refusal is proven to execute zero SQL and zero DDL. Separately, a registry
+whose top-level JSON is valid but not an object (`[]`, `null`, `7`, `"target"`)
+reached `document.get` on a non-dict and raised `AttributeError` instead of the
+intended refusal; it now raises `DestructiveTargetRefused` naming the format.
+Four parametrized tests cover it.
+
+**2. Deployment/readiness recovery.** Prose alone could not be rehearsed, so
+the path is now one executable, **unexecuted** artifact:
+`radar-design/perf3-release/deploy_perf3.sh first|routine FULL_SHA`. It
+captures each service's prior active AND enabled state before touching
+anything; writes one durable log via `tee` while preserving its own exit
+status; keeps both web units stopped across checkout, install, build, migration
+and prewarm; gates activation on a bounded readiness loop with explicit success
+and timeout branches (timeout exits 70 -- there is no silent continue); and on
+any failure restores the flag, resets the checkout to the captured SHA and
+restores every captured service state, explicitly leaving both web units
+stopped and saying so if restoration itself failed.
+`tests/test_perf3_release_artifacts.py` drives the real script under `bash`
+against fake `systemctl`/`git`/`npm`/`pip`/`flask`/`python` binaries and asserts
+the orderings and exit statuses: routine rollout stops both webs BEFORE the
+checkout reset and starts them only AFTER readiness, exit 23 survives a build
+failure, exit 70 survives a readiness timeout after exactly the configured
+attempts, the checkout returns to the original SHA, every non-web service is
+restarted, and the flag is absent from `.env` afterwards. 3 passed.
+
+**3. Interrupted migration recovery.** The rehearsal covered only "one table"
+and "all DDL complete". It now covers **both tables present with only some of
+the three indexes**, and it compares exact ordered column definitions and exact
+index definitions read from `information_schema`, not object names.
+`recovery_plan` is fail-closed and decides BEFORE any destructive step: it
+refuses a wrong stamp, any nonempty cache table, an established installation
+already stamped `b7e3f9c1a2d4`, and any shape that is neither exactly the
+migration's nor a strict subset of its indexes. Each refusal is proven
+non-destructive in the rehearsal by comparing a full snapshot (stamp, tables,
+row counts, column and index definitions) before and after the raised refusal
+-- including one that had a neighbour row inserted and one that had an
+unexpected column added. `check()` also now raises instead of merely recording,
+so a failure cannot run on into a destructive step. The decision function is
+additionally unit-tested offline in
+`tests/test_perf3_migration_recovery_policy.py` (5 passed, no database).
+Registered disposable MariaDB 10.11.14: **67/67 checks passed**, up from 60/60.
+
+**4. Compatible rollback artifact.** Named exactly in
+`radar-design/perf3-release/rollback-compatible.json`: commit
+`197be30c2c1028c0b46f8110783f1da5e428d481`, the accepted pre-close application
+code, which contains
+`personal_apps/migrations/versions/b7e3f9c1a2d4_add_radar_board_results.py` at
+that tree -- verified by `git cat-file -e` inside the release-artifact test, so
+the claim cannot rot silently. Its routine upgrade resolution at the new stamp
+is rehearsed as MariaDB check 67 ("rollback-compatible code retaining the
+migration sees a no-op"). Recovery sequence: flag off first and schema
+retained; full code rollback to that commit only if code must also go back.
+Nothing was merged, pushed, deployed, or moved; the branch still points at the
+review-fix commit.
+
+**Sequential namespace isolation, wording corrected.** The ruling asked for it
+and it is done in three places: the producer suite's section header and the
+two-Loop test's docstring, the store suite's section header and docstring, and
+this ledger's Task-6 evidence bullet. The two `Loop`s are ticked one after the
+other on one thread; that pins the namespace fence exactly, and it is
+**sequential namespace isolation, not simultaneous producer execution**. It is
+explicitly marked as not citable as rollout-concurrency evidence. No test was
+weakened and none was renamed away.
+
+### Review-fix verification
+
+- Registered backend regression, one pass, on `localhost:3306/
+  personal_apps_radar_perf3` with the explicit opt-in and provisioned registry:
+  `pytest tests/test_radar_board_store.py tests/test_radar_board_producer.py
+  tests/test_radar_board_shared_api.py tests/test_radar_board_parity.py
+  tests/test_radar_board_results_migration.py
+  tests/test_radar_projection_migration.py tests/test_radar_hub_page.py
+  tests/test_perf3_release_artifacts.py
+  tests/test_perf3_migration_recovery_policy.py -q -p no:cacheprovider`
+  -> **251 passed in 60.24 s** (235 before, +8 guard-bypass/registry tests,
+  +8 in the two new files).
+- MariaDB rehearsal without the opt-in: refused before creating an engine,
+  naming the actual bound target. With the registered opt-in: **67/67**. The
+  portable server was started on a FRESH disposable datadir and stopped again.
+- Loaded matrix: 320/320 samples, 16/16 cases, 20/20 write-overlap per case.
+- Freshness defaults re-checked unchanged at 120 / 120 / 600 s
+  (`board_store.py:109-111`).
+- The two protected untracked preview scripts were never read, executed,
+  edited, deleted or staged.

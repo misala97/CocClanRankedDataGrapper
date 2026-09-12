@@ -86,6 +86,46 @@ def check(label, condition, detail=''):
     print(f'  {COUNT:2d}. {mark}  {label}' + (f' -- {detail}' if detail else ''))
     if not condition:
         FAILURES.append(f'{COUNT}. {label}')
+        raise AssertionError(f'{label}: {detail}')
+
+
+class RecoveryRefused(RuntimeError):
+    """An interrupted schema is not provably a first-deploy empty cache."""
+
+
+def recovery_plan(stamp_value, present, row_counts, signatures, expected):
+    """Classify only exact, empty interruption states; otherwise hard fail."""
+    present = set(present)
+    if stamp_value != PREVIOUS:
+        raise RecoveryRefused(
+            f'recovery requires prior stamp {PREVIOUS}, got {stamp_value}')
+    if present - NEW_TABLES:
+        raise RecoveryRefused(f'unexpected cache objects: {present - NEW_TABLES}')
+    if any(row_counts.get(name, 0) for name in present):
+        raise RecoveryRefused('cache tables are nonempty: not a first deploy')
+    if not present:
+        return 'upgrade'
+    if present == {'radar_board_namespaces'}:
+        if signatures.get('radar_board_namespaces') != expected.get(
+                'radar_board_namespaces'):
+            raise RecoveryRefused('partial control-table shape differs')
+        return 'rebuild'
+    if present != NEW_TABLES:
+        raise RecoveryRefused(f'unsupported partial table set: {present}')
+    if signatures == expected:
+        return 'stamp'
+    control = signatures.get('radar_board_namespaces', {})
+    result = signatures.get('radar_board_results', {})
+    expected_control = expected['radar_board_namespaces']
+    expected_result = expected['radar_board_results']
+    actual_indexes = set(result.get('indexes', ()))
+    expected_indexes = set(expected_result['indexes'])
+    if (control == expected_control
+            and result.get('columns') == expected_result['columns']
+            and actual_indexes < expected_indexes
+            and any(item[0] == 'PRIMARY' for item in actual_indexes)):
+        return 'rebuild'
+    raise RecoveryRefused('cache table or index signature differs from migration')
 
 
 def seconds(count):
@@ -171,6 +211,59 @@ def columns(table):
             {'schema': SCHEMA, 'table': table})}
 
 
+def table_signature(table):
+    """Exact ordered column and index definitions, not merely object names."""
+    with db.engine.connect() as connection:
+        column_rows = connection.execute(sa.text(
+            'select column_name, column_type, is_nullable, column_default,'
+            ' extra from information_schema.columns'
+            ' where table_schema = :schema and table_name = :table'
+            ' order by ordinal_position'),
+            {'schema': SCHEMA, 'table': table}).fetchall()
+        index_rows = connection.execute(sa.text(
+            'select index_name, non_unique, seq_in_index, column_name,'
+            ' collation, sub_part, index_type'
+            ' from information_schema.statistics'
+            ' where table_schema = :schema and table_name = :table'
+            ' order by index_name, seq_in_index'),
+            {'schema': SCHEMA, 'table': table}).fetchall()
+    return {'columns': tuple(tuple(row) for row in column_rows),
+            'indexes': tuple(tuple(row) for row in index_rows)}
+
+
+def recovery_snapshot():
+    present = NEW_TABLES & tables()
+    with db.engine.connect() as connection:
+        counts = {name: connection.execute(sa.text(
+            f'select count(*) from `{name}`')).scalar() for name in present}
+    signatures = {name: table_signature(name) for name in present}
+    return {'stamp': stamped(), 'present': present, 'rows': counts,
+            'signatures': signatures}
+
+
+def recover_interrupted(expected):
+    """Apply the one safe action after a complete fail-closed inspection."""
+    before = recovery_snapshot()
+    action = recovery_plan(before['stamp'], before['present'], before['rows'],
+                           before['signatures'], expected)
+    if action == 'upgrade':
+        upgrade(revision=REVISION)
+    elif action == 'stamp':
+        stamp(revision=REVISION)
+    else:
+        with db.engine.begin() as connection:
+            if 'radar_board_results' in before['present']:
+                connection.execute(sa.text('drop table radar_board_results'))
+            if 'radar_board_namespaces' in before['present']:
+                connection.execute(sa.text('drop table radar_board_namespaces'))
+        upgrade(revision=REVISION)
+    after = recovery_snapshot()
+    if (after['stamp'] != REVISION or after['present'] != NEW_TABLES
+            or after['signatures'] != expected):
+        raise RuntimeError('recovery did not produce the exact expected schema')
+    return action
+
+
 def stamped():
     with db.engine.connect() as connection:
         return connection.execute(
@@ -239,8 +332,14 @@ def main():
               f'found {sorted(NEW_TABLES & before)}' if NEW_TABLES & before
               else '')
 
-        # MariaDB commits each CREATE independently. Rehearse the two crash
-        # shapes the release runbook must recognize, before the clean path.
+        # Establish the exact signature from this migration, then return to
+        # the prior revision before manufacturing each crash state.
+        upgrade(revision=REVISION)
+        expected = {name: table_signature(name) for name in NEW_TABLES}
+        downgrade(revision=PREVIOUS)
+
+        # MariaDB commits each CREATE/INDEX independently. Rehearse every
+        # accepted crash shape and fail-closed refusal before the clean path.
         print('\n2. interrupted additive DDL and bounded recovery')
         upgrade(revision=REVISION)
         with db.engine.begin() as connection:
@@ -249,24 +348,86 @@ def main():
         check('partial-DDL crash is represented without touching neighbours',
               tables() - before == {'radar_board_namespaces'}
               and 'radar_board_observations' in tables())
-        with db.engine.begin() as connection:
-            connection.execute(sa.text('drop table radar_board_namespaces'))
-        upgrade(revision=REVISION)
+        check('exact empty partial-table recovery chooses rebuild',
+              recover_interrupted(expected) == 'rebuild')
         check('bounded partial recovery recreates exactly both cache tables',
-              tables() - before == NEW_TABLES and stamped() == REVISION)
+              recovery_snapshot()['signatures'] == expected)
+        downgrade(revision=PREVIOUS)
+
+        upgrade(revision=REVISION)
+        with db.engine.begin() as connection:
+            connection.execute(sa.text(
+                'drop index ix_radar_board_results_demand'
+                ' on radar_board_results'))
+        stamp(revision=PREVIOUS)
+        check('partial-index crash is detected as incomplete',
+              recovery_snapshot()['signatures'] != expected)
+        check('exact empty partial-index recovery chooses rebuild',
+              recover_interrupted(expected) == 'rebuild')
+        check('partial-index recovery restores exact definitions',
+              recovery_snapshot()['signatures'] == expected)
+        downgrade(revision=PREVIOUS)
 
         # All CREATEs landed but the Alembic stamp did not. Recovery verifies
         # the exact final shape and stamps it; it must not rerun CREATE TABLE.
+        upgrade(revision=REVISION)
         stamp(revision=PREVIOUS)
-        complete_shape = (NEW_TABLES <= tables()
-                          and NEW_INDEXES <= indexes('radar_board_results'))
         check('all-DDL-before-stamp crash has the complete expected shape',
-              complete_shape and stamped() == PREVIOUS)
-        if complete_shape:
-            stamp(revision=REVISION)
+              recovery_snapshot()['signatures'] == expected
+              and stamped() == PREVIOUS)
         check('verified complete DDL recovers by stamping without data DDL',
-              stamped() == REVISION and tables() - before == NEW_TABLES)
-        downgrade(revision=PREVIOUS)
+              recover_interrupted(expected) == 'stamp'
+              and recovery_snapshot()['signatures'] == expected)
+
+        # An established install (new stamp), a nonempty cache, or an
+        # unexpected shape must leave every object and row byte-for-byte as
+        # found. These calls raise before DROP or stamp.
+        established = recovery_snapshot()
+        try:
+            recover_interrupted(expected)
+        except RecoveryRefused:
+            pass
+        else:
+            raise AssertionError('established install was accepted as first deploy')
+        check('established-install refusal preserved all objects',
+              recovery_snapshot() == established)
+
+        stamp(revision=PREVIOUS)
+        with db.engine.begin() as connection:
+            connection.execute(sa.text(
+                'insert into radar_board_namespaces'
+                ' (namespace, producer_revision, payload_version, created_at,'
+                '  last_seen_at) values (:ns, :revision, 1, :now, :now)'),
+                {'ns': 'must-survive-refusal', 'revision': REVISION_STAMP,
+                 'now': NOW})
+        nonempty = recovery_snapshot()
+        try:
+            recover_interrupted(expected)
+        except RecoveryRefused:
+            pass
+        else:
+            raise AssertionError('nonempty cache was accepted as first deploy')
+        check('nonempty-cache refusal preserved its row and schema',
+              recovery_snapshot() == nonempty)
+        with db.engine.begin() as connection:
+            connection.execute(sa.text(
+                'delete from radar_board_namespaces'
+                ' where namespace = :ns'), {'ns': 'must-survive-refusal'})
+            connection.execute(sa.text(
+                'alter table radar_board_results add column unexpected int'))
+        malformed = recovery_snapshot()
+        try:
+            recover_interrupted(expected)
+        except RecoveryRefused:
+            pass
+        else:
+            raise AssertionError('unexpected schema was accepted for cleanup')
+        check('shape-mismatch refusal preserved the unexpected object',
+              recovery_snapshot() == malformed)
+        with db.engine.begin() as connection:
+            connection.execute(sa.text('drop table radar_board_results'))
+            connection.execute(sa.text('drop table radar_board_namespaces'))
+        stamp(revision=PREVIOUS)
         check('interruption rehearsal returns to the clean previous shape',
               tables() == before and stamped() == PREVIOUS)
 
