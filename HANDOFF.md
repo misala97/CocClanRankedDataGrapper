@@ -1,3 +1,14 @@
+# CURRENT — B1C deployed with owner authorization
+
+On 2026-09-13 the owner explicitly requested deployment ("Ok so lets deploy"). Published normal fast-forward origin/main and deployed 200c51cc402e053575bf9e0008db597ea27b36a5 with /root/update_coc.sh in routine mode. Main local checkout and PERF3 worktree were not modified.
+
+Release unit radar-b1c-release-200c51c succeeded at 23:32:31 Europe/Berlin. Fresh backup db_2026-09-13_2329.sql.gz preceded release. All six application/ingestion/producer services active; migration head unchanged b7e3f9c1a2d4. Public hub returned expected unauthenticated 302. Shared boards on; capture unset/off. Root route not promoted. Gallery included in candidate.
+
+Read-only actual MariaDB smoke: AAPL 24h/1D detail plus tone returned successfully, 664ms including detail construction in a fresh Python process. This is one correctness smoke, not a latency benchmark or authenticated browser verification. Existing owner-accepted latency limitations stand. Local preview remains on port5021.
+
+Immediate next action: owner reviews live B1C at https://mgemmel.viewdns.net/radar/hub/. No further deployment required. Historical boundaries below predate explicit authorization.
+
+---
 # CURRENT — owner accepts B1C latency limitation
 
 The owner accepted the measured busy-ticker tone latency for now: "if i find it annoying i will call it later". This supersedes the latency-blocker ruling below. No further tone-query optimization is required for this packet unless the owner reports a problem or new evidence warrants it.
@@ -94,3 +105,4 @@ chatter totals, recorded judgments only, and a 48-hour retained evidence horizon
 Do not deploy, push, merge main, touch the VPS, alter PERF3 owner scripts, add a capture,
 promote the hub, or invent durable historical tone. Remaining product decisions are
 whether to promote the hub and when HA should own persistent historical tone.
+
