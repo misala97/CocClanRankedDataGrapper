@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  defaultDirection, fetchBoard, fetchSearch, queryFor, setWatch,
+  defaultDirection, fetchBoard, fetchDetail, fetchSearch, queryFor, setWatch,
 } from './api'
 import { resetCsrfCache } from './csrf'
 import type { Selection } from './types'
@@ -35,6 +35,18 @@ describe('the board request', () => {
     // And it rides outside the question, so the two are one cache key.
     expect(String(spy.mock.calls[1]![0]).replace('&poll=1', ''))
       .toBe(String(spy.mock.calls[0]![0]))
+  })
+})
+
+describe('the detail request', () => {
+  it('opts into tone only for the hub reader', async () => {
+    const spy = vi.fn(async (_url: string) => ({
+      ok: true, redirected: false, status: 200, json: async () => ({}),
+    }))
+    vi.stubGlobal('fetch', spy)
+
+    await fetchDetail('NVDA', baseSelection, '1D', undefined, true)
+    expect(String(spy.mock.calls[0]![0])).toContain('&tone=1')
   })
 })
 

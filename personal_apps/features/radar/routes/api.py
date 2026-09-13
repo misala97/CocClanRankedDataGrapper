@@ -11,7 +11,7 @@ from auth import current_user, login_required
 from .. import board as board_mod
 from .. import board_shared, board_store
 from .. import detail as detail_mod
-from .. import detail_panel, llm_sentiment, market_data, phrasing, spend
+from .. import chatter_tone, detail_panel, llm_sentiment, market_data, phrasing, spend
 from .. import search as search_mod
 from .. import watch
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
@@ -681,7 +681,7 @@ def search():
     ]})
 
 
-def serialize_detail(d):
+def serialize_detail(d, *, tone=None):
     """One ticker's panel.
 
     Five zones, in the order the reader meets them: who this is, what we
@@ -738,6 +738,7 @@ def serialize_detail(d):
             'basis_venue': d.chart.basis_venue,
             'converted_from': d.chart.converted_from,
             'priced_from': d.chart.priced_from,
+            **({'chatter_tone': tone} if tone is not None else {}),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,
@@ -791,6 +792,9 @@ def ticker_detail(ticker):
     span = request.args.get('span', detail_mod.DEFAULT_SPAN)
     if not detail_mod.known_span(span):
         return jsonify({'error': 'unknown span'}), 400
+    tone_arg = request.args.get('tone')
+    if tone_arg not in (None, '', '1'):
+        return jsonify({'error': 'tone must be 1 when supplied'}), 400
     try:
         query = parse_query(request.args)
     except BadQuery as exc:
@@ -803,4 +807,9 @@ def ticker_detail(ticker):
                                     market=query.market)
     except detail_mod.UnknownTicker:
         return jsonify({'error': 'unknown ticker'}), 404
-    return jsonify(serialize_detail(built))
+    tone = (chatter_tone.chart_tone(
+        built.ticker, query.sources, built.chart, now=now)
+            if tone_arg == '1' else None)
+    if tone is None:
+        return jsonify(serialize_detail(built))
+    return jsonify(serialize_detail(built, tone=tone))

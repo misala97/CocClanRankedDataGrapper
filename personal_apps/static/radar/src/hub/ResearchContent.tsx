@@ -127,7 +127,7 @@ export function ChartSection({ chart, quoteVenue, ticker, span, onSpan,
       <div className="rh-chartwrap" role="region"
            aria-label={`Price and chatter for ${ticker}`}
            tabIndex={0} ref={pan}>
-        <PriceChart chart={chart} />
+        <PriceChart chart={chart} chatterMode="sentiment-bars" />
       </div>
       <p className="rh-caption">
         Swipe or scroll sideways for earlier history. The chart has a

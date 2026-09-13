@@ -164,13 +164,14 @@ export async function fetchBoard(
  *  differently from the row that opened it would quietly disagree with it. */
 export async function fetchDetail(
   ticker: string, selection: Selection, span: PanelSpan,
-  signal?: AbortSignal,
+  signal?: AbortSignal, includeTone = false,
 ): Promise<Detail> {
   const params = new URLSearchParams()
   params.set('sources', selection.sources.join(','))
   params.set('window', String(selection.window))
   params.set('span', span)
   params.set('market', selection.market)
+  if (includeTone) params.set('tone', '1')
   return getJson<Detail>(
     `/radar/api/ticker/${encodeURIComponent(ticker)}?${params}`, signal)
 }

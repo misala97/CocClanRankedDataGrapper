@@ -138,6 +138,25 @@ export interface DetailChart {
   /** 'intraday' when the line is quote snapshots, 'daily' when it is stored
    *  closes. 1D may be either. */
   priced_from: 'intraday' | 'daily'
+  /** Optional hub-only partition of the same chatter totals. */
+  chatter_tone?: ChatterTone
+}
+
+export type ChatterToneSlot = null | {
+  bullish: number
+  bearish: number
+  neutral: number
+  unjudged: number
+  unavailable: number
+  status: 'complete' | 'partial' | 'unavailable'
+}
+
+export interface ChatterTone {
+  version: 1
+  basis: 'recorded-judgments'
+  calculated_at: string
+  retained_from: string
+  slots: ChatterToneSlot[]
 }
 
 export interface Post {

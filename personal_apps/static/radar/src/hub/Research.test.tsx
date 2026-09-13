@@ -38,7 +38,7 @@ describe('finding the company', () => {
     await screen.findByText('Alpha Inc')
 
     expect(fetchDetail).toHaveBeenCalledWith('AAA', selection, '1D',
-                                             expect.anything())
+                                             expect.anything(), true)
   })
 
   it('offers a way back and a way to search when the ticker is gone', async () => {

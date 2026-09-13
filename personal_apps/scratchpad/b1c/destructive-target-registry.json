@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "targets": ["localhost:3306/personal_apps_radar_b1c"]
+}

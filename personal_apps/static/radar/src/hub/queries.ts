@@ -26,6 +26,7 @@ import type { BoardPayload, PanelSpan, Selection } from '../types'
 /** Every hub key starts here, so the hub and the old board island can share a
  *  browser tab without sharing a cache entry. */
 const ROOT = 'radar-hub'
+const TONE_VERSION = 1
 
 /** Panels are refreshed while their page is on screen, and only then. A
  *  hidden tab polling a dashboard nobody is reading is a request the reader
@@ -45,7 +46,8 @@ export const REFRESH_MS = 60_000
 export const boardKey = (s: Selection) => [ROOT, 'board', queryFor(s)] as const
 
 export const detailKey = (ticker: string, s: Selection, span: PanelSpan) =>
-  [ROOT, 'detail', ticker, s.market, s.sources.join(','), s.window, span] as const
+  [ROOT, 'detail', ticker, s.market, s.sources.join(','), s.window, span,
+    `tone-v${TONE_VERSION}`] as const
 
 export const searchKey = (q: string) => [ROOT, 'search', q.trim()] as const
 
@@ -697,7 +699,8 @@ export function useDetail(ticker: string | null, selection: Selection,
                           span: PanelSpan, visible = true) {
   return useQuery({
     queryKey: detailKey(ticker ?? '', selection, span),
-    queryFn: ({ signal }) => fetchDetail(ticker as string, selection, span, signal),
+    queryFn: ({ signal }) => fetchDetail(
+      ticker as string, selection, span, signal, true),
     enabled: Boolean(ticker),
     refetchInterval: visible ? REFRESH_MS : false,
     refetchIntervalInBackground: false,

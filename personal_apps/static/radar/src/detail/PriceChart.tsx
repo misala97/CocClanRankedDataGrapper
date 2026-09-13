@@ -1,6 +1,7 @@
 import { count, money } from '../format'
 import type { DetailChart, PanelSpan } from '../types'
 import { ChartHover } from './ChartHover'
+import { ChatterHistogram } from './ChatterHistogram'
 import { SessionBands, sessionNames } from './SessionBands'
 
 const W = 912
@@ -67,7 +68,13 @@ export function ChartBasisNote({ chart, quoteVenue }: {
   return basisNote ? <p className="history-proxy-note">{basisNote}</p> : null
 }
 
-export function PriceChart({ chart }: { chart: DetailChart }) {
+export function PriceChart({ chart, chatterMode = 'area' }: {
+  chart: DetailChart
+  chatterMode?: 'area' | 'sentiment-bars'
+}) {
+  if (chatterMode === 'sentiment-bars') {
+    return <ChatterHistogram chart={chart} />
+  }
   const currency = chart.currency ?? 'USD'
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 

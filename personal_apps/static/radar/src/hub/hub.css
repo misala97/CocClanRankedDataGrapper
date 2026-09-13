@@ -1129,6 +1129,69 @@
 .rh .pxchart .watch-edge { stroke: var(--line); stroke-dasharray: 3 3; }
 .rh .history-proxy-note { font-size: 11px; color: var(--amber); margin-top: 8px; }
 
+.rh .chatter-histogram { margin-top: 10px; }
+.rh .chatter-histogram-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+.rh .chatter-histogram h3 { margin: 0 0 4px; }
+.rh .chatter-histogram-head p { margin: 0; }
+.rh .chatter-tone-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 12px;
+  max-width: 520px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.rh .chatter-tone-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.rh .chatter-tone-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+.rh .chatter-histogram-canvas {
+  overflow-x: auto;
+  padding: 4px 0 2px;
+  outline: none;
+}
+.rh .chatter-histogram-canvas:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+.rh .chatter-histogram-canvas svg {
+  display: block;
+  width: 912px;
+  min-width: 912px;
+  height: auto;
+}
+.rh .chatter-histogram-canvas rect { cursor: pointer; }
+.rh .chatter-interval-detail {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 760px) {
+  .rh .chatter-histogram-head { display: block; }
+  .rh .chatter-tone-legend {
+    justify-content: flex-start;
+    margin-top: 10px;
+  }
+}
+
 .rh .bd {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
