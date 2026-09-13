@@ -22,18 +22,20 @@ freshened.
    repository SHA. Confirm the shared flag is off/absent and timing logging is
    absent in `/root/coc-stats/.env`.
 2. Stop **both web units**, then scheduler, notifier, ingest and any producer.
-   Keep both web units stopped through checkout, install, both asset builds,
+   Keep both web units stopped through checkout, root dependency install, the personal_apps asset build,
    migration and prewarm. There is no old-code/new-checkout mixed window.
-3. Fetch/reset to the approved full SHA. Install/build normally. Write no
+3. Fetch/reset to the approved full SHA. Install root `requirements.txt`, build
+   `personal_apps` with npm ci/build (the established deploy has no coc asset build). Write no
    `BUILD_REVISION` and set no `RADAR_BUILD_REVISION`; full `HEAD` is the
    generation namespace.
-4. Run the existing migration from `personal_apps`; verify current is exactly
+4. Run coc_stats then personal_apps migration upgrades as in the established deploy; verify current is exactly
    `b7e3f9c1a2d4`, its two tables/three indexes exist, and
    `first_demand_at` is nullable `DATETIME(6)`.
 5. Reconcile/install the producer unit against the freshly read web-unit
    user, directory, environment, Python and logging conventions. Start it
    while both web units remain stopped.
-6. Run `run_radar_board_producer.py --readiness` with a **15-minute timeout**.
+6. Run `run_radar_board_producer.py --readiness` with a **900-second total deadline**, individually bounded 30-second probes
+   and at most one additional second for forced termination.
    Success requires matching revision/namespace and all warm keys fresh. On
    timeout or disagreement, keep web stopped, stop the producer, capture its
    journal/readiness output, and use the recovery rules below. Do not enable
@@ -48,37 +50,26 @@ freshened.
    web units and producer if enabled. Bounded gunicorn timing telemetry is
    recommended before judging target latency.
 
-Steps 1-8 are implemented by one prepared, **unexecuted** runner,
-`radar-design/perf3-release/deploy_perf3.sh`, which is the artifact to review
-and run rather than a copied snippet. `deploy_perf3.sh first|routine FULL_SHA`
-covers both the first and the routine rollout from one path. It captures every
-affected service's prior active/enabled state before touching anything, writes
-one durable log under `/var/log/perf3-release` (`tee`, so the script's own exit
-status survives), keeps BOTH web units stopped across checkout, install, build,
-migration and prewarm, gates activation on the bounded readiness loop with
-explicit success and timeout branches (timeout exits 70; there is no silent
-bypass), and on ANY failure restores the flag, the checkout and every captured
-service state -- leaving both web units stopped and saying so when restoration
-itself could not complete. Its behaviour is pinned by
-`personal_apps/tests/test_perf3_release_artifacts.py`, which drives the real
-script against fake `systemctl`/`git`/`npm`/`pip`/`flask`/`python` commands --
-fakes that can be made to FAIL -- and asserts the stop-before-checkout
-ordering, the start-after-readiness ordering, the preserved exit status (23 for
-a build failure, 70 for readiness, 75 for a post-activation service failure)
-and that unrelated `.env` keys survive every path.
+The runner `radar-design/perf3-release/deploy_perf3.sh first|routine FULL_SHA`
+automates checkout/install/build/migration/prewarm/activation and service restoration.
+**Backup verification, fresh target inspection, schema-detail verification, telemetry
+configuration and browser/HTTP smoke verification remain external operator gates.**
+It captures existence separately from enabled/active state; an absent producer is
+not mutated until installed. It logs only allowlisted non-secret systemd properties,
+never raw unit contents or environment values. One durable log records the exit status.
 
-**Its recovery model is the part to read twice.** Before the candidate
-migration has been applied, a failure is fully reversible and the runner resets
-the checkout, reinstalls, rebuilds and restores services. **After the migration
-has been applied the checkout is NOT rolled back.** Older code cannot resolve
-the new stamp, so resetting to it would strand the installation -- the earlier
-draft did exactly that, and left both web units down. The recovery is the one
-this document prescribes: the flag returns to its original value, the schema is
-retained, and the candidate code serves its flag-off path, which is current
-production behaviour. A full code rollback is a separate, separately authorized
-step using `rollback-compatible.json`. And once readiness has passed and the
-flag is on, the runner never rolls the release back: a service that will not
-reach its intended state is reported by name and exits 75.
+Recovery uses explicit phases:
+- Before any migration attempt: restore prior checkout, build and service/flag state.
+- Migration attempted but not confirmed complete: retain candidate checkout and keep
+  ALL stopped consumers stopped. Inspect the schema/stamp and follow manual recovery.
+- Both upgrades complete but activation not reached: retain schema/candidate, explicitly
+  set shared results OFF (even on routine rollout), stop producer, restore safe services.
+- Activated: retain ON and candidate; any later failure or interruption reports degraded
+  activation (75). It cannot re-enter pre-activation rollback.
+
+The database-free runner suite (`pytest --noconftest`) uses real bash with failing
+command fakes, including missing units, partial upgrade, routine timeout, postactivation
+health failure and a hanging readiness probe. Application/performance behavior is unchanged.
 
 **The runner does not implement interrupted-migration recovery.** That policy
 is rehearsed and unit-tested (below), but on the target it remains the written

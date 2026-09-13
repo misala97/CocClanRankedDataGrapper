@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import time
 
 import pytest
 
@@ -54,6 +55,7 @@ def release_env(tmp_path):
     state.mkdir()
     repo = tmp_path / 'repo'
     (repo / 'personal_apps').mkdir(parents=True)
+    (repo / 'coc_stats').mkdir()
     env_file = repo / '.env'
     unit_source = tmp_path / 'radar_board_producer.service'
     unit_source.write_text('[Service]\nExecStart=/bin/true\n', encoding='utf-8')
@@ -62,12 +64,24 @@ def release_env(tmp_path):
     fake = _exe(command, r'''
 role="$1"; shift
 printf '%s %s\n' "$role" "$*" >> "$FAKE_COMMAND_LOG"
+# Reject real missing-unit mutations; it exists only after the runner installs it.
+if [ "$role" = systemctl ] && [ "${2:-}" = radar_board_producer.service ] && [ "${FAKE_ABSENT_PRODUCER:-0}" = 1 ] && [ ! -f "$PERF3_UNIT_TARGET" ]; then
+  case "$1" in
+    show) echo not-found; exit 0;;
+    is-active|is-enabled) exit 4;;
+    start|stop|disable|enable) echo 'Unit not found' >&2; exit 5;;
+  esac
+fi
 case "$role:$1" in
+  systemctl:show) echo loaded ;;
+  systemctl:cat) printf 'Environment="SECRET=sentinel_quoted" "OTHER=sentinel_multi"\nEnvironment=SECRET=sentinel_bare\nEnvironment="SECRET=sentinel_cont\\\nnext"\n' ;;
+
   systemctl:is-active)
     # Real systemctl reports what the unit is doing NOW, so this fake tracks
     # its own starts and stops and only falls back to the captured baseline for
     # a unit this run has not touched.
     name=${2%.service}
+    if [ "${FAKE_FAIL:-}" = final-health ] && [ "$name" = personal_apps_web ] && [ -e "$FAKE_STATE_DIR/$name" ] && [ "$(cat "$FAKE_STATE_DIR/$name")" = active ]; then exit 9; fi
     if [ -e "$FAKE_STATE_DIR/$name" ]; then
       [ "$(cat "$FAKE_STATE_DIR/$name")" = active ] || exit 3
       exit 0
@@ -94,16 +108,21 @@ case "$role:$1" in
         printf '%s' "$3" > "$FAKE_HEAD" ;;
     esac ;;
   npm:*)
+    if [ "${FAKE_FAIL:-}" = signal-build ] && [ ! -e "$FAKE_FAIL_MARK" ]; then : > "$FAKE_FAIL_MARK"; kill -TERM "$PPID"; sleep 1; exit 143; fi
     if [ "${FAKE_FAIL:-}" = npm ] && [ ! -e "$FAKE_FAIL_MARK" ]; then
       : > "$FAKE_FAIL_MARK"; exit 23
     fi ;;
   pip:*) [ "${FAKE_FAIL:-}" != pip ] || exit 24 ;;
   flask:*)
     if [ "$1" = "db" ] && [ "${2:-}" = "upgrade" ]; then
+      if [ "${FAKE_FAIL:-}" = partial-migration ]; then exit 26; fi
+      if [ "${FAKE_FAIL:-}" = signal-migration ]; then kill -TERM "$PPID"; sleep 1; exit 143; fi
       n=$(cat "$FAKE_UPGRADE_COUNT"); n=$((n + 1)); printf '%s' "$n" > "$FAKE_UPGRADE_COUNT"
     fi
     [ "${FAKE_FAIL:-}" != flask ] || exit 25 ;;
   python:*)
+    if [ "${FAKE_READINESS:-}" = signal ]; then kill -TERM "$PPID"; sleep 1; exit 143; fi
+    if [ "${FAKE_READINESS:-}" = hang ]; then sleep 30; fi
     n=$(cat "$FAKE_READY_COUNT"); n=$((n + 1)); printf '%s' "$n" > "$FAKE_READY_COUNT"
     [ "${FAKE_READINESS:-pass}" = pass ] ;;
 esac
@@ -231,13 +250,13 @@ def test_a_readiness_timeout_keeps_the_migrated_checkout_and_recovers_flag_off(
         'the checkout was rolled back after the migration had been applied')
     assert not any(line.endswith(f'reset --hard {OLD_SHA}')
                    for line in commands)
-    assert upgrades.read_text(encoding='ascii') == '1', (
+    assert upgrades.read_text(encoding='ascii') == '2', (
         'the recovery path re-ran flask db upgrade against older code')
     for service in NON_WEB + WEB:
         assert f'systemctl start {service}.service' in commands, (
             f'{service} was left stopped by a recoverable readiness timeout')
     text = env_file.read_text(encoding='utf-8')
-    assert 'RADAR_BOARD_SHARED_RESULTS' not in text
+    assert 'RADAR_BOARD_SHARED_RESULTS=off' in text
     assert 'UNRELATED=secret' in text
 
 
@@ -259,7 +278,7 @@ def test_a_service_failure_after_activation_reports_but_never_rolls_back(
     assert head.read_text(encoding='ascii') == NEW_SHA
     assert not any(line.endswith(f'reset --hard {OLD_SHA}')
                    for line in commands)
-    assert upgrades.read_text(encoding='ascii') == '1'
+    assert upgrades.read_text(encoding='ascii') == '2'
     assert 'RADAR_BOARD_SHARED_RESULTS=on' in env_file.read_text(
         encoding='utf-8'), 'a healthy release had its flag turned back off'
     # Every other unit was still attempted rather than abandoned at the first
@@ -336,3 +355,78 @@ def test_the_rollback_manifest_names_real_older_code_that_retains_the_revision()
          'merge-base', '--is-ancestor', commit, 'HEAD'], capture_output=True)
     assert ancestor.returncode == 0, (
         f'{commit} is not an ancestor of HEAD, so it is not a rollback target')
+
+
+@pytest.mark.parametrize('failure', ['', 'npm'])
+def test_first_rollout_handles_genuinely_absent_producer(release_env, failure):
+    _, _, env_file, log, _, _, _, _, _ = release_env
+    env_file.write_text('UNRELATED=secret\n')
+    result = _run(release_env, 'first', FAKE_ABSENT_PRODUCER='1', FAKE_FAIL=failure)
+    assert result.returncode == (23 if failure else 0), result.stdout + result.stderr
+    commands = log.read_text().splitlines()
+    for unit in WEB:
+        assert f'systemctl start {unit}.service' in commands
+    assert 'Unit not found' not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('failure', ['partial-migration', 'signal-migration'])
+def test_incomplete_migration_never_restarts_consumers(release_env, failure):
+    _, _, env_file, log, head, _, _, _, _ = release_env
+    env_file.write_text('UNRELATED=secret\n')
+    result = _run(release_env, 'first', FAKE_FAIL=failure)
+    assert result.returncode != 0, result.stdout
+    assert head.read_text() == NEW_SHA
+    assert 'manual recovery' in result.stdout
+    assert not any(line.startswith('systemctl start ') for line in log.read_text().splitlines())
+
+
+def test_routine_readiness_failure_forces_off_and_stops_producer(release_env):
+    _, _, env_file, log, _, _, _, _, _ = release_env
+    env_file.write_text('UNRELATED=secret\nRADAR_BOARD_SHARED_RESULTS=on\n')
+    result = _run(release_env, 'routine', **_producer_on(FAKE_READINESS='fail'))
+    assert result.returncode == 70, result.stdout
+    assert 'RADAR_BOARD_SHARED_RESULTS=off' in env_file.read_text()
+    lines = log.read_text().splitlines()
+    assert lines.index('systemctl start radar_board_producer.service') < max(i for i,x in enumerate(lines) if x == 'systemctl stop radar_board_producer.service')
+
+
+def test_postactivation_health_failure_retains_activation(release_env):
+    _, _, env_file, _, head, _, _, _, _ = release_env
+    env_file.write_text('UNRELATED=secret\n')
+    result = _run(release_env, 'first', FAKE_FAIL='final-health')
+    assert result.returncode == 75, result.stdout
+    assert 'activation degraded' in result.stdout
+    assert head.read_text() == NEW_SHA
+    assert 'RADAR_BOARD_SHARED_RESULTS=on' in env_file.read_text()
+
+
+def test_unit_environment_secrets_never_enter_any_log(release_env):
+    _, _, env_file, log, _, _, tmp, _, _ = release_env
+    env_file.write_text('UNRELATED=secret\n')
+    result = _run(release_env, 'first')
+    assert result.returncode == 0, result.stdout
+    contents = result.stdout + result.stderr + ''.join(p.read_text() for p in (tmp/'logs').glob('*'))
+    assert 'sentinel_' not in contents
+    assert 'systemctl cat ' not in log.read_text()
+    shows = [line for line in log.read_text().splitlines() if line.startswith('systemctl show')]
+    assert shows and all('--property=LoadState' in line for line in shows)
+
+
+def test_hanging_readiness_probe_respects_real_deadline(release_env):
+    _, _, env_file, _, _, _, _, _, _ = release_env
+    env_file.write_text('UNRELATED=secret\n')
+    started = time.monotonic()
+    result = _run(release_env, 'first', FAKE_READINESS='hang', PERF3_READINESS_SECONDS='2', PERF3_PROBE_SECONDS='1', PERF3_READINESS_ATTEMPTS='180')
+    assert result.returncode == 70, result.stdout + result.stderr
+    # Includes shell startup and recovery on Windows; a hung 30-second probe must not survive.
+    assert time.monotonic() - started < 15
+
+
+def test_interrupted_build_restores_original_checkout(release_env):
+    _, _, env_file, log, head, _, _, _, _ = release_env
+    env_file.write_text('UNRELATED=secret\n')
+    result = _run(release_env, 'first', FAKE_FAIL='signal-build')
+    assert result.returncode != 0
+    assert head.read_text() == OLD_SHA
+    for unit in WEB:
+        assert f'systemctl start {unit}.service' in log.read_text()

@@ -5,11 +5,9 @@
 # only read what it publishes. While RADAR_BOARD_SHARED_RESULTS is off, nothing
 # reads its tables, so installing and starting it changes no page.
 #
-# Three lines below are marked RECONCILE. They follow the repository's own
-# personal_apps/deploy/radar-encoder-trial.service and the layout that
-# update_coc.sh uses: /root/coc-stats, its venv, and /root/coc-stats/.env.
-# Check each one against personal_apps_web.service before installing this file.
-# That unit has never been read.
+# Reconciled read-only against the live personal_apps_web unit on 2026-09-12:
+# root, /root/coc-stats/personal_apps, shared venv, no EnvironmentFile.
+# app.py loads the authoritative root .env itself with override=True.
 #
 # Install (proposal): copy this file to /etc/systemd/system/, then run
 # `systemctl daemon-reload` and `systemctl enable radar_board_producer`. Start it
@@ -23,15 +21,8 @@ Wants=mariadb.service
 
 [Service]
 Type=simple
-# RECONCILE against personal_apps_web.service, which has never been read.
 User=root
-# RECONCILE against personal_apps_web.service, which has never been read.
 WorkingDirectory=/root/coc-stats/personal_apps
-# RECONCILE against personal_apps_web.service, which has never been read.
-# app.py loads this same file itself with override=True, so every key in the
-# file wins over anything set in this unit. Keep this line only if the web
-# unit has it.
-EnvironmentFile=/root/coc-stats/.env
 # The venv that update_coc.sh installs into, and the checkout it resets.
 ExecStart=/root/coc-stats/venv/bin/python run_radar_board_producer.py
 # On SIGTERM the producer sets its stop event, finishes the build in flight and

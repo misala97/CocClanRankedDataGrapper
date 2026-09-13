@@ -932,3 +932,7 @@ Protected `cleanup_preview.py` and `preview_perf3.py` were not read, run,
 edited, deleted or staged. `.superpowers/`, the local registry, measurement
 JSON/logs, secrets/environment and generated build products remain unstaged.
 
+
+## Owner authorization — 2026-09-12
+The owner explicitly requested complete deployment. This authorizes necessary local release-runner fixes, verification, integration/push, backup, target migration, producer installation/configuration, shared-path activation and telemetry per the accepted ruling. Complete the named safety fixes and verify the final candidate before executing. Capture remains off; root routing, B1, threading and held index stay excluded. No deployment has occurred merely because this authorization is recorded.
+
