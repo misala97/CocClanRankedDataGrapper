@@ -936,3 +936,17 @@ JSON/logs, secrets/environment and generated build products remain unstaged.
 ## Owner authorization — 2026-09-12
 The owner explicitly requested complete deployment. This authorizes necessary local release-runner fixes, verification, integration/push, backup, target migration, producer installation/configuration, shared-path activation and telemetry per the accepted ruling. Complete the named safety fixes and verify the final candidate before executing. Capture remains off; root routing, B1, threading and held index stay excluded. No deployment has occurred merely because this authorization is recorded.
 
+
+## Deployed, 2026-09-10 02:47 CEST — the two honesty fixes
+
+`4221196` is live. 29-second outage, migration head unchanged at
+`a7c31f0b52d4`, capture off, `/radar/` still routed alongside `/radar/hub/`.
+Both fixes verified against live production data through the application's own
+code: 43 of 46 priced rows now carry a move where none did, and 11 of 208
+sampled posts read "not judged yet" where all of them used to say "wording".
+The full window, evidence and remaining limitations are in
+RELEASE-RECORD-VC1.md under "Second deployment".
+
+Nothing is owed on this authorization. The open work is the named follow-up
+list in VISUAL-CORRECTION-LEDGER.md and the owner's own authenticated look at
+the deployed hub.
