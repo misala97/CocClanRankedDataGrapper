@@ -1,3 +1,12 @@
+# Current status — 2026-09-13, B1C live and owner confirmed
+
+B1C deployed at 200c51cc402e053575bf9e0008db597ea27b36a5 with explicit owner authorization. The owner subsequently confirmed the chatter bars work; the apparent missing-bars issue was resolved by scrolling. Investigation cancelled, no product fix required. Busy-ticker tone latency is accepted for this iteration, not a passed performance target. Capture remains OFF; /radar/hub/ remains alongside /radar/; no root promotion.
+
+Deployment evidence and exact operational state: root HANDOFF.md. Prior pending-release, unimplemented-tone and latency-blocker statements below are historical and superseded by this notice. Preserve historical evidence; do not redispatch completed work.
+
+---
+Current design direction: B dark research workspace. HA remains the next new feature before portfolio/news. B1C retained-evidence bars are implemented; durable historical tone is not. Earlier light/green and planned-only statements below are superseded.
+
 > Accepted addition, 2026-09-13: [B1-TONE-CHART-ADDENDUM.md](B1-TONE-CHART-ADDENDUM.md) adds per-interval bullish/bearish/neutral-or-unjudged stacked chatter bars to upcoming B1 chart work, carried into HA1 and Combined Radar. Planned, not built. Preserve completed B1 and deployed PERF3 work.
 
 # Historical analysis before portfolio and news
@@ -142,3 +151,4 @@ its historical availability is recorded. MD-09 follows basic context. MD-11's
 chart richness grows with HA1 and beyond, but candles/volume need real OHLCV.
 Original A/B visual ambition remains the long-term target. Next work is a
 coordinated measurement/design packet, not implementation from this amendment.
+

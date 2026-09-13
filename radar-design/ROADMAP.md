@@ -1,3 +1,17 @@
+# Current roadmap — 2026-09-13
+
+This overview supersedes the original dated proposal below. Binding current release details: ../HANDOFF.md and B1C-LEDGER.md.
+
+- **Delivered:** hub foundations and side-by-side release; visual Chatter corrections and sorting; PERF3 shared-board performance release; B1 dark research workspace; B1C retained-evidence sentiment histogram. B1C is live and owner confirmed the bars work.
+- **Next new feature:** historical analysis, before portfolio and news. Use HISTORY-ANALYSIS-PLAN.md for the staged HA0 capture contract, HA1 retrospective explorer and HA2 evaluation. Plan the bounded implementation before dispatch. Existing aggregates support retrospective exploration; they do not prove what was known at a historical instant.
+- **Further UI work:** carry B's dark research direction through Overview and the remaining hub pages as their capabilities land. Original rich screenshot concepts remain the long-term ambition; the interactive mockup is not a final design ceiling.
+- **Later:** manual buys/sells, trade journal and actual performance; news/professional sentiment; combined Radar with evidence-based decision support; deeper statistics, administration, watchlists and alerts. No automatic trading.
+- **Separate decisions:** capture activation and root promotion remain unapproved/off. Durable historical sentiment is future HA work; B1C colours only retained recent evidence, with older/unmatched data explicitly unavailable.
+- **Accepted limitation:** local busy-ticker tone latency exceeds the original target; owner accepted it for now. Revisit on reported problems or new evidence, not as unfinished B1C work.
+
+The earlier release numbering, light/green direction, portfolio-before-history ordering and pending implementation descriptions below are historical baseline analysis, not current instructions.
+
+---
 # Radar — from the current engine to the new hub
 
 9 September 2026 · Proposed release roadmap · Planning only
@@ -156,3 +170,4 @@ Broker availability mapping is a separate research task: verified available / un
 Prepare the Release 0/1 execution plan for a first real-data vertical slice: new shell → Human chatter → Stock research → Watching. Add the first truthful Overview around it. Start archive/counter instrumentation alongside it with its own isolated verification.
 
 This is the largest immediate improvement available without waiting for news ingestion, portfolio accounting or recommendation validation. Calendar estimates should follow a live-data baseline and that bounded implementation plan; relative scope is clear now, completion dates are not.
+

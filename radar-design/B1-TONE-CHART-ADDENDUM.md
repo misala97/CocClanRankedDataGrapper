@@ -1,3 +1,10 @@
+# Current status — 2026-09-13, B1C live and owner confirmed
+
+B1C deployed at 200c51cc402e053575bf9e0008db597ea27b36a5 with explicit owner authorization. The owner subsequently confirmed the chatter bars work; the apparent missing-bars issue was resolved by scrolling. Investigation cancelled, no product fix required. Busy-ticker tone latency is accepted for this iteration, not a passed performance target. Capture remains OFF; /radar/hub/ remains alongside /radar/; no root promotion.
+
+Deployment evidence and exact operational state: root HANDOFF.md. Prior pending-release, unimplemented-tone and latency-blocker statements below are historical and superseded by this notice. Preserve historical evidence; do not redispatch completed work.
+
+---
 # B1 follow-up: sentiment-coloured chatter histogram
 
 Owner approved 2026-09-13. Planning only; not implemented. This adds scope to the next B1 chart/integration packet, not a redispatch of completed B1.1/B1.2. Codex plans; implementer works in the actual app on the integrated PERF3 base.

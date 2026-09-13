@@ -1,3 +1,10 @@
+# Current status — 2026-09-13, B1C live and owner confirmed
+
+B1C deployed at 200c51cc402e053575bf9e0008db597ea27b36a5 with explicit owner authorization. The owner subsequently confirmed the chatter bars work; the apparent missing-bars issue was resolved by scrolling. Investigation cancelled, no product fix required. Busy-ticker tone latency is accepted for this iteration, not a passed performance target. Capture remains OFF; /radar/hub/ remains alongside /radar/; no root promotion.
+
+Deployment evidence and exact operational state: root HANDOFF.md. Prior pending-release, unimplemented-tone and latency-blocker statements below are historical and superseded by this notice. Preserve historical evidence; do not redispatch completed work.
+
+---
 # CURRENT — owner accepts B1C latency limitation
 
 The owner accepted the measured busy-ticker tone latency for now: "if i find it annoying i will call it later". This supersedes the latency-blocker ruling below. No further tone-query optimization is required for this packet unless the owner reports a problem or new evidence warrants it.
@@ -105,3 +112,4 @@ Binding: `B1C-IMPLEMENTATION-PLAN.md`, `B1-TONE-CHART-ADDENDUM.md`, and `CLAUDE-
 
 - Decide whether B1’s hub remains opt-in or is promoted later.
 - Decide whether/when HA should persist durable historical tone. This delivery deliberately does not invent tone for the older chart span.
+

@@ -1,3 +1,10 @@
+# Current status — 2026-09-13, B1C live and owner confirmed
+
+B1C deployed at 200c51cc402e053575bf9e0008db597ea27b36a5 with explicit owner authorization. The owner subsequently confirmed the chatter bars work; the apparent missing-bars issue was resolved by scrolling. Investigation cancelled, no product fix required. Busy-ticker tone latency is accepted for this iteration, not a passed performance target. Capture remains OFF; /radar/hub/ remains alongside /radar/; no root promotion.
+
+Deployment evidence and exact operational state: root HANDOFF.md. Prior pending-release, unimplemented-tone and latency-blocker statements below are historical and superseded by this notice. Preserve historical evidence; do not redispatch completed work.
+
+---
 > Current B1C state: read ../HANDOFF.md (the root HANDOFF.md in this worktree), CODEX-RETURN-B1C.md and B1C-LEDGER.md. Local corrections complete; busy tone latency acceptance fails. The PERF3 status below is historical and does not govern this task.
 
 # CURRENT — PERF3-close review-fix round is CLOSED (2026-09-12)
@@ -952,3 +959,4 @@ RELEASE-RECORD-VC1.md under "Second deployment".
 Nothing is owed on this authorization. The open work is the named follow-up
 list in VISUAL-CORRECTION-LEDGER.md and the owner's own authenticated look at
 the deployed hub.
+

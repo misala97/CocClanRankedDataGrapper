@@ -1,3 +1,10 @@
+# Current status — 2026-09-13, B1C live and owner confirmed
+
+B1C deployed at 200c51cc402e053575bf9e0008db597ea27b36a5 with explicit owner authorization. The owner subsequently confirmed the chatter bars work; the apparent missing-bars issue was resolved by scrolling. Investigation cancelled, no product fix required. Busy-ticker tone latency is accepted for this iteration, not a passed performance target. Capture remains OFF; /radar/hub/ remains alongside /radar/; no root promotion.
+
+Deployment evidence and exact operational state: root HANDOFF.md. Prior pending-release, unimplemented-tone and latency-blocker statements below are historical and superseded by this notice. Preserve historical evidence; do not redispatch completed work.
+
+---
 # CURRENT — B1C deployed with owner authorization
 
 On 2026-09-13 the owner explicitly requested deployment ("Ok so lets deploy"). Published normal fast-forward origin/main and deployed 200c51cc402e053575bf9e0008db597ea27b36a5 with /root/update_coc.sh in routine mode. Main local checkout and PERF3 worktree were not modified.
@@ -105,4 +112,5 @@ chatter totals, recorded judgments only, and a 48-hour retained evidence horizon
 Do not deploy, push, merge main, touch the VPS, alter PERF3 owner scripts, add a capture,
 promote the hub, or invent durable historical tone. Remaining product decisions are
 whether to promote the hub and when HA should own persistent historical tone.
+
 
