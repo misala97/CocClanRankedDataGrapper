@@ -215,22 +215,81 @@ def read_clauses(detail, mentions, expected, voices, session,
 
 
 def _read_price(detail, session):
-    """What the tape did, or why there is nothing to say about it."""
-    if session == 'closed' or detail.price_status == 'closed':
-        return [Clause('plain',
-                       'The market is shut, so there is no price move to '
-                       'compare this against — divergence needs a live tape '
-                       'and returns with one.')]
-    if detail.price_status == 'stale':
-        return [Clause('warn',
-                       'The tape has not printed in this window, so the price '
-                       'cannot be taken at face value.')]
+    """What the tape did, as a measurement, and what limits reading it.
+
+    Descriptive only. An earlier version said "the talk and the tape agree"
+    for any move over 1% -- without testing which way the talk leaned or
+    which way the tape went -- and said a closed market had "no price move"
+    when a move across the window had been measured and the row beside this
+    panel was printing it. Codex's B1 ruling (2026-09-10, item 3) required
+    this clause to state the measured window move and its session or
+    quality limitation, and to claim no agreement and no causation.
+
+    The move is stated whenever one was measured. `move_since` returns None
+    for one honest reason -- fewer than two snapshots in the window -- and
+    that absence stays an absence rather than becoming a zero. Being shut,
+    frozen, quoted at a non-trade basis or quoted from a fallback listing
+    are LIMITS on the number, said beside it; none of them makes the
+    measurement disappear. Scoring is untouched: the leaderboard's
+    `score_eligible` gate decides what earns a divergence score, and this
+    sentence decides nothing.
+    """
+    closed = session == 'closed' or detail.price_status == 'closed'
+    frozen = detail.price_status == 'stale'
+
     if detail.price_move is None:
+        if closed:
+            return [Clause('plain',
+                           'The market is shut, so there is no price move to '
+                           'compare this against — divergence needs a live '
+                           'tape and returns with one.')]
+        if frozen:
+            return [_FROZEN]
         return []
 
     pct = detail.price_move * 100
-    verb = ('the talk and the tape agree' if abs(pct) >= 1
-            else 'the talk has moved and the price has not')
-    return [Clause('plain',
-                   f'The price moved {pct:+.1f}% over the same window, so '
-                   f'{verb}.')]
+    out = [Clause('plain',
+                  f'The price moved {pct:+.1f}% over the measured window.')]
+    if closed:
+        out.append(Clause('plain',
+                          'Market closed; this is a historical window move.'))
+    if frozen:
+        out.append(_FROZEN)
+    out.extend(_quote_limits(getattr(detail, 'quote', None)))
+    return out
+
+
+# The frozen-tape warning, unchanged in wording from before the correction.
+_FROZEN = Clause('warn',
+                 'The tape has not printed in this window, so the price '
+                 'cannot be taken at face value.')
+
+_BASIS_WORD = {'midpoint': 'a bid/ask midpoint', 'close': 'a closing price'}
+
+
+def _quote_limits(quote):
+    """Why the quote behind a measured move is not a scored one.
+
+    `score_eligible` is not a session gate: markets.py refuses a non-trade
+    basis and a fallback listing as well as a frozen tape. Those two are
+    stated here, because a reader shown "+2.3%" beside a closing price or a
+    foreign-market fallback would otherwise take the move for a live trade.
+    Absent quote, absent clause -- the fakes in the phrasing tests carry
+    none, and the original board panel carries the same quote view the hub
+    does.
+    """
+    if quote is None:
+        return []
+    out = []
+    basis = getattr(quote, 'price_basis', None)
+    if basis is not None and basis != 'trade':
+        word = _BASIS_WORD.get(basis, f'a {basis} price')
+        out.append(Clause('plain',
+                          f'The latest quote is {word}, not an executed '
+                          f'trade, so this move is context rather than a '
+                          f'scored signal.'))
+    if getattr(quote, 'is_fallback', False):
+        out.append(Clause('warn',
+                          'Quoted from a fallback listing rather than this '
+                          'market\'s own.'))
+    return out

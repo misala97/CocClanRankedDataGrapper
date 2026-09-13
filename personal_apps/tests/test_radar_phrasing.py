@@ -142,11 +142,19 @@ class FakeChart:
 
 
 @dataclasses.dataclass
+class FakeQuote:
+    """Only the two quote facts the price clause reads."""
+    price_basis: str | None = 'trade'
+    is_fallback: bool = False
+
+
+@dataclasses.dataclass
 class FakeDetail:
     ticker: str = 'ZZZ'
     price_move: float | None = 0.182
     price_status: str = 'ok'
     chart: object = dataclasses.field(default_factory=FakeChart)
+    quote: object = None
 
 
 def test_the_read_leads_with_the_finding():
@@ -265,3 +273,149 @@ def test_a_row_under_the_floor_says_why_instead_of_a_ratio():
     assert words('repeated_text', 9, 4) == 'repeated text, under the floor'
     # The window is the selection's, not a constant.
     assert row_clauses(quiet('no_mentions'), 'closed', 24)[0].text == 'no mentions in 24h'
+
+
+# --- the price clause is descriptive (Codex B1 ruling, 2026-09-10, item 3) --
+
+
+def _read(detail, session='regular'):
+    return phrasing.read_clauses(detail, mentions=284, expected=7.0,
+                                 voices=11, session=session)
+
+
+def _price_text(detail, session='regular'):
+    """Only the sentences the price clause produced, joined."""
+    clauses = _read(detail, session)
+    # The first two clauses are the finding and the breadth; everything the
+    # price path says follows them, before any baseline caveat.
+    return ' '.join(c.text for c in clauses[2:]
+                    if 'baseline' not in c.text).replace('−', '-')
+
+
+def test_a_falling_move_is_stated_as_a_measurement_and_nothing_more():
+    """The exact clause the ruling gives as its example. No agreement, no
+    causation: the panel never tested which way the talk leaned, so it has
+    no business saying the tape agrees with it."""
+    joined = _price_text(FakeDetail(price_move=-0.023))
+
+    assert 'The price moved -2.3% over the measured window.' in joined
+    assert 'agree' not in joined
+    assert 'talk' not in joined
+    assert 'has not' not in joined
+
+
+def test_a_rising_move_is_stated_the_same_way():
+    joined = _price_text(FakeDetail(price_move=0.182))
+
+    assert 'The price moved +18.2% over the measured window.' in joined
+    assert 'agree' not in joined
+
+
+def test_a_move_under_one_percent_is_still_just_the_number():
+    """The old wording turned anything under 1% into "the talk has moved and
+    the price has not" -- a claim about the talk from a fact about the
+    price. Now it is the number, and only the number."""
+    joined = _price_text(FakeDetail(price_move=0.004))
+
+    assert 'The price moved +0.4% over the measured window.' in joined
+    assert 'has not' not in joined
+    assert 'agree' not in joined
+
+
+def test_an_absent_move_is_absent_not_zero():
+    """`move_since` returns None when there were fewer than two snapshots to
+    measure between. That is nothing to say, not a 0.0% move."""
+    joined = _price_text(FakeDetail(price_move=None))
+
+    assert 'price moved' not in joined
+    assert '0.0%' not in joined
+    assert joined == ''
+
+
+def test_a_shut_market_keeps_a_measured_move_and_says_it_is_historical():
+    """The B1 defect: the candidate rail printed +4.6% while the panel beside
+    it said the market being shut meant there was no price move. The move
+    exists; the session is what limits it."""
+    joined = _price_text(FakeDetail(price_move=0.046, price_status='closed'),
+                         session='closed')
+
+    assert 'The price moved +4.6% over the measured window.' in joined
+    assert 'Market closed; this is a historical window move.' in joined
+    assert 'no price move' not in joined
+    assert 'agree' not in joined
+
+
+def test_a_shut_market_with_nothing_measured_still_says_so():
+    """The pre-existing sentence for the case with NO measured move stays:
+    it is the one that is true there, and its own test above pins it."""
+    joined = _price_text(FakeDetail(price_move=None, price_status='closed'),
+                         session='closed')
+
+    assert 'market is shut' in joined
+    assert 'divergence' in joined
+
+
+def test_a_frozen_tape_keeps_the_measured_move_and_its_warning():
+    clauses = _read(FakeDetail(price_move=-0.031, price_status='stale'))
+    joined = ' '.join(c.text for c in clauses).replace('−', '-')
+
+    assert 'The price moved -3.1% over the measured window.' in joined
+    assert 'has not printed' in joined
+    assert any(c.kind == 'warn' and 'not printed' in c.text for c in clauses)
+    assert 'agree' not in joined
+
+
+def test_a_frozen_tape_with_nothing_measured_keeps_only_the_warning():
+    clauses = _read(FakeDetail(price_move=None, price_status='stale'))
+
+    assert any(c.kind == 'warn' and 'not printed' in c.text for c in clauses)
+    assert not any('price moved' in c.text for c in clauses)
+
+
+def test_a_non_trade_basis_keeps_the_move_and_names_the_basis():
+    """The population the detail panel's gate removal newly reaches: a
+    closing price as the latest quote. The move was measured between real
+    trades; the CURRENT quote is what is not scorable, and the clause says
+    which of those two things is true."""
+    clauses = _read(FakeDetail(price_move=0.005,
+                               quote=FakeQuote(price_basis='close')))
+    joined = ' '.join(c.text for c in clauses)
+
+    assert 'The price moved +0.5% over the measured window.' in joined
+    assert 'closing price, not an executed trade' in joined
+    assert 'scored signal' in joined
+    assert 'agree' not in joined
+    assert not any(c.kind == 'warn' for c in clauses), (
+        'a non-trade basis is a limitation, not a caution')
+
+
+def test_a_midpoint_basis_is_named_as_one():
+    joined = _price_text(FakeDetail(price_move=0.02,
+                                    quote=FakeQuote(price_basis='midpoint')))
+
+    assert 'bid/ask midpoint, not an executed trade' in joined
+
+
+def test_a_fallback_listing_is_a_warning_beside_the_move():
+    clauses = _read(FakeDetail(price_move=0.02,
+                               quote=FakeQuote(is_fallback=True)))
+    joined = ' '.join(c.text for c in clauses)
+
+    assert 'The price moved +2.0% over the measured window.' in joined
+    assert any(c.kind == 'warn' and 'fallback listing' in c.text
+               for c in clauses)
+
+
+def test_a_trade_basis_native_listing_adds_no_limitation():
+    joined = _price_text(FakeDetail(price_move=0.02, quote=FakeQuote()))
+
+    assert joined == 'The price moved +2.0% over the measured window.'
+
+
+def test_the_row_phrase_is_untouched_by_the_panel_correction():
+    """The ROW clause was never the problem and is not what the ruling
+    corrects: `price +18%` stays exactly as it was."""
+    clauses = phrasing.row_clauses(FakeRow(price_move=0.182), session='regular')
+
+    assert 'price +18%' in text(clauses)
+    assert 'price-up' in kinds(clauses)
