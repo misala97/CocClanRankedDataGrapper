@@ -49,14 +49,40 @@ const SEGMENTS: { value: SegmentFilter | 'all'; label: string }[] = [
   { value: 'unknown', label: 'Unclassified' },
 ]
 
-export function Filters({ board, selection, onChange }: {
+export function Filters({ board, selection, onChange, compact = false }: {
   board: BoardPayload
   selection: Selection
   onChange: (next: Selection) => void
+  /** The candidate rail is 320px wide and already carries a text filter and
+   *  an ordering control. `compact` puts EVERY server-side filter behind one
+   *  labelled disclosure rather than three selects on a bar -- the controls
+   *  are identical, the summary line still says what they are doing, and
+   *  nothing is dropped to save the width. */
+  compact?: boolean
 }) {
   const [more, setMore] = useState(false)
   return (
-    <div className="rh-filters">
+    <div className={`rh-filters${compact ? ' compact' : ''}`}>
+      {compact ? (
+        <div className="rh-more">
+          <button
+            type="button"
+            className="rh-morebutton"
+            aria-expanded={more}
+            aria-controls={MORE_ID}
+            onClick={() => setMore((was) => !was)}
+          >
+            Filters
+            <span className="rh-moresummary">
+              {summariseAll(board, selection)}
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      <div className={compact ? 'rh-morepanel' : 'rh-filterbar'}
+           id={compact ? MORE_ID : undefined}
+           hidden={compact && !more}>
       <label className="rh-field">
         <span>Market</span>
         <select
@@ -107,21 +133,28 @@ export function Filters({ board, selection, onChange }: {
       {/* Everything past this point is still a server-side filter and still
           reachable by keyboard; it is one press away instead of always on
           screen. `hidden` rather than unmounted so aria-controls points at
-          something real, and so a test can open it and find the controls. */}
-      <div className="rh-more">
-        <button
-          type="button"
-          className="rh-morebutton"
-          aria-expanded={more}
-          aria-controls={MORE_ID}
-          onClick={() => setMore((was) => !was)}
-        >
-          More filters
-          <span className="rh-moresummary">{summarise(board, selection)}</span>
-        </button>
-      </div>
+          something real, and so a test can open it and find the controls.
+          In compact mode there is no second disclosure -- the outer one has
+          already revealed the whole set, and a nested one would ask the
+          reader for two presses to reach a feed checkbox. */}
+      {compact ? null : (
+        <div className="rh-more">
+          <button
+            type="button"
+            className="rh-morebutton"
+            aria-expanded={more}
+            aria-controls={MORE_ID}
+            onClick={() => setMore((was) => !was)}
+          >
+            More filters
+            <span className="rh-moresummary">{summarise(board, selection)}</span>
+          </button>
+        </div>
+      )}
 
-      <div className="rh-morepanel" id={MORE_ID} hidden={!more}>
+      <div className={compact ? 'rh-morecontinued' : 'rh-morepanel'}
+           id={compact ? undefined : MORE_ID}
+           hidden={!compact && !more}>
       <label className="rh-field">
         <span>Breadth</span>
         <select
@@ -188,6 +221,7 @@ export function Filters({ board, selection, onChange }: {
         ) : null}
       </fieldset>
       </div>
+      </div>
     </div>
   )
 }
@@ -209,6 +243,22 @@ function summarise(board: BoardPayload, selection: Selection): string {
     ? `all ${offered} ${offered === 1 ? 'feed' : 'feeds'}`
     : `${chosen} of ${offered} feeds`
   return `${venue ? venue.label : `${selection.minVenues}+ venues`} · ${feeds}`
+}
+
+/** Everything the compact disclosure is hiding, in one line: the three
+ *  controls that used to sit on the bar as well as the two that were already
+ *  behind it. A filter nobody can see has to announce itself. */
+function summariseAll(board: BoardPayload, selection: Selection): string {
+  const market = MARKETS.find((m) => m.value === selection.market)
+  const hours = selection.window
+  const segment = SEGMENTS.find(
+    (s) => s.value === (selection.segments[0] ?? 'all'))
+  return [
+    market ? market.label : selection.market.toUpperCase(),
+    hours === 1 ? 'last hour' : `last ${hours} hours`,
+    segment ? segment.label : 'All companies',
+    summarise(board, selection),
+  ].join(' · ')
 }
 
 /** The feeds a selection covers, each named once. `reddit:options` and

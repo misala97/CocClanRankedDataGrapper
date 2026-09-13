@@ -97,8 +97,12 @@ const choose = (element: Element, value: string) =>
 const notice = () => document.querySelector('.rh-wait')
 const ageLine = () => document.querySelector('.rh-age')
 const contextLine = () => document.querySelector('.rh-datestamp')
-const listed = () => screen.queryAllByTestId('rh-row-ticker')
-  .map((el) => el.textContent)
+// The companies on screen, in order: the comparison table's rows or --
+// since the workspace became the opening reading -- the candidate rail's.
+// One population either way; which reading draws it is not what these
+// tests are about.
+const listed = () => screen.queryAllByTestId(/^rh-(row|candidate)-ticker$/)
+  .map((el) => el.textContent?.trim())
 const retryButtons = () => screen.queryAllByRole('button', { name: 'Retry' })
 
 function visibility(state: 'hidden' | 'visible') {

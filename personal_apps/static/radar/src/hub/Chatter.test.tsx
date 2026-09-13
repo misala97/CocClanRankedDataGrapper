@@ -178,13 +178,13 @@ describe('the ranked list', () => {
     show([row({ price: 10, price_move: 0.031, direction: 'up',
                 price_status: 'stale', marks: ['no-print'] })])
     expect(screen.getByText(/\+3\.1%/)).toBeVisible()
-    expect(screen.getByText(/no print since/)).toBeVisible()
+    expect(screen.getByText(/tape not printing/)).toBeVisible()
   })
 
   it('adds no session note while the market is open', () => {
     show([row({ price: 10, price_move: 0.012, price_status: 'ok' })])
     expect(screen.getByText('+1.2%')).toBeVisible()
-    expect(screen.queryByText(/at close|no print since/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/at close|tape not printing/)).not.toBeInTheDocument()
   })
 
   it('still says unknown when the move really is unmeasurable', () => {
@@ -454,7 +454,12 @@ describe('ordering the candidates on screen', () => {
       await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'voices')
       expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
       expect(direction).toHaveTextContent(/highest first/i)
-      expect(direction).toHaveAccessibleName('Sort lowest first')
+      // WCAG 2.5.3: the accessible name has to CONTAIN the visible text, so
+      // it leads with what is written on the control and then says what
+      // pressing it does. It used to read `Highest first` and answer only to
+      // `Sort lowest first`, which voice control could not address at all.
+      expect(direction).toHaveAccessibleName(
+        'Highest first — sort lowest first instead')
       await userEvent.click(direction)
       expect(listed()).toEqual(['LOW', 'MID', 'TOP'])
       expect(direction).toHaveTextContent(/lowest first/i)

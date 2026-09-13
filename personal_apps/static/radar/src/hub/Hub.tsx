@@ -18,6 +18,7 @@ import type { BoardPayload, PanelSpan, Selection } from '../types'
 import { Activity } from './Activity'
 import { Admin } from './Admin'
 import { Chatter } from './Chatter'
+import type { ChatterMode } from './Chatter'
 import type { ChatterSort } from './chatterSort'
 import { Overview } from './Overview'
 import {
@@ -37,12 +38,17 @@ import {
 import './hub.css'
 
 /** Only destinations this release actually renders. An empty page behind a
- *  nav item is a promise the surface cannot keep. */
+ *  nav item is a promise the surface cannot keep -- which is why the B
+ *  reference's News, Combined radar, Portfolio and Analysis are not here.
+ *
+ *  Flat, not grouped. The old left rail had room for `Discover` / `Your
+ *  stocks` / `Review` headings above one item each; a 48px horizontal band
+ *  does not, and four labels across a bar need no taxonomy to be found. */
 const DESTINATIONS = [
-  { group: null, items: [{ page: 'overview', label: 'Overview' }] },
-  { group: 'Discover', items: [{ page: 'chatter', label: 'Human chatter' }] },
-  { group: 'Your stocks', items: [{ page: 'watching', label: 'Watching' }] },
-  { group: 'Review', items: [{ page: 'activity', label: 'Activity' }] },
+  { page: 'overview', label: 'Overview' },
+  { page: 'chatter', label: 'Human chatter' },
+  { page: 'watching', label: 'Watching' },
+  { page: 'activity', label: 'Activity' },
 ] as const
 
 export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: boolean }) {
@@ -58,6 +64,20 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   // URL either -- the query string is the SELECTION, which decides what the
   // server builds, and this decides nothing the server does.
   const [sort, setSort] = useState<ChatterSort | null>(null)
+  // The text filter and the chatter mode live here for the same reason the
+  // ordering does: they are a view over whichever response is current, and
+  // Chatter unmounts whenever the reader opens a company from somewhere else
+  // or steps out to Overview. Held in memory only -- the query string is the
+  // SELECTION, which decides what the server builds, and neither of these
+  // decides anything the server does.
+  const [filter, setFilter] = useState('')
+  const [mode, setMode] = useState<ChatterMode>('research')
+  // Whether this visit to Human chatter has already made its opening
+  // selection. Up here for the same reason as the three above: the workspace
+  // unmounts on every Table/Research toggle, and a remount that forgot would
+  // re-select a company the reader had deliberately cleared -- REPLACING the
+  // `#chatter` entry they were standing on, so Back could not return to it.
+  const [opened, setOpened] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const main = useRef<HTMLElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
@@ -137,6 +157,23 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
     if (!options.keepFocus) main.current?.focus()
   }, [selection, span])
 
+  /** The same navigation as `go`, without a history entry and without moving
+   *  focus. For the ONE case that is not a reader's choice: the workspace
+   *  opening on the first candidate. A pushState there would make Back a
+   *  no-op that lands on the same page with nothing selected. */
+  const replace = useCallback((next: HubRoute, nextSelection = selection,
+                               nextSpan = span) => {
+    window.history.replaceState(null, '', urlFor(next, nextSelection, nextSpan))
+    setRoute(next)
+  }, [selection, span])
+
+  // Leaving Human chatter ends the visit. Coming back is a fresh one, and a
+  // fresh one opens on the first candidate again -- which is what the brief
+  // asks for and what a reader returning to a list expects.
+  useEffect(() => {
+    if (route.page !== 'chatter') setOpened(false)
+  }, [route.page])
+
   const title = titleFor(route)
   // The board on screen, when a refresh of it has failed. Never the previous
   // selection's (react-query's placeholder), and never a waiting shell: a
@@ -166,36 +203,90 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
         Skip to the page
       </a>
 
+      <header className="rh-top">
+        <button
+          ref={menuButton}
+          type="button"
+          className="rh-menu"
+          aria-expanded={menuOpen}
+          aria-controls="rh-nav"
+          aria-label="Navigation"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
+        <p className="rh-brand">
+          <Logo />
+          {/* In its own element so the narrow bar can drop the word without
+              collapsing the mark: `font-size: 0` on the paragraph took the
+              brand's width to zero and left the logo overflowing onto the
+              search field. */}
+          <span className="rh-wordmark">RADAR</span>
+        </p>
+        <div className="rh-topmid">
+          <Search onOpen={(ticker) => go(openRoute(route, ticker))} />
+        </div>
+        <p className="rh-session">
+          {context ? (
+            <>
+              <span className={`rh-dot${context.session === 'closed' ? ' closed' : ''}`} />
+              {/* The venue is the half that stops fitting on a phone. The
+                  state is the half that changes what the ranking MEANS --
+                  with the exchange shut there is no movement to diverge from
+                  -- so it stays at every width. */}
+              <span className="rh-venue">
+                {context.market_venue}{' · '}
+              </span>
+              {sessionWord(context)}
+            </>
+          ) : MARKET_NAME[selection.market]}
+        </p>
+        {/* Where Radar is going. Three fictional mockups the owner asked to
+            keep reachable from the live hub -- long-term visual references,
+            not shipped capability, and the gallery page says so. In the
+            identity bar, not the destination band: it is a document that
+            leaves the application, not a page of it, so the router is not
+            involved and Back returns here. */}
+        <a className="rh-gallerylink"
+           href="/static/radar/design-reference/index.html">
+          Future Radar design
+        </a>
+      </header>
+
       <nav id="rh-nav" className={`rh-nav${menuOpen ? ' open' : ''}`}
            aria-label="Radar">
-        <div className="rh-brand">
-          <Logo />
-          RADAR
-        </div>
-        {DESTINATIONS.map(({ group, items }) => (
-          <div className="rh-navgroup" key={group ?? 'top'}>
-            {group ? <p className="rh-navlabel">{group}</p> : null}
-            {items.map((item) => (
-              <a
-                key={item.page}
-                className="rh-navlink"
-                href={urlFor({ page: item.page }, selection, span)}
-                aria-current={route.page === item.page ? 'page' : undefined}
-                onClick={(event) => {
-                  if (event.metaKey || event.ctrlKey || event.shiftKey) return
-                  event.preventDefault()
-                  go({ page: item.page })
-                }}
-              >
-                {item.label}
-              </a>
-            ))}
-          </div>
+        {DESTINATIONS.map((item) => (
+          <a
+            key={item.page}
+            className="rh-navlink"
+            href={urlFor({ page: item.page }, selection, span)}
+            // Human chatter stays the current destination while a company is
+            // open inside it: the workspace IS the page, not a page the
+            // reader left.
+            aria-current={route.page === item.page ? 'page' : undefined}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey) return
+              event.preventDefault()
+              go({ page: item.page })
+            }}
+          >
+            {item.label}
+          </a>
         ))}
-        {/* Rendered for admins only; /radar/api/ops enforces this itself and
-            does not trust the absence of a link. */}
-        {isAdmin ? (
-          <div className="rh-navbottom">
+        {/* Standalone research is not a destination anybody navigates to; it
+            is where a search from another page, or an old bookmark, lands.
+            The band names the company rather than leaving all four labels
+            inactive with no account of where the reader is -- and it sits
+            NEXT TO the destinations it qualifies, not pushed to the far end
+            of a 1920px bar beside Administration, which is what it did when
+            it shared their container. */}
+        {route.page === 'research' ? (
+          <span className="rh-navcrumb">{route.ticker}</span>
+        ) : null}
+        <div className="rh-navend">
+          {/* Rendered for admins only; /radar/api/ops enforces this itself and
+              does not trust the absence of a link. */}
+          {isAdmin ? (
             <a
               className="rh-navlink"
               href={urlFor({ page: 'admin' }, selection, span)}
@@ -208,54 +299,45 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
             >
               Administration
             </a>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </nav>
 
-      <div className="rh-workspace">
-        <header className="rh-topbar">
-          <button
-            ref={menuButton}
-            type="button"
-            className="rh-menu"
-            aria-expanded={menuOpen}
-            aria-controls="rh-nav"
-            aria-label="Navigation"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <span aria-hidden="true">☰</span>
-          </button>
-          <Search onOpen={(ticker) => go({ page: 'research', ticker })} />
-          <p className="rh-session">
-            {context ? (
-              <>
-                <span className={`rh-dot${context.session === 'closed' ? ' closed' : ''}`} />
-                {marketLabel(context)}
-              </>
-            ) : MARKET_NAME[selection.market]}
-          </p>
-        </header>
-
-        <main id="rh-main" className="rh-main" ref={main} tabIndex={-1}
-              aria-label={title}>
-          {/* Data that was true a minute ago beats a blank page, as long as
-              the surface says the refresh failed and when it last succeeded. */}
-          {banner
-            ? <StaleNotice error={board.error}
-                           since={berlinStamp(banner.generated_at)}
-                           onRetry={board.retry} />
-            : null}
-          {expired
-            ? <SignedOut />
-            : <Page route={route} board={board} selection={selection}
-                    span={span} title={title} visible={visible}
-                    isAdmin={isAdmin} go={go} vocabulary={initial}
-                    bannerUp={banner !== null}
-                    sort={sort} onSort={setSort} />}
-        </main>
-      </div>
+      <main id="rh-main" className="rh-main" ref={main} tabIndex={-1}
+            aria-label={title}>
+        {/* Data that was true a minute ago beats a blank page, as long as
+            the surface says the refresh failed and when it last succeeded. */}
+        {banner
+          ? <StaleNotice error={board.error}
+                         since={berlinStamp(banner.generated_at)}
+                         onRetry={board.retry} />
+          : null}
+        {expired
+          ? <SignedOut />
+          : <Page route={route} board={board} selection={selection}
+                  span={span} title={title} visible={visible}
+                  isAdmin={isAdmin} go={go} replace={replace}
+                  vocabulary={initial} bannerUp={banner !== null}
+                  sort={sort} onSort={setSort}
+                  filter={filter} onFilter={setFilter}
+                  mode={mode} onMode={setMode}
+                  opened={opened} onOpened={() => setOpened(true)} />}
+      </main>
     </div>
   )
+}
+
+/** Where a global search hit opens.
+ *
+ *  Inside the chatter workspace it opens IN the workspace, because that is
+ *  where the reader already is and the candidate rail beside it is the
+ *  context they were using. Anywhere else it opens standalone research,
+ *  exactly as before: a company found from Overview has no candidate list to
+ *  sit inside. */
+function openRoute(route: HubRoute, ticker: string): HubRoute {
+  return route.page === 'chatter'
+    ? { page: 'chatter', ticker }
+    : { page: 'research', ticker }
 }
 
 /** Which page, and what it needs.
@@ -265,7 +347,8 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
  *  from a measured emptiness.
  */
 function Page({ route, board, selection, span, title, visible, isAdmin, go,
-                vocabulary, bannerUp, sort, onSort }: {
+                replace, vocabulary, bannerUp, sort, onSort, filter, onFilter,
+                mode, onMode, opened, onOpened }: {
   route: HubRoute
   board: ReturnType<typeof useBoard>
   selection: Selection
@@ -275,6 +358,7 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
   isAdmin: boolean
   go: (route: HubRoute, selection?: Selection, span?: PanelSpan,
        options?: { keepFocus?: boolean }) => void
+  replace: (route: HubRoute, selection?: Selection, span?: PanelSpan) => void
   /** Where the filters read the server's vocabulary while this selection
    *  has no board of its own yet. */
   vocabulary: BoardPayload
@@ -282,6 +366,12 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
   bannerUp: boolean
   sort: ChatterSort | null
   onSort: (next: ChatterSort | null) => void
+  filter: string
+  onFilter: (next: string) => void
+  mode: ChatterMode
+  onMode: (next: ChatterMode) => void
+  opened: boolean
+  onOpened: () => void
 }) {
   // Declared before any early return, because hooks are.
   const [marking, setMarking] = useState<string | null>(null)
@@ -298,8 +388,12 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
   const watching = board.data !== undefined && isReady(board.data)
     ? board.data.watching : watch.data
   // A refusal belongs to the page it happened on. Without this the red
-  // "could not be saved" banner followed the reader to another company.
-  const here = route.page === 'research' ? route.ticker : route.page
+  // "could not be saved" banner followed the reader to another company --
+  // including from one selected candidate to the next inside the workspace,
+  // which is why the chatter route keys on its ticker too.
+  const here = route.page === 'research' ? route.ticker
+    : route.page === 'chatter' ? `chatter:${route.ticker ?? ''}`
+    : route.page
   const lastPlace = useRef(here)
   useEffect(() => {
     if (lastPlace.current !== here) {
@@ -405,11 +499,54 @@ function Page({ route, board, selection, span, title, visible, isAdmin, go,
                   watchError={watch.error} />
       )
     }
+    // Explicitly, rather than by elimination: `page` on the first union
+    // member is itself a union of four literals, so ruling out two of them
+    // leaves TypeScript unable to see that only `chatter` is left -- and
+    // `route.ticker` unreachable.
+    if (route.page !== 'chatter') return <Placeholder title={title} />
     return (
-      <Chatter board={shown} vocabulary={board.data ?? vocabulary}
-               selection={selection} {...freshness} standIn={standIn}
-               onOpen={open} onSelect={(next) => go(route, next)}
-               sort={sort} onSort={onSort} />
+      <Chatter
+        // This selection's answer: a board, a waiting shell, or null while
+        // nothing for it has answered yet. Only a built board has rows; the
+        // rest is `standIn`, under the same heading and controls.
+        board={shown}
+        vocabulary={board.data ?? vocabulary}
+        selection={selection}
+        {...freshness}
+        standIn={standIn}
+        span={span}
+        visible={visible}
+        selected={route.ticker ?? null}
+        mode={mode}
+        onMode={onMode}
+        // A deliberate choice: it goes in the history, so Back returns to the
+        // company the reader was looking at before this one.
+        //
+        // Opening from the comparison table switches to the workspace, which
+        // is where an opened company is actually readable. The table has no
+        // room to show one, and leaving the reader on it after they asked for
+        // a company would look like the press did nothing.
+        onOpen={(ticker) => { onMode('research'); go({ page: 'chatter', ticker }) }}
+        onOpenReplace={(ticker) => replace({ page: 'chatter', ticker })}
+        // Clearing is a decision, so it ends the opening-selection question
+        // for this visit: the workspace must not put a company back the
+        // moment the reader steps through Table and returns.
+        onClear={() => { onOpened(); go({ page: 'chatter' }) }}
+        hrefFor={(ticker) => urlFor({ page: 'chatter', ticker }, selection, span)}
+        onSpan={(next) => go(route, selection, next, { keepFocus: true })}
+        onSelect={(next) => go(route, next)}
+        onSearch={() => document.getElementById('rh-search-input')?.focus()}
+        sort={sort}
+        onSort={onSort}
+        filter={filter}
+        onFilter={onFilter}
+        opened={opened}
+        onOpened={onOpened}
+        watching={watching}
+        onToggleWatch={watching === undefined ? undefined : onToggleWatch}
+        watchPending={marking !== null}
+        watchError={watch.error}
+      />
     )
   }
 
@@ -480,9 +617,8 @@ function titleFor(route: HubRoute): string {
  */
 export const seedSelection = selectionOf
 
-function marketLabel(payload: BoardPayload): string {
-  const state = payload.session === 'regular' ? 'open' : payload.session
-  return `${payload.market_venue} · ${state}`
+function sessionWord(payload: BoardPayload): string {
+  return payload.session === 'regular' ? 'open' : payload.session
 }
 
 /** What the top bar calls a market no board of it has answered for yet. */

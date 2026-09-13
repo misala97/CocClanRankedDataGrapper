@@ -19,7 +19,7 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from features.radar import detail, detail_panel
+from features.radar import detail, detail_panel, phrasing
 from features.radar.config import source_config_version
 from models import (RadarBucketSource, RadarDailyClose, RadarInstrument,
                     RadarMention, RadarQuote, TickerUniverse)
@@ -1389,3 +1389,83 @@ def test_the_label_change_leaves_tone_precedence_alone():
     assert _tone_of(-0.5, None, None) == 'bearish'
     assert _judged_by(None, 'bullish', None) == 'model'
     assert _judged_by(None, None, 'positive') == 'model'
+
+
+def _priced(ticker, snapshots):
+    """Quote snapshots in the window, newest last."""
+    from models import RadarQuote
+
+    for minutes_ago, price, basis in snapshots:
+        db.session.add(RadarQuote(
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
+            fetched_at=NOW - dt.timedelta(minutes=minutes_ago),
+            quote_ts=NOW - dt.timedelta(minutes=minutes_ago),
+            price=decimal.Decimal(price), price_basis=basis))
+    db.session.commit()
+
+
+def test_a_non_trade_basis_keeps_the_panel_move_too(panel_ticker):
+    """The board row and this panel are the same number about the same window.
+
+    `leaderboard._assemble` stopped discarding a measured move on 2026-09-10;
+    this path kept the old gate. The chatter workspace draws the row and the
+    panel side by side, so the withheld move printed a percentage in the
+    candidate rail and `move unknown` under the company's own heading, at the
+    same instant, about the same number.
+
+    This fixture is ineligible for a reason that has nothing to do with the
+    session: the latest quote is a closing price rather than an executed
+    trade. `score_eligible` is not a session gate -- markets.py refuses a
+    non-trade basis, a fallback listing and a frozen tape as well -- and this
+    is the population that shows it.
+
+    It matters more than the shut case below, because it is the one that
+    reaches `phrasing._read_price`: that function short-circuits on a closed
+    or frozen tape, so those two produce no new sentence, while THIS one gains
+    "The price moved X% over the same window" -- on the hub and, from the same
+    endpoint, on the original board at /radar/. That is the intended
+    alignment, since the row has printed this move since 2026-09-10 and
+    `move_since` measures between executed trades either way. It is a visible
+    change to a deployed surface, and it is pinned here rather than left to be
+    discovered.
+    """
+    ticker = f'{PREFIX}A'
+    # Two executed trades to measure between, and a closing price as the
+    # latest quote -- which is what makes the CURRENT quote ineligible.
+    _priced(ticker, ((200, '110.00', 'trade'),
+                     (60, '100.00', 'trade'),
+                     (5, '100.50', 'close')))
+
+    built = detail_panel.build(ticker, ['bluesky'], NOW, window_hours=24)
+
+    assert built.quote.price_basis == 'close'
+    assert built.quote.score_eligible is False, 'a close cannot anchor a score'
+    assert built.quote.tape_status == 'ok', 'and this tape is printing fine'
+    assert built.session != 'closed', 'and the market is open'
+    assert built.price_move is not None, 'the measured move must survive'
+
+    clauses = phrasing.read_clauses(
+        built, built.mentions, built.expected, built.breakdown.voices,
+        built.session, baseline_days=built.baseline_days,
+        venues=len(built.breakdown.venues))
+    assert any('The price moved' in clause.text for clause in clauses), (
+        'the clause this population newly gets')
+
+
+def test_a_shut_exchange_keeps_the_panel_move_too(panel_ticker):
+    """The case the correction was written for: the market is simply closed."""
+    ticker = f'{PREFIX}A'
+    shut = NOW.replace(hour=3)          # 03:00 UTC is the middle of the night
+    from models import RadarQuote
+    for minutes_ago, price in ((200, '110.00'), (30, '100.00')):
+        db.session.add(RadarQuote(
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
+            fetched_at=shut - dt.timedelta(minutes=minutes_ago),
+            quote_ts=shut - dt.timedelta(minutes=minutes_ago),
+            price=decimal.Decimal(price), price_basis='trade'))
+    db.session.commit()
+
+    built = detail_panel.build(ticker, ['bluesky'], shut, window_hours=24)
+
+    assert built.session == 'closed', 'the fixture must be shut'
+    assert built.price_move is not None, 'the measured move must survive'

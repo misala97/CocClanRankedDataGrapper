@@ -16,23 +16,45 @@
 // stacked three tone counts vertically. Both facts are still here -- the
 // concrete feed identifiers and the exact tone counts -- inside a detail the
 // reader opens, rather than as prose every row has to carry.
-import { useId, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { isReady } from '../types'
-import type { BoardPayload, ReadyBoard, Row, Selection } from '../types'
+import type { BoardPayload, PanelSpan, ReadyBoard, Row, Selection } from '../types'
+import { ChatterWorkspace } from './ChatterWorkspace'
 import { sourcePresentation, tonePresentation } from './chatterPresentation'
 import type { SourcePresentation, TonePresentation } from './chatterPresentation'
 import {
   SORT_LABELS, knownCount, nextSort, priceCurrencies, readingWord, sortRows,
 } from './chatterSort'
 import type { ChatterSort, SortKey } from './chatterSort'
+import { Disclosure } from './Disclosure'
 import { Filters } from './Filters'
 import { AgeLine, Empty } from './PageState'
+import { SortPicker } from './SortPicker'
+
+/** Two readings of one list.
+ *
+ *  `research` is the workspace: candidates on the left, the one being
+ *  examined in the middle, its evidence on the right. `table` is the
+ *  seven-column comparison, which answers a question the workspace cannot --
+ *  how do all fifty of these compare on tone, or on breadth, at once.
+ *
+ *  Same rows, same filters, same ordering, same cached response. Not two data
+ *  models and not two applications. */
+export type ChatterMode = 'research' | 'table'
+
+/** A stable empty list for the states that have no rows, so the ordering
+ *  memo below does not re-run on every render of a waiting shell. */
+const NO_ROWS: Row[] = []
 
 export function Chatter({ board, vocabulary, selection, sort = null,
                          received, stalled = false, onRetry, standIn, onOpen,
-                         onSelect, onSort }: {
+                         onSelect, onSort, mode = 'table', onMode,
+                         selected = null, onOpenReplace, onClear, hrefFor,
+                         span = '1D', onSpan, onSearch, visible = true, filter,
+                         onFilter, opened = false, onOpened, watching,
+                         onToggleWatch, watchPending = false, watchError }: {
   /** This selection's answer: a board, a waiting shell, or null while
    *  nothing for it has answered yet. Only a built board has rows to list;
    *  anything else is `standIn`, under the same heading and controls. */
@@ -57,18 +79,77 @@ export function Chatter({ board, vocabulary, selection, sort = null,
   onOpen: (ticker: string) => void
   onSelect?: (next: Selection) => void
   onSort?: (next: ChatterSort | null) => void
+  /** Defaults to the table, which is what this component has always been. The
+   *  hub opens on `research`; a caller that does not supply the workspace's
+   *  navigation cannot render the workspace, and gets the list it asked for. */
+  mode?: ChatterMode
+  onMode?: (next: ChatterMode) => void
+  selected?: string | null
+  onOpenReplace?: (ticker: string) => void
+  onClear?: () => void
+  hrefFor?: (ticker: string) => string
+  span?: PanelSpan
+  onSpan?: (next: PanelSpan) => void
+  onSearch?: () => void
+  visible?: boolean
+  /** Held by the hub when there is one, so opening a company and coming back
+   *  does not clear what the reader typed. Uncontrolled otherwise. */
+  filter?: string
+  onFilter?: (next: string) => void
+  /** The hub's record of whether this visit has already opened a company.
+   *  See ChatterWorkspace: it cannot live in the workspace, which unmounts
+   *  whenever the reader switches to the table and back. */
+  opened?: boolean
+  onOpened?: () => void
+  watching?: string[]
+  onToggleWatch?: (ticker: string) => void
+  watchPending?: boolean
+  watchError?: unknown
 }) {
-  // Held here rather than in the list, which unmounts while a new selection
-  // loads: the text filter is a view over whichever board is current, and
-  // outlives a filter change the way the ordering does.
-  const [filter, setFilter] = useState('')
+  const [ownFilter, setOwnFilter] = useState('')
+  const text = filter ?? ownFilter
+  const setText = onFilter ?? setOwnFilter
+  const needle = text.trim().toLowerCase()
   const [mounted] = useState(() => Date.now())
+  // Only a built board has rows to list. A waiting shell, a failing key, or
+  // null -- nothing for this selection has answered yet -- is `standIn`,
+  // drawn under the same heading and the same controls in either reading.
   const ready = board !== null && isReady(board) ? board : null
   const offered = board ?? vocabulary
+  // Filter first, then order what survived. Both are views over the response:
+  // neither fetches, and neither can add a company the server did not send.
+  // Sorting outlives a refresh because it is applied to whatever `board.rows`
+  // currently is, rather than stored as a reordered copy that would go stale.
+  //
+  // ONE list, for both modes. The workspace's rail and the comparison table
+  // are the same rows in the same order -- switching between them is a change
+  // of presentation, never of population.
+  const source = ready ? ready.rows : NO_ROWS
+  const rows = useMemo(() => {
+    const matching = needle
+      ? source.filter((row) => matches(row, needle))
+      : source
+    return sortRows(matching, sort)
+  }, [source, needle, sort])
+
+  const excluded = Object.values(ready?.excluded ?? {})
+    .reduce((total, count) => total + count, 0)
+
+  // Every capability the workspace needs, or it does not render one. The
+  // list includes `onSort` and `onSelect` deliberately: without them the rail
+  // would draw a Sort by control that does nothing and drop every
+  // server-side filter, which is precisely what the brief says not to do for
+  // visual space. A caller that cannot supply them gets the table, which is
+  // honest about what it is. And it needs SOME board to read the server's
+  // vocabulary from: with neither an answer nor a vocabulary there is no
+  // feed list to draw.
+  const workspace = mode === 'research' && offered !== undefined && hrefFor
+    && onOpenReplace && onClear && onSpan && onSearch && onSort && onSelect
+    && onOpened
 
   return (
     <>
-      <div className="rh-heading">
+      <div className={`rh-heading rh-chatterhead${workspace ? ' tight' : ''}`}>
         <div>
           {board ? (
             <p className="rh-datestamp">
@@ -83,56 +164,92 @@ export function Chatter({ board, vocabulary, selection, sort = null,
             </p>
           ) : null}
           <h1>Human chatter</h1>
-          <p>Find unusual discussion, then inspect the evidence.</p>
+          {workspace ? null : (
+            <p>Find unusual discussion, then inspect the evidence.</p>
+          )}
         </div>
+        {onMode ? <ModeToggle mode={mode} onMode={onMode} /> : null}
       </div>
 
-      {/* In every state, and at the same place in the tree: a reader waiting
-          on one question may ask another, and controls that remounted when
-          an answer landed would drop their focus and fold their disclosure. */}
-      {onSelect && offered ? (
-        <Filters board={offered} selection={selection} onChange={onSelect} />
-      ) : null}
+      {workspace ? (
+        // In every state, and at the same place in the tree: the rail keeps
+        // its filter, its ordering and the server-side feed controls while a
+        // board is being built, and `standIn` stands where the candidates
+        // would. Controls that remounted when the answer landed would drop
+        // their focus and fold their disclosure.
+        <ChatterWorkspace
+          board={offered}
+          ready={ready}
+          standIn={standIn}
+          selection={selection}
+          rows={rows}
+          selected={selected}
+          onSelect={onOpen}
+          onSelectReplace={onOpenReplace}
+          onClear={onClear}
+          hrefFor={hrefFor}
+          span={span}
+          onSpan={onSpan}
+          visible={visible}
+          filter={text}
+          onFilter={setText}
+          sort={sort}
+          onSort={onSort}
+          onSelection={onSelect}
+          opened={opened}
+          onOpened={onOpened}
+          watching={watching}
+          onToggleWatch={onToggleWatch}
+          watchPending={watchPending}
+          watchError={watchError}
+          onSearch={onSearch}
+        />
+      ) : (
+        <>
+          {/* In every state, and at the same place in the tree: a reader
+              waiting on one question may ask another, and controls that
+              remounted when an answer landed would drop their focus and
+              fold their disclosure. */}
+          {onSelect && offered ? (
+            <Filters board={offered} selection={selection} onChange={onSelect} />
+          ) : null}
 
-      {ready === null ? standIn : (
-        <Listing board={ready} filter={filter} onFilter={setFilter}
-                 onOpen={onOpen} sort={sort} onSort={onSort} />
+          {ready === null ? standIn
+            : ready.rows.length === 0 ? <EmptyBoard excluded={excluded} />
+            : (
+              <Panel board={ready} rows={rows} filter={text}
+                     onFilter={setText} onOpen={onOpen}
+                     sort={sort} onSort={onSort} />
+            )}
+        </>
       )}
     </>
   )
 }
 
-/** A built board's rows, or its measured emptiness. */
-function Listing({ board, filter, onFilter, onOpen, sort, onSort }: {
-  board: ReadyBoard
-  filter: string
-  onFilter: (next: string) => void
-  onOpen: (ticker: string) => void
-  sort: ChatterSort | null
-  onSort?: (next: ChatterSort | null) => void
+/** Which reading of the list is on screen.
+ *
+ *  A pressed pair rather than a select: there are two of them, they are
+ *  mutually exclusive, and the one in effect should be readable without
+ *  opening anything. `aria-pressed` carries the state, and the label is the
+ *  destination rather than the current place -- pressing "Table" gives the
+ *  table. */
+function ModeToggle({ mode, onMode }: {
+  mode: ChatterMode
+  onMode: (next: ChatterMode) => void
 }) {
-  const needle = filter.trim().toLowerCase()
-  // Filter first, then order what survived. Both are views over the response:
-  // neither fetches, and neither can add a company the server did not send.
-  // Sorting outlives a refresh because it is applied to whatever `board.rows`
-  // currently is, rather than stored as a reordered copy that would go stale.
-  const rows = useMemo(() => {
-    const matching = needle
-      ? board.rows.filter((row) => matches(row, needle))
-      : board.rows
-    return sortRows(matching, sort)
-  }, [board.rows, needle, sort])
-
-  const excluded = Object.values(board.excluded ?? {})
-    .reduce((total, count) => total + count, 0)
-
-  return board.rows.length === 0
-    ? <EmptyBoard excluded={excluded} />
-    : (
-      <Panel board={board} rows={rows} filter={filter}
-             onFilter={onFilter} onOpen={onOpen}
-             sort={sort} onSort={onSort} />
-    )
+  return (
+    <div className="rh-modetoggle" role="group" aria-label="List view">
+      <button type="button" aria-pressed={mode === 'research'}
+              onClick={() => onMode('research')}>
+        Research
+      </button>
+      <button type="button" aria-pressed={mode === 'table'}
+              onClick={() => onMode('table')}>
+        Table
+      </button>
+    </div>
+  )
 }
 
 function EmptyBoard({ excluded }: { excluded: number }) {
@@ -371,60 +488,6 @@ function SortControl({ sortKey, label, sort, onSort }: {
   )
 }
 
-const SORT_KEYS: SortKey[] = ['company', 'attention', 'voices', 'sources',
-                              'tone', 'price', 'move']
-
-/** The stacked layout's sort control.
- *
- *  Below 860px the header row is `display: none`, which takes it out of the
- *  accessibility tree along with the eye's -- so without this, sorting would
- *  exist only in controls nobody on a phone can reach. Rendered always and
- *  hidden by the same CSS breakpoint, rather than by JavaScript watching the
- *  viewport: one switch, one source of truth. */
-function SortPicker({ sort, onSort }: {
-  sort: ChatterSort | null
-  onSort: (next: ChatterSort | null) => void
-}) {
-  return (
-    <div className="rh-sortpicker">
-      <label className="rh-field">
-        <span>Sort by</span>
-        <select
-          value={sort ? sort.key : 'radar'}
-          onChange={(event) => {
-            const value = event.target.value
-            onSort(value === 'radar'
-              ? null
-              : nextSort(null, value as SortKey))
-          }}
-        >
-          <option value="radar">Radar order</option>
-          {SORT_KEYS.map((key) => (
-            <option key={key} value={key}>{SORT_LABELS[key]}</option>
-          ))}
-        </select>
-      </label>
-      {/* The visible text is the CURRENT order; the accessible name is what
-          pressing it does, because "Lowest first" as a name promises the
-          opposite of what happens. Disabled with no sort, and then it claims
-          no order at all rather than asserting one that is not in effect. */}
-      <button
-        type="button"
-        className="rh-button rh-sortdir"
-        disabled={!sort}
-        aria-label={sort
-          ? `Sort ${sort.dir === 'asc' ? 'highest' : 'lowest'} first`
-          : 'Sort direction'}
-        onClick={() => sort && onSort({
-          key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
-      >
-        {!sort ? 'Direction'
-          : sort.dir === 'asc' ? 'Lowest first' : 'Highest first'}
-      </button>
-    </div>
-  )
-}
-
 /** What the sort did, and — more importantly — what it did not do.
  *
  *  "Sorted by tone" reads like "the most bullish companies in the market". It
@@ -606,7 +669,7 @@ function Sources({ ticker, sources }: {
       {/* The summary IS the control. A separate "which feeds" link under it
           cost every row a line, which is how the row got tall in the first
           place -- and this correction exists because the rows were tall. */}
-      <Detail label={`Which feeds counted for ${ticker}`}
+      <Disclosure label={`Which feeds counted for ${ticker}`}
               trigger={sources.summary ?? 'Which feeds'}>
         <p className="rh-detailnote">
           {sources.feedCount} {sources.feedCount === 1 ? 'feed' : 'feeds'}{' '}
@@ -624,7 +687,7 @@ function Sources({ ticker, sources }: {
             </li>
           ))}
         </ul>
-      </Detail>
+      </Disclosure>
     </>
   )
 }
@@ -665,64 +728,11 @@ function ToneCell({ ticker, tone }: { ticker: string; tone: TonePresentation }) 
           the local development copy produces. The footer's "How to read
           this" still explains the column. */}
       {tone.sample ? (
-        <Detail label={`How ${ticker}’s tone is counted`} trigger={tone.sample}>
+        <Disclosure label={`How ${ticker}’s tone is counted`} trigger={tone.sample}>
           <p className="rh-detailnote">{tone.detail}</p>
-        </Detail>
+        </Disclosure>
       ) : null}
     </>
-  )
-}
-
-/** A disclosure that opens in place.
- *
- *  In place rather than floating: the table scrolls inside its own region, and
- *  anything absolutely positioned in a cell would be clipped by that scroll
- *  box. A row that grows while it is open is at least honest about what it is
- *  showing.
- *
- *  Escape closes it and returns focus to the control that opened it. A reader
- *  who opened it from the keyboard otherwise has nowhere obvious to go back
- *  to. Rendered always and hidden with the attribute rather than unmounted,
- *  so `aria-controls` points at something that exists. */
-function Detail({ label, trigger, children }: {
-  label: string; trigger: string; children: React.ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-  const id = useId()
-  const button = useRef<HTMLButtonElement>(null)
-  return (
-    <span
-      className="rh-detail"
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape' || !open) return
-        // Stopped here so Escape closes THIS and does not travel on to
-        // whatever else on the page listens for it.
-        event.stopPropagation()
-        setOpen(false)
-        button.current?.focus()
-      }}
-    >
-      <button
-        type="button"
-        ref={button}
-        className="rh-detailtoggle"
-        aria-expanded={open}
-        aria-controls={id}
-        // The visible text LEADS the accessible name, then the label says what
-        // opening it does. Replacing the visible text outright failed WCAG
-        // 2.5.3 Label in Name: the button read `26 directional / 71 total` and
-        // answered to "How KSTR's tone is counted", so a voice-control reader
-        // saying "click 26 directional" had no handle on it at all.
-        aria-label={`${trigger} — ${label}`}
-        onClick={() => setOpen((was) => !was)}
-      >
-        <span className="rh-sub">{trigger}</span>
-      </button>
-      <span className="rh-detailbody" id={id} role="group" aria-label={label}
-            hidden={!open}>
-        {children}
-      </span>
-    </span>
   )
 }
 
@@ -765,7 +775,11 @@ function tapeNote(status: Row['price_status']): string | null {
   if (status === 'closed') return 'at close'
   // The exchange is open and this tape is not printing. The row already
   // carries the No print badge; this says what the number is in spite of it.
-  if (status === 'stale') return 'no print since'
+  //
+  // Not `no print since`: that is a sentence with its object missing, and
+  // the row printed `0.0% · no print since` and stopped. The row has no date
+  // to finish it with -- the panel's quote line is where the timestamp is.
+  if (status === 'stale') return 'tape not printing'
   return null
 }
 
@@ -799,7 +813,7 @@ function Foot({ board, shown }: { board: BoardPayload; shown: number }) {
           own baseline
         </span>
       </p>
-      <Detail label="How to read this table" trigger="How to read this">
+      <Disclosure label="How to read this table" trigger="How to read this">
         <dl className="rh-glossary">
           <dt>Attention</dt>
           <dd>
@@ -835,7 +849,7 @@ function Foot({ board, shown }: { board: BoardPayload; shown: number }) {
             rather than rendering as a zero.
           </dd>
         </dl>
-      </Detail>
+      </Disclosure>
     </div>
   )
 }

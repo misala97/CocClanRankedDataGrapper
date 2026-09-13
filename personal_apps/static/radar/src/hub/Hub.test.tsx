@@ -21,6 +21,14 @@ function mount(props: Partial<Parameters<typeof Hub>[0]> = {}) {
   )
 }
 
+/** Human chatter opens on the workspace. These tests are about the
+ *  comparison table, which is one press away and shares its rows, filters
+ *  and ordering with it -- so they ask for it rather than asserting the
+ *  workspace is not there. */
+async function toTable() {
+  await userEvent.click(screen.getByRole('button', { name: 'Table' }))
+}
+
 beforeEach(() => {
   window.history.replaceState(null, '', '/radar/hub/')
 })
@@ -281,8 +289,9 @@ describe('the shell', () => {
     window.history.replaceState(null, '', '/radar/hub/#chatter')
     mount({ initial: onlyReddit })
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /more filters/i }))
+    // In the rail every server-side filter is behind one disclosure; the
+    // feeds are the same checkboxes wired to the same reducer.
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
     await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
 
     for (const call of fetchBoard.mock.calls) {
@@ -302,8 +311,7 @@ describe('the shell', () => {
     window.history.replaceState(null, '', '/radar/hub/#chatter')
     mount({ initial: both })
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /more filters/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
     await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
     await waitFor(() => expect(fetchBoard).toHaveBeenCalled())
     expect(fetchBoard.mock.calls[0]![0].sources).toEqual(['bluesky'])
@@ -355,6 +363,7 @@ describe('the reader’s ordering of the chatter list', () => {
     const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(board)
     window.history.replaceState(null, '', '/radar/hub/#chatter')
     mount({ initial: board })
+    await toTable()
     await screen.findByTestId('rh-sort-voices')
     const before = fetchBoard.mock.calls.length
 
@@ -365,19 +374,29 @@ describe('the reader’s ordering of the chatter list', () => {
     expect(window.location.search).not.toContain('sort')
   })
 
-  it('still has the reader’s ordering after Back from a company', async () => {
+  it('still has the reader’s ordering after a company and Back', async () => {
     vi.spyOn(api, 'fetchBoard').mockResolvedValue(board)
+    vi.spyOn(api, 'fetchDetail').mockRejectedValue(new BoardUnavailable('server'))
     window.history.replaceState(null, '', '/radar/hub/#chatter')
     mount({ initial: board })
+    await toTable()
     await screen.findByTestId('rh-sort-voices')
     await userEvent.click(screen.getByTestId('rh-sort-voices'))
     expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
 
-    // Chatter unmounts here, which is why the ordering cannot live in it.
+    // Opening from the table hands the company to the workspace, which is
+    // where one is readable. Chatter stays mounted, but the table does not --
+    // and the ordering has to survive that either way.
     await userEvent.click(screen.getByRole('button', { name: /^TOP/ }))
-    await waitFor(() => expect(window.location.hash).toContain('research'))
+    await waitFor(() => expect(window.location.hash).toBe('#chatter/TOP'))
     window.history.back()
+    // Back lands on the entry the reader arrived on, which the workspace's
+    // opening selection REPLACED rather than pushed -- so it still names the
+    // first candidate of the unsorted response, not a bare `#chatter`. That
+    // is the point of the replace: one press of Back leaves the hub.
+    await waitFor(() => expect(window.location.hash).toBe('#chatter/MID'))
 
+    await toTable()
     await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
     expect(screen.getByRole('columnheader', { name: 'Voices' }))
       .toHaveAttribute('aria-sort', 'descending')
@@ -392,6 +411,7 @@ describe('the reader’s ordering of the chatter list', () => {
     vi.spyOn(api, 'fetchBoard').mockResolvedValue(reordered)
     window.history.replaceState(null, '', '/radar/hub/#chatter')
     mount({ initial: board })
+    await toTable()
     await screen.findByTestId('rh-sort-voices')
     await userEvent.click(screen.getByTestId('rh-sort-voices'))
 
@@ -412,6 +432,7 @@ describe('the reader’s ordering of the chatter list', () => {
       vi.spyOn(api, 'fetchBoard').mockResolvedValue(reordered)
       window.history.replaceState(null, '', '/radar/hub/#chatter')
       mount({ initial: board })
+      await toTable()
       await screen.findByTestId('rh-sort-voices')
       await userEvent.click(screen.getByTestId('rh-sort-voices'))
       await userEvent.selectOptions(screen.getByLabelText(/window/i), '1')

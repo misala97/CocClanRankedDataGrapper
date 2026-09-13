@@ -46,7 +46,7 @@ describe('finding the company', () => {
     const onBack = vi.fn()
     show({ onBack })
 
-    expect(await screen.findByText(/nothing here for AAA/i)).toBeVisible()
+    expect(await screen.findByText(/no panel for AAA/i)).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: /back to the list/i }))
     expect(onBack).toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /search for a company/i }))

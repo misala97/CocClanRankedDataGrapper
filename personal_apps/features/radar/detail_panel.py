@@ -367,9 +367,20 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN,
     quote = quotes_mod.quote_views_for([ticker], market, now)[ticker]
     session = quote.session
     status = quote.tape_status
-    move = (quotes_mod.move_since(ticker, hours=window_hours, now=now,
-                                  market=quote.market, mic=quote.mic)
-            if quote.score_eligible else None)
+    # The move as MEASURED, whatever the session -- the same correction
+    # `leaderboard._assemble` took on 2026-09-10, which this path was missed
+    # by. It matters more here than it did there: the chatter workspace draws
+    # the board row and this panel side by side, so the withheld move printed
+    # `+4.6%` in the candidate rail and `move unknown` under the company's own
+    # heading, at the same instant, about the same number.
+    #
+    # Nothing is weakened by carrying it. This panel computes no divergence;
+    # the score's frozen-tape gate lives in the leaderboard and tests
+    # `score_eligible` itself. `move_since` returns None for the one honest
+    # reason -- fewer than two snapshots in the window -- and that is the
+    # unknown the panel should name.
+    move = quotes_mod.move_since(ticker, hours=window_hours, now=now,
+                                 market=quote.market, mic=quote.mic)
 
     # Intraday spans price from radar_quotes and slot by minutes; the daily
     # ones price from radar_daily_closes and slot by calendar day. Different

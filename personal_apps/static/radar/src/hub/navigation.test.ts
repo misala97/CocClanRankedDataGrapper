@@ -79,10 +79,32 @@ describe('reading the address bar', () => {
   it('round-trips every route through its hash', () => {
     const routes = [{ page: 'overview' }, { page: 'chatter' }, { page: 'watching' },
                     { page: 'activity' }, { page: 'admin' },
+                    { page: 'chatter', ticker: 'BRK.B' },
                     { page: 'research', ticker: 'BRK.B' }] as const
     for (const route of routes) {
       expect(readRoute(hashFor(route))).toEqual(route)
     }
+  })
+
+  it('carries the workspace’s selected company in the address', () => {
+    expect(readRoute('#chatter/kstr')).toEqual({ page: 'chatter', ticker: 'KSTR' })
+    // A ticker with a slash survives, exactly as it does for research.
+    expect(readRoute('#chatter/BRK%2FB'))
+      .toEqual({ page: 'chatter', ticker: 'BRK/B' })
+  })
+
+  it('reads a chatter link that lost its company as the bare list', () => {
+    // `#chatter/` is a link that lost its last segment, not a link to
+    // nowhere: unlike research, the list is a destination in its own right.
+    expect(readRoute('#chatter/')).toEqual({ page: 'chatter' })
+    expect(readRoute('#chatter/%E0%A4%A')).toEqual({ page: 'chatter' })
+  })
+
+  it('leaves `#chatter` exactly the route it has always been', () => {
+    // No `ticker: undefined` key: a bookmark from before the workspace
+    // existed has to keep resolving to the same thing.
+    expect(readRoute('#chatter')).toEqual({ page: 'chatter' })
+    expect(hashFor({ page: 'chatter' })).toBe('#chatter')
   })
 })
 
@@ -207,6 +229,10 @@ describe('writing the address bar', () => {
     // It belongs to one ticker's chart. On the chatter list it would be a
     // parameter describing nothing on screen.
     expect(urlFor({ page: 'chatter' }, selection, '1M')).not.toContain('span=')
+    // With a company open the workspace HAS that chart, so the span rides
+    // along and a link to it opens on the span the sender was looking at.
+    expect(urlFor({ page: 'chatter', ticker: 'AAA' }, selection, '1M'))
+      .toContain('span=1M')
   })
 
   it('encodes a ticker that needs it', () => {

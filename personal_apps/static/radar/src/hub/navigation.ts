@@ -16,7 +16,17 @@ import { SORT_KEYS } from '../types'
 import type { Market, PanelSpan, SegmentFilter, Selection, SortKey } from '../types'
 
 export type HubRoute =
-  | { page: 'overview' | 'chatter' | 'watching' | 'activity' | 'admin' }
+  | { page: 'overview' | 'watching' | 'activity' | 'admin' }
+  /** Human chatter, optionally with the company the workspace has open.
+   *
+   *  The selected company is a property of the ROUTE rather than of a state
+   *  store beside it: Back returns to the company the reader was looking at,
+   *  a link to one is a link anybody can send, and there is no second copy of
+   *  "which company" free to disagree with the address bar.
+   *
+   *  Absent -- not `undefined`, absent -- on the bare list, which is what
+   *  keeps `#chatter` the exact same route object it has always been. */
+  | { page: 'chatter'; ticker?: string }
   | { page: 'research'; ticker: string }
   | { page: 'missing' }
 
@@ -58,6 +68,15 @@ export function readRoute(hash: string): HubRoute {
     if (!ticker) return { page: 'missing' }
     return { page: 'research', ticker: ticker.toUpperCase() }
   }
+  // `#chatter/KSTR` is the list with that company open. A trailing slash with
+  // nothing after it is the bare list rather than a missing page: unlike
+  // research, chatter is a destination in its own right, and `#chatter/` is a
+  // link that lost its last segment, not a link to nowhere.
+  if (name === 'chatter') {
+    const ticker = decode(rest.join('/'))
+    if (!ticker) return { page: 'chatter' }
+    return { page: 'chatter', ticker: ticker.toUpperCase() }
+  }
   return { page: 'missing' }
 }
 
@@ -80,6 +99,9 @@ export function hashFor(route: HubRoute): string {
     // everything after the first segment; encodeURIComponent leaves `.` alone,
     // so BRK.B needs nothing special.
     return `#research/${encodeURIComponent(route.ticker)}`
+  }
+  if (route.page === 'chatter' && route.ticker) {
+    return `#chatter/${encodeURIComponent(route.ticker)}`
   }
   return `#${route.page}`
 }
@@ -192,6 +214,11 @@ export function readSpan(search: string): PanelSpan {
 export function urlFor(route: HubRoute, selection: Selection,
                        span: PanelSpan): string {
   const params = new URLSearchParams(queryFor(selection))
-  if (route.page === 'research') params.set('span', span)
+  // Only where there is a chart the span describes -- which is standalone
+  // research, and the chatter workspace once it has a company open.
+  if (route.page === 'research'
+      || (route.page === 'chatter' && route.ticker)) {
+    params.set('span', span)
+  }
   return `?${params.toString()}${hashFor(route)}`
 }

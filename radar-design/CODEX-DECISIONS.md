@@ -728,3 +728,59 @@ Run relevant regression suites/build checks for the changes. Reuse previously ve
 
 Return a closure report and one concrete deploy proposal. Stopping point: closure requirements proven, or a specifically measured criterion that requires Codex's decision. No merge, push, deploy, production migration/configuration/restart, capture enablement or root-route change is authorized. The next decision after a successful closure is release approval, not another design phase.
 
+
+
+> Carried into codex/radar-b1c on 2026-09-13 from codex/radar-b1 @6c63959 (radar-design/CODEX-DECISIONS.md lines 644-end), unchanged. It is the ruling B1C Task 2 closes.
+
+## B1 return ruling — 2026-09-10
+
+Verified radar-b1/codex/radar-b1 at df139ff, six commits from 472f345, clean
+before this documentation edit (Git ignore/cache warnings). Read B1 ledger and
+current dispatch, inspected desktop 1440/1920 screenshots, measured recheck
+output, detail_panel move path and phrasing._read_price. Other reported suites,
+review findings and baseline classifications remain attributed to Claude;
+no production access or backend database tests performed in this review.
+Started actual app on loopback 5002 after asserting personal_apps_radar_b1.
+
+1. Accept B1 for owner visual review, not deployment or final appearance approval.
+The horizontal navy shell and integrated candidate/detail/evidence composition
+are implemented. Actual seeded-app data is demonstration data, not live market
+prices. Owner reviews this working application; no separate prototype requested.
+
+2. Ratify three columns at 1600 for this iteration. Readable labels and complete
+price values take priority over the approximate breakpoint. Do not treat the
+912-unit chart width as a permanent architectural requirement: MD/HA chart
+redesign should use responsive plot geometry and tick density while preserving
+legibility. No need to reverse this one CSS number now.
+
+3. Accept carrying the measured detail price_move as the intended alignment with
+the deployed leaderboard change, but NOT all new narrative consequences. Source
+inspection shows phrasing._read_price claims 'the talk and the tape agree' for
+abs(price_move)>=1%, without testing direction or chatter attitude; it also
+claims no price move exists when closed. Removing the gate exposes that wording
+to more cases. Before a deployment proposal, make this price clause descriptive:
+state the measured window move and relevant session/quality limitation, no claim
+of agreement or causation. Closed session may withhold divergence but must not
+say a measured move does not exist. Preserve missing/stale warnings and the
+score_eligible gate for actual scoring. This is a narrow shared-surface correction:
+add focused fallback/non-trade-basis, positive/negative, closed and absent-move
+cases; prove original /radar/ detail remains coherent. No provider/scoring rewrite.
+Do not describe /radar/ as code-untouched just because its CSS stayed light.
+
+4. Area versus histogram is a named chart follow-up, not a reason to freeze a
+shared renderer forever. Add a hub-specific rendering option or suitable shared
+abstraction when implementing bars, preserving old-board behavior by default.
+Track with MD-07/11 chart work; do not fabricate OHLCV or change counts. Overview
+'people' -> 'voices' belongs in B2 as recorded. Neither blocks owner's B1 preview.
+
+5. Accept a NEW isolated seeded DB to protect TE1. Do not call it TE1-equivalent
+without actual schema/constraint/session checks. Preserve TE1 evidence and the
+reported six backend failures; the suite is not all green. The ledger's assertion
+that TE1 was built by structure copy rather than migrations conflicts with the
+prior TE1 record of schema-preserving dump/restore then upgrade. Correct this
+historical explanation instead of generalizing B1's empty-schema failure to TE1.
+
+Next: owner looks at actual app now. Claude's only pre-deployment closure from
+this ruling is item 3 and the documentation precision in item 5, with focused
+verification and review. Do not redispatch B1.1/1.2. No merge/push/deploy/capture
+or root-route change. B2 and MD/HA remain subsequent scoped work.

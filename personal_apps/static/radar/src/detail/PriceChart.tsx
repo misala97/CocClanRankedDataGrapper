@@ -432,7 +432,16 @@ export function priceY(value: number, low: number, high: number): number {
 }
 
 /** Direction across the whole visible span, which is the only thing green and
- *  red are allowed to mean on this surface. */
+ *  red are allowed to mean on this surface.
+ *
+ *  Exported because the hub states this in words beside its chart: there the
+ *  stroke is cyan for series identity, so the direction has to be said rather
+ *  than drawn. One implementation, so the sentence and the line can never
+ *  disagree about which way the span went. */
+export function roseOverSpan(closes: (number | null)[]): boolean {
+  return rose(closes)
+}
+
 function rose(closes: (number | null)[]): boolean {
   const real = closes.filter((v): v is number => v !== null)
   return real.length < 2 || real[real.length - 1]! >= real[0]!
