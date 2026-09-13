@@ -5,8 +5,8 @@ import { count } from '../format'
 import { PLOT_R, TOP, FLOOR, isIntraday, slotLabel } from './PriceChart'
 
 const TONE_COLORS = {
-  bullish: 'var(--up)',
-  bearish: 'var(--down)',
+  bullish: '#45dda0',
+  bearish: '#ff6b7c',
   neutral: 'var(--dim)',
   unjudged: '#748391',
   unavailable: '#46545e',
@@ -27,35 +27,36 @@ export function poolHistogram(chart: DetailChart): DisplayBin[] {
   const length = chart.chatter.length
   const poolSize = length > 400 ? Math.ceil(length / 365) : 1
   const bins: DisplayBin[] = []
-  for (let start = 0; start < length; start += poolSize) {
-    const end = Math.min(length, start + poolSize)
-    const values = chart.chatter.slice(start, end)
-    const tones = chart.chatter_tone?.slots.slice(start, end) ?? []
-    const observed = values.filter((value): value is number => value !== null)
-    if (observed.length === 0) {
+  // Never pool across an unobserved gap: a missing interval is not silence.
+  for (let start = 0; start < length;) {
+    let end = Math.min(length, start + poolSize)
+    const missing = chart.chatter[start] === null
+    for (let i = start + 1; i < end; i++) {
+      if ((chart.chatter[i] === null) !== missing) { end = i; break }
+    }
+    if (missing) {
       bins.push({ start, end, total: null, slot: null })
+      start = end
       continue
     }
-    const total = observed.reduce((sum, value) => sum + value, 0)
-    const toneSlot: NonNullable<ChatterToneSlot> = {
-      bullish: 0, bearish: 0, neutral: 0, unjudged: 0, unavailable: 0,
-      status: 'complete',
+    let total = 0
+    const slot: NonNullable<ChatterToneSlot> = {
+      bullish: 0, bearish: 0, neutral: 0, unjudged: 0, unavailable: 0, status: 'complete',
     }
-    const slot = tones.length === 0 || tones.every((value) => value === null)
-      ? null
-      : (['bullish', 'bearish', 'neutral', 'unjudged', 'unavailable'] as const)
-        .reduce((sum, key) => {
-          sum[key] = tones.reduce((inner, tone) => inner + (tone?.[key] ?? 0), 0)
-          return sum
-        }, toneSlot)
-    if (slot !== null) {
-      const categories = ['bullish', 'bearish', 'neutral', 'unjudged', 'unavailable'] as const
-      const categoryTotal = categories.reduce((sum, key) => sum + slot[key], 0)
-      slot.status = slot.unavailable === 0 ? 'complete'
-        : slot.unavailable === categoryTotal ? 'unavailable' : 'partial'
-      if (categoryTotal !== total) slot.unavailable += total - categoryTotal
+    const keys = ['bullish', 'bearish', 'neutral', 'unjudged', 'unavailable'] as const
+    for (let i = start; i < end; i++) {
+      const value = chart.chatter[i] ?? 0
+      total += value
+      const tone = chart.chatter_tone?.slots[i]
+      const valid = tone && keys.every(key => Number.isInteger(tone[key]) && tone[key] >= 0)
+        && keys.reduce((sum, key) => sum + tone[key], 0) === value
+      if (valid) for (const key of keys) slot[key] += tone[key]
+      else slot.unavailable += value
     }
+    slot.status = slot.unavailable === 0 ? 'complete'
+      : slot.unavailable === total ? 'unavailable' : 'partial'
     bins.push({ start, end, total, slot })
+    start = end
   }
   return bins
 }
@@ -80,7 +81,7 @@ function detailText(chart: DetailChart, bin: DisplayBin): string {
   const parts = (['bullish', 'bearish', 'neutral', 'unjudged', 'unavailable'] as const)
     .map((key) => `${key} ${slot[key]} (${percentageText(slot[key], total)})`)
     .join(', ')
-  return `${intervalLabel(chart, bin)}; total ${count(total)} mentions; ${parts}; basis recorded judgments`
+  return `${intervalLabel(chart, bin)}; total ${count(total)} mentions; ${parts}; basis recorded judgments${slot.status === 'unavailable' ? '; tone unavailable' : ''}`
 }
 
 export function ChatterHistogram({ chart }: { chart: DetailChart }) {
@@ -89,8 +90,9 @@ export function ChatterHistogram({ chart }: { chart: DetailChart }) {
   const [selected, setSelected] = useState<number | null>(
     firstObserved >= 0 ? firstObserved : null)
   const [hovered, setHovered] = useState<number | null>(null)
-  const peak = Math.max(...bins.map((bin) => bin.total ?? 0), 1)
-  const width = PLOT_R / Math.max(bins.length, 1)
+  const peak = Math.max(...bins.map(bin => Math.max(bin.total ?? 0,
+    (chart.normal_per_slot ?? 0) * (bin.end - bin.start))), 1)
+  const width = PLOT_R / Math.max(chart.chatter.length, 1)
   const active = hovered ?? selected
 
   const move = (delta: number) => {
@@ -130,14 +132,15 @@ export function ChatterHistogram({ chart }: { chart: DetailChart }) {
           else if (event.key === 'Escape') { setSelected(null); setHovered(null) }
         }}
       >
-        <svg viewBox={`0 0 ${PLOT_R} ${FLOOR + 26}`} role="img"
+        <svg viewBox={`0 0 912 ${FLOOR + 26}`} role="img"
              aria-label="Stacked chatter tone histogram">
           <line x1="0" y1={FLOOR} x2={PLOT_R} y2={FLOOR}
                 stroke="var(--rule)" vectorEffect="non-scaling-stroke" />
           {bins.map((bin, index) => {
             if (bin.total === null) return null
-            const x = index * width + Math.min(width * 0.18, 3)
-            const barWidth = Math.max(width * 0.64, 1)
+            const binWidth = (bin.end - bin.start) * width
+            const x = bin.start * width + Math.min(binWidth * 0.18, 3)
+            const barWidth = Math.max(binWidth * 0.64, 0.1)
             const values = bin.slot ?? {
               bullish: 0, bearish: 0, neutral: 0, unjudged: 0,
               unavailable: bin.total, status: 'unavailable' as const,
@@ -145,18 +148,28 @@ export function ChatterHistogram({ chart }: { chart: DetailChart }) {
             let y = FLOOR
             return (
               <g key={`${bin.start}-${bin.end}`}>
+                {chart.normal_per_slot !== null && (
+                  <line className="tone-normal" x1={bin.start * width} x2={bin.end * width}
+                    y1={FLOOR - (chart.normal_per_slot * (bin.end - bin.start) / peak) * (FLOOR - TOP)}
+                    y2={FLOOR - (chart.normal_per_slot * (bin.end - bin.start) / peak) * (FLOOR - TOP)}
+                    stroke="var(--dim)" strokeDasharray="3 4" />
+                )}
                 {(['bullish', 'bearish', 'neutral', 'unjudged', 'unavailable'] as const)
                   .map((key) => {
                     const height = (values[key] / peak) * (FLOOR - TOP)
                     const rect = <rect key={key} x={x} y={y - height}
                       width={barWidth} height={Math.max(height, 0)}
-                      fill={TONE_COLORS[key]} opacity={active === index ? 1 : 0.9}
+                      data-tone={key} fill={TONE_COLORS[key]} opacity={active === index ? 1 : 0.9}
                       onMouseEnter={() => setHovered(index)}
                       onMouseLeave={() => setHovered(null)}
                       onClick={() => setSelected(index)} />
                     y -= height
                     return rect
                   })}
+                <rect className="tone-hit" x={bin.start * width} y={TOP}
+                  width={binWidth} height={FLOOR - TOP} fill="transparent"
+                  onMouseEnter={() => setHovered(index)} onMouseLeave={() => setHovered(null)}
+                  onClick={() => setSelected(index)} />
                 {active === index && (
                   <line x1={x + barWidth / 2} y1={TOP} x2={x + barWidth / 2}
                         y2={FLOOR} stroke="var(--text)" opacity=".55"
@@ -165,6 +178,7 @@ export function ChatterHistogram({ chart }: { chart: DetailChart }) {
               </g>
             )
           })}
+          <text className="ax" x={PLOT_R + 8} y={TOP + 12}>{count(peak)}</text>
           <text className="ax" x="0" y={FLOOR + 18}>{slotLabel(chart, 0, true)}</text>
           <text className="ax" x={PLOT_R} y={FLOOR + 18} textAnchor="end">
             {isIntraday(chart) ? 'now' : 'today'}
@@ -179,7 +193,7 @@ export function ChatterHistogram({ chart }: { chart: DetailChart }) {
       <p className="rh-caption">
         Green and red describe recorded discussion only; they do not predict a
         price move or recommend a trade. Percentages use the full interval
-        mention total. Focus the chart and use arrow keys, Home, End or Escape.
+        mention total. Dashed segments show the normal volume for each interval. Focus the chart and use arrow keys, Home, End or Escape.
       </p>
     </div>
   )

@@ -79,10 +79,10 @@ def reconcile_slot(*, total, source_bins):
             result['status'] = 'unavailable'
             return result
         categories_total = sum(values[key] for key in TONE_CATEGORIES)
+        observed_total += source_total
         if categories_total != source_total:
             result['unavailable'] += source_total
         else:
-            observed_total += source_total
             for key in TONE_CATEGORIES:
                 result[key] += values[key]
 
@@ -178,6 +178,7 @@ def _event_partitions(ticker, sources, lower, upper):
         event_rows.c.source,
         event_rows.c.bucket_start,
         sa.func.count(event_rows.c.event_id).label('total'),
+        sa.func.sum(event_rows.c.eligibility_conflicts).label('eligibility_conflicts'),
         *[
             sa.func.sum(sa.case((classification == category, 1), else_=0))
             .label(category)
@@ -203,7 +204,7 @@ def chart_tone(ticker, sources, chart, *, now):
     ).filter(
         RadarBucketSource.ticker == ticker,
         RadarBucketSource.source.in_(list(selected_sources)),
-        RadarBucketSource.bucket_start >= start,
+        RadarBucketSource.bucket_start >= retained_from,
         RadarBucketSource.bucket_start < end,
     ).all()) if selected_sources else []
 
@@ -248,7 +249,7 @@ def chart_tone(ticker, sources, chart, *, now):
             if source_bin is None:
                 continue
             row = aggregate_map.get((source, bucket_start))
-            if row is None:
+            if row is None or row.eligibility_conflicts:
                 source_bin.update(total=_as_count(mention_count), bullish=0,
                                   bearish=0, neutral=0, unjudged=0,
                                   unavailable=_as_count(mention_count))

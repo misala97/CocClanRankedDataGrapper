@@ -81,6 +81,7 @@ export function ChartSection({ chart, quoteVenue, ticker, span, onSpan,
     // resting position of zero, so someone who has scrolled back into
     // history is left where they put themselves.
     const toNewest = () => {
+      box.style.setProperty('--chart-visible-width', `${Math.max(1, box.clientWidth - 38)}px`)
       if (box.scrollWidth > box.clientWidth && box.scrollLeft === 0) {
         box.scrollLeft = box.scrollWidth
       }
@@ -160,7 +161,7 @@ export function ChartLegend({ chart }: { chart: DetailChart }) {
         )}
       </span>
       <span className="rh-legenditem">
-        <span className="rh-swatch chatter" aria-hidden="true" />
+        <span className="rh-swatch chatter-tone" aria-hidden="true" />
         Chatter (mentions{perSlotWord(chart)})
       </span>
       {/* The dashed line through the chatter body is the ticker's own normal

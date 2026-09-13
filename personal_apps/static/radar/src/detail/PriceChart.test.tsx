@@ -280,3 +280,13 @@ describe('the axis currency', () => {
     expect(us.textContent).toContain('$')
   })
 })
+
+
+describe('sentiment chart integration', () => {
+  it('retains the price path while replacing only the chatter area', () => {
+    const { container } = render(<PriceChart chart={chart()} chatterMode="sentiment-bars" />)
+    expect(container.querySelector('path.px')?.getAttribute('d')).toBeTruthy()
+    expect(container.querySelector('.chatter-histogram')).toBeTruthy()
+    expect(container.querySelectorAll('path[fill="var(--mark-soft)"]')).toHaveLength(0)
+  })
+})

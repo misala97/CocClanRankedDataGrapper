@@ -56,3 +56,51 @@ describe('ChatterHistogram', () => {
       /tone unavailable/i)
   })
 })
+
+
+describe('histogram reconciliation and geometry', () => {
+  it('does not bridge an unobserved day while pooling a long span', () => {
+    const values = Array<number | null>(402).fill(2)
+    values[1] = null
+    const bins = poolHistogram(chart({ chatter: values, chatter_tone: undefined }))
+    expect(bins.slice(0, 3).map(bin => [bin.start, bin.end, bin.total]))
+      .toEqual([[0, 1, 2], [1, 2, null], [2, 4, 4]])
+  })
+
+  it('preserves verified colour while assigning absent evidence to unavailable', () => {
+    const base = chart()
+    const bins = poolHistogram(chart({ chatter: Array(402).fill(10),
+      chatter_tone: { ...base.chatter_tone!, slots: [base.chatter_tone!.slots[0]!] } }))
+    expect(bins[0]?.slot).toMatchObject({ bullish: 4, bearish: 2, unavailable: 10, status: 'partial' })
+    expect(bins[0]?.total).toBe(20)
+  })
+
+  it('refuses an overfull partition instead of producing negative unavailable counts', () => {
+    const base = chart()
+    base.chatter_tone!.slots[0]!.bullish = 100
+    expect(poolHistogram(base)[0]?.slot).toMatchObject({ bullish: 0, unavailable: 10, status: 'unavailable' })
+  })
+
+  it('uses one zero-based scale for normal volume and each stacked segment', () => {
+    const { container } = render(<ChatterHistogram chart={chart({ normal_per_slot: 20 })} />)
+    const rects = [...container.querySelectorAll('rect[data-tone]')].slice(0, 5)
+    const heights = rects.map(rect => Number(rect.getAttribute('height')))
+    expect(heights.reduce((a, b) => a + b, 0)).toBeCloseTo(132)
+    expect(heights[0]! / heights[1]!).toBeCloseTo(2)
+    expect(container.querySelector('line.tone-normal')).toHaveAttribute('y1', '8')
+  })
+
+  it('allows tapping a zero-volume interval', async () => {
+    const { container } = render(<ChatterHistogram chart={chart()} />)
+    await userEvent.click(container.querySelectorAll('rect.tone-hit')[1]!)
+    expect(screen.getByText(/total 0 mentions/i)).toBeVisible()
+    expect(container.querySelector('.chatter-interval-detail')).not.toHaveTextContent('NaN')
+  })
+})
+
+
+it('keeps bullish and bearish colours independent of the price chart tokens', () => {
+  const { container } = render(<ChatterHistogram chart={chart()} />)
+  expect(container.querySelector('[data-tone="bullish"]')).toHaveAttribute('fill', '#45dda0')
+  expect(container.querySelector('[data-tone="bearish"]')).toHaveAttribute('fill', '#ff6b7c')
+})

@@ -1157,7 +1157,7 @@
   flex: none;
 }
 .rh .chatter-histogram-canvas {
-  overflow-x: auto;
+  overflow-x: visible;
   padding: 4px 0 2px;
   outline: none;
 }
@@ -2126,4 +2126,20 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Tone is independent of the cyan price series. */
+.rh .chatter-histogram .ax { fill: var(--muted); font-size: 12px; }
+.rh .rh-swatch.chatter-tone { background: linear-gradient(90deg, #45dda0 0 40%, #ff6b7c 40% 70%, #748391 70%); }
+
+/* Keep explanatory text readable while both plots pan together. */
+.rh .chatter-histogram { width: 912px; }
+.rh .chatter-histogram-head,
+.rh .chatter-interval-detail,
+.rh .chatter-histogram > .rh-caption {
+  position: sticky;
+  left: 0;
+  width: var(--chart-visible-width, 100%);
+  max-width: 912px;
+  box-sizing: border-box;
 }

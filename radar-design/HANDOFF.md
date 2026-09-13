@@ -1,3 +1,5 @@
+> Current B1C state: read ../HANDOFF.md (the root HANDOFF.md in this worktree), CODEX-RETURN-B1C.md and B1C-LEDGER.md. Local corrections complete; busy tone latency acceptance fails. The PERF3 status below is historical and does not govern this task.
+
 # CURRENT — PERF3-close review-fix round is CLOSED (2026-09-12)
 
 **Read this block first. Everything below it is historical where it differs.**

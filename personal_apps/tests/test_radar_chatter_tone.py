@@ -67,3 +67,33 @@ def test_reconcile_zero_and_null_totals_are_distinct():
     }
     assert chatter_tone.reconcile_slot(total=None, source_bins=[]) is None
 
+
+def test_mismatched_source_does_not_erase_other_sources():
+    slot = chatter_tone.reconcile_slot(total=10, source_bins=[
+        {'total': 4, 'bullish': 3},
+        {'total': 6, 'bearish': 6},
+    ])
+    assert slot == dict(bullish=0, bearish=6, neutral=0, unjudged=0,
+                        unavailable=4, status='partial')
+
+def test_guarded_real_sql_source_reconciliation_and_retention():
+    """Opt-in integration; uses only reserved rollback-only fixture rows."""
+    import importlib.util
+    import os
+    import pathlib
+    import pytest
+    if os.environ.get('RADAR_DESTRUCTIVE_TEST_TARGET') != 'localhost:3306/personal_apps_radar_b1c':
+        pytest.skip('requires independently registered disposable B1C target')
+    path = pathlib.Path(__file__).parents[1] / 'scratchpad/b1c/probe_tone.py'
+    spec = importlib.util.spec_from_file_location('b1c_tone_probe', path)
+    probe = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(probe)
+    with probe.app.app_context():
+        assert probe.require(probe.db.engine.url) == 'localhost:3306/personal_apps_radar_b1c'
+        for model in [probe.RadarMentionEvent, probe.RadarMention, probe.RadarBucketSource]:
+            assert probe.db.session.query(model).filter(model.ticker == 'B1CTEST').first() is None
+        try:
+            assert len(probe.correctness()) == 6
+        finally:
+            probe.db.session.rollback()
+        assert probe.db.session.query(probe.RadarMentionEvent).filter_by(ticker='B1CTEST').first() is None

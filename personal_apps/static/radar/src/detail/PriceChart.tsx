@@ -73,8 +73,12 @@ export function PriceChart({ chart, chatterMode = 'area' }: {
   chatterMode?: 'area' | 'sentiment-bars'
 }) {
   if (chatterMode === 'sentiment-bars') {
-    return <ChatterHistogram chart={chart} />
+    return <><PricePlot chart={chart} showChatter={false} /><ChatterHistogram chart={chart} /></>
   }
+  return <PricePlot chart={chart} showChatter />
+}
+
+function PricePlot({ chart, showChatter }: { chart: DetailChart; showChatter: boolean }) {
   const currency = chart.currency ?? 'USD'
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 
@@ -106,7 +110,7 @@ export function PriceChart({ chart, chatterMode = 'area' }: {
   // time. One clip on one group keeps that affordable at the long spans.
   return (
     <svg className="pxchart" viewBox={`0 0 ${W} ${H}`} role="img"
-         aria-label={`price over ${chart.span} with chatter beneath${
+         aria-label={`price over ${chart.span}${showChatter ? ' with chatter beneath' : ''}${
            sessionContext ? `; extended sessions: ${sessionContext}` : ''}`}>
       <SessionBands chart={chart} plotTop={TOP} plotBottom={FLOOR}
                     plotRight={PLOT_R} />
@@ -135,7 +139,7 @@ export function PriceChart({ chart, chatterMode = 'area' }: {
           </text>
         )}
 
-        {watchIndex > 0 && (
+        {showChatter && watchIndex > 0 && (
           <>
             <line x1="0" y1={FLOOR} x2={watchX} y2={FLOOR}
                   stroke="var(--rule)"
@@ -156,7 +160,7 @@ export function PriceChart({ chart, chatterMode = 'area' }: {
             over `33/h` into one unreadable block (seen live twice). Only
             where something was counted: a number over an empty lane would
             label a measurement nobody took. */}
-        {observed > 0 && peakIndex >= 0 && (
+        {showChatter && observed > 0 && peakIndex >= 0 && (
           <text className="ax peak" fill="var(--mark)"
                 x={Math.min(peakIndex * slot + slot / 2, PLOT_R - 4)}
                 y={Math.max(chatterY(observed, peak, band) - 6, 12)}
@@ -176,10 +180,10 @@ export function PriceChart({ chart, chatterMode = 'area' }: {
       </g>
 
       <g className="plot">
-        {chatter.areas.map((d, index) => (
+        {showChatter && chatter.areas.map((d, index) => (
           <path key={`a${index}`} d={d} fill="var(--mark-soft)" />
         ))}
-        {chatter.lines.map((d, index) => (
+        {showChatter && chatter.lines.map((d, index) => (
           <path key={`l${index}`} d={d} fill="none" stroke="var(--mark)"
                 strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"
                 vectorEffect="non-scaling-stroke" />
@@ -187,13 +191,13 @@ export function PriceChart({ chart, chatterMode = 'area' }: {
         {/* The ticker's own normal, dashed through the talk exactly as the
             rows draw it -- only over the stretch that was observed, because
             left of the boundary there is nothing to measure against. */}
-        {yNormal !== null && observed > 0 && (
+        {showChatter && yNormal !== null && observed > 0 && (
           <line x1={watchX} y1={yNormal} x2={PLOT_R} y2={yNormal}
                 stroke="var(--dim)" strokeWidth="1" strokeDasharray="3 4"
                 opacity="0.55" vectorEffect="non-scaling-stroke" />
         )}
 
-        {watchIndex > 0 && (
+        {showChatter && watchIndex > 0 && (
           <line className="watch-edge" x1={watchX} y1={TOP} x2={watchX}
                 y2={FLOOR} stroke="var(--mark)" strokeWidth="1"
                 strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
