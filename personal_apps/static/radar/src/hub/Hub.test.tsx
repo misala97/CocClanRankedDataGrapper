@@ -52,7 +52,7 @@ describe('the shell', () => {
     mount()
     const nav = screen.getByRole('navigation', { name: 'Radar' })
     const labels = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent)
-    expect(labels).toEqual(['Overview', 'Human chatter', 'Watching', 'Activity'])
+    expect(labels).toEqual(['Overview', 'Human Chatter', 'Watching', 'Activity'])
     // The prototype's other pages are roadmap, not disabled nav items.
     for (const absent of ['News', 'Portfolio', 'Analysis', 'Combined']) {
       expect(screen.queryByRole('link', { name: new RegExp(absent, 'i') }))
@@ -108,7 +108,7 @@ describe('the shell', () => {
   it('carries the reader’s filters through every link', () => {
     window.history.replaceState(null, '', '/radar/hub/?market=de&window=24#overview')
     mount()
-    const link = screen.getByRole('link', { name: 'Human chatter' })
+    const link = screen.getByRole('link', { name: 'Human Chatter' })
     expect(link.getAttribute('href')).toContain('market=de')
     expect(link.getAttribute('href')).toContain('window=24')
   })
@@ -264,7 +264,7 @@ describe('the shell', () => {
     window.history.replaceState(null, '', '/radar/hub/#watching')
     mount({ initial: marked(['AAA', 'BBB']) })
     await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
-    await userEvent.click(screen.getByRole('link', { name: 'Human chatter' }))
+    await userEvent.click(screen.getByRole('link', { name: 'Human Chatter' }))
 
     await act(async () => {
       land(['BBB'])
@@ -313,8 +313,9 @@ describe('the shell', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
     await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
-    await waitFor(() => expect(fetchBoard).toHaveBeenCalled())
-    expect(fetchBoard.mock.calls[0]![0].sources).toEqual(['bluesky'])
+    await waitFor(() => expect(fetchBoard.mock.calls.some(
+      ([asked]) => asked?.sources.length === 1 && asked.sources[0] === 'bluesky',
+    )).toBe(true))
   })
 
   it('does not carry a failed mark to the next page', async () => {
@@ -328,7 +329,7 @@ describe('the shell', () => {
     await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
     expect(await screen.findByText(/could not be saved/i)).toBeVisible()
 
-    await userEvent.click(screen.getByRole('link', { name: 'Human chatter' }))
+    await userEvent.click(screen.getByRole('link', { name: 'Human Chatter' }))
     await waitFor(() => {
       expect(screen.queryByText(/could not be saved/i)).not.toBeInTheDocument()
     })
@@ -356,6 +357,19 @@ describe('the reader’s ordering of the chatter list', () => {
 
   const listed = () =>
     screen.getAllByTestId('rh-row-ticker').map((el) => el.textContent)
+
+  it('requests the chatter selection instead of seeding a legacy bootstrap',
+    async () => {
+      const chatter = payload({ sort: 'chatter', dir: 'desc' })
+      const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(chatter)
+      window.history.replaceState(null, '', '/radar/hub/#chatter')
+      mount({ initial: board })
+
+      await waitFor(() => expect(fetchBoard).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'chatter', dir: 'desc' }),
+        expect.anything(), expect.anything(),
+      ))
+    })
 
   it('sorts without asking the server for anything', async () => {
     // Sorting is a view over the rows already here. A request would be a
@@ -438,7 +452,7 @@ describe('the reader’s ordering of the chatter list', () => {
       await userEvent.selectOptions(screen.getByLabelText(/window/i), '1')
       await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
 
-      await userEvent.click(screen.getByRole('button', { name: /radar order/i }))
+      await userEvent.click(screen.getByRole('button', { name: /unusual activity/i }))
 
       expect(listed()).toEqual(['LOW', 'TOP', 'MID'])
     })

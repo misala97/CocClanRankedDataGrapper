@@ -38,7 +38,7 @@ export function SortPicker({ sort, onSort, className = 'rh-sortpicker',
               : nextSort(null, value as SortKey))
           }}
         >
-          <option value="radar">Radar order</option>
+          <option value="radar">Unusual activity</option>
           {SORT_KEYS.map((key) => (
             <option key={key} value={key}>{SORT_LABELS[key]}</option>
           ))}

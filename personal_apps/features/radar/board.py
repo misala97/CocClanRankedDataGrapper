@@ -25,6 +25,7 @@ different clothes -- an absence is not a zero:
 import collections
 import dataclasses
 import datetime as dt
+import math
 
 import sqlalchemy as sa
 
@@ -446,7 +447,8 @@ def build_pinned_rows(tickers, sources, now, window_hours=4, market='us'):
 # The board's sort keys, in the order the header reads left to right. This
 # spelling IS the wire format: the query parameter, the island's Selection
 # field and this tuple never diverge.
-SORT_KEYS = ('ticker', 'mentions', 'divergence', 'ratio', 'move', 'lean')
+SORT_KEYS = ('ticker', 'mentions', 'divergence', 'ratio', 'move', 'lean',
+             'chatter')
 
 
 def _lean_value(tone):
@@ -508,6 +510,16 @@ def sort_rows(ranked, key, direction, leans):
     """
     if key not in SORT_KEYS:
         return list(ranked)
+    if key == 'chatter':
+        # Deliberately independent of the legacy divergence order: this is
+        # the Human Chatter selection policy, before its top-N cut.
+        def chatter_order(row):
+            score = row.mention_z
+            if not isinstance(score, (int, float)) or not math.isfinite(score):
+                return (1, 0, 0, row.ticker)
+            return (0, -score if direction != 'asc' else score,
+                    -row.mentions, row.ticker)
+        return sorted(ranked, key=chatter_order)
     descending = direction != 'asc'
 
     def ordering(row):

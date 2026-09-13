@@ -46,7 +46,7 @@ import './hub.css'
  *  does not, and four labels across a bar need no taxonomy to be found. */
 const DESTINATIONS = [
   { page: 'overview', label: 'Overview' },
-  { page: 'chatter', label: 'Human chatter' },
+  { page: 'chatter', label: 'Human Chatter' },
   { page: 'watching', label: 'Watching' },
   { page: 'activity', label: 'Activity' },
 ] as const
@@ -85,9 +85,15 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   const visible = useVisible()
   const client = useQueryClient()
 
+  // Human Chatter owns a distinct, price-independent candidate set. Other
+  // hub pages retain their existing board selection and default behaviour.
+  const pageSelection = route.page === 'chatter'
+    ? { ...selection, sort: 'chatter' as const, dir: 'desc' as const }
+    : selection
+
   // useBoard decides for itself whether this payload matches the key it would
   // seed; passing it unconditionally is safe.
-  const board = useBoard(selection, expiredRef.current ? undefined : initial,
+  const board = useBoard(pageSelection, expiredRef.current ? undefined : initial,
                          visible)
 
   // Both events, because they are not the same event. A hash typed into the
@@ -600,7 +606,7 @@ function Placeholder({ title }: { title: string }) {
 function titleFor(route: HubRoute): string {
   switch (route.page) {
     case 'overview': return 'Overview'
-    case 'chatter': return 'Human chatter'
+    case 'chatter': return 'Human Chatter'
     case 'watching': return 'Watching'
     case 'activity': return 'Activity'
     case 'admin': return 'Administration'

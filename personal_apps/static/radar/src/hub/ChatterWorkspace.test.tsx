@@ -388,7 +388,7 @@ describe('the two readings of the list', () => {
 
     await userEvent.click(screen.getByRole('link', { name: 'Overview' }))
     await waitFor(() => expect(window.location.hash).toBe('#overview'))
-    await userEvent.click(screen.getByRole('link', { name: 'Human chatter' }))
+    await userEvent.click(screen.getByRole('link', { name: 'Human Chatter' }))
 
     await waitFor(() => expect(window.location.hash).toBe('#chatter/MID'))
   })
@@ -469,7 +469,7 @@ describe('the evidence rail', () => {
     const setWatch = vi.spyOn(api, 'setWatch').mockResolvedValue(['MID'])
     ;(api.fetchBoard as ReturnType<typeof vi.fn>).mockResolvedValue(marked)
 
-    mount(payload({ rows: board.rows, watching: [] }))
+    mount(payload({ rows: board.rows, watching: [], sort: 'chatter' }))
     await showing('MID')
     await userEvent.click(screen.getByRole('button', { name: /watch MID/i }))
 

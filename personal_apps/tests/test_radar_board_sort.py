@@ -1,31 +1,96 @@
-"""Sorting the board: six keys, missing values last, and the sort happening
+"""Sorting the board: seven keys, missing values last, and the sort happening
 BEFORE the row limit -- which is the whole point of doing it server-side."""
 import dataclasses
+import datetime as dt
+import math
 
 import pytest
 
 from features.radar import board
 
 
-def row(ticker, mentions=10, expected=5.0, divergence=None, price_move=None):
+def row(ticker, mentions=10, expected=5.0, divergence=None, price_move=None,
+        mention_z=None, segment='large', venues=1, price=10,
+        direction='up', price_status='ok'):
     """A stand-in for leaderboard.Row carrying only the sorted fields.
 
-    sort_rows reads five attributes and a tones map; it never touches the
+    sort_rows reads only the sort attributes and a tones map; it never touches the
     quote, the marks or the series, so a namespace is a truthful fixture
     and keeps this suite independent of the DB.
     """
     return dataclasses.make_dataclass(
-        'R', ['ticker', 'mentions', 'expected', 'divergence', 'price_move'])(
-        ticker, mentions, expected, divergence, price_move)
+        'R', ['ticker', 'mentions', 'expected', 'divergence', 'price_move',
+              'mention_z', 'segment', 'venues', 'price', 'direction',
+              'price_status'])(ticker, mentions, expected, divergence, price_move,
+                               mention_z, segment, venues, price, direction,
+                               price_status)
 
 
 def tickers(rows):
     return [r.ticker for r in rows]
 
 
-def test_the_six_keys_are_the_wire_format():
+def test_the_sort_keys_are_the_wire_format():
     assert board.SORT_KEYS == ('ticker', 'mentions', 'divergence', 'ratio',
-                               'move', 'lean')
+                               'move', 'lean', 'chatter')
+
+
+def test_chatter_orders_finite_surprise_then_mentions_then_ticker():
+    rows = [row('PRICEFIRST', mentions=4, divergence=99, mention_z=2),
+            row('HIGH', mentions=12, divergence=None, mention_z=2),
+            row('ALPHA', mentions=12, divergence=-5, mention_z=2),
+            row('ZERO', mentions=100, mention_z=0),
+            row('NEG', mentions=100, mention_z=-1),
+            row('NONE', mentions=999, mention_z=None),
+            row('NAN', mentions=999, mention_z=math.nan),
+            row('INF', mentions=999, mention_z=math.inf)]
+    assert tickers(board.sort_rows(rows, 'chatter', 'desc', {})) == [
+        'ALPHA', 'HIGH', 'PRICEFIRST', 'ZERO', 'NEG', 'INF', 'NAN', 'NONE']
+
+
+def test_chatter_selection_happens_before_limit_and_ignores_price_only_changes(
+        monkeypatch):
+    """A high-surprise row must enter even when price-derived divergence would
+    have kept it outside the legacy top-N.  Changing only quote observations
+    (including their derived divergence) cannot change this selection."""
+    original = [
+        row('PRICEFIRST', mentions=20, mention_z=1, divergence=99,
+            price_move=0.40, price=80, direction='up', price_status='ok'),
+        row('PRICESECOND', mentions=19, mention_z=2, divergence=98,
+            price_move=-0.30, price=5, direction='down', price_status='stale'),
+        row('SURPRISE', mentions=8, mention_z=8, divergence=None,
+            price_move=None, price=None, direction='flat', price_status='closed'),
+    ]
+    changed_quotes = [
+        row('PRICEFIRST', mentions=20, mention_z=1, divergence=-99,
+            price_move=None, price=None, direction='flat', price_status='stale'),
+        row('PRICESECOND', mentions=19, mention_z=2, divergence=None,
+            price_move=0.70, price=500, direction='up', price_status='ok'),
+        row('SURPRISE', mentions=8, mention_z=8, divergence=1,
+            price_move=-0.80, price=1, direction='down', price_status='closed'),
+    ]
+    active = original
+
+    def rows_for_board(*_args, **_kwargs):
+        return board.leaderboard.Ranking(rows=list(active), excluded={})
+
+    monkeypatch.setattr(board.leaderboard, 'build_rows', rows_for_board)
+    monkeypatch.setattr(board, 'session_state', lambda *_args, **_kwargs: 'regular')
+    monkeypatch.setattr(board, '_next_boundary',
+                        lambda _market, now, _session, **_kwargs: ('closes', now))
+    monkeypatch.setattr(board, '_entries', lambda ranked, *_args: list(ranked))
+
+    legacy = board.sort_rows(original, 'divergence', 'desc', {})[:2]
+    assert 'SURPRISE' not in tickers(legacy)
+
+    first = board.build(['bluesky'], now=dt.datetime(2026, 1, 1),
+                        sort='chatter', direction='desc', limit=2)
+    active = changed_quotes
+    second = board.build(['bluesky'], now=dt.datetime(2026, 1, 1),
+                         sort='chatter', direction='desc', limit=2)
+
+    assert tickers(first.rows) == ['SURPRISE', 'PRICESECOND']
+    assert tickers(second.rows) == tickers(first.rows)
 
 
 def test_mentions_sorts_loudest_first_then_reverses():

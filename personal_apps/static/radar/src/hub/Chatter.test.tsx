@@ -23,6 +23,27 @@ function show(rows: Row[], onOpen = vi.fn()) {
 }
 
 describe('the ranked list', () => {
+  it.each([
+    ['positive activity', [row({ mention_z: 0.1 })], null],
+    ['all measurable nonpositive activity',
+     [row({ ticker: 'ZERO', mention_z: 0 }), row({ ticker: 'NEG', mention_z: -1 })],
+     'No elevated discussion in this selection.'],
+    ['no measurable baselines', [row({ mention_z: null })],
+     'Not enough history to measure unusual activity.'],
+    ['mixed nonpositive activity and unknown baselines',
+     [row({ ticker: 'ZERO', mention_z: 0 }), row({ ticker: 'UNKNOWN', mention_z: null })],
+     'No elevated discussion among companies with a measurable baseline. Some companies have insufficient history.'],
+    ['an empty selection', [], null],
+  ])('states only what the %s establish', (_case, rows, message) => {
+    show(rows)
+    if (message) {
+      expect(screen.getByText(message)).toBeVisible()
+    } else {
+      expect(screen.queryByText(/elevated discussion|enough history to measure unusual activity/i))
+        .not.toBeInTheDocument()
+    }
+  })
+
   it('keeps the server’s order', () => {
     show([row({ ticker: 'CCC' }), row({ ticker: 'AAA' }), row({ ticker: 'BBB' })])
     const tickers = screen.getAllByTestId('rh-row-ticker').map((el) => el.textContent)
@@ -318,7 +339,7 @@ describe('ordering the candidates on screen', () => {
     row({ ticker: 'LOW', authors: 2, ratio: 1 }),
   ]
 
-  it('starts in Radar order with no column marked', () => {
+  it('starts in unusual-activity order with no column marked', () => {
     render(<Sortable rows={three()} />)
     expect(listed()).toEqual(['MID', 'TOP', 'LOW'])
     for (const name of ['Company', 'Attention', 'Voices', 'Sources', 'Tone']) {
@@ -409,11 +430,11 @@ describe('ordering the candidates on screen', () => {
     expect(screen.queryByText(/grouped by currency/i)).not.toBeInTheDocument()
   })
 
-  it('returns to Radar order on reset', async () => {
+  it('returns to unusual-activity order on reset', async () => {
     render(<Sortable rows={three()} />)
     await userEvent.click(screen.getByTestId('rh-sort-voices'))
     expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
-    await userEvent.click(screen.getByRole('button', { name: /radar order/i }))
+    await userEvent.click(screen.getByRole('button', { name: /unusual activity/i }))
     expect(listed()).toEqual(['MID', 'TOP', 'LOW'])
     expect(screen.getByRole('columnheader', { name: 'Voices' }))
       .toHaveAttribute('aria-sort', 'none')
@@ -439,7 +460,7 @@ describe('ordering the candidates on screen', () => {
     const picker = screen.getByLabelText(/sort by/i)
     const options = Array.from(picker.querySelectorAll('option'))
       .map((o) => o.textContent)
-    expect(options).toEqual(['Radar order', 'Company', 'Attention', 'Voices',
+    expect(options).toEqual(['Unusual activity', 'Company', 'Attention', 'Voices',
                              'Sources', 'Tone', 'Price', 'Today'])
   })
 
@@ -465,7 +486,7 @@ describe('ordering the candidates on screen', () => {
       expect(direction).toHaveTextContent(/lowest first/i)
     })
 
-  it('returns to Radar order from the selector too', async () => {
+  it('returns to unusual-activity order from the selector too', async () => {
     render(<Sortable rows={three()} />)
     await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'voices')
     await userEvent.selectOptions(screen.getByLabelText(/sort by/i), 'radar')
@@ -478,7 +499,7 @@ describe('ordering the candidates on screen', () => {
     // the document, past the navigation and every filter.
     render(<Sortable rows={three()} />)
     await userEvent.click(screen.getByTestId('rh-sort-voices'))
-    const reset = screen.getByRole('button', { name: /radar order/i })
+    const reset = screen.getByRole('button', { name: /unusual activity/i })
     reset.focus()
     await userEvent.keyboard('{Enter}')
     expect(document.activeElement).not.toBe(document.body)
@@ -506,7 +527,7 @@ describe('ordering the candidates on screen', () => {
     expect(screen.getByText(/nothing is left to sort under the current filter/i))
       .toBeVisible()
     // And the way back is still there.
-    expect(screen.getByRole('button', { name: /radar order/i })).toBeVisible()
+    expect(screen.getByRole('button', { name: /unusual activity/i })).toBeVisible()
   })
 
   it('phrases the unsorted remainder as a sentence', async () => {

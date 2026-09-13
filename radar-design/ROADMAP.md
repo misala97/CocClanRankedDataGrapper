@@ -1,3 +1,33 @@
+# Current status — independent final review COMPLETE
+
+The owner supplied the completed independent review on 2026-09-14: no material issues found; the implementation satisfies the binding Human Chatter ranking contract. Implementation and independent review are COMPLETE for this uncommitted candidate. No repeat implementation/review assignment is open.
+
+Independent reviewer-reported fresh evidence: backend focused suite 29 passed; frontend focused suite 4 files / 125 tests passed; git diff --check passed. The reviewer reported preserving all dirty files and making no code or documentation changes. The Product Overview planner verified current Git state and read the handoff/plan/ledger/return, but did not rerun those tests or independently reproduce the reviewer results. The production build/typecheck pass remains implementer-reported evidence, not an independent review build.
+
+Residual verification limits remain explicit: direct/shared producer, API and parity integration could not safely run because only protected localhost:3306/personal_apps was available. Do not bypass the gate, use B1C's database or create an improvised target. No safely isolated actual-app preview was available, so no screenshots exist. The 6.5-hour price-period assumption remains unaudited and outside scope. Review completion does not mean these gates passed or that release readiness was demonstrated.
+
+Current candidate: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-human-chatter; branch codex/radar-human-chatter; verified HEAD/base a161dc3793aede70b31e1cb1cf851607f918881f. Implementation and planning changes remain uncommitted. Git's ignore-file/.pytest_cache permission warnings limit untracked enumeration. Existing dirty implementation and historical B1C files were preserved; this status reconciliation changes planning documents only.
+
+Product recommendation: owner approval for a scoped local commit of the reviewed candidate and its planning evidence. Commit, integration, push and deployment are NOT authorized by this record. Keep the integration/visual gaps visible for any later integration/release decision; no automatic test/review loop. Historical analysis remains next after disposition of this candidate. Capture remains OFF. No migrations, root promotion, B1C/PERF3 changes, port-5021 use or production access.
+
+Contract unchanged: default membership/order is independent of price, quotes, freshness, direction and session; price remains visible and explicitly sortable within the selected candidates; existing mention_z with no new score/weights/boosts/predictive claims; original /radar/ defaults unchanged.
+
+This notice supersedes older open-review, worktree-creation and next-action instructions below. Detailed historical evidence is retained.
+
+---
+# Current priority — 2026-09-14, Human Chatter ranking
+
+The owner approved a bounded ranking change before historical analysis. Binding scope: [HUMAN-CHATTER-RANKING-PLAN.md](HUMAN-CHATTER-RANKING-PLAN.md); progress: [HUMAN-CHATTER-RANKING-LEDGER.md](HUMAN-CHATTER-RANKING-LEDGER.md). For root-level readers these files are under radar-design/.
+
+Human Chatter will select and rank unusual discussion independently of price, before top-N truncation. Price remains visible and explicitly sortable. Use existing mention_z provisionally; no new composite formula or predictive claim. Preserve original /radar/ behavior and PERF3 shared-board architecture. Implementation and independent review are COMPLETE with the recorded verification limits; owner decision on a local commit is pending. No agents have been dispatched by the planner.
+
+Historical analysis remains the next new feature after this bounded interruption, ahead of portfolio/news. Future HA captures must identify the ranking policy and selection; legacy divergence selections and new chatter selections are different populations and must not be silently pooled or relabelled. No HA implementation is included here. Use the actual app for future UI work, not a separate interactive prototype; this supersedes older prototype instructions.
+
+B1/PERF3/B1C remain complete and deployed at 200c51cc402e053575bf9e0008db597ea27b36a5. Bars are owner-confirmed; tone latency is accepted, not a passed target. Capture remains OFF. No push, deployment, migration or root promotion is authorized. Preserve main checkout, PERF3 files, other worktrees, port 5021 preview and the untracked missing-bars-local.png investigation screenshot.
+
+This notice supersedes historical next-action and assignment text below, not the recorded evidence.
+
+---
 # Current roadmap — 2026-09-13
 
 This overview supersedes the original dated proposal below. Binding current release details: ../HANDOFF.md and B1C-LEDGER.md.
