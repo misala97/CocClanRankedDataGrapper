@@ -1,3 +1,13 @@
+# CURRENT — owner accepts B1C latency limitation
+
+The owner accepted the measured busy-ticker tone latency for now: "if i find it annoying i will call it later". This supersedes the latency-blocker ruling below. No further tone-query optimization is required for this packet unless the owner reports a problem or new evidence warrants it.
+
+The measured100ms median/200ms p95 targets remain unmet; they are waived for this iteration, not reported as passing. Existing evidence remains unchanged: added tone calculation median280–500ms on the local20k-event fixture, not full browser load time or production/MariaDB proof. Other disclosed verification limits remain as recorded.
+
+Reviewed implementation is5297af6. Local preview remains http://127.0.0.1:5021/radar/hub/. This acceptance does not authorize deployment, push, merge main, capture enablement or root promotion. Preserve main/PERF3 and the running local app. Any later release preparation must retain the documented evidence limits.
+
+---
+Historical review follows.
 # CURRENT — B1C Codex local review, 2026-09-13
 
 This notice supersedes earlier claims that the whole B1C packet is complete. Initial verified HEAD c97583e on codex/radar-b1c was clean. Corrections and evidence are recorded in the following local commit; use git log for its full SHA. No main checkout, PERF3 files, production services or other worktrees were modified.
