@@ -440,6 +440,7 @@ const TOKENS: { text: string; key: SortKey | null; name?: string }[][] = [
 const SORT_LABEL: Record<SortKey, string> = {
   ticker: 'ticker', mentions: 'mentions', divergence: 'divergence',
   ratio: 'ratio to normal', move: 'price move', lean: 'lean',
+  chatter: 'unusual activity',
 }
 
 /** The ledger's column header, and the board's only sort control.

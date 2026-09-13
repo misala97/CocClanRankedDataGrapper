@@ -1,3 +1,10 @@
+# Current status — 2026-09-13, B1C live and owner confirmed
+
+B1C deployed at 200c51cc402e053575bf9e0008db597ea27b36a5 with explicit owner authorization. The owner subsequently confirmed the chatter bars work; the apparent missing-bars issue was resolved by scrolling. Investigation cancelled, no product fix required. Busy-ticker tone latency is accepted for this iteration, not a passed performance target. Capture remains OFF; /radar/hub/ remains alongside /radar/; no root promotion.
+
+Deployment evidence and exact operational state: root HANDOFF.md. Prior pending-release, unimplemented-tone and latency-blocker statements below are historical and superseded by this notice. Preserve historical evidence; do not redispatch completed work.
+
+---
 > Current B1C state: read ../HANDOFF.md (the root HANDOFF.md in this worktree), CODEX-RETURN-B1C.md and B1C-LEDGER.md. Local corrections complete; busy tone latency acceptance fails. The PERF3 status below is historical and does not govern this task.
 
 # CURRENT — PERF3-close review-fix round is CLOSED (2026-09-12)
@@ -839,7 +846,6 @@ and open tasks, review findings, exact tests and results, protected files and de
 Verify this file against Git and the reports before trusting it; if they disagree, the evidence wins
 and the discrepancy belongs in the ledger.
 
-
 ## Owner clarification — staged design ambition (2026-09-09)
 
 The interactive prototype is the near-term fidelity target for VC1 and the next
@@ -870,9 +876,7 @@ edits are intentional and uncommitted. Fresh focused Vitest: 56 passed/2 files.
 
 2026-09-10 owner addition: sortable Chatter is OPEN within VC1-close. Read the appended binding sorting contract in VISUAL-CORRECTION-PLAN.md. Preserve completed tasks; return sorting with the same closure review/preview. No deployment authorized.
 
-
 2026-09-10 Codex Ninth return: VC1-close/sorting accepted for owner visual review at 31ae58a. A-D settled with no new implementation gate. Fresh focused tests: 78 passed/2 files. Next: owner reviews sortable preview; deployment is a separate decision. See CODEX-DECISIONS.md. These Codex documentation edits are intentional.
-
 
 ## Owner approval — VC1 deployment, 2026-09-10
 
@@ -934,10 +938,8 @@ Protected `cleanup_preview.py` and `preview_perf3.py` were not read, run,
 edited, deleted or staged. `.superpowers/`, the local registry, measurement
 JSON/logs, secrets/environment and generated build products remain unstaged.
 
-
 ## Owner authorization — 2026-09-12
 The owner explicitly requested complete deployment. This authorizes necessary local release-runner fixes, verification, integration/push, backup, target migration, producer installation/configuration, shared-path activation and telemetry per the accepted ruling. Complete the named safety fixes and verify the final candidate before executing. Capture remains off; root routing, B1, threading and held index stay excluded. No deployment has occurred merely because this authorization is recorded.
-
 
 ## Deployed, 2026-09-10 02:47 CEST — the two honesty fixes
 

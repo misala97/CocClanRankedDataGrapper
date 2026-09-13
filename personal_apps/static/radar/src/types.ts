@@ -427,7 +427,7 @@ export function isReady(payload: BoardPayload): payload is ReadyBoard {
 /** The board's sort keys, in the order the header reads left to right. Same
  *  spelling as the query parameter and as board.SORT_KEYS on the server. */
 export const SORT_KEYS = ['ticker', 'mentions', 'divergence', 'ratio',
-                          'move', 'lean'] as const
+                          'move', 'lean', 'chatter'] as const
 export type SortKey = typeof SORT_KEYS[number]
 
 export interface Selection {

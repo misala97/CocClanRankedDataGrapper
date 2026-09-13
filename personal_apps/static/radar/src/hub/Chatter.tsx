@@ -163,13 +163,13 @@ export function Chatter({ board, vocabulary, selection, sort = null,
               ) : null}
             </p>
           ) : null}
-          <h1>Human chatter</h1>
-          {workspace ? null : (
-            <p>Find unusual discussion, then inspect the evidence.</p>
-          )}
+          <h1>Human Chatter</h1>
+          <p>Discussion ranked by how unusual it is against its baseline. Price movement is shown separately.</p>
         </div>
         {onMode ? <ModeToggle mode={mode} onMode={onMode} /> : null}
       </div>
+
+      {ready !== null ? <SelectionState rows={ready.rows} /> : null}
 
       {workspace ? (
         // In every state, and at the same place in the tree: the rail keeps
@@ -225,6 +225,22 @@ export function Chatter({ board, vocabulary, selection, sort = null,
       )}
     </>
   )
+}
+
+function SelectionState({ rows }: { rows: Row[] }) {
+  const measured = rows.filter((row) => typeof row.mention_z === 'number'
+    && Number.isFinite(row.mention_z))
+  if (measured.length === 0 && rows.length > 0) {
+    return <p className="small muted">Not enough history to measure unusual activity.</p>
+  }
+  if (measured.length > 0 && measured.every((row) => row.mention_z! <= 0)) {
+    return <p className="small muted">
+      {measured.length === rows.length
+        ? 'No elevated discussion in this selection.'
+        : 'No elevated discussion among companies with a measurable baseline. Some companies have insufficient history.'}
+    </p>
+  }
+  return null
 }
 
 /** Which reading of the list is on screen.
@@ -538,7 +554,7 @@ function SortNote({ rows, sort, onSort, onReset }: {
           navigation and every filter. */}
       <button type="button" className="rh-textbutton rh-sortreset"
               onClick={() => { onSort(null); onReset?.() }}>
-        Radar order
+        Unusual activity
       </button>
     </p>
   )

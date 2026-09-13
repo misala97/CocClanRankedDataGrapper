@@ -179,7 +179,7 @@ export function ChatterWorkspace({
           {sort ? (
             <button type="button" className="rh-textbutton rh-railreset"
                     onClick={() => onSort(null)}>
-              Radar order
+              Unusual activity
             </button>
           ) : null}
           {onSelection ? (

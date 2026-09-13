@@ -15,9 +15,10 @@ import hashlib
 import json
 
 import pytest
+from werkzeug.datastructures import MultiDict
 
 from features.radar import board_keys
-from features.radar.routes.api import Query
+from features.radar.routes.api import BadQuery, Query, parse_query
 
 
 def q(**over):
@@ -54,6 +55,26 @@ def test_segment_order_is_a_different_key():
 def test_direction_is_kept_even_without_a_sort():
     assert board_keys.canonical(q(direction='asc'))[0] != \
         board_keys.canonical(q(direction='desc'))[0]
+
+
+def test_chatter_is_a_distinct_round_trippable_shared_board_key():
+    """A legacy/default board must never answer the Human Chatter request."""
+    legacy = board_keys.canonical(q())
+    chatter = board_keys.canonical(q(sort='chatter', direction='desc'))
+
+    assert chatter != legacy
+    assert '"sort":"chatter"' in chatter[1]
+    assert board_keys.round_trips(*chatter)
+
+
+def test_chatter_query_is_accepted_with_the_existing_direction_validation():
+    query = parse_query(MultiDict({'market': 'us', 'sort': 'chatter',
+                                   'dir': 'desc'}))
+    assert query.sort == 'chatter' and query.direction == 'desc'
+
+    with pytest.raises(BadQuery, match='unknown sort direction'):
+        parse_query(MultiDict({'market': 'us', 'sort': 'chatter',
+                               'dir': 'sideways'}))
 
 
 def test_sources_are_deduplicated_and_sorted():

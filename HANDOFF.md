@@ -1,3 +1,72 @@
+# Current status — independent final review COMPLETE
+
+The owner supplied the completed independent review on 2026-09-14: no material issues found; the implementation satisfies the binding Human Chatter ranking contract. Implementation and independent review are COMPLETE for this uncommitted candidate. No repeat implementation/review assignment is open.
+
+Independent reviewer-reported fresh evidence: backend focused suite 29 passed; frontend focused suite 4 files / 125 tests passed; git diff --check passed. The reviewer reported preserving all dirty files and making no code or documentation changes. The Product Overview planner verified current Git state and read the handoff/plan/ledger/return, but did not rerun those tests or independently reproduce the reviewer results. The production build/typecheck pass remains implementer-reported evidence, not an independent review build.
+
+Residual verification limits remain explicit: direct/shared producer, API and parity integration could not safely run because only protected localhost:3306/personal_apps was available. Do not bypass the gate, use B1C's database or create an improvised target. No safely isolated actual-app preview was available, so no screenshots exist. The 6.5-hour price-period assumption remains unaudited and outside scope. Review completion does not mean these gates passed or that release readiness was demonstrated.
+
+Current candidate: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-human-chatter; branch codex/radar-human-chatter; verified HEAD/base a161dc3793aede70b31e1cb1cf851607f918881f. Implementation and planning changes remain uncommitted. Git's ignore-file/.pytest_cache permission warnings limit untracked enumeration. Existing dirty implementation and historical B1C files were preserved; this status reconciliation changes planning documents only.
+
+Product recommendation: owner approval for a scoped local commit of the reviewed candidate and its planning evidence. Commit, integration, push and deployment are NOT authorized by this record. Keep the integration/visual gaps visible for any later integration/release decision; no automatic test/review loop. Historical analysis remains next after disposition of this candidate. Capture remains OFF. No migrations, root promotion, B1C/PERF3 changes, port-5021 use or production access.
+
+Contract unchanged: default membership/order is independent of price, quotes, freshness, direction and session; price remains visible and explicitly sortable within the selected candidates; existing mention_z with no new score/weights/boosts/predictive claims; original /radar/ defaults unchanged.
+
+This notice supersedes older open-review, worktree-creation and next-action instructions below. Detailed historical evidence is retained.
+
+---
+# Current priority — 2026-09-14, Human Chatter ranking
+
+## Implementer update — 2026-09-14
+
+Workspace: `C:\\Users\\michi\\Desktop\\CodingStuff-worktrees\\radar-human-chatter`; branch `codex/radar-human-chatter`; HEAD/base `a161dc3793aede70b31e1cb1cf851607f918881f`. The copied planning artifacts remain dirty and planner-owned. Implementation-owned dirty files are the Radar board sort, Hub request/copy/type changes, focused backend/frontend regression tests, and `radar-design/HUMAN-CHATTER-RANKING-RETURN.md`.
+
+Completed implementation: `chatter` sorts finite `mention_z` before the top-N cut, descending by default, then finite mentions and ticker; missing/nonfinite scores are last and never zeroed. The Human Chatter route derives `sort=chatter&dir=desc` for its board request while leaving other hub routes and `/radar/` defaults alone. The shared-board key includes that sort, so a legacy/default bootstrap cannot seed the chatter cache entry. Alternate workspace sorts only reorder the returned candidates; reset is “Unusual activity.” The page names Human Chatter, explains the price-independent ranking, and distinguishes all-measurable nonpositive, all-unknown, and mixed baseline coverage honestly.
+
+Fresh verification: backend pure sort/key/query suite `29 passed in 0.33s`; affected frontend suites `125 passed` (Hub, queries, Chatter, ChatterWorkspace); `npm run build` passed (TypeScript plus both Vite builds); `git diff --check` passed. The mixed-state test failed against the prior implementation, then passed after its targeted correction.
+
+Integration limitation, not a product failure: the requested producer/shared/direct/parity run stopped at its safety gate on `localhost:3306/personal_apps` (`42 passed, 139 errors`), before destructive setup. No `RADAR_DESTRUCTIVE_TEST_TARGET` or `RADAR_DESTRUCTIVE_TEST_REGISTRY` environment registration exists. Do not bypass this, use B1C's preview/database, or seed a database. No safely isolated actual-app preview was available, so no screenshots were captured; preserve port 5021. The reported universal 6.5-hour price assumption was not audited; quote/currency/freshness/session fields remain visible.
+
+No subagents, deployment, push, migration, capture activation, root promotion, provider change, B1C work, or historical-analysis implementation occurred. Independent final review is complete; next action is the owner decision on a scoped local commit. Do not begin a repeat review cycle.
+
+The owner approved a bounded ranking change before historical analysis. Binding scope: [HUMAN-CHATTER-RANKING-PLAN.md](radar-design/HUMAN-CHATTER-RANKING-PLAN.md); progress: [HUMAN-CHATTER-RANKING-LEDGER.md](radar-design/HUMAN-CHATTER-RANKING-LEDGER.md). For root-level readers these files are under radar-design/.
+
+Human Chatter will select and rank unusual discussion independently of price, before top-N truncation. Price remains visible and explicitly sortable. Use existing mention_z provisionally; no new composite formula or predictive claim. Preserve original /radar/ behavior and PERF3 shared-board architecture. Implementation and independent review are COMPLETE with the recorded verification limits; owner decision on a local commit is pending. No agents have been dispatched by the planner.
+
+Historical analysis remains the next new feature after this bounded interruption, ahead of portfolio/news. Future HA captures must identify the ranking policy and selection; legacy divergence selections and new chatter selections are different populations and must not be silently pooled or relabelled. No HA implementation is included here. Use the actual app for future UI work, not a separate interactive prototype; this supersedes older prototype instructions.
+
+B1/PERF3/B1C remain complete and deployed at 200c51cc402e053575bf9e0008db597ea27b36a5. Bars are owner-confirmed; tone latency is accepted, not a passed target. Capture remains OFF. No push, deployment, migration or root promotion is authorized. Preserve main checkout, PERF3 files, other worktrees, port 5021 preview and the untracked missing-bars-local.png investigation screenshot.
+
+This notice supersedes historical next-action and assignment text below, not the recorded evidence.
+
+---
+## Planning continuity
+
+Workspace: C:/Users/michi/Desktop/CodingStuff-worktrees/radar-b1c. Branch: codex/radar-b1c. Last verified HEAD: a161dc3793aede70b31e1cb1cf851607f918881f. This synchronization is uncommitted documentation owned by the Product Overview planner. No application code or tests were changed or executed.
+
+Next implementer: create a separate isolated worktree from the verified HEAD and explicitly copy the current ranking plan/ledger and updated handoff/roadmap/history plan from this workspace, because uncommitted planning files do not follow a Git worktree automatically. Verify current Git evidence before proceeding. Do not modify the running B1C workspace. Read the ranking ledger and begin its first open task.
+
+Planner-owned dirty files: HANDOFF.md; radar-design/HANDOFF.md; radar-design/ROADMAP.md; radar-design/HISTORY-ANALYSIS-PLAN.md; new radar-design/HUMAN-CHATTER-RANKING-PLAN.md and HUMAN-CHATTER-RANKING-LEDGER.md. Unrelated untracked radar-design/artifacts/b1c-resume/missing-bars-local.png remains untouched. Git ignore/.pytest_cache permission warnings limited untracked inspection. No fresh runtime, production or statistical validation is claimed.
+
+---
+# Current status — 2026-09-13, B1C live and owner confirmed
+
+B1C deployed at 200c51cc402e053575bf9e0008db597ea27b36a5 with explicit owner authorization. The owner subsequently confirmed the chatter bars work; the apparent missing-bars issue was resolved by scrolling. Investigation cancelled, no product fix required. Busy-ticker tone latency is accepted for this iteration, not a passed performance target. Capture remains OFF; /radar/hub/ remains alongside /radar/; no root promotion.
+
+Deployment evidence and exact operational state: root HANDOFF.md. Prior pending-release, unimplemented-tone and latency-blocker statements below are historical and superseded by this notice. Preserve historical evidence; do not redispatch completed work.
+
+---
+# CURRENT — B1C deployed with owner authorization
+
+On 2026-09-13 the owner explicitly requested deployment ("Ok so lets deploy"). Published normal fast-forward origin/main and deployed 200c51cc402e053575bf9e0008db597ea27b36a5 with /root/update_coc.sh in routine mode. Main local checkout and PERF3 worktree were not modified.
+
+Release unit radar-b1c-release-200c51c succeeded at 23:32:31 Europe/Berlin. Fresh backup db_2026-09-13_2329.sql.gz preceded release. All six application/ingestion/producer services active; migration head unchanged b7e3f9c1a2d4. Public hub returned expected unauthenticated 302. Shared boards on; capture unset/off. Root route not promoted. Gallery included in candidate.
+
+Read-only actual MariaDB smoke: AAPL 24h/1D detail plus tone returned successfully, 664ms including detail construction in a fresh Python process. This is one correctness smoke, not a latency benchmark or authenticated browser verification. Existing owner-accepted latency limitations stand. Local preview remains on port5021.
+
+Immediate next action: owner reviews live B1C at https://mgemmel.viewdns.net/radar/hub/. No further deployment required. Historical boundaries below predate explicit authorization.
+
+---
 # CURRENT — owner accepts B1C latency limitation
 
 The owner accepted the measured busy-ticker tone latency for now: "if i find it annoying i will call it later". This supersedes the latency-blocker ruling below. No further tone-query optimization is required for this packet unless the owner reports a problem or new evidence warrants it.
