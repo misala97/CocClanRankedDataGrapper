@@ -1,3 +1,24 @@
+# Hub promotion release candidate — 2026-09-14
+
+Owner explicitly requested finishing the bookmark correction and deploying. That supersedes earlier deployment-not-authorized notices for this scoped promotion. Root /radar/ mounts the hub; /radar/hub/ remains alias; /radar/legacy/ retains the board. Valid hashes override legacy t; invalid hashes fall back to valid t; filter-only legacy root links now open Human Chatter, while bare root opens Overview.
+
+Fresh correction evidence: new regression failed before correction and passed after it. Frontend navigation/Hub: 58 passed. Route/auth/admin suite on the existing independently registered disposable MariaDB 10.11.14 at 127.0.0.1:3399/personal_apps_radar_human_chatter_release: 13 passed. Production TypeScript/Vite build passed. Isolated actual-app desktop 1440x1000/mobile 390x844 at port 5033 passed root/alias/legacy, company links, invalid-hash fallback, filter-only links, refresh and return link checks. Screenshots visually inspected. Evidence: radar-design/artifacts/hub-promotion-preview/result.json and root/filters/legacy PNGs. Earlier port-5032 preview script failed login and is not passing evidence; the final script uses the registered DB at port 5033. B1C/5021 untouched.
+
+Preflight verified current production root@194.164.29.97 at 83bc2bf6282b7772fbee07c1eb27cfe41760f417 and the locked backup-first /root/update_coc.sh wrapper. Older root@82.165.240.212 was read-only checked and is not this deployment target. Capture remains off; no provider/schema/ranking changes. Next: scoped commit, normal push and routine release, then production smoke. Record exact final SHA and outcome after release.
+
+---
+# Current priority — hub promotion, 2026-09-14
+
+Owner approved the next bounded transition: make /radar/ the hub entry, retain /radar/hub/ as compatibility alias, and preserve the original board at /radar/legacy/. Check important old-only capabilities and preserve bookmarks before promotion. Do not delete legacy UI in this increment. Binding: HUB-PROMOTION-PLAN.md and HUB-PROMOTION-LEDGER.md under radar-design/ (relative to root).
+
+This isolated implementation workspace is `C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-hub-promotion`, branch `codex/radar-hub-promotion`, created from `83bc2bf6282b7772fbee07c1eb27cfe41760f417`. Deployment remains unauthorized. Capture stays OFF. The Human Chatter ranking release is closed and must not be redispatched.
+
+Implementation changes: `/radar/` and `/radar/hub/` render the existing hub; `/radar/legacy/` renders the unchanged board. Root `?t=VALID` opens the hub Human Chatter workspace, preserving supported filter context; a nonempty hub hash wins. The hub strips legacy `t` before its board API build, while Legacy Radar retains it. The hub nav links to Legacy Radar; the board returns to root with its query retained. No ranking or backend/shared-board behavior changed.
+
+Evidence: `test_radar_hub_page.py` 13 passed; hub navigation/component Vitest 57 passed; final `npm run build` passed; `git diff --check` passed. Preview server was verified on port 5032, but its Playwright script did not persist screenshots/results; rerun `radar-design/artifacts/hub-promotion-preview/verify_preview.py` before independent review. Do not use port 5021, B1C data, production, migrations, capture, push or deployment.
+
+---
+
 # Current status — independent final review COMPLETE
 
 The owner supplied the completed independent review on 2026-09-14: no material issues found; the implementation satisfies the binding Human Chatter ranking contract. Implementation and independent review are COMPLETE for this uncommitted candidate. No repeat implementation/review assignment is open.

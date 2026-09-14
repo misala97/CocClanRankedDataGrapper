@@ -52,7 +52,7 @@ describe('the shell', () => {
     mount()
     const nav = screen.getByRole('navigation', { name: 'Radar' })
     const labels = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent)
-    expect(labels).toEqual(['Overview', 'Human Chatter', 'Watching', 'Activity'])
+    expect(labels).toEqual(['Overview', 'Human Chatter', 'Watching', 'Activity', 'Legacy Radar'])
     // The prototype's other pages are roadmap, not disabled nav items.
     for (const absent of ['News', 'Portfolio', 'Analysis', 'Combined']) {
       expect(screen.queryByRole('link', { name: new RegExp(absent, 'i') }))

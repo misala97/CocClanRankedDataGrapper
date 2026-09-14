@@ -29,7 +29,7 @@ import { Research } from './Research'
 import { Watching } from './Watching'
 import { Search } from './Search'
 import {
-  hashFor, isInPageAnchor, readRoute, readSelection, readSpan, urlFor,
+  hashFor, isInPageAnchor, readRootRoute, readRoute, readSelection, readSpan, urlFor,
 } from './navigation'
 import type { HubRoute } from './navigation'
 import {
@@ -52,7 +52,7 @@ const DESTINATIONS = [
 ] as const
 
 export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: boolean }) {
-  const [route, setRoute] = useState<HubRoute>(() => readRoute(window.location.hash))
+  const [route, setRoute] = useState<HubRoute>(() => initialRoute())
   const [selection, setSelection] = useState<Selection>(
     () => readSelection(window.location.search, seedSelection(initial),
                         initial.all_sources))
@@ -107,7 +107,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
       // replaced the page with the recovery view -- on the first control a
       // keyboard reader meets.
       if (!isInPageAnchor(window.location.hash)) {
-        setRoute(readRoute(window.location.hash))
+        setRoute(initialRoute())
       }
       setSelection(readSelection(window.location.search, seedSelection(initial),
                                  initial.all_sources))
@@ -290,6 +290,9 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
           <span className="rh-navcrumb">{route.ticker}</span>
         ) : null}
         <div className="rh-navend">
+          <a className="rh-navlink" href={`/radar/legacy/${window.location.search}`}>
+            Legacy Radar
+          </a>
           {/* Rendered for admins only; /radar/api/ops enforces this itself and
               does not trust the absence of a link. */}
           {isAdmin ? (
@@ -340,6 +343,12 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
  *  context they were using. Anywhere else it opens standalone research,
  *  exactly as before: a company found from Overview has no candidate list to
  *  sit inside. */
+function initialRoute(): HubRoute {
+  return window.location.pathname === '/radar/'
+    ? readRootRoute(window.location.search, window.location.hash)
+    : readRoute(window.location.hash)
+}
+
 function openRoute(route: HubRoute, ticker: string): HubRoute {
   return route.page === 'chatter'
     ? { page: 'chatter', ticker }

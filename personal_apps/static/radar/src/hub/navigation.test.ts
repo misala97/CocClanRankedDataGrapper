@@ -4,7 +4,7 @@ import { payload } from '../fixtures'
 import type { Selection } from '../types'
 import { queryFor } from '../api'
 import {
-  hashFor, isInPageAnchor, readRoute, readSelection, readSpan, urlFor,
+  hashFor, isInPageAnchor, readRootRoute, readRoute, readSelection, readSpan, urlFor,
 } from './navigation'
 
 const initial = payload()
@@ -15,6 +15,26 @@ const selection: Selection = {
 }
 
 describe('reading the address bar', () => {
+  it('opens legacy filter bookmarks in chatter without changing bare-root or hash precedence', () => {
+    for (const search of ['?market=de&window=24', '?sources=reddit', '?segment=', '?venues=2', '?sort=mentions&dir=asc']) {
+      expect(readRootRoute(search, '')).toEqual({ page: 'chatter' })
+      expect(readRootRoute(search, '#nonsense')).toEqual({ page: 'chatter' })
+      expect(readRootRoute(search, '#overview')).toEqual({ page: 'overview' })
+    }
+    expect(readRootRoute('', '')).toEqual({ page: 'overview' })
+    expect(readRootRoute('?unrelated=value', '')).toEqual({ page: 'overview' })
+    expect(readRootRoute('?t=AAA&market=de', '')).toEqual({ page: 'chatter', ticker: 'AAA' })
+  })
+
+  it('maps a valid legacy root ticker to Human Chatter unless a hub hash wins', () => {
+    expect(readRootRoute('?t=brk.b', '')).toEqual({ page: 'chatter', ticker: 'BRK.B' })
+    expect(readRootRoute('?t=brk.b', '#research/TSLA'))
+      .toEqual({ page: 'research', ticker: 'TSLA' })
+    expect(readRootRoute('?t=AAA', '#nonsense'))
+      .toEqual({ page: 'chatter', ticker: 'AAA' })
+    expect(readRootRoute('?t=not/a-ticker', '')).toEqual({ page: 'overview' })
+  })
+
   it('opens direct research links', () => {
     expect(readRoute('#research/AAA')).toEqual({ page: 'research', ticker: 'AAA' })
     expect(readRoute('#nonsense')).toEqual({ page: 'missing' })

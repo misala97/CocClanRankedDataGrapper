@@ -80,6 +80,28 @@ export function readRoute(hash: string): HubRoute {
   return { page: 'missing' }
 }
 
+/** Root used to be the board, whose selected-company bookmark was `?t=`.
+ * A real hub fragment is newer and more specific, so it wins. This runs only
+ * for `/radar/`; `/radar/hub/` has always interpreted a bare URL as Overview. */
+export function readRootRoute(search: string, hash: string): HubRoute {
+  if (hash.replace(/^#/, '') !== '') {
+    const route = readRoute(hash)
+    if (route.page !== 'missing') return route
+  }
+  const params = new URLSearchParams(search.replace(/^\?/, ''))
+  const ticker = params.get('t')
+  if (ticker && /^[A-Za-z][A-Za-z0-9.-]{0,9}$/.test(ticker)) {
+    return { page: 'chatter', ticker: ticker.toUpperCase() }
+  }
+  // Old board links can select a population without selecting a company.
+  // Value validation remains in readSelection; unrelated query keys do not
+  // turn a bare hub visit into a board visit.
+  const boardKeys = ['market', 'sources', 'window', 'segment', 'venues', 'sort', 'dir']
+  return boardKeys.some((key) => params.has(key))
+    ? { page: 'chatter' }
+    : { page: 'overview' }
+}
+
 /** decodeURIComponent throws on a lone `%`. A bookmark that lost a character
  *  in a chat client is a missing page, never an exception. */
 function decode(value: string): string | null {

@@ -51,8 +51,10 @@ def plain_user():
             db.session.commit()
 
 
-def test_the_hub_needs_a_session(anon_client):
-    assert anon_client.get('/radar/hub/').status_code == 302
+@pytest.mark.parametrize('path', ('/radar/', '/radar/hub/', '/radar/legacy/'))
+def test_every_radar_entry_needs_a_session(anon_client, path):
+    response = anon_client.get(path)
+    assert response.status_code == 302
 
 
 def test_the_hub_embeds_the_board_it_would_otherwise_have_to_fetch(client):
@@ -105,11 +107,27 @@ def test_the_discover_url_embeds_the_existing_warm_default(client):
     assert shell['board']['segments'] == ['discover', 'mid', 'micro', 'unknown']
 
 
-def test_the_old_board_route_still_answers(client):
-    """The hub is opt-in. /radar/ is the way back and must not have moved."""
-    response = client.get('/radar/')
+def test_root_and_alias_mount_the_same_hub(client):
+    for path in ('/radar/', '/radar/hub/'):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert 'radar-hub-data' in response.get_data(as_text=True)
+
+
+def test_root_legacy_ticker_keeps_supported_board_filters(client):
+    shell = _shell(client.get('/radar/?t=AAA&market=de&window=24')
+                   .get_data(as_text=True))
+    assert shell['board']['market'] == 'de'
+    assert shell['board']['window_hours'] == 24
+
+
+def test_legacy_route_keeps_the_original_board(client):
+    response = client.get('/radar/legacy/?t=AAA&market=de&window=24')
     assert response.status_code == 200
-    assert 'radar-data' in response.get_data(as_text=True)
+    html = response.get_data(as_text=True)
+    assert 'radar-data' in html
+    assert 'radar-hub-data' not in html
+    assert '/radar/?t=AAA&amp;market=de&amp;window=24' in html
 
 
 def test_the_hub_loads_its_own_bundle_and_stylesheet(client):

@@ -21,12 +21,16 @@ from ..config import DEFAULT_SEGMENT
 def _hub_args(args):
     """Map the hub's visible Discover choice to the existing warm key."""
     mapped = args.copy()
+    # `t` is old-board selection state. The hub translates it in the browser,
+    # where a fragment can take precedence; the board API must never receive
+    # it or reject otherwise valid legacy filters.
+    mapped.pop('t', None)
     if mapped.get('segment') == 'discover':
         mapped['segment'] = DEFAULT_SEGMENT
     return mapped
 
 
-@radar_bp.route('/')
+@radar_bp.route('/legacy/')
 @login_required
 def board_page():
     """A bad query string falls back to the default board rather than 400.
@@ -40,23 +44,23 @@ def board_page():
         payload = build_payload(request.args, user_id=user_id)
     except BadQuery:
         payload = build_payload({}, user_id=user_id)
-    return render_template('radar/board.html', payload=payload)
+    query = request.query_string.decode('utf-8')
+    return render_template('radar/board.html', payload=payload,
+                           hub_url=f'/radar/{"?" + query if query else ""}')
 
 
+@radar_bp.route('/')
 @radar_bp.route('/hub/')
 @login_required
 def hub_page():
-    """The opt-in hub, offered alongside the board rather than in place of it.
-
-    /radar/ above is unchanged and stays the way back. Promoting this route is
-    a separate release decision, so nothing here may change what that one does.
+    """The hub at the root, with /hub/ retained as a compatibility alias.
 
     `is_admin` travels with the board so the shell can decide whether to render
     an Administration link on first paint rather than after a probe request.
     It is a rendering hint: /radar/api/ops enforces authorization itself and
     does not trust it.
 
-    Same BadQuery fallback as the board page: a person editing the address bar
+    Same BadQuery fallback as the legacy board page: a person editing the address bar
     is not a bug, and answering a typo with an error page is an odd way to run
     a dashboard.
     """
