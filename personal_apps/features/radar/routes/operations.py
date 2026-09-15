@@ -29,7 +29,7 @@ from auth import admin_required, login_required
 from extensions import db
 
 from .. import activity, board_namespace, board_producer, board_store
-from .. import llm_sentiment, market_data, observations, spend
+from .. import llm_sentiment, market_data, observations, price_chart_acquisition, spend
 from . import api
 from ._blueprint import radar_bp
 
@@ -81,6 +81,10 @@ def ops():
                 observations.latest_observed_at()),
         },
         'board_results': _board_results(now),
+        # This web PROCESS's selected-price acquisition health. A read of
+        # counters it already holds: it never creates the coordinator, admits
+        # an acquisition or contacts a provider.
+        'selected_price_ops': price_chart_acquisition.ops_snapshot(),
     })
 
 

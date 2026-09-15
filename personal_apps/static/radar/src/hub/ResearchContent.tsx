@@ -10,15 +10,19 @@
 // Nothing here fetches. Both callers own one `useDetail` for the company they
 // have open and hand the answer in, which is what keeps a selected company to
 // one request no matter how many panels are reading it.
-import { useEffect, useRef } from 'react'
+import { useContext, useEffect, useRef } from 'react'
 
 import { Breakdown } from '../detail/Breakdown'
 import { Posts } from '../detail/Posts'
 import { ChartBasisNote, PriceChart, roseOverSpan } from '../detail/PriceChart'
 import { sourceLabel } from '../format'
-import type { Detail, DetailChart, PanelSpan } from '../types'
+import type { Detail, DetailChart, PanelSpan, Selection } from '../types'
 import { BoardUnavailable } from '../api'
 import { Unavailable } from './PageState'
+import { PriceChartUnavailable } from './priceChart'
+import { usePriceChart } from './queries'
+import { SelectedPriceChart, selectedCaption } from './SelectedPriceChart'
+import { SelectedPriceCharts } from './selectedPriceContext'
 
 export const SPANS: PanelSpan[] = ['1D', '1W', '1M', '6M', '1Y', '3Y']
 
@@ -57,14 +61,32 @@ export function captionFor(chart: DetailChart): string {
  *  get and a stroke colour never was.
  */
 export function ChartSection({ chart, quoteVenue, ticker, span, onSpan,
-                              headingId = 'rh-chart-head' }: {
+                              headingId = 'rh-chart-head', selection, visible = true }: {
   chart: DetailChart
   quoteVenue?: string | null
   ticker: string
   span: PanelSpan
   onSpan: (span: PanelSpan) => void
   headingId?: string
+  /** The listing context, which the selected-session chart needs for its
+   *  market and sources. Without it the original chart is drawn. */
+  selection?: Selection
+  visible?: boolean
 }) {
+  // The selected-session chart (MD-SELECTED-PRICE) replaces ONLY this
+  // section's drawing, and only where the server offers it, for a US
+  // selection, on 1D and 1W. A company the server cannot chart that way (no
+  // native-USD US primary) and a switched-off server keep the original chart.
+  // Everything else on the page -- the quote, evidence, posts -- is untouched.
+  const offered = useContext(SelectedPriceCharts)
+  const eligible = offered && selection !== undefined && selection.market === 'us'
+    && (span === '1D' || span === '1W')
+  const priceChart = usePriceChart({ ticker, selection, span, enabled: eligible, visible })
+  const refused = priceChart.error instanceof PriceChartUnavailable
+    && (priceChart.error.reason === 'unsupported' || priceChart.error.reason === 'disabled')
+  const selected = eligible && !refused
+  const failed = selected && Boolean(priceChart.error)
+
   // Where the chart is looking when it does not all fit.
   //
   // Below the desk widths the drawing keeps a 620px floor and pans inside
@@ -105,7 +127,11 @@ export function ChartSection({ chart, quoteVenue, ticker, span, onSpan,
       <div className="rh-sectionhead">
         <div>
           <h2 id={headingId}>Price and chatter</h2>
-          <p className="muted small">{captionFor(chart)}</p>
+          <p className="muted small">
+            {selected
+              ? selectedCaption(failed ? undefined : priceChart.data, span, failed ? 'failed' : 'loading')
+              : captionFor(chart)}
+          </p>
         </div>
         <div className="rh-spans" role="group" aria-label="Chart span">
           {SPANS.map((option) => (
@@ -120,23 +146,76 @@ export function ChartSection({ chart, quoteVenue, ticker, span, onSpan,
           ))}
         </div>
       </div>
-      <ChartBasisNote chart={chart} quoteVenue={quoteVenue} />
-      <ChartLegend chart={chart} />
-      {/* Its own scroller: below the desk widths the chart pans rather
-          than being scaled until its axis is unreadable. The document
-          itself never scrolls sideways. */}
-      <div className="rh-chartwrap" role="region"
-           aria-label={`Price and chatter for ${ticker}`}
-           tabIndex={0} ref={pan}>
-        <PriceChart chart={chart} chatterMode="sentiment-bars" />
-      </div>
-      <p className="rh-caption">
-        Swipe or scroll sideways for earlier history. The chart has a
-        text equivalent under every figure it draws: the price and the
-        window are stated above, and the counts are in the breakdown.
-      </p>
+      {selected ? (
+        <SelectedChartBody query={priceChart} ticker={ticker} span={span} />
+      ) : (
+        <>
+          <ChartBasisNote chart={chart} quoteVenue={quoteVenue} />
+          <ChartLegend chart={chart} />
+          {/* Its own scroller: below the desk widths the chart pans rather
+              than being scaled until its axis is unreadable. The document
+              itself never scrolls sideways. */}
+          <div className="rh-chartwrap" role="region"
+               aria-label={`Price and chatter for ${ticker}`}
+               tabIndex={0} ref={pan}>
+            <PriceChart chart={chart} chatterMode="sentiment-bars" />
+          </div>
+          <p className="rh-caption">
+            Swipe or scroll sideways for earlier history. The chart has a
+            text equivalent under every figure it draws: the price and the
+            window are stated above, and the counts are in the breakdown.
+          </p>
+        </>
+      )}
     </section>
   )
+}
+
+/** The selected-session chart's own states, scoped to the chart.
+ *
+ *  Loading and failure never overlay a previous company's or span's chart:
+ *  the query keeps no placeholder, so without an answer for THIS key there is
+ *  nothing to draw but the state.
+ *
+ *  A failed request shows the retry state even when the cache still holds an
+ *  earlier answer for this key. The key is ticker, market, sources and span;
+ *  it is not the identity or the window, and after a failure nothing here can
+ *  prove the earlier answer still describes them -- the session may have
+ *  rolled over or the listing been remapped since it was answered. So that
+ *  answer, and its "current session" and "now" wording, stays hidden until a
+ *  refresh succeeds. A stale or stored-fallback answer the server sends with
+ *  HTTP 200 is an answer, not a failure, and is drawn with its own labels. */
+function SelectedChartBody({ query, ticker, span }: {
+  query: ReturnType<typeof usePriceChart>
+  ticker: string
+  span: PanelSpan
+}) {
+  const { data, error, refetch, isFetching } = query
+  if (error) {
+    const message = error instanceof Error ? error.message : 'The chart did not answer.'
+    return (
+      <div className="rh-sp-state" role="alert">
+        <p>
+          {data
+            ? `The latest ${span} chart for ${ticker} could not be loaded, so the earlier chart is hidden. `
+            : `The ${span} chart for ${ticker} could not be loaded. `}
+          {message}
+        </p>
+        <button type="button" className="rh-button" disabled={isFetching}
+                onClick={() => void refetch()}>
+          {isFetching ? 'Retrying…' : 'Retry'}
+        </button>
+      </div>
+    )
+  }
+  if (!data) {
+    return (
+      <p className="rh-sp-state" role="status">
+        Loading the {span} price and chatter chart for {ticker}…
+      </p>
+    )
+  }
+  return <SelectedPriceChart data={data} ticker={ticker} />
 }
 
 /** Which mark is which series, and which way the price went across the span.

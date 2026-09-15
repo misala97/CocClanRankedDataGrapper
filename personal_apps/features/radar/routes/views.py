@@ -15,6 +15,7 @@ from auth import current_user, is_admin, login_required
 
 from ._blueprint import radar_bp
 from .api import BadQuery, build_payload
+from .. import config
 from ..config import DEFAULT_SEGMENT
 
 
@@ -69,5 +70,10 @@ def hub_page():
         payload = build_payload(_hub_args(request.args), user_id=user_id)
     except BadQuery:
         payload = build_payload({}, user_id=user_id)
+    # The selected-price chart flag is a rendering hint as well: the chart
+    # endpoint refuses by itself when it is off, and the provider switch is
+    # never sent to the browser at all.
     return render_template('radar/hub.html',
-                           shell={'board': payload, 'is_admin': is_admin()})
+                           shell={'board': payload, 'is_admin': is_admin(),
+                                  'selected_price_charts_enabled':
+                                      config.selected_price_charts_enabled()})

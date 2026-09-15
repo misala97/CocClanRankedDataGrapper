@@ -7,6 +7,7 @@ import * as api from '../api'
 import { BoardUnavailable } from '../api'
 import type { OpsPayload } from '../types'
 import { Admin } from './Admin'
+import type { SelectedPriceOps } from './priceChart'
 
 const ops = (over: Partial<OpsPayload> = {}): OpsPayload => ({
   generated_at: '2026-09-09T10:00:00Z',
@@ -49,6 +50,58 @@ function show(payload?: OpsPayload, error?: unknown) {
 }
 
 afterEach(() => { vi.restoreAllMocks() })
+
+describe('selected price chart health', () => {
+  const health = (over: Partial<SelectedPriceOps> = {}): SelectedPriceOps => ({
+    scope: 'process', pid: 4242, coordinator_started_at: '2026-09-15T08:00:00Z',
+    charts_enabled: true, yahoo_enabled: false,
+    configured_web_workers: 2, configured_web_workers_source: 'WEB_CONCURRENCY',
+    note: 'Counts for this web process only, reset when it restarts.',
+    in_flight: false, cache_keys: 3, cache_bytes: 20480, rolling_starts_60s: 1,
+    backoff_until: null, quarantined: false,
+    counters: { success: 4, timeout: 1, busy: 0 },
+    latency: { count: 5, sum_seconds: 5, max_seconds: 2.5 },
+    limits: { starts_per_60s: 10, deadline_seconds: 6 },
+    ...over,
+  })
+
+  it('is shown as one web process’s figures, with its reset scope', async () => {
+    show(ops({ selected_price_ops: health() }))
+    expect(await screen.findByText('Selected price charts')).toBeVisible()
+    expect(screen.getByText('This web process (pid 4242)')).toBeVisible()
+    expect(screen.getByText('on / off')).toBeVisible()
+    expect(screen.getByText('1 of 10')).toBeVisible()
+    expect(screen.getByText('success 4 · timeout 1')).toBeVisible()
+    expect(screen.getByText('avg 1.00 s · max 2.50 s')).toBeVisible()
+    expect(screen.getByText(/reset when it restarts\./)).toBeVisible()
+  })
+
+  it('names the coordinator start and the configured workers with their source', async () => {
+    show(ops({ selected_price_ops: health() }))
+    await screen.findByText('Selected price charts')
+    expect(screen.getByText('Acquisition coordinator started')).toBeVisible()
+    expect(screen.getByText('15 Sep, 10:00 Berlin')).toBeVisible()
+    expect(screen.getByText('Configured web workers')).toBeVisible()
+    expect(screen.getByText('2 (from WEB_CONCURRENCY)')).toBeVisible()
+    expect(screen.queryByText(/process started/i)).toBeNull()
+  })
+
+  it('says Unknown, and why, when no positive worker count is configured', async () => {
+    show(ops({ selected_price_ops: health({ configured_web_workers: null, coordinator_started_at: null }) }))
+    await screen.findByText('Selected price charts')
+    expect(screen.getByText(
+      'Unknown — WEB_CONCURRENCY is not set to a positive number; each worker keeps its own limits',
+    )).toBeVisible()
+    expect(screen.getByText('not started in this process')).toBeVisible()
+    expect(screen.queryByText(/web workers are configured/)).toBeNull()
+  })
+
+  it('is absent when the server does not send it', async () => {
+    show(ops())
+    await screen.findByText(/\$1\.25/)
+    expect(screen.queryByText('Selected price charts')).toBeNull()
+  })
+})
 
 describe('the operations page', () => {
   it('shows the summaries the server already computes', async () => {

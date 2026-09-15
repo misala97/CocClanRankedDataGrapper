@@ -29,6 +29,7 @@ import {
   StaleNotice, Unavailable,
 } from './PageState'
 import { Research } from './Research'
+import { SelectedPriceCharts } from './selectedPriceContext'
 import { Watching } from './Watching'
 import { Search } from './Search'
 import {
@@ -56,7 +57,13 @@ const DESTINATIONS = [
   { page: 'activity', label: 'Activity' },
 ] as const
 
-export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: boolean }) {
+export function Hub({ initial, isAdmin, selectedPriceCharts = false }: {
+  initial: BoardPayload
+  isAdmin: boolean
+  /** The server's selected-session chart flag, from the shell (a rendering
+   *  hint; the chart endpoint enforces it itself). */
+  selectedPriceCharts?: boolean
+}) {
   const [route, setRoute] = useState<HubRoute>(() => initialRoute())
   const [selection, setSelection] = useState<Selection>(
     () => readSelection(window.location.search, seedSelection(initial),
@@ -232,6 +239,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
     (candidate) => candidate?.market === selection.market) ?? null
 
   return (
+    <SelectedPriceCharts.Provider value={selectedPriceCharts}>
     <div className="rh">
       {/* A real anchor for the semantics a screen reader announces, but it
           moves focus itself rather than letting the fragment land in the
@@ -379,6 +387,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
                   opened={opened} onOpened={() => setOpened(true)} />}
       </main>
     </div>
+    </SelectedPriceCharts.Provider>
   )
 }
 

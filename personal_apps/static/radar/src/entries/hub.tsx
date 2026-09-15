@@ -41,7 +41,8 @@ if (rootEl) {
       ? (
         <Boundary label="The hub">
           <QueryClientProvider client={client}>
-            <Hub initial={parsed.board} isAdmin={parsed.isAdmin} />
+            <Hub initial={parsed.board} isAdmin={parsed.isAdmin}
+                 selectedPriceCharts={parsed.selectedPriceCharts} />
           </QueryClientProvider>
         </Boundary>
       )
@@ -57,12 +58,17 @@ if (rootEl) {
  *  case is an admin who has to reload, not a stranger who gets a nav link.
  */
 function readShell(text: string | null | undefined):
-  { board: BoardPayload; isAdmin: boolean } | null {
+  { board: BoardPayload; isAdmin: boolean; selectedPriceCharts: boolean } | null {
   try {
-    const raw = JSON.parse(text ?? '') as { board?: unknown; is_admin?: unknown }
+    const raw = JSON.parse(text ?? '') as {
+      board?: unknown; is_admin?: unknown; selected_price_charts_enabled?: unknown
+    }
     const board = parsePayload(JSON.stringify(raw?.board))
     if (!board) return null
-    return { board, isAdmin: raw?.is_admin === true }
+    // Same rule as is_admin: anything but a literal true is off, and off is
+    // the chart this page always drew.
+    return { board, isAdmin: raw?.is_admin === true,
+             selectedPriceCharts: raw?.selected_price_charts_enabled === true }
   } catch {
     return null
   }

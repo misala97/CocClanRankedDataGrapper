@@ -5,6 +5,8 @@
 // no separate "initial" type -- a second shape is a second thing to keep in
 // sync, and the first divergence would show up as a blank panel.
 
+import type { SelectedPriceOps } from './hub/priceChart'
+
 /** A mention count for one hour. `null` means the hour was never measured --
  *  ingest was down, or the sources were unreachable. It is not a quiet hour
  *  and must never render as a zero. */
@@ -489,6 +491,9 @@ export interface ActivityPayload {
  */
 export interface OpsPayload {
   generated_at: string
+  /** This web process's selected-price acquisition health. Optional so an
+   *  older deployment without it still renders the page. */
+  selected_price_ops?: SelectedPriceOps
   spend: { today_usd: number; month_usd: number; unpriced_tokens: number }
   sentiment: {
     pending: number

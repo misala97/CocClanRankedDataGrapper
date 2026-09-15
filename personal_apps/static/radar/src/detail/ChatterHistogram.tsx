@@ -4,7 +4,7 @@ import type { ChatterToneSlot, DetailChart } from '../types'
 import { count } from '../format'
 import { PLOT_R, TOP, FLOOR, isIntraday, slotLabel } from './PriceChart'
 
-const TONE_COLORS = {
+export const TONE_COLORS = {
   bullish: '#45dda0',
   bearish: '#ff6b7c',
   neutral: 'var(--dim)',

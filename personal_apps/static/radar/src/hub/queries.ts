@@ -22,6 +22,10 @@ import {
   untilExpired, untilStale,
 } from '../pending'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
+import {
+  PERMANENT_CHART_REASONS, PriceChartUnavailable, fetchPriceChart,
+} from './priceChart'
+import type { ChartSpan, PriceChartResponse } from './priceChart'
 
 /** Every hub key starts here, so the hub and the old board island can share a
  *  browser tab without sharing a cache entry. */
@@ -714,6 +718,89 @@ export function useDetail(ticker: string | null, selection: Selection,
     refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
     retry,
+  })
+}
+
+// --- the selected-session price chart (MD-SELECTED-PRICE) ---------------------
+
+export const PRICE_CHART_VERSION = 'selected-price-v1'
+/** While the server is acquiring a chart, ask again this soon... */
+export const PENDING_POLL_MS = 2_000
+/** ...at most this many times per acquisition attempt, then on the minute. */
+export const PENDING_POLLS = 5
+
+/** Everything the answer depends on. No `window`, segment or limit: the chart
+ *  does not depend on them, and a key that carried them would refetch the
+ *  same chart whenever the board's controls moved. */
+export const priceChartKey = (ticker: string, market: string, sources: string[],
+                              span: PanelSpan) =>
+  [ROOT, 'price-chart', ticker, market, sources.join(','), span,
+    PRICE_CHART_VERSION] as const
+
+/** When the chart asks again on its own, or false for not at all.
+ *
+ *  Never for a hidden tab or a chart with no answer yet (a failure waits for
+ *  the reader's Retry). A pending or busy acquisition is asked about every two
+ *  seconds for at most five polls, never sooner than the server's
+ *  retry_after_seconds; everything else -- ready, disabled, backoff,
+ *  unavailable, or a wait that ran out of polls -- refreshes on the minute the
+ *  detail uses, again never sooner than retry_after_seconds. */
+export function priceChartInterval(answer: PriceChartResponse | undefined,
+                                   { visible, polls }: { visible: boolean; polls: number }):
+  number | false {
+  if (!visible || answer === undefined) return false
+  const { state, retry_after_seconds: retryAfter } = answer.acquisition
+  const floor = retryAfter === null ? 0 : retryAfter * 1000
+  if ((state === 'pending' || state === 'busy') && polls <= PENDING_POLLS) {
+    return Math.max(PENDING_POLL_MS, floor)
+  }
+  return Math.max(REFRESH_MS, floor)
+}
+
+/** One company's selected-session chart, shared by standalone Research and the
+ *  chatter workspace through the page's one QueryClient.
+ *
+ *  No placeholder data: a new ticker, span or source selection is a new
+ *  question and shows its own loading state rather than the previous chart.
+ *  An answer about another ticker or span is refused at validation, and a
+ *  request for a key nobody is looking at any more is cancelled by the client
+ *  because its signal is consumed. */
+export function usePriceChart({ ticker, selection, span, enabled, visible = true }: {
+  ticker: string | null
+  selection: Selection | undefined
+  span: PanelSpan
+  enabled: boolean
+  visible?: boolean
+}) {
+  const sources = selection?.sources ?? []
+  const market = selection?.market ?? 'us'
+  const active = enabled && Boolean(ticker) && market === 'us'
+    && (span === '1D' || span === '1W')
+  const key = priceChartKey(ticker ?? '', market, sources, span)
+  const keyText = JSON.stringify(key)
+  // Answers that said "still acquiring", in a row, for THIS key.
+  const polls = useRef({ key: keyText, count: 0 })
+  if (polls.current.key !== keyText) polls.current = { key: keyText, count: 0 }
+  return useQuery({
+    queryKey: key,
+    queryFn: async ({ signal }) => {
+      const answer = await fetchPriceChart(ticker as string, sources, span as ChartSpan, signal)
+      if (polls.current.key === keyText) {
+        const waiting = answer.acquisition.state === 'pending'
+          || answer.acquisition.state === 'busy'
+        polls.current.count = waiting ? polls.current.count + 1 : 0
+      }
+      return answer
+    },
+    enabled: active,
+    refetchInterval: (query) => priceChartInterval(query.state.data, {
+      visible, polls: polls.current.key === keyText ? polls.current.count : 0,
+    }),
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (count, error) => !(error instanceof PriceChartUnavailable
+      && PERMANENT_CHART_REASONS.has(error.reason)) && count < 1,
   })
 }
 

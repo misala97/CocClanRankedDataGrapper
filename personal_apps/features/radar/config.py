@@ -1206,3 +1206,22 @@ PROVISIONAL_BASELINE_DAYS = 14
 SCORE_WRITE_TOLERANCE_REL = 0.01      # expected and variance, relative
 SCORE_WRITE_TOLERANCE_Z = 0.02        # mention_z, absolute
 SCORE_WRITE_TOLERANCE_DAYS = 0.25     # baseline_days, absolute
+
+# ---- selected-instrument price charts (MD-SELECTED-PRICE) -------------------
+# Two switches, both off unless the environment says otherwise, read on every
+# call so turning one off is a restart rather than a deploy (the
+# RADAR_BOARD_SHARED_RESULTS rule). The first serves the hub's new 1D/1W chart
+# contract; the second additionally lets a web process start its bounded Yahoo
+# acquisition and means nothing without the first. Only the first is ever sent
+# to the browser, as a rendering hint.
+_SELECTED_PRICE_TRUTHY = {'1', 'true', 'yes', 'on'}
+
+
+def selected_price_charts_enabled():
+    return os.environ.get('RADAR_SELECTED_PRICE_CHARTS_ENABLED',
+                          '').strip().lower() in _SELECTED_PRICE_TRUTHY
+
+
+def selected_price_yahoo_enabled():
+    return selected_price_charts_enabled() and os.environ.get(
+        'RADAR_SELECTED_PRICE_YAHOO_ENABLED', '').strip().lower() in _SELECTED_PRICE_TRUTHY

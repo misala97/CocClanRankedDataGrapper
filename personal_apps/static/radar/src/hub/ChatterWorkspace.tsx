@@ -377,7 +377,8 @@ function SelectedCompany({ ticker, board, selection, row, outside, onBoard,
           <Quote detail={data} headingId="rh-ws-quote-head" />
           <ChartSection chart={chart} quoteVenue={identity.quote.venue}
                         ticker={identity.ticker} span={span} onSpan={onSpan}
-                        headingId="rh-ws-chart-head" />
+                        headingId="rh-ws-chart-head" selection={selection}
+                        visible={visible} />
           <Tabs breakdown={breakdown} detail={data}
                 windowHours={selection.window} />
         </div>

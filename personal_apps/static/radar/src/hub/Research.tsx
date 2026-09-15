@@ -111,7 +111,8 @@ export function Research({ ticker, selection, span, onSpan, onBack, onSearch,
         <div className="rh-stack">
           <Quote detail={data} />
           <ChartSection chart={chart} quoteVenue={identity.quote.venue}
-                        ticker={identity.ticker} span={span} onSpan={onSpan} />
+                        ticker={identity.ticker} span={span} onSpan={onSpan}
+                        selection={selection} visible={visible} />
           <EvidencePanel breakdown={breakdown} windowHours={selection.window} />
           <PostsPanel detail={data} />
         </div>

@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { BoardUnavailable, fetchOps } from '../api'
 import { Forbidden, Loading, Unavailable } from './PageState'
+import type { SelectedPriceOps } from './priceChart'
 import { REFRESH_MS } from './queries'
 
 export function Admin() {
@@ -141,9 +142,74 @@ export function Admin() {
               </ul>
             )}
         </Panel>
+
+        {ops.selected_price_ops ? <SelectedPricePanel ops={ops.selected_price_ops} /> : null}
       </div>
     </>
   )
+}
+
+/** One web process's selected-price acquisition, and it says so: every figure
+ *  resets when that process restarts, and each web worker keeps its own. */
+function SelectedPricePanel({ ops }: { ops: SelectedPriceOps }) {
+  const outcomes = Object.entries(ops.counters)
+    .filter(([, value]) => value > 0)
+    .map(([name, value]) => `${name.replace(/_/g, ' ')} ${value}`)
+    .join(' · ')
+  const average = ops.latency.count ? ops.latency.sum_seconds / ops.latency.count : null
+  // The server names where the worker count comes from; an older server that
+  // does not is the same environment variable.
+  const workersSource = ops.configured_web_workers_source || 'WEB_CONCURRENCY'
+  return (
+    <Panel title="Selected price charts">
+      <Fact label="Scope">{`This web process (pid ${ops.pid})`}</Fact>
+      <Fact label="Acquisition coordinator started">
+        {ops.coordinator_started_at ? dayStamp(ops.coordinator_started_at) : 'not started in this process'}
+      </Fact>
+      <Fact label="Configured web workers">
+        {typeof ops.configured_web_workers === 'number' && ops.configured_web_workers > 0
+          ? `${ops.configured_web_workers} (from ${workersSource})`
+          : `Unknown — ${workersSource} is not set to a positive number; each worker keeps its own limits`}
+      </Fact>
+      <Fact label="Chart / provider switch">
+        {`${ops.charts_enabled ? 'on' : 'off'} / ${ops.yahoo_enabled ? 'on' : 'off'}`}
+      </Fact>
+      <Fact label="Acquiring now">{ops.in_flight ? 'yes' : 'no'}</Fact>
+      <Fact label="Starts, last 60 s">
+        {`${ops.rolling_starts_60s} of ${ops.limits?.starts_per_60s ?? 10}`}
+      </Fact>
+      <Fact label="Cached charts">
+        {`${ops.cache_keys} · ${(ops.cache_bytes / 1024).toFixed(0)} KiB`}
+      </Fact>
+      <Fact label="Provider backoff until">
+        {ops.backoff_until === null ? 'none' : stamp(ops.backoff_until)}
+      </Fact>
+      {ops.quarantined ? (
+        <Fact label="Stopped">a fetch child could not be confirmed stopped</Fact>
+      ) : null}
+      <Fact label="Outcomes">{outcomes || 'none yet'}</Fact>
+      <Fact label="Acquisition time">
+        {average === null ? 'none yet'
+          : `avg ${average.toFixed(2)} s · max ${ops.latency.max_seconds.toFixed(2)} s`}
+      </Fact>
+      <p className="rh-caption">{ops.note}</p>
+    </Panel>
+  )
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** Day and time in Berlin, e.g. "15 Sep, 10:00 Berlin". A coordinator can be
+ *  days old, so a bare clock time would read as today. Built from numeric
+ *  parts: ICU spells en-GB September "Sept" in some builds. */
+function dayStamp(iso: string): string {
+  const when = new Date(iso)
+  if (Number.isNaN(when.getTime())) return 'an unknown time'
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    timeZone: 'Europe/Berlin',
+  }).formatToParts(when).map((part) => [part.type, part.value]))
+  return `${Number(parts.day)} ${MONTHS[Number(parts.month) - 1]}, ${parts.hour}:${parts.minute} Berlin`
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
