@@ -6,5 +6,6 @@ imported below even though the names look unused.
 from ._blueprint import radar_bp     # noqa: F401
 
 from . import api                    # noqa: F401
+from . import analysis               # noqa: F401
 from . import operations             # noqa: F401
 from . import views                  # noqa: F401

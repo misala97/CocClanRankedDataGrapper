@@ -28,12 +28,26 @@ export type HubRoute =
    *  keeps `#chatter` the exact same route object it has always been. */
   | { page: 'chatter'; ticker?: string }
   | { page: 'research'; ticker: string }
+  /** Analysis / Explore (HA1). Three forms, and they are three different
+   *  things: no company; a ticker still to be resolved to today's current
+   *  mapping; and the canonical link that pins the company and instrument
+   *  by ID. The IDs are never guessed from a ticker and a half-formed link
+   *  is read as the unresolved form, not cast into a resolved one. */
+  | { page: 'analysis'; ticker?: string; companyId?: number; instrumentId?: number }
   | { page: 'missing' }
 
 /** Only what this release actually renders. News, Combined, Portfolio and
  *  Analysis stay in the prototype and the roadmap; a bookmark to one is a dead
  *  link the recovery view can explain, not an empty destination in the nav. */
 const PAGES = ['overview', 'chatter', 'watching', 'activity', 'admin'] as const
+
+/** The Analysis page's own query keys. Outside `Selection` on purpose: the
+ *  board's context is retained beside them so Back returns to the board the
+ *  reader left, and the board API never receives them. */
+const ANALYSIS_FROM = 'analysis_from'
+const ANALYSIS_TO = 'analysis_to'
+
+export interface AnalysisRange { from: string; to: string }
 
 const SPANS: PanelSpan[] = ['1D', '1W', '1M', '6M', '1Y', '3Y']
 
@@ -77,7 +91,43 @@ export function readRoute(hash: string): HubRoute {
     if (!ticker) return { page: 'chatter' }
     return { page: 'chatter', ticker: ticker.toUpperCase() }
   }
+  if (name === 'analysis') return readAnalysis(rest)
   return { page: 'missing' }
+}
+
+/** `#analysis`, `#analysis/<ticker>` or `#analysis/<ticker>/<company>/<instrument>`.
+ *  Anything else after the ticker -- one ID, a non-numeric ID, a zero, an
+ *  extra segment -- is the unresolved ticker form: the page resolves it
+ *  again rather than trusting a link it cannot read whole. */
+function readAnalysis(rest: string[]): HubRoute {
+  const ticker = decode(rest[0] ?? '')
+  if (!ticker) return { page: 'analysis' }
+  const upper = ticker.toUpperCase()
+  if (rest.length === 3) {
+    const companyId = positive(rest[1])
+    const instrumentId = positive(rest[2])
+    if (companyId !== null && instrumentId !== null) {
+      return { page: 'analysis', ticker: upper, companyId, instrumentId }
+    }
+  }
+  return { page: 'analysis', ticker: upper }
+}
+
+function positive(value: string | undefined): number | null {
+  if (value === undefined || !/^[1-9]\d{0,17}$/.test(value)) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) ? parsed : null
+}
+
+/** The analysis dates as WRITTEN, or null when neither key is present.
+ *
+ *  Not validated here: a malformed or half-present pair is returned as the
+ *  strings the reader gave, so the page can show them in an editable notice
+ *  and refuse to fetch a guessed range. A bare page gets the default. */
+export function readAnalysisRange(search: string): AnalysisRange | null {
+  const params = new URLSearchParams(search.replace(/^\?/, ''))
+  if (!params.has(ANALYSIS_FROM) && !params.has(ANALYSIS_TO)) return null
+  return { from: params.get(ANALYSIS_FROM) ?? '', to: params.get(ANALYSIS_TO) ?? '' }
 }
 
 /** Root used to be the board, whose selected-company bookmark was `?t=`.
@@ -124,6 +174,14 @@ export function hashFor(route: HubRoute): string {
   }
   if (route.page === 'chatter' && route.ticker) {
     return `#chatter/${encodeURIComponent(route.ticker)}`
+  }
+  if (route.page === 'analysis') {
+    if (!route.ticker) return '#analysis'
+    const ticker = encodeURIComponent(route.ticker)
+    if (route.companyId !== undefined && route.instrumentId !== undefined) {
+      return `#analysis/${ticker}/${route.companyId}/${route.instrumentId}`
+    }
+    return `#analysis/${ticker}`
   }
   return `#${route.page}`
 }
@@ -234,13 +292,20 @@ export function readSpan(search: string): PanelSpan {
 /** The whole address for a state: filters in the query, destination in the
  *  hash. The span rides along only where there is a chart it describes. */
 export function urlFor(route: HubRoute, selection: Selection,
-                       span: PanelSpan): string {
+                       span: PanelSpan,
+                       analysis: AnalysisRange | null = null): string {
   const params = new URLSearchParams(queryFor(selection))
   // Only where there is a chart the span describes -- which is standalone
   // research, and the chatter workspace once it has a company open.
   if (route.page === 'research'
       || (route.page === 'chatter' && route.ticker)) {
     params.set('span', span)
+  }
+  // The explicit analysis window rides only on the analysis destination; a
+  // link to any other page drops it, and the board's query stays as it was.
+  if (route.page === 'analysis' && analysis !== null) {
+    params.set(ANALYSIS_FROM, analysis.from)
+    params.set(ANALYSIS_TO, analysis.to)
   }
   return `?${params.toString()}${hashFor(route)}`
 }

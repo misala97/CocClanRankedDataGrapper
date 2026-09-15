@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as api from '../api'
 import { BoardUnavailable } from '../api'
+import * as analysisApi from './analysisApi'
+import { analysis as analysisPayload, resolved } from './analysisFixtures'
 import { payload, row } from '../fixtures'
 import { Hub } from './Hub'
 
@@ -52,9 +54,9 @@ describe('the shell', () => {
     mount()
     const nav = screen.getByRole('navigation', { name: 'Radar' })
     const labels = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent)
-    expect(labels).toEqual(['Overview', 'Human Chatter', 'Watching', 'Activity', 'Legacy Radar'])
+    expect(labels).toEqual(['Overview', 'Human Chatter', 'Analysis', 'Watching', 'Activity', 'Legacy Radar'])
     // The prototype's other pages are roadmap, not disabled nav items.
-    for (const absent of ['News', 'Portfolio', 'Analysis', 'Combined']) {
+    for (const absent of ['News', 'Portfolio', 'Combined']) {
       expect(screen.queryByRole('link', { name: new RegExp(absent, 'i') }))
         .not.toBeInTheDocument()
     }
@@ -456,4 +458,108 @@ describe('the reader’s ordering of the chatter list', () => {
 
       expect(listed()).toEqual(['LOW', 'TOP', 'MID'])
     })
+})
+
+describe('the Analysis destination (HA1, C12/C15)', () => {
+  it('is in the nav, opens empty and never asks the board for anything', async () => {
+    const boards = vi.spyOn(api, 'fetchBoard')
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      mount()
+      await userEvent.click(screen.getByRole('link', { name: 'Analysis' }))
+      expect(screen.getByRole('main')).toHaveAccessibleName('Analysis')
+      expect(window.location.hash).toBe('#analysis')
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Explore')
+      // The top bar names the explicit scope, not the board's market session.
+      expect(screen.getByRole('banner')).toHaveTextContent('US primary · USD · retrospective')
+      await vi.advanceTimersByTimeAsync(130_000)
+      expect(boards).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens a search hit on Analysis as an Analysis ticker link', async () => {
+    vi.spyOn(api, 'fetchSearch').mockResolvedValue([
+      { ticker: 'AAA', name: 'Aaa Corp', exchange: 'N', segment: 'large', watching: false },
+    ])
+    vi.spyOn(analysisApi, 'fetchAnalysisResolve').mockResolvedValue(resolved())
+    vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '', '/radar/hub/?market=de&window=24#overview')
+    mount()
+    await userEvent.click(screen.getByRole('link', { name: 'Analysis' }))
+    expect(window.location.hash).toBe('#analysis')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Find a company' }), 'AAA')
+    const option = await screen.findByRole('option', { name: /AAA/ })
+    await userEvent.click(within(option).getByRole('button'))
+    // Resolved and REPLACED with the canonical pinned link plus explicit
+    // dates; the DE board context stays in the query beside them.
+    await waitFor(() => expect(window.location.hash).toBe('#analysis/AAA/11/7'))
+    expect(window.location.search).toContain('analysis_from=')
+    expect(window.location.search).toContain('market=de')
+    expect(window.location.search).toContain('window=24')
+    await screen.findByRole('group', { name: 'Select a day' })
+    expect(screen.getByText(/US primary · USD · all retained sources/)).toBeInTheDocument()
+    // Back returns to the unresolved Analysis entry (the pin was a replace,
+    // not a push), then to the page the reader came from with its board
+    // context intact; the analysis keys are gone from the address.
+    window.history.back()
+    await waitFor(() => expect(window.location.hash).toBe('#analysis'))
+    window.history.back()
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAccessibleName('Overview'))
+    expect(window.location.search).not.toContain('analysis_from')
+    expect(window.location.search).toContain('market=de')
+  })
+
+  it('restores a canonical link with explicit dates on refresh', async () => {
+    const read = vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '',
+      '/radar/hub/?market=us&analysis_from=2026-09-07&analysis_to=2026-09-13#analysis/AAA/11/7')
+    mount()
+    await screen.findByRole('group', { name: 'Select a day' })
+    expect(read).toHaveBeenCalledWith(11, 7, { from: '2026-09-07', to: '2026-09-13' }, expect.anything())
+  })
+
+  it('keeps malformed address dates through ticker resolution and never fetches a guessed window (P2-2)', async () => {
+    vi.spyOn(analysisApi, 'fetchAnalysisResolve').mockResolvedValue(resolved())
+    const read = vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '',
+      '/radar/hub/?market=us&analysis_from=2026-13-07&analysis_to=2026-09-13#analysis/AAA')
+    mount()
+    // Pinned by replace, with the address's own strings still in it.
+    await waitFor(() => expect(window.location.hash).toBe('#analysis/AAA/11/7'))
+    expect(window.location.search).toContain('analysis_from=2026-13-07')
+    expect(window.location.search).toContain('analysis_to=2026-09-13')
+    expect(await screen.findByText(/Asked for “2026-13-07” to “2026-09-13”/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/From \(UTC day\)/)).toHaveValue('2026-13-07')
+    expect(screen.getByText('No window to show.')).toBeInTheDocument()
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('shows malformed dates on a pinned link and fetches nothing', async () => {
+    const read = vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '',
+      '/radar/hub/?analysis_from=2026-09-07&analysis_to=not-a-day#analysis/AAA/11/7')
+    mount()
+    expect(await screen.findByText(/Asked for “2026-09-07” to “not-a-day”/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/To \(UTC day\)/)).toHaveValue('not-a-day')
+    expect(window.location.search).toContain('analysis_to=not-a-day')
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('keeps legacy root bookmarks and invalid hashes exactly as before', () => {
+    window.history.replaceState(null, '', '/radar/?t=AAA#analysis/BBB')
+    mount()
+    // A real hub hash wins over the legacy t, Analysis included.
+    expect(screen.getByRole('main')).toHaveAccessibleName('Analysis')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Explore · BBB')
+  })
+
+  it('shows the signed-out state when an Analysis read reports an expired session', async () => {
+    vi.spyOn(analysisApi, 'fetchAnalysis').mockRejectedValue(new analysisApi.AnalysisUnavailable('session'))
+    window.history.replaceState(null, '', '/radar/hub/#analysis/AAA/11/7')
+    mount()
+    await screen.findByText('Session expired.')
+    expect(screen.queryByRole('group', { name: 'Select a day' })).not.toBeInTheDocument()
+  })
 })

@@ -394,8 +394,15 @@ export type BoardQuery = UseQueryResult<BoardPayload, unknown> & {
 }
 
 export function useBoard(asked: Selection, initial?: BoardPayload,
-                         visible = true): BoardQuery {
+                         visible = true, enabled = true): BoardQuery {
   const client = useQueryClient()
+  // `enabled` is the page saying it has no use for a board at all -- the
+  // Analysis page (HA1) reads its own series and must not keep the board's
+  // polls, expiry refetch and minute read running behind it. Distinct from
+  // `visible`, which is the tab: a disabled page owes nothing when it is
+  // looked at, and react-query sends nothing for a disabled key. The seed
+  // and the cache stay, so returning to a board page resumes as it was.
+  const active = visible && enabled
   // Before anything here becomes a query key, and so before anything here
   // sends a request.
   const settled = useSettled(asked)
@@ -522,10 +529,11 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
       const received = current.state.dataUpdatedAt
       wait.current = nextWait(wait.current, key, board, received, now)
       return boardInterval(board, {
-        visible, fetching: current.state.fetchStatus !== 'idle', received,
+        visible: active, fetching: current.state.fetchStatus !== 'idle', received,
         now, wait: wait.current,
       })
     },
+    enabled,
     refetchIntervalInBackground: false,
     // Coming back to the tab is this hook's to handle (below), and it asks
     // only when the board owes one. The client's default would refetch any
@@ -575,7 +583,7 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
   // its own expiry is asked about again once, slowly, rather than in a loop.
   const expiredAsked = useRef<string | null>(null)
   useEffect(() => {
-    if (answer === undefined) return
+    if (answer === undefined || !enabled) return
     const left = untilExpired(answer, received)
     if (left === null) return
     const stamp = `${key} ${answer.as_of}`
@@ -610,7 +618,7 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
       clearTimeout(timer)
       if (owed.current === refetchAtExpiry) owed.current = null
     }
-  }, [answer, received, key, client, selection, refetch])
+  }, [answer, received, key, client, selection, refetch, enabled])
 
   // A board a worker built for itself, read again a minute after it arrived
   // (`refreshAt`) -- as the hub always read its board -- for a reader who is
@@ -620,7 +628,7 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
   // tab hidden at the minute owes the read, and pays it only if the reader
   // is back inside the bound.
   useEffect(() => {
-    if (answer === undefined) return
+    if (answer === undefined || !enabled) return
     const at = refreshAt(answer, received)
     if (at === null) return
     const bound = received + (untilStale(answer, received, received) ?? 0)
@@ -645,16 +653,16 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
       clearTimeout(timer)
       if (owed.current === read) owed.current = null
     }
-  }, [answer, received, client, selection, refetch])
+  }, [answer, received, client, selection, refetch, enabled])
 
   // Back from a hidden tab: one ask at once for a board this page is waiting
   // on -- it may well have been built while nobody was looking -- and the
   // schedule carries on from its place. Otherwise, whatever the tab owes.
-  const looked = useRef(visible)
+  const looked = useRef(active)
   useEffect(() => {
     const was = looked.current
-    looked.current = visible
-    if (!visible || was) return
+    looked.current = active
+    if (!active || was) return
     const state = client.getQueryState<BoardPayload>(boardKey(selection))
     // An ask already out is the one this would send. Whatever the tab owes
     // stays owed until an answer lands: that ask may yet fail, and the next
@@ -668,7 +676,7 @@ export function useBoard(asked: Selection, initial?: BoardPayload,
     const pay = owed.current
     owed.current = null
     pay?.()
-  }, [visible, client, selection, refetch])
+  }, [active, client, selection, refetch])
 
   // How long the reader has waited for a board being built, from when the
   // wait for THIS selection began. Kept here rather than in the waiting

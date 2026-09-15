@@ -4,7 +4,8 @@ import { payload } from '../fixtures'
 import type { Selection } from '../types'
 import { queryFor } from '../api'
 import {
-  hashFor, isInPageAnchor, readRootRoute, readRoute, readSelection, readSpan, urlFor,
+  hashFor, isInPageAnchor, readAnalysisRange, readRootRoute, readRoute,
+  readSelection, readSpan, urlFor,
 } from './navigation'
 
 const initial = payload()
@@ -55,7 +56,7 @@ describe('reading the address bar', () => {
   it('does not invent a destination the release does not have', () => {
     // News, Combined, Portfolio and Analysis live in the prototype and the
     // roadmap. A bookmark to one of them is a dead link, not a blank page.
-    for (const page of ['news', 'combined', 'portfolio', 'analysis']) {
+    for (const page of ['news', 'combined', 'portfolio']) {
       expect(readRoute(`#${page}`)).toEqual({ page: 'missing' })
     }
   })
@@ -258,5 +259,64 @@ describe('writing the address bar', () => {
   it('encodes a ticker that needs it', () => {
     expect(urlFor({ page: 'research', ticker: 'BRK.B' }, selection, '1D'))
       .toContain('#research/BRK.B')
+  })
+})
+
+describe('the analysis destination (HA1)', () => {
+  it('reads the empty, ticker-only and canonical forms', () => {
+    expect(readRoute('#analysis')).toEqual({ page: 'analysis' })
+    expect(readRoute('#analysis/')).toEqual({ page: 'analysis' })
+    expect(readRoute('#analysis/aapl')).toEqual({ page: 'analysis', ticker: 'AAPL' })
+    expect(readRoute('#analysis/AAPL/11/7'))
+      .toEqual({ page: 'analysis', ticker: 'AAPL', companyId: 11, instrumentId: 7 })
+  })
+
+  it('does not cast a half-canonical or non-numeric link into a resolved one', () => {
+    expect(readRoute('#analysis/AAPL/11')).toEqual({ page: 'analysis', ticker: 'AAPL' })
+    expect(readRoute('#analysis/AAPL/x/7')).toEqual({ page: 'analysis', ticker: 'AAPL' })
+    expect(readRoute('#analysis/AAPL/0/7')).toEqual({ page: 'analysis', ticker: 'AAPL' })
+    expect(readRoute('#analysis/AAPL/11/7/extra')).toEqual({ page: 'analysis', ticker: 'AAPL' })
+    expect(readRoute('#analysis/%')).toEqual({ page: 'analysis' })
+  })
+
+  it('round-trips through hashFor', () => {
+    for (const route of [{ page: 'analysis' }, { page: 'analysis', ticker: 'BRK.B' },
+                         { page: 'analysis', ticker: 'BRK.B', companyId: 3, instrumentId: 9 }] as const) {
+      expect(readRoute(hashFor(route))).toEqual(route)
+    }
+  })
+
+  it('reads analysis dates outside the board selection and keeps invalid ones visible', () => {
+    expect(readAnalysisRange('?market=de&analysis_from=2026-09-07&analysis_to=2026-09-13'))
+      .toEqual({ from: '2026-09-07', to: '2026-09-13' })
+    expect(readAnalysisRange('?market=de')).toBeNull()
+    // Present but malformed is NOT null: the page must show the value it was
+    // given and refuse to guess a range for it.
+    expect(readAnalysisRange('?analysis_from=2026-9-7&analysis_to=2026-09-13'))
+      .toEqual({ from: '2026-9-7', to: '2026-09-13' })
+    expect(readAnalysisRange('?analysis_from=2026-09-07'))
+      .toEqual({ from: '2026-09-07', to: '' })
+    // The board's own selection is untouched by analysis keys.
+    const read = readSelection('?market=de&analysis_from=2026-09-07', selection)
+    expect(read.market).toBe('de')
+  })
+
+  it('writes analysis dates only on analysis routes and keeps board context beside them', () => {
+    const range = { from: '2026-09-07', to: '2026-09-13' }
+    const url = urlFor({ page: 'analysis', ticker: 'AAPL', companyId: 1, instrumentId: 2 },
+                       { ...selection, market: 'de' }, '1D', range)
+    expect(url).toContain('analysis_from=2026-09-07')
+    expect(url).toContain('analysis_to=2026-09-13')
+    expect(url).toContain('market=de')
+    expect(url.endsWith('#analysis/AAPL/1/2')).toBe(true)
+    expect(url).not.toContain('span=')
+    const board = urlFor({ page: 'chatter' }, selection, '1D', range)
+    expect(board).not.toContain('analysis_from')
+    expect(urlFor({ page: 'analysis' }, selection, '1D', null)).not.toContain('analysis_from')
+  })
+
+  it('keeps analysis off the legacy root translation', () => {
+    expect(readRootRoute('?t=AAA', '#analysis/AAA')).toEqual({ page: 'analysis', ticker: 'AAA' })
+    expect(readRootRoute('?analysis_from=2026-09-07', '')).toEqual({ page: 'overview' })
   })
 })

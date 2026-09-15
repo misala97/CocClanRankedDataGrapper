@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen } from '@testing-library/react'
+import { createElement } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import * as api from '../api'
 import { payload } from '../fixtures'
 import type { Selection } from '../types'
-import { boardKey, detailKey, searchKey, selectionOf } from './queries'
+import { boardKey, detailKey, searchKey, selectionOf, useBoard } from './queries'
 
 const initial = payload()
 const selection: Selection = {
@@ -80,5 +84,42 @@ describe('cache identity', () => {
     expect(boardKey(selectionOf(initial))).toEqual(boardKey(selection))
     expect(boardKey(selectionOf(payload({ market: 'de' }))))
       .not.toEqual(boardKey(selection))
+  })
+})
+
+describe('a page that has no use for a board (HA1)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  function Probe({ enabled, seed }: { enabled: boolean; seed?: typeof initial }) {
+    const board = useBoard(selection, seed, true, enabled)
+    return createElement('p', { 'data-testid': 'state' },
+                         `${board.fetchStatus}/${board.answer ? 'answer' : 'none'}`)
+  }
+
+  function mount(props: { enabled: boolean; seed?: typeof initial }) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(createElement(QueryClientProvider, { client }, createElement(Probe, props)))
+  }
+
+  it('sends nothing while disabled and keeps the embedded seed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const boards = vi.spyOn(api, 'fetchBoard')
+    // A board that is already past its fresh bound would, when enabled, be
+    // asked about again at once; disabled, it is left alone.
+    const stale = payload({ generated_at: new Date(Date.now() - 600_000).toISOString(),
+                            as_of: new Date(Date.now() - 600_000).toISOString() })
+    mount({ enabled: false, seed: stale })
+    expect(screen.getByTestId('state')).toHaveTextContent('idle/answer')
+    await vi.advanceTimersByTimeAsync(130_000)
+    expect(boards).not.toHaveBeenCalled()
+  })
+
+  it('fetches as before once enabled', async () => {
+    const boards = vi.spyOn(api, 'fetchBoard').mockResolvedValue(payload())
+    mount({ enabled: true })
+    await vi.waitFor(() => expect(boards).toHaveBeenCalledTimes(1))
   })
 })

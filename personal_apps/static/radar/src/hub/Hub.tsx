@@ -17,6 +17,9 @@ import { isReady } from '../types'
 import type { BoardPayload, PanelSpan, Selection } from '../types'
 import { Activity } from './Activity'
 import { Admin } from './Admin'
+import { Analysis } from './Analysis'
+import type { AnalysisRoute } from './Analysis'
+import type { Range } from './analysisTypes'
 import { Chatter } from './Chatter'
 import type { ChatterMode } from './Chatter'
 import type { ChatterSort } from './chatterSort'
@@ -29,9 +32,10 @@ import { Research } from './Research'
 import { Watching } from './Watching'
 import { Search } from './Search'
 import {
-  hashFor, isInPageAnchor, readRootRoute, readRoute, readSelection, readSpan, urlFor,
+  hashFor, isInPageAnchor, readAnalysisRange, readRootRoute, readRoute,
+  readSelection, readSpan, urlFor,
 } from './navigation'
-import type { HubRoute } from './navigation'
+import type { AnalysisRange, HubRoute } from './navigation'
 import {
   owesABoard, selectionOf, useBoard, useWatchMutation,
 } from './queries'
@@ -47,6 +51,7 @@ import './hub.css'
 const DESTINATIONS = [
   { page: 'overview', label: 'Overview' },
   { page: 'chatter', label: 'Human Chatter' },
+  { page: 'analysis', label: 'Analysis' },
   { page: 'watching', label: 'Watching' },
   { page: 'activity', label: 'Activity' },
 ] as const
@@ -57,6 +62,14 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
     () => readSelection(window.location.search, seedSelection(initial),
                         initial.all_sources))
   const [span, setSpan] = useState<PanelSpan>(() => readSpan(window.location.search))
+  // The Analysis window as written in the address (HA1). Beside the board's
+  // selection, never inside it: the board API never receives these keys and
+  // Back from Analysis returns to the board the reader left.
+  const [analysisRange, setAnalysisRange] = useState<AnalysisRange | null>(
+    () => readAnalysisRange(window.location.search))
+  // Analysis reads its own series; an expired session there is as final as
+  // one the board reports.
+  const [analysisExpired, setAnalysisExpired] = useState(false)
   // Chatter's ordering lives HERE, not in Chatter, because Chatter unmounts
   // when the reader opens a company. Held in memory only: it is a view over
   // whichever response is current, so it survives a refresh and a filter
@@ -92,9 +105,10 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
     : selection
 
   // useBoard decides for itself whether this payload matches the key it would
-  // seed; passing it unconditionally is safe.
+  // seed; passing it unconditionally is safe. Analysis has no use for a board
+  // and disables its recurring reads while it is the page (HA1).
   const board = useBoard(pageSelection, expiredRef.current ? undefined : initial,
-                         visible)
+                         visible, route.page !== 'analysis')
 
   // Both events, because they are not the same event. A hash typed into the
   // address bar fires hashchange; Back across a pushState that changed only
@@ -112,6 +126,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
       setSelection(readSelection(window.location.search, seedSelection(initial),
                                  initial.all_sources))
       setSpan(readSpan(window.location.search))
+      setAnalysisRange(readAnalysisRange(window.location.search))
     }
     window.addEventListener('popstate', resync)
     window.addEventListener('hashchange', resync)
@@ -124,8 +139,8 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   // An expired session invalidates everything cached under this account. The
   // board is shared, but watch marks are not, and a cache surviving a sign-out
   // is how one reader sees another's.
-  const expired = board.error instanceof BoardUnavailable
-    && board.error.reason === 'session'
+  const expired = (board.error instanceof BoardUnavailable
+    && board.error.reason === 'session') || analysisExpired
   // Latched, and read before the query is built. The embedded payload carries
   // this account's `watching`, so re-seeding the cleared cache from it would
   // put the previous reader's marks back -- marked fresh, defeating the clear
@@ -148,11 +163,16 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
 
   const go = useCallback((next: HubRoute, nextSelection = selection,
                           nextSpan = span,
-                          options: { keepFocus?: boolean } = {}) => {
-    window.history.pushState(null, '', urlFor(next, nextSelection, nextSpan))
+                          options: { keepFocus?: boolean; analysis?: AnalysisRange | null } = {}) => {
+    // The analysis window travels only with the analysis destination; every
+    // other page drops it from the address, and the board context stays.
+    const nextAnalysis = next.page === 'analysis'
+      ? (options.analysis !== undefined ? options.analysis : analysisRange) : null
+    window.history.pushState(null, '', urlFor(next, nextSelection, nextSpan, nextAnalysis))
     setRoute(next)
     setSelection(nextSelection)
     setSpan(nextSpan)
+    setAnalysisRange(nextAnalysis)
     setMenuOpen(false)
     // The reader asked for a different page; the keyboard should be on it and
     // a screen reader should be told, which neither gets from a URL change.
@@ -161,17 +181,30 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
     // is a toggle, and moving focus to the top would make a keyboard reader
     // tab back through the whole page to press the next one.
     if (!options.keepFocus) main.current?.focus()
-  }, [selection, span])
+  }, [selection, span, analysisRange])
 
   /** The same navigation as `go`, without a history entry and without moving
-   *  focus. For the ONE case that is not a reader's choice: the workspace
-   *  opening on the first candidate. A pushState there would make Back a
-   *  no-op that lands on the same page with nothing selected. */
+   *  focus. For the cases that are not a reader's choice: the workspace
+   *  opening on the first candidate, and Analysis pinning a resolved ticker
+   *  to its IDs. A pushState there would make Back a no-op that lands on the
+   *  same page with nothing selected. */
   const replace = useCallback((next: HubRoute, nextSelection = selection,
-                               nextSpan = span) => {
-    window.history.replaceState(null, '', urlFor(next, nextSelection, nextSpan))
+                               nextSpan = span, analysis: AnalysisRange | null = null) => {
+    const nextAnalysis = next.page === 'analysis' ? analysis : null
+    window.history.replaceState(null, '', urlFor(next, nextSelection, nextSpan, nextAnalysis))
     setRoute(next)
+    setAnalysisRange(nextAnalysis)
   }, [selection, span])
+
+  /** Analysis's one way to move: push for a reader's change of company or
+   *  window, replace for the canonical pinning of a resolved ticker. */
+  const onAnalysisNavigate = useCallback((next: AnalysisRoute, range: Range | null,
+                                          options: { replace?: boolean; keepFocus?: boolean } = {}) => {
+    const written: AnalysisRange | null = range === null ? null : { from: range.from, to: range.to }
+    if (options.replace) replace(next, selection, span, written)
+    else go(next, selection, span, { keepFocus: options.keepFocus, analysis: written })
+  }, [go, replace, selection, span])
+  const onAnalysisExpired = useCallback(() => setAnalysisExpired(true), [])
 
   // Leaving Human chatter ends the visit. Coming back is a fresh one, and a
   // fresh one opens on the first candidate again -- which is what the brief
@@ -186,8 +219,10 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
   // shell has no last answer to fall back on, and says what is happening in
   // its own words.
   const shown = board.answer
+  // Not on Analysis: its series are its own, and a board refresh that failed
+  // behind it is nothing the reader asked about there.
   const banner = shown !== undefined && isReady(shown) && board.isError
-    ? shown : null
+    && route.page !== 'analysis' ? shown : null
   // The market the top bar names is the one the reader is on. Placeholder
   // data is the previous selection's board -- after a market switch, the
   // previous MARKET's, session and all -- so a board speaks for the bar only
@@ -233,7 +268,11 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
           <Search onOpen={(ticker) => go(openRoute(route, ticker))} />
         </div>
         <p className="rh-session">
-          {context ? (
+          {route.page === 'analysis' ? (
+            // Analysis is not a market board: it names its own explicit scope
+            // rather than the selected market's session.
+            <><span className="rh-venue">US primary · </span>USD · retrospective</>
+          ) : context ? (
             <>
               <span className={`rh-dot${context.session === 'closed' ? ' closed' : ''}`} />
               {/* The venue is the half that stops fitting on a phone. The
@@ -314,6 +353,12 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
 
       <main id="rh-main" className="rh-main" ref={main} tabIndex={-1}
             aria-label={title}>
+        {route.page === 'analysis' && !expired ? (
+          <Analysis route={route} rawRange={analysisRange}
+                    onNavigate={onAnalysisNavigate}
+                    onSearch={() => document.getElementById('rh-search-input')?.focus()}
+                    onSessionExpired={onAnalysisExpired} />
+        ) : null}
         {/* Data that was true a minute ago beats a blank page, as long as
             the surface says the refresh failed and when it last succeeded. */}
         {banner
@@ -323,6 +368,7 @@ export function Hub({ initial, isAdmin }: { initial: BoardPayload; isAdmin: bool
           : null}
         {expired
           ? <SignedOut />
+          : route.page === 'analysis' ? null
           : <Page route={route} board={board} selection={selection}
                   span={span} title={title} visible={visible}
                   isAdmin={isAdmin} go={go} replace={replace}
@@ -350,6 +396,9 @@ function initialRoute(): HubRoute {
 }
 
 function openRoute(route: HubRoute, ticker: string): HubRoute {
+  // On Analysis a search hit is the explicit way to resolve a company's
+  // current mapping again; it stays on Analysis.
+  if (route.page === 'analysis') return { page: 'analysis', ticker }
   return route.page === 'chatter'
     ? { page: 'chatter', ticker }
     : { page: 'research', ticker }
@@ -619,6 +668,7 @@ function titleFor(route: HubRoute): string {
     case 'watching': return 'Watching'
     case 'activity': return 'Activity'
     case 'admin': return 'Administration'
+    case 'analysis': return 'Analysis'
     case 'research': return route.ticker
     default: return 'Not found'
   }
