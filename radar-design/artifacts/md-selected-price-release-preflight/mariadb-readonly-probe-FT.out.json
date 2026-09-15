@@ -1,0 +1,245 @@
+{
+ "recorded_at_utc": "2026-09-15T21:23:18.458186+00:00",
+ "ticker": "FT",
+ "credentials": "DB_USER/DB_PASS/DB_HOST from /root/coc-stats/.env (not printed)",
+ "driver": "pymysql 2.2.8",
+ "session_before": {
+  "v": "10.11.14-MariaDB-0ubuntu0.24.04.1",
+  "mst": 0.0,
+  "smst": 0.0,
+  "u": "coc_user@localhost",
+  "iso": "REPEATABLE-READ"
+ },
+ "timeout_probe": {
+  "errno": 1969,
+  "message": "Query execution was interrupted (max_statement_time exceeded)",
+  "elapsed_seconds": 1.001
+ },
+ "recovered_same_connection": {
+  "recovered": 1
+ },
+ "session_after": {
+  "mst": 0.0,
+  "smst": 0.0
+ },
+ "windows": {
+  "1D": {
+   "from": "2026-09-15T08:00:00+00:00",
+   "to": "2026-09-15T21:23:19.461205+00:00",
+   "sessions": [
+    "2026-09-15"
+   ],
+   "waiting": false
+  },
+  "1W": {
+   "from": "2026-09-09T13:30:00+00:00",
+   "to": "2026-09-15T20:00:00+00:00",
+   "sessions": [
+    "2026-09-09",
+    "2026-09-10",
+    "2026-09-11",
+    "2026-09-14",
+    "2026-09-15"
+   ],
+   "waiting": false
+  }
+ },
+ "instrument": [
+  {
+   "id": 8005,
+   "mic": "XNYS",
+   "provider_symbol": "FT"
+  }
+ ],
+ "sources_used": 36,
+ "checks": [
+  {
+   "name": "company_by_symbol",
+   "param_count": 1,
+   "explain": [
+    {
+     "id": 1,
+     "select_type": "SIMPLE",
+     "table": "radar_ticker_universe",
+     "type": "const",
+     "possible_keys": "ix_radar_ticker_universe_symbol",
+     "key": "ix_radar_ticker_universe_symbol",
+     "key_len": "50",
+     "rows": "1",
+     "Extra": ""
+    }
+   ],
+   "unsafe_full_scan_on_big_table": false,
+   "executed": {
+    "rows": 1,
+    "elapsed_ms": 0.5
+   }
+  },
+  {
+   "name": "primary_candidates",
+   "param_count": 1,
+   "explain": [
+    {
+     "id": 1,
+     "select_type": "SIMPLE",
+     "table": "radar_instruments",
+     "type": "ref",
+     "possible_keys": "uq_radar_instrument,ix_radar_instrument_primary,ix_radar_instruments_history_due",
+     "key": "ix_radar_instrument_primary",
+     "key_len": "61",
+     "rows": "1",
+     "Extra": "Using index condition"
+    }
+   ],
+   "unsafe_full_scan_on_big_table": false,
+   "executed": {
+    "rows": 1,
+    "elapsed_ms": 0.5
+   }
+  },
+  {
+   "name": "bucket_rows[1W]",
+   "param_count": 40,
+   "explain": [
+    {
+     "id": 1,
+     "select_type": "SIMPLE",
+     "table": "radar_bucket_sources",
+     "type": "range",
+     "possible_keys": "PRIMARY,ix_radar_bucket_sources_start,ix_radar_bucket_sources_coverage",
+     "key": "PRIMARY",
+     "key_len": "252",
+     "rows": "5534",
+     "Extra": "Using where"
+    }
+   ],
+   "unsafe_full_scan_on_big_table": false,
+   "executed": {
+    "rows": 2595,
+    "elapsed_ms": 40.2
+   }
+  },
+  {
+   "name": "bucket_rows[1D]",
+   "param_count": 40,
+   "explain": [
+    {
+     "id": 1,
+     "select_type": "SIMPLE",
+     "table": "radar_bucket_sources",
+     "type": "range",
+     "possible_keys": "PRIMARY,ix_radar_bucket_sources_start,ix_radar_bucket_sources_coverage",
+     "key": "PRIMARY",
+     "key_len": "252",
+     "rows": "2676",
+     "Extra": "Using where"
+    }
+   ],
+   "unsafe_full_scan_on_big_table": false,
+   "executed": "skipped (EXPLAIN only)"
+  },
+  {
+   "name": "quote_rows[1D]",
+   "param_count": 6,
+   "explain": [
+    {
+     "id": 1,
+     "select_type": "SIMPLE",
+     "table": "radar_quotes",
+     "type": "range",
+     "possible_keys": "uq_radar_quote_market,ix_radar_quotes_ticker_market_mic_fetched",
+     "key": "uq_radar_quote_market",
+     "key_len": "88",
+     "rows": "26",
+     "Extra": "Using index condition; Using where; Using filesort"
+    }
+   ],
+   "unsafe_full_scan_on_big_table": false,
+   "executed": {
+    "rows": 24,
+    "elapsed_ms": 1.7
+   }
+  },
+  {
+   "name": "daily_rows[1W]",
+   "param_count": 6,
+   "explain": [
+    {
+     "id": 1,
+     "select_type": "SIMPLE",
+     "table": "radar_daily_closes",
+     "type": "range",
+     "possible_keys": "uq_radar_daily_close_market",
+     "key": "uq_radar_daily_close_market",
+     "key_len": "84",
+     "rows": "4",
+     "Extra": "Using index condition; Using where"
+    }
+   ],
+   "unsafe_full_scan_on_big_table": false,
+   "executed": {
+    "rows": 4,
+    "elapsed_ms": 1.3
+   }
+  },
+  {
+   "name": "tone_rows[1W]",
+   "param_count": 40,
+   "explain": [
+    {
+     "id": 1,
+     "select_type": "PRIMARY",
+     "table": "<derived2>",
+     "type": "ALL",
+     "possible_keys": null,
+     "key": null,
+     "key_len": null,
+     "rows": "1097",
+     "Extra": "Using temporary; Using filesort"
+    },
+    {
+     "id": 2,
+     "select_type": "DERIVED",
+     "table": "e",
+     "type": "range",
+     "possible_keys": "uq_radar_mention_event,ix_radar_mention_events_bucket,ix_radar_mention_events_ticker_time",
+     "key": "ix_radar_mention_events_bucket",
+     "key_len": "58",
+     "rows": "1097",
+     "Extra": "Using index condition; Using where; Using temporary; Using filesort"
+    },
+    {
+     "id": 2,
+     "select_type": "DERIVED",
+     "table": "p",
+     "type": "eq_ref",
+     "possible_keys": "uq_radar_post_source_ext",
+     "key": "uq_radar_post_source_ext",
+     "key_len": "708",
+     "rows": "1",
+     "Extra": "Using index"
+    },
+    {
+     "id": 2,
+     "select_type": "DERIVED",
+     "table": "m",
+     "type": "ref",
+     "possible_keys": "ix_radar_mentions_post,ix_radar_mentions_ticker_post",
+     "key": "ix_radar_mentions_post",
+     "key_len": "8",
+     "rows": "1",
+     "Extra": "Using where"
+    }
+   ],
+   "unsafe_full_scan_on_big_table": false,
+   "executed": {
+    "rows": 36,
+    "elapsed_ms": 93.7
+   }
+  }
+ ],
+ "session_end": {
+  "smst": 0.0
+ },
+ "connection": "closed"
+}

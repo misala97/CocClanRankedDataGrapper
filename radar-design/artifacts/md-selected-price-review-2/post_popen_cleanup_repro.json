@@ -1,0 +1,47 @@
+{
+  "post_popen": {
+    "scenario": "post_popen_reader_start_failure",
+    "first_state": "pending",
+    "snapshot_after_first": {
+      "quarantined": false,
+      "in_flight": false,
+      "counters": {
+        "invalid": 1
+      }
+    },
+    "first_process": {
+      "kill_calls": 1,
+      "terminate_calls": 0,
+      "still_running_per_poll": true
+    },
+    "second_chart_state": "pending",
+    "second_chart_reason": "acquiring",
+    "processes_started": 2
+  },
+  "control": {
+    "scenario": "control_reap_unconfirmed",
+    "first_state": "pending",
+    "snapshot_after_first": {
+      "quarantined": true,
+      "in_flight": false,
+      "counters": {
+        "timeout": 1,
+        "cleanup_failed": 1
+      }
+    },
+    "first_process": {
+      "kill_calls": 1,
+      "terminate_calls": 1,
+      "still_running_per_poll": true
+    },
+    "second_chart_state": "unavailable",
+    "second_chart_reason": "cleanup_failed: a fetch child could not be confirmed stopped",
+    "processes_started": 1
+  },
+  "independent_rehash": {
+    "files": 50,
+    "mismatches": [],
+    "digest": "ad06a94a4d4dcacbd024180a7a604743c5d9ba7e67b36b41c6b197e59f9466ce",
+    "recorded_digest": "ad06a94a4d4dcacbd024180a7a604743c5d9ba7e67b36b41c6b197e59f9466ce"
+  }
+}

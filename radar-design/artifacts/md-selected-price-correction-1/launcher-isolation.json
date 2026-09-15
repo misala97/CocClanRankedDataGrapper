@@ -1,0 +1,71 @@
+{
+  "parent": {
+    "parent_pid": 32612,
+    "first": "pending",
+    "admission_seconds": 0.014999999999417923,
+    "ready": "ready",
+    "bars": [
+      [
+        1788960600,
+        100.0
+      ],
+      [
+        1788960900,
+        100.5
+      ]
+    ],
+    "counters": {
+      "success": 1,
+      "empty": 0,
+      "invalid": 0,
+      "identity_mismatch": 0,
+      "timeout": 0,
+      "throttle": 0,
+      "unsupported": 0,
+      "upstream_error": 0,
+      "served_stale": 0,
+      "fallback": 0,
+      "busy": 0,
+      "cleanup_failed": 0
+    },
+    "supervisor_seconds": 0.578,
+    "sentinel_in_parent": true,
+    "parent_environment_unchanged": true,
+    "modules_flask_in_parent": false
+  },
+  "marker_records": [
+    {
+      "role": "sitecustomize",
+      "pid": 32612
+    },
+    {
+      "role": "parent-script-top-level",
+      "pid": 32612,
+      "name": "__main__"
+    },
+    {
+      "role": "child",
+      "pid": 40740,
+      "main_spec": "tests.selected_price_unit.probe_child",
+      "heavy_modules": [],
+      "env_keys": [
+        "SYSTEMROOT"
+      ],
+      "dummy_sentinel_present": false,
+      "sitecustomize_hook_loaded": false,
+      "flags": {
+        "ignore_environment": 1,
+        "no_user_site": 1,
+        "dont_write_bytecode": 1
+      }
+    }
+  ],
+  "loopback_requests": 1,
+  "loopback_request_header_names": [
+    "Accept",
+    "Accept-Encoding",
+    "Connection",
+    "Host",
+    "User-Agent"
+  ]
+}

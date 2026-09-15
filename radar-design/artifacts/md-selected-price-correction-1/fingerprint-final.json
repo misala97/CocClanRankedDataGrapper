@@ -1,0 +1,213 @@
+{
+  "recorded_at_utc": "2026-09-15T17:01:38Z",
+  "branch": "codex/radar-selected-price-charts",
+  "head": "daadf3868caedcb5db858378e919cba68b735f8a",
+  "digest": "ad06a94a4d4dcacbd024180a7a604743c5d9ba7e67b36b41c6b197e59f9466ce",
+  "counts": {
+    "modified": 16,
+    "added": 29,
+    "generated": 5
+  },
+  "files": {
+    "personal_apps/features/radar/config.py": {
+      "sha256_lf": "4fcaef1f046ba68095169caf4159bf4b4f5e2be542ed248b70f04fa574fe3b8a",
+      "kind": "modified"
+    },
+    "personal_apps/features/radar/price_chart_acquisition.py": {
+      "sha256_lf": "8bdfd05e2aea55037b89386d4738cc27f8c6f9ffe612bed44b99a6185a9a18f0",
+      "kind": "added"
+    },
+    "personal_apps/features/radar/price_chart_contract.py": {
+      "sha256_lf": "4e0204f0c52a0437c61f1ac280d3e3b24fade70e757f282c6d4fd52d2c019662",
+      "kind": "added"
+    },
+    "personal_apps/features/radar/price_chart_fetch.py": {
+      "sha256_lf": "2e1f3caf8cedf1a1d66eb6643068a3c16d350bb92bd16320e2e8219a3344f7fd",
+      "kind": "added"
+    },
+    "personal_apps/features/radar/price_chart_reader.py": {
+      "sha256_lf": "764d1af6af2c091447e46458cfcce996fbafbea69e40155940d1574b576f7960",
+      "kind": "added"
+    },
+    "personal_apps/features/radar/prices/yahoo.py": {
+      "sha256_lf": "d982e83e03e6f58c470c2f539fe156b39640871fabae2fc4d9933bc41da4a4ea",
+      "kind": "modified"
+    },
+    "personal_apps/features/radar/routes/__init__.py": {
+      "sha256_lf": "9143058dfce1e5ceb133c192bcd53f078254b8ea5f8a321b42b8737e1248ecc2",
+      "kind": "modified"
+    },
+    "personal_apps/features/radar/routes/operations.py": {
+      "sha256_lf": "40cd110da35b1a6995ad47e8889e1b83e34a10c767fc01d8bc8cb03a9d5b47d8",
+      "kind": "modified"
+    },
+    "personal_apps/features/radar/routes/price_chart.py": {
+      "sha256_lf": "506c363b6bc43cfe324c0042a84f008ff0795bd228828d1456827a8271d2e27f",
+      "kind": "added"
+    },
+    "personal_apps/features/radar/routes/views.py": {
+      "sha256_lf": "a24350e3f6387752f0f8509a4aae188ede29c42c0c9f14dfb7dd5185ec4c0044",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/detail/ChatterHistogram.tsx": {
+      "sha256_lf": "90e57e6721009e53e975b269cff975e8ff60dd7259f58b8645d5a5bcf517e285",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/entries/hub.tsx": {
+      "sha256_lf": "7be13caa7076813a9f8d89558ab08ea14ebc80d0b2fa1bffa9d424d18bc52aee",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/Admin.test.tsx": {
+      "sha256_lf": "c3c7bc01c2e3a68d52178fe80a8d4f3184c340af709d4c381d157345349a76f7",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/Admin.tsx": {
+      "sha256_lf": "84a82d04b6df6f339746a719d6e361338dfefd2613116a0fb484e8f3baf7a1ef",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/ChatterWorkspace.tsx": {
+      "sha256_lf": "91e6dad9ecafa40c3ef489ea12f591cf42dcef51c1b8dd669ea9688941eb2ab9",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/Hub.tsx": {
+      "sha256_lf": "501765e0d88416dba7b688766d26ed5f260a4355f01d681a9f517971467c9dd6",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/Research.tsx": {
+      "sha256_lf": "b2279e2c4c70c82b5092c3468d9d850e10a3ed6f8c95258bec399d716189178c",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/ResearchContent.tsx": {
+      "sha256_lf": "6768c6223e714c5b5d236d20d0635a5033bfbeb9d019770dc378bbadbf5b97d3",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/SelectedPriceChart.test.tsx": {
+      "sha256_lf": "ff20db14ae78cdd56c5ebfb0b409ba5387a49ebe272d8483945f36fe52511f3e",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/SelectedPriceChart.tsx": {
+      "sha256_lf": "329cd077d090f86b65a1f531dc27bb277fa5a68f3129c422ea9c95fcc5214b6b",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/SelectedPriceSection.test.tsx": {
+      "sha256_lf": "4bce739831c85da8e34aa465ada68035b6730aa54d38f123a4bcbd86bacaa1dc",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/priceChart.test.ts": {
+      "sha256_lf": "7fd81f92d30e09e8df6021e3b9a1933554c63f355ab8a5b322553120847ff7e7",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/priceChart.ts": {
+      "sha256_lf": "6cc7efc8e04c8828cd9739747a2d7fc0d8fd94689ec6d34a990c0992df07933b",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/priceChartFixtures.ts": {
+      "sha256_lf": "62c8f2f5abab95f043927dbfb1c51c820c025db70b64b23e233b385044e565b0",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/queries.ts": {
+      "sha256_lf": "54b6f4db7b5bbca3743695f1a54a72bf5a5893a442f1f04beeca266deaa84f2a",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/src/hub/selected-price.css": {
+      "sha256_lf": "c35eb308c7470b863dde62c1540cc90f8720b182b5c13cb2eff8bb4e4911516e",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/selectedPriceContext.ts": {
+      "sha256_lf": "e5cbbad914c0a78d26047f806c6e5527e2a20c8dddd99053252f0f629d0d3968",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/selectedPriceGeometry.test.ts": {
+      "sha256_lf": "8ca2107ba575267225cfe6d5a3c048f5815412252603fa1c9fc404ab87d3820c",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/hub/selectedPriceGeometry.ts": {
+      "sha256_lf": "5c3322a115c9d4956856187f8b241be71031a4cdbb37a255c327204dde4a5ee8",
+      "kind": "added"
+    },
+    "personal_apps/static/radar/src/types.ts": {
+      "sha256_lf": "a45233ae976782aa97ccc121c743c455a74b33f06a7a4bc3606c396a310199c4",
+      "kind": "modified"
+    },
+    "personal_apps/tests/selected_price_unit/__init__.py": {
+      "sha256_lf": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/child_targets.py": {
+      "sha256_lf": "8b51a252cfa443bca5e37edee1bd3b4dc1bc43b3a1aae50ff40e0f09b5094ad9",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/fixtures/yahoo_saved_arrays.json": {
+      "sha256_lf": "fb0e4c7d2f365973877363640f355e540616eb63e6a698e9de6243b05df260d6",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/helpers.py": {
+      "sha256_lf": "f4e6244c3fc60278af696ebc7bf326e3bd58afffd092f14507e879ca70145f1a",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/probe_child.py": {
+      "sha256_lf": "4ba0b0f4facc238a0899def6fc3bba9385cfb1b90d0ea5f2c26238cdf08b3d66",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_acquisition.py": {
+      "sha256_lf": "dd3490a167f4135c6f4841f485915ab4e3b98691fe56546de5138851c3c6fcf0",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_chatter_tone.py": {
+      "sha256_lf": "f1c99af878eedb6f505360ad8d90d8f00b6d3aa5daa8895358571f0621655410",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_child_lifecycle.py": {
+      "sha256_lf": "fb345d9575ddabf73bb6be042d24c6366d2f19d4b1385bbcc1d350b21fdbf3d3",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_launcher_isolation.py": {
+      "sha256_lf": "a7f4b39798758f3f40f5e2db4d81998e35d528367cacbcf90159b3251656222b",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_normalize.py": {
+      "sha256_lf": "218df9bebe4d2d6d595cab6e56c510714d44f350e4393b90011002a9bb9f0edc",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_reader.py": {
+      "sha256_lf": "9b6f9937c10d9e7ddd40e2499f5b2d617107386090ad8c256746b3d27949f21f",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_route_ops.py": {
+      "sha256_lf": "ccb457c552ef22aaaa4c6baf3353e611c4997fbc4449cec79af5942751a7d825",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_window.py": {
+      "sha256_lf": "5a46cc91b57cac6ba5c9dcf900a4e9e0572d6db421e5d34f38e25976e5beba47",
+      "kind": "added"
+    },
+    "personal_apps/tests/selected_price_unit/test_yahoo_bounded.py": {
+      "sha256_lf": "77a719f9bb882f9294d0faf619477e750db0f8a7dce8db70eba8e1ff06a7c0a9",
+      "kind": "added"
+    },
+    "personal_apps/tests/test_radar_operations_api.py": {
+      "sha256_lf": "de93a50b26fd6c7ec4c878c2e033e8aa6e48210aee5a711721382df824d1dd94",
+      "kind": "modified"
+    },
+    "personal_apps/static/radar/dist/.vite/manifest.json": {
+      "sha256": "3f49fbbeae25d4d19a430edaeae43b725b762b3f657487161e00418bc837cf22",
+      "kind": "generated"
+    },
+    "personal_apps/static/radar/dist/assets/board-rWQq9mLW.js": {
+      "sha256": "585c855821139a46b2327d3e621fbb378a259a02200e86f17311deb17dc5154b",
+      "kind": "generated"
+    },
+    "personal_apps/static/radar/dist/assets/embedded-DT-Q2QoO.js": {
+      "sha256": "956e1a6d94f9c05c6e7528a092366247668550d6decba07356db1b4404de1f75",
+      "kind": "generated"
+    },
+    "personal_apps/static/radar/dist/assets/hub-Bmvv_e8B.css": {
+      "sha256": "904aa485f9a499aac1ed834217d2d7972456508b3744f489f6955e42bb8b3288",
+      "kind": "generated"
+    },
+    "personal_apps/static/radar/dist/assets/hub-CZqS9Prw.js": {
+      "sha256": "c5baaeeea40477dd16b4b1a166d9f0674b953a3add2340d6796f33f370960e12",
+      "kind": "generated"
+    }
+  }
+}

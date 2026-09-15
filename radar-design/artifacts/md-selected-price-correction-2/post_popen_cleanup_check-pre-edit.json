@@ -1,0 +1,150 @@
+{
+  "label": "pre-edit",
+  "all_met": false,
+  "scenarios": [
+    {
+      "scenario": "post_popen_unconfirmed",
+      "required": {
+        "quarantined": true,
+        "cleanup_failed": 1,
+        "second_state": "unavailable",
+        "popen_calls": 1
+      },
+      "observed": {
+        "first_state": "pending",
+        "quarantined": false,
+        "counters": {
+          "invalid": 1
+        },
+        "second_state": "pending",
+        "second_reason": "acquiring",
+        "popen_calls": 2,
+        "first_process": {
+          "kill_calls": 1,
+          "terminate_calls": 0,
+          "exit_confirmed_by_process": false
+        }
+      },
+      "met": false,
+      "unmet": {
+        "quarantined": {
+          "required": true,
+          "observed": false
+        },
+        "cleanup_failed": {
+          "required": 1,
+          "observed": 0
+        },
+        "second_state": {
+          "required": "unavailable",
+          "observed": "pending"
+        },
+        "popen_calls": {
+          "required": 1,
+          "observed": 2
+        }
+      }
+    },
+    {
+      "scenario": "post_popen_confirmed",
+      "required": {
+        "quarantined": false,
+        "cleanup_failed": 0,
+        "second_state": "pending",
+        "popen_calls": 2
+      },
+      "observed": {
+        "first_state": "pending",
+        "quarantined": false,
+        "counters": {
+          "invalid": 1
+        },
+        "second_state": "pending",
+        "second_reason": "acquiring",
+        "popen_calls": 2,
+        "first_process": {
+          "kill_calls": 1,
+          "terminate_calls": 0,
+          "exit_confirmed_by_process": true
+        }
+      },
+      "met": true,
+      "unmet": {}
+    },
+    {
+      "scenario": "post_popen_kill_raises_but_exited",
+      "required": {
+        "quarantined": false,
+        "cleanup_failed": 0,
+        "second_state": "pending",
+        "popen_calls": 2
+      },
+      "observed": {
+        "first_state": "pending",
+        "quarantined": false,
+        "counters": {
+          "invalid": 1
+        },
+        "second_state": "pending",
+        "second_reason": "acquiring",
+        "popen_calls": 2,
+        "first_process": {
+          "kill_calls": 1,
+          "terminate_calls": 0,
+          "exit_confirmed_by_process": true
+        }
+      },
+      "met": true,
+      "unmet": {}
+    },
+    {
+      "scenario": "pre_popen_failure",
+      "required": {
+        "quarantined": false,
+        "cleanup_failed": 0,
+        "second_state": "pending",
+        "popen_calls": 2
+      },
+      "observed": {
+        "first_state": "pending",
+        "quarantined": false,
+        "counters": {
+          "invalid": 1
+        },
+        "second_state": "pending",
+        "second_reason": "acquiring",
+        "popen_calls": 2,
+        "first_process": null
+      },
+      "met": true,
+      "unmet": {}
+    },
+    {
+      "scenario": "control_reap_unconfirmed",
+      "required": {
+        "quarantined": true,
+        "cleanup_failed": 1,
+        "second_state": "unavailable",
+        "popen_calls": 1
+      },
+      "observed": {
+        "first_state": "pending",
+        "quarantined": true,
+        "counters": {
+          "timeout": 1,
+          "cleanup_failed": 1
+        },
+        "second_state": "unavailable",
+        "second_reason": "cleanup_failed: a fetch child could not be confirmed stopped",
+        "popen_calls": 1,
+        "first_process": {
+          "kill_calls": 1,
+          "terminate_calls": 1,
+          "exit_confirmed_by_process": false
+        }
+      },
+      "met": true,
+      "unmet": {}
+    }
+  ]
+}

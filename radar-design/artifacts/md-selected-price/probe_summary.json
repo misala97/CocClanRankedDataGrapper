@@ -1,0 +1,3302 @@
+{
+  "started_utc": "2026-09-15T13:50:04.461755+00:00",
+  "started_et": "2026-09-15T09:50:04.461755-04:00",
+  "config": {
+    "user_agent": "Mozilla/5.0",
+    "accept": "application/json",
+    "timeout_s": 15,
+    "gap_s": 2.0,
+    "ceiling": 48,
+    "origin_referer": false,
+    "cookies": false,
+    "retries": false,
+    "proxies": false,
+    "finnhub_key_present": true
+  },
+  "sample": [
+    {
+      "ticker": "AAPL",
+      "nasdaq": "AAPL",
+      "assetclass": "stocks",
+      "yahoo": "AAPL",
+      "finnhub": "AAPL",
+      "why": "Nasdaq Global Select common; continuity with saved 2026-09-09 probe"
+    },
+    {
+      "ticker": "GE",
+      "nasdaq": "GE",
+      "assetclass": "stocks",
+      "yahoo": "GE",
+      "finnhub": "GE",
+      "why": "NYSE common; continuity with saved TradingView sample"
+    },
+    {
+      "ticker": "SPY",
+      "nasdaq": "SPY",
+      "assetclass": "etf",
+      "yahoo": "SPY",
+      "finnhub": "SPY",
+      "why": "NYSE Arca ETF (otherlisted ETF=Y, exchange P); assetclass=etf path"
+    },
+    {
+      "ticker": "RZLV",
+      "nasdaq": "RZLV",
+      "assetclass": "stocks",
+      "yahoo": "RZLV",
+      "finnhub": "RZLV",
+      "why": "Nasdaq Global Market small stock; used in original comparison"
+    },
+    {
+      "ticker": "BRK.B",
+      "nasdaq": "BRK.B",
+      "assetclass": "stocks",
+      "yahoo": "BRK-B",
+      "finnhub": "BRK.B",
+      "why": "NYSE class share; dot/hyphen symbol edge case across providers"
+    }
+  ],
+  "results": [
+    {
+      "ticker": "AAPL",
+      "nasdaq_chart_undated": {
+        "name": "nasdaq_chart_undated_AAPL",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "AAPL",
+        "company": "Apple Inc. Common Stock",
+        "timeAsOf": "Sep 15, 2026 9:49 AM ET",
+        "isNasdaq100": false,
+        "lastSalePrice": "$330.42",
+        "netChange": "-2.66",
+        "percentageChange": "-0.80%",
+        "deltaIndicator": "down",
+        "previousClose": "$333.08",
+        "count": 349,
+        "first_et": "2026-09-15T00:00:00-04:00",
+        "last_et": "2026-09-15T05:48:00-04:00",
+        "first_x": 1789444800000,
+        "last_x": 1789465680000,
+        "z_keys": [
+          "dateTime",
+          "value"
+        ],
+        "distinct_et_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 348
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "dateTime": "4:00 AM ET",
+              "value": "330.30"
+            },
+            "x": 1789444800000,
+            "y": 330.3
+          },
+          {
+            "z": {
+              "dateTime": "4:01 AM ET",
+              "value": "330.30"
+            },
+            "x": 1789444860000,
+            "y": 330.3
+          },
+          {
+            "z": {
+              "dateTime": "6:54 AM ET",
+              "value": "330.87"
+            },
+            "x": 1789455240000,
+            "y": 330.87
+          },
+          {
+            "z": {
+              "dateTime": "9:47 AM ET",
+              "value": "330.595"
+            },
+            "x": 1789465620000,
+            "y": 330.595
+          },
+          {
+            "z": {
+              "dateTime": "9:48 AM ET",
+              "value": "330.24"
+            },
+            "x": 1789465680000,
+            "y": 330.24
+          }
+        ]
+      },
+      "nasdaq_chart_dated9d": {
+        "name": "nasdaq_chart_dated9d_AAPL",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "AAPL",
+        "company": "Apple Inc. Common Stock",
+        "timeAsOf": "Sep 14, 2026",
+        "isNasdaq100": true,
+        "lastSalePrice": "$330.48",
+        "netChange": "-2.60",
+        "percentageChange": "-0.78%",
+        "deltaIndicator": "up",
+        "previousClose": "$333.08",
+        "count": 5,
+        "first_et": "2026-09-07T20:00:00-04:00",
+        "last_et": "2026-09-13T20:00:00-04:00",
+        "first_x": 1788825600000,
+        "last_x": 1789344000000,
+        "z_keys": [
+          "close",
+          "dateTime",
+          "high",
+          "low",
+          "open",
+          "value",
+          "volume"
+        ],
+        "distinct_et_dates": [
+          "2026-09-07",
+          "2026-09-08",
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-13"
+        ],
+        "spacing_seconds": {
+          "86400": 3,
+          "259200": 1
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "high": "320.7",
+              "low": "314.9",
+              "open": "317.1",
+              "close": "316.22",
+              "volume": "35,477,090",
+              "dateTime": "9/8/2026",
+              "value": "316.22"
+            },
+            "x": 1788825600000,
+            "y": 316.22
+          },
+          {
+            "z": {
+              "high": "319.15",
+              "low": "309.9",
+              "open": "315.485",
+              "close": "315.34",
+              "volume": "65,639,960",
+              "dateTime": "9/9/2026",
+              "value": "315.34"
+            },
+            "x": 1788912000000,
+            "y": 315.34
+          },
+          {
+            "z": {
+              "high": "326.74",
+              "low": "316.51",
+              "open": "316.67",
+              "close": "326.57",
+              "volume": "70,011,910",
+              "dateTime": "9/10/2026",
+              "value": "326.57"
+            },
+            "x": 1788998400000,
+            "y": 326.57
+          },
+          {
+            "z": {
+              "high": "336.22",
+              "low": "326.3",
+              "open": "327.45",
+              "close": "332.27",
+              "volume": "50,716,870",
+              "dateTime": "9/11/2026",
+              "value": "332.27"
+            },
+            "x": 1789084800000,
+            "y": 332.27
+          },
+          {
+            "z": {
+              "high": "335.5",
+              "low": "331.34",
+              "open": "334.79",
+              "close": "333.08",
+              "volume": "39,269,150",
+              "dateTime": "9/14/2026",
+              "value": "333.08"
+            },
+            "x": 1789344000000,
+            "y": 333.08
+          }
+        ]
+      },
+      "nasdaq_info": {
+        "name": "nasdaq_info_AAPL",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "assetClass",
+          "companyName",
+          "exchange",
+          "isHeld",
+          "isNasdaq100",
+          "isNasdaqListed",
+          "keyStats",
+          "marketStatus",
+          "notifications",
+          "primaryData",
+          "secondaryData",
+          "stockType",
+          "symbol"
+        ],
+        "symbol": "AAPL",
+        "companyName": "Apple Inc. Common Stock",
+        "stockType": "Common Stock",
+        "exchange": "NASDAQ-GS",
+        "isNasdaqListed": true,
+        "isNasdaq100": true,
+        "isHeld": false,
+        "marketStatus": "Open",
+        "assetClass": "STOCKS",
+        "primaryData": {
+          "lastSalePrice": "$330.495",
+          "netChange": "-2.585",
+          "percentageChange": "-0.78%",
+          "deltaIndicator": "down",
+          "lastTradeTimestamp": "Sep 15, 2026 9:50 AM ET",
+          "isRealTime": true,
+          "bidPrice": "$330.47",
+          "askPrice": "$330.50",
+          "bidSize": "83",
+          "askSize": "40",
+          "volume": "3,271,571.111953",
+          "currency": null
+        },
+        "secondaryData": null,
+        "keyStats_keys": [
+          "dayrange",
+          "fiftyTwoWeekHighLow"
+        ],
+        "lastTrade_parsed_et": "2026-09-15T09:50:00-04:00",
+        "lastTrade_epoch": 1789480200,
+        "sent_utc": "2026-09-15T13:50:13.578546+00:00"
+      },
+      "yahoo_5d_5m": {
+        "name": "yahoo_5d_5m_AAPL",
+        "error": null,
+        "meta": {
+          "symbol": "AAPL",
+          "currency": "USD",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 330.53,
+          "regularMarketTime": 1789480218,
+          "chartPreviousClose": 316.22,
+          "previousClose": 333.08,
+          "dataGranularity": "5m",
+          "range": "5d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 345479400
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "end": 1789502400,
+          "start": 1789479000,
+          "gmtoffset": -14400
+        },
+        "count": 318,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-09T09:30:00-04:00",
+        "last": "2026-09-15T09:50:18-04:00",
+        "distinct_dates": [
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-14",
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "300": 312,
+          "63300": 3,
+          "236100": 1,
+          "18": 1
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-09": 78,
+          "2026-09-10": 78,
+          "2026-09-11": 78,
+          "2026-09-14": 78,
+          "2026-09-15": 6
+        },
+        "samples": [
+          {
+            "ts": 1788960600,
+            "local": "2026-09-09T09:30:00-04:00",
+            "o": 315.4106140136719,
+            "h": 316.2099914550781,
+            "l": 315.05499267578125,
+            "c": 315.5198974609375,
+            "v": 1895080
+          },
+          {
+            "ts": 1788960900,
+            "local": "2026-09-09T09:35:00-04:00",
+            "o": 315.4100036621094,
+            "h": 316.1300048828125,
+            "l": 315.2969970703125,
+            "c": 315.95001220703125,
+            "v": 464828
+          },
+          {
+            "ts": 1789134300,
+            "local": "2026-09-11T09:45:00-04:00",
+            "o": 333.3900146484375,
+            "h": 333.75,
+            "l": 331.010009765625,
+            "c": 331.70770263671875,
+            "v": 1297974
+          },
+          {
+            "ts": 1789480200,
+            "local": "2026-09-15T09:50:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480218,
+            "local": "2026-09-15T09:50:18-04:00",
+            "o": 330.5299987792969,
+            "h": 330.5299987792969,
+            "l": 330.5299987792969,
+            "c": 330.5299987792969,
+            "v": 0
+          }
+        ]
+      },
+      "yahoo_1d_1m": {
+        "name": "yahoo_1d_1m_AAPL",
+        "error": null,
+        "meta": {
+          "symbol": "AAPL",
+          "currency": "USD",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 330.49,
+          "regularMarketTime": 1789480220,
+          "chartPreviousClose": 333.08,
+          "previousClose": 333.08,
+          "dataGranularity": "1m",
+          "range": "1d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 345479400
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "start": 1789479000,
+          "end": 1789502400,
+          "gmtoffset": -14400
+        },
+        "count": 352,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-15T04:00:00-04:00",
+        "last": "2026-09-15T09:50:20-04:00",
+        "distinct_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 350,
+          "20": 1
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-15": 352
+        },
+        "samples": [
+          {
+            "ts": 1789459200,
+            "local": "2026-09-15T04:00:00-04:00",
+            "o": 330.23,
+            "h": 333.08,
+            "l": 330.09,
+            "c": 330.3,
+            "v": 0
+          },
+          {
+            "ts": 1789459260,
+            "local": "2026-09-15T04:01:00-04:00",
+            "o": 330.4,
+            "h": 331.68,
+            "l": 330.09,
+            "c": 330.3,
+            "v": 0
+          },
+          {
+            "ts": 1789469760,
+            "local": "2026-09-15T06:56:00-04:00",
+            "o": 330.89,
+            "h": 330.955,
+            "l": 330.89,
+            "c": 330.93,
+            "v": 0
+          },
+          {
+            "ts": 1789480200,
+            "local": "2026-09-15T09:50:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480220,
+            "local": "2026-09-15T09:50:20-04:00",
+            "o": 330.4898986816406,
+            "h": 330.4898986816406,
+            "l": 330.4898986816406,
+            "c": 330.4898986816406,
+            "v": 0
+          }
+        ]
+      },
+      "finnhub_quote": {
+        "name": "finnhub_quote_AAPL",
+        "payload": {
+          "c": 330.37,
+          "d": -2.71,
+          "dp": -0.8136,
+          "h": 331.5,
+          "l": 328.35,
+          "o": 330.1675,
+          "pc": 333.08,
+          "t": 1789480195
+        },
+        "t_et": "2026-09-15T09:49:55-04:00",
+        "age_at_request_s": 27.1
+      }
+    },
+    {
+      "ticker": "GE",
+      "nasdaq_chart_undated": {
+        "name": "nasdaq_chart_undated_GE",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "GE",
+        "company": "GE Aerospace Common Stock",
+        "timeAsOf": "Sep 15, 2026 9:50 AM ET",
+        "isNasdaq100": false,
+        "lastSalePrice": "$312.2512",
+        "netChange": "-5.3088",
+        "percentageChange": "-1.67%",
+        "deltaIndicator": "down",
+        "previousClose": "$317.56",
+        "count": 109,
+        "first_et": "2026-09-15T00:00:00-04:00",
+        "last_et": "2026-09-15T05:50:00-04:00",
+        "first_x": 1789444800000,
+        "last_x": 1789465800000,
+        "z_keys": [
+          "dateTime",
+          "value"
+        ],
+        "distinct_et_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 56,
+          "120": 15,
+          "180": 15,
+          "240": 8,
+          "300": 4,
+          "600": 1
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "dateTime": "4:00 AM ET",
+              "value": "317.00"
+            },
+            "x": 1789444800000,
+            "y": 317.0
+          },
+          {
+            "z": {
+              "dateTime": "4:01 AM ET",
+              "value": "316.2275"
+            },
+            "x": 1789444860000,
+            "y": 316.2275
+          },
+          {
+            "z": {
+              "dateTime": "8:25 AM ET",
+              "value": "317.56"
+            },
+            "x": 1789460700000,
+            "y": 317.56
+          },
+          {
+            "z": {
+              "dateTime": "9:49 AM ET",
+              "value": "312.405"
+            },
+            "x": 1789465740000,
+            "y": 312.405
+          },
+          {
+            "z": {
+              "dateTime": "9:50 AM ET",
+              "value": "312.2512"
+            },
+            "x": 1789465800000,
+            "y": 312.2512
+          }
+        ]
+      },
+      "nasdaq_chart_dated9d": {
+        "name": "nasdaq_chart_dated9d_GE",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "GE",
+        "company": "GE Aerospace Common Stock",
+        "timeAsOf": "Sep 14, 2026",
+        "isNasdaq100": false,
+        "lastSalePrice": "$312.375",
+        "netChange": "-5.185",
+        "percentageChange": "-1.63%",
+        "deltaIndicator": "down",
+        "previousClose": "$317.56",
+        "count": 5,
+        "first_et": "2026-09-07T20:00:00-04:00",
+        "last_et": "2026-09-13T20:00:00-04:00",
+        "first_x": 1788825600000,
+        "last_x": 1789344000000,
+        "z_keys": [
+          "close",
+          "dateTime",
+          "high",
+          "low",
+          "open",
+          "value",
+          "volume"
+        ],
+        "distinct_et_dates": [
+          "2026-09-07",
+          "2026-09-08",
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-13"
+        ],
+        "spacing_seconds": {
+          "86400": 3,
+          "259200": 1
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "high": "342.73",
+              "low": "332.04",
+              "open": "338.11",
+              "close": "334.91",
+              "volume": "3,062,819",
+              "dateTime": "9/8/2026",
+              "value": "334.91"
+            },
+            "x": 1788825600000,
+            "y": 334.91
+          },
+          {
+            "z": {
+              "high": "332.06",
+              "low": "321.16",
+              "open": "330.875",
+              "close": "325.42",
+              "volume": "5,021,863",
+              "dateTime": "9/9/2026",
+              "value": "325.42"
+            },
+            "x": 1788912000000,
+            "y": 325.42
+          },
+          {
+            "z": {
+              "high": "327.5",
+              "low": "321.8",
+              "open": "322.36",
+              "close": "324.15",
+              "volume": "3,464,507",
+              "dateTime": "9/10/2026",
+              "value": "324.15"
+            },
+            "x": 1788998400000,
+            "y": 324.15
+          },
+          {
+            "z": {
+              "high": "329.88",
+              "low": "322.77",
+              "open": "328.29",
+              "close": "323.66",
+              "volume": "2,528,693",
+              "dateTime": "9/11/2026",
+              "value": "323.66"
+            },
+            "x": 1789084800000,
+            "y": 323.66
+          },
+          {
+            "z": {
+              "high": "318.46",
+              "low": "312.08",
+              "open": "315.2",
+              "close": "317.56",
+              "volume": "5,146,701",
+              "dateTime": "9/14/2026",
+              "value": "317.56"
+            },
+            "x": 1789344000000,
+            "y": 317.56
+          }
+        ]
+      },
+      "nasdaq_info": {
+        "name": "nasdaq_info_GE",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "assetClass",
+          "companyName",
+          "exchange",
+          "isHeld",
+          "isNasdaq100",
+          "isNasdaqListed",
+          "keyStats",
+          "marketStatus",
+          "notifications",
+          "primaryData",
+          "secondaryData",
+          "stockType",
+          "symbol"
+        ],
+        "symbol": "GE",
+        "companyName": "GE Aerospace Common Stock",
+        "stockType": "Common Stock",
+        "exchange": "NYSE",
+        "isNasdaqListed": false,
+        "isNasdaq100": false,
+        "isHeld": false,
+        "marketStatus": "Open",
+        "assetClass": "STOCKS",
+        "primaryData": {
+          "lastSalePrice": "$312.535",
+          "netChange": "-5.025",
+          "percentageChange": "-1.58%",
+          "deltaIndicator": "down",
+          "lastTradeTimestamp": "Sep 15, 2026 9:50 AM ET",
+          "isRealTime": true,
+          "bidPrice": "$312.31",
+          "askPrice": "$312.72",
+          "bidSize": "18",
+          "askSize": "75",
+          "volume": "258,325.471467",
+          "currency": null
+        },
+        "secondaryData": null,
+        "keyStats_keys": [
+          "dayrange",
+          "fiftyTwoWeekHighLow"
+        ],
+        "lastTrade_parsed_et": "2026-09-15T09:50:00-04:00",
+        "lastTrade_epoch": 1789480200,
+        "sent_utc": "2026-09-15T13:50:36.300166+00:00"
+      },
+      "yahoo_5d_5m": {
+        "name": "yahoo_5d_5m_GE",
+        "error": null,
+        "meta": {
+          "symbol": "GE",
+          "currency": "USD",
+          "exchangeName": "NYQ",
+          "fullExchangeName": "NYSE",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 312.535,
+          "regularMarketTime": 1789480236,
+          "chartPreviousClose": 334.91,
+          "previousClose": 317.56,
+          "dataGranularity": "5m",
+          "range": "5d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": -252322200
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "end": 1789502400,
+          "start": 1789479000,
+          "gmtoffset": -14400
+        },
+        "count": 318,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-09T09:30:00-04:00",
+        "last": "2026-09-15T09:50:36-04:00",
+        "distinct_dates": [
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-14",
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "300": 312,
+          "63300": 3,
+          "236100": 1,
+          "36": 1
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-09": 78,
+          "2026-09-10": 78,
+          "2026-09-11": 78,
+          "2026-09-14": 78,
+          "2026-09-15": 6
+        },
+        "samples": [
+          {
+            "ts": 1788960600,
+            "local": "2026-09-09T09:30:00-04:00",
+            "o": 330.875,
+            "h": 332.05999755859375,
+            "l": 327.1300048828125,
+            "c": 329.30499267578125,
+            "v": 166479
+          },
+          {
+            "ts": 1788960900,
+            "local": "2026-09-09T09:35:00-04:00",
+            "o": 329.29998779296875,
+            "h": 330.1000061035156,
+            "l": 328.42999267578125,
+            "c": 328.614990234375,
+            "v": 62089
+          },
+          {
+            "ts": 1789134300,
+            "local": "2026-09-11T09:45:00-04:00",
+            "o": 326.95001220703125,
+            "h": 327.0199890136719,
+            "l": 325.8399963378906,
+            "c": 326.1000061035156,
+            "v": 38366
+          },
+          {
+            "ts": 1789480200,
+            "local": "2026-09-15T09:50:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480236,
+            "local": "2026-09-15T09:50:36-04:00",
+            "o": 312.5350036621094,
+            "h": 312.5350036621094,
+            "l": 312.5350036621094,
+            "c": 312.5350036621094,
+            "v": 0
+          }
+        ]
+      },
+      "yahoo_1d_1m": {
+        "name": "yahoo_1d_1m_GE",
+        "error": null,
+        "meta": {
+          "symbol": "GE",
+          "currency": "USD",
+          "exchangeName": "NYQ",
+          "fullExchangeName": "NYSE",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 312.535,
+          "regularMarketTime": 1789480236,
+          "chartPreviousClose": 317.56,
+          "previousClose": 317.56,
+          "dataGranularity": "1m",
+          "range": "1d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": -252322200
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "end": 1789502400,
+          "start": 1789479000,
+          "gmtoffset": -14400
+        },
+        "count": 48,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-15T04:01:00-04:00",
+        "last": "2026-09-15T09:50:36-04:00",
+        "distinct_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 25,
+          "1200": 2,
+          "180": 2,
+          "420": 2,
+          "540": 2,
+          "360": 2
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-15": 48
+        },
+        "samples": [
+          {
+            "ts": 1789459260,
+            "local": "2026-09-15T04:01:00-04:00",
+            "o": 316.17,
+            "h": 316.17,
+            "l": 316.17,
+            "c": 316.17,
+            "v": 0
+          },
+          {
+            "ts": 1789460460,
+            "local": "2026-09-15T04:21:00-04:00",
+            "o": 315.8,
+            "h": 315.8,
+            "l": 315.8,
+            "c": 315.8,
+            "v": 0
+          },
+          {
+            "ts": 1789477800,
+            "local": "2026-09-15T09:10:00-04:00",
+            "o": 318.54,
+            "h": 318.54,
+            "l": 318.54,
+            "c": 318.54,
+            "v": 0
+          },
+          {
+            "ts": 1789480200,
+            "local": "2026-09-15T09:50:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480236,
+            "local": "2026-09-15T09:50:36-04:00",
+            "o": 312.5350036621094,
+            "h": 312.5350036621094,
+            "l": 312.5350036621094,
+            "c": 312.5350036621094,
+            "v": 0
+          }
+        ]
+      },
+      "finnhub_quote": {
+        "name": "finnhub_quote_GE",
+        "payload": {
+          "c": 312.45,
+          "d": -5.11,
+          "dp": -1.6091,
+          "h": 320.36,
+          "l": 312.2801,
+          "o": 317.355,
+          "pc": 317.56,
+          "t": 1789480219
+        },
+        "t_et": "2026-09-15T09:50:19-04:00",
+        "age_at_request_s": 27.1
+      }
+    },
+    {
+      "ticker": "SPY",
+      "nasdaq_chart_undated": {
+        "name": "nasdaq_chart_undated_SPY",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "SPY",
+        "company": "State Street SPDR S&P 500 ETF Trust",
+        "timeAsOf": "Sep 15, 2026 9:50 AM ET",
+        "isNasdaq100": false,
+        "lastSalePrice": "$759.35",
+        "netChange": "-1.53",
+        "percentageChange": "-0.20%",
+        "deltaIndicator": "down",
+        "previousClose": "$760.88",
+        "count": 342,
+        "first_et": "2026-09-15T00:00:00-04:00",
+        "last_et": "2026-09-15T05:50:00-04:00",
+        "first_x": 1789444800000,
+        "last_x": 1789465800000,
+        "z_keys": [
+          "dateTime",
+          "value"
+        ],
+        "distinct_et_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 332,
+          "120": 9
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "dateTime": "4:00 AM ET",
+              "value": "757.15"
+            },
+            "x": 1789444800000,
+            "y": 757.15
+          },
+          {
+            "z": {
+              "dateTime": "4:01 AM ET",
+              "value": "757.15"
+            },
+            "x": 1789444860000,
+            "y": 757.15
+          },
+          {
+            "z": {
+              "dateTime": "7:00 AM ET",
+              "value": "760.881"
+            },
+            "x": 1789455600000,
+            "y": 760.881
+          },
+          {
+            "z": {
+              "dateTime": "9:49 AM ET",
+              "value": "759.35"
+            },
+            "x": 1789465740000,
+            "y": 759.35
+          },
+          {
+            "z": {
+              "dateTime": "9:50 AM ET",
+              "value": "759.39"
+            },
+            "x": 1789465800000,
+            "y": 759.39
+          }
+        ]
+      },
+      "nasdaq_chart_dated9d": {
+        "name": "nasdaq_chart_dated9d_SPY",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "SPY",
+        "company": "State Street SPDR S&P 500 ETF Trust",
+        "timeAsOf": "Sep 14, 2026",
+        "isNasdaq100": false,
+        "lastSalePrice": "$759.31",
+        "netChange": "-1.57",
+        "percentageChange": "-0.21%",
+        "deltaIndicator": "down",
+        "previousClose": "$760.88",
+        "count": 5,
+        "first_et": "2026-09-07T20:00:00-04:00",
+        "last_et": "2026-09-13T20:00:00-04:00",
+        "first_x": 1788825600000,
+        "last_x": 1789344000000,
+        "z_keys": [
+          "close",
+          "dateTime",
+          "high",
+          "low",
+          "open",
+          "value",
+          "volume"
+        ],
+        "distinct_et_dates": [
+          "2026-09-07",
+          "2026-09-08",
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-13"
+        ],
+        "spacing_seconds": {
+          "86400": 3,
+          "259200": 1
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "high": "769.7",
+              "low": "765.14",
+              "open": "769.07",
+              "close": "765.96",
+              "volume": "44,746,100",
+              "dateTime": "9/8/2026",
+              "value": "765.96"
+            },
+            "x": 1788825600000,
+            "y": 765.96
+          },
+          {
+            "z": {
+              "high": "764.47",
+              "low": "760.94",
+              "open": "764.08",
+              "close": "762.4",
+              "volume": "32,812,410",
+              "dateTime": "9/9/2026",
+              "value": "762.4"
+            },
+            "x": 1788912000000,
+            "y": 762.4
+          },
+          {
+            "z": {
+              "high": "760.11",
+              "low": "756.64",
+              "open": "758.03",
+              "close": "757.83",
+              "volume": "42,740,380",
+              "dateTime": "9/10/2026",
+              "value": "757.83"
+            },
+            "x": 1788998400000,
+            "y": 757.83
+          },
+          {
+            "z": {
+              "high": "766.38",
+              "low": "763.6",
+              "open": "764.72",
+              "close": "764.29",
+              "volume": "45,512,740",
+              "dateTime": "9/11/2026",
+              "value": "764.29"
+            },
+            "x": 1789084800000,
+            "y": 764.29
+          },
+          {
+            "z": {
+              "high": "763.52",
+              "low": "757.93",
+              "open": "759",
+              "close": "760.88",
+              "volume": "43,992,430",
+              "dateTime": "9/14/2026",
+              "value": "760.88"
+            },
+            "x": 1789344000000,
+            "y": 760.88
+          }
+        ]
+      },
+      "nasdaq_info": {
+        "name": "nasdaq_info_SPY",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "assetClass",
+          "companyName",
+          "exchange",
+          "isHeld",
+          "isNasdaq100",
+          "isNasdaqListed",
+          "keyStats",
+          "marketStatus",
+          "notifications",
+          "primaryData",
+          "secondaryData",
+          "stockType",
+          "symbol"
+        ],
+        "symbol": "SPY",
+        "companyName": "State Street SPDR S&P 500 ETF Trust",
+        "stockType": null,
+        "exchange": "PSE",
+        "isNasdaqListed": false,
+        "isNasdaq100": false,
+        "isHeld": false,
+        "marketStatus": "Open",
+        "assetClass": "ETF",
+        "primaryData": {
+          "lastSalePrice": "$759.29",
+          "netChange": "-1.59",
+          "percentageChange": "-0.21%",
+          "deltaIndicator": "down",
+          "lastTradeTimestamp": "Sep 15, 2026 9:50 AM ET",
+          "isRealTime": true,
+          "bidPrice": "$759.27",
+          "askPrice": "$759.29",
+          "bidSize": "115",
+          "askSize": "40",
+          "volume": "2,997,448.173411",
+          "currency": null
+        },
+        "secondaryData": null,
+        "keyStats_keys": [],
+        "lastTrade_parsed_et": "2026-09-15T09:50:00-04:00",
+        "lastTrade_epoch": 1789480200,
+        "sent_utc": "2026-09-15T13:50:58.388794+00:00"
+      },
+      "yahoo_5d_5m": {
+        "name": "yahoo_5d_5m_SPY",
+        "error": null,
+        "meta": {
+          "symbol": "SPY",
+          "currency": "USD",
+          "exchangeName": "PCX",
+          "fullExchangeName": "NYSEArca",
+          "instrumentType": "ETF",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 759.31,
+          "regularMarketTime": 1789480253,
+          "chartPreviousClose": 765.96,
+          "previousClose": 760.88,
+          "dataGranularity": "5m",
+          "range": "5d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 728317800
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "start": 1789479000,
+          "end": 1789502400,
+          "gmtoffset": -14400
+        },
+        "count": 318,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-09T09:30:00-04:00",
+        "last": "2026-09-15T09:50:53-04:00",
+        "distinct_dates": [
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-14",
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "300": 312,
+          "63300": 3,
+          "236100": 1,
+          "53": 1
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-09": 78,
+          "2026-09-10": 78,
+          "2026-09-11": 78,
+          "2026-09-14": 78,
+          "2026-09-15": 6
+        },
+        "samples": [
+          {
+            "ts": 1788960600,
+            "local": "2026-09-09T09:30:00-04:00",
+            "o": 764.0800170898438,
+            "h": 764.3800048828125,
+            "l": 763.239990234375,
+            "c": 764.1199951171875,
+            "v": 1528226
+          },
+          {
+            "ts": 1788960900,
+            "local": "2026-09-09T09:35:00-04:00",
+            "o": 764.1199951171875,
+            "h": 764.1900024414062,
+            "l": 763.6099853515625,
+            "c": 763.7999877929688,
+            "v": 510819
+          },
+          {
+            "ts": 1789134300,
+            "local": "2026-09-11T09:45:00-04:00",
+            "o": 765.47998046875,
+            "h": 765.9299926757812,
+            "l": 764.7999877929688,
+            "c": 764.969970703125,
+            "v": 762224
+          },
+          {
+            "ts": 1789480200,
+            "local": "2026-09-15T09:50:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480253,
+            "local": "2026-09-15T09:50:53-04:00",
+            "o": 759.3099975585938,
+            "h": 759.3099975585938,
+            "l": 759.3099975585938,
+            "c": 759.3099975585938,
+            "v": 0
+          }
+        ]
+      },
+      "yahoo_1d_1m": {
+        "name": "yahoo_1d_1m_SPY",
+        "error": null,
+        "meta": {
+          "symbol": "SPY",
+          "currency": "USD",
+          "exchangeName": "PCX",
+          "fullExchangeName": "NYSEArca",
+          "instrumentType": "ETF",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 759.215,
+          "regularMarketTime": 1789480264,
+          "chartPreviousClose": 760.88,
+          "previousClose": 760.88,
+          "dataGranularity": "1m",
+          "range": "1d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 728317800
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "start": 1789479000,
+          "end": 1789502400,
+          "gmtoffset": -14400
+        },
+        "count": 306,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-15T04:00:00-04:00",
+        "last": "2026-09-15T09:51:04-04:00",
+        "distinct_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 279,
+          "120": 18,
+          "180": 5,
+          "300": 1,
+          "960": 1,
+          "4": 1
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-15": 306
+        },
+        "samples": [
+          {
+            "ts": 1789459200,
+            "local": "2026-09-15T04:00:00-04:00",
+            "o": 759.0,
+            "h": 759.96,
+            "l": 757.13,
+            "c": 757.15,
+            "v": 0
+          },
+          {
+            "ts": 1789459260,
+            "local": "2026-09-15T04:01:00-04:00",
+            "o": 757.13,
+            "h": 760.08,
+            "l": 757.0,
+            "c": 758.18,
+            "v": 0
+          },
+          {
+            "ts": 1789470000,
+            "local": "2026-09-15T07:00:00-04:00",
+            "o": 759.32,
+            "h": 759.4784,
+            "l": 759.255,
+            "c": 759.46,
+            "v": 0
+          },
+          {
+            "ts": 1789480260,
+            "local": "2026-09-15T09:51:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480264,
+            "local": "2026-09-15T09:51:04-04:00",
+            "o": 759.2150268554688,
+            "h": 759.2150268554688,
+            "l": 759.2150268554688,
+            "c": 759.2150268554688,
+            "v": 0
+          }
+        ]
+      },
+      "finnhub_quote": {
+        "name": "finnhub_quote_SPY",
+        "payload": {
+          "c": 759.38,
+          "d": -1.5,
+          "dp": -0.1971,
+          "h": 760.35,
+          "l": 758.73,
+          "o": 758.8085,
+          "pc": 760.88,
+          "t": 1789480243
+        },
+        "t_et": "2026-09-15T09:50:43-04:00",
+        "age_at_request_s": 23.7
+      }
+    },
+    {
+      "ticker": "RZLV",
+      "nasdaq_chart_undated": {
+        "name": "nasdaq_chart_undated_RZLV",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "RZLV",
+        "company": "Rezolve AI PLC Ordinary Shares",
+        "timeAsOf": "Sep 15, 2026 9:51 AM ET",
+        "isNasdaq100": false,
+        "lastSalePrice": "$2.2619",
+        "netChange": "-0.0281",
+        "percentageChange": "-1.23%",
+        "deltaIndicator": "down",
+        "previousClose": "$2.29",
+        "count": 188,
+        "first_et": "2026-09-15T00:00:00-04:00",
+        "last_et": "2026-09-15T05:50:00-04:00",
+        "first_x": 1789444800000,
+        "last_x": 1789465800000,
+        "z_keys": [
+          "dateTime",
+          "value"
+        ],
+        "distinct_et_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 124,
+          "120": 27,
+          "180": 11,
+          "240": 8,
+          "300": 7,
+          "360": 5
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "dateTime": "4:00 AM ET",
+              "value": "2.27"
+            },
+            "x": 1789444800000,
+            "y": 2.27
+          },
+          {
+            "z": {
+              "dateTime": "4:01 AM ET",
+              "value": "2.2703"
+            },
+            "x": 1789444860000,
+            "y": 2.2703
+          },
+          {
+            "z": {
+              "dateTime": "7:46 AM ET",
+              "value": "2.28"
+            },
+            "x": 1789458360000,
+            "y": 2.28
+          },
+          {
+            "z": {
+              "dateTime": "9:49 AM ET",
+              "value": "2.2699"
+            },
+            "x": 1789465740000,
+            "y": 2.2699
+          },
+          {
+            "z": {
+              "dateTime": "9:50 AM ET",
+              "value": "2.2619"
+            },
+            "x": 1789465800000,
+            "y": 2.2619
+          }
+        ]
+      },
+      "nasdaq_chart_dated9d": {
+        "name": "nasdaq_chart_dated9d_RZLV",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "chart",
+          "company",
+          "deltaIndicator",
+          "events",
+          "exchange",
+          "isNasdaq100",
+          "lastSalePrice",
+          "netChange",
+          "percentageChange",
+          "previousClose",
+          "symbol",
+          "timeAsOf",
+          "volume",
+          "volumeChart"
+        ],
+        "symbol": "RZLV",
+        "company": "Rezolve AI PLC Ordinary Shares",
+        "timeAsOf": "Sep 14, 2026",
+        "isNasdaq100": false,
+        "lastSalePrice": "$2.2619",
+        "netChange": "-0.0281",
+        "percentageChange": "-1.23%",
+        "deltaIndicator": "down",
+        "previousClose": "$2.29",
+        "count": 5,
+        "first_et": "2026-09-07T20:00:00-04:00",
+        "last_et": "2026-09-13T20:00:00-04:00",
+        "first_x": 1788825600000,
+        "last_x": 1789344000000,
+        "z_keys": [
+          "close",
+          "dateTime",
+          "high",
+          "low",
+          "open",
+          "value",
+          "volume"
+        ],
+        "distinct_et_dates": [
+          "2026-09-07",
+          "2026-09-08",
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-13"
+        ],
+        "spacing_seconds": {
+          "86400": 3,
+          "259200": 1
+        },
+        "null_y": 0,
+        "nonpositive_y": 0,
+        "monotonic_x": true,
+        "samples": [
+          {
+            "z": {
+              "high": "2.37",
+              "low": "2.24",
+              "open": "2.26",
+              "close": "2.31",
+              "volume": "20,663,950",
+              "dateTime": "9/8/2026",
+              "value": "2.31"
+            },
+            "x": 1788825600000,
+            "y": 2.31
+          },
+          {
+            "z": {
+              "high": "2.32",
+              "low": "2.26",
+              "open": "2.3",
+              "close": "2.3",
+              "volume": "9,466,703",
+              "dateTime": "9/9/2026",
+              "value": "2.3"
+            },
+            "x": 1788912000000,
+            "y": 2.3
+          },
+          {
+            "z": {
+              "high": "2.37",
+              "low": "2.25",
+              "open": "2.26",
+              "close": "2.3",
+              "volume": "12,009,200",
+              "dateTime": "9/10/2026",
+              "value": "2.3"
+            },
+            "x": 1788998400000,
+            "y": 2.3
+          },
+          {
+            "z": {
+              "high": "2.34",
+              "low": "2.29",
+              "open": "2.31",
+              "close": "2.29",
+              "volume": "8,967,833",
+              "dateTime": "9/11/2026",
+              "value": "2.29"
+            },
+            "x": 1789084800000,
+            "y": 2.29
+          },
+          {
+            "z": {
+              "high": "2.3",
+              "low": "2.22",
+              "open": "2.25",
+              "close": "2.29",
+              "volume": "8,434,030",
+              "dateTime": "9/14/2026",
+              "value": "2.29"
+            },
+            "x": 1789344000000,
+            "y": 2.29
+          }
+        ]
+      },
+      "nasdaq_info": {
+        "name": "nasdaq_info_RZLV",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "assetClass",
+          "companyName",
+          "exchange",
+          "isHeld",
+          "isNasdaq100",
+          "isNasdaqListed",
+          "keyStats",
+          "marketStatus",
+          "notifications",
+          "primaryData",
+          "secondaryData",
+          "stockType",
+          "symbol"
+        ],
+        "symbol": "RZLV",
+        "companyName": "Rezolve AI PLC Ordinary Shares",
+        "stockType": "Ordinary Shares",
+        "exchange": "NASDAQ-GM",
+        "isNasdaqListed": true,
+        "isNasdaq100": false,
+        "isHeld": false,
+        "marketStatus": "Open",
+        "assetClass": "STOCKS",
+        "primaryData": {
+          "lastSalePrice": "$2.2652",
+          "netChange": "-0.0248",
+          "percentageChange": "-1.08%",
+          "deltaIndicator": "down",
+          "lastTradeTimestamp": "Sep 15, 2026 9:51 AM ET",
+          "isRealTime": true,
+          "bidPrice": "$2.26",
+          "askPrice": "$2.27",
+          "bidSize": "42395",
+          "askSize": "31600",
+          "volume": "618,241.439189",
+          "currency": null
+        },
+        "secondaryData": null,
+        "keyStats_keys": [
+          "dayrange",
+          "fiftyTwoWeekHighLow"
+        ],
+        "lastTrade_parsed_et": "2026-09-15T09:51:00-04:00",
+        "lastTrade_epoch": 1789480260,
+        "sent_utc": "2026-09-15T13:51:18.627009+00:00"
+      },
+      "yahoo_5d_5m": {
+        "name": "yahoo_5d_5m_RZLV",
+        "error": null,
+        "meta": {
+          "symbol": "RZLV",
+          "currency": "USD",
+          "exchangeName": "NGM",
+          "fullExchangeName": "NasdaqGM",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 2.265,
+          "regularMarketTime": 1789480279,
+          "chartPreviousClose": 2.31,
+          "previousClose": 2.29,
+          "dataGranularity": "5m",
+          "range": "5d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 1636554600
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "end": 1789502400,
+          "start": 1789479000,
+          "gmtoffset": -14400
+        },
+        "count": 318,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-09T09:30:00-04:00",
+        "last": "2026-09-15T09:51:19-04:00",
+        "distinct_dates": [
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-14",
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "300": 312,
+          "63300": 3,
+          "236100": 1,
+          "79": 1
+        },
+        "null_close": 0,
+        "len_close_eq_ts": true,
+        "null_volume": 0,
+        "points_per_date": {
+          "2026-09-09": 78,
+          "2026-09-10": 78,
+          "2026-09-11": 78,
+          "2026-09-14": 78,
+          "2026-09-15": 6
+        },
+        "samples": [
+          {
+            "ts": 1788960600,
+            "local": "2026-09-09T09:30:00-04:00",
+            "o": 2.299999952316284,
+            "h": 2.315000057220459,
+            "l": 2.299999952316284,
+            "c": 2.308000087738037,
+            "v": 909504
+          },
+          {
+            "ts": 1788960900,
+            "local": "2026-09-09T09:35:00-04:00",
+            "o": 2.309999942779541,
+            "h": 2.319999933242798,
+            "l": 2.2699999809265137,
+            "c": 2.2850000858306885,
+            "v": 867540
+          },
+          {
+            "ts": 1789134300,
+            "local": "2026-09-11T09:45:00-04:00",
+            "o": 2.315000057220459,
+            "h": 2.3299999237060547,
+            "l": 2.309999942779541,
+            "c": 2.3238000869750977,
+            "v": 107417
+          },
+          {
+            "ts": 1789480200,
+            "local": "2026-09-15T09:50:00-04:00",
+            "o": 2.2690999507904053,
+            "h": 2.2690999507904053,
+            "l": 2.261899948120117,
+            "c": 2.261899948120117,
+            "v": 1222
+          },
+          {
+            "ts": 1789480279,
+            "local": "2026-09-15T09:51:19-04:00",
+            "o": 2.265199899673462,
+            "h": 2.265199899673462,
+            "l": 2.265199899673462,
+            "c": 2.265199899673462,
+            "v": 0
+          }
+        ]
+      },
+      "yahoo_1d_1m": {
+        "name": "yahoo_1d_1m_RZLV",
+        "error": null,
+        "meta": {
+          "symbol": "RZLV",
+          "currency": "USD",
+          "exchangeName": "NGM",
+          "fullExchangeName": "NasdaqGM",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 2.265,
+          "regularMarketTime": 1789480279,
+          "chartPreviousClose": 2.29,
+          "previousClose": 2.29,
+          "dataGranularity": "1m",
+          "range": "1d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 1636554600
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "end": 1789502400,
+          "start": 1789479000,
+          "gmtoffset": -14400
+        },
+        "count": 190,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-15T04:00:00-04:00",
+        "last": "2026-09-15T09:51:19-04:00",
+        "distinct_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 125,
+          "120": 27,
+          "180": 11,
+          "240": 8,
+          "300": 7,
+          "360": 5
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-15": 190
+        },
+        "samples": [
+          {
+            "ts": 1789459200,
+            "local": "2026-09-15T04:00:00-04:00",
+            "o": 2.27,
+            "h": 2.28,
+            "l": 2.26,
+            "c": 2.27,
+            "v": 0
+          },
+          {
+            "ts": 1789459260,
+            "local": "2026-09-15T04:01:00-04:00",
+            "o": 2.29,
+            "h": 2.29,
+            "l": 2.27,
+            "c": 2.2703,
+            "v": 0
+          },
+          {
+            "ts": 1789472820,
+            "local": "2026-09-15T07:47:00-04:00",
+            "o": 2.2704,
+            "h": 2.2704,
+            "l": 2.2703,
+            "c": 2.2703,
+            "v": 0
+          },
+          {
+            "ts": 1789480260,
+            "local": "2026-09-15T09:51:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480279,
+            "local": "2026-09-15T09:51:19-04:00",
+            "o": 2.265199899673462,
+            "h": 2.265199899673462,
+            "l": 2.265199899673462,
+            "c": 2.265199899673462,
+            "v": 0
+          }
+        ]
+      },
+      "finnhub_quote": {
+        "name": "finnhub_quote_RZLV",
+        "payload": {
+          "c": 2.28,
+          "d": -0.01,
+          "dp": -0.4367,
+          "h": 2.29,
+          "l": 2.26,
+          "o": 2.285,
+          "pc": 2.29,
+          "t": 1789480257
+        },
+        "t_et": "2026-09-15T09:50:57-04:00",
+        "age_at_request_s": 29.0
+      }
+    },
+    {
+      "ticker": "BRK.B",
+      "nasdaq_chart_undated": {
+        "name": "nasdaq_chart_undated_BRK.B",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": [
+            {
+              "code": 1000,
+              "errorMessage": "Something went wrong.Please try again later."
+            },
+            {
+              "code": 1000,
+              "errorMessage": "Something went wrong.Please try again later."
+            }
+          ],
+          "developerMessage": null
+        },
+        "message": null,
+        "data": null
+      },
+      "nasdaq_chart_undated_alt_BRK-B": {
+        "name": "nasdaq_chart_undated_BRK-B_alt",
+        "status_block": {
+          "rCode": 400,
+          "bCodeMessage": [
+            {
+              "code": 1001,
+              "errorMessage": "Symbol not exists."
+            }
+          ],
+          "developerMessage": null
+        },
+        "message": null,
+        "data": null
+      },
+      "nasdaq_chart_dated9d": {
+        "name": "nasdaq_chart_dated9d_BRK.B",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": [
+            {
+              "code": 1000,
+              "errorMessage": "Something went wrong.Please try again later."
+            },
+            {
+              "code": 2001,
+              "errorMessage": "Error while calling vendor"
+            }
+          ],
+          "developerMessage": null
+        },
+        "message": null,
+        "data": null
+      },
+      "nasdaq_info": {
+        "name": "nasdaq_info_BRK.B",
+        "status_block": {
+          "rCode": 200,
+          "bCodeMessage": null,
+          "developerMessage": null
+        },
+        "message": null,
+        "data_keys": [
+          "assetClass",
+          "companyName",
+          "exchange",
+          "isHeld",
+          "isNasdaq100",
+          "isNasdaqListed",
+          "keyStats",
+          "marketStatus",
+          "notifications",
+          "primaryData",
+          "secondaryData",
+          "stockType",
+          "symbol"
+        ],
+        "symbol": "BRK.B",
+        "companyName": "Berkshire Hathaway Inc.",
+        "stockType": "Common Stock",
+        "exchange": "NYSE",
+        "isNasdaqListed": false,
+        "isNasdaq100": false,
+        "isHeld": false,
+        "marketStatus": "Open",
+        "assetClass": "STOCKS",
+        "primaryData": {
+          "lastSalePrice": "$514.98",
+          "netChange": "+0.03",
+          "percentageChange": "+0.01%",
+          "deltaIndicator": "up",
+          "lastTradeTimestamp": "Sep 15, 2026 9:51 AM ET",
+          "isRealTime": true,
+          "bidPrice": "$514.79",
+          "askPrice": "$515.15",
+          "bidSize": "10",
+          "askSize": "50",
+          "volume": "261,667.449319",
+          "currency": null
+        },
+        "secondaryData": null,
+        "keyStats_keys": [
+          "dayrange",
+          "fiftyTwoWeekHighLow"
+        ],
+        "lastTrade_parsed_et": "2026-09-15T09:51:00-04:00",
+        "lastTrade_epoch": 1789480260,
+        "sent_utc": "2026-09-15T13:51:40.855619+00:00"
+      },
+      "yahoo_5d_5m": {
+        "name": "yahoo_5d_5m_BRK.B",
+        "error": null,
+        "meta": {
+          "symbol": "BRK-B",
+          "currency": "USD",
+          "exchangeName": "NYQ",
+          "fullExchangeName": "NYSE",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 514.965,
+          "regularMarketTime": 1789480304,
+          "chartPreviousClose": 505.83,
+          "previousClose": 514.9,
+          "dataGranularity": "5m",
+          "range": "5d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 831648600
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "start": 1789479000,
+          "end": 1789502400,
+          "gmtoffset": -14400
+        },
+        "count": 318,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-09T09:30:00-04:00",
+        "last": "2026-09-15T09:51:44-04:00",
+        "distinct_dates": [
+          "2026-09-09",
+          "2026-09-10",
+          "2026-09-11",
+          "2026-09-14",
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "300": 312,
+          "63300": 3,
+          "236100": 1,
+          "104": 1
+        },
+        "null_close": 0,
+        "len_close_eq_ts": true,
+        "null_volume": 0,
+        "points_per_date": {
+          "2026-09-09": 78,
+          "2026-09-10": 78,
+          "2026-09-11": 78,
+          "2026-09-14": 78,
+          "2026-09-15": 6
+        },
+        "samples": [
+          {
+            "ts": 1788960600,
+            "local": "2026-09-09T09:30:00-04:00",
+            "o": 504.1000061035156,
+            "h": 505.1099853515625,
+            "l": 502.360107421875,
+            "c": 502.6099853515625,
+            "v": 177170
+          },
+          {
+            "ts": 1788960900,
+            "local": "2026-09-09T09:35:00-04:00",
+            "o": 502.6099853515625,
+            "h": 502.6199951171875,
+            "l": 501.3900146484375,
+            "c": 501.57000732421875,
+            "v": 72446
+          },
+          {
+            "ts": 1789134300,
+            "local": "2026-09-11T09:45:00-04:00",
+            "o": 508.1199951171875,
+            "h": 508.69000244140625,
+            "l": 507.2099914550781,
+            "c": 507.3599853515625,
+            "v": 46508
+          },
+          {
+            "ts": 1789480200,
+            "local": "2026-09-15T09:50:00-04:00",
+            "o": 515.135009765625,
+            "h": 515.6300048828125,
+            "l": 515.0499877929688,
+            "c": 515.0499877929688,
+            "v": 18637
+          },
+          {
+            "ts": 1789480304,
+            "local": "2026-09-15T09:51:44-04:00",
+            "o": 514.9650268554688,
+            "h": 514.9650268554688,
+            "l": 514.9650268554688,
+            "c": 514.9650268554688,
+            "v": 0
+          }
+        ]
+      },
+      "yahoo_1d_1m": {
+        "name": "yahoo_1d_1m_BRK.B",
+        "error": null,
+        "meta": {
+          "symbol": "BRK-B",
+          "currency": "USD",
+          "exchangeName": "NYQ",
+          "fullExchangeName": "NYSE",
+          "instrumentType": "EQUITY",
+          "exchangeTimezoneName": "America/New_York",
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "regularMarketPrice": 514.965,
+          "regularMarketTime": 1789480304,
+          "chartPreviousClose": 514.9,
+          "previousClose": 514.9,
+          "dataGranularity": "1m",
+          "range": "1d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ],
+          "hasPrePostMarketData": true,
+          "firstTradeDate": 831648600
+        },
+        "currentTradingPeriod_regular": {
+          "timezone": "EDT",
+          "start": 1789479000,
+          "end": 1789502400,
+          "gmtoffset": -14400
+        },
+        "count": 50,
+        "quote_keys": [
+          "close",
+          "high",
+          "low",
+          "open",
+          "volume"
+        ],
+        "has_adjclose": false,
+        "first": "2026-09-15T04:00:00-04:00",
+        "last": "2026-09-15T09:51:44-04:00",
+        "distinct_dates": [
+          "2026-09-15"
+        ],
+        "spacing_seconds": {
+          "60": 30,
+          "240": 3,
+          "720": 3,
+          "660": 2,
+          "1200": 2,
+          "420": 2
+        },
+        "null_close": 1,
+        "len_close_eq_ts": true,
+        "null_volume": 1,
+        "points_per_date": {
+          "2026-09-15": 50
+        },
+        "samples": [
+          {
+            "ts": 1789459200,
+            "local": "2026-09-15T04:00:00-04:00",
+            "o": 514.24,
+            "h": 514.51,
+            "l": 514.24,
+            "c": 514.51,
+            "v": 0
+          },
+          {
+            "ts": 1789459260,
+            "local": "2026-09-15T04:01:00-04:00",
+            "o": 514.97,
+            "h": 514.97,
+            "l": 514.51,
+            "c": 514.52,
+            "v": 0
+          },
+          {
+            "ts": 1789477500,
+            "local": "2026-09-15T09:05:00-04:00",
+            "o": 515.04,
+            "h": 515.04,
+            "l": 515.04,
+            "c": 515.04,
+            "v": 0
+          },
+          {
+            "ts": 1789480260,
+            "local": "2026-09-15T09:51:00-04:00",
+            "o": null,
+            "h": null,
+            "l": null,
+            "c": null,
+            "v": null
+          },
+          {
+            "ts": 1789480304,
+            "local": "2026-09-15T09:51:44-04:00",
+            "o": 514.9650268554688,
+            "h": 514.9650268554688,
+            "l": 514.9650268554688,
+            "c": 514.9650268554688,
+            "v": 0
+          }
+        ]
+      },
+      "finnhub_quote": {
+        "name": "finnhub_quote_BRK.B",
+        "payload": {
+          "c": 515.24,
+          "d": 0.29,
+          "dp": 0.0563,
+          "h": 515.63,
+          "l": 512.41,
+          "o": 514.61,
+          "pc": 514.95,
+          "t": 1789480290
+        },
+        "t_et": "2026-09-15T09:51:30-04:00",
+        "age_at_request_s": 18.3
+      }
+    },
+    {
+      "ticker": "ZZZZZZ (nonexistent)",
+      "nasdaq_chart_undated": {
+        "name": "nasdaq_chart_undated_ZZZZZZ",
+        "status_block": {
+          "rCode": 400,
+          "bCodeMessage": [
+            {
+              "code": 1001,
+              "errorMessage": "Symbol not exists."
+            }
+          ],
+          "developerMessage": null
+        },
+        "message": null,
+        "data": null
+      },
+      "nasdaq_info": {
+        "name": "nasdaq_info_ZZZZZZ",
+        "status_block": {
+          "rCode": 400,
+          "bCodeMessage": [
+            {
+              "code": 1001,
+              "errorMessage": "Symbol not exists."
+            }
+          ],
+          "developerMessage": null
+        },
+        "message": null,
+        "data": null
+      },
+      "yahoo_5d_5m": {
+        "name": "yahoo_5d_5m_ZZZZZZ",
+        "error": {
+          "code": "Not Found",
+          "description": "No data found, symbol may be delisted"
+        }
+      },
+      "finnhub_quote": {
+        "name": "finnhub_quote_ZZZZZZ",
+        "payload": {
+          "c": 0,
+          "d": null,
+          "dp": null,
+          "h": 0,
+          "l": 0,
+          "o": 0,
+          "pc": 0,
+          "t": 0
+        },
+        "t_et": "1969-12-31T19:00:00-05:00",
+        "age_at_request_s": 1789480318.8
+      }
+    }
+  ],
+  "finished_utc": "2026-09-15T13:51:58.978695+00:00",
+  "request_count": 35,
+  "providers_stopped": [],
+  "request_log": [
+    {
+      "n": 1,
+      "name": "nasdaq_chart_undated_AAPL",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/AAPL/chart",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:50:04.461755+00:00",
+      "status": 200,
+      "elapsed_s": 1.156,
+      "bytes": 56075,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:07 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 2,
+      "name": "nasdaq_chart_dated9d_AAPL",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/AAPL/chart",
+      "params": {
+        "assetclass": "stocks",
+        "fromdate": "2026-09-06",
+        "todate": "2026-09-15"
+      },
+      "sent_utc": "2026-09-15T13:50:07.613150+00:00",
+      "status": 200,
+      "elapsed_s": 3.969,
+      "bytes": 1192,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:13 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 3,
+      "name": "nasdaq_info_AAPL",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/AAPL/info",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:50:13.578546+00:00",
+      "status": 200,
+      "elapsed_s": 1.922,
+      "bytes": 1150,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:17 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 4,
+      "name": "yahoo_5d_5m_AAPL",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL",
+      "params": {
+        "range": "5d",
+        "interval": "5m",
+        "includePrePost": "false"
+      },
+      "sent_utc": "2026-09-15T13:50:17.513005+00:00",
+      "status": 200,
+      "elapsed_s": 0.516,
+      "bytes": 29746,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:19 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 5,
+      "name": "yahoo_1d_1m_AAPL",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/AAPL",
+      "params": {
+        "range": "1d",
+        "interval": "1m",
+        "includePrePost": "true"
+      },
+      "sent_utc": "2026-09-15T13:50:20.037569+00:00",
+      "status": 200,
+      "elapsed_s": 0.078,
+      "bytes": 17980,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:21 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 6,
+      "name": "finnhub_quote_AAPL",
+      "provider": "finnhub",
+      "url": "https://finnhub.io/api/v1/quote",
+      "params": {
+        "symbol": "AAPL",
+        "token": "<redacted>"
+      },
+      "sent_utc": "2026-09-15T13:50:22.119977+00:00",
+      "status": 200,
+      "elapsed_s": 0.656,
+      "bytes": 96,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:24 GMT",
+        "X-RateLimit-Limit": "60",
+        "X-RateLimit-Remaining": "59",
+        "X-RateLimit-Reset": "1789480284"
+      }
+    },
+    {
+      "n": 7,
+      "name": "nasdaq_chart_undated_GE",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/GE/chart",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:50:24.774618+00:00",
+      "status": 200,
+      "elapsed_s": 3.157,
+      "bytes": 17534,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:29 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 8,
+      "name": "nasdaq_chart_dated9d_GE",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/GE/chart",
+      "params": {
+        "assetclass": "stocks",
+        "fromdate": "2026-09-06",
+        "todate": "2026-09-15"
+      },
+      "sent_utc": "2026-09-15T13:50:29.924706+00:00",
+      "status": 200,
+      "elapsed_s": 4.375,
+      "bytes": 1195,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:36 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 9,
+      "name": "nasdaq_info_GE",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/GE/info",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:50:36.300166+00:00",
+      "status": 200,
+      "elapsed_s": 3.609,
+      "bytes": 1143,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:41 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 10,
+      "name": "yahoo_5d_5m_GE",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/GE",
+      "params": {
+        "range": "5d",
+        "interval": "5m",
+        "includePrePost": "false"
+      },
+      "sent_utc": "2026-09-15T13:50:41.907795+00:00",
+      "status": 200,
+      "elapsed_s": 0.078,
+      "bytes": 29457,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:43 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 11,
+      "name": "yahoo_1d_1m_GE",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/GE",
+      "params": {
+        "range": "1d",
+        "interval": "1m",
+        "includePrePost": "true"
+      },
+      "sent_utc": "2026-09-15T13:50:43.991543+00:00",
+      "status": 200,
+      "elapsed_s": 0.094,
+      "bytes": 4381,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:45 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 12,
+      "name": "finnhub_quote_GE",
+      "provider": "finnhub",
+      "url": "https://finnhub.io/api/v1/quote",
+      "params": {
+        "symbol": "GE",
+        "token": "<redacted>"
+      },
+      "sent_utc": "2026-09-15T13:50:46.079581+00:00",
+      "status": 200,
+      "elapsed_s": 0.109,
+      "bytes": 98,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:48 GMT",
+        "X-RateLimit-Limit": "60",
+        "X-RateLimit-Remaining": "58",
+        "X-RateLimit-Reset": "1789480284"
+      }
+    },
+    {
+      "n": 13,
+      "name": "nasdaq_chart_undated_SPY",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/SPY/chart",
+      "params": {
+        "assetclass": "etf"
+      },
+      "sent_utc": "2026-09-15T13:50:48.195950+00:00",
+      "status": 200,
+      "elapsed_s": 2.719,
+      "bytes": 55092,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:52 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 14,
+      "name": "nasdaq_chart_dated9d_SPY",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/SPY/chart",
+      "params": {
+        "assetclass": "etf",
+        "fromdate": "2026-09-06",
+        "todate": "2026-09-15"
+      },
+      "sent_utc": "2026-09-15T13:50:52.906663+00:00",
+      "status": 200,
+      "elapsed_s": 3.484,
+      "bytes": 1203,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:58 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 15,
+      "name": "nasdaq_info_SPY",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/SPY/info",
+      "params": {
+        "assetclass": "etf"
+      },
+      "sent_utc": "2026-09-15T13:50:58.388794+00:00",
+      "status": 200,
+      "elapsed_s": 2.125,
+      "bytes": 644,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:02 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 16,
+      "name": "yahoo_5d_5m_SPY",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/SPY",
+      "params": {
+        "range": "5d",
+        "interval": "5m",
+        "includePrePost": "false"
+      },
+      "sent_utc": "2026-09-15T13:51:02.522227+00:00",
+      "status": 200,
+      "elapsed_s": 0.079,
+      "bytes": 29264,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:50:54 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 17,
+      "name": "yahoo_1d_1m_SPY",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/SPY",
+      "params": {
+        "range": "1d",
+        "interval": "1m",
+        "includePrePost": "true"
+      },
+      "sent_utc": "2026-09-15T13:51:04.607057+00:00",
+      "status": 200,
+      "elapsed_s": 0.063,
+      "bytes": 15152,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:06 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 18,
+      "name": "finnhub_quote_SPY",
+      "provider": "finnhub",
+      "url": "https://finnhub.io/api/v1/quote",
+      "params": {
+        "symbol": "SPY",
+        "token": "<redacted>"
+      },
+      "sent_utc": "2026-09-15T13:51:06.672194+00:00",
+      "status": 200,
+      "elapsed_s": 0.093,
+      "bytes": 96,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:08 GMT",
+        "X-RateLimit-Limit": "60",
+        "X-RateLimit-Remaining": "57",
+        "X-RateLimit-Reset": "1789480284"
+      }
+    },
+    {
+      "n": 19,
+      "name": "nasdaq_chart_undated_RZLV",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/RZLV/chart",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:51:08.775517+00:00",
+      "status": 200,
+      "elapsed_s": 3.485,
+      "bytes": 28966,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:14 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 20,
+      "name": "nasdaq_chart_dated9d_RZLV",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/RZLV/chart",
+      "params": {
+        "assetclass": "stocks",
+        "fromdate": "2026-09-06",
+        "todate": "2026-09-15"
+      },
+      "sent_utc": "2026-09-15T13:51:14.249441+00:00",
+      "status": 200,
+      "elapsed_s": 2.375,
+      "bytes": 1136,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:18 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 21,
+      "name": "nasdaq_info_RZLV",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/RZLV/info",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:51:18.627009+00:00",
+      "status": 200,
+      "elapsed_s": 1.172,
+      "bytes": 785,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:21 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 22,
+      "name": "yahoo_5d_5m_RZLV",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/RZLV",
+      "params": {
+        "range": "5d",
+        "interval": "5m",
+        "includePrePost": "false"
+      },
+      "sent_utc": "2026-09-15T13:51:21.801658+00:00",
+      "status": 200,
+      "elapsed_s": 0.14,
+      "bytes": 30337,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:23 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 23,
+      "name": "yahoo_1d_1m_RZLV",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/RZLV",
+      "params": {
+        "range": "1d",
+        "interval": "1m",
+        "includePrePost": "true"
+      },
+      "sent_utc": "2026-09-15T13:51:23.940864+00:00",
+      "status": 200,
+      "elapsed_s": 0.063,
+      "bytes": 9584,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:25 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 24,
+      "name": "finnhub_quote_RZLV",
+      "provider": "finnhub",
+      "url": "https://finnhub.io/api/v1/quote",
+      "params": {
+        "symbol": "RZLV",
+        "token": "<redacted>"
+      },
+      "sent_utc": "2026-09-15T13:51:26.001100+00:00",
+      "status": 200,
+      "elapsed_s": 0.109,
+      "bytes": 86,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:28 GMT",
+        "X-RateLimit-Limit": "60",
+        "X-RateLimit-Remaining": "59",
+        "X-RateLimit-Reset": "1789480348"
+      }
+    },
+    {
+      "n": 25,
+      "name": "nasdaq_chart_undated_BRK.B",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/BRK.B/chart",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:51:28.114217+00:00",
+      "status": 200,
+      "elapsed_s": 3.235,
+      "bytes": 244,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:33 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 26,
+      "name": "nasdaq_chart_undated_BRK-B_alt",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/BRK-B/chart",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:51:33.352480+00:00",
+      "status": 200,
+      "elapsed_s": 1.187,
+      "bytes": 142,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:36 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 27,
+      "name": "nasdaq_chart_dated9d_BRK.B",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/BRK.B/chart",
+      "params": {
+        "assetclass": "stocks",
+        "fromdate": "2026-09-06",
+        "todate": "2026-09-15"
+      },
+      "sent_utc": "2026-09-15T13:51:36.541866+00:00",
+      "status": 200,
+      "elapsed_s": 2.313,
+      "bytes": 226,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:40 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 28,
+      "name": "nasdaq_info_BRK.B",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/BRK.B/info",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:51:40.855619+00:00",
+      "status": 200,
+      "elapsed_s": 1.265,
+      "bytes": 774,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:44 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 29,
+      "name": "yahoo_5d_5m_BRK.B",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/BRK-B",
+      "params": {
+        "range": "5d",
+        "interval": "5m",
+        "includePrePost": "false"
+      },
+      "sent_utc": "2026-09-15T13:51:44.121286+00:00",
+      "status": 200,
+      "elapsed_s": 0.078,
+      "bytes": 29080,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:45 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 30,
+      "name": "yahoo_1d_1m_BRK.B",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/BRK-B",
+      "params": {
+        "range": "1d",
+        "interval": "1m",
+        "includePrePost": "true"
+      },
+      "sent_utc": "2026-09-15T13:51:46.193670+00:00",
+      "status": 200,
+      "elapsed_s": 0.063,
+      "bytes": 4480,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:48 GMT",
+        "Cache-Control": "public, max-age=10, stale-while-revalidate=20"
+      }
+    },
+    {
+      "n": 31,
+      "name": "finnhub_quote_BRK.B",
+      "provider": "finnhub",
+      "url": "https://finnhub.io/api/v1/quote",
+      "params": {
+        "symbol": "BRK.B",
+        "token": "<redacted>"
+      },
+      "sent_utc": "2026-09-15T13:51:48.261781+00:00",
+      "status": 200,
+      "elapsed_s": 0.109,
+      "bytes": 93,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:50 GMT",
+        "X-RateLimit-Limit": "60",
+        "X-RateLimit-Remaining": "58",
+        "X-RateLimit-Reset": "1789480348"
+      }
+    },
+    {
+      "n": 32,
+      "name": "nasdaq_chart_undated_ZZZZZZ",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/ZZZZZZ/chart",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:51:50.371230+00:00",
+      "status": 200,
+      "elapsed_s": 1.172,
+      "bytes": 142,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:53 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 33,
+      "name": "nasdaq_info_ZZZZZZ",
+      "provider": "nasdaq",
+      "url": "https://api.nasdaq.com/api/quote/ZZZZZZ/info",
+      "params": {
+        "assetclass": "stocks"
+      },
+      "sent_utc": "2026-09-15T13:51:53.544302+00:00",
+      "status": 200,
+      "elapsed_s": 1.172,
+      "bytes": 142,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:56 GMT",
+        "Cache-Control": "max-age=0, no-cache, no-store"
+      }
+    },
+    {
+      "n": 34,
+      "name": "yahoo_5d_5m_ZZZZZZ",
+      "provider": "yahoo",
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/ZZZZZZ",
+      "params": {
+        "range": "5d",
+        "interval": "5m",
+        "includePrePost": "false"
+      },
+      "sent_utc": "2026-09-15T13:51:56.728467+00:00",
+      "status": 404,
+      "elapsed_s": 0.093,
+      "bytes": 108,
+      "headers": {
+        "Content-Type": "application/json;charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:51:58 GMT",
+        "Cache-Control": "max-age=0, private"
+      }
+    },
+    {
+      "n": 35,
+      "name": "finnhub_quote_ZZZZZZ",
+      "provider": "finnhub",
+      "url": "https://finnhub.io/api/v1/quote",
+      "params": {
+        "symbol": "ZZZZZZ",
+        "token": "<redacted>"
+      },
+      "sent_utc": "2026-09-15T13:51:58.820624+00:00",
+      "status": 200,
+      "elapsed_s": 0.157,
+      "bytes": 57,
+      "headers": {
+        "Content-Type": "application/json; charset=utf-8",
+        "Date": "Tue, 15 Sep 2026 13:52:00 GMT",
+        "X-RateLimit-Limit": "60",
+        "X-RateLimit-Remaining": "57",
+        "X-RateLimit-Reset": "1789480348"
+      }
+    }
+  ]
+}
