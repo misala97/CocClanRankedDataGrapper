@@ -1,0 +1,57 @@
+﻿{
+  "1_identity_excluded_unit": {
+    "quarter_hours_before_first_seen": 48,
+    "represented_sources": 3,
+    "identity_excluded_slots": 144
+  },
+  "2_slot_partition": {
+    "ok_slots": 96,
+    "truncated_slots": 0,
+    "missing_slots": 0,
+    "absent_slots": 0,
+    "invalid_slots": 0,
+    "expected_slots": 96,
+    "sum_of_slot_fields": 96,
+    "coverage": "partial"
+  },
+  "3_weekend_between_closes": {
+    "days": [
+      [
+        "2026-09-11",
+        "observed",
+        "modeled_open"
+      ],
+      [
+        "2026-09-12",
+        "missing",
+        "modeled_closed"
+      ],
+      [
+        "2026-09-13",
+        "missing",
+        "modeled_closed"
+      ],
+      [
+        "2026-09-14",
+        "observed",
+        "modeled_open"
+      ]
+    ],
+    "backend_regime_runs": [
+      [
+        "2026-09-11"
+      ],
+      [
+        "2026-09-14"
+      ]
+    ]
+  },
+  "4_pre_identity_only_source": [
+    [
+      "bluesky",
+      "partial",
+      60
+    ]
+  ],
+  "4_identity_excluded_slots": 10
+}

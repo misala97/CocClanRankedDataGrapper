@@ -1,0 +1,7 @@
+﻿branch: codex/radar-ha1-us-daily-explore
+HEAD: 1ac39fe4e1a5dd7d04830e96a96563183687b447
+upstream: git : fatal: no upstream configured for branch 'codex/radar-ha1-us-daily-explore'
+diff --check exit: 0
+diffstat:  14 files changed, 1112 insertions(+), 35 deletions(-)
+status entries: 66
+global safe.directory: C:/Users/michi/Desktop/CodingStuff | C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-pipeline-audit

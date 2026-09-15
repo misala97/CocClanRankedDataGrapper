@@ -1,0 +1,44 @@
+﻿codex/radar-ha1-us-daily-explore
+1ac39fe4e1a5dd7d04830e96a96563183687b447
+git : fatal: no upstream configured for branch 'codex/radar-ha1-us-daily-explore'
+In Zeile:1 Zeichen:539
++ ... parse HEAD; git -c safe.directory=$w -C $w rev-parse --abbrev-ref '@{ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (fatal: no upstr...-daily-explore':String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+git : warning: in the working copy of 'HANDOFF.md', LF will be replaced by CRLF the next time Git touches it
+In Zeile:1 Zeichen:606
++ ... v-ref '@{u}' 2>&1; git -c safe.directory=$w -C $w diff --stat | Selec ...
++                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: in the... Git touches it:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: in the working copy of 'personal_apps/features/radar/routes/__init__.py', LF will be replaced by CRLF the 
+next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/Hub.test.tsx', LF will be replaced by CRLF the 
+next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/Hub.tsx', LF will be replaced by CRLF the next 
+time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/navigation.test.ts', LF will be replaced by CRLF 
+the next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/navigation.ts', LF will be replaced by CRLF the 
+next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/queries.test.ts', LF will be replaced by CRLF the 
+next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/queries.ts', LF will be replaced by CRLF the next 
+time Git touches it
+warning: in the working copy of 'radar-design/HANDOFF.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/HISTORY-ANALYSIS-LEDGER.md', LF will be replaced by CRLF the next time 
+Git touches it
+warning: in the working copy of 'radar-design/HISTORY-ANALYSIS-PLAN.md', LF will be replaced by CRLF the next time Git 
+touches it
+warning: in the working copy of 'radar-design/HUB-PROMOTION-LEDGER.md', LF will be replaced by CRLF the next time Git 
+touches it
+warning: in the working copy of 'radar-design/HUB-PROMOTION-PLAN.md', LF will be replaced by CRLF the next time Git 
+touches it
+warning: in the working copy of 'radar-design/ROADMAP.md', LF will be replaced by CRLF the next time Git touches it
+ 14 files changed, 1040 insertions(+), 35 deletions(-)
+status entries: 63
+C:/Users/michi/Desktop/CodingStuff
+C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-pipeline-audit

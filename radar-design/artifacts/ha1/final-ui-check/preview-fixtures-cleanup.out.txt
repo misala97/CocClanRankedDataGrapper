@@ -1,0 +1,2 @@
+HA1 bound target: 127.0.0.1:3461/radar_ha1_localqa (mysql); no SQL executed by the gate
+removed the owned preview fixtures recorded for 127.0.0.1:3461/radar_ha1_localqa

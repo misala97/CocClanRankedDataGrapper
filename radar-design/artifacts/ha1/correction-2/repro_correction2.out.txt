@@ -1,0 +1,73 @@
+{
+  "U1_git": {
+    "git_version": "git version 2.39.1.windows.1",
+    "plain_form_CORRECTION-1": {
+      "exit": 128,
+      "stderr_first_line": "fatal: detected dubious ownership in repository at 'C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore'"
+    },
+    "local_runtime.git_CORRECTION-2": "1ac39fe4e1a5dd7d04830e96a96563183687b447",
+    "failure_is": "SystemExit: git rev-parse HEAD failed in C:\\Users\\michi\\AppData\\Local\\Temp\\tmpj1n7nint\\missing (exit 128): fatal: cannot change to '",
+    "global_safe_directory_unchanged": true
+  },
+  "U4_host_gate": {
+    "CORRECTION-1_form_session_on_default_host": 302,
+    "CORRECTION-2_non_admin_session_on_full_access_host": 403,
+    "admin_on_full_access_host": 200,
+    "non_admin_on_loopback": 200,
+    "member_gate_removed_non_admin_on_full_access_host": 200
+  },
+  "U6_U9_cases_and_contrast": {
+    "zero_check_case": [
+      "no check was evaluated; a case with zero checks is not a pass"
+    ],
+    "shared_block_exception": {
+      "resolve_pin_replace": [
+        "[390] raised TimeoutError: selector never appeared"
+      ],
+      "de_entry_us_label": [
+        "[390] raised TimeoutError: selector never appeared"
+      ]
+    },
+    "empty_selector": [
+      "text .rh-an-caption color: required selector matched no rendered element",
+      "text: no contrast pair was evaluated"
+    ],
+    "unsupported_colour": [
+      "text main h1 color: unsupported colour 'oklch(80% 0.1 200)'; unverified, not skipped",
+      "text main h1 color: no pair could be evaluated",
+      "text: no contrast pair was evaluated"
+    ],
+    "translucent_text_on_panel": [
+      "text .rh-an-dayfacts color: contrast 1.90:1 is below 4.5:1"
+    ],
+    "no_opaque_background": [
+      "text svg .rh-an-axis fill: no opaque background up to the document root; unverified, not skipped",
+      "text svg .rh-an-axis fill: no pair could be evaluated",
+      "text: no contrast pair was evaluated"
+    ]
+  },
+  "U5_subsecond_rendering": {
+    "requested_s": 0.25,
+    "effective_s": 0.25,
+    "rendered": "SET STATEMENT max_statement_time=0.250 FOR SELECT 1"
+  },
+  "U8_fingerprint": {
+    "digest": "f2f48b333469ef2cc62de1549cb0a84b2019e87199ba9e04a235254fb785c3d9",
+    "files": 154,
+    "build_files": 5,
+    "by_group": {
+      "python-app": 80,
+      "ha1-harness": 6,
+      "build": 5,
+      "frontend-src": 61,
+      "templates": 2
+    }
+  },
+  "U10_dialect_before_connect": {
+    "initialized": false,
+    "timeout_dialect": null,
+    "failure": "timeout dialect not recorded: no connection has initialized the engine dialect yet"
+  }
+}
+guard: app_imported=False pymysql_imported=False
+exit=0

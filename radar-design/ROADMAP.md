@@ -1,3 +1,166 @@
+# CURRENT — OWNER AUTHORIZED HA1 DEPLOYMENT
+
+Owner's 'Ok lets go' after final acceptance authorizes scoped commit/integration/normal push and established backup-first deployment, verification/rollback for accepted HA1. Supersedes earlier release-unauthorized notices. Deployer prompt: radar-design/HA1-US-DAILY-EXPLORE-DEPLOY-PROMPT.md. PREPARED, NOT dispatched; no deployment occurred merely by recording approval. Mastermind retains planning role. No more product correction/review rounds.
+
+Candidate C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; codex/radar-ha1-us-daily-explore; accepted base/HEAD 1ac39fe4e1a5dd7d04830e96a96563183687b447, uncommitted. Accepted fingerprint 6588be5e8dabf471befda62addc380d0775703948a5e7d22a9d96f55a2e50886. Deployer must verify fresh Git/target facts, preserve unrelated dirt and follow current runbook. No provider/schema/capture expansion; protected local environments unchanged. This update owns only deployment prompt/current notices.
+
+---
+
+# CURRENT — HA1 IMPLEMENTATION AND LOCAL QA ACCEPTED
+
+Final acceptance: radar-design/HA1-US-DAILY-EXPLORE-FINAL-ACCEPTANCE.md. F1 date clipping CLOSED; C02/C11/C13/C14/C15/C16 accepted with recorded local-evidence qualifications. No further implementation/review/QA round. F2/header placeholder polish deferred, nonblocking. Next is OWNER RELEASE DECISION; commit/merge/push/deployment remain unauthorized. No worker dispatched.
+
+Candidate C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; codex/radar-ha1-us-daily-explore; HEAD/base 1ac39fe4e1a5dd7d04830e96a96563183687b447, uncommitted. Tested fingerprint 6588be5e8dabf471befda62addc380d0775703948a5e7d22a9d96f55a2e50886. Operator: 232 frontend/241 pure tests, build, 140 focused browser checks, 58/58 full preview cases. Prior backend/performance acceptance carried unchanged. Mastermind inspected report/CSS/Git and two saved screenshots, no test/runtime rerun. Existing dirt preserved; final assessment owns final ruling/notices only.
+
+Retained HA1 environment stopped with verified recovery/graceful DB shutdown per return. Preserve records/secrets locally; dashboard.lock disappearance unattributed. Main/other worktrees, B1C/5021, DB3306/3399/promotion5033 protected; production state remains release-attributed. No code/DB/browser/commit/deploy action by Mastermind. Read final acceptance before historical status below.
+
+---
+
+# CURRENT — LOCAL-QA assessed; F1 final UI check prepared
+
+Local C02/C11/C13/C14/C15 accepted; C16 PARTIAL due to clipped dates at 320px. Hatch accepted; measured deadline overshoots accepted for this environment; profiling-only 30s statement limit accepted solely for memory measurement, not timeout evidence. F2 caveat wrap deferred. Binding: radar-design/HA1-US-DAILY-EXPLORE-LOCAL-QA-RULING.md and HA1-US-DAILY-EXPLORE-FINAL-UI-CHECK-PROMPT.md (both under radar-design). Narrow F1 fix/focused browser check PREPARED, NOT dispatched; no full review/benchmark loop. Deployment/commits unauthorized.
+
+Candidate C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; codex/radar-ha1-us-daily-explore; HEAD/base 1ac39fe4e1a5dd7d04830e96a96563183687b447. Existing dirt preserved; assessment owns ruling/prompt/notices only. Mastermind inspected reports/source/Git and two saved screenshots, did not execute tests/DB/browser. Retained authorized HA1 local environment stopped; next operator checks recovery. dashboard.lock disappearance unattributed. Main/other worktrees, B1C/5021, DB3306/3399, promotion5033 protected; production state remains release-attributed. No worker/provisioning/deploy by Mastermind.
+
+Supersedes older status below.
+
+---
+
+# CURRENT — CORRECTION-2 assessed; local QA prompt prepared, 2026-09-15
+
+Harness correction accepted for progression; runtime gates remain OPEN. Next proposed owner-authorized assignment is the narrow partial-bar CSS fix plus NEW disposable local HA1 environment/QA. No full review loop. Read radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-2-RULING.md and HA1-US-DAILY-EXPLORE-LOCAL-QA-PROMPT.md (both under radar-design). Prompt PREPARED, NOT dispatched; this assessment performs/authorizes no runtime provisioning or deployment. Tolerances accepted as harness parameters; timeout grace does not waive overshoot review; DPR emulation is not real zoom proof.
+
+Candidate C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; codex/radar-ha1-us-daily-explore; HEAD/base 1ac39fe4e1a5dd7d04830e96a96563183687b447, uncommitted. 236 guarded tests/17 mutation catches are Implementer-reported. Mastermind inspected reports/source/Git only. Existing dirt and unexplained dashboard.lock preserved. Assessment owns ruling/prompt/current notices only. No code/tests/DB/browser/workers/commits/deploy. Protect main/other worktrees, B1C/5021, default3306, promotion3399/5033 and artifacts. Production capture OFF/shared boards ON/migration b7e3f9c1a2d4 remain release-attributed. Next after HA1: prices, then reassess priorities.
+
+Supersedes older status below.
+
+---
+
+# CURRENT — REVIEW-2 assessed; harness CORRECTION-2 prepared, 2026-09-15
+
+REVIEW-2 COMPLETE; original product corrections independently resolved at code/component level. CORRECTION-2 PREPARED, NOT dispatched: harness U1/U2/U3/U4/U6 plus bounded U5/U7/U8/U9/U10 evidence repairs. No product edits or automatic full review loop. Binding ruling/prompt: radar-design/HA1-US-DAILY-EXPLORE-REVIEW-2-RULING.md and HA1-US-DAILY-EXPLORE-CORRECTION-2.md (both in radar-design). U11 runtime hypothesis; U12 polish/U13 hypothesis deferred. Five seconds explicitly means reader/resolver budget and post-hoc refusal, not hard full-HTTP termination; runtime overshoot and full-request p95 still require proof.
+
+Candidate C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; branch codex/radar-ha1-us-daily-explore; HEAD/base 1ac39fe4e1a5dd7d04830e96a96563183687b447, no upstream reported, uncommitted. Reviewer executed 170 pure/228 frontend tests and build; Mastermind inspected Git/review/spec only. Runtime C02/C11/C13/C14/C15/C16 OPEN. Next owner-selected harness correction, focused Mastermind assessment, then separately authorized environment/QA if satisfactory. No workers/DB/browser/provisioning/commit/deploy. Existing dirt preserved per correction/review returns; new assessment owns ruling/prompt/current notices only. Protect main/other worktrees, B1C/5021, default3306, promotion3399/5033 and artifacts. Capture OFF/shared boards ON/migration b7e3f9c1a2d4 remain release-attributed. Priorities: finish HA1, improve prices, reassess later features from use.
+
+Supersedes older status below; preserve history.
+
+---
+
+# CURRENT — CORRECTION-1 assessed; REVIEW-2 prepared, 2026-09-15
+
+Candidate accepted for focused independent review only. CORRECTION-1 returned; REVIEW-2 PREPARED, NOT DISPATCHED. Binding: radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-1-RULING.md and HA1-US-DAILY-EXPLORE-REVIEW-2-PROMPT.md (both under radar-design). Next: owner-selected Reviewer/QA, corrected harness first, DB-free execution only. Runtime C02/C11/C13/C14/C15/C16 OPEN; no environment/provisioning/deployment authorization. Additive contract clarifications accepted in principle; existing production-host access policy preserved; overall deadline acceptance not waived.
+
+Workspace C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; branch codex/radar-ha1-us-daily-explore; HEAD/base 1ac39fe4e1a5dd7d04830e96a96563183687b447, uncommitted. 170 pure/228 frontend tests and build are Implementer-reported; Mastermind inspected Git/reports/selected source only. Existing dirty ownership is preserved per CORRECTION-1-RETURN. Assessment owns ruling/prompt/current notices only. Protected main/other worktrees, B1C/5021, default3306, promotion3399/5033 and artifacts unchanged. Capture OFF/shared boards ON/migration b7e3f9c1a2d4 remain release-attributed. No code/tests/DB/browser/workers/commits/deploy. Immediate priorities remain finish HA1 then selected-instrument price improvements; later feature order can be reassessed from actual use.
+
+This notice supersedes older current-status text below.
+
+---
+
+# CURRENT — HA1 review assessed, 2026-09-15
+
+Independent REVIEW-1 complete; HA1 acceptance OPEN. CORRECTION-1 is prepared, NOT dispatched. Read radar-design/HA1-US-DAILY-EXPLORE-REVIEW-1-RULING.md and HA1-US-DAILY-EXPLORE-CORRECTION-1.md (both in radar-design). P1/P2, R3/R4 and explicitly ruled P3 fixes precede focused independent re-review. DB/preview execution remains held; provisioning needs separate later authorization. Candidate: C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; branch codex/radar-ha1-us-daily-explore; HEAD/base 1ac39fe4e1a5dd7d04830e96a96563183687b447, no upstream, uncommitted.
+
+Reviewer executed 95 pure tests, 210 focused frontend tests and build; Mastermind inspected Git/artifacts only. Runtime C02/C11/C13/C14/C15/C16 remain OPEN. Existing implementation/planner/reviewer dirt preserved. This assessment owns ruling, correction prompt and current notices only. No code changes, tests, DB/provider/browser access, workers, commit or deployment. Capture OFF/shared boards ON/migration b7e3f9c1a2d4 remain release-attributed. Main/other worktrees, B1C/5021, default3306 and promotion targets/artifacts protected. OpenTerminal MD-02/07+05+10 next; MD-03/08 separate.
+
+This notice supersedes older current-status text below, retained as history.
+
+---
+
+# CURRENT — HA1 return assessed, 2026-09-15
+
+Mastermind accepts the returned candidate for independent READ-ONLY review, not completed HA1 acceptance or release readiness. Current workspace: C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore; branch codex/radar-ha1-us-daily-explore; base/current HEAD 1ac39fe4e1a5dd7d04830e96a96563183687b447. Implementation was owner-dispatched and returned; older not-dispatched notices are historical. No new worker dispatched, commits or deployment.
+
+Binding assessment and complete next Reviewer/QA prompt: radar-design/HA1-US-DAILY-EXPLORE-IMPLEMENTATION-RULING.md (from radar-design use HA1-US-DAILY-EXPLORE-IMPLEMENTATION-RULING.md). Additive explanation fields accepted with source-bucket-row units. T2 DB integration and T4 remain OPEN. Static findings R1–R5 cover broad ZQ% fixture deletion, measurement context/SQL-parameter handling, incomplete assertion/cleanup, preview identity/fixture gaps and price-line bridging contrary to spec. Do not run current DB/preview harnesses pending disposition; missing environment is not the only unresolved issue. Next bounded action: owner-selected independent Reviewer/QA, read-only code first; no auto dispatch. Environment provisioning and Deployer remain unauthorized.
+
+Tests/build remain Implementer-reported (95 pure/fake-store, 210 focused frontend; 28 reported baseline pending failures). Fresh Mastermind evidence: local Git/source/artifact inspection, diff check and 19/22 current carry files byte-identical before this update (two handoffs and ledger differ as expected; the return's 'other 20' corrected). No tests, DB, provider or production rerun. This update changes additional continuity documents, so old byte-equality claims are historical. Main/other worktrees, B1C/5021, promotion artifacts and application/test code preserved. Capture OFF/shared boards ON/migration b7e3f9c1a2d4 remain release-attributed. OpenTerminal MD-02/07+05+10 next enabling packet; MD-03/08 separate.
+
+This current notice and ruling supersede older status text below; retain historical reports without rewriting their evidence.
+
+---
+# CURRENT — HA1 planning packet complete, 2026-09-14
+
+HA1-US-DAILY-EXPLORE-PLAN is COMPLETE as planning, awaiting originating Mastermind acceptance. Implementation is NOT AUTHORIZED / NOT DISPATCHED; no candidate worktree, worker, Reviewer/QA or Deployer started. This notice governs current status; all earlier current/next-action notices below are historical where they conflict. The MD-01C ruling remains binding evidence qualification.
+
+Binding files under radar-design/: HA1-US-DAILY-EXPLORE-SPEC.md, HA1-US-DAILY-EXPLORE-PLAN.md, HA1-US-DAILY-EXPLORE-LEDGER.md, HA1-US-DAILY-EXPLORE-PLANNING-RETURN.md. PLAN contains the complete copy-ready Implementer prompt, mandatory return-to-Mastermind prompt and explicit 22-file carry manifest. All are local/uncommitted in C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-hub-promotion, branch codex/radar-hub-promotion; HEAD/local origin/main verified at 1ac39fe4e1a5dd7d04830e96a96563183687b447; no upstream. Git ignore/.pytest_cache permission warnings qualify untracked enumeration.
+
+Contract: actual dark hub Analysis/Explore; current mapped US primary explicitly pinned by IDs; daily USD closes plus independent UTC retained mention counts; 1–7 completed UTC dates, default seven. Missing/observed zero/truncated/config/identity/price-regime limits stay visible. Calendar is modeled only; Q4 195/225 is provisional, not an oracle. No z aggregation, return/study/replay/tone claims, provider selection or schema prerequisite. Source-grounded spec and C01–C16 tests/actual-app QA plan are prepared, not executed. Fresh planner evidence is local Git/code/document inspection; MD-01C coverage remains attributed to Researcher, no rerun.
+
+Immediate next action: Mastermind assesses planning return; owner chooses Implementer/model. Proposed later isolated candidate is C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore, branch codex/radar-ha1-us-daily-explore, from the exact base above; not created or verified. Safe HA1 test/preview target remains unverified; old 3399/5033 promotion environment is not authorization to reuse it. Copy manifest artifacts explicitly before implementation; uncommitted planning does not follow worktree creation. One Implementer then independent Reviewer with QA; Deployer only on later owner authorization.
+
+Next enabling packet remains OpenTerminal MD-02/07 + MD-05 + MD-10 ahead of portfolio/full news; MD-03/08 broad experiments separate. B/B1C/PERF3/ranking/promotion stay closed/live. Capture OFF, shared boards ON, migration b7e3f9c1a2d4 remain last-release-attributed; no production check. Preserve B1C DB/port5021, main/other worktrees, all existing dirty documents and preview artifacts. No application/test changes, DB/provider access, services, migration, capture, commits, pushes, deployment or subagents in planning. Exact dirty ownership and open tasks: HA1 ledger.
+
+---
+# Current planning handoff — 2026-09-14
+
+Owner requested synchronized continuity and the next prompt. HA1-PLANNING-PROMPT.md under radar-design is the complete copy/paste assignment for a Mastermind/Overview planner to produce the HA1-US-Daily-Explore spec, plan, ledger and Implementer prompt. Prepared, not dispatched; implementation remains unauthorized. MD-01C measurement is accepted for this planning decision with the Q4 qualification in MD-01C-RULING.md. No repeat research, snapshot restoration or release work is pending.
+
+OpenTerminal MARKET-DATA-ROADMAP.md and the independent comparison review have now been carried from the main planning checkout into this worktree at their original relative paths. Source originals remain untouched. Current rulings supersede their dated status/scoring language. Keep these and all uncommitted MD/HA/workflow artifacts in future implementation worktree carries. HEAD/local origin/main remains 1ac39fe4e1a5dd7d04830e96a96563183687b447. Protected environments and application code are unchanged.
+
+---
+
+# MD-01C ruling — 2026-09-14
+
+Owner authorized bounded read-only VPS measurements, superseding the earlier snapshot requirement. MD-01C-RETURN.md is accepted as Researcher-reported evidence sufficient to prepare HA1-US-Daily-Explore. No backup provisioning or repeat coverage assessment remains necessary. Mastermind verified local branch/HEAD/origin-main at 1ac39fe4e1a5dd7d04830e96a96563183687b447 and preserved dirty work; no independent SQL execution or runtime verification claimed.
+
+Reported September 7-13 window: all 12,599 active catalogue companies have eligible native-USD US primaries; 12,294 have usable daily prices, 12,075 at least two closes; DE rescued zero missing-US daily cases. Chatter buckets cover 8,037 companies, with 4,562 unavailable and 2,146 having positive mentions. This supports a selected-instrument daily retrospective slice, not universal/global coverage or proven long history. MD-01C-RULING.md records evidence qualifications and scope.
+
+Next action: Mastermind prepares the bounded actual-app implementation spec/plan; no worker dispatched and no implementation/deployment authorized. OpenTerminal selected-instrument intraday/provider/resilience work remains the next enabling packet, not abandoned. All planning edits uncommitted.
+
+---
+
+# MD-01B assessed — 2026-09-14
+
+MD-01B-RETURN.md accepted for static mapping and planning; measurements remain unavailable. Mastermind reviewed the SQL as text, not by execution. Q0-Q4 require the bounded corrections recorded in MD-01B-RULING.md before use. HEAD/local origin/main remain 1ac39fe4e1a5dd7d04830e96a96563183687b447; existing dirty files/artifacts preserved. No runtime, provider or database checks performed.
+
+US-native daily Explore remains the recommended first implementation scope, pending coverage evidence and owner adoption. Next is an operations assignment to identify/provision an authorized isolated representative data copy, then a Researcher measurement pass; no repeat broad research. Provisioning/production access is not authorized yet. The owner need only authorize the concrete operation; the worker should establish technical identity/date/schema/access/budget details. No worker running or dispatched. See MD-01B-RULING.md for corrections and the proposed operation. All planning edits uncommitted.
+
+---
+
+# MD-01 return assessed — 2026-09-14
+
+Mastermind accepted the owner-supplied MD-01-HA-READINESS-BASELINE return as a static architecture/readiness assessment, not a completed live coverage benchmark. Git HEAD and local origin/main reverified at 1ac39fe4e1a5dd7d04830e96a96563183687b447; no upstream is configured. Existing documentation dirt and preview artifacts preserved. No tests, production or provider requests were run.
+
+Daily retrospective HA1 remains the smallest plausible delivery, subject to measured availability and range/interior-gap contracts. Complete decision-population capture is required for broader population/comparison claims, not every bounded top-selection appearance study. Capture OFF is release-reported state, not newly established runtime evidence; it does not prove the historical observation table is empty.
+
+Owner is open to USD prices if materially simpler. Recommendation pending owner adoption: US-listing-first research for US-listed stocks, native currency/identity metadata retained, international discovery preserved, German execution-price parity deferred for that slice. This is not approval to delete German sources or convert every instrument to USD. Measure eligible coverage and exclusions before narrowing scope. Currency alone does not solve source freshness, history, adjustment or capture gaps.
+
+Next proposed assignment: Researcher MD-01B measurement-and-contract packet, including a US-listing-first coverage comparison. Read-only measurements only on an explicitly approved representative snapshot/replica; identify and document a missing target without treating an old disposable test DB as representative. No worker dispatched. Details and handoff prompt: radar-design/MD-01-ASSESSMENT.md (from radar-design documents, MD-01-ASSESSMENT.md). All continuity edits remain uncommitted; no implementation, provider selection, capture activation or release authorized.
+
+---
+
+# Reset handover checkpoint — 2026-09-14
+
+The owner requested a fresh Mastermind chat. Start with radar-design/WORKFLOW.md, MASTERMIND-STATE.md and ASSIGNMENTS.md (all under radar-design), then the current handoff and roadmap/ledgers. No active worker or release is pending. Mastermind assesses the needed roles proportionally and writes assignments; owner chooses worker/model. Every worker returns a self-contained prompt to Mastermind. Do not implement/deploy or spawn workers automatically.
+
+Local Git reverified: workspace C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-hub-promotion; branch codex/radar-hub-promotion; HEAD and tracking origin/main 1ac39fe4e1a5dd7d04830e96a96563183687b447. Hub promotion is live/closed; post-release workflow/planning documents only are dirty, with preserved untracked verification artifacts. No reset-time production check or test rerun is claimed. Do not commit/release these documents merely to carry continuity.
+
+Immediate next planning action: read the OpenTerminal MARKET-DATA-ROADMAP.md and source comparison review at the absolute paths in MASTERMIND-STATE.md, coordinate MD-01 with HA readiness, and prepare one bounded Researcher prompt if ready. No research worker has been dispatched. Old HA mockup-first and old release-wait instructions are superseded by actual-app design and current completed releases.
+
+---
+# Current role and continuity protocol — 2026-09-14
+
+Owner approved WORKFLOW.md in radar-design/ as the binding role protocol: Mastermind/Overview coordinates product, plans, decisions and continuity; Implementer writes code; Reviewer reviews; Deployer releases; Researcher investigates; optional Verifier/QA proves actual-app behavior. Mastermind does not implement or deploy. Owner selects workers/models and normally pastes prompts; no automatic worker spawning by Mastermind. Worker subagents may only use exactly the parent model recursively, never a different or higher-cost model.
+
+Every assignment explicitly names its role and ends by requiring a self-contained copy/paste return prompt to the Mastermind with exact workspace/Git state, scope, evidence attribution, findings, artifact paths and decision requested. No silent role switching or redispatch of completed work. ASSIGNMENTS.md tracks dispatch/closure; MASTERMIND-STATE.md is the compact takeover entry point.
+
+When the owner announces a reset, update state/handoff/roadmap/ledgers against Git and artifacts, then provide a self-contained fresh-Mastermind prompt. Do not reset, create a task or initiate handover automatically. Uncommitted continuity must be reachable by absolute path and explicitly carried to new worktrees; no commit/release just to publish it. This protocol supersedes older role/dispatch instructions below. It does not alter current product priorities or authorize new implementation/deployment.
+
+---
+# LIVE — hub promotion deployed 2026-09-14
+
+Owner-requested deployment is COMPLETE at `1ac39fe4e1a5dd7d04830e96a96563183687b447`, pushed normally to origin/main and deployed on root@194.164.29.97 using /root/update_coc.sh. Production HEAD and origin/main both match; tracked production tree is clean. Routine unit radar-hub-promotion-release-1ac39fe succeeded at 02:32:26 Europe/Berlin. Release log: /var/log/perf3-release/perf3-release-20260914T003055Z-198789.log.
+
+/radar/ is now the hub; /radar/hub/ remains a working alias; /radar/legacy/ retains the original board. Root company bookmarks and filter-only bookmarks open Human Chatter; valid hub hashes override legacy t, invalid hashes fall back to valid t. Bare root opens Overview. Legacy fallback and return links remain available. Old UI deletion is deferred.
+
+Fresh evidence: 58 frontend navigation/Hub tests; 13 route/auth/admin tests on the independently registered disposable MariaDB 10.11.14 target; TypeScript/Vite production build passed. Filter-bookmark regression failed before the narrow correction and passed afterward. Actual-app Playwright passed at 1440x1000 and 390x844 on isolated port 5033; root/alias/legacy, company bookmarks, invalid hashes, filter bookmarks, refresh and return links verified. Screenshots inspected. Artifacts remain under radar-design/artifacts/hub-promotion-preview/; local runtime and PNG/log files are intentionally untracked. B1C port 5021 and DB untouched.
+
+Authenticated production smoke: root/alias/legacy pages all 200 with correct hub/board mounts; Human Chatter API 200 from shared results with 30 correctly ordered rows, sort=chatter&dir=desc and price fields present; legacy API 200 with sort=null; signed-out routes redirect to login. capture_enabled() false. All six services active/enabled, zero failed units. Migration unchanged b7e3f9c1a2d4. Backup /root/db_backups/db_2026-09-14_0229.sql.gz passed gzip validation (242882313 bytes), off-server Drive copy reported complete. No rollback, provider change, schema migration or ranking change.
+
+Current continuity workspace: C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-hub-promotion; branch codex/radar-hub-promotion. These post-release documentation edits are local/uncommitted; do not create another commit/release just to publish them. No deployment work remains. Earlier review-open/preview-missing/deployment-prohibited notices below describe completed historical stages.
+
+Next roadmap: OpenTerminal market-data baseline/architecture (MD-01) coordinated with historical-analysis readiness and HA1 Explore planning; selected-instrument history/quote restructuring enables HA0/HA1, not a later afterthought. Detailed MARKET-DATA-ROADMAP.md currently remains in C:/Users/michi/Desktop/CodingStuff/radar-design and must be carried with its source review at next planning kickoff. Provider choices remain open; price must not re-enter Human Chatter default ranking. Capture remains OFF. Accepted B1C latency and the separately unaudited 6.5-hour price assumption are not reopened automatically.
+
+---
 # Current status — independent final review COMPLETE
 
 The owner supplied the completed independent review on 2026-09-14: no material issues found; the implementation satisfies the binding Human Chatter ranking contract. Implementation and independent review are COMPLETE for this uncommitted candidate. No repeat implementation/review assignment is open.

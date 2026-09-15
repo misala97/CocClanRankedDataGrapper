@@ -1,0 +1,76 @@
+﻿branch: codex/radar-ha1-us-daily-explore
+HEAD: 1ac39fe4e1a5dd7d04830e96a96563183687b447
+upstream: git : fatal: no upstream configured for branch 'codex/radar-ha1-us-daily-explore'
+In Zeile:1 Zeichen:588
++ ... tream: " + (git -c safe.directory=$w -C $w rev-parse --abbrev-ref '@{ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (fatal: no upstr...-daily-explore':String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+diffstat:  14 files changed, 1040 insertions(+), 35 deletions(-)
+diff --check exit: 0
+--- status ---
+ M HANDOFF.md
+ M personal_apps/features/radar/routes/__init__.py
+ M personal_apps/static/radar/src/hub/Hub.test.tsx
+ M personal_apps/static/radar/src/hub/Hub.tsx
+ M personal_apps/static/radar/src/hub/navigation.test.ts
+ M personal_apps/static/radar/src/hub/navigation.ts
+ M personal_apps/static/radar/src/hub/queries.test.ts
+ M personal_apps/static/radar/src/hub/queries.ts
+ M radar-design/HANDOFF.md
+ M radar-design/HISTORY-ANALYSIS-LEDGER.md
+ M radar-design/HISTORY-ANALYSIS-PLAN.md
+ M radar-design/HUB-PROMOTION-LEDGER.md
+ M radar-design/HUB-PROMOTION-PLAN.md
+ M radar-design/ROADMAP.md
+?? docs/superpowers/specs/2026-09-10-radar-openterminal-comparison-REVIEW.md
+?? personal_apps/features/radar/analysis.py
+?? personal_apps/features/radar/analysis_contract.py
+?? personal_apps/features/radar/routes/analysis.py
+?? personal_apps/scratchpad/ha1/
+?? personal_apps/static/radar/src/hub/Analysis.test.tsx
+?? personal_apps/static/radar/src/hub/Analysis.tsx
+?? personal_apps/static/radar/src/hub/AnalysisChart.test.tsx
+?? personal_apps/static/radar/src/hub/AnalysisChart.tsx
+?? personal_apps/static/radar/src/hub/analysis.css
+?? personal_apps/static/radar/src/hub/analysisApi.test.ts
+?? personal_apps/static/radar/src/hub/analysisApi.ts
+?? personal_apps/static/radar/src/hub/analysisCss.test.ts
+?? personal_apps/static/radar/src/hub/analysisFixtures.ts
+?? personal_apps/static/radar/src/hub/analysisQueries.test.tsx
+?? personal_apps/static/radar/src/hub/analysisQueries.ts
+?? personal_apps/static/radar/src/hub/analysisTypes.ts
+?? personal_apps/tests/ha1_unit/
+?? personal_apps/tests/test_radar_analysis_api.py
+?? radar-design/ASSIGNMENTS.md
+?? radar-design/HA1-PLANNING-PROMPT.md
+?? radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-1-RETURN.md
+?? radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-1-RULING.md
+?? radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-1.md
+?? radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-2-RETURN.md
+?? radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-2-RULING.md
+?? radar-design/HA1-US-DAILY-EXPLORE-CORRECTION-2.md
+?? radar-design/HA1-US-DAILY-EXPLORE-IMPLEMENTATION-RETURN.md
+?? radar-design/HA1-US-DAILY-EXPLORE-IMPLEMENTATION-RULING.md
+?? radar-design/HA1-US-DAILY-EXPLORE-LEDGER.md
+?? radar-design/HA1-US-DAILY-EXPLORE-LOCAL-QA-PROMPT.md
+?? radar-design/HA1-US-DAILY-EXPLORE-PLAN.md
+?? radar-design/HA1-US-DAILY-EXPLORE-PLANNING-RETURN.md
+?? radar-design/HA1-US-DAILY-EXPLORE-REVIEW-1-RULING.md
+?? radar-design/HA1-US-DAILY-EXPLORE-REVIEW-2-PROMPT.md
+?? radar-design/HA1-US-DAILY-EXPLORE-REVIEW-2-RETURN.md
+?? radar-design/HA1-US-DAILY-EXPLORE-REVIEW-2-RULING.md
+?? radar-design/HA1-US-DAILY-EXPLORE-REVIEW-RETURN.md
+?? radar-design/HA1-US-DAILY-EXPLORE-SPEC.md
+?? radar-design/MARKET-DATA-ROADMAP.md
+?? radar-design/MASTERMIND-STATE.md
+?? radar-design/MD-01-ASSESSMENT.md
+?? radar-design/MD-01B-RETURN.md
+?? radar-design/MD-01B-RULING.md
+?? radar-design/MD-01C-RETURN.md
+?? radar-design/MD-01C-RULING.md
+?? radar-design/WORKFLOW.md
+?? radar-design/artifacts/ha1/
+--- global safe.directory ---
+C:/Users/michi/Desktop/CodingStuff
+C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-pipeline-audit

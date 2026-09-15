@@ -1,0 +1,41 @@
+﻿
+> build
+> tsc --noEmit && vite build && vite build -c vite.radar.config.ts
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 134 modules transformed.
+rendering chunks...
+computing gzip size...
+static/gym/dist/.vite/manifest.json             4.38 kB │ gzip:  0.70 kB
+static/gym/dist/assets/index-Bmt0JL9N.js        0.07 kB │ gzip:  0.08 kB
+static/gym/dist/assets/push-BW-x_a-N.js         0.23 kB │ gzip:  0.22 kB
+static/gym/dist/assets/csrf-9RS1h3Sm.js         0.27 kB │ gzip:  0.23 kB
+static/gym/dist/assets/vt-DoPDbta-.js           0.31 kB │ gzip:  0.22 kB
+static/gym/dist/assets/format-BuUUaYXF.js       0.48 kB │ gzip:  0.32 kB
+static/gym/dist/assets/format-B6PVwRlW.js       0.55 kB │ gzip:  0.32 kB
+static/gym/dist/assets/undo-Dq-1sReh.js         1.07 kB │ gzip:  0.54 kB
+static/gym/dist/assets/api-D9Mz9vQ5.js          1.43 kB │ gzip:  0.78 kB
+static/gym/dist/assets/Sheet-B9LA6xY8.js        1.70 kB │ gzip:  0.83 kB
+static/gym/dist/assets/Icon-BZzOeDth.js         2.78 kB │ gzip:  1.14 kB
+static/gym/dist/assets/shared-CiPyGeGW.js       2.80 kB │ gzip:  1.20 kB
+static/gym/dist/assets/history-B-QzCBqv.js      6.27 kB │ gzip:  2.42 kB
+static/gym/dist/assets/catalogue-DGn6xT8T.js   11.01 kB │ gzip:  3.81 kB
+static/gym/dist/assets/finished-6DQ0xQlD.js    13.91 kB │ gzip:  4.19 kB
+static/gym/dist/assets/start-CRsTvZ59.js       15.79 kB │ gzip:  4.95 kB
+static/gym/dist/assets/exercise-hqCwuEvE.js    16.03 kB │ gzip:  5.24 kB
+static/gym/dist/assets/statistik-BO5ZemR2.js   20.53 kB │ gzip:  5.92 kB
+static/gym/dist/assets/session-MkCov7L1.js     79.51 kB │ gzip: 23.40 kB
+static/gym/dist/assets/index-H2lzQVE3.js      192.48 kB │ gzip: 60.33 kB
+✓ built in 1.40s
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 129 modules transformed.
+rendering chunks...
+computing gzip size...
+static/radar/dist/.vite/manifest.json            0.61 kB │ gzip:  0.23 kB
+static/radar/dist/assets/hub-Dwv8T12n.css       44.09 kB │ gzip:  9.27 kB
+static/radar/dist/assets/board-C8WIKxkb.js      40.82 kB │ gzip: 13.56 kB
+static/radar/dist/assets/hub-o2gdkuNr.js       160.17 kB │ gzip: 46.39 kB
+static/radar/dist/assets/embedded-C0npOew5.js  222.65 kB │ gzip: 71.19 kB
+✓ built in 1.79s

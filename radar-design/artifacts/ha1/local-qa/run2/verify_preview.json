@@ -1,0 +1,664 @@
+{
+  "port": 5041,
+  "synthetic": true,
+  "seconds": 238.0,
+  "fingerprint": "9629c0076d207dc86840ba5be98905660421dc425073f43984ea63934ba80ed2",
+  "results": {
+    "gate_identity": {
+      "failures": [],
+      "checks": 5,
+      "facts": {
+        "port": 5041,
+        "fingerprint": "9629c0076d207dc86840ba5be98905660421dc425073f43984ea63934ba80ed2"
+      }
+    },
+    "c15_signed_out_redirects": {
+      "failures": [],
+      "facts": {},
+      "checks": 5
+    },
+    "empty_analysis": {
+      "failures": [],
+      "facts": {},
+      "checks": 10
+    },
+    "resolve_pin_replace": {
+      "failures": [],
+      "facts": {},
+      "checks": 20
+    },
+    "de_entry_us_label": {
+      "failures": [],
+      "facts": {},
+      "checks": 10
+    },
+    "c15_back_to_pre_selection_analysis": {
+      "failures": [],
+      "facts": {},
+      "checks": 15
+    },
+    "viewport_1440": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "no_document_overflow": {
+      "failures": [],
+      "facts": {},
+      "checks": 5
+    },
+    "chart_control_alignment": {
+      "failures": [],
+      "facts": {
+        "1440": {
+          "centers": {
+            "buttons": [
+              181.09375,
+              310.8515625,
+              440.6171875,
+              570.3828125,
+              700.1484375,
+              829.9140625,
+              959.6796875
+            ],
+            "points": [
+              181.12227630615234,
+              310.92083740234375,
+              440.63243103027344,
+              570.4309387207031,
+              700.1860656738281,
+              829.8976135253906,
+              959.6527099609375
+            ],
+            "bars": [
+              181.11225128173828,
+              310.8708953857422,
+              440.6295928955078,
+              570.3882141113281,
+              700.1468811035156,
+              829.905517578125,
+              959.6642150878906
+            ]
+          }
+        },
+        "390": {
+          "centers": {
+            "buttons": [
+              94.3125,
+              151.40625,
+              208.5,
+              265.6015625,
+              322.703125,
+              379.796875,
+              436.890625
+            ],
+            "points": [
+              94.32778549194336,
+              151.7357406616211,
+              208.5165557861328,
+              265.9245147705078,
+              323.0189208984375,
+              379.7996826171875,
+              436.8940734863281
+            ],
+            "bars": [
+              94.34354019165039,
+              151.43228912353516,
+              208.52104949951172,
+              265.6097946166992,
+              322.6985321044922,
+              379.7872772216797,
+              436.87603759765625
+            ]
+          }
+        }
+      },
+      "checks": 30
+    },
+    "keyboard_days": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "focus_visible": {
+      "failures": [],
+      "facts": {},
+      "checks": 1
+    },
+    "keyboard_table": {
+      "failures": [],
+      "facts": {},
+      "checks": 1
+    },
+    "contrast_text": {
+      "failures": [],
+      "facts": {
+        "all": {
+          "text": [
+            {
+              "selector": "main h1",
+              "property": "color",
+              "ratio": 16.25
+            },
+            {
+              "selector": ".rh-an-identity dt",
+              "property": "color",
+              "ratio": 6.19
+            },
+            {
+              "selector": ".rh-an-identity dt",
+              "property": "color",
+              "ratio": 6.19
+            },
+            {
+              "selector": ".rh-an-identity dt",
+              "property": "color",
+              "ratio": 6.19
+            },
+            {
+              "selector": ".rh-an-identity dd",
+              "property": "color",
+              "ratio": 14.37
+            },
+            {
+              "selector": ".rh-an-identity dd",
+              "property": "color",
+              "ratio": 14.37
+            },
+            {
+              "selector": ".rh-an-identity dd",
+              "property": "color",
+              "ratio": 14.37
+            },
+            {
+              "selector": ".rh-an-list li",
+              "property": "color",
+              "ratio": 8.74
+            },
+            {
+              "selector": ".rh-an-list li",
+              "property": "color",
+              "ratio": 8.74
+            },
+            {
+              "selector": ".rh-an-list li",
+              "property": "color",
+              "ratio": 8.74
+            },
+            {
+              "selector": ".rh-an-caption",
+              "property": "color",
+              "ratio": 8.74
+            },
+            {
+              "selector": ".rh-an-table td",
+              "property": "color",
+              "ratio": 12.17
+            },
+            {
+              "selector": ".rh-an-table td",
+              "property": "color",
+              "ratio": 12.17
+            },
+            {
+              "selector": ".rh-an-table td",
+              "property": "color",
+              "ratio": 12.17
+            },
+            {
+              "selector": ".rh-an-dayfacts",
+              "property": "color",
+              "ratio": 9.32
+            },
+            {
+              "selector": ".rh-an-dayfacts",
+              "property": "color",
+              "ratio": 8.74
+            },
+            {
+              "selector": ".rh-an-dayfacts",
+              "property": "color",
+              "ratio": 8.74
+            },
+            {
+              "selector": "svg .rh-an-axis",
+              "property": "fill",
+              "ratio": 6.19
+            },
+            {
+              "selector": "svg .rh-an-axis",
+              "property": "fill",
+              "ratio": 6.19
+            },
+            {
+              "selector": "svg .rh-an-axis",
+              "property": "fill",
+              "ratio": 6.19
+            },
+            {
+              "selector": "svg .rh-an-value",
+              "property": "fill",
+              "ratio": 14.37
+            },
+            {
+              "selector": "svg .rh-an-value",
+              "property": "fill",
+              "ratio": 14.37
+            },
+            {
+              "selector": "svg .rh-an-value",
+              "property": "fill",
+              "ratio": 14.37
+            }
+          ]
+        }
+      },
+      "checks": 1
+    },
+    "contrast_graphics": {
+      "failures": [],
+      "facts": {
+        "all": {
+          "graphics": [
+            {
+              "selector": "svg.price circle[data-state=\"observed\"]",
+              "property": "fill",
+              "ratio": 7.93
+            },
+            {
+              "selector": "svg.price circle[data-state=\"observed\"]",
+              "property": "fill",
+              "ratio": 7.93
+            },
+            {
+              "selector": "svg.price circle[data-state=\"observed\"]",
+              "property": "fill",
+              "ratio": 7.93
+            },
+            {
+              "selector": "svg.counts rect.rh-an-fill:not(.partial)",
+              "property": "fill",
+              "ratio": 7.82
+            },
+            {
+              "selector": "svg.counts rect.rh-an-fill:not(.partial)",
+              "property": "fill",
+              "ratio": 7.82
+            },
+            {
+              "selector": "svg.counts rect.rh-an-fill:not(.partial)",
+              "property": "fill",
+              "ratio": 7.82
+            },
+            {
+              "selector": "svg.counts rect.rh-an-fill.partial",
+              "property": "stroke",
+              "ratio": 7.82
+            },
+            {
+              "selector": "svg.counts rect.rh-an-gap",
+              "property": "stroke",
+              "ratio": 6.19
+            },
+            {
+              "selector": "svg.counts rect.rh-an-gap",
+              "property": "stroke",
+              "ratio": 6.19
+            },
+            {
+              "selector": "svg.counts rect.rh-an-gap",
+              "property": "stroke",
+              "ratio": 6.19
+            },
+            {
+              "selector": "svg.price polyline.rh-an-line",
+              "property": "stroke",
+              "ratio": 7.93
+            },
+            {
+              "selector": "svg.price line[data-state=\"missing-closed\"]",
+              "property": "stroke",
+              "ratio": 6.19
+            },
+            {
+              "selector": "svg.price line[data-state=\"missing-closed\"]",
+              "property": "stroke",
+              "ratio": 6.19
+            }
+          ]
+        }
+      },
+      "checks": 2
+    },
+    "price_line_runs": {
+      "failures": [],
+      "facts": {
+        "all": {
+          "drawn": [
+            [
+              "0,1,2,3",
+              4
+            ]
+          ]
+        }
+      },
+      "checks": 5
+    },
+    "skip_link_and_tab_order": {
+      "failures": [
+        "the first Tab stop is 'day'",
+        "the skip link did not focus the page"
+      ],
+      "facts": {
+        "all": {
+          "tab_order": [
+            "div:Per-source buckets (scro",
+            "div:Daily table (scrollable)",
+            "button:Tue 8 Sep",
+            "button:Wed 9 Sep",
+            "button:Thu 10 Sep",
+            "button:Fri 11 Sep",
+            "button:Sat 12 Sep",
+            "button:Sun 13 Sep",
+            "button:Mon 14 Sep",
+            "body",
+            "skip",
+            "input:Find a company",
+            "a:Future Radar design",
+            "a:Overview",
+            "a:Human Chatter",
+            "a:Analysis",
+            "a:Watching",
+            "a:Activity",
+            "a:Legacy Radar",
+            "a:Administration",
+            "button:Find another company",
+            "analysis_from",
+            "analysis_to",
+            "submit",
+            "day"
+          ]
+        }
+      },
+      "checks": 4
+    },
+    "explicit_range_push_back_refresh": {
+      "failures": [],
+      "facts": {},
+      "checks": 5
+    },
+    "back_restores_board": {
+      "failures": [],
+      "facts": {},
+      "checks": 1
+    },
+    "c15_no_board_poll_on_analysis": {
+      "failures": [],
+      "facts": {
+        "all": {
+          "bootstrap_board_requests": []
+        }
+      },
+      "checks": 3
+    },
+    "c15_root_overview_mount": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "c15_hub_alias_mount": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "c15_legacy_mount_and_return": {
+      "failures": [],
+      "facts": {},
+      "checks": 8
+    },
+    "c15_valid_t_bookmark": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "c15_valid_hash_overrides_t": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "c15_invalid_hash_fallback": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "c15_filter_only_bookmark": {
+      "failures": [
+        "[1440] a company was invented for a filter-only link",
+        "[390] a company was invented for a filter-only link"
+      ],
+      "facts": {},
+      "checks": 4
+    },
+    "c15_canonical_analysis_link": {
+      "failures": [],
+      "facts": {},
+      "checks": 10
+    },
+    "invalid_range_pinned": {
+      "failures": [],
+      "facts": {},
+      "checks": 6
+    },
+    "invalid_range_ticker_only": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "one_close": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "no_close_no_chatter": {
+      "failures": [],
+      "facts": {},
+      "checks": 6
+    },
+    "partial_truncated_zero": {
+      "failures": [],
+      "facts": {
+        "1440": {
+          "partial_fills": [
+            "url(\"#rh-an-hatch\")"
+          ]
+        },
+        "390": {
+          "partial_fills": [
+            "url(\"#rh-an-hatch\")"
+          ]
+        }
+      },
+      "checks": 8
+    },
+    "config_transition": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "overlap": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "identity_boundary": {
+      "failures": [],
+      "facts": {},
+      "checks": 6
+    },
+    "regime_change": {
+      "failures": [],
+      "facts": {},
+      "checks": 6
+    },
+    "invalid_row_closed_day_close": {
+      "failures": [],
+      "facts": {},
+      "checks": 6
+    },
+    "excluded_rows": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "limit_503": {
+      "failures": [],
+      "facts": {},
+      "checks": 4
+    },
+    "stale_link_409": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "ineligible_422": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "ambiguous_resolve_409": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "loading_state": {
+      "failures": [
+        "raised Error: Route.continue_: Route is already handled!"
+      ],
+      "facts": {},
+      "checks": 0
+    },
+    "timeout_error": {
+      "failures": [
+        "no timeout notice"
+      ],
+      "facts": {},
+      "checks": 1
+    },
+    "network_error_retry": {
+      "failures": [
+        "raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"main[aria-label=\\\"Analysis\\\"] [role=alert]\") to be visible\n"
+      ],
+      "facts": {},
+      "checks": 0
+    },
+    "session_expiry": {
+      "failures": [
+        "raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"text=Session expired.\") to be visible\n"
+      ],
+      "facts": {},
+      "checks": 0
+    },
+    "viewport_1920": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "viewport_768": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "viewport_390": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "touch_targets_44": {
+      "failures": [],
+      "facts": {
+        "390": {
+          "small": []
+        },
+        "320": {
+          "small": []
+        }
+      },
+      "checks": 2
+    },
+    "us_primary_usd_visible_mobile": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "touch_select_and_scroll_reach": {
+      "failures": [],
+      "facts": {
+        "390": {
+          "scrollbox": {
+            "scrollWidth": 440,
+            "clientWidth": 322
+          }
+        },
+        "320": {
+          "scrollbox": {
+            "scrollWidth": 440,
+            "clientWidth": 252
+          }
+        }
+      },
+      "checks": 16
+    },
+    "menu_escape": {
+      "failures": [],
+      "facts": {},
+      "checks": 6
+    },
+    "viewport_320": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "zoom_200": {
+      "failures": [],
+      "facts": {
+        "all": {
+          "small": []
+        }
+      },
+      "checks": 6
+    },
+    "reduced_motion": {
+      "failures": [],
+      "facts": {},
+      "checks": 2
+    },
+    "non_admin_access": {
+      "failures": [],
+      "facts": {
+        "all": {
+          "note": "loopback host only; the production full-access host member gate 403s non-admins on the whole radar blueprint (app.py), unchanged; asserted as exactly 403 in tests/test_radar_analysis_api.py"
+        }
+      },
+      "checks": 1
+    },
+    "source_build_identity": {
+      "failures": [],
+      "facts": {
+        "all": {
+          "digest": "9629c0076d207dc86840ba5be98905660421dc425073f43984ea63934ba80ed2"
+        }
+      },
+      "checks": 1
+    }
+  },
+  "failures": [
+    "c15_filter_only_bookmark: [1440] a company was invented for a filter-only link",
+    "c15_filter_only_bookmark: [390] a company was invented for a filter-only link",
+    "loading_state: raised Error: Route.continue_: Route is already handled!",
+    "network_error_retry: raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"main[aria-label=\\\"Analysis\\\"] [role=alert]\") to be visible\n",
+    "session_expiry: raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"text=Session expired.\") to be visible\n",
+    "skip_link_and_tab_order: the first Tab stop is 'day'",
+    "skip_link_and_tab_order: the skip link did not focus the page",
+    "timeout_error: no timeout notice"
+  ]
+}

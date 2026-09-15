@@ -1,0 +1,257 @@
+HA1 bound target: 127.0.0.1:3461/radar_ha1_localqa (mysql); no SQL executed by the gate
+{
+  "target": "127.0.0.1:3461/radar_ha1_localqa",
+  "synthetic": true,
+  "seeded_bucket_rows": 43008,
+  "untraced": [
+    {
+      "traced": false,
+      "outcome": "ok",
+      "elapsed_s": 0.761,
+      "alloc_peak_bytes": null,
+      "calls": [
+        {
+          "table": "radar_ticker_universe",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_instruments",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "handed_s": 2.0,
+          "elapsed_s": 0.601,
+          "error": null
+        }
+      ]
+    },
+    {
+      "traced": false,
+      "outcome": "ok",
+      "elapsed_s": 0.707,
+      "alloc_peak_bytes": null,
+      "calls": [
+        {
+          "table": "radar_ticker_universe",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_instruments",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "handed_s": 2.0,
+          "elapsed_s": 0.562,
+          "error": null
+        }
+      ]
+    },
+    {
+      "traced": false,
+      "outcome": "ok",
+      "elapsed_s": 0.803,
+      "alloc_peak_bytes": null,
+      "calls": [
+        {
+          "table": "radar_ticker_universe",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_instruments",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "handed_s": 2.0,
+          "elapsed_s": 0.654,
+          "error": null
+        }
+      ]
+    },
+    {
+      "traced": false,
+      "outcome": "ok",
+      "elapsed_s": 0.703,
+      "alloc_peak_bytes": null,
+      "calls": [
+        {
+          "table": "radar_ticker_universe",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_instruments",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "handed_s": 2.0,
+          "elapsed_s": 0.561,
+          "error": null
+        }
+      ]
+    },
+    {
+      "traced": false,
+      "outcome": "ok",
+      "elapsed_s": 0.752,
+      "alloc_peak_bytes": null,
+      "calls": [
+        {
+          "table": "radar_ticker_universe",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_instruments",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "handed_s": 2.0,
+          "elapsed_s": 0.592,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "bucket_select_alone_30s_limit": {
+    "untraced": {
+      "limit_s": 30.0,
+      "rows": 43008,
+      "error": null,
+      "elapsed_s": 0.602
+    },
+    "traced": {
+      "limit_s": 30.0,
+      "rows": 43008,
+      "error": null,
+      "elapsed_s": 2.655
+    }
+  },
+  "traced": [
+    {
+      "traced": true,
+      "outcome": "ok",
+      "elapsed_s": 3.287,
+      "alloc_peak_bytes": 26195411,
+      "calls": [
+        {
+          "table": "radar_ticker_universe",
+          "handed_s": 2.0,
+          "elapsed_s": 0.002,
+          "error": null
+        },
+        {
+          "table": "radar_instruments",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "handed_s": 2.0,
+          "elapsed_s": 0.002,
+          "error": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "handed_s": 2.0,
+          "elapsed_s": 2.855,
+          "error": null
+        }
+      ]
+    },
+    {
+      "traced": true,
+      "outcome": "ok",
+      "elapsed_s": 3.349,
+      "alloc_peak_bytes": 26195215,
+      "calls": [
+        {
+          "table": "radar_ticker_universe",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_instruments",
+          "handed_s": 2.0,
+          "elapsed_s": 0.001,
+          "error": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "handed_s": 2.0,
+          "elapsed_s": 0.002,
+          "error": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "handed_s": 2.0,
+          "elapsed_s": 2.889,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "cleanup": {
+    "status": "complete",
+    "error": null,
+    "remaining": {},
+    "planned_symbols": [
+      "ZQDBAF37A"
+    ],
+    "planned_usernames": []
+  }
+}

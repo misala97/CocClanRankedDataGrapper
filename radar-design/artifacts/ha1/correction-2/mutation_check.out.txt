@@ -1,0 +1,20 @@
+baseline (no change) | 0 | 71 passed, 55 deselected in 1.35s | guard: app_imported=False pymysql_imported=False | OK
+U1 runtime Git without per-command safe.directory | 1 | 2 failed, 2 passed, 122 deselected in 1.45s | guard: app_imported=False pymysql_imported=False | OK
+U1 Git failure not a SystemExit | 1 | 1 failed, 3 passed, 122 deselected in 1.44s | guard: app_imported=False pymysql_imported=False | OK
+U4 session set on the default host | 1 | 3 failed, 2 passed, 121 deselected in 1.36s | guard: app_imported=False pymysql_imported=False | OK
+U6 zero-check case recorded as success | 1 | 1 failed, 6 passed, 119 deselected in 1.01s | guard: app_imported=False pymysql_imported=False | OK
+U9 shared-block exception attributed to the last case only | 1 | 1 failed, 6 passed, 119 deselected in 1.10s | guard: app_imported=False pymysql_imported=False | OK
+U9 unsupported check recorded as success | 1 | 1 failed, 6 passed, 119 deselected in 0.98s | guard: app_imported=False pymysql_imported=False | OK
+U6 unsupported colour skipped (CORRECTION-1 behaviour) | 1 | 1 failed, 7 passed, 118 deselected in 1.00s | guard: app_imported=False pymysql_imported=False | OK
+U6 empty required selector skipped | 1 | 1 failed, 7 passed, 118 deselected in 1.03s | guard: app_imported=False pymysql_imported=False | OK
+U6 alpha ignored | 1 | 1 failed, 7 passed, 118 deselected in 1.06s | guard: app_imported=False pymysql_imported=False | OK
+U8 harness outputs under radar-design/artifacts not excluded | 1 | 1 failed, 5 passed, 120 deselected in 1.29s | guard: app_imported=False pymysql_imported=False | OK
+U8 frontend test files fingerprinted | 1 | 3 failed, 3 passed, 120 deselected in 1.28s | guard: app_imported=False pymysql_imported=False | OK
+U8 drift not reported | 1 | 1 failed, 5 passed, 120 deselected in 1.27s | guard: app_imported=False pymysql_imported=False | OK
+U5 sub-second probe not required | 1 | 2 failed, 22 passed, 102 deselected in 1.47s | guard: app_imported=False pymysql_imported=False | OK
+U5 recovery not required | 1 | 2 failed, 22 passed, 102 deselected in 1.56s | guard: app_imported=False pymysql_imported=False | OK
+U7 cleanup failure dropped from the report | 1 | 1 failed, 3 passed, 122 deselected in 1.03s | guard: app_imported=False pymysql_imported=False | OK
+Deadline: an exhausted budget answering 200 accepted | 1 | 2 failed, 9 passed, 115 deselected in 1.08s | guard: app_imported=False pymysql_imported=False | OK
+U10 dialect labelled before any connection | 1 | 1 failed, 1 passed, 124 deselected in 1.10s | guard: app_imported=False pymysql_imported=False | OK
+mutants caught: 17/17; baseline passed
+exit=0

@@ -1,0 +1,11 @@
+﻿[14:41:10] viewport 1440 started
+[14:41:49] board-quiet window 30/130 s, 0 board request(s) so far
+[14:42:19] board-quiet window 60/130 s, 0 board request(s) so far
+[14:42:49] board-quiet window 90/130 s, 0 board request(s) so far
+[14:43:19] board-quiet window 120/130 s, 0 board request(s) so far
+[14:43:29] board-quiet window 130/130 s, 0 board request(s) so far
+[14:43:45] viewport 1920 started
+[14:43:50] viewport 768 started
+[14:43:54] viewport 390 started
+[14:44:02] viewport 320 started
+all C15/C16 cases recorded without failures; now VIEW the PNGs
