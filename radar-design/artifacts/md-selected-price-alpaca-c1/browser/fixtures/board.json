@@ -1,0 +1,829 @@
+{
+ "age_seconds": 0,
+ "all_sources": [
+  "bluesky",
+  "fourchan",
+  "reddit"
+ ],
+ "as_of": "2026-09-15T20:00:00Z",
+ "built_at": "2026-09-15T20:00:00Z",
+ "busy": false,
+ "dir": "desc",
+ "display_timezone": "Europe/Berlin",
+ "excluded": {},
+ "failed": false,
+ "fresh_seconds": 120,
+ "generated_at": "2026-09-15T20:00:00Z",
+ "hard_expiry_seconds": 600,
+ "lead_count": 3,
+ "market": "us",
+ "market_venue": "US markets",
+ "min_venues": 1,
+ "next_boundary_at": "2026-09-16T13:30:00Z",
+ "next_boundary_label": "opens",
+ "ops_collected_at": "2026-09-15T20:00:00Z",
+ "pending": false,
+ "queue_age_seconds": null,
+ "retry_after_ms": null,
+ "rows": [
+  {
+   "activity_sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "authors": 12,
+   "baseline_days": 30,
+   "clauses": [
+    {
+     "kind": "ratio",
+     "text": "3.1x its normal"
+    },
+    {
+     "kind": "venues",
+     "text": "2 venues"
+    }
+   ],
+   "direction": "up",
+   "divergence": 0.4,
+   "eligible": true,
+   "expected": 9,
+   "marks": [],
+   "mention_z": 4.0,
+   "mentions": 40,
+   "name": "Franklin Universal Trust",
+   "normal_per_hour": 1.2,
+   "price": 7.39,
+   "price_move": 0.012,
+   "price_series": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "price_status": "ok",
+   "quote": {
+    "age_seconds": 900,
+    "ask": null,
+    "bid": null,
+    "currency": "USD",
+    "extended_move": null,
+    "is_fallback": false,
+    "market": "us",
+    "mic": "XNYS",
+    "price": 7.39,
+    "price_basis": "trade",
+    "quality": "delayed",
+    "quoted_at": "2026-09-15T19:55:00Z",
+    "regular_move": 0.0123,
+    "score_eligible": true,
+    "score_term": "divergence",
+    "session": "regular",
+    "source": "finnhub",
+    "tape_status": "ok",
+    "venue": "NYSE"
+   },
+   "ratio": 3.1,
+   "segment": "large",
+   "series": [
+    {
+     "count": 0,
+     "hour": "2026-09-15T00:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T01:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T02:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T03:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T04:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T05:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T06:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T07:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T08:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T09:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T10:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T11:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T12:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T13:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T14:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T15:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T16:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T17:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T18:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T19:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T20:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T21:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T22:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T23:00:00Z"
+    }
+   ],
+   "sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "text_ratio": 0.9,
+   "ticker": "FT",
+   "tone": {
+    "bearish": 3,
+    "bullish": 6,
+    "neutral": 10
+   },
+   "triplet": {
+    "1": 1.1,
+    "24": 1.6,
+    "4": 2.0
+   }
+  },
+  {
+   "activity_sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "authors": 12,
+   "baseline_days": 30,
+   "clauses": [
+    {
+     "kind": "ratio",
+     "text": "3.1x its normal"
+    },
+    {
+     "kind": "venues",
+     "text": "2 venues"
+    }
+   ],
+   "direction": "up",
+   "divergence": 0.4,
+   "eligible": true,
+   "expected": 9,
+   "marks": [],
+   "mention_z": 3.5,
+   "mentions": 35,
+   "name": "Apple Inc",
+   "normal_per_hour": 1.2,
+   "price": 330.46,
+   "price_move": 0.012,
+   "price_series": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "price_status": "ok",
+   "quote": {
+    "age_seconds": 900,
+    "ask": null,
+    "bid": null,
+    "currency": "USD",
+    "extended_move": null,
+    "is_fallback": false,
+    "market": "us",
+    "mic": "XNMS",
+    "price": 330.46,
+    "price_basis": "trade",
+    "quality": "delayed",
+    "quoted_at": "2026-09-15T19:55:00Z",
+    "regular_move": 0.0123,
+    "score_eligible": true,
+    "score_term": "divergence",
+    "session": "regular",
+    "source": "finnhub",
+    "tape_status": "ok",
+    "venue": "NASDAQ"
+   },
+   "ratio": 3.1,
+   "segment": "large",
+   "series": [
+    {
+     "count": 0,
+     "hour": "2026-09-15T00:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T01:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T02:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T03:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T04:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T05:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T06:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T07:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T08:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T09:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T10:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T11:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T12:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T13:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T14:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T15:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T16:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T17:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T18:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T19:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T20:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T21:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T22:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T23:00:00Z"
+    }
+   ],
+   "sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "text_ratio": 0.9,
+   "ticker": "AAPL",
+   "tone": {
+    "bearish": 3,
+    "bullish": 6,
+    "neutral": 10
+   },
+   "triplet": {
+    "1": 1.1,
+    "24": 1.6,
+    "4": 2.0
+   }
+  },
+  {
+   "activity_sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "authors": 12,
+   "baseline_days": 30,
+   "clauses": [
+    {
+     "kind": "ratio",
+     "text": "3.1x its normal"
+    },
+    {
+     "kind": "venues",
+     "text": "2 venues"
+    }
+   ],
+   "direction": "up",
+   "divergence": 0.4,
+   "eligible": true,
+   "expected": 9,
+   "marks": [],
+   "mention_z": 3.0,
+   "mentions": 30,
+   "name": "Microsoft Corp",
+   "normal_per_hour": 1.2,
+   "price": 431.18,
+   "price_move": 0.012,
+   "price_series": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "price_status": "ok",
+   "quote": {
+    "age_seconds": 900,
+    "ask": null,
+    "bid": null,
+    "currency": "USD",
+    "extended_move": null,
+    "is_fallback": false,
+    "market": "us",
+    "mic": "XNGS",
+    "price": 431.18,
+    "price_basis": "trade",
+    "quality": "delayed",
+    "quoted_at": "2026-09-15T19:55:00Z",
+    "regular_move": 0.0123,
+    "score_eligible": true,
+    "score_term": "divergence",
+    "session": "regular",
+    "source": "finnhub",
+    "tape_status": "ok",
+    "venue": "NASDAQ"
+   },
+   "ratio": 3.1,
+   "segment": "large",
+   "series": [
+    {
+     "count": 0,
+     "hour": "2026-09-15T00:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T01:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T02:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T03:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T04:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T05:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T06:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T07:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T08:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T09:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T10:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T11:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T12:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T13:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T14:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T15:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T16:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T17:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T18:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T19:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T20:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T21:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T22:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T23:00:00Z"
+    }
+   ],
+   "sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "text_ratio": 0.9,
+   "ticker": "MSFT",
+   "tone": {
+    "bearish": 3,
+    "bullish": 6,
+    "neutral": 10
+   },
+   "triplet": {
+    "1": 1.1,
+    "24": 1.6,
+    "4": 2.0
+   }
+  },
+  {
+   "activity_sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "authors": 12,
+   "baseline_days": 30,
+   "clauses": [
+    {
+     "kind": "ratio",
+     "text": "3.1x its normal"
+    },
+    {
+     "kind": "venues",
+     "text": "2 venues"
+    }
+   ],
+   "direction": "up",
+   "divergence": 0.4,
+   "eligible": true,
+   "expected": 9,
+   "marks": [],
+   "mention_z": 2.5,
+   "mentions": 25,
+   "name": "NVIDIA Corp",
+   "normal_per_hour": 1.2,
+   "price": 121.07,
+   "price_move": 0.012,
+   "price_series": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ],
+   "price_status": "ok",
+   "quote": {
+    "age_seconds": 900,
+    "ask": null,
+    "bid": null,
+    "currency": "USD",
+    "extended_move": null,
+    "is_fallback": false,
+    "market": "us",
+    "mic": "XNMS",
+    "price": 121.07,
+    "price_basis": "trade",
+    "quality": "delayed",
+    "quoted_at": "2026-09-15T19:55:00Z",
+    "regular_move": 0.0123,
+    "score_eligible": true,
+    "score_term": "divergence",
+    "session": "regular",
+    "source": "finnhub",
+    "tape_status": "ok",
+    "venue": "NASDAQ"
+   },
+   "ratio": 3.1,
+   "segment": "large",
+   "series": [
+    {
+     "count": 0,
+     "hour": "2026-09-15T00:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T01:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T02:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T03:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T04:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T05:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T06:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T07:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T08:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T09:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T10:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T11:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T12:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T13:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T14:00:00Z"
+    },
+    {
+     "count": 6,
+     "hour": "2026-09-15T15:00:00Z"
+    },
+    {
+     "count": 4,
+     "hour": "2026-09-15T16:00:00Z"
+    },
+    {
+     "count": 2,
+     "hour": "2026-09-15T17:00:00Z"
+    },
+    {
+     "count": 0,
+     "hour": "2026-09-15T18:00:00Z"
+    },
+    {
+     "count": 7,
+     "hour": "2026-09-15T19:00:00Z"
+    },
+    {
+     "count": 5,
+     "hour": "2026-09-15T20:00:00Z"
+    },
+    {
+     "count": 3,
+     "hour": "2026-09-15T21:00:00Z"
+    },
+    {
+     "count": 1,
+     "hour": "2026-09-15T22:00:00Z"
+    },
+    {
+     "count": 8,
+     "hour": "2026-09-15T23:00:00Z"
+    }
+   ],
+   "sources": [
+    "bluesky",
+    "reddit"
+   ],
+   "text_ratio": 0.9,
+   "ticker": "NVDA",
+   "tone": {
+    "bearish": 3,
+    "bullish": 6,
+    "neutral": 10
+   },
+   "triplet": {
+    "1": 1.1,
+    "24": 1.6,
+    "4": 2.0
+   }
+  }
+ ],
+ "segment_counts": {
+  "all": 4,
+  "large": 4
+ },
+ "segments": [],
+ "series_hours": 24,
+ "session": "closed",
+ "shared": false,
+ "sort": null,
+ "sources": [
+  "bluesky",
+  "fourchan",
+  "reddit"
+ ],
+ "stale": false,
+ "triplet_hours": [
+  1,
+  4,
+  24
+ ],
+ "venue_counts": {
+  "any": 4,
+  "multi": 3
+ },
+ "watch_rows": [],
+ "watching": [],
+ "window_hours": 4
+}

@@ -1,0 +1,1268 @@
+{
+ "acquisition": {
+  "reason": "delayed provider data does not reach this window yet",
+  "retry_after_seconds": null,
+  "state": "unavailable"
+ },
+ "chatter": {
+  "from": "2026-09-15T08:00:00Z",
+  "normal_per_slot": null,
+  "slots": [
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "observed",
+    "end": "2026-09-15T08:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "observed",
+    "end": "2026-09-15T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "observed",
+    "end": "2026-09-15T08:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "observed",
+    "end": "2026-09-15T09:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 2,
+    "coverage": "observed",
+    "end": "2026-09-15T09:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "observed",
+    "end": "2026-09-15T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "observed",
+    "end": "2026-09-15T09:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 10,
+    "coverage": "observed",
+    "end": "2026-09-15T10:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "observed",
+    "end": "2026-09-15T10:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "observed",
+    "end": "2026-09-15T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 10,
+    "coverage": "observed",
+    "end": "2026-09-15T10:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "observed",
+    "end": "2026-09-15T11:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "observed",
+    "end": "2026-09-15T11:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 10,
+    "coverage": "observed",
+    "end": "2026-09-15T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "observed",
+    "end": "2026-09-15T11:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 12,
+    "coverage": "observed",
+    "end": "2026-09-15T12:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "observed",
+    "end": "2026-09-15T12:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "observed",
+    "end": "2026-09-15T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 12,
+    "coverage": "observed",
+    "end": "2026-09-15T12:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "observed",
+    "end": "2026-09-15T13:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "observed",
+    "end": "2026-09-15T13:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 18,
+    "coverage": "observed",
+    "end": "2026-09-15T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 12,
+    "coverage": "observed",
+    "end": "2026-09-15T13:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 14,
+    "coverage": "observed",
+    "end": "2026-09-15T14:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 14,
+    "coverage": "observed",
+    "end": "2026-09-15T14:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T14:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 12,
+    "coverage": "observed",
+    "end": "2026-09-15T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T14:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 14,
+    "coverage": "observed",
+    "end": "2026-09-15T14:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T14:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 14,
+    "coverage": "observed",
+    "end": "2026-09-15T15:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T14:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T15:12:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T15:00:00Z",
+    "truncated": false
+   }
+  ],
+  "step_minutes": 15,
+  "to": "2026-09-15T15:12:00Z",
+  "tone": {
+   "basis": "recorded-judgments",
+   "slots": [
+    {
+     "bearish": 0,
+     "bullish": 4,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 4,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 1,
+     "neutral": 1,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 3,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 4,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 1,
+     "bullish": 4,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 1,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 1,
+     "bullish": 5,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 1,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 1,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 1,
+     "bullish": 4,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 5,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 1,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 6,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 2,
+     "bullish": 9,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 5,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 2,
+     "bullish": 7,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 1,
+     "bullish": 6,
+     "neutral": 5,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 1,
+     "bullish": 6,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 2,
+     "bullish": 6,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 1,
+     "bullish": 7,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 5,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    }
+   ]
+  }
+ },
+ "generated_at": "2026-09-15T15:12:00Z",
+ "identity": {
+  "company_id": 11,
+  "currency": "USD",
+  "fingerprint": "f089d8bf06c5a356d83102a4333f0887",
+  "instrument_id": 7,
+  "mapped_at": "2026-08-01T00:00:00Z",
+  "mic": "XNGS",
+  "provider_symbol": "MSFT",
+  "ticker": "MSFT",
+  "venue": "NASDAQ"
+ },
+ "price": {
+  "adjustment_basis": "unknown",
+  "cache_age_seconds": null,
+  "currency": "USD",
+  "expected_intervals": null,
+  "fallback": true,
+  "interval_seconds": null,
+  "kind": "stored_quote",
+  "latest_observation_at": "2026-09-15T15:10:00Z",
+  "mic": "XNGS",
+  "observations": 69,
+  "points": [
+   {
+    "at": "2026-09-15T08:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:00:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:00:00Z",
+    "value": 429.05
+   },
+   {
+    "at": "2026-09-15T08:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:05:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:05:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T08:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:10:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:10:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T08:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:15:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:15:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T08:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:20:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:20:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T08:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:25:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:25:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T08:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:30:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:30:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T08:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:35:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:35:00Z",
+    "value": 429.05
+   },
+   {
+    "at": "2026-09-15T08:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:40:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:40:00Z",
+    "value": 429.4
+   },
+   {
+    "at": "2026-09-15T08:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:45:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:45:00Z",
+    "value": 429.26
+   },
+   {
+    "at": "2026-09-15T08:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:50:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:50:00Z",
+    "value": 429.4
+   },
+   {
+    "at": "2026-09-15T08:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:55:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T08:55:00Z",
+    "value": 429.05
+   },
+   {
+    "at": "2026-09-15T09:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:00:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:00:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T09:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:05:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:05:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T09:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:10:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:10:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T09:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:15:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:15:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T09:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:20:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:20:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T09:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:25:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:25:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T09:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:30:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:30:00Z",
+    "value": 429.05
+   },
+   {
+    "at": "2026-09-15T09:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:35:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:35:00Z",
+    "value": 429.4
+   },
+   {
+    "at": "2026-09-15T09:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:40:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:40:00Z",
+    "value": 429.26
+   },
+   {
+    "at": "2026-09-15T09:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:45:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:45:00Z",
+    "value": 429.4
+   },
+   {
+    "at": "2026-09-15T09:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:50:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:50:00Z",
+    "value": 429.05
+   },
+   {
+    "at": "2026-09-15T09:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:55:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T09:55:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T10:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:00:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:00:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T10:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:05:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:05:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T10:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:10:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:10:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T10:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:15:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:15:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T10:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:20:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:20:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T10:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:25:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:25:00Z",
+    "value": 429.05
+   },
+   {
+    "at": "2026-09-15T10:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:30:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:30:00Z",
+    "value": 429.4
+   },
+   {
+    "at": "2026-09-15T10:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:35:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:35:00Z",
+    "value": 429.26
+   },
+   {
+    "at": "2026-09-15T10:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:40:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:40:00Z",
+    "value": 429.4
+   },
+   {
+    "at": "2026-09-15T10:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:45:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:45:00Z",
+    "value": 429.05
+   },
+   {
+    "at": "2026-09-15T10:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:50:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:50:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T10:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:55:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|0",
+    "start": "2026-09-15T10:55:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T12:30:00Z",
+    "break_before": true,
+    "end": "2026-09-15T12:30:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T12:30:00Z",
+    "value": 429.33
+   },
+   {
+    "at": "2026-09-15T12:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:35:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T12:35:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T12:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:40:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T12:40:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T12:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:45:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T12:45:00Z",
+    "value": 429.12
+   },
+   {
+    "at": "2026-09-15T12:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:50:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T12:50:00Z",
+    "value": 428.84
+   },
+   {
+    "at": "2026-09-15T12:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:55:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T12:55:00Z",
+    "value": 428.84
+   },
+   {
+    "at": "2026-09-15T13:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:00:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T13:00:00Z",
+    "value": 429.12
+   },
+   {
+    "at": "2026-09-15T13:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:05:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T13:05:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T13:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:10:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T13:10:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T13:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:15:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T13:15:00Z",
+    "value": 429.33
+   },
+   {
+    "at": "2026-09-15T13:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:20:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T13:20:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T13:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:25:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "premarket:2026-09-15|finnhub:trade:unknown|1",
+    "start": "2026-09-15T13:25:00Z",
+    "value": 429.33
+   },
+   {
+    "at": "2026-09-15T13:30:00Z",
+    "break_before": true,
+    "end": "2026-09-15T13:30:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T13:30:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T13:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:35:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T13:35:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T13:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:40:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T13:40:00Z",
+    "value": 429.12
+   },
+   {
+    "at": "2026-09-15T13:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:45:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T13:45:00Z",
+    "value": 428.84
+   },
+   {
+    "at": "2026-09-15T13:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:50:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T13:50:00Z",
+    "value": 428.84
+   },
+   {
+    "at": "2026-09-15T13:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:55:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T13:55:00Z",
+    "value": 429.12
+   },
+   {
+    "at": "2026-09-15T14:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:00:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:00:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T14:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:05:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:05:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T14:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:10:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:10:00Z",
+    "value": 429.33
+   },
+   {
+    "at": "2026-09-15T14:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:15:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:15:00Z",
+    "value": 429.19
+   },
+   {
+    "at": "2026-09-15T14:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:20:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:20:00Z",
+    "value": 429.33
+   },
+   {
+    "at": "2026-09-15T14:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:25:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:25:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T14:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:30:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:30:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T14:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:35:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:35:00Z",
+    "value": 429.12
+   },
+   {
+    "at": "2026-09-15T14:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:40:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:40:00Z",
+    "value": 428.84
+   },
+   {
+    "at": "2026-09-15T14:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:45:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:45:00Z",
+    "value": 428.84
+   },
+   {
+    "at": "2026-09-15T14:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:50:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:50:00Z",
+    "value": 429.12
+   },
+   {
+    "at": "2026-09-15T14:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T14:55:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T14:55:00Z",
+    "value": 428.91
+   },
+   {
+    "at": "2026-09-15T15:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T15:00:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T15:00:00Z",
+    "value": 428.98
+   },
+   {
+    "at": "2026-09-15T15:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T15:05:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T15:05:00Z",
+    "value": 429.33
+   },
+   {
+    "at": "2026-09-15T15:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T15:10:00Z",
+    "provisional": false,
+    "regime": "finnhub:trade:unknown",
+    "segment": "regular:2026-09-15|finnhub:trade:unknown|2",
+    "start": "2026-09-15T15:10:00Z",
+    "value": 429.19
+   }
+  ],
+  "price_basis": "trade",
+  "received_at": "2026-09-15T15:10:20Z",
+  "regimes": [
+   {
+    "adjustment_basis": "unknown",
+    "id": "finnhub:trade:unknown",
+    "price_basis": "trade",
+    "source": "finnhub"
+   }
+  ],
+  "source": "finnhub",
+  "stale": true
+ },
+ "span": "1D",
+ "version": 1,
+ "warnings": [
+  "tone: colours use retained recorded judgments only; older chatter is unavailable"
+ ],
+ "window": {
+  "bands": [
+   {
+    "from": "2026-09-15T08:00:00Z",
+    "state": "premarket",
+    "to": "2026-09-15T13:30:00Z"
+   },
+   {
+    "from": "2026-09-15T13:30:00Z",
+    "state": "regular",
+    "to": "2026-09-15T15:12:00Z"
+   }
+  ],
+  "calendar_basis": "modeled",
+  "from": "2026-09-15T08:00:00Z",
+  "partial": true,
+  "session_dates": [
+   "2026-09-15"
+  ],
+  "timezone": "America/New_York",
+  "to": "2026-09-15T15:12:00Z"
+ }
+}
