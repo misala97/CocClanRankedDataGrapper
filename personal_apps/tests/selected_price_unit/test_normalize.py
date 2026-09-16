@@ -47,12 +47,12 @@ def test_saved_5d_5m_array_is_five_sessions_with_its_null_gap_and_off_grid_point
     gap = points[316]
     assert gap['value'] is None and gap['start'] == '2026-09-15T13:50:00Z'
     assert gap['provisional'] is True and gap['at'] == '2026-09-15T13:50:19Z'
-    price = c.yahoo_price(result, window, identity(), now=now)
+    price = c.provider_price(result, window, identity(), now=now)
     assert price['adjustment_basis'] == 'unknown' and price['kind'] == 'bar_close'
     assert price['price_basis'] == 'provider_bar_close' and price['interval_seconds'] == 300
     assert price['latest_observation_at'] == '2026-09-15T13:50:00Z'
     assert price['stale'] is False and price['fallback'] is False
-    assert any('off the bar grid' in w for w in c.yahoo_warnings(result))
+    assert any('off the bar grid' in w for w in c.provider_warnings(result))
 
 
 def test_a_bar_close_is_plotted_at_the_bar_end_never_at_its_start():
@@ -119,7 +119,7 @@ def test_one_valid_bar_is_a_point_not_an_unavailable_line():
     spec = c.request_spec(identity(), window)
     stamp = int(utc(2026, 9, 15, 8, 30).timestamp())
     result = c.normalize_yahoo(payload(timestamps=[stamp], closes=[100.25]), spec, received_at=now.timestamp())
-    price = c.yahoo_price(result, window, identity(), now=now)
+    price = c.provider_price(result, window, identity(), now=now)
     assert len(price['points']) == 1 and price['points'][0]['value'] == 100.25
 
 
@@ -199,3 +199,142 @@ def test_empty_and_malformed_envelopes():
     assert c.normalize_yahoo(no_bars, spec, received_at=0)['kind'] == 'empty'
     assert c.normalize_yahoo(payload(timestamps=[t], closes=[1.0]), {'version': 1}, received_at=0) == {
         'kind': 'invalid', 'reason': 'request_spec'}
+
+
+# --- Alpaca consolidated SIP bars (C1) --------------------------------------------
+#
+# Fixtures are hand-written in the exact shape the 2026-09-16 bounded validation
+# recorded (radar-design/artifacts/md-selected-price-alpaca-validate-1/README.md):
+# `{"bars": {"<SYMBOL>": [{c,h,l,n,o,t,v,vw}, ...]}, "next_page_token": null}`,
+# with `t` the bar START in RFC-3339 UTC. No provider was contacted for any of
+# them, and no credential is involved in normalization at all.
+
+ALPACA_NOW = utc(2026, 9, 16, 0, 34)          # the validation's clock: market closed
+
+
+def alpaca_bar(stamp, close, **over):
+    row = {'t': stamp, 'o': close, 'h': close, 'l': close, 'c': close, 'v': 10, 'n': 2, 'vw': close}
+    row.update(over)
+    return row
+
+
+def alpaca_payload(rows, symbol='AAPL', token=None):
+    return {'bars': {symbol: list(rows)}, 'next_page_token': token}
+
+
+def alpaca_spec(span, ident=None, now=ALPACA_NOW):
+    window = c.window_for(span, now)
+    spec, refusal = c.alpaca_request_spec(ident or identity(), window, now=now)
+    assert refusal is None
+    return window, spec
+
+
+def test_a_1w_regular_session_excludes_the_exact_close_timestamp():
+    window, spec = alpaca_spec('1W')
+    result = c.normalize_alpaca(alpaca_payload([
+        alpaca_bar('2026-09-15T19:55:00Z', 10.5), alpaca_bar('2026-09-15T20:00:00Z', 10.6)]),
+        spec, received_at=ALPACA_NOW.timestamp())
+    assert result['kind'] == 'ok' and result['outside'] == 1
+    points = c.provider_points(result['bars'], window, ALPACA_NOW, regime=c.ALPACA_REGIME)
+    assert [p['start'] for p in points] == ['2026-09-15T19:55:00Z']
+    assert points[0]['segment'] == 'regular:2026-09-15|' + c.ALPACA_REGIME
+
+
+def test_a_1d_extended_window_keeps_the_close_bar_as_a_separate_after_hours_segment():
+    window, spec = alpaca_spec('1D')
+    result = c.normalize_alpaca(alpaca_payload([
+        alpaca_bar('2026-09-15T19:58:00Z', 10.4), alpaca_bar('2026-09-15T19:59:00Z', 10.5),
+        alpaca_bar('2026-09-15T20:00:00Z', 10.6)]), spec, received_at=ALPACA_NOW.timestamp())
+    assert (result['kind'], result['outside'], result['nulls']) == ('ok', 0, 0)
+    points = c.provider_points(result['bars'], window, ALPACA_NOW, regime=c.ALPACA_REGIME)
+    assert [p['segment'].split('|')[0] for p in points] == [
+        'regular:2026-09-15', 'regular:2026-09-15', 'afterhours:2026-09-15']
+    assert points[-1]['break_before'] is True
+
+
+def test_missing_minutes_are_absent_and_do_not_end_the_hard_segment():
+    window, spec = alpaca_spec('1D')
+    result = c.normalize_alpaca(alpaca_payload([
+        alpaca_bar('2026-09-15T13:30:00Z', 7.4), alpaca_bar('2026-09-15T14:20:00Z', 7.41),
+        alpaca_bar('2026-09-15T14:21:00Z', 7.39)]), spec, received_at=ALPACA_NOW.timestamp())
+    points = c.provider_points(result['bars'], window, ALPACA_NOW, regime=c.ALPACA_REGIME)
+    assert len(points) == 3 and all(p['value'] is not None for p in points)
+    assert len({p['segment'] for p in points}) == 1
+    # break_before still records the grid gap; it no longer splits the drawing.
+    assert [p['break_before'] for p in points] == [False, True, False]
+    assert result['nulls'] == 0
+
+
+def test_fractional_rfc3339_seconds_parse_and_stay_off_the_minute_grid():
+    window, spec = alpaca_spec('1D')
+    result = c.normalize_alpaca(alpaca_payload([
+        alpaca_bar('2026-09-15T13:30:00.000000000Z', 7.4),
+        alpaca_bar('2026-09-15T13:30:30.500Z', 7.5),
+        alpaca_bar('2026-09-15T13:31:00Z', 7.6)]), spec, received_at=ALPACA_NOW.timestamp())
+    assert (result['kind'], result['off_grid']) == ('ok', 1)
+    points = c.provider_points(result['bars'], window, ALPACA_NOW, regime=c.ALPACA_REGIME)
+    assert [p['start'] for p in points] == ['2026-09-15T13:30:00Z', '2026-09-15T13:31:00Z']
+
+
+@pytest.mark.parametrize('rows,reason', [
+    ([alpaca_bar('2026-09-15T13:31:00Z', 1.0), alpaca_bar('2026-09-15T13:30:00Z', 1.0)],
+     'timestamps not increasing'),
+    ([alpaca_bar('2026-09-15T13:30:00Z', 1.0), alpaca_bar('2026-09-15T13:30:00Z', 1.0)],
+     'timestamps not increasing'),
+    ([alpaca_bar('2026-09-15T13:30:00Z', 0)], 'close is not a finite positive number'),
+    ([alpaca_bar('2026-09-15T13:30:00Z', -1.5)], 'close is not a finite positive number'),
+    ([alpaca_bar('2026-09-15T13:30:00Z', None)], 'close is not a finite positive number'),
+    ([alpaca_bar('2026-09-15T13:30:00Z', float('nan'))], 'close is not a finite positive number'),
+    ([alpaca_bar('2026-09-15T13:30:00Z', True)], 'close is not a finite positive number'),
+    ([alpaca_bar('not a timestamp', 1.0)], 'timestamp'),
+    ([{'c': 1.0}], 'timestamp'),
+])
+def test_an_invalid_alpaca_bar_invalidates_the_whole_answer(rows, reason):
+    _, spec = alpaca_spec('1D')
+    result = c.normalize_alpaca(alpaca_payload(rows), spec, received_at=0)
+    assert result == {'kind': 'invalid', 'reason': reason}
+
+
+def test_the_symbol_key_must_match_exactly_and_a_page_token_is_truncation():
+    _, spec = alpaca_spec('1D')
+    rows = [alpaca_bar('2026-09-15T13:30:00Z', 7.4)]
+    assert c.normalize_alpaca(alpaca_payload(rows, 'AAPL.X'), spec, received_at=0)['kind'] == 'identity_mismatch'
+    assert c.normalize_alpaca({'bars': {'AAPL': rows, 'MSFT': rows}, 'next_page_token': None},
+                              spec, received_at=0)['kind'] == 'identity_mismatch'
+    assert c.normalize_alpaca(alpaca_payload(rows, token='abc'), spec, received_at=0) == {
+        'kind': 'truncated', 'reason': 'the provider answer was paginated'}
+    assert c.normalize_alpaca({'bars': {}, 'next_page_token': None}, spec, received_at=0)['kind'] == 'empty'
+    assert c.normalize_alpaca(alpaca_payload([]), spec, received_at=0)['kind'] == 'empty'
+
+
+def test_a_malformed_alpaca_envelope_is_invalid_never_a_zero_series():
+    _, spec = alpaca_spec('1D')
+    for body in (None, [], {'bars': []}, {'bars': {'AAPL': {}}, 'next_page_token': None},
+                 {'next_page_token': None}):
+        assert c.normalize_alpaca(body, spec, received_at=0)['kind'] == 'invalid'
+    assert c.normalize_alpaca(alpaca_payload([alpaca_bar('2026-09-15T13:30:00Z', 1.0)]),
+                              {'version': 1}, received_at=0) == {'kind': 'invalid', 'reason': 'request_spec'}
+
+
+def test_the_alpaca_price_block_names_delayed_sip_and_raw_closes():
+    window, spec = alpaca_spec('1D')
+    result = c.normalize_alpaca(alpaca_payload([
+        alpaca_bar('2026-09-15T13:30:00Z', 7.4), alpaca_bar('2026-09-15T13:31:00Z', 7.41)]),
+        spec, received_at=ALPACA_NOW.timestamp())
+    price = c.provider_price(result, window, identity(), now=ALPACA_NOW)
+    assert (price['source'], price['kind']) == (c.ALPACA_SOURCE, 'bar_close')
+    assert (price['price_basis'], price['adjustment_basis']) == ('provider_bar_close', 'raw')
+    assert price['regimes'] == [{'id': c.ALPACA_REGIME, 'source': c.ALPACA_SOURCE,
+                                 'price_basis': 'provider_bar_close', 'adjustment_basis': 'raw'}]
+    assert price['fallback'] is False and price['interval_seconds'] == 60
+    assert price['observations'] == 2 and price['expected_intervals'] == 960
+    assert price['latest_observation_at'] == '2026-09-15T13:32:00Z'
+    assert all(p['segment'] == 'regular:2026-09-15|' + c.ALPACA_REGIME for p in price['points'])
+
+
+def test_too_many_alpaca_bars_are_rejected_not_truncated():
+    _, spec = alpaca_spec('1D')
+    rows = [alpaca_bar(c.iso_z(utc(2026, 9, 15, 8) + dt.timedelta(minutes=i)), 1.0)
+            for i in range(c.MAX_RAW_BARS + 1)]
+    assert c.normalize_alpaca(alpaca_payload(rows), spec, received_at=0) == {
+        'kind': 'invalid', 'reason': 'too many bars'}

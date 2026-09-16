@@ -58,6 +58,43 @@ describe('validating the answer at the boundary', () => {
   it('accepts a window with no price at all', () => {
     expect(refused(mutate((c) => { c.price = null }))).toBe('accepted')
   })
+
+  // C1: the renderer groups by `segment` and discloses coverage from
+  // `observations` / `expected_intervals`, so an answer without them is not
+  // drawable and must be refused rather than guessed at.
+  it('requires a hard-segment key on every price point', () => {
+    expect(refused(mutate((c) => { delete (c.price!.points[0] as { segment?: string }).segment })))
+      .toBe('invalid')
+    expect(refused(mutate((c) => { (c.price!.points[0] as { segment: unknown }).segment = 3 })))
+      .toBe('invalid')
+  })
+
+  it('requires an honest observation count and expected-interval count', () => {
+    expect(refused(mutate((c) => { delete (c.price as { observations?: number }).observations })))
+      .toBe('invalid')
+    expect(refused(mutate((c) => { (c.price as { observations: unknown }).observations = -1 })))
+      .toBe('invalid')
+    expect(refused(mutate((c) => {
+      (c.price as { expected_intervals: unknown }).expected_intervals = 'lots'
+    }))).toBe('invalid')
+    // A stored fallback has no expected grid, and says so with null.
+    expect(refused(mutate((c) => {
+      (c.price as { expected_intervals: number | null }).expected_intervals = null
+    }))).toBe('accepted')
+  })
+
+  it('accepts a delayed consolidated-SIP series with raw closes', () => {
+    expect(refused(mutate((c) => {
+      c.price!.source = 'alpaca_sip'
+      c.price!.adjustment_basis = 'raw'
+      c.price!.regimes = [{ id: 'alpaca_sip:provider_bar_close:raw', source: 'alpaca_sip',
+                            price_basis: 'provider_bar_close', adjustment_basis: 'raw' }]
+      c.price!.points = c.price!.points.map((point) => ({
+        ...point, value: point.value ?? 1, regime: 'alpaca_sip:provider_bar_close:raw',
+        segment: 'regular:2026-09-15|alpaca_sip:provider_bar_close:raw' }))
+      c.price!.observations = c.price!.points.length
+    }))).toBe('accepted')
+  })
 })
 
 describe('the one request', () => {

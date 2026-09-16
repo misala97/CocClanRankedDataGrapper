@@ -14,14 +14,18 @@ acquiring (`cleanup_failed`) rather than start another child.
 The child is an explicit fresh interpreter running one module,
 `python -E -s -B -m features.radar.price_chart_fetch`, started from an
 argument array (no shell) in the application directory with a minimal
-environment built from an allowlist (`CHILD_ENV_ALLOWLIST`) -- never a copy
-of os.environ, and os.environ is never modified. It therefore never executes
-the parent's main script (python app.py, serve_b1c.py, gunicorn, pytest:
-the launcher's shape does not matter), never imports Flask, the models or the
-database, never loads dotenv, and does not inherit PYTHONPATH/PYTHONSTARTUP,
-user site-packages, proxy settings, provider keys, database or application
-secrets. Its one validated public request goes in on stdin (bounded), its one
-JSON result comes back on stdout (bounded), stderr goes to the null device.
+environment built from an allowlist (`CHILD_ENV_ALLOWLIST` plus the two
+`CREDENTIAL_ENV` names the Alpaca adapter turns into its request headers) --
+never a copy of os.environ, and os.environ is never modified. It therefore
+never executes the parent's main script (python app.py, serve_b1c.py,
+gunicorn, pytest: the launcher's shape does not matter), never imports Flask,
+the models or the database, never loads dotenv, and does not inherit
+PYTHONPATH/PYTHONSTARTUP, user site-packages, proxy settings, any other
+provider key, the database URL or an application secret. The two credential
+values cross in that environment and nowhere else: not in the argument array,
+not in the request spec, not in a log line, not in the result. Its one
+validated public request goes in on stdin (bounded), its one JSON result
+comes back on stdout (bounded), stderr goes to the null device.
 
 Limits, all per web PROCESS -- nothing here is shared across workers, and a
 restart resets every counter. With N web workers up to N children can run at
@@ -63,7 +67,7 @@ from pathlib import Path
 from . import config
 from . import price_chart_contract as contract
 from . import price_chart_fetch as fetch
-from .prices import yahoo
+from .prices import alpaca, yahoo
 
 DEADLINE_S = 6.0
 CLEANUP_S = 1.0
@@ -80,10 +84,11 @@ COOLDOWN_S = 60.0
 UNSUPPORTED_S = 900.0
 PENDING_RETRY_S = 2
 BUSY_RETRY_S = 5
+THROTTLED_REASON = 'the provider throttled this process'
 
 COUNTERS = ('success', 'empty', 'invalid', 'identity_mismatch', 'timeout', 'throttle',
             'unsupported', 'upstream_error', 'served_stale', 'fallback', 'busy',
-            'cleanup_failed')
+            'cleanup_failed', 'truncated', 'waiting', 'permission', 'credentials_missing')
 
 
 #: The production child program, run with `python -m`.
@@ -93,24 +98,34 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 #: -E ignore every PYTHON* variable (PYTHONPATH, PYTHONSTARTUP, PYTHONHOME...);
 #: -s no user site-packages; -B write no bytecode into the application tree.
 INTERPRETER_FLAGS = ('-E', '-s', '-B')
-#: The ONLY environment entries a child receives, per os.name. Windows cannot
+#: The platform minimum a child receives, per os.name. Windows cannot
 #: initialise sockets (WinError 10106) without SYSTEMROOT; a POSIX interpreter
 #: started by absolute path needs nothing. No PATH, HOME, locale, proxy, TLS
-#: bundle override, provider key, database URL or application secret.
+#: bundle override, database URL or application secret.
 CHILD_ENV_ALLOWLIST = {'nt': ('SYSTEMROOT',), 'posix': ()}
+#: The ONLY other entries that cross, on every platform: the two variables the
+#: Alpaca adapter turns into its two request headers. Nothing else named
+#: APCA_*, no other provider key, and a blank value is absent rather than an
+#: empty credential.
+CREDENTIAL_ENV = ('APCA_API_KEY_ID', 'APCA_API_SECRET_KEY')
 _MODULE_NAME = re.compile(r'[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*')
 _NO_WINDOW = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
 
 
 def child_environment(source=None, platform=None) -> dict:
     """A new dict holding only the allowlisted, non-empty entries of `source`
-    (os.environ by default), which is read and never modified."""
+    (os.environ by default), which is read and never modified.
+
+    The credential values are copied here and nowhere else: they go straight
+    into the Popen environment, never into an argument, a log line or a
+    result. Blank is treated as absent.
+    """
     source = os.environ if source is None else source
     platform = os.name if platform is None else platform
     environment = {}
-    for name in CHILD_ENV_ALLOWLIST.get(platform, ()):
+    for name in tuple(CHILD_ENV_ALLOWLIST.get(platform, ())) + CREDENTIAL_ENV:
         value = source.get(name)
-        if isinstance(value, str) and value:
+        if isinstance(value, str) and value.strip():
             environment[name] = value
     return environment
 
@@ -309,6 +324,7 @@ class Coordinator:
         self._backoff_index = -1
         self._backoff_until = 0.0
         self._backoff_capped = False
+        self._backoff_reason = THROTTLED_REASON
         self._unavailable_until = 0.0
         self._quarantined = False
         self.counters = {name: 0 for name in COUNTERS}
@@ -318,13 +334,12 @@ class Coordinator:
 
     # --- admission (request thread, short lock, no I/O) ----------------------
 
-    def get_or_start(self, identity: dict, window: contract.Window, *, now) -> dict:
-        spec = contract.request_spec(identity, window)
+    def get_or_start(self, identity: dict, window: contract.Window, *, now,
+                     source: str = contract.YAHOO_SOURCE) -> dict:
+        spec, refusal = contract.request_spec_for(source, identity, window, now=now)
         if spec is None:
-            reason = ('the session has only just begun' if window.waiting
-                      else 'the mapped symbol has no supported provider form')
-            return _answer('unavailable', None, reason)
-        key = contract.cache_key(identity, window)
+            return _answer('unavailable', None, contract.ALPACA_REFUSALS[refusal])
+        key = contract.cache_key(identity, window, source=source)
         mono, wall = self._clock(), self._wall()
         start = False
         with self._lock:
@@ -373,7 +388,7 @@ class Coordinator:
             return ('unavailable', min(_ceil(self._unavailable_until - mono), RETRY_AFTER_CAP_S),
                     'the provider asked this process to wait longer than one day')
         if mono < self._backoff_until:
-            reason = 'the provider throttled this process'
+            reason = self._backoff_reason
             if self._backoff_capped:
                 reason += ' (its Retry-After was capped at one day for display)'
             return ('backoff', _ceil(self._backoff_until - mono), reason)
@@ -436,9 +451,9 @@ class Coordinator:
                 if not confirmed:
                     self._quarantined = True
                     self.counters['cleanup_failed'] += 1
-                self._settle(key, outcome, data)
+                self._settle(key, spec, outcome, data)
 
-    def _settle(self, key, outcome, data):
+    def _settle(self, key, spec, outcome, data):
         mono = self._clock()
         if outcome == 'timeout':
             self.counters['timeout'] += 1
@@ -456,6 +471,18 @@ class Coordinator:
             self._cool(key, mono, COOLDOWN_S, 'backoff', 'the last acquisition was invalid')
             return
         if kind == 'ok':
+            # Only a series from the source this child was ADMITTED for is
+            # publishable: the reader resolves `source` on the request thread,
+            # and the cache key names the admitted source. Equality, not a table
+            # lookup -- `source` is untrusted JSON, and an array or object must be
+            # refused here rather than raise. A result or a spec without one is
+            # the historical Yahoo shape.
+            if (result.get('source', contract.YAHOO_SOURCE)
+                    != spec.get('source', contract.YAHOO_SOURCE)):
+                self.counters['invalid'] += 1
+                self._cool(key, mono, COOLDOWN_S, 'backoff',
+                           'the series named a source other than the one requested')
+                return
             if (len(data) > ENTRY_BYTES or not isinstance(result.get('bars'), list)
                     or not isinstance(result.get('received_at'), (int, float))):
                 self.counters['invalid'] += 1
@@ -477,6 +504,26 @@ class Coordinator:
             self._drop(key)
             self._cool(key, mono, UNSUPPORTED_S, 'unavailable',
                        'the provider answered for a different listing')
+        elif kind == 'permission':
+            # A refused key does not fix itself in a minute, and it is not a
+            # rate problem: it pauses this process's acquisition provider-wide
+            # on the same ladder, but says what it actually is.
+            self.counters['permission'] += 1
+            self._throttle(mono, None, 'the provider refused this process\'s credentials')
+        elif kind == 'credentials_missing':
+            self.counters['credentials_missing'] += 1
+            self._cool(key, mono, UNSUPPORTED_S, 'unavailable',
+                       'the provider credentials are not configured for this process')
+        elif kind == 'waiting':
+            # The delayed feed does not reach this window yet. Not a failure,
+            # not a retry: ask again when the window has aged.
+            self.counters['waiting'] += 1
+            self._cool(key, mono, COOLDOWN_S, 'unavailable',
+                       'delayed provider data does not reach this window yet')
+        elif kind == 'truncated':
+            self.counters['truncated'] += 1
+            self._cool(key, mono, COOLDOWN_S, 'backoff',
+                       'the provider answer was incomplete and was not used')
         elif kind == 'empty':
             self.counters['empty'] += 1
             self._cool(key, mono, COOLDOWN_S, 'backoff', 'the provider returned no bars')
@@ -493,10 +540,11 @@ class Coordinator:
     def _cool(self, key, mono, seconds, state, reason):
         self._cooldowns[key] = (mono + seconds, state, reason)
 
-    def _throttle(self, mono, retry_after):
+    def _throttle(self, mono, retry_after, reason=THROTTLED_REASON):
         self._backoff_index = min(self._backoff_index + 1, len(BACKOFF_STEPS) - 1)
         ladder = BACKOFF_STEPS[self._backoff_index]
         self._backoff_capped = False
+        self._backoff_reason = reason
         if isinstance(retry_after, int) and not isinstance(retry_after, bool) and retry_after > ladder:
             if retry_after > RETRY_AFTER_CAP_S:
                 self._unavailable_until = mono + retry_after
@@ -581,8 +629,47 @@ def _configured_workers():
     return count if count > 0 else None
 
 
+def selected_source():
+    """`(source, None)` when this process may acquire, else `(None, why)`.
+
+    Charts and the Alpaca switch are separate truths, and so is whether the
+    two credential variable NAMES hold anything: a present-but-blank key is
+    not a credential. Only presence is ever tested; no value is read here.
+    """
+    if not config.selected_price_charts_enabled():
+        return None, 'charts_off'
+    if config.selected_price_alpaca_enabled():
+        if alpaca.credentials() is None:
+            return None, 'credentials_missing'
+        return contract.ALPACA_SOURCE, None
+    if config.selected_price_yahoo_enabled():
+        return contract.YAHOO_SOURCE, None
+    return None, 'disabled'
+
+
+def intended_source():
+    """Which provider this process would acquire from if it could, or None
+    when neither source switch is on. Naming the source a refusal is ABOUT --
+    "Alpaca, credentials not configured" -- is the truth; claiming one when
+    none is selected is not."""
+    if config.selected_price_alpaca_enabled():
+        return contract.ALPACA_SOURCE
+    if config.selected_price_yahoo_enabled():
+        return contract.YAHOO_SOURCE
+    return None
+
+
+SOURCE_REFUSALS = {
+    'charts_off': ('disabled', 'provider acquisition is switched off'),
+    'disabled': ('disabled', 'provider acquisition is switched off'),
+    'credentials_missing': ('unavailable',
+                            'the provider credentials are not configured for this process'),
+}
+
+
 def _snapshot_shape(*, pid, started, in_flight, in_flight_seconds, cache_keys, cache_bytes,
                     rolling_starts, backoff_until, quarantined, counters, latency) -> dict:
+    source, refusal = selected_source()
     return {
         'scope': 'process',
         'pid': pid,
@@ -593,6 +680,14 @@ def _snapshot_shape(*, pid, started, in_flight, in_flight_seconds, cache_keys, c
         'coordinator_started_at': _iso_wall(started) if started is not None else None,
         'charts_enabled': config.selected_price_charts_enabled(),
         'yahoo_enabled': config.selected_price_yahoo_enabled(),
+        'alpaca_enabled': config.selected_price_alpaca_enabled(),
+        # Whether the two credential NAMES hold a value in this process. Never
+        # a value, a prefix, a length or a digest of one.
+        'credentials_present': alpaca.credentials() is not None,
+        #: The source actually selected, or the one a refusal is about, or
+        #: None when neither switch is on. A chart flag alone is not a source.
+        'source': source or intended_source(),
+        'source_state': 'active' if refusal is None and source == contract.ALPACA_SOURCE else refusal or 'yahoo',
         'configured_web_workers': _configured_workers(),
         'configured_web_workers_source': WORKERS_SOURCE,
         'limits': {'max_children': 1, 'starts_per_60s': ROLLING_STARTS,
@@ -630,13 +725,16 @@ def coordinator() -> Coordinator:
 
 
 class Admission:
-    """What the route hands the reader: provider acquisition when both flags
-    allow it, and a `disabled` answer that creates nothing otherwise."""
+    """What the route hands the reader: provider acquisition when the flags
+    and the credentials allow it, and an explanatory answer that creates
+    nothing otherwise -- no coordinator, no child, no request."""
 
     def get_or_start(self, identity, window, *, now):
-        if not config.selected_price_yahoo_enabled():
-            return _answer('disabled', None, 'provider acquisition is switched off')
-        return coordinator().get_or_start(identity, window, now=now)
+        source, refusal = selected_source()
+        if source is None:
+            state, reason = SOURCE_REFUSALS[refusal]
+            return _answer(state, None, reason)
+        return coordinator().get_or_start(identity, window, now=now, source=source)
 
 
 def note_fallback() -> None:

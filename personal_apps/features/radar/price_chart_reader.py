@@ -405,8 +405,8 @@ def build_response(ticker: str, sources, span: str, now: dt.datetime, *, coordin
     price = None
     series = acquisition.get('series')
     if series is not None:
-        price = contract.yahoo_price(series, window, identity, now=now)
-        warnings += contract.yahoo_warnings(series)
+        price = contract.provider_price(series, window, identity, now=now)
+        warnings += contract.provider_warnings(series)
         if price is None:
             warnings.append('price: the provider series has no valid bar inside this window')
 
@@ -435,7 +435,7 @@ def build_response(ticker: str, sources, span: str, now: dt.datetime, *, coordin
         warnings.append('window: the session has only just begun; nothing to plot yet')
 
     warnings += entry['chatter']['warnings'] + entry['tone_warnings']
-    if identity['provider_symbol'] and contract.yahoo_symbol(identity['provider_symbol']) is None:
+    if identity['provider_symbol'] and not contract.provider_symbol_supported(identity['provider_symbol']):
         warnings.append('price: the mapped symbol has no supported provider form; stored data only')
     return contract.assemble(identity=identity, window=window, now=now,
                              acquisition=acquisition, price=price,

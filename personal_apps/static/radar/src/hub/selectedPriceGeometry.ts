@@ -12,15 +12,17 @@ import { TONE_KEYS } from './priceChart'
 export const CHART_W = 912
 /** The plot ends here; the rest is the price gutter, as on the older chart. */
 export const PLOT_R = 848
-export const PRICE_TOP = 16
-export const PRICE_BOTTOM = 150
-export const BARS_TOP = 178
-export const FLOOR = 300
-export const AXIS_Y = 318
+/** The compact proportions of the accepted area preview: a tall, calm price
+ *  lane over a short discussion lane, with the axis labels below both. */
+export const PRICE_TOP = 14
+export const PRICE_BOTTOM = 184
+export const BARS_TOP = 214
+export const FLOOR = 262
+export const AXIS_Y = 280
 /** The window's own start and end labels, on a line of their own so a tick
  *  can never print over them. */
-export const AXIS_Y2 = 336
-export const CHART_H = 344
+export const AXIS_Y2 = 298
+export const CHART_H = 306
 
 export interface Frame { from: number; to: number }
 
@@ -51,39 +53,48 @@ export function priceY(value: number, low: number, high: number): number {
 
 export interface PlotPoint { x: number; y: number; index: number; point: PricePoint }
 
-/** Connected runs and lone dots. A null value or `break_before` ends a run;
- *  a run of one is a dot with its own timestamp, never an invisible line. */
-export function priceRuns(points: PricePoint[], frame: Frame):
-  { lines: PlotPoint[][]; dots: PlotPoint[] } {
+/** One run of actual observations the chart may connect and fill. */
+export interface PriceSegment { key: string; points: PlotPoint[] }
+
+/** The actual observations, grouped by the server's HARD segment key.
+ *
+ *  A market session, a market state and a source/regime change each start a
+ *  new segment, and nothing is drawn across two of them. A minute the tape
+ *  did not report -- a null close or a disclosed `break_before` gap -- is NOT
+ *  a boundary: it leaves the segment alone, and the straight line drawn past
+ *  it is a visual guide between two real prices, not a price of its own.
+ *  Nothing here resamples, smooths, interpolates or invents a point. */
+export function priceSegments(points: PricePoint[], frame: Frame): PriceSegment[] {
   const extent = priceExtent(points)
-  if (!extent) return { lines: [], dots: [] }
-  const runs: PlotPoint[][] = []
-  let current: PlotPoint[] = []
-  const flush = () => {
-    if (current.length) runs.push(current)
-    current = []
-  }
+  if (!extent) return []
+  const segments: PriceSegment[] = []
   points.forEach((point, index) => {
-    if (point.value === null) {
-      flush()
-      return
-    }
-    if (point.break_before) flush()
-    current.push({
+    if (point.value === null) return
+    const plot: PlotPoint = {
       x: xOf(frame, instant(point.at)),
       y: priceY(point.value, extent.low, extent.high),
       index, point,
-    })
+    }
+    const current = segments[segments.length - 1]
+    if (current && current.key === point.segment) current.points.push(plot)
+    else segments.push({ key: point.segment, points: [plot] })
   })
-  flush()
-  return {
-    lines: runs.filter((run) => run.length > 1),
-    dots: runs.filter((run) => run.length === 1).map((run) => run[0]!),
-  }
+  return segments
 }
 
 export function pathOf(run: PlotPoint[]): string {
   return run.map((p, n) => `${n ? 'L' : 'M'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')
+}
+
+/** The same line, closed down to the price lane's baseline. Two extra
+ *  vertices, both on the baseline: the fill adds shape, never a value. A
+ *  single observation gets no area at all -- there is nothing to fill. */
+export function areaPathOf(run: PlotPoint[], baseline: number): string {
+  if (run.length < 2) return ''
+  const first = run[0]!
+  const last = run[run.length - 1]!
+  return `${pathOf(run)} L${last.x.toFixed(2)},${baseline.toFixed(2)}`
+    + ` L${first.x.toFixed(2)},${baseline.toFixed(2)} Z`
 }
 
 export interface Stack { key: ToneKey; y: number; height: number; value: number }
@@ -254,6 +265,9 @@ export function ageWord(seconds: number): string {
 }
 
 const SOURCE_WORD: Record<string, string> = {
+  // Delayed by at least fifteen minutes on the plan Radar uses, and the name
+  // says so wherever the source is named: this series is never real-time.
+  alpaca_sip: 'Alpaca consolidated SIP (delayed)',
   yahoo_chart: 'Yahoo chart', finnhub: 'Finnhub', twelvedata: 'Twelve Data',
   massive_grouped: 'Massive', legacy: 'legacy feed',
   deutsche_boerse_delayed: 'Deutsche Börse (delayed)',
@@ -268,6 +282,16 @@ export function priceKindWord(price: PriceSeries): string {
     return `${intervalWord(price.interval_seconds)} bar closes`
   }
   return price.kind === 'stored_quote' ? 'stored quotes' : 'stored daily closes'
+}
+
+/** How much of the window the source actually reported, when there is an
+ *  expected grid to compare against. An illiquid listing reporting 64 of 390
+ *  minutes is 64 real observations, not a broken chart -- so the chart says
+ *  both numbers rather than implying complete coverage. */
+export function coverageWord(price: PriceSeries): string | null {
+  if (price.expected_intervals === null || price.expected_intervals <= 0) return null
+  return `${price.observations} of ${price.expected_intervals} expected `
+    + `${intervalWord(price.interval_seconds)} intervals reported`
 }
 
 export function money(value: number): string {

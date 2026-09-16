@@ -1,19 +1,26 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { priceChartResponse, yahooPrice } from './priceChartFixtures'
-import { SelectedPriceChart, chartSummary, slotReadout } from './SelectedPriceChart'
+import { PREMARKET, alpacaPrice, bar, counted, priceChartResponse, yahooPrice } from './priceChartFixtures'
+import { SelectedPriceChart, chartSummary, panOffset, slotReadout } from './SelectedPriceChart'
 
 function show(data = priceChartResponse()) {
   return render(<div className="rh"><SelectedPriceChart data={data} ticker="AAA" /></div>)
 }
+
+const marks = (container: HTMLElement) => ({
+  lines: container.querySelectorAll('path.price-line').length,
+  areas: container.querySelectorAll('path.rh-sp-area').length,
+  dots: container.querySelectorAll('circle.price-dot').length,
+  latest: container.querySelectorAll('circle.price-last, circle.price-provisional').length,
+})
 
 describe('what the chart says in words', () => {
   it('names the window, the listing, the provenance and the unknown adjustment basis', () => {
     show()
     expect(screen.getByText('Current session so far')).toBeInTheDocument()
     expect(screen.getByTestId('rh-sp-provenance')).toHaveTextContent(
-      'Yahoo chart · NASDAQ (XNMS) · USD · 1-minute bar closes · received 30 s ago')
+      'Yahoo chart · NASDAQ (XNMS) · USD · 1-minute bar closes · 5 of 67 reported · received 30 s ago')
     expect(screen.getByText(/Adjustment basis unknown/)).toBeInTheDocument()
   })
 
@@ -65,6 +72,126 @@ describe('what the chart says in words', () => {
   it('discloses its data notes', () => {
     show()
     expect(screen.getByText('Data notes (1)')).toBeInTheDocument()
+  })
+})
+
+describe('the segmented area (C1)', () => {
+  const sparse = () => priceChartResponse({
+    price: alpacaPrice(Array.from({ length: 64 }, (_, i) => i)),
+  })
+
+  it('draws one line and one filled area per hard segment, and no dot cloud', () => {
+    const { container } = show(sparse())
+    expect(marks(container)).toEqual({ lines: 1, areas: 1, dots: 0, latest: 1 })
+    const area = container.querySelector('path.rh-sp-area')!
+    expect(area.getAttribute('fill')).toMatch(/^url\(#/)
+    expect(area.getAttribute('d')!.endsWith('Z')).toBe(true)
+  })
+
+  it('splits at a session, a market state and a source change, and never fills across one', () => {
+    const points = [bar('08:00', 100), bar('08:01', 101),
+                    bar('08:02', 102, { segment: `regular:2026-09-15|alpaca_sip:provider_bar_close:raw`,
+                                        regime: 'alpaca_sip:provider_bar_close:raw' }),
+                    bar('08:03', 103, { segment: `regular:2026-09-15|alpaca_sip:provider_bar_close:raw`,
+                                        regime: 'alpaca_sip:provider_bar_close:raw' })]
+    const { container } = show(priceChartResponse({
+      price: yahooPrice({ points, observations: counted(points) }),
+    }))
+    expect(marks(container)).toEqual({ lines: 2, areas: 2, dots: 0, latest: 1 })
+    const ds = [...container.querySelectorAll('path.price-line')].map((p) => p.getAttribute('d')!)
+    expect(ds[0]!.match(/[ML]/g)).toHaveLength(2)
+    expect(ds[1]!.match(/[ML]/g)).toHaveLength(2)
+  })
+
+  it('renders a one-observation segment as a dot with no area', () => {
+    const points = [bar('08:00', 100),
+                    bar('08:30', 102, { segment: `regular:2026-09-15|yahoo_chart:provider_bar_close:unknown` })]
+    const { container } = show(priceChartResponse({
+      price: yahooPrice({ points, observations: counted(points) }),
+    }))
+    expect(marks(container)).toEqual({ lines: 0, areas: 0, dots: 2, latest: 1 })
+  })
+
+  it('reports only actual observations however long the drawn line is', () => {
+    const data = sparse()
+    const summary = chartSummary(data)
+    expect(summary).toContain('64 1-minute bar closes')
+    expect(summary).toContain('in 1 segment')
+    expect(summary).toContain('64 of 67 expected 1-minute intervals reported')
+    expect(summary).not.toMatch(/real.time|live price/i)
+  })
+
+  it('names delayed consolidated SIP and raw closes, never real-time', () => {
+    show(sparse())
+    const line = screen.getByTestId('rh-sp-provenance')
+    expect(line).toHaveTextContent('Alpaca consolidated SIP (delayed)')
+    expect(line).toHaveTextContent('1-minute bar closes')
+    expect(line.textContent).not.toMatch(/real.time/i)
+    expect(screen.getByText(/Adjustment basis raw/)).toBeInTheDocument()
+  })
+
+  it('keeps the same segment key for a run interrupted by a disclosed gap', () => {
+    const points = [bar('08:00', 100), bar('08:02', null, { breakBefore: true }),
+                    bar('08:40', 101, { breakBefore: true })]
+    expect(points.every((p) => p.segment === PREMARKET)).toBe(true)
+    const { container } = show(priceChartResponse({
+      price: yahooPrice({ points, observations: counted(points) }),
+    }))
+    expect(marks(container)).toEqual({ lines: 1, areas: 1, dots: 0, latest: 1 })
+  })
+})
+
+// C2-2: the drawing is 912 units wide and pans below that width. Where it
+// pans, it must open on the latest actual observation -- a 1D window runs to
+// the extended close, so a listing that stopped trading at the bell would
+// otherwise open on empty after-hours hours. But where the RIGHTMOST position
+// still leaves a usable amount of line on screen, take it: that is where the
+// price axis and the window-end label live.
+describe('where the panned chart opens', () => {
+  // FT: 912-unit drawing, the last reported minute four hours before the
+  // window ends. The numbers are the widths measured on the built hub.
+  const sparse = (clientWidth: number) =>
+    panOffset({ scrollWidth: 950, clientWidth, drawingWidth: 912, latestX: 636 })
+  const visible = (left: number, clientWidth: number, x: number) =>
+    x >= left && x <= left + clientWidth
+
+  it('takes the rightmost position where the gutter fits without hiding the line', () => {
+    expect(sparse(816)).toBe(134)            // 1200 px: maxLeft, gutter visible
+    expect(sparse(700)).toBe(250)            // 768 px: maxLeft, gutter visible
+    // The price gutter sits past the plot at 848..912; it is on screen in both.
+    expect(visible(134, 816, 912)).toBe(true)
+    expect(visible(250, 700, 912)).toBe(true)
+  })
+
+  it('keeps the latest observation rather than the gutter when both cannot fit', () => {
+    expect(sparse(322)).toBe(410)            // 390 px: the latest stays on screen
+    expect(visible(410, 322, 636)).toBe(true)
+    expect(visible(410, 322, 912)).toBe(false)
+  })
+
+  it('never hides the latest observation at any of the measured widths', () => {
+    for (const clientWidth of [816, 700, 322]) {
+      expect(visible(sparse(clientWidth)!, clientWidth, 636)).toBe(true)
+    }
+    // A dense session whose latest observation is at the window end keeps the
+    // rightmost position at every width.
+    for (const clientWidth of [816, 700, 322]) {
+      const left = panOffset({ scrollWidth: 950, clientWidth, drawingWidth: 912, latestX: 848 })
+      expect(left).toBe(950 - clientWidth)
+      expect(visible(left!, clientWidth, 848)).toBe(true)
+    }
+  })
+
+  it('does nothing when the drawing fits, and falls back to the newest end with no observation', () => {
+    expect(panOffset({ scrollWidth: 900, clientWidth: 900, drawingWidth: 912, latestX: 636 })).toBeNull()
+    expect(panOffset({ scrollWidth: 950, clientWidth: 322, drawingWidth: 912, latestX: null })).toBe(628)
+  })
+
+  it('places by the rendered drawing width rather than assuming 912 CSS pixels', () => {
+    // A half-size drawing puts the same observation at 318 CSS px, so the
+    // trailing room -- which is CSS pixels, not user units -- gives 253.
+    expect(panOffset({ scrollWidth: 475, clientWidth: 161, drawingWidth: 456, latestX: 636 }))
+      .toBe(253)
   })
 })
 

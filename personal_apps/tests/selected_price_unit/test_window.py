@@ -192,6 +192,67 @@ def test_yahoo_symbol_forms():
         assert c.yahoo_symbol(refused) is None
 
 
+def test_alpaca_symbol_forms_keep_the_class_share_dot():
+    assert c.alpaca_symbol('AAPL') == 'AAPL'
+    assert c.alpaca_symbol('BRK.B') == 'BRK.B'
+    for refused in ('BRK/B', 'BRK-B', 'brk.b', 'A.B.C', '', None, 'TOOLONGSYMBOL1', 'AB CD'):
+        assert c.alpaca_symbol(refused) is None
+
+
+def test_the_alpaca_request_is_one_symbol_with_the_ruled_parameters():
+    now = utc(2026, 9, 16, 0, 34)                               # 20:34 ET, session closed
+    window = c.window_for('1D', now)
+    spec, refusal = c.alpaca_request_spec(identity(), window, now=now)
+    assert refusal is None
+    assert spec['source'] == c.ALPACA_SOURCE and spec['symbol'] == 'AAPL'
+    assert (spec['feed'], spec['adjustment'], spec['sort'], spec['limit']) == ('sip', 'raw', 'asc', 10_000)
+    assert (spec['timeframe'], spec['interval_seconds']) == ('1Min', 60)
+    # A closed window older than the clamp keeps its own contract end.
+    assert (spec['start'], spec['end']) == ('2026-09-15T08:00:00Z', '2026-09-16T00:00:00Z')
+    assert spec['anchor'] == int(utc(2026, 9, 15, 8).timestamp())
+    assert spec['intervals'] == [[int(utc(2026, 9, 15, 8).timestamp()),
+                                  int(utc(2026, 9, 16, 0).timestamp())]]
+    week, week_refusal = c.alpaca_request_spec(identity(), c.window_for('1W', now), now=now)
+    assert week_refusal is None and week['timeframe'] == '5Min'
+    assert (week['start'], week['end']) == ('2026-09-09T13:30:00Z', '2026-09-15T20:00:00Z')
+    assert len(week['intervals']) == 5
+
+
+def test_a_live_window_end_is_clamped_sixteen_minutes_behind_now():
+    now = utc(2026, 9, 15, 17, 0, 30)                            # 13:00 ET, session live
+    window = c.window_for('1D', now)
+    spec, refusal = c.alpaca_request_spec(identity(), window, now=now)
+    assert refusal is None and window.end == now
+    assert spec['end'] == '2026-09-15T16:44:30Z'                 # exactly now - 16 minutes
+    assert spec['start'] == '2026-09-15T08:00:00Z'
+
+
+@pytest.mark.parametrize('now,refusal', [
+    (utc(2026, 9, 15, 8), 'session_not_started'),                # the zero-length 04:00 ET window
+    (utc(2026, 9, 15, 8, 15), 'waiting_for_delay'),              # 15 minutes in: nothing old enough yet
+])
+def test_the_clamp_refuses_instead_of_asking_for_data_that_cannot_exist(now, refusal):
+    spec, reason = c.alpaca_request_spec(identity(), c.window_for('1D', now), now=now)
+    assert spec is None and reason == refusal
+
+
+def test_an_unsupported_symbol_refuses_before_a_request_is_built():
+    now = utc(2026, 9, 16, 0, 34)
+    spec, reason = c.alpaca_request_spec(identity(provider_symbol='BRK/B'),
+                                         c.window_for('1D', now), now=now)
+    assert spec is None and reason == 'unsupported_symbol'
+
+
+def test_the_cache_key_separates_the_two_sources():
+    window = c.window_for('1W', utc(2026, 9, 15, 13, 31))
+    yahoo = c.cache_key(identity(), window)
+    alpaca = c.cache_key(identity(), window, source=c.ALPACA_SOURCE)
+    assert yahoo != alpaca and yahoo[1] == c.YAHOO_SOURCE and alpaca[1] == c.ALPACA_SOURCE
+    # Still stable while `now` moves: the clamped end is not part of it.
+    assert alpaca == c.cache_key(identity(), c.window_for('1W', utc(2026, 9, 15, 19, 45)),
+                                 source=c.ALPACA_SOURCE)
+
+
 def test_fingerprint_changes_with_every_identity_field():
     base = identity()['fingerprint']
     for change in ({'company_id': 12}, {'instrument_id': 8}, {'provider_symbol': 'AAPX'},

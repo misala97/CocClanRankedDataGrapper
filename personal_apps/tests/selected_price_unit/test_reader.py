@@ -15,8 +15,8 @@ from features.radar import chatter_tone
 from features.radar import price_chart_contract as c
 from features.radar import price_chart_reader as reader
 
-from .helpers import (Clock, FakeAdmission, FakeStore, bucket, company_row, instrument_row, naive,
-                      series, tone_row, utc)
+from .helpers import (Clock, FakeAdmission, FakeStore, alpaca_series, bucket, company_row,
+                      instrument_row, naive, series, tone_row, utc)
 
 NOW = utc(2026, 9, 15, 13, 29)                     # 1D 08:00Z..13:29Z, 1W before today's open
 
@@ -233,6 +233,93 @@ def test_tone_rows_reconcile_through_the_reader():
     assert payload['chatter']['tone']['slots'][0] == {
         'bullish': 2, 'bearish': 1, 'neutral': 0, 'unjudged': 0, 'unavailable': 0, 'status': 'complete'}
     assert store.params['tone_rows']['lower'] == when and store.params['tone_rows']['upper'] == naive(2026, 9, 15, 13, 29)
+
+
+# --- the Alpaca source through the reader (C1) --------------------------------
+
+def alpaca_ready(values=(100.0, 100.5, 101.0), *, received_at=None):
+    # NOW is 09:29 ET, so the 1D window is 08:00Z..13:29Z: these three minutes
+    # are inside it, in the pre-market state.
+    anchor = int(utc(2026, 9, 15, 9, 0).timestamp())
+    return {'state': 'ready', 'retry_after_seconds': None, 'reason': None,
+            'series': alpaca_series(anchor, received_at=received_at or NOW.timestamp(),
+                                    values=values)}
+
+
+def test_an_alpaca_series_is_published_as_delayed_sip_raw_closes_and_never_as_real_time():
+    store = FakeStore(buckets=[bucket(naive(2026, 9, 15, 8))],
+                      quotes=[quote(naive(2026, 9, 15, 9))])
+    payload, _ = build(store, alpaca_ready())
+    price = payload['price']
+    assert 'quote_rows' not in store.calls and 'daily_rows' not in store.calls
+    assert (price['source'], price['kind']) == ('alpaca_sip', 'bar_close')
+    assert (price['price_basis'], price['adjustment_basis']) == ('provider_bar_close', 'raw')
+    assert price['fallback'] is False and price['interval_seconds'] == 60
+    assert price['observations'] == 3 and price['expected_intervals'] == 329
+    assert price['latest_observation_at'] == '2026-09-15T09:03:00Z'
+    assert [p['segment'] for p in price['points']] == [
+        'premarket:2026-09-15|alpaca_sip:provider_bar_close:raw'] * 3
+    assert not any('real-time' in w or 'live' in w for w in payload['warnings'])
+
+
+def test_a_provider_series_is_never_spliced_with_a_stored_point():
+    later = quote(naive(2026, 9, 15, 9, 30), 999.0)              # after the provider's last bar
+    store = FakeStore(quotes=[later])
+    payload, _ = build(store, alpaca_ready())
+    values = [p['value'] for p in payload['price']['points']]
+    assert values == [100.0, 100.5, 101.0] and 999.0 not in values
+    assert {p['regime'] for p in payload['price']['points']} == {'alpaca_sip:provider_bar_close:raw'}
+    assert payload['price']['regimes'] == [{'id': 'alpaca_sip:provider_bar_close:raw',
+                                            'source': 'alpaca_sip',
+                                            'price_basis': 'provider_bar_close',
+                                            'adjustment_basis': 'raw'}]
+
+
+@pytest.mark.parametrize('state,reason', [
+    ('unavailable', 'delayed provider data does not reach this window yet'),
+    ('unavailable', 'the provider credentials are not configured for this process'),
+    ('backoff', 'the provider answer was incomplete and was not used'),
+    ('backoff', "the provider refused this process's credentials"),
+    ('backoff', 'the provider throttled this process'),
+    ('busy', 'another chart is being acquired in this process'),
+    ('disabled', 'provider acquisition is switched off'),
+    ('pending', 'acquiring'),
+])
+def test_every_alpaca_refusal_serves_one_whole_stored_series_or_nothing(state, reason):
+    answer = {'state': state, 'retry_after_seconds': None, 'reason': reason, 'series': None}
+    store = FakeStore(quotes=[quote(naive(2026, 9, 15, 9, m), 100 + m) for m in (0, 5)])
+    payload, _ = build(store, answer)
+    price = payload['price']
+    assert payload['acquisition'] == {'state': state, 'retry_after_seconds': None, 'reason': reason}
+    assert (price['source'], price['kind'], price['fallback']) == ('finnhub', 'stored_quote', True)
+    assert [p['value'] for p in price['points']] == [100.0, 105.0]
+    assert 'alpaca_sip' not in {r['source'] for r in price['regimes']}
+    assert price['expected_intervals'] is None and price['observations'] == 2
+
+
+def test_a_refusal_with_nothing_stored_is_an_honest_absence_not_an_empty_series():
+    answer = {'state': 'unavailable', 'retry_after_seconds': None,
+              'reason': 'delayed provider data does not reach this window yet', 'series': None}
+    payload, _ = build(FakeStore(), answer)
+    assert payload['price'] is None
+    assert any('no usable price observation' in w for w in payload['warnings'])
+
+
+def test_real_chatter_states_and_tone_are_untouched_beside_a_provider_series():
+    when = naive(2026, 9, 15, 8)
+    store = FakeStore(
+        buckets=[bucket(when, count=3), bucket(when + dt.timedelta(minutes=15), count=0),
+                 bucket(when + dt.timedelta(minutes=45), count=2, status='truncated')],
+        tone=[tone_row(when, bullish=2, bearish=1)])
+    payload, _ = build(store, alpaca_ready())
+    slots = payload['chatter']['slots']
+    assert [s['count'] for s in slots[:4]] == [3, 0, None, 2]
+    assert [s['coverage'] for s in slots[:4]] == ['observed', 'observed', 'unknown', 'partial']
+    assert payload['chatter']['tone']['slots'][0] == {
+        'bullish': 2, 'bearish': 1, 'neutral': 0, 'unjudged': 0, 'unavailable': 0, 'status': 'complete'}
+    assert payload['chatter']['tone']['slots'][2] is None
+    assert payload['chatter']['normal_per_slot'] is None
+    assert payload['price']['source'] == 'alpaca_sip'
 
 
 def test_a_waiting_window_reads_no_price_and_says_why():

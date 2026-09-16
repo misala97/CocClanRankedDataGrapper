@@ -19,9 +19,9 @@ import type { PriceChartResponse, PricePoint, ToneKey } from './priceChart'
 import { TONE_KEYS } from './priceChart'
 import {
   AXIS_Y, AXIS_Y2, BARS_TOP, CHART_H, CHART_W, FLOOR, PLOT_R, PRICE_BOTTOM, PRICE_TOP,
-  ageWord, bandAt, bandBoxes, berlinClock, berlinStamp, berlinZone, chatterBars,
-  frameOf, instant, intervalWord, latestValid, money, newYorkDate, pathOf,
-  peakCount, pointsInSlot, priceExtent, priceKindWord, priceRuns, priceY,
+  ageWord, areaPathOf, bandAt, bandBoxes, berlinClock, berlinStamp, berlinZone, chatterBars,
+  coverageWord, frameOf, instant, intervalWord, latestValid, money, newYorkDate, pathOf,
+  peakCount, pointsInSlot, priceExtent, priceKindWord, priceSegments, priceY,
   sessionDateLabel, slotIndexAt, sourceWord, toneFor, xOf,
 } from './selectedPriceGeometry'
 import './selected-price.css'
@@ -34,6 +34,36 @@ const TONE_WORD: Record<ToneKey, string> = {
 const STATE_WORD: Record<string, string> = {
   regular: 'regular session', premarket: 'pre-market', afterhours: 'after hours',
   closed: 'market closed',
+}
+
+/** How much room the panned chart keeps to the RIGHT of the latest observation
+ *  when it has to choose that over the gutter, so the newest price is not
+ *  flush against the edge. CSS pixels, not drawing units. */
+const TRAILING_PX = 96
+
+/** Where a panned chart opens, or null when the drawing fits and nothing needs
+ *  placing.
+ *
+ *  Two things want the right-hand end: the price axis and the window-end label
+ *  live past the plot, and the latest actual observation is what a price chart
+ *  is for. On a 1D window -- which runs to the extended close -- a listing that
+ *  stopped trading at the bell puts them hours apart. So: take the rightmost
+ *  position while it still leaves half a viewport of line to the left of the
+ *  latest observation, and otherwise keep the observation on screen and let the
+ *  gutter be scrolled to. Neither branch ever pushes the latest observation
+ *  out of view. */
+export function panOffset({ scrollWidth, clientWidth, drawingWidth, latestX }: {
+  scrollWidth: number
+  clientWidth: number
+  drawingWidth: number
+  latestX: number | null
+}): number | null {
+  const maxLeft = scrollWidth - clientWidth
+  if (maxLeft <= 0) return null
+  if (latestX === null) return maxLeft
+  const latest = (latestX * drawingWidth) / CHART_W
+  if (maxLeft <= latest - clientWidth / 2) return maxLeft
+  return Math.round(Math.max(0, Math.min(maxLeft, latest + TRAILING_PX - clientWidth)))
 }
 
 const ACQUISITION_WORD: Record<string, string> = {
@@ -123,11 +153,12 @@ export function chartSummary(data: PriceChartResponse): string {
   if (data.price) {
     const valid = data.price.points.filter((p) => p.value !== null)
     const latest = latestValid(data.price.points)
-    const runs = priceRuns(data.price.points, frameOf(data.window))
-    const pieces = runs.lines.length + runs.dots.length
+    const segments = priceSegments(data.price.points, frameOf(data.window))
+    const coverage = coverageWord(data.price)
     price = `${valid.length} ${priceKindWord(data.price)} from ${sourceWord(data.price.source)}`
-      + `${data.price.fallback ? ' (stored fallback)' : ''} in ${pieces} separate `
-      + `${pieces === 1 ? 'piece' : 'pieces'}`
+      + `${data.price.fallback ? ' (stored fallback)' : ''} in ${segments.length} `
+      + `${segments.length === 1 ? 'segment' : 'segments'}`
+      + `${coverage ? `, ${coverage}` : ''}`
     if (latest && latest.value !== null) {
       price += `; latest ${money(latest.value)} at ${berlinStamp(latest.at)} ${berlinZone(latest.at)}`
         + `${latest.provisional ? ' (provisional)' : ''}`
@@ -145,9 +176,14 @@ function provenance(data: PriceChartResponse): { text: string; stale: boolean } 
       + `${acquisition.reason ? ` (${acquisition.reason})` : ''}`, stale: false }
   }
   const listing = `${identity.venue} (${identity.mic}) · USD`
+  // How much of the window the source reported rides on this line rather than
+  // a paragraph of its own: at phone width every extra paragraph pushes the
+  // drawing further off the screen.
+  const covered = price.expected_intervals === null || price.expected_intervals <= 0 ? ''
+    : ` · ${price.observations} of ${price.expected_intervals} reported`
   if (!price.fallback) {
     const age = price.cache_age_seconds === null ? '' : ` · received ${ageWord(price.cache_age_seconds)} ago`
-    return { text: `${sourceWord(price.source)} · ${listing} · ${priceKindWord(price)}${age}`
+    return { text: `${sourceWord(price.source)} · ${listing} · ${priceKindWord(price)}${covered}${age}`
       + `${price.stale ? ' · stale' : ''}`, stale: price.stale }
   }
   const received = price.received_at ? ` · stored ${berlinStamp(price.received_at)}` : ''
@@ -158,9 +194,10 @@ function provenance(data: PriceChartResponse): { text: string; stale: boolean } 
 function Header({ data }: { data: PriceChartResponse }) {
   const source = provenance(data)
   const basis = data.price
-    ? `Adjustment basis ${data.price.adjustment_basis === 'unknown' ? 'unknown' : data.price.adjustment_basis}. `
+    ? `Adjustment basis ${data.price.adjustment_basis}. `
       + (data.price.kind === 'bar_close'
-        ? 'Each point is a bar close, placed where the bar ended.'
+        ? 'Each point is a bar close at the bar’s end; the line between two of them is a '
+          + 'guide, not a price.'
         : data.price.kind === 'stored_quote'
           ? 'Each point is a stored quote at its own event time.'
           : 'Each point is a stored daily close at the modeled regular close.')
@@ -210,9 +247,13 @@ function ticks(data: PriceChartResponse): Tick[] {
 
 export function SelectedPriceChart({ data, ticker }: { data: PriceChartResponse; ticker: string }) {
   const summaryId = useId()
+  // One gradient per mounted chart: two of them share a page (standalone
+  // Research and the chatter workspace), and a duplicate SVG id would make
+  // one of them paint with the other's fill.
+  const fillId = `${useId().replace(/[^\w-]/g, '')}-price-area`
   const frame = useMemo(() => frameOf(data.window), [data])
   const points = data.price?.points ?? []
-  const runs = useMemo(() => priceRuns(points, frame), [points, frame])
+  const segments = useMemo(() => priceSegments(points, frame), [points, frame])
   const bars = useMemo(() => chatterBars(data.chatter.slots, data.chatter.tone.slots, frame),
     [data, frame])
   const bands = useMemo(() => bandBoxes(data.window.bands, frame), [data, frame])
@@ -233,20 +274,55 @@ export function SelectedPriceChart({ data, ticker }: { data: PriceChartResponse;
     setHovered(null)
   }, [slots.length])
 
-  // Below the desk widths the drawing pans; open it at the NEWEST end, as the
-  // older chart does, and never against a reader who scrolled back.
+  // Below the desk widths the drawing pans rather than being squeezed until
+  // its axis is unreadable, and it is placed ONCE per chart -- a new ticker or
+  // span -- and then left to the reader.
+  //
+  // `placedFor` remembers which chart has been placed; `readerMoved` records
+  // that the reader has taken it over. Neither is inferred from scrollLeft: a
+  // reader who scrolls all the way LEFT to see the session open sits at
+  // exactly 0, which an "is it still at zero?" test cannot tell apart from a
+  // chart nobody has placed yet -- and the 60-second refresh would then drag
+  // them back every minute.
   const pan = useRef<HTMLDivElement>(null)
+  const latestX = latest && extent ? xOf(frame, instant(latest.at)) : null
+  const chart = `${ticker}|${data.span}`
+  const placedFor = useRef<string | null>(null)
+  const readerMoved = useRef(false)
+  const placing = useRef(false)
   useEffect(() => {
     const box = pan.current
     if (!box) return
-    const toNewest = () => {
-      if (box.scrollWidth > box.clientWidth && box.scrollLeft === 0) box.scrollLeft = box.scrollWidth
+    if (placedFor.current !== chart) readerMoved.current = false
+    const place = () => {
+      if (readerMoved.current) return
+      const drawing = box.querySelector('svg')?.getBoundingClientRect().width ?? box.scrollWidth
+      const wanted = panOffset({ scrollWidth: box.scrollWidth, clientWidth: box.clientWidth,
+                                 drawingWidth: drawing, latestX })
+      if (wanted === null) return
+      placedFor.current = chart
+      if (Math.round(box.scrollLeft) === wanted) return
+      // The assignment fires a scroll event of its own; it is not the reader's.
+      placing.current = true
+      box.scrollLeft = wanted
     }
-    const frameId = requestAnimationFrame(toNewest)
-    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(toNewest) : null
+    const onScroll = () => {
+      if (placing.current) {
+        placing.current = false
+        return
+      }
+      readerMoved.current = true
+    }
+    box.addEventListener('scroll', onScroll, { passive: true })
+    const frameId = requestAnimationFrame(place)
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null
     observer?.observe(box)
-    return () => { cancelAnimationFrame(frameId); observer?.disconnect() }
-  }, [data])
+    return () => {
+      cancelAnimationFrame(frameId)
+      observer?.disconnect()
+      box.removeEventListener('scroll', onScroll)
+    }
+  }, [chart, data, latestX])
 
   const move = (next: number) => {
     if (!slots.length) return
@@ -368,21 +444,36 @@ export function SelectedPriceChart({ data, ticker }: { data: PriceChartResponse;
               })}
             </g>
 
+            {/* One line and one baseline-closing area per HARD segment, and a
+                single marker on the latest actual observation. No dot at
+                every reported price: on a dense session that is a cloud, and
+                on a sparse one it hides the shape the chart is for. A segment
+                with one observation has nothing to connect, so it keeps its
+                own dot. */}
             <g className="price" aria-hidden="true">
-              {runs.lines.map((run) => (
-                <path key={`l${run[0]!.index}`} className="price-line" d={pathOf(run)} />
-              ))}
-              {runs.dots.map((dot) => (
-                <circle key={`d${dot.index}`} className="price-dot" cx={dot.x} cy={dot.y} r={3.2} />
-              ))}
-              {extent && points.filter((p) => p.provisional && p.value !== null).map((p) => (
-                <circle key={`p${p.start}`} className="price-provisional"
-                        cx={xOf(frame, instant(p.at))} cy={priceY(p.value as number, extent.low, extent.high)}
-                        r={4.2} />
-              ))}
-              {latest && extent && !latest.provisional ? (
-                <circle className="price-last" cx={xOf(frame, instant(latest.at))}
-                        cy={priceY(latest.value as number, extent.low, extent.high)} r={3.4} />
+              <defs>
+                <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+                  <stop className="rh-sp-area-top" offset="0%" />
+                  <stop className="rh-sp-area-foot" offset="100%" />
+                </linearGradient>
+              </defs>
+              {segments.map((segment) => segment.points.length > 1 ? (
+                <path key={`a${segment.points[0]!.index}`} className="rh-sp-area"
+                      d={areaPathOf(segment.points, PRICE_BOTTOM)} fill={`url(#${fillId})`} />
+              ) : null)}
+              {segments.map((segment) => segment.points.length > 1 ? (
+                <path key={`l${segment.points[0]!.index}`} className="price-line"
+                      d={pathOf(segment.points)} />
+              ) : null)}
+              {segments.map((segment) => segment.points.length === 1 ? (
+                <circle key={`d${segment.points[0]!.index}`} className="price-dot"
+                        cx={segment.points[0]!.x} cy={segment.points[0]!.y} r={3.2} />
+              ) : null)}
+              {latest && extent ? (
+                <circle className={latest.provisional ? 'price-provisional' : 'price-last'}
+                        cx={xOf(frame, instant(latest.at))}
+                        cy={priceY(latest.value as number, extent.low, extent.high)}
+                        r={latest.provisional ? 4.2 : 3.8} />
               ) : null}
             </g>
 

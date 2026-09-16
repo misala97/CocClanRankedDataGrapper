@@ -118,10 +118,13 @@ def test_pending_then_ready_through_the_route(app, store, monkeypatch):
     assert first['acquisition']['state'] == 'pending'
     assert second['acquisition']['state'] == 'ready' and second['price']['kind'] == 'bar_close'
     point = second['price']['points'][0]
-    assert set(point) == {'at', 'start', 'end', 'value', 'provisional', 'break_before', 'regime'}
+    assert set(point) == {'at', 'start', 'end', 'value', 'provisional', 'break_before', 'regime',
+                          'segment'}
+    assert set(point) >= {'segment'}
     assert set(second['price']) == {'source', 'kind', 'currency', 'mic', 'price_basis', 'adjustment_basis',
                                     'regimes', 'received_at', 'cache_age_seconds', 'latest_observation_at',
-                                    'stale', 'fallback', 'interval_seconds', 'points'}
+                                    'stale', 'fallback', 'interval_seconds', 'observations',
+                                    'expected_intervals', 'points'}
 
 
 def test_the_fallback_counter_only_moves_for_an_existing_coordinator(app, monkeypatch):
@@ -160,6 +163,25 @@ def test_both_flags_default_off_and_the_provider_flag_needs_the_chart_flag(monke
     assert config.selected_price_yahoo_enabled() is True
 
 
+def test_the_alpaca_flag_defaults_off_and_is_its_own_switch(monkeypatch):
+    for name in ('RADAR_SELECTED_PRICE_CHARTS_ENABLED', 'RADAR_SELECTED_PRICE_YAHOO_ENABLED',
+                 'RADAR_SELECTED_PRICE_ALPACA_ENABLED'):
+        monkeypatch.delenv(name, raising=False)
+    assert config.selected_price_alpaca_enabled() is False
+    # Independent of both older flags in BOTH directions: neither turns it on,
+    # and it does not turn itself on because the others are set.
+    monkeypatch.setenv('RADAR_SELECTED_PRICE_CHARTS_ENABLED', 'on')
+    monkeypatch.setenv('RADAR_SELECTED_PRICE_YAHOO_ENABLED', 'on')
+    assert config.selected_price_alpaca_enabled() is False
+    monkeypatch.setenv('RADAR_SELECTED_PRICE_ALPACA_ENABLED', 'true')
+    assert config.selected_price_alpaca_enabled() is True
+    monkeypatch.delenv('RADAR_SELECTED_PRICE_CHARTS_ENABLED')
+    assert config.selected_price_alpaca_enabled() is True
+    for off in ('', ' ', '0', 'off', 'no', 'maybe'):
+        monkeypatch.setenv('RADAR_SELECTED_PRICE_ALPACA_ENABLED', off)
+        assert config.selected_price_alpaca_enabled() is False, off
+
+
 @pytest.fixture()
 def ops_fakes(monkeypatch):
     monkeypatch.setattr(operations.spend, 'summary', lambda: {})
@@ -181,6 +203,17 @@ def test_ops_reports_process_health_without_creating_or_starting_anything(app, o
     assert ops['coordinator_started_at'] is None and 'process_started_at' not in ops
     assert (ops['configured_web_workers'], ops['configured_web_workers_source']) == (2, 'WEB_CONCURRENCY')
     assert acq._instance is None and launched == []
+    # Enablement is not confused with the chart flag, and with neither source
+    # switch on the ops payload claims no source at all.
+    assert ops['source'] is None and ops['alpaca_enabled'] is False
+    assert ops['source_state'] == 'disabled' and isinstance(ops['credentials_present'], bool)
+
+
+def test_ops_names_the_historical_source_when_that_is_the_one_selected(app, ops_fakes, monkeypatch):
+    monkeypatch.setenv('RADAR_SELECTED_PRICE_YAHOO_ENABLED', '1')
+    ops = app.test_client().get('/radar/api/ops').get_json()['selected_price_ops']
+    assert (ops['source'], ops['source_state']) == ('yahoo_chart', 'yahoo')
+    assert ops['yahoo_enabled'] is True and ops['alpaca_enabled'] is False
 
 
 def test_ops_stays_admin_only(app, ops_fakes, monkeypatch):

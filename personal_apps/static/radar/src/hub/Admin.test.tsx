@@ -54,7 +54,8 @@ afterEach(() => { vi.restoreAllMocks() })
 describe('selected price chart health', () => {
   const health = (over: Partial<SelectedPriceOps> = {}): SelectedPriceOps => ({
     scope: 'process', pid: 4242, coordinator_started_at: '2026-09-15T08:00:00Z',
-    charts_enabled: true, yahoo_enabled: false,
+    charts_enabled: true, yahoo_enabled: false, alpaca_enabled: false,
+    credentials_present: true, source: null, source_state: 'disabled',
     configured_web_workers: 2, configured_web_workers_source: 'WEB_CONCURRENCY',
     note: 'Counts for this web process only, reset when it restarts.',
     in_flight: false, cache_keys: 3, cache_bytes: 20480, rolling_starts_60s: 1,
@@ -100,6 +101,45 @@ describe('selected price chart health', () => {
     show(ops())
     await screen.findByText(/\$1\.25/)
     expect(screen.queryByText('Selected price charts')).toBeNull()
+  })
+
+  // C1: the switch is Alpaca's now, and "the charts are on" is not the same
+  // claim as "the source is acquiring".
+  it('names the Alpaca switch and the effective source state, not just the chart flag', async () => {
+    show(ops({ selected_price_ops: health() }))
+    await screen.findByText('Selected price charts')
+    expect(screen.getByText('Chart / Alpaca switch')).toBeVisible()
+    expect(screen.getByText('on / off')).toBeVisible()
+    // Neither source switch is on, so no source is claimed.
+    expect(screen.getByText('None selected — switched off')).toBeVisible()
+    expect(screen.queryByText(/Alpaca consolidated SIP/)).toBeNull()
+  })
+
+  // C2-4: the panel names the source the server actually selected. Claiming
+  // Alpaca while the historical Yahoo source is the active one is a lie the
+  // reader has no way to catch.
+  it.each([
+    ['alpaca_sip', 'active', 'Alpaca consolidated SIP (delayed) — acquiring'],
+    ['alpaca_sip', 'credentials_missing',
+     'Alpaca consolidated SIP (delayed) — credentials not configured'],
+    ['alpaca_sip', 'charts_off', 'Alpaca consolidated SIP (delayed) — selected charts switched off'],
+    ['yahoo_chart', 'yahoo', 'Yahoo chart — the historical Yahoo source is active instead'],
+    [null, 'disabled', 'None selected — switched off'],
+  ] as const)('reports %s in the %s state in words', async (source, state, text) => {
+    show(ops({ selected_price_ops: health({
+      source, source_state: state, alpaca_enabled: source === 'alpaca_sip' && state === 'active',
+    }) }))
+    await screen.findByText('Selected price charts')
+    expect(screen.getByText(text)).toBeVisible()
+  })
+
+  it('says whether the credential variables hold anything, never what', async () => {
+    show(ops({ selected_price_ops: health({ credentials_present: false }) }))
+    await screen.findByText('Selected price charts')
+    expect(screen.getByText('Credentials configured')).toBeVisible()
+    // "Acquiring now" is the other no; neither says what a credential is.
+    expect(screen.getAllByText('no')).toHaveLength(2)
+    expect(document.body.textContent).not.toMatch(/APCA|key id|secret/i)
   })
 })
 

@@ -6,20 +6,26 @@ price_chart_acquisition starts this module as its own fresh interpreter,
 
 with an allowlisted minimal environment. It reads ONE validated public
 request spec (JSON, at most SPEC_LIMIT_BYTES) from stdin, makes at most one
-Yahoo chart request for it, normalizes the answer with the pure contract,
+provider request for it -- Alpaca's historical bars for the selected symbol,
+or the older Yahoo chart -- normalizes the answer with the pure contract,
 writes ONE JSON result (at most RESULT_LIMIT_BYTES) to stdout and exits 0.
 
 What it deliberately does not have: the parent's main script, a Flask app or
 request context, a database handle or engine, dotenv, the web process's
-requests session or environment -- so no proxy settings, provider keys,
-database or application secrets are even present -- an arbitrary URL, a
-retry, an alternate symbol or a cache. Its imports are the pure contract and
-the Yahoo module -- nothing that reaches `extensions`, `models` or `app`
-(tests/selected_price_unit checks a real child's own sys.modules and
-environment).
+requests session or environment -- so no proxy settings, database or
+application secrets are even present -- an arbitrary URL, a retry, an
+alternate symbol, pagination or a cache. The ONLY environment entries it
+receives are the platform minimum and the two Alpaca credential variables
+(price_chart_acquisition.CHILD_ENV_ALLOWLIST plus CREDENTIAL_ENV); their
+values reach the two documented request headers and nothing else -- never an
+argument, a log line, an exception, a fixture or this module's result. Its
+imports are the pure contract and the two adapter modules -- nothing that
+reaches `extensions`, `models` or `app` (tests/selected_price_unit checks a
+real child's own sys.modules and environment).
 
 Binding: radar-design/MD-SELECTED-PRICE-SPEC.md section 6, as amended by
-radar-design/MD-SELECTED-PRICE-REVIEW-1-RULING.md (F1/F2).
+radar-design/MD-SELECTED-PRICE-REVIEW-1-RULING.md (F1/F2) and
+radar-design/MD-SELECTED-PRICE-ALPACA-SOURCE-RULING.md.
 """
 from __future__ import annotations
 
@@ -29,6 +35,7 @@ import sys
 import time
 
 from . import price_chart_contract as contract
+from .prices import alpaca
 from .prices.yahoo import YahooHttp
 
 BODY_LIMIT_BYTES = 512 * 1024
@@ -77,6 +84,40 @@ def classify(fetch, spec: dict, *, received_at: float) -> dict:
     return result
 
 
+def classify_alpaca(fetch, spec: dict, *, received_at: float) -> dict:
+    """One bounded Alpaca response, as the result the supervisor acts on.
+
+    Nothing provider-written crosses the pipe: only the status, a parsed
+    numeric refusal code and this module's own vocabulary. The documented
+    too-recent-SIP refusal is `waiting` -- the window is simply not old enough
+    yet -- and must not open a retry or a throttle ladder.
+    """
+    if fetch.problem == 'credentials':
+        return {'kind': 'credentials_missing'}
+    if fetch.problem == 'timeout':
+        return {'kind': 'timeout', 'status': fetch.status}
+    if fetch.problem == 'network':
+        return {'kind': 'upstream_error', 'reason': 'network', 'status': fetch.status}
+    if fetch.problem in ('redirect', 'oversized', 'invalid_body'):
+        return {'kind': 'invalid', 'reason': fetch.problem, 'status': fetch.status}
+    if alpaca.refusal_code(fetch.payload) == alpaca.TOO_RECENT_CODE:
+        return {'kind': 'waiting', 'status': fetch.status}
+    if fetch.status in (401, 403):
+        return {'kind': 'permission', 'status': fetch.status}
+    if fetch.status == 429:
+        return {'kind': 'throttle', 'status': 429,
+                'retry_after': parse_retry_after(fetch.retry_after, received_at)}
+    if fetch.status == 404:
+        return {'kind': 'unsupported', 'status': 404}
+    if fetch.status is not None and fetch.status >= 500:
+        return {'kind': 'upstream_error', 'reason': 'server', 'status': fetch.status}
+    if fetch.status != 200:
+        return {'kind': 'invalid', 'reason': 'status', 'status': fetch.status}
+    result = contract.normalize_alpaca(fetch.payload, spec, received_at=received_at)
+    result['status'] = 200
+    return result
+
+
 def encode_result(result: dict) -> bytes:
     data = json.dumps(result, separators=(',', ':'), allow_nan=False).encode('utf-8')
     if len(data) > RESULT_LIMIT_BYTES:
@@ -89,16 +130,47 @@ def _transport():
                      max_body_bytes=BODY_LIMIT_BYTES)
 
 
-def run(request_spec, transport_factory=_transport, clock=time.time) -> dict:
+def _alpaca_transport():
+    return alpaca.AlpacaHttp(timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
+                             max_body_bytes=BODY_LIMIT_BYTES)
+
+
+def _run_alpaca(request_spec, transport_factory, clock) -> dict:
+    """ONE historical-bars request for ONE symbol, or none at all.
+
+    The parent already clamped `end` to `min(window end, now - 16 min)`; an
+    empty range means the delayed feed simply does not reach this window yet,
+    which is answered without contacting the provider.
+    """
+    if request_spec['start'] >= request_spec['end']:
+        return {'kind': 'waiting', 'reason': 'clamp'}
+    if alpaca.credentials() is None:
+        return {'kind': 'credentials_missing'}
+    fetch = transport_factory().fetch_bars_bounded(
+        request_spec['symbol'], timeframe=request_spec['timeframe'],
+        start=request_spec['start'], end=request_spec['end'])
+    return classify_alpaca(fetch, request_spec, received_at=clock())
+
+
+def _run_yahoo(request_spec, transport_factory, clock) -> dict:
+    fetch = transport_factory().fetch_chart_bounded(
+        request_spec['symbol'], interval=request_spec['interval'],
+        period1=request_spec['period1'], period2=request_spec['period2'],
+        include_prepost=request_spec['include_prepost'])
+    return classify(fetch, request_spec, received_at=clock())
+
+
+def run(request_spec, transport_factory=None, clock=time.time) -> dict:
     """The child's work without the pipes, so tests can run it in-process."""
-    if not contract._spec_ok(request_spec):
+    if not contract.spec_ok(request_spec):
         return {'kind': 'invalid', 'reason': 'request_spec'}
+    alpaca_source = request_spec.get('source') == contract.ALPACA_SOURCE
+    if transport_factory is None:
+        transport_factory = _alpaca_transport if alpaca_source else _transport
     try:
-        fetch = transport_factory().fetch_chart_bounded(
-            request_spec['symbol'], interval=request_spec['interval'],
-            period1=request_spec['period1'], period2=request_spec['period2'],
-            include_prepost=request_spec['include_prepost'])
-        return classify(fetch, request_spec, received_at=clock())
+        if alpaca_source:
+            return _run_alpaca(request_spec, transport_factory, clock)
+        return _run_yahoo(request_spec, transport_factory, clock)
     except Exception as exc:  # noqa: BLE001 -- a result, never a traceback over the pipe
         return {'kind': 'invalid', 'reason': type(exc).__name__}
 

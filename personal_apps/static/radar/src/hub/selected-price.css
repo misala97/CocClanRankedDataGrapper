@@ -44,7 +44,9 @@
   width: 912px;
   min-width: 912px;
   max-width: 912px;
-  aspect-ratio: 912 / 344;
+  /* The accepted area preview's proportions: a tall price lane over a short
+   * discussion lane. Must match selectedPriceGeometry's CHART_W / CHART_H. */
+  aspect-ratio: 912 / 306;
   height: auto;
   overflow: visible;
   cursor: crosshair;
@@ -65,6 +67,14 @@
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
+/* The fill under a connected segment: the price colour fading to nothing, so
+ * it reads as one calm shape rather than a second series. Purely decorative --
+ * it carries no value, and nothing can be inspected inside it. The stops are
+ * CSS rather than SVG attributes so the price token stays the one definition. */
+.rh .rh-sp-svg .rh-sp-area { stroke: none; }
+.rh .rh-sp-svg .rh-sp-area-top { stop-color: var(--price); stop-opacity: 0.27; }
+.rh .rh-sp-svg .rh-sp-area-foot { stop-color: var(--price); stop-opacity: 0; }
+
 .rh .rh-sp-svg .price-dot,
 .rh .rh-sp-svg .price-last { fill: var(--price); }
 .rh .rh-sp-svg .price-provisional {

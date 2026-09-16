@@ -58,9 +58,15 @@ def tone_row(when, source='bluesky', **counts):
     return row
 
 
-def series(anchor, *, received_at, values=(101.0,), interval=300):
-    return {'kind': 'ok', 'bars': [[anchor + i * interval, v] for i, v in enumerate(values)],
+def series(anchor, *, received_at, values=(101.0,), interval=300, source=c.YAHOO_SOURCE):
+    return {'kind': 'ok', 'source': source,
+            'bars': [[anchor + i * interval, v] for i, v in enumerate(values)],
             'off_grid': 0, 'outside': 0, 'nulls': 0, 'received_at': received_at}
+
+
+def alpaca_series(anchor, *, received_at, values=(101.0,), interval=60):
+    return series(anchor, received_at=received_at, values=values, interval=interval,
+                  source=c.ALPACA_SOURCE)
 
 
 class FakeStore:

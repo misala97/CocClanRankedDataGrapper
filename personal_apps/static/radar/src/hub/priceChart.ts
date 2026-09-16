@@ -58,8 +58,16 @@ export interface PricePoint {
   end: string
   value: number | null
   provisional: boolean
+  /** The previous reported observation was not the adjacent one, or had no
+   *  valid close. Disclosed, but NOT a drawing boundary: connecting two
+   *  reported prices across a quiet minute adds no observation. */
   break_before: boolean
   regime: string
+  /** The HARD boundary: market state, session date and source/regime. The
+   *  chart draws one line and one area per run of equal `segment`, and never
+   *  across two of them. The server owns this key; the client never derives
+   *  one from timestamps. */
+  segment: string
 }
 
 export interface PriceRegime {
@@ -83,6 +91,12 @@ export interface PriceSeries {
   stale: boolean
   fallback: boolean
   interval_seconds: number | null
+  /** Actual reported observations with a value. */
+  observations: number
+  /** How many whole intervals the window could have held, or null for a
+   *  stored series, which has no expected grid. The two together are what the
+   *  chart says instead of implying complete coverage. */
+  expected_intervals: number | null
   points: PricePoint[]
 }
 
@@ -130,6 +144,17 @@ export interface SelectedPriceOps {
   coordinator_started_at: string | null
   charts_enabled: boolean
   yahoo_enabled: boolean
+  /** The Alpaca source switch, independent of the chart flag. */
+  alpaca_enabled?: boolean
+  /** Whether the two credential variable NAMES hold a value in that process.
+   *  Never a value, a prefix, a length or a digest of one. */
+  credentials_present?: boolean
+  /** The source the server actually selected, or the one a refusal is about;
+   *  null when neither source switch is on. */
+  source?: string | null
+  /** Why the source is or is not active: 'active', 'disabled', 'charts_off',
+   *  'credentials_missing', or 'yahoo' for the older source. */
+  source_state?: string
   /** A positive explicit worker count from `configured_web_workers_source`,
    *  or null when none is configured there: unknown, never guessed. */
   configured_web_workers: number | null
@@ -207,6 +232,7 @@ function validPoint(point: unknown): void {
   check(isObj(point))
   const p = point as Obj
   check(isIso(p.at) && isIso(p.start) && isIso(p.end) && isStr(p.regime))
+  check(isStr(p.segment) && (p.segment as string).length > 0)
   check(p.value === null || (typeof p.value === 'number' && Number.isFinite(p.value) && p.value > 0))
   check(typeof p.provisional === 'boolean' && typeof p.break_before === 'boolean')
 }
@@ -223,8 +249,12 @@ function validPrice(price: unknown): void {
     && (p.latest_observation_at === null || isIso(p.latest_observation_at)))
   check(isNullableNumber(p.cache_age_seconds) && isNullableNumber(p.interval_seconds))
   check(typeof p.stale === 'boolean' && typeof p.fallback === 'boolean')
+  check(isCount(p.observations)
+    && (p.expected_intervals === null || isCount(p.expected_intervals)))
   check(Array.isArray(p.points) && (p.points as unknown[]).length <= MAX_POINTS)
   ;(p.points as unknown[]).forEach(validPoint)
+  check(p.observations === (p.points as unknown[])
+    .filter((point) => (point as Obj).value !== null).length)
 }
 
 function validTone(slot: unknown, count: number | null): void {

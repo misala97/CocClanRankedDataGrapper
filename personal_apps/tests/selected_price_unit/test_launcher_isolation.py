@@ -6,6 +6,7 @@ unguarded top-level code (the shape of app.py / serve_b1c.py), a dummy secret
 sentinel, and Python start-up/path/proxy overrides in its environment; that
 parent runs the real Coordinator with the production launcher against a
 loopback HTTP server. No provider, no database, no real secret."""
+import hashlib
 import http.server
 import io
 import json
@@ -30,7 +31,15 @@ NOW = utc(2026, 9, 15, 13, 50, 19)
 SPEC = c.request_spec(identity(), c.window_for('1W', NOW))
 SENTINEL_KEY = 'RADAR_SP_DUMMY_SECRET'
 SENTINEL = 'dummy-sentinel-not-a-real-secret'
+#: Made-up values in the two real credential variable NAMES. Nothing here is a
+#: credential; no provider is contacted with them.
+KEY_ID_SENTINEL = 'PKSENTINELKEYID0000'
+SECRET_SENTINEL = 'sentinel-secret-not-a-real-credential'
 SEEN = []
+
+
+def digest(value):
+    return hashlib.sha256(value.encode('utf-8')).hexdigest()
 
 PARENT = textwrap.dedent('''\
     import json, os, sys, time
@@ -41,6 +50,8 @@ PARENT = textwrap.dedent('''\
                              'name': __name__}) + '\\n')
     sys.path.insert(0, PERSONAL)
     os.environ[%(key)r] = %(value)r
+    os.environ['APCA_API_KEY_ID'] = %(key_id)r
+    os.environ['APCA_API_SECRET_KEY'] = %(secret)r
 
     if __name__ == '__main__':
         from features.radar import price_chart_acquisition as acq
@@ -65,7 +76,8 @@ PARENT = textwrap.dedent('''\
             'sentinel_in_parent': os.environ.get(%(key)r) == %(value)r,
             'parent_environment_unchanged': dict(os.environ) == before,
             'modules_flask_in_parent': 'flask' in sys.modules}))
-''') % {'key': SENTINEL_KEY, 'value': SENTINEL}
+''') % {'key': SENTINEL_KEY, 'value': SENTINEL,
+        'key_id': 'PKSENTINELKEYID0000', 'secret': 'sentinel-secret-not-a-real-credential'}
 
 HOOK = textwrap.dedent('''\
     """RADAR_SP_HOOK: a start-up hook reachable only through PYTHONPATH."""
@@ -148,7 +160,13 @@ def test_a_file_path_parent_is_not_re_executed_and_its_secrets_and_overrides_sta
     assert child['main_spec'] == 'tests.selected_price_unit.probe_child'
     assert child['heavy_modules'] == []
     assert child['dummy_sentinel_present'] is False and child['sitecustomize_hook_loaded'] is False
-    assert set(child['env_keys']) <= set(acq.CHILD_ENV_ALLOWLIST.get(os.name, ()))
+    assert set(child['env_keys']) <= set(acq.CHILD_ENV_ALLOWLIST.get(os.name, ())) | set(acq.CREDENTIAL_ENV)
+    # The two credential NAMES crossed, with their values intact and nowhere
+    # near the argument array; nothing else the parent held crossed with them.
+    assert set(child['env_keys']) >= set(acq.CREDENTIAL_ENV)
+    assert child['credential_digests'] == {'APCA_API_KEY_ID': digest(KEY_ID_SENTINEL),
+                                           'APCA_API_SECRET_KEY': digest(SECRET_SENTINEL)}
+    assert child['argv_carries_a_credential'] is False
     assert child['flags'] == {'ignore_environment': 1, 'no_user_site': 1, 'dont_write_bytecode': 1}
     # The production child's own transport did the request: direct, no proxy, no cookie.
     assert (out['first'], out['ready']) == ('pending', 'ready')
@@ -175,6 +193,41 @@ def test_the_child_environment_is_an_explicit_allowlist():
     produced = acq.child_environment(hostile, platform='nt')
     produced['EXTRA'] = '1'
     assert 'EXTRA' not in hostile
+
+
+def test_only_the_two_named_alpaca_variables_join_the_platform_minimum():
+    assert acq.CREDENTIAL_ENV == ('APCA_API_KEY_ID', 'APCA_API_SECRET_KEY')
+    hostile = {'SYSTEMROOT': r'C:\Windows', 'APCA_API_KEY_ID': KEY_ID_SENTINEL,
+               'APCA_API_SECRET_KEY': SECRET_SENTINEL, 'APCA_API_BASE_URL': 'https://paper-api.alpaca.markets',
+               'ALPACA_API_KEY': 'x', 'SECRET_KEY': 'x', 'FINNHUB_API_KEY': 'x'}
+    assert acq.child_environment(hostile, platform='nt') == {
+        'SYSTEMROOT': r'C:\Windows', 'APCA_API_KEY_ID': KEY_ID_SENTINEL,
+        'APCA_API_SECRET_KEY': SECRET_SENTINEL}
+    assert acq.child_environment(hostile, platform='posix') == {
+        'APCA_API_KEY_ID': KEY_ID_SENTINEL, 'APCA_API_SECRET_KEY': SECRET_SENTINEL}
+    # Blank is absent, not an empty credential.
+    assert acq.child_environment({'APCA_API_KEY_ID': '', 'APCA_API_SECRET_KEY': '  '},
+                                 platform='posix') == {}
+
+
+def test_an_alpaca_child_is_started_with_no_credential_in_its_arguments(monkeypatch):
+    FakePopen.instances.clear()
+    monkeypatch.setattr(acq.subprocess, 'Popen', FakePopen)
+    monkeypatch.setenv('APCA_API_KEY_ID', KEY_ID_SENTINEL)
+    monkeypatch.setenv('APCA_API_SECRET_KEY', SECRET_SENTINEL)
+    now = utc(2026, 9, 16, 0, 34)
+    spec, refusal = c.alpaca_request_spec(identity(), c.window_for('1D', now), now=now)
+    assert refusal is None
+    acq.subprocess_launcher()(spec)
+    popen = FakePopen.instances[0]
+    written = popen.stdin.written.decode()
+    for secret in (KEY_ID_SENTINEL, SECRET_SENTINEL):
+        assert secret not in ' '.join(popen.args)
+        assert secret not in written                       # not in the request spec either
+    assert json.loads(written) == spec
+    assert popen.kwargs['env'] == acq.child_environment()
+    assert popen.kwargs['env']['APCA_API_KEY_ID'] == KEY_ID_SENTINEL
+    assert popen.kwargs['stderr'] is subprocess.DEVNULL
 
 
 class FakeStdin(io.BytesIO):

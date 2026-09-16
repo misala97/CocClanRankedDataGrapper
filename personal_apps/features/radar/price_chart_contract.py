@@ -1,24 +1,28 @@
 """Selected-instrument price charts (MD-SELECTED-PRICE): the pure contract.
 
-Windows, Yahoo bar normalization, stored-fallback reduction, chatter slots and
-their retained tone, and the version-1 response assembly. Nothing here imports
-the app, the database, Flask or a network client -- the spawned fetch child
-imports this module, so it must stay that light. Every input is a bounded list
-of plain mappings or an already parsed provider payload, and every output is a
+Windows, provider bar normalization (Alpaca consolidated SIP, and the older
+Yahoo shape), stored-fallback reduction, chatter slots and their retained
+tone, and the version-1 response assembly. Nothing here imports the app, the
+database, Flask or a network client -- the spawned fetch child imports this
+module, so it must stay that light. Every input is a bounded list of plain
+mappings or an already parsed provider payload, and every output is a
 JSON-serialisable dict matching SPEC section 3.
 
 Rules this module exists to keep true:
 
 - Missing is not zero. A slot with no valid represented bucket has
-  `count: null`; only recorded valid zero contributions can add up to 0.
-- A bar close is not a tick at its start. A Yahoo timestamp names the START of
-  a bar; its close is known at the bar's end, and a bar still open when the
+  `count: null`; only recorded valid zero contributions can add up to 0. A
+  minute Alpaca did not report is absent, never a null or zero price.
+- A bar close is not a tick at its start. A provider timestamp names the START
+  of a bar; its close is known at the bar's end, and a bar still open when the
   data was received is provisional and plotted at the receipt instant.
-- Adjustment basis is unknown. Nothing here claims unadjusted or split
-  adjusted intraday bars.
-- Gaps stay gaps. A null bar, a missing expected bar, a session or market
-  state boundary and a regime change all break the line; nothing is
-  interpolated or bridged.
+- Adjustment basis is stated, never assumed: `raw` for Alpaca, which says so,
+  and `unknown` for Yahoo, which does not.
+- Hard boundaries stay hard. A session, a market state and a source/regime
+  change each start a NEW hard segment, and no line or fill crosses one. A
+  missing expected bar inside one segment is disclosed (`break_before`) but is
+  not a boundary: the renderer connects the reported prices around it as a
+  visual guide, which adds no observation.
 - One coherent price dataset. Provider bars, stored quotes and stored daily
   closes are never combined, and competing quote sources are never
   interleaved.
@@ -26,7 +30,9 @@ Rules this module exists to keep true:
 The modeled calendar is market_calendars.us, used as it is. Boundaries are
 modeled, not independently validated exchange facts.
 
-Binding: radar-design/MD-SELECTED-PRICE-SPEC.md sections 2-5.
+Binding: radar-design/MD-SELECTED-PRICE-SPEC.md sections 2-5, as amended by
+radar-design/MD-SELECTED-PRICE-ALPACA-SOURCE-RULING.md and
+radar-design/MD-SELECTED-PRICE-ALPACA-C1-SPEC.md.
 """
 from __future__ import annotations
 
@@ -38,7 +44,7 @@ import re
 
 from .analysis_contract import _finite_positive, _price_reason
 from .market_calendars import us
-from .prices import yahoo
+from .prices import alpaca, yahoo
 
 VERSION = 1
 SPANS = ('1D', '1W')
@@ -74,6 +80,20 @@ YAHOO_SOURCE = 'yahoo_chart'
 YAHOO_PRICE_BASIS = 'provider_bar_close'
 UNKNOWN_ADJUSTMENT = 'unknown'
 YAHOO_REGIME = f'{YAHOO_SOURCE}:{YAHOO_PRICE_BASIS}:{UNKNOWN_ADJUSTMENT}'
+
+#: Delayed consolidated SIP bars. `raw` is Alpaca's own documented adjustment
+#: parameter, so unlike Yahoo the basis is stated rather than unknown.
+ALPACA_SOURCE = 'alpaca_sip'
+ALPACA_PRICE_BASIS = 'provider_bar_close'
+RAW_ADJUSTMENT = 'raw'
+ALPACA_REGIME = f'{ALPACA_SOURCE}:{ALPACA_PRICE_BASIS}:{RAW_ADJUSTMENT}'
+
+#: Per provider source: the price basis, adjustment basis and regime id its
+#: normalized series carries. Nothing else in the code branches on a source.
+PROVIDER_PROFILES = {
+    YAHOO_SOURCE: (YAHOO_PRICE_BASIS, UNKNOWN_ADJUSTMENT, YAHOO_REGIME),
+    ALPACA_SOURCE: (ALPACA_PRICE_BASIS, RAW_ADJUSTMENT, ALPACA_REGIME),
+}
 
 ACQUISITION_STATES = ('ready', 'pending', 'backoff', 'busy', 'disabled', 'unavailable')
 TONE_CATEGORIES = ('bullish', 'bearish', 'neutral', 'unjudged', 'unavailable')
@@ -323,6 +343,34 @@ def yahoo_symbol(provider_symbol) -> str | None:
     return None
 
 
+def alpaca_symbol(provider_symbol) -> str | None:
+    """Alpaca's spelling, which is Radar's own: `BRK.B` stays `BRK.B`.
+
+    The validation resolved the dot form on the first attempt, so nothing is
+    rewritten and no alternative spelling is ever tried. Unknown forms --
+    slashes, hyphens, several dots, lower case -- are refused rather than
+    guessed, and the chart falls back to stored data.
+    """
+    if not isinstance(provider_symbol, str):
+        return None
+    if _PLAIN_SYMBOL.match(provider_symbol) or _CLASS_SHARE.match(provider_symbol):
+        return provider_symbol
+    return None
+
+
+def provider_symbol_supported(provider_symbol) -> bool:
+    """Whether either adapter has a spelling for this mapped symbol. Both
+    accept exactly the plain and single-class-share forms."""
+    return alpaca_symbol(provider_symbol) is not None
+
+
+def expected_intervals(window: Window) -> int:
+    """How many whole bars the window could hold, for the chart's coverage
+    wording. Provider coverage may be far below it without being wrong."""
+    seconds = sum((right - left).total_seconds() for left, right in window.price_intervals())
+    return int(seconds // window.interval_seconds)
+
+
 def request_spec(identity: dict, window: Window) -> dict | None:
     """The validated public parameters a fetch child receives, or None when
     the symbol has no Yahoo form. Nothing browser-supplied reaches this."""
@@ -331,6 +379,7 @@ def request_spec(identity: dict, window: Window) -> dict | None:
         return None
     return {
         'version': VERSION,
+        'source': YAHOO_SOURCE,
         'symbol': symbol,
         'currency': identity['currency'],
         'mic': identity['mic'],
@@ -347,9 +396,67 @@ def request_spec(identity: dict, window: Window) -> dict | None:
     }
 
 
-def cache_key(identity: dict, window: Window) -> tuple:
-    """Stable across a moving `now`: no period2 in it."""
-    return (VERSION, YAHOO_SOURCE, identity['fingerprint'], window.span,
+#: Why no Alpaca request was built. Each is an explanatory unavailable state,
+#: never a retry loop and never a zero-valued series.
+ALPACA_REFUSALS = {
+    'session_not_started': 'the session has only just begun',
+    'unsupported_symbol': 'the mapped symbol has no supported provider form',
+    'waiting_for_delay': 'delayed consolidated SIP data does not reach this window yet',
+}
+
+
+def alpaca_request_spec(identity: dict, window: Window, *, now) -> tuple:
+    """`(spec, None)` or `(None, refusal)` for ONE bounded Alpaca request.
+
+    One symbol, one call, `feed=sip`, `adjustment=raw`, `sort=asc`,
+    `limit=10000`, and an `end` clamped to `min(window end, now - 16 minutes)`
+    -- a minute past the documented fifteen-minute Basic delay, on purpose. A
+    window older than the clamp keeps its own contract end. When the clamp
+    leaves nothing, no request is built at all: Alpaca is not asked for data
+    that cannot exist yet.
+    """
+    if window.waiting:
+        return None, 'session_not_started'
+    symbol = alpaca_symbol(identity.get('provider_symbol'))
+    if symbol is None:
+        return None, 'unsupported_symbol'
+    end = min(window.end, aware_utc(now) - dt.timedelta(seconds=alpaca.DELAY_MARGIN_SECONDS))
+    if end <= window.start:
+        return None, 'waiting_for_delay'
+    return {
+        'version': VERSION,
+        'source': ALPACA_SOURCE,
+        'symbol': symbol,
+        'currency': identity['currency'],
+        'mic': identity['mic'],
+        'timeframe': alpaca.TIMEFRAMES[window.interval_seconds],
+        'interval_seconds': window.interval_seconds,
+        'start': iso_z(window.start),
+        'end': iso_z(end),
+        'feed': alpaca.FEED,
+        'adjustment': alpaca.ADJUSTMENT,
+        'sort': alpaca.SORT,
+        'limit': alpaca.LIMIT,
+        'anchor': int(window.start.timestamp()),
+        'intervals': [[int(a.timestamp()), int(b.timestamp())]
+                      for a, b in window.price_intervals()],
+    }, None
+
+
+def request_spec_for(source: str, identity: dict, window: Window, *, now) -> tuple:
+    """`(spec, refusal)` for the admitted source."""
+    if source == ALPACA_SOURCE:
+        return alpaca_request_spec(identity, window, now=now)
+    spec = request_spec(identity, window)
+    if spec is not None:
+        return spec, None
+    return None, 'session_not_started' if window.waiting else 'unsupported_symbol'
+
+
+def cache_key(identity: dict, window: Window, *, source: str = YAHOO_SOURCE) -> tuple:
+    """Stable across a moving `now`: neither period2 nor the delay clamp is in
+    it. The source is, so two adapters never share one cached series."""
+    return (VERSION, source, identity['fingerprint'], window.span,
             window.interval_seconds, window.include_prepost,
             tuple(day.isoformat() for day in window.session_dates))
 
@@ -372,9 +479,47 @@ def _close_value(close):
     return value if value > 0 else None
 
 
+def _intervals_ok(spec) -> bool:
+    return (isinstance(spec.get('intervals'), list)
+            and len(spec['intervals']) <= LOOKUP_DAYS
+            and all(isinstance(pair, list) and len(pair) == 2
+                    and all(isinstance(x, int) and not isinstance(x, bool) for x in pair)
+                    for pair in spec['intervals']))
+
+
+def _alpaca_spec_ok(spec) -> bool:
+    """Structure only. `start >= end` is not a malformed request -- it is the
+    delay clamp having nothing to ask for -- so the child answers `waiting`
+    for it rather than calling it invalid."""
+    try:
+        return (isinstance(spec, dict) and spec.get('version') == VERSION
+                and spec.get('source') == ALPACA_SOURCE
+                and alpaca_symbol(spec.get('symbol')) is not None
+                and spec.get('interval_seconds') in alpaca.TIMEFRAMES
+                and spec.get('timeframe') == alpaca.TIMEFRAMES[spec['interval_seconds']]
+                and spec.get('feed') == alpaca.FEED
+                and spec.get('adjustment') == alpaca.ADJUSTMENT
+                and spec.get('sort') == alpaca.SORT
+                and spec.get('limit') == alpaca.LIMIT
+                and _alpaca_instant(spec.get('start')) is not None
+                and _alpaca_instant(spec.get('end')) is not None
+                and isinstance(spec.get('anchor'), int) and not isinstance(spec['anchor'], bool)
+                and _intervals_ok(spec))
+    except (TypeError, AttributeError, KeyError):
+        return False
+
+
+def spec_ok(spec) -> bool:
+    """Whichever adapter this request names."""
+    if isinstance(spec, dict) and spec.get('source') == ALPACA_SOURCE:
+        return _alpaca_spec_ok(spec)
+    return _spec_ok(spec)
+
+
 def _spec_ok(spec) -> bool:
     try:
         return (isinstance(spec, dict) and spec.get('version') == VERSION
+                and spec.get('source', YAHOO_SOURCE) == YAHOO_SOURCE
                 and isinstance(spec.get('symbol'), str)
                 and yahoo_symbol(spec['symbol'].replace('-', '.')) is not None
                 and spec.get('interval_seconds') in YAHOO_INTERVAL
@@ -383,11 +528,7 @@ def _spec_ok(spec) -> bool:
                         for k in ('period1', 'period2', 'anchor'))
                 and spec['period1'] < spec['period2']
                 and isinstance(spec.get('include_prepost'), bool)
-                and isinstance(spec.get('intervals'), list)
-                and len(spec['intervals']) <= LOOKUP_DAYS
-                and all(isinstance(pair, list) and len(pair) == 2
-                        and all(isinstance(x, int) for x in pair)
-                        for pair in spec['intervals']))
+                and _intervals_ok(spec))
     except (TypeError, AttributeError, KeyError):
         return False
 
@@ -444,17 +585,119 @@ def normalize_yahoo(payload, spec: dict, *, received_at: float) -> dict:
     if not any(value is not None for _, value in bars):
         return {'kind': 'empty', 'reason': 'no valid bar in the window',
                 'off_grid': off_grid, 'outside': outside}
-    return {'kind': 'ok', 'bars': bars, 'off_grid': off_grid, 'outside': outside,
-            'nulls': nulls, 'received_at': received_at}
+    return {'kind': 'ok', 'source': YAHOO_SOURCE, 'bars': bars, 'off_grid': off_grid,
+            'outside': outside, 'nulls': nulls, 'received_at': received_at}
+
+
+# --- Alpaca bars ------------------------------------------------------------------
+
+_FRACTION = re.compile(r'\.(\d+)')
+
+
+def _alpaca_instant(text) -> dt.datetime | None:
+    """One RFC-3339 instant, or None. Every observed bar carried whole
+    seconds, but the documentation reserves nanosecond precision, so the
+    fraction is accepted and truncated to what datetime can hold."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    value = text.strip()
+    if value[-1] in 'Zz':
+        value = value[:-1] + '+00:00'
+    value = _FRACTION.sub(lambda match: '.' + match.group(1)[:6].ljust(6, '0'), value, count=1)
+    try:
+        when = dt.datetime.fromisoformat(value)
+    except (ValueError, TypeError):
+        return None
+    return when.astimezone(UTC) if when.tzinfo is not None else None
+
+
+def normalize_alpaca(payload, spec: dict, *, received_at: float) -> dict:
+    """Validated consolidated-SIP bars for one request, or a classified
+    refusal, in the same shape the supervisor already acts on.
+
+    What the 2026-09-16 validation established and this enforces: exactly one
+    bars key, equal to the requested symbol; a non-null `next_page_token` is
+    truncation, never a complete answer; a minute without a trade is ABSENT,
+    so a null or nonpositive close is a malformed answer rather than a gap;
+    `t` is the bar START. Timestamps outside the window's half-open intervals
+    are dropped -- which is what keeps the exact regular-close bar out of 1W
+    regular data while the 1D extended window keeps it as after-hours.
+    """
+    if not _alpaca_spec_ok(spec):
+        return {'kind': 'invalid', 'reason': 'request_spec'}
+    if not isinstance(payload, dict):
+        return {'kind': 'invalid', 'reason': 'envelope'}
+    if payload.get('next_page_token') is not None:
+        return {'kind': 'truncated', 'reason': 'the provider answer was paginated'}
+    groups = payload.get('bars')
+    if not isinstance(groups, dict):
+        return {'kind': 'invalid', 'reason': 'envelope'}
+    if not groups:
+        return {'kind': 'empty', 'reason': 'no bars'}
+    if set(groups) != {spec['symbol']}:
+        return {'kind': 'identity_mismatch', 'reason': 'the answer named another symbol'}
+    raw = groups[spec['symbol']]
+    if not isinstance(raw, list):
+        return {'kind': 'invalid', 'reason': 'series'}
+    if not raw:
+        return {'kind': 'empty', 'reason': 'no bars'}
+    if len(raw) > MAX_RAW_BARS:
+        return {'kind': 'invalid', 'reason': 'too many bars'}
+    interval = spec['interval_seconds']
+    anchor = spec['anchor']
+    intervals = spec['intervals']
+    previous = None
+    bars = []
+    off_grid = outside = 0
+    for row in raw:
+        when = _alpaca_instant(row.get(alpaca.TIMESTAMP_KEY)) if isinstance(row, dict) else None
+        if when is None:
+            return {'kind': 'invalid', 'reason': 'timestamp'}
+        epoch = when.timestamp()
+        if previous is not None and epoch <= previous:
+            return {'kind': 'invalid', 'reason': 'timestamps not increasing'}
+        previous = epoch
+        close = row.get(alpaca.CLOSE_KEY)
+        if (close is None or isinstance(close, bool) or not isinstance(close, (int, float))
+                or not math.isfinite(close) or close <= 0):
+            # Alpaca omits a minute it has nothing for, so a null, zero or
+            # negative close is a malformed answer, not a disclosed gap.
+            return {'kind': 'invalid', 'reason': 'close is not a finite positive number'}
+        stamp = int(epoch)
+        if stamp != epoch or (stamp - anchor) % interval:
+            off_grid += 1
+            continue
+        if not any(left <= stamp < right for left, right in intervals):
+            outside += 1
+            continue
+        bars.append([stamp, float(close)])
+    if len(bars) > MAX_PRICE_POINTS:
+        return {'kind': 'invalid', 'reason': 'too many points'}
+    if not bars:
+        return {'kind': 'empty', 'reason': 'no bar inside the window',
+                'off_grid': off_grid, 'outside': outside}
+    return {'kind': 'ok', 'source': ALPACA_SOURCE, 'bars': bars, 'off_grid': off_grid,
+            'outside': outside, 'nulls': 0, 'received_at': received_at}
 
 
 def yahoo_points(bars, window: Window, received_at: dt.datetime) -> list[dict]:
+    return provider_points(bars, window, received_at, regime=YAHOO_REGIME)
+
+
+def provider_points(bars, window: Window, received_at: dt.datetime, *,
+                    regime: str = YAHOO_REGIME) -> list[dict]:
     """Points for normalized bars, clipped to window.end.
 
     A bar still open when the data was RECEIVED is provisional and plotted at
     the receipt instant, however much later it is served from cache: its close
-    was captured mid-bar. Missing expected bars, null bars, market-state
-    boundaries and session boundaries break the line.
+    was captured mid-bar.
+
+    `segment` is the HARD boundary the renderer groups by: the market
+    state and session date this bar starts in, plus the source/regime. Nothing
+    is drawn across two of them. `break_before` is the softer fact that the
+    previous reported bar was not the adjacent one (or had no valid close);
+    it is disclosed but does NOT split the drawing, because connecting two
+    reported prices across a quiet minute adds no observation.
     """
     interval = window.interval_seconds
     step = dt.timedelta(seconds=interval)
@@ -475,35 +718,44 @@ def yahoo_points(bars, window: Window, received_at: dt.datetime) -> list[dict]:
         points.append({'at': iso_z(at), 'start': iso_z(start), 'end': iso_z(end),
                        'value': value, 'provisional': provisional,
                        'break_before': break_before if points else False,
-                       'regime': YAHOO_REGIME})
+                       'regime': regime, 'segment': f'{state}|{regime}'})
         previous_start, previous_state, previous_valid = start, state, value is not None
     return points
 
 
-def yahoo_price(bars_result: dict, window: Window, identity: dict, *, now: dt.datetime) -> dict | None:
+def provider_price(bars_result: dict, window: Window, identity: dict, *,
+                   now: dt.datetime) -> dict | None:
     """The provider price block, or None when no valid point is inside the
-    window (the caller then tries the stored fallback)."""
+    window (the caller then tries the stored fallback).
+
+    `observations` and `expected_intervals` are what the chart discloses
+    instead of implying complete coverage: an illiquid listing reporting 64 of
+    390 minutes is 64 real observations, not a broken chart.
+    """
+    source = bars_result.get('source', YAHOO_SOURCE)
+    price_basis, adjustment, regime = PROVIDER_PROFILES[source]
     received = from_epoch(bars_result['received_at'])
-    points = yahoo_points(bars_result['bars'], window, received)
+    points = provider_points(bars_result['bars'], window, received, regime=regime)
     valid = [p for p in points if p['value'] is not None]
     if not valid:
         return None
     age = max(0, int((aware_utc(now) - received).total_seconds()))
     return {
-        'source': YAHOO_SOURCE, 'kind': 'bar_close', 'currency': 'USD',
-        'mic': identity['mic'], 'price_basis': YAHOO_PRICE_BASIS,
-        'adjustment_basis': UNKNOWN_ADJUSTMENT,
-        'regimes': [{'id': YAHOO_REGIME, 'source': YAHOO_SOURCE,
-                     'price_basis': YAHOO_PRICE_BASIS,
-                     'adjustment_basis': UNKNOWN_ADJUSTMENT}],
+        'source': source, 'kind': 'bar_close', 'currency': 'USD',
+        'mic': identity['mic'], 'price_basis': price_basis,
+        'adjustment_basis': adjustment,
+        'regimes': [{'id': regime, 'source': source, 'price_basis': price_basis,
+                     'adjustment_basis': adjustment}],
         'received_at': iso_z(received), 'cache_age_seconds': age,
         'latest_observation_at': valid[-1]['at'],
         'stale': age >= FRESH_SECONDS, 'fallback': False,
-        'interval_seconds': window.interval_seconds, 'points': points,
+        'interval_seconds': window.interval_seconds,
+        'observations': len(valid), 'expected_intervals': expected_intervals(window),
+        'points': points,
     }
 
 
-def yahoo_warnings(bars_result: dict) -> list[str]:
+def provider_warnings(bars_result: dict) -> list[str]:
     out = []
     if bars_result.get('off_grid'):
         out.append(f"price: {bars_result['off_grid']} provider point(s) off the "
@@ -566,6 +818,7 @@ def quote_fallback(rows, identity: dict, window: Window, *, read_start: dt.datet
     points = []
     previous = None
     conflicts = 0
+    run = 0
     for when in sorted(by_source[chosen]):
         values = by_source[chosen][when]
         if len(values) > 1:
@@ -578,9 +831,15 @@ def quote_fallback(rows, identity: dict, window: Window, *, read_start: dt.datet
         break_before = previous is not None and (
             previous['regime'] != regime or previous['state'] != state
             or (when - previous['when']).total_seconds() > QUOTE_GAP_SECONDS)
+        # A stored quote has no expected grid, so an hours-long hole between
+        # two polls is itself a hard boundary: a line across it would be a
+        # claim about a period nothing was recorded for.
+        if break_before:
+            run += 1
         points.append({'at': iso_z(when), 'start': iso_z(when), 'end': iso_z(when),
                        'value': price, 'provisional': False,
-                       'break_before': break_before, 'regime': regime})
+                       'break_before': break_before, 'regime': regime,
+                       'segment': f'{state}|{regime}|{run}'})
         previous = {'regime': regime, 'state': state, 'when': when}
     if conflicts:
         warnings.append(f'price: {conflicts} stored quote instant(s) carried conflicting '
@@ -604,7 +863,8 @@ def quote_fallback(rows, identity: dict, window: Window, *, read_start: dt.datet
         'regimes': regimes, 'received_at': iso_z(received), 'cache_age_seconds': None,
         'latest_observation_at': points[-1]['at'],
         'stale': (read_start - received).total_seconds() >= FRESH_SECONDS,
-        'fallback': True, 'interval_seconds': None, 'points': points,
+        'fallback': True, 'interval_seconds': None,
+        'observations': len(points), 'expected_intervals': None, 'points': points,
     }, warnings
 
 
@@ -653,9 +913,12 @@ def daily_fallback(rows, identity: dict, window: Window, *, read_start: dt.datet
             regimes.append({'id': regime, 'source': row['source'].strip(),
                             'price_basis': 'close', 'adjustment_basis': row['adjustment_basis'].strip()})
         fetched_max = fetched if fetched_max is None or fetched > fetched_max else fetched_max
+        # Each daily close is its own hard segment: a line between two of them
+        # would draw prices nobody observed across a whole session.
         points.append({'at': iso_z(close_at), 'start': iso_z(session.regular_opens_at),
                        'end': iso_z(close_at), 'value': _finite_positive(row['close']),
-                       'provisional': False, 'break_before': bool(points), 'regime': regime})
+                       'provisional': False, 'break_before': bool(points), 'regime': regime,
+                       'segment': f'{session.date.isoformat()}|{regime}'})
     if invalid:
         warnings.append(f'price: {invalid} stored daily close(s) in this window were unusable')
     if not points:
@@ -670,7 +933,8 @@ def daily_fallback(rows, identity: dict, window: Window, *, read_start: dt.datet
         'received_at': iso_z(fetched_max), 'cache_age_seconds': None,
         'latest_observation_at': points[-1]['at'],
         'stale': (read_start - fetched_max).total_seconds() >= FRESH_SECONDS,
-        'fallback': True, 'interval_seconds': None, 'points': points,
+        'fallback': True, 'interval_seconds': None,
+        'observations': len(points), 'expected_intervals': None, 'points': points,
     }, warnings
 
 

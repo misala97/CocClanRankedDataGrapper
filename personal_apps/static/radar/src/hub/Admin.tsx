@@ -14,6 +14,7 @@ import { BoardUnavailable, fetchOps } from '../api'
 import { Forbidden, Loading, Unavailable } from './PageState'
 import type { SelectedPriceOps } from './priceChart'
 import { REFRESH_MS } from './queries'
+import { sourceWord } from './selectedPriceGeometry'
 
 export function Admin() {
   const query = useQuery({
@@ -149,6 +150,17 @@ export function Admin() {
   )
 }
 
+/** Whether the source is actually acquiring, in words. "The charts are on" is
+ *  a different claim from "the source is acquiring", and so is "the key
+ *  variables hold something". */
+const SOURCE_STATE_WORD: Record<string, string> = {
+  active: 'acquiring',
+  disabled: 'switched off',
+  charts_off: 'selected charts switched off',
+  credentials_missing: 'credentials not configured',
+  yahoo: 'the historical Yahoo source is active instead',
+}
+
 /** One web process's selected-price acquisition, and it says so: every figure
  *  resets when that process restarts, and each web worker keeps its own. */
 function SelectedPricePanel({ ops }: { ops: SelectedPriceOps }) {
@@ -171,9 +183,14 @@ function SelectedPricePanel({ ops }: { ops: SelectedPriceOps }) {
           ? `${ops.configured_web_workers} (from ${workersSource})`
           : `Unknown — ${workersSource} is not set to a positive number; each worker keeps its own limits`}
       </Fact>
-      <Fact label="Chart / provider switch">
-        {`${ops.charts_enabled ? 'on' : 'off'} / ${ops.yahoo_enabled ? 'on' : 'off'}`}
+      <Fact label="Chart / Alpaca switch">
+        {`${ops.charts_enabled ? 'on' : 'off'} / ${ops.alpaca_enabled ? 'on' : 'off'}`}
       </Fact>
+      <Fact label="Source">
+        {`${ops.source ? sourceWord(ops.source) : 'None selected'} — `
+          + `${SOURCE_STATE_WORD[ops.source_state ?? ''] ?? 'unknown'}`}
+      </Fact>
+      <Fact label="Credentials configured">{ops.credentials_present ? 'yes' : 'no'}</Fact>
       <Fact label="Acquiring now">{ops.in_flight ? 'yes' : 'no'}</Fact>
       <Fact label="Starts, last 60 s">
         {`${ops.rolling_starts_60s} of ${ops.limits?.starts_per_60s ?? 10}`}
