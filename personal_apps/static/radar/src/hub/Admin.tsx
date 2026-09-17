@@ -111,37 +111,11 @@ export function Admin() {
                 ? ` (${ops.market_data.grouped_closes.http_status})` : ''}
             </Fact>
           ) : null}
-          <Fact label="German download budget">
-            {`${ops.market_data.de_download_budget_24h.spent} of `
-             + `${ops.market_data.de_download_budget_24h.limit} used`}
-          </Fact>
           <Fact label="Quote basis, 24h">
             {Object.entries(ops.market_data.quote_basis_24h)
               .map(([basis, count]) => `${basis} ${count.toLocaleString('en-US')}`)
               .join(' · ') || 'No quotes stored'}
           </Fact>
-        </Panel>
-
-        <Panel title="Collection cycles">
-          {Object.keys(ops.market_data.cycles).length === 0
-            ? <p className="muted small">No cycle has been recorded.</p>
-            : (
-              <ul className="rh-facts-list">
-                {Object.entries(ops.market_data.cycles).map(([key, cycle]) => (
-                  <li key={key}>
-                    <strong>{key}</strong> — {cycle.status}
-                    {cycle.error_code ? ` (${cycle.error_code})` : ''},
-                    {' '}{cycle.files_accepted} of {cycle.files_seen} files,
-                    {' '}{cycle.selected.toLocaleString('en-US')} selected
-                    {/* The newest row per channel, with no recency bound on
-                        the server -- so one from three weeks ago looks
-                        identical to one from five minutes ago unless it says
-                        when it ran. */}
-                    <span className="rh-sub">{scheduled(cycle.scheduled_at)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
         </Panel>
 
         {ops.selected_price_ops ? <SelectedPricePanel ops={ops.selected_price_ops} /> : null}
@@ -252,19 +226,6 @@ function money(value: number): string {
   // about not misreading a zero.
   if (value > 0 && value < 0.01) return 'under $0.01'
   return `$${value.toFixed(2)}`
-}
-
-/** The market-data timestamps are naive UTC (no Z, unlike the envelope's
- *  own), so they are told which zone they are in before being converted. */
-function scheduled(iso: string): string {
-  const utc = /(Z|[+-]\d\d:?\d\d)$/.test(iso) ? iso : `${iso}Z`
-  try {
-    return `ran ${new Date(utc).toLocaleString('en-GB',
-      { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-        timeZone: 'Europe/Berlin' })} Berlin`
-  } catch {
-    return 'run time unknown'
-  }
 }
 
 function stamp(iso: string): string {

@@ -15,8 +15,10 @@ import { useContext, useEffect, useRef } from 'react'
 import { Breakdown } from '../detail/Breakdown'
 import { Posts } from '../detail/Posts'
 import { ChartBasisNote, PriceChart, roseOverSpan } from '../detail/PriceChart'
-import { sourceLabel } from '../format'
-import type { Detail, DetailChart, PanelSpan, Selection } from '../types'
+import { sourceLabel, usdText } from '../format'
+import type {
+  Detail, DetailChart, PanelSpan, QuoteCurrency, Selection,
+} from '../types'
 import { BoardUnavailable } from '../api'
 import { Unavailable } from './PageState'
 import { PriceChartUnavailable } from './priceChart'
@@ -69,17 +71,17 @@ export function ChartSection({ chart, quoteVenue, ticker, span, onSpan,
   onSpan: (span: PanelSpan) => void
   headingId?: string
   /** The listing context, which the selected-session chart needs for its
-   *  market and sources. Without it the original chart is drawn. */
+   *  sources. Without it the original chart is drawn. */
   selection?: Selection
   visible?: boolean
 }) {
   // The selected-session chart (MD-SELECTED-PRICE) replaces ONLY this
-  // section's drawing, and only where the server offers it, for a US
+  // section's drawing, and only where the server offers it, for a listing
   // selection, on 1D and 1W. A company the server cannot chart that way (no
   // native-USD US primary) and a switched-off server keep the original chart.
   // Everything else on the page -- the quote, evidence, posts -- is untouched.
   const offered = useContext(SelectedPriceCharts)
-  const eligible = offered && selection !== undefined && selection.market === 'us'
+  const eligible = offered && selection !== undefined
     && (span === '1D' || span === '1W')
   const priceChart = usePriceChart({ ticker, selection, span, enabled: eligible, visible })
   const refused = priceChart.error instanceof PriceChartUnavailable
@@ -304,7 +306,6 @@ export function Quote({ detail, headingId = 'rh-quote-head' }: {
             {[quote.venue, quote.currency, quote.mic].filter(Boolean).join(' · ')}
             {quote.quoted_at ? ` · quoted ${berlinStamp(quote.quoted_at)}` : ''}
             {' · '}{qualityWord(quote.quality)}
-            {quote.is_fallback ? ' · fallback listing' : ''}
           </p>
         </>
       )}
@@ -439,7 +440,7 @@ export function PostsPanel({ detail }: { detail: Detail }) {
   )
 }
 
-/** A company the server has no panel for, in the window and market currently
+/** A company the server has no panel for, in the window currently
  *  selected. Distinct from a failure, which keeps its retry. */
 export function NotHere({ ticker, error, onBack, onSearch, retry, backLabel,
                          onBoard = false }: {
@@ -462,11 +463,11 @@ export function NotHere({ ticker, error, onBack, onSearch, retry, backLabel,
       <p>
         {onBoard
           ? `${ticker} is ranked on this board, but Radar has no detail panel `
-            + 'for it in the current window and market — the company profile '
+            + 'for it in the current window — the company profile '
             + 'behind the ticker is missing, not the chatter.'
-          : 'Radar has no panel for that ticker in the current window and '
-            + 'market. It may have dropped off the board, or the symbol may '
-            + 'be spelled differently in this market.'}
+          : 'Radar has no panel for that ticker in the current window. It '
+            + 'may have dropped off the board, or the symbol may be spelled '
+            + 'differently.'}
       </p>
       <p className="rh-empty-actions">
         <button type="button" className="rh-button primary" onClick={onBack}>
@@ -498,11 +499,8 @@ export function moveClass(move: number | null): string {
   return move > 0 ? 'positive' : 'negative'
 }
 
-export function formatPrice(value: number, currency: string | null): string {
-  const symbol = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : ''
-  const text = value.toLocaleString('en-US',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return symbol ? `${symbol}${text}` : `${text} ${currency ?? ''}`.trim()
+export function formatPrice(value: number, currency: QuoteCurrency | null): string {
+  return usdText(value, currency)
 }
 
 export const SESSION_WORD: Record<string, string> = {

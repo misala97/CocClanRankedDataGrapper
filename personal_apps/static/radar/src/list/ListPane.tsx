@@ -2,7 +2,6 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactNode } from 'react'
 
 import { Controls } from '../board/Controls'
-import { MarketSwitch } from '../board/MarketSwitch'
 import { Search } from '../board/Search'
 import { defaultDirection, queryFor } from '../api'
 import { boardAge, formatMarketTime, humanAge, plural } from '../format'
@@ -194,10 +193,10 @@ export function universalMarks(rows: Row[]): Mark[] {
 
 /** Quote provenance the whole board carries, lifted the same way.
  *
- *  On the German board with no Xetra entitlement EVERY row's quote is a US
- *  fallback, aged the same ~46 hours -- and five badges times seventeen rows
- *  all saying one thing is how the old row drowned. The board states it once,
- *  in amber, and each row keeps only what deviates (see deviantQuoteFacts).
+ *  On a board read overnight EVERY row's quote can be aged the same ~46
+ *  hours -- and five badges times seventeen rows all saying one thing is how
+ *  the old row drowned. The board states it once, in amber, and each row
+ *  keeps only what deviates (see deviantQuoteFacts).
  *
  *  `keys` is the suppression contract with TickerRow; `tokens` is what the
  *  Status line prints. Same two-row floor as universalMarks, same reason.
@@ -215,10 +214,6 @@ export function universalQuoteFacts(rows: Row[]): {
   const tokens: string[] = []
   let agedTypical: number | null = null
 
-  if (rows.every((row) => row.quote.is_fallback)) {
-    keys.push('fallback')
-    tokens.push('US prices')
-  }
   // Over the rows that HAVE a quote. One row with no quote at all (QQQ, live
   // 2026-09-01) used to block the lift, so six stale rows each said "quote
   // 1h old" and every row grew a flags line -- the wallpaper the lift exists
@@ -620,14 +615,11 @@ export function ListPane({ payload, received, selection, selected, busy,
   return (
     <aside className="list" aria-label="Board">
       <div className="lhead">
-        {/* Masthead: identity, the market the prices come from, freshness.
-            The market switch sits beside the wordmark because it changes
-            what the board IS -- unlike the strip below, which narrows it.
-            The session state that used to sit here as a chip lives in the
-            status line now; it was the same fact stated twice. */}
+        {/* Masthead: identity, search, freshness. The session state that
+            used to sit here as a chip lives in the status line now; it was
+            the same fact stated twice. */}
         <div className="brand">
           <h1>Radar</h1>
-          <MarketSwitch selection={selection} onChange={onChange} />
           <Search rows={rows} watching={watching}
                   onPick={onSelect} onToggleWatch={onToggleWatch} />
           {/* Ops at a glance, in the corner the eye already checks for

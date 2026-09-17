@@ -230,13 +230,10 @@ export function Hub({ initial, isAdmin, selectedPriceCharts = false }: {
   // behind it is nothing the reader asked about there.
   const banner = shown !== undefined && isReady(shown) && board.isError
     && route.page !== 'analysis' ? shown : null
-  // The market the top bar names is the one the reader is on. Placeholder
-  // data is the previous selection's board -- after a market switch, the
-  // previous MARKET's, session and all -- so a board speaks for the bar only
-  // when it is this market's. Until one is, the bar names the market the
-  // reader chose and claims no session for it.
-  const context = [board.data, initial].find(
-    (candidate) => candidate?.market === selection.market) ?? null
+  // The top bar names the US market and its session. Every board is a US
+  // board, so the one on screen -- or the page's opening one -- speaks for
+  // it; until either exists the bar names the market and claims no session.
+  const context = board.data ?? initial ?? null
 
   return (
     <SelectedPriceCharts.Provider value={selectedPriceCharts}>
@@ -292,7 +289,7 @@ export function Hub({ initial, isAdmin, selectedPriceCharts = false }: {
               </span>
               {sessionWord(context)}
             </>
-          ) : MARKET_NAME[selection.market]}
+          ) : MARKET_NAME}
         </p>
         {/* Where Radar is going. Three fictional mockups the owner asked to
             keep reachable from the live hub -- long-term visual references,
@@ -695,11 +692,8 @@ function sessionWord(payload: BoardPayload): string {
   return payload.session === 'regular' ? 'open' : payload.session
 }
 
-/** What the top bar calls a market no board of it has answered for yet. */
-const MARKET_NAME: Record<Selection['market'], string> = {
-  us: 'US markets',
-  de: 'Germany',
-}
+/** What the top bar calls the market before any board has answered. */
+const MARKET_NAME = 'US markets'
 
 function Logo() {
   return (

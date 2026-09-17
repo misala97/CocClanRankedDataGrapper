@@ -1,4 +1,8 @@
-"""Normalized market quote quality, movement, and market fallback rules."""
+"""Normalized US quote quality and movement.
+
+Radar prices US listings in US dollars only. A snapshot from any other market
+or in any other currency is never selected, converted or relabelled.
+"""
 import dataclasses
 import datetime as dt
 import decimal
@@ -9,7 +13,9 @@ from .market_calendars import session_state
 from .prices import Quote
 
 
-Market = Literal['us', 'de']
+Market = Literal['us']
+MARKET = 'us'
+CURRENCY = 'USD'
 TapeStatus = Literal['ok', 'closed', 'stale', 'unknown']
 QUALITY_STATES = frozenset({'live', 'delayed', 'eod', 'stale', 'unavailable'})
 TAPE_STATUSES = frozenset({'ok', 'closed', 'stale', 'unknown'})
@@ -90,7 +96,6 @@ class QuoteView:
     score_eligible: bool
     regular_move: decimal.Decimal | None
     extended_move: decimal.Decimal | None
-    is_fallback: bool
     source: str | None = None
     price_basis: str | None = None
     bid: decimal.Decimal | None = None
@@ -109,13 +114,12 @@ class QuoteView:
                     volume=None, session='closed', quality='unavailable',
                    age_seconds=None, tape_status='unknown',
                    score_eligible=False, regular_move=None,
-                   extended_move=None, is_fallback=False)
+                   extended_move=None)
 
     @classmethod
     def from_snapshot(cls, quote: Quote, now: dt.datetime,
-                      is_fallback: bool = False,
                       tape_status: TapeStatus = 'ok') -> 'QuoteView':
-        """Build a view from a provider snapshot and its external tape verdict.
+        """Build a view from a US dollar snapshot and its tape verdict.
 
         ``tape_status`` is supplied by quote-history code. Only ``'ok'``
         permits scoring; every other verdict is not a verified open tape,
@@ -123,6 +127,10 @@ class QuoteView:
         """
         if tape_status not in TAPE_STATUSES:
             raise ValueError(f'unknown tape status: {tape_status}')
+        if quote.market != MARKET:
+            raise ValueError(f'not a US snapshot: {quote.market}')
+        if quote.currency != CURRENCY:
+            raise ValueError(f'not a USD snapshot: {quote.currency}')
         # Session may use the current clock for a row without provider time,
         # but no price/move/eligibility can come from that missing time.
         observed_at = quote.quote_ts or now
@@ -139,20 +147,17 @@ class QuoteView:
             quote_ts=quote.quote_ts, volume=quote.volume, session=session,
             quality=quality, age_seconds=age_seconds,
             tape_status=tape_status,
-            # Only a fresh executed trade on a moving, non-fallback tape may
-            # produce divergence: midpoints are visible-not-eligible, and a
-            # US fallback in Germany mode is never a German signal.
+            # Only a fresh executed trade on a moving tape may produce
+            # divergence: midpoints are visible-not-eligible.
             score_eligible=(quality in {'live', 'delayed'} and
                             tape_status == 'ok' and
-                            quote.price_basis == 'trade' and
-                            not is_fallback),
+                            quote.price_basis == 'trade'),
             regular_move=_movement(quote.price, quote.previous_close),
             extended_move=(
                 _movement(quote.price, quote.previous_close)
                 if session == 'premarket' else
                 _movement(quote.price, quote.regular_close)
                 if session == 'afterhours' else None),
-            is_fallback=is_fallback,
             source=quote.source, price_basis=quote.price_basis,
             bid=quote.bid, ask=quote.ask,
         )
@@ -169,16 +174,14 @@ def _quotes_for(snapshots: Mapping[str, object], market: str) -> list[Quote]:
     return []
 
 
-def _primary_quote(ticker: str, market: str,
+def _primary_quote(ticker: str,
                    snapshots: Mapping[str, object]) -> Quote | None:
-    quotes = [quote for quote in _quotes_for(snapshots, market)
-              if quote.ticker == ticker and quote.market == market]
-    expected_currency = {'us': 'USD', 'de': 'EUR'}[market]
-    quotes = [quote for quote in quotes if quote.currency == expected_currency]
-    # No German MIC hard-code: the current primary instrument supplies the
-    # MIC, and the caller hands this function only that instrument's rows.
-    # Pinning between XGAT and XETR is a mapping-generation decision, never
-    # a per-poll race.
+    # A snapshot filed under the US key is still checked: only a US dollar
+    # print of this ticker is a candidate. The current primary instrument
+    # supplies the MIC, and the caller hands this function only its rows.
+    quotes = [quote for quote in _quotes_for(snapshots, MARKET)
+              if quote.ticker == ticker and quote.market == MARKET
+              and quote.currency == CURRENCY]
     if not quotes:
         return None
     return max(quotes, key=lambda quote: _utc_naive(quote.fetched_at) or
@@ -187,30 +190,19 @@ def _primary_quote(ticker: str, market: str,
 
 def select_quote(ticker: str, requested_market: Market,
                  snapshots: Mapping[str, object], now: dt.datetime,
-                 tape_status: TapeStatus = 'ok',
-                 allow_us_fallback: bool = True) -> QuoteView:
-    """Select the honest market quote, retaining stale snapshots before fallback.
+                 tape_status: TapeStatus = 'ok') -> QuoteView:
+    """Select the honest US quote, retaining a stale snapshot as stale.
 
-    ``allow_us_fallback=False`` is how a caller says a verified German
-    primary mapping EXISTS but its feed is currently silent: the row shows
-    its retained stale quote or unavailable, never a US price dressed as
-    availability (spec §4.2).
+    Missing US data stays unavailable: there is no other market to fall back
+    to, and no other currency to convert from.
     """
-    if requested_market not in {'us', 'de'}:
+    if requested_market != MARKET:
         raise ValueError(f'unknown market: {requested_market}')
 
-    requested = _primary_quote(ticker, requested_market, snapshots)
+    requested = _primary_quote(ticker, snapshots)
     if requested is not None:
         view = QuoteView.from_snapshot(requested, now, tape_status=tape_status)
         if view.quality != 'unavailable':
             return view
-
-    if requested_market == 'de' and allow_us_fallback:
-        us = _primary_quote(ticker, 'us', snapshots)
-        if us is not None:
-            view = QuoteView.from_snapshot(
-                us, now, is_fallback=True, tape_status=tape_status)
-            if view.quality != 'unavailable':
-                return view
 
     return QuoteView.unavailable(ticker, requested_market)

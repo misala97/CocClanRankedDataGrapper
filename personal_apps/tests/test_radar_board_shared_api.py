@@ -202,22 +202,18 @@ def blob_for(query, *, as_of, rows=None):
 
     The session and the boundary are the three fields a serialized board
     DERIVES rather than echoes, and they are derived here the way `board.build`
-    derives them -- from the same two functions, with the same Tradegate-first
-    MIC. A fake that named a session out of the air would make the shell-versus-
-    board comparison below assert a difference the producer never produces.
+    derives them -- from the same two functions. A fake that named a session
+    out of the air would make the shell-versus-board comparison below assert a
+    difference the producer never produces.
     """
-    mic = 'XGAT' if query.market == 'de' else None
-    session = session_state(query.market, as_of.replace(tzinfo=dt.timezone.utc),
-                            mic=mic)
-    label, boundary_at = board_mod._next_boundary(query.market, as_of, session,
-                                                  mic=mic)
+    session = session_state(query.market, as_of.replace(tzinfo=dt.timezone.utc))
+    label, boundary_at = board_mod._next_boundary(query.market, as_of, session)
     payload = {
         'generated_at': as_of.isoformat() + 'Z',
         'ops_collected_at': as_of.isoformat() + 'Z',
         'market': query.market,
         'display_timezone': 'Europe/Berlin',
-        'market_venue': ('Tradegate-first Germany' if query.market == 'de'
-                         else 'US markets'),
+        'market_venue': 'US markets',
         'next_boundary_label': label,
         'next_boundary_at': api._iso_z(boundary_at),
         'sources': sorted({api.source_root(s) for s in query.sources}),
@@ -561,7 +557,7 @@ def test_the_shell_and_the_board_describe_the_same_selection(shared):
     in the echo is a difference in how the two paths DERIVE it rather than
     however many seconds of clock separate a build from a read.
     """
-    args = {'market': 'de', 'window': '24', 'segment': 'large',
+    args = {'market': 'us', 'window': '24', 'segment': 'large',
             'sources': 'reddit:wallstreetbets'}
     shell = read(shared, args)
     assert shell['pending'] is True
@@ -846,7 +842,7 @@ def test_capture_reads_nothing_from_the_store_even_with_the_flag_on(
                 < dt.datetime(2020, 1, 1)).delete(synchronize_session=False)
             db.session.commit()
 
-    assert [args['market'] for args in calls] == ['us', 'de']
+    assert [args['market'] for args in calls] == ['us']
 
 
 # --- the flag off -----------------------------------------------------------
@@ -955,12 +951,14 @@ def test_ops_counts_the_standing_boards_this_build_derives(shared, client,
     the number `warm_ready` is short of.
 
     Derived rather than read off a limit: the eight come from a cross product
-    of markets, segments and windows, and a ninth added to that cross product
+    of the US market, two segments and four windows, and a ninth added to that
+    cross product
     must make the operations page read "8 of 12" rather than a full house it
     is two thirds of. A constant that agreed with the derivation today is a
     constant that would go on agreeing after the derivation moved.
     """
-    monkeypatch.setattr(board_producer, 'WARM_WINDOWS', (4, 12, 24))
+    # 1 market x 2 segments x 6 windows.
+    monkeypatch.setattr(board_producer, 'WARM_WINDOWS', (1, 2, 4, 8, 12, 24))
 
     results = client.get('/radar/api/ops').get_json()['board_results']
     assert results['warm_total'] == 12
@@ -1030,10 +1028,10 @@ def test_every_outcome_writes_one_read_line(shared, caplog):
     """One line per read, and the outcome is the answer the viewer got."""
     with caplog.at_level(logging.INFO, logger='radar.board'):
         read(shared)                                             # pending
-        shared.publish({'market': 'de'}, as_of=NOW - seconds(300))
-        read(shared, {'market': 'de'})                           # stale
-        shared.publish({'market': 'de'}, as_of=NOW - seconds(10))
-        read(shared, {'market': 'de'})                           # ready
+        shared.publish({'segment': 'large'}, as_of=NOW - seconds(300))
+        read(shared, {'segment': 'large'})                       # stale
+        shared.publish({'segment': 'large'}, as_of=NOW - seconds(10))
+        read(shared, {'segment': 'large'})                       # ready
         shared.seed_pending(32, base=NOW - seconds(500))
         read(shared, {'market': 'us', 'window': '4'})             # busy
 

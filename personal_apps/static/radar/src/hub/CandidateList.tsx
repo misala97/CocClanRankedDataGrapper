@@ -13,7 +13,8 @@
 // filters, same ordering, same response.
 import { useEffect, useRef } from 'react'
 
-import type { Row } from '../types'
+import { usdText } from '../format'
+import type { QuoteCurrency, Row } from '../types'
 import { tonePresentation } from './chatterPresentation'
 import type { TonePresentation } from './chatterPresentation'
 
@@ -237,9 +238,6 @@ function moveClass(move: number | null): string {
   return move > 0 ? 'positive' : 'negative'
 }
 
-function formatPrice(value: number, currency: string | null): string {
-  const symbol = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : ''
-  const text = value.toLocaleString('en-US',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return symbol ? `${symbol}${text}` : `${text} ${currency ?? ''}`.trim()
+function formatPrice(value: number, currency: QuoteCurrency | null): string {
+  return usdText(value, currency)
 }

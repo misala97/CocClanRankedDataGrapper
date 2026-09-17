@@ -7,7 +7,6 @@ weekend never gets to the ticker that appeared an hour ago.
 """
 import datetime as dt
 import decimal
-import hashlib
 
 import pytest
 import sqlalchemy as sa
@@ -20,22 +19,19 @@ from models import RadarDailyClose
 TODAY = dt.date(2026, 8, 21)
 NOW = dt.datetime(2026, 8, 21, 20, 0, 0)
 PREFIX = 'HS'
-OWNED_INSTRUMENT_TICKERS = (
-    f'{PREFIX}NEW', f'{PREFIX}OLD', f'{PREFIX}SEAM')
+OWNED_INSTRUMENT_TICKERS = (f'{PREFIX}SEAM', f'{PREFIX}ARC')
 
 
 @pytest.fixture()
 def clean():
     def wipe():
-        from models import RadarInstrument, RadarMappingGeneration
+        from models import RadarInstrument
         RadarDailyClose.query.filter(
             RadarDailyClose.ticker.like(f'{PREFIX}%')).delete(
                 synchronize_session=False)
         RadarInstrument.query.filter(
             RadarInstrument.ticker.in_(OWNED_INSTRUMENT_TICKERS)).delete(
                 synchronize_session=False)
-        RadarMappingGeneration.query.filter_by(
-            source='test-history-proxy').delete(synchronize_session=False)
         db.session.commit()
 
     with flask_app.app_context():
@@ -163,9 +159,9 @@ def test_a_full_year_is_requested(clean):
 def test_an_empty_fetch_is_counted_not_swallowed(clean):
     """`if not closes: continue` reported success while storing nothing.
 
-    Yahoo refuses any MIC outside its allowlist, which has no XGAT, so the
-    German per-ticker fetcher has silently stored zero rows since it was
-    written -- and the log line said it had run.
+    Yahoo refuses any MIC outside its allowlist, so a fetcher asking for an
+    identity it cannot serve would store zero rows while its log line said it
+    had run.
     """
     provider = FakeProvider({})
 
@@ -176,46 +172,14 @@ def test_an_empty_fetch_is_counted_not_swallowed(clean):
     assert empty == 1
 
 
-def test_due_instruments_serves_the_never_fetched_first(clean):
-    from models import RadarInstrument
-
-    never = RadarInstrument(
-        ticker=f'{PREFIX}NEW', market='de', mic='XETR', venue='Xetra',
-        provider_symbol='NEW', currency='EUR', is_primary=True,
-        mapping_status='mapped', mapped_at=NOW, history_due_at=None)
-    recent = RadarInstrument(
-        ticker=f'{PREFIX}OLD', market='de', mic='XETR', venue='Xetra',
-        provider_symbol='OLD', currency='EUR', is_primary=True,
-        mapping_status='mapped', mapped_at=NOW,
-        history_due_at=NOW - dt.timedelta(hours=1))
-    db.session.add_all([recent, never])
-    db.session.commit()
-
-    due = history.due_instruments([recent, never], NOW, limit=2)
-
-    assert [row.ticker for row in due] == [f'{PREFIX}NEW', f'{PREFIX}OLD']
-
-
-def test_due_instruments_waits_until_the_stored_schedule(clean):
-    from models import RadarInstrument
-
-    tomorrow = RadarInstrument(
-        ticker=f'{PREFIX}LATER', market='de', mic='XETR', venue='Xetra',
-        provider_symbol='LATER', currency='EUR', is_primary=True,
-        mapping_status='mapped', mapped_at=NOW,
-        history_due_at=NOW + dt.timedelta(days=1))
-
-    assert history.due_instruments([tomorrow], NOW, limit=1) == []
-
-
 def test_clean_fixture_preserves_an_unowned_hs_instrument(clean):
     from models import RadarInstrument
 
     ticker = f'{PREFIX}ZXQKEEP'
     assert RadarInstrument.query.filter_by(ticker=ticker).one_or_none() is None
     unowned = RadarInstrument(
-        ticker=ticker, market='de', mic='XETR', venue='Xetra',
-        provider_symbol='ZXQKEEP', currency='EUR', is_primary=True,
+        ticker=ticker, market='us', mic='XNAS', venue='NASDAQ',
+        provider_symbol='ZXQKEEP', currency='USD', is_primary=True,
         mapping_status='mapped', mapped_at=NOW)
     db.session.add(unowned)
     db.session.commit()
@@ -271,22 +235,44 @@ def test_a_recent_ipo_is_not_refetched_forever(clean):
         [f'{PREFIX}IPO'], TODAY)
 
 
-def test_daily_history_stays_with_its_market_and_mic(clean):
-    """EUR/Xetra bars cannot overwrite or appear as US history."""
+def test_archived_non_us_closes_never_appear_as_us_history(clean):
+    """Archived EUR bars stay in the table and out of every history read,
+    and no writer may add one."""
     history.record_closes(
         f'{PREFIX}DUAL', [(TODAY, decimal.Decimal('220.00'))], NOW,
         market='us', mic='XNAS', currency='USD')
-    history.record_closes(
-        f'{PREFIX}DUAL', [(TODAY, decimal.Decimal('194.00'))], NOW,
-        market='de', mic='XETR', currency='EUR')
+    add_close(f'{PREFIX}DUAL', TODAY, '194.00', market='de', mic='XETR',
+              currency='EUR')
+    add_close(f'{PREFIX}DUAL', TODAY - dt.timedelta(days=1), '190.00',
+              market='de', mic='XETR', currency='EUR')
+    add_close(f'{PREFIX}ONLYDE', TODAY, '50.00', market='de', mic='XETR',
+              currency='EUR')
+    db.session.commit()
 
-    de = history.closes_for(
-        [f'{PREFIX}DUAL'], today=TODAY, market='de', mic='XETR')
-    us = history.closes_for(
-        [f'{PREFIX}DUAL'], today=TODAY, market='us', mic='XNAS')
+    for mic in ('XNAS', None):
+        us = history.closes_for(
+            [f'{PREFIX}DUAL', f'{PREFIX}ONLYDE'], today=TODAY, market='us',
+            mic=mic)
+        assert us == {f'{PREFIX}DUAL': [(TODAY, decimal.Decimal('220.0000'))]}
+    assert history.tickers_needing_history(
+        [f'{PREFIX}ONLYDE'], TODAY) == [f'{PREFIX}ONLYDE']
 
-    assert de[f'{PREFIX}DUAL'] == [(TODAY, decimal.Decimal('194.0000'))]
-    assert us[f'{PREFIX}DUAL'] == [(TODAY, decimal.Decimal('220.0000'))]
+    with pytest.raises(ValueError, match='unknown market'):
+        history.closes_for([f'{PREFIX}DUAL'], today=TODAY, market='de',
+                           mic='XETR')
+    with pytest.raises(ValueError, match='unknown market'):
+        history.tickers_needing_history([f'{PREFIX}DUAL'], TODAY,
+                                        market='de')
+    for market, currency in (('de', 'EUR'), ('us', 'EUR'), ('de', 'USD')):
+        with pytest.raises(ValueError, match='US'):
+            history.record_closes(
+                f'{PREFIX}DUAL', [(TODAY, decimal.Decimal('1.00'))], NOW,
+                market=market, mic='XETR', currency=currency)
+    db.session.rollback()
+    rows = RadarDailyClose.query.filter_by(
+        ticker=f'{PREFIX}DUAL', market='de').all()
+    assert sorted(row.close for row in rows) == [
+        decimal.Decimal('190.0000'), decimal.Decimal('194.0000')]
 
 
 def test_primary_mic_us_history_reads_the_null_legacy_identity(clean):
@@ -301,7 +287,7 @@ def test_primary_mic_us_history_reads_the_null_legacy_identity(clean):
             f'{PREFIX}LEGACY': [(TODAY, decimal.Decimal('100.0000'))]}
 
 
-def test_german_history_uses_the_verified_mic_and_keeps_old_rows_on_error(clean):
+def test_history_uses_the_verified_mic_and_keeps_old_rows_on_error(clean):
     class MicProvider:
         def __init__(self):
             self.asked = []
@@ -312,24 +298,24 @@ def test_german_history_uses_the_verified_mic_and_keeps_old_rows_on_error(clean)
 
     history.record_closes(
         f'{PREFIX}ERR', [(TODAY, decimal.Decimal('194.00'))], NOW,
-        market='de', mic='XETR', currency='EUR')
+        market='us', mic='XNYS', currency='USD')
     provider = MicProvider()
 
     assert history.fetch_into_store(
-        provider, [f'{PREFIX}ERR'], NOW, market='de', mic='XETR',
-        currency='EUR', provider_symbols={f'{PREFIX}ERR': 'APC'}) == (0, 1)
-    assert provider.asked == [('APC', history.HISTORY_DAYS, 'XETR')]
+        provider, [f'{PREFIX}ERR'], NOW, market='us', mic='XNYS',
+        currency='USD', provider_symbols={f'{PREFIX}ERR': 'ERR.B'}) == (0, 1)
+    assert provider.asked == [('ERR.B', history.HISTORY_DAYS, 'XNYS')]
     assert history.closes_for(
-        [f'{PREFIX}ERR'], today=TODAY, market='de', mic='XETR')[
+        [f'{PREFIX}ERR'], today=TODAY, market='us', mic='XNYS')[
             f'{PREFIX}ERR'] == [(TODAY, decimal.Decimal('194.0000'))]
 
 
-# --- Market data v2 (plan Task 8): priority, shadow, proxy seam --------------
+# --- Market data v2 (plan Task 8): priority, shadow, sibling basis ----------
 
 DAY = TODAY
 
 
-def add_close(ticker, day, price, *, market='de', mic='XETR', currency='EUR',
+def add_close(ticker, day, price, *, market='us', mic='XNAS', currency='USD',
               source=None, price_basis=None, adjustment_basis=None,
               is_shadow=False):
     db.session.add(RadarDailyClose(
@@ -339,20 +325,17 @@ def add_close(ticker, day, price, *, market='de', mic='XETR', currency='EUR',
         adjustment_basis=adjustment_basis, is_shadow=is_shadow))
 
 
-def test_native_close_cannot_be_overwritten_by_yahoo(clean):
-    ticker = f'{PREFIX}NAT'
-    history.record_closes(
-        ticker, [(DAY, decimal.Decimal('100.00'))], NOW, market='de',
-        mic='XETR', currency='EUR', source='deutsche_boerse_delayed',
-        adjustment_basis='split')
-    history.record_closes(
-        ticker, [(DAY, decimal.Decimal('99.00'))],
-        NOW + dt.timedelta(hours=1), market='de', mic='XETR',
-        currency='EUR', source='yahoo_chart', adjustment_basis='split')
-    row = RadarDailyClose.query.filter_by(
-        ticker=ticker, market='de', mic='XETR', close_date=DAY).one()
-    assert (row.close, row.source) == (
-        decimal.Decimal('100.0000'), 'deutsche_boerse_delayed')
+def test_the_retired_native_source_is_not_an_active_close_source(clean):
+    """Its rows are archival; no writer may produce one and no priority
+    table ranks it."""
+    assert set(history.CLOSE_SOURCE_PRIORITY) == {
+        'legacy', 'twelvedata', 'yahoo_chart', 'massive_grouped'}
+    with pytest.raises(ValueError, match='unknown close source'):
+        history.record_closes(
+            f'{PREFIX}NAT', [(DAY, decimal.Decimal('100.00'))], NOW,
+            market='us', mic='XNAS', currency='USD',
+            source='deutsche_boerse_delayed', adjustment_basis='split')
+    assert RadarDailyClose.query.filter_by(ticker=f'{PREFIX}NAT').count() == 0
 
 
 def test_equal_priority_permits_provider_restatement(clean):
@@ -424,7 +407,7 @@ def test_live_history_reader_excludes_newer_shadow_close(clean):
     add_close(ticker, DAY + dt.timedelta(days=1), '101', is_shadow=True)
     db.session.commit()
     stored = history.closes_for([ticker], today=DAY + dt.timedelta(days=2),
-                                market='de', mic='XETR')
+                                market='us', mic='XNAS')
     assert stored[ticker] == [(DAY, decimal.Decimal('100.0000'))]
 
 
@@ -445,67 +428,72 @@ def test_shadow_and_live_write_lanes_do_not_collide(clean):
                      True: decimal.Decimal('55.1000')}
 
 
-class _TradegateQuote:
+class _NasdaqQuote:
     """Only the fields resolve_basis reads off a quote view."""
-    market, mic, venue, currency = 'de', 'XGAT', 'Tradegate BSX', 'EUR'
+    market, mic, venue, currency = 'us', 'XNAS', 'NASDAQ', 'USD'
 
 
-def test_the_basis_takes_the_deeper_venue_whole(clean):
-    from models import RadarInstrument, RadarMappingGeneration
+def test_the_basis_takes_the_deeper_us_venue_whole(clean):
+    from models import RadarInstrument
     ticker = f'{PREFIX}SEAM'
-    payload = '{"decisions":[]}'
-    generation = RadarMappingGeneration(
-        market='de', status='shadow', source='test-history-proxy',
-        payload_sha256=hashlib.sha256(payload.encode()).hexdigest(),
-        payload_json=payload, summary_json='{}', created_at=NOW)
-    db.session.add(generation)
-    db.session.flush()
     db.session.add_all([
-        RadarInstrument(ticker=ticker, market='de', venue='Tradegate BSX',
-                        mic='XGAT', provider_symbol=ticker + 'G',
-                        currency='EUR', isin='DE000ZZTST05',
+        RadarInstrument(ticker=ticker, market='us', venue='NASDAQ',
+                        mic='XNAS', provider_symbol=ticker,
+                        currency='USD', isin='US000ZZTST05',
                         is_primary=True, mapping_status='mapped',
-                        mapping_generation_id=generation.id, mapped_at=NOW),
+                        mapped_at=NOW),
+        RadarInstrument(ticker=ticker, market='us', venue='NYSE',
+                        mic='XNYS', provider_symbol=ticker,
+                        currency='USD', isin='US000ZZTST05',
+                        is_primary=False, mapping_status='mapped',
+                        mapped_at=NOW),
+        # An archived listing with the same ISIN and the deepest series of
+        # all: never a candidate, however deep.
         RadarInstrument(ticker=ticker, market='de', venue='Xetra',
                         mic='XETR', provider_symbol=ticker + 'X',
-                        currency='EUR', isin='DE000ZZTST05',
-                        is_primary=False, mapping_status='mapped',
-                        mapping_generation_id=generation.id, mapped_at=NOW),
+                        currency='EUR', isin='US000ZZTST05',
+                        is_primary=True, mapping_status='mapped',
+                        mapped_at=NOW),
     ])
-    rows = RadarInstrument.query.filter_by(ticker=ticker, market='de').all()
-    assert {row.mapping_generation_id for row in rows} == {generation.id}
     for offset in (5, 4, 3, 2, 1):
         add_close(ticker, DAY - dt.timedelta(days=offset), '10.00',
-                  mic='XETR', source='yahoo_chart', price_basis='close')
+                  mic='XNYS', source='yahoo_chart', price_basis='close')
     for offset in (2, 1, 0):
         add_close(ticker, DAY - dt.timedelta(days=offset), '11.00',
-                  mic='XGAT', source='deutsche_boerse_delayed',
-                  price_basis='close')
+                  mic='XNAS', source='massive_grouped', price_basis='close')
+    for offset in range(20):
+        add_close(ticker, DAY - dt.timedelta(days=offset), '9.00',
+                  market='de', mic='XETR', currency='EUR',
+                  source='yahoo_chart', price_basis='close')
     db.session.commit()
 
-    basis = history.resolve_basis(ticker, _TradegateQuote(), 30, DAY)
-    # Five Xetra closes against three Tradegate ones: the deeper series wins
-    # WHOLE. There is no seam to compose any more -- the old rule filled the
-    # days before the first native date from Xetra and left later native
-    # holes as holes, which on real data meant a two-point line.
-    assert basis.mic == 'XETR'
-    assert basis.venue == 'Xetra'
+    basis = history.resolve_basis(ticker, _NasdaqQuote(), 30, DAY)
+    # Five NYSE closes against three Nasdaq ones: the deeper series wins
+    # WHOLE, and it is dollars from a US venue.
+    assert (basis.market, basis.mic, basis.venue, basis.currency) == (
+        'us', 'XNYS', 'NYSE', 'USD')
+    assert not hasattr(basis, 'converted_from')
     assert len(basis.closes) == 5
     assert all(close == decimal.Decimal('10.0000')
                for _, close in basis.closes)
 
     # ISIN mismatch disqualifies the sibling, and the native stub is then
     # all there is.
-    RadarInstrument.query.filter_by(ticker=ticker, mic='XETR').update(
-        {RadarInstrument.isin: 'DE000ZZTST06'}, synchronize_session=False)
+    RadarInstrument.query.filter_by(ticker=ticker, mic='XNYS').update(
+        {RadarInstrument.isin: 'US000ZZTST06'}, synchronize_session=False)
     db.session.commit()
-    basis = history.resolve_basis(ticker, _TradegateQuote(), 30, DAY)
-    assert basis.mic == 'XGAT'
+    basis = history.resolve_basis(ticker, _NasdaqQuote(), 30, DAY)
+    assert (basis.mic, basis.currency) == ('XNAS', 'USD')
     assert all(close == decimal.Decimal('11.0000')
                for _, close in basis.closes)
-    RadarInstrument.query.filter_by(ticker=ticker).delete(
-        synchronize_session=False)
-    db.session.commit()
+
+
+def test_no_basis_is_ever_built_for_an_archived_quote(clean):
+    class _ArchivedQuote:
+        market, mic, venue, currency = 'de', 'XGAT', 'Tradegate BSX', 'EUR'
+
+    with pytest.raises(ValueError, match='unknown market'):
+        history.resolve_basis(f'{PREFIX}ARC', _ArchivedQuote(), 30, DAY)
 
 
 def test_a_source_basis_conflict_is_refused_not_overwritten(clean):

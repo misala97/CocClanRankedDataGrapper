@@ -154,9 +154,12 @@ def test_chunking_does_not_change_the_outcome(ctx):
     assert surviving(f'{PREFIX}CHUNK') == STALE_QUOTE_POLLS
 
 
-def test_retention_keeps_the_required_snapshots_for_each_market(ctx):
-    """A busy US tape must not age Xetra's no-print evidence out."""
-    for market, mic, currency in (('us', 'XNAS', 'USD'), ('de', 'XETR', 'EUR')):
+def test_archived_non_us_quotes_are_never_pruned(ctx):
+    """Archived rows are historical evidence: the nightly prune ranks and
+    deletes US and legacy-US snapshots only, and leaves every archived row
+    exactly where it was, however old and however many."""
+    for market, mic, currency in (('us', 'XNAS', 'USD'), ('de', 'XETR', 'EUR'),
+                                  ('de', 'XGAT', 'EUR')):
         for minutes in range(8):
             when = NOW - dt.timedelta(days=OLD, minutes=minutes)
             db.session.add(RadarQuote(
@@ -165,23 +168,47 @@ def test_retention_keeps_the_required_snapshots_for_each_market(ctx):
                 fetched_at=when, quote_ts=when,
                 price=decimal.Decimal('10.00'),
                 prev_close=decimal.Decimal('9.00')))
+    for minutes in range(8):
+        add(f'{PREFIX}LEGACY', OLD, minutes=minutes)
     db.session.commit()
 
-    retention.prune_quotes(NOW)
+    deleted = retention.prune_quotes(NOW)
 
+    assert deleted >= 2 * (8 - STALE_QUOTE_POLLS)
     assert RadarQuote.query.filter_by(
         ticker=f'{PREFIX}DUAL', market='us', mic='XNAS').count() == STALE_QUOTE_POLLS
+    assert surviving(f'{PREFIX}LEGACY') == STALE_QUOTE_POLLS
     assert RadarQuote.query.filter_by(
-        ticker=f'{PREFIX}DUAL', market='de', mic='XETR').count() == STALE_QUOTE_POLLS
+        ticker=f'{PREFIX}DUAL', market='de', mic='XETR').count() == 8
+    assert RadarQuote.query.filter_by(
+        ticker=f'{PREFIX}DUAL', market='de', mic='XGAT').count() == 8
+
+
+def test_the_ranked_prune_input_is_us_scoped_before_ranking():
+    """Filtering after the window function would still rank archived rows;
+    the market filter belongs inside the ranked subquery."""
+    import re
+
+    import sqlalchemy as sa
+
+    ranked = retention._ranked_quotes()
+    inner = str(ranked.element.compile(compile_kwargs={'literal_binds': True}))
+    where = re.split(r'\sWHERE\s', inner, maxsplit=1)
+    assert len(where) == 2, inner
+    assert 'row_number()' in where[0].lower()
+    assert "radar_quotes.market = 'us'" in where[1]
+    assert 'radar_quotes.market IS NULL' in where[1]
+    assert isinstance(ranked, sa.sql.Subquery)
 
 
 # --- [A1] daily-close horizon and guarded massive shadow cleanup -------------
 
-def _close(ticker, days_back, *, source=None, is_shadow=False):
+def _close(ticker, days_back, *, source=None, is_shadow=False,
+           market='us', mic='XNAS', currency='USD'):
     import decimal
     from models import RadarDailyClose
     db.session.add(RadarDailyClose(
-        ticker=ticker, market='us', mic='XNAS', currency='USD',
+        ticker=ticker, market=market, mic=mic, currency=currency,
         close_date=NOW.date() - dt.timedelta(days=days_back),
         close=decimal.Decimal('10.00'), fetched_at=NOW, source=source,
         price_basis='close' if source else None,
@@ -213,15 +240,52 @@ def test_close_horizon_is_calendar_days_beyond_the_widest_span(
     _close(f'{PREFIX}KEEP', max(SPAN_DAYS.values()) - 1,
            source='massive_grouped')       # still displayable on 3Y
     _close(f'{PREFIX}DROP', horizon + 1, source='yahoo_chart')
-    _close(f'{PREFIX}NATV', horizon + 1,
-           source='deutsche_boerse_delayed')  # observed, never refetchable
+    _close(f'{PREFIX}OLDL', horizon + 1, market=None, mic=None,
+           currency=None)                   # legacy US identity
+    # Archived rows, old and of every archived source: never pruned.
+    _close(f'{PREFIX}ARCH', horizon + 1, source='yahoo_chart',
+           market='de', mic='XETR', currency='EUR')
+    _close(f'{PREFIX}NATV', horizon + 30, source='deutsche_boerse_delayed',
+           market='de', mic='XGAT', currency='EUR')
     db.session.commit()
 
-    retention.prune_market_data(NOW)
+    retention.prune_closes(NOW)
 
     remaining = {row.ticker for row in RadarDailyClose.query.filter(
         RadarDailyClose.ticker.like(f'{PREFIX}%'))}
-    assert remaining == {f'{PREFIX}KEEP', f'{PREFIX}NATV'}
+    assert remaining == {f'{PREFIX}KEEP', f'{PREFIX}ARCH', f'{PREFIX}NATV'}
+
+
+def test_the_close_prune_never_touches_archived_journal_rows(close_rows):
+    """The retired collector's events and cycle rows are historical now:
+    no retention path deletes them, however old."""
+    import decimal
+    from models import RadarMarketDataCycle, RadarMarketTradeEvent
+
+    old = NOW - dt.timedelta(days=400)
+    event = RadarMarketTradeEvent(
+        mic='XGAT', isin='QR0000000001', event_id=f'{PREFIX}-retention-event',
+        action='new', event_ts=old, price=decimal.Decimal('1.00'),
+        source_remote_id=f'{PREFIX}-retention', received_at=old)
+    cycle = RadarMarketDataCycle(
+        source=f'{PREFIX}-retention', mic='XGAT', channel='posttrade',
+        scheduled_at=old, completed_at=old, mode='shadow', status='accepted')
+    db.session.add_all([event, cycle])
+    db.session.commit()
+    try:
+        retention.prune_closes(NOW)
+        assert RadarMarketTradeEvent.query.filter_by(
+            event_id=f'{PREFIX}-retention-event').count() == 1
+        assert RadarMarketDataCycle.query.filter_by(
+            source=f'{PREFIX}-retention').count() == 1
+    finally:
+        RadarMarketTradeEvent.query.filter_by(
+            event_id=f'{PREFIX}-retention-event').delete(
+                synchronize_session=False)
+        RadarMarketDataCycle.query.filter_by(
+            source=f'{PREFIX}-retention').delete(synchronize_session=False)
+        db.session.commit()
+    assert not hasattr(retention, 'prune_market_data')
 
 
 def test_massive_shadow_cleanup_requires_all_three_evidence_settings(
@@ -236,19 +300,19 @@ def test_massive_shadow_cleanup_requires_all_three_evidence_settings(
                        '2026-08-10T00:00:00Z')
     monkeypatch.setenv('RADAR_US_CLOSE_GATE_REPORT_SHA256', 'a' * 64)
     monkeypatch.delenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', raising=False)
-    retention.prune_market_data(NOW)
+    retention.prune_closes(NOW)
     assert RadarDailyClose.query.filter_by(
         ticker=f'{PREFIX}SHDW').count() == 1
 
     # Malformed digest also disables cleanup.
     monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'NOT-A-DIGEST')
-    retention.prune_market_data(NOW)
+    retention.prune_closes(NOW)
     assert RadarDailyClose.query.filter_by(
         ticker=f'{PREFIX}SHDW').count() == 1
 
     # All three valid and activation at least seven days old: armed.
     monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'b' * 64)
-    retention.prune_market_data(NOW)
+    retention.prune_closes(NOW)
     assert RadarDailyClose.query.filter_by(
         ticker=f'{PREFIX}SHDW').count() == 0
 
@@ -264,13 +328,13 @@ def test_massive_shadow_cleanup_waits_seven_days_after_activation(
                        (NOW - dt.timedelta(days=3)).isoformat() + 'Z')
     monkeypatch.setenv('RADAR_US_CLOSE_GATE_REPORT_SHA256', 'a' * 64)
     monkeypatch.setenv('RADAR_US_CLOSE_GATE_AUDIT_SHA256', 'b' * 64)
-    retention.prune_market_data(NOW)
+    retention.prune_closes(NOW)
     assert RadarDailyClose.query.filter_by(
         ticker=f'{PREFIX}SHDW').count() == 1
 
     monkeypatch.setenv('RADAR_US_CLOSE_ACTIVATED_AT',
                        (NOW - dt.timedelta(days=8)).isoformat() + 'Z')
-    retention.prune_market_data(NOW)
+    retention.prune_closes(NOW)
     assert RadarDailyClose.query.filter_by(
         ticker=f'{PREFIX}SHDW').count() == 0
     # The live lane is never cleanup's business.

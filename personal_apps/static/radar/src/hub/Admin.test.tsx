@@ -17,14 +17,6 @@ const ops = (over: Partial<OpsPayload> = {}): OpsPayload => ({
     review: { demanded: 5, attempted: 5, served: 4, capped: 1, over_ceiling: 0 },
   },
   market_data: {
-    cycles: {
-      'XETR:pretrade': {
-        status: 'accepted', scheduled_at: '2026-09-09T09:55:00Z',
-        files_seen: 3, files_accepted: 3, selected: 120, rejected: 0,
-        parse_ms: 88, error_code: null,
-      },
-    },
-    mapping_generations: { active: 1 },
     quote_basis_24h: { trade: 900, midpoint: 12 },
     grouped_closes: {
       latest_accepted_date: '2026-09-08', retryable_gaps: [],
@@ -32,7 +24,6 @@ const ops = (over: Partial<OpsPayload> = {}): OpsPayload => ({
       error_code: null, http_status: null, backoff_until: null,
     },
     post_close_claims: {},
-    de_download_budget_24h: { spent: 4, limit: 40, remaining: 36 },
   },
   capture: { latest_observed_at: null },
   ...over,
@@ -199,11 +190,13 @@ describe('the operations page', () => {
     expect((await screen.findAllByText(/under \$0\.01/)).length).toBeGreaterThan(0)
   })
 
-  it('says when a collection cycle actually ran', async () => {
-    // The server takes the newest row per channel with no recency bound, so a
-    // cycle from three weeks ago looks identical to one from five minutes ago.
+  it('shows the US market-data facts and nothing of the retired collector', async () => {
     show(ops())
-    expect(await screen.findByText(/ran 9 Sept?,? 11:55 Berlin/i)).toBeVisible()
+    expect(await screen.findByText('2026-09-08')).toBeVisible()
+    expect(screen.getByText(/trade 900 · midpoint 12/)).toBeVisible()
+    expect(screen.queryByText(/download budget/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/collection cycles/i)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/German|XETR|XGAT/)
   })
 
   it('says forbidden when the reader is not an administrator', async () => {

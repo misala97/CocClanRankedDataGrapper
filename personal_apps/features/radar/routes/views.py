@@ -9,14 +9,30 @@ Control changes after that go through /radar/api/board, which returns the
 identical shape -- so the island has exactly one payload type to render and no
 separate "initial" code path to keep in sync.
 """
-from flask import render_template, request
+from flask import abort, render_template, request
 
 from auth import current_user, is_admin, login_required
 
 from ._blueprint import radar_bp
-from .api import BadQuery, build_payload
+from .api import BadQuery, build_payload, require_us_market
 from .. import config
 from ..config import DEFAULT_SEGMENT
+
+
+def _refuse_unsupported_market(args):
+    """A visible 400 for an explicit market other than US.
+
+    Checked before the friendly fallback below, which would otherwise turn a
+    bookmarked link to a retired market into the US board without saying so.
+    An absent or empty market is the US board, as it is for the API, and
+    every value of a repeated market is checked the same way the API does.
+    """
+    try:
+        require_us_market(args)
+    except BadQuery:
+        abort(400, description=(
+            'unsupported market: Radar shows US listings only. Remove the '
+            'market parameter from the address to open the board.'))
 
 
 def _hub_args(args):
@@ -38,8 +54,11 @@ def board_page():
 
     The API is strict because a client sending nonsense has a bug worth
     surfacing. A person editing the address bar is not a bug, and answering a
-    typo with a JSON error page would be an odd way to run a dashboard.
+    typo with a JSON error page would be an odd way to run a dashboard. An
+    explicit unsupported market is the exception: it names a board Radar no
+    longer has, so it is refused visibly rather than answered with another.
     """
+    _refuse_unsupported_market(request.args)
     user_id = current_user().id
     try:
         payload = build_payload(request.args, user_id=user_id)
@@ -63,8 +82,9 @@ def hub_page():
 
     Same BadQuery fallback as the legacy board page: a person editing the address bar
     is not a bug, and answering a typo with an error page is an odd way to run
-    a dashboard.
+    a dashboard. The same explicit-market exception applies.
     """
+    _refuse_unsupported_market(request.args)
     user_id = current_user().id
     try:
         payload = build_payload(_hub_args(request.args), user_id=user_id)

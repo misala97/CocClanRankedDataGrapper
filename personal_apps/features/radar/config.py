@@ -830,25 +830,21 @@ SOURCE_NAME_GENERATION = 2
 
 
 def price_provider_config():
-    """The three validated market-data v2 flags, read at startup.
+    """The two validated US market-data flags, read at startup.
 
-    ``(us_quote_provider, de_price_mode, us_close_source)``. Defaults keep
-    the live behavior exactly; an invalid value refuses startup rather than
-    running a half-configured provider, and a close-source of shadow/massive
-    without RADAR_MASSIVE_API_KEY refuses too -- a silently dormant close
-    source must not look activated [A1][A2].
+    ``(us_quote_provider, us_close_source)``. Defaults keep the live
+    behavior exactly; an invalid value refuses startup rather than running a
+    half-configured provider, and a close-source of shadow/massive without
+    RADAR_MASSIVE_API_KEY refuses too -- a silently dormant close source must
+    not look activated [A1][A2]. Radar is US-only: no other market's setting
+    is read, so a stale one left in an environment file changes nothing.
     """
     us_provider = os.getenv('RADAR_US_PRICE_PROVIDER', 'finnhub')
-    de_mode = os.getenv('RADAR_DE_PRICE_MODE', 'legacy')
     close_source = os.getenv('RADAR_US_CLOSE_SOURCE', 'legacy')
     if us_provider not in ('finnhub', 'yahoo'):
         raise RuntimeError(
             f'RADAR_US_PRICE_PROVIDER must be finnhub|yahoo, '
             f'not {us_provider!r}')
-    if de_mode not in ('legacy', 'shadow', 'active'):
-        raise RuntimeError(
-            f'RADAR_DE_PRICE_MODE must be legacy|shadow|active, '
-            f'not {de_mode!r}')
     if close_source not in ('legacy', 'shadow', 'massive'):
         raise RuntimeError(
             f'RADAR_US_CLOSE_SOURCE must be legacy|shadow|massive, '
@@ -859,7 +855,7 @@ def price_provider_config():
             'RADAR_US_CLOSE_SOURCE=%s requires RADAR_MASSIVE_API_KEY'
             % close_source)
     _validate_close_cleanup_evidence()
-    return us_provider, de_mode, close_source
+    return us_provider, close_source
 
 
 def _validate_close_cleanup_evidence():
@@ -1046,26 +1042,6 @@ MIN_DISTINCT_AUTHORS = 3
 JUDGE_GATE_ENABLED = False           # False = judge everything, as before
 JUDGE_SKIP_SEGMENTS = ('large', 'fund')
 JUDGE_FLOOR_HOURS = 24
-
-# ---- the German delayed-data feed's host quota ------------------------------
-# Deutsche Börse publishes one file per minute per channel. On 2026-09-01 the
-# collector pulled ~520 minute-files in a few hours, the host answered HTTP
-# 429 from then on, and the collector kept retrying two files every five
-# minutes for 21 hours -- which kept the window full. The board needs one
-# snapshot per cycle, not every minute-file, so: newest files first under a
-# per-cycle cap, a rolling 24h download budget read from the cycle rows, and
-# exponential backoff on 429 for the whole feed (the throttle is per IP).
-# German trade history is sampled as a result, about one minute-file in
-# five; decided by Michi on 2026-09-02.
-DE_FILES_PER_CYCLE = 1                        # per channel, newest first
-# Session-gated collection over the quote-supplying MIC costs two downloads
-# a cycle, twelve cycles an hour, across Tradegate's ~14.5-hour day: about
-# 348. At 300 the budget was spent by mid-morning and every later cycle
-# recorded 'download budget spent 300/300' -- the safety net had become the
-# binding constraint. 400 leaves headroom above a full session and still
-# sits far under the ~170 files/hour that drew the original HTTP 429.
-DE_DOWNLOAD_BUDGET_24H = 400                  # attempted downloads, all channels
-DE_THROTTLE_BACKOFF_SECONDS = (1800, 21600)   # first wait, longest wait
 
 # Distinct CHANNELS a broadcast source needs, against MIN_DISTINCT_AUTHORS for
 # a forum. Two rather than three because there are orders of magnitude fewer

@@ -4,8 +4,8 @@
 // the same board rather than each fetching one -- three views of one answer,
 // which is also why they can never disagree with each other on screen.
 //
-// The keys are the load-bearing part. A key that held only the market would
-// serve a reader the board built for a different window, sort or source set:
+// The keys are the load-bearing part. A key that held only the sources would
+// serve a reader the board built for a different window, sort or segment set:
 // silently, and only sometimes. Every dimension the server filters on is in
 // the key, and the panel's key carries the listing context that opened it,
 // because its breakdown and posts describe the same window the row's phrase
@@ -50,7 +50,7 @@ export const REFRESH_MS = 60_000
 export const boardKey = (s: Selection) => [ROOT, 'board', queryFor(s)] as const
 
 export const detailKey = (ticker: string, s: Selection, span: PanelSpan) =>
-  [ROOT, 'detail', ticker, s.market, s.sources.join(','), s.window, span,
+  [ROOT, 'detail', ticker, s.sources.join(','), s.window, span,
     `tone-v${TONE_VERSION}`] as const
 
 export const searchKey = (q: string) => [ROOT, 'search', q.trim()] as const
@@ -73,7 +73,6 @@ export function requestSelection(selection: Selection): Selection {
  */
 export function selectionOf(payload: BoardPayload): Selection {
   return {
-    market: payload.market,
     sources: payload.sources,
     segments: payload.segments,
     minVenues: payload.min_venues,
@@ -732,9 +731,9 @@ export const PENDING_POLLS = 5
 /** Everything the answer depends on. No `window`, segment or limit: the chart
  *  does not depend on them, and a key that carried them would refetch the
  *  same chart whenever the board's controls moved. */
-export const priceChartKey = (ticker: string, market: string, sources: string[],
+export const priceChartKey = (ticker: string, sources: string[],
                               span: PanelSpan) =>
-  [ROOT, 'price-chart', ticker, market, sources.join(','), span,
+  [ROOT, 'price-chart', ticker, sources.join(','), span,
     PRICE_CHART_VERSION] as const
 
 /** When the chart asks again on its own, or false for not at all.
@@ -773,10 +772,9 @@ export function usePriceChart({ ticker, selection, span, enabled, visible = true
   visible?: boolean
 }) {
   const sources = selection?.sources ?? []
-  const market = selection?.market ?? 'us'
-  const active = enabled && Boolean(ticker) && market === 'us'
+  const active = enabled && Boolean(ticker)
     && (span === '1D' || span === '1W')
-  const key = priceChartKey(ticker ?? '', market, sources, span)
+  const key = priceChartKey(ticker ?? '', sources, span)
   const keyText = JSON.stringify(key)
   // Answers that said "still acquiring", in a row, for THIS key.
   const polls = useRef({ key: keyText, count: 0 })

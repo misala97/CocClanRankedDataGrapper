@@ -59,34 +59,67 @@ def test_a_quote_round_trips_exactly(ctx):
 
 
 def test_record_quotes_persists_the_verified_market_identity(ctx):
-    """A German EUR print must remain distinguishable from its US ticker."""
+    """The venue, provider symbol and currency travel with the print."""
     from features.radar.prices import Quote
 
     quote = Quote(
-        ticker='QQA', market='de', venue='Xetra', mic='XETR',
-        provider_symbol='QQA1', currency='EUR', price=decimal.Decimal('194.20'),
+        ticker='QQA', market='us', venue='NYSE', mic='XNYS',
+        provider_symbol='QQA1', currency='USD', price=decimal.Decimal('194.20'),
         quote_ts=NOW, provider_delay='delayed')
 
     assert quotes_mod.record_quotes({'QQA': quote}, NOW) == 1
 
-    stored = RadarQuote.query.filter_by(ticker='QQA', market='de', mic='XETR').one()
+    stored = RadarQuote.query.filter_by(ticker='QQA', market='us', mic='XNYS').one()
     assert (stored.currency, stored.provider_symbol, stored.price,
             stored.provider_delay) == (
-        'EUR', 'QQA1', decimal.Decimal('194.200000'), 'delayed')
+        'USD', 'QQA1', decimal.Decimal('194.200000'), 'delayed')
+
+
+@pytest.mark.parametrize('market, currency', [('de', 'EUR'), ('us', 'EUR'),
+                                              ('de', 'USD')])
+def test_record_quotes_writes_nothing_but_us_dollar_prints(ctx, market,
+                                                           currency):
+    """No active writer may add a row to the archived non-US lane."""
+    from features.radar.prices import Quote
+
+    quote = Quote(
+        ticker='QQA', market=market, venue='Xetra', mic='XETR',
+        provider_symbol='QQA1', currency=currency,
+        price=decimal.Decimal('194.20'), quote_ts=NOW,
+        provider_delay='delayed')
+
+    with pytest.raises(ValueError, match='US'):
+        quotes_mod.record_quotes({'QQA': quote}, NOW)
+    db.session.rollback()
+    assert RadarQuote.query.filter_by(ticker='QQA').count() == 0
 
 
 def test_persisted_eod_quality_is_not_reconstructed_as_live():
     row = SimpleNamespace(
-        ticker='QQA', mic='XETR', currency='EUR', provider_symbol='QQA1',
+        ticker='QQA', mic='XNYS', currency='USD', provider_symbol='QQA1',
         fetched_at=NOW, quote_ts=NOW, price=decimal.Decimal('194.20'),
         prev_close=decimal.Decimal('193.50'), regular_close=None, volume=None,
         provider_delay='eod')
     instrument = SimpleNamespace(
-        venue='Xetra', mic='XETR', provider_symbol='QQA1', currency='EUR')
+        venue='NYSE', mic='XNYS', provider_symbol='QQA1', currency='USD')
 
-    restored = quotes_mod._stored_quote(row, instrument, 'de')
+    restored = quotes_mod._stored_quote(row, instrument)
 
     assert restored.provider_delay == 'eod'
+    assert (restored.market, restored.currency) == ('us', 'USD')
+
+
+def test_a_stored_row_without_an_instrument_is_read_as_us():
+    row = SimpleNamespace(
+        ticker='QQA', mic=None, currency=None, provider_symbol=None,
+        fetched_at=NOW, quote_ts=NOW, price=decimal.Decimal('10'),
+        prev_close=decimal.Decimal('9'), regular_close=None, volume=None,
+        provider_delay=None)
+
+    restored = quotes_mod._stored_quote(row, None)
+
+    assert (restored.market, restored.venue, restored.mic,
+            restored.currency) == ('us', 'US', 'XNAS', 'USD')
 
 
 @pytest.mark.parametrize('provider_kind, payload', [
@@ -136,7 +169,7 @@ def test_provider_regular_close_survives_storage_into_afterhours_view(
             restored = quotes_mod._stored_quote(
                 stored, SimpleNamespace(
                     venue='NASDAQ', mic='XNAS', provider_symbol='QQA',
-                    currency='USD'), 'us')
+                    currency='USD'))
             view = select_quote(
                 'QQA', 'us', {'us': restored}, afterhours)
             assert view.session == 'afterhours'
@@ -147,10 +180,11 @@ def test_provider_regular_close_survives_storage_into_afterhours_view(
     engine.dispose()
 
 
-def test_mapped_de_primary_with_dead_feed_never_falls_back_to_us(monkeypatch):
-    """Spec §4.2: the US fallback covers a genuinely ABSENT German mapping,
-    never a transient German feed failure. A verified DE primary whose feed
-    stopped printing shows unavailable/stale, not a USD price."""
+@pytest.mark.parametrize('with_us_rows', [True, False])
+def test_archived_non_us_rows_never_reach_a_us_view(monkeypatch, with_us_rows):
+    """Archived non-US instruments and quotes stay in the database and out
+    of every read: the US view shows the US tape, or nothing -- never the
+    newer archived EUR print, and never a converted one."""
     engine = sa.create_engine('sqlite://')
     sa.event.listen(
         engine, 'connect',
@@ -165,32 +199,43 @@ def test_mapped_de_primary_with_dead_feed_never_falls_back_to_us(monkeypatch):
                 id=1, ticker='QQA', market='de', venue='Xetra', mic='XETR',
                 provider_symbol='QQA', currency='EUR', is_primary=True,
                 mapping_status='mapped', mapped_at=NOW),
-            RadarInstrument(
-                id=2, ticker='QQA', market='us', venue='NASDAQ', mic='XNAS',
-                provider_symbol='QQA', currency='USD', is_primary=True,
-                mapping_status='mapped', mapped_at=NOW),
             RadarQuote(
                 id=1, ticker='QQA', market='de', mic='XETR', currency='EUR',
-                provider_symbol='QQA', fetched_at=NOW - dt.timedelta(minutes=1),
-                quote_ts=None, price=decimal.Decimal('194.20'),
+                provider_symbol='QQA', fetched_at=NOW,
+                quote_ts=NOW, price=decimal.Decimal('194.20'),
                 prev_close=decimal.Decimal('193.50')),
-            RadarQuote(
-                id=2, ticker='QQA', market='us', mic='XNAS', currency='USD',
-                provider_symbol='QQA', fetched_at=NOW - dt.timedelta(minutes=1),
-                quote_ts=NOW - dt.timedelta(minutes=1),
-                price=decimal.Decimal('225.00'),
-                prev_close=decimal.Decimal('224.00')),
         ])
+        if with_us_rows:
+            session.add_all([
+                RadarInstrument(
+                    id=2, ticker='QQA', market='us', venue='NASDAQ',
+                    mic='XNAS', provider_symbol='QQA', currency='USD',
+                    is_primary=True, mapping_status='mapped', mapped_at=NOW),
+                RadarQuote(
+                    id=2, ticker='QQA', market='us', mic='XNAS',
+                    currency='USD', provider_symbol='QQA',
+                    fetched_at=NOW - dt.timedelta(minutes=1),
+                    quote_ts=NOW - dt.timedelta(minutes=1),
+                    price=decimal.Decimal('225.00'),
+                    prev_close=decimal.Decimal('224.00')),
+            ])
         session.commit()
         with flask_app.app_context():
             monkeypatch.setattr(
                 quotes_mod, 'db', SimpleNamespace(session=session))
             monkeypatch.setattr(
                 RadarInstrument, 'query', session.query(RadarInstrument))
-            selected = quotes_mod.quote_views_for(['QQA'], 'de', NOW)['QQA']
+            selected = quotes_mod.quote_views_for(['QQA'], 'us', NOW)['QQA']
+            with pytest.raises(ValueError, match='unknown market'):
+                quotes_mod.quote_views_for(['QQA'], 'de', NOW)
 
-        assert (selected.market, selected.quality, selected.is_fallback) == (
-            'de', 'unavailable', False)
+        assert selected.market == 'us'
+        if with_us_rows:
+            assert (selected.mic, selected.currency, selected.price) == (
+                'XNAS', 'USD', decimal.Decimal('225.00'))
+        else:
+            assert (selected.quality, selected.price,
+                    selected.currency) == ('unavailable', None, None)
 
     engine.dispose()
 
@@ -206,7 +251,7 @@ def test_stored_regular_close_drives_afterhours_extended_move():
     instrument = SimpleNamespace(
         venue='NASDAQ', mic='XNAS', provider_symbol='QQA', currency='USD')
 
-    quote = quotes_mod._stored_quote(row, instrument, 'us')
+    quote = quotes_mod._stored_quote(row, instrument)
     selected = select_quote('QQA', 'us', {'us': quote}, afterhours)
 
     assert selected.extended_move == decimal.Decimal('0.02')
@@ -422,51 +467,95 @@ def test_a_ticker_with_too_little_history_keeps_its_old_sigma():
 
 # --- Market data v2 (plan Task 3): shadow exclusion and basis filtering ------
 
-def _add_v2(when, price, *, ticker='QQSH', market='de', mic='XGAT',
-            currency='EUR', price_basis='trade', is_shadow=False,
-            quote_ts=None):
+def _add_v2(when, price, *, ticker='QQSH', market='us', mic='XNAS',
+            currency='USD', price_basis='trade', is_shadow=False,
+            quote_ts=None, source='finnhub'):
     db.session.add(RadarQuote(
         ticker=ticker, market=market, mic=mic, currency=currency,
         provider_symbol=ticker, fetched_at=when, quote_ts=quote_ts or when,
         price=decimal.Decimal(str(price)),
         prev_close=decimal.Decimal('100.000000'),
-        source='deutsche_boerse_delayed', price_basis=price_basis,
+        source=source, price_basis=price_basis,
+        bid=(decimal.Decimal(str(price)) if price_basis == 'midpoint'
+             else None),
+        ask=(decimal.Decimal(str(price)) if price_basis == 'midpoint'
+             else None),
         is_shadow=is_shadow))
 
 
-def _de_instrument(ticker='QQSH'):
+def _us_instrument(ticker='QQSH'):
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol=ticker, currency='USD', is_primary=True,
+        mapping_status='mapped', mapping_source='test',
+        mapped_at=dt.datetime(2026, 8, 20)))
+
+
+def _archived_rows(ticker='QQSH', price='999.00'):
+    """An archived non-US instrument and a NEWER archived print."""
     db.session.add(RadarInstrument(
         ticker=ticker, market='de', venue='Tradegate BSX', mic='XGAT',
         provider_symbol=ticker, currency='EUR', is_primary=True,
         mapping_status='mapped', mapping_source='test',
         mapped_at=dt.datetime(2026, 8, 20)))
+    _add_v2(NOW - dt.timedelta(seconds=30), price, ticker=ticker,
+            market='de', mic='XGAT', currency='EUR',
+            source='deutsche_boerse_delayed')
 
 
 def test_a_newer_shadow_snapshot_never_reaches_the_live_view(ctx):
     from features.radar import quotes
-    _de_instrument()
+    _us_instrument()
     _add_v2(NOW - dt.timedelta(minutes=10), '100.00')
     _add_v2(NOW - dt.timedelta(minutes=1), '999.00', is_shadow=True)
     db.session.commit()
 
-    views = quotes.quote_views_for(['QQSH'], 'de', NOW)
+    views = quotes.quote_views_for(['QQSH'], 'us', NOW)
     view = views['QQSH']
     assert view.price == decimal.Decimal('100.000000')
 
 
+def test_a_newer_archived_print_never_reaches_the_live_view(ctx):
+    from features.radar import quotes
+    _us_instrument()
+    _add_v2(NOW - dt.timedelta(minutes=10), '100.00')
+    _archived_rows()
+    db.session.commit()
+
+    view = quotes.quote_views_for(['QQSH'], 'us', NOW)['QQSH']
+    assert (view.market, view.mic, view.currency, view.price) == (
+        'us', 'XNAS', 'USD', decimal.Decimal('100.000000'))
+    status = quotes.price_status('QQSH', NOW, session='regular')
+    assert status == 'ok'
+    assert quotes.move_since('QQSH', 1, NOW, market='us', mic='XNAS') is None
+
+
 def test_moves_use_only_trade_basis_snapshots(ctx):
     from features.radar import quotes
-    _de_instrument()
+    _us_instrument()
     _add_v2(NOW - dt.timedelta(minutes=30), '100.00', price_basis='trade')
     _add_v2(NOW - dt.timedelta(minutes=20), '500.00', price_basis='midpoint')
     _add_v2(NOW - dt.timedelta(minutes=10), '110.00', price_basis='trade')
+    _archived_rows(price='900.00')
     db.session.commit()
 
-    move = quotes.move_since('QQSH', 1, NOW, market='de', mic='XGAT')
+    move = quotes.move_since('QQSH', 1, NOW, market='us', mic='XNAS')
     assert move == pytest.approx(decimal.Decimal('0.1'))
 
-    batch = quotes.moves_for([('QQSH', 'de', 'XGAT')], 1, NOW)
-    assert batch[('QQSH', 'de')] == pytest.approx(decimal.Decimal('0.1'))
+    batch = quotes.moves_for([('QQSH', 'us', 'XNAS')], 1, NOW)
+    assert batch[('QQSH', 'us')] == pytest.approx(decimal.Decimal('0.1'))
+
+
+@pytest.mark.parametrize('call', [
+    lambda q: q.move_since('QQSH', 1, NOW, market='de', mic='XGAT'),
+    lambda q: q.price_status('QQSH', NOW, market='de', mic='XGAT'),
+    lambda q: q.moves_for([('QQSH', 'de', 'XGAT')], 1, NOW),
+    lambda q: q.statuses_for([('QQSH', 'de', 'XGAT')], NOW),
+], ids=['move_since', 'price_status', 'moves_for', 'statuses_for'])
+def test_no_quote_read_accepts_a_non_us_identity(ctx, call):
+    from features.radar import quotes
+    with pytest.raises(ValueError, match='unknown market'):
+        call(quotes)
 
 
 def test_legacy_null_basis_rows_still_count_as_trades(ctx):

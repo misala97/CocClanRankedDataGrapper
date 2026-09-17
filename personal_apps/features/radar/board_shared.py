@@ -360,21 +360,16 @@ def _selection_echo(query, now):
     moment they are waiting for the result of using them.
 
     The session and the boundary go through the same two functions
-    `board.build` calls, with the same Tradegate-first MIC for Germany, so a
-    pending page and the board that replaces it cannot disagree about what time
-    it is on the market.
+    `board.build` calls, so a pending page and the board that replaces it
+    cannot disagree about what time it is on the market.
     """
     api = _api()
-    mic = 'XGAT' if query.market == 'de' else None
-    session = session_state(query.market, now.replace(tzinfo=dt.timezone.utc),
-                            mic=mic)
-    label, boundary_at = board_mod._next_boundary(query.market, now, session,
-                                                  mic=mic)
+    session = session_state(query.market, now.replace(tzinfo=dt.timezone.utc))
+    label, boundary_at = board_mod._next_boundary(query.market, now, session)
     return {
         'market': query.market,
         'display_timezone': 'Europe/Berlin',
-        'market_venue': ('Tradegate-first Germany' if query.market == 'de'
-                         else 'US markets'),
+        'market_venue': board_mod.MARKET_VENUE,
         'session': session,
         'next_boundary_label': label,
         'next_boundary_at': api._iso_z(boundary_at),

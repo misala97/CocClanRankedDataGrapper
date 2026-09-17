@@ -113,11 +113,10 @@ sigma_cache: dict = {}
 
 
 def _quote_sigmas(quote_views, today):
-    """Volatility from the history belonging to each selected quote identity.
+    """Volatility from the US history belonging to each selected quote.
 
-    A company-level cached US sigma is not evidence about its Xetra listing.
-    Grouping preserves the batched read for normal US boards while allowing a
-    Germany board's genuine and fallback rows to use their actual markets.
+    Grouped by (market, mic) so each primary venue's closes are read in one
+    batch; every identity here is a US one.
     """
     if any(key[3] != today for key in list(sigma_cache)):
         sigma_cache.clear()
@@ -132,22 +131,6 @@ def _quote_sigmas(quote_views, today):
             by_identity[(quote.market, quote.mic)].append(ticker)
 
     for (market, mic), tickers in by_identity.items():
-        if market == 'de':
-            # A German identity seeds its volatility from whichever of the
-            # ticker's listings actually has depth -- the Xetra sibling, or
-            # the US primary converted into euros. Tradegate itself stores
-            # about two days of closes, and a sigma from two closes is a
-            # number with no information in it.
-            #
-            # Converted rather than raw dollars on purpose: the move this
-            # sigma is compared against is measured in the quote's own
-            # currency, so the volatility must be too.
-            for ticker in tickers:
-                basis = history.resolve_basis(
-                    ticker, quote_views[ticker], history.HISTORY_DAYS, today)
-                sigmas[ticker] = quotes_mod.daily_sigma(list(basis.closes))
-                sigma_cache[(ticker, market, mic, today)] = sigmas[ticker]
-            continue
         closes = history.closes_for(tickers, days=history.HISTORY_DAYS,
                                     today=today, market=market, mic=mic)
         for ticker in tickers:
@@ -424,9 +407,8 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
     The source list is a read-time filter: it re-pools components that were
     stored per source, and never touches how anything was scored (spec 8.6).
 
-    Quote selection supplies its own market/session/tape state per row.  A
-    Germany board can therefore rank a marked US fallback on its US session
-    without treating every row as if it shared the aggregate board session.
+    Quote selection supplies its own session/tape state per row, so no row
+    is treated as if it shared the aggregate board session.
     """
     survivors, excluded, grouped, channel_counts = _chatter_survivors(
         sources, now, window_hours)

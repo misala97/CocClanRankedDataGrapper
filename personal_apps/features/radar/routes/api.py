@@ -44,10 +44,10 @@ class Query:
     window: int
     limit: int
     min_venues: int
-    # Omission means the live session -- see default_market. The API remains
-    # strict for any value that is supplied, so a typo cannot silently return
-    # a different market.
-    market: str = 'de'
+    # Radar is US-only. Omission means US; parse_query refuses any other
+    # supplied value, so a legacy link cannot silently open a different
+    # board than the one it names.
+    market: str = 'us'
     # None is the default two-tier ranking; otherwise one of board.SORT_KEYS.
     sort: str = None
     direction: str = 'desc'
@@ -69,9 +69,7 @@ def _iso_z(value):
 def _chart_sessions(chart, market, span, mic=None):
     """What kind of time each stretch of the chart is, in UTC intervals.
 
-    A chart may represent a real German quote or an explicit US fallback.  Its
-    bands must follow the quote's actual market calendar, not the selected
-    surface's market label.
+    Its bands follow the quote's own market calendar.
 
     Three kinds since the single-lane chart (2026-08-30): premarket and
     afterhours as before, plus `closed` -- nights, weekends and holidays --
@@ -114,8 +112,8 @@ def _chart_sessions(chart, market, span, mic=None):
     day = start.date() - dt.timedelta(days=1)
     last_day = end.date() + dt.timedelta(days=1)
     while day <= last_day:
-        # Noon UTC unambiguously selects this local US or German calendar day;
-        # the extra day at either side covers a session crossing a UTC date.
+        # Noon UTC unambiguously selects this local US calendar day; the
+        # extra day at either side covers a session crossing a UTC date.
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
         bounds = session_bounds(market, probe, mic=mic)
         if session_state(market, bounds.regular_opens_at,
@@ -231,7 +229,6 @@ def _quote(view):
         'tape_status': view.tape_status,
         'score_eligible': view.score_eligible,
         'score_term': view.score_term,
-        'is_fallback': view.is_fallback,
         # Market-data v2 provenance: decided in QuoteView, never re-derived
         # here (spec 10).
         'source': view.source,
@@ -245,22 +242,28 @@ class BadQuery(ValueError):
     """A query parameter the caller sent that cannot be honoured."""
 
 
-def default_market(now=None):
-    """The market an unqualified request opens on: whichever session is live.
+def _supplied_markets(args):
+    """Every `market` value the request supplied.
 
-    Michi, 2026-09-01, reversing the DE-always default of 2026-08-30. US only
-    when the US session is regular AND the German one is not; DE otherwise.
-    The home market wins the 15:30-17:30 overlap, and with nothing live there
-    is no price move to diverge from on either venue, so the board opens on
-    the one the reader trades.
+    A query string may repeat a parameter and `MultiDict.get` answers only the
+    first; a plain mapping, as the producer and unit tests pass, holds one.
     """
-    now = now or dt.datetime.now(dt.timezone.utc)
-    # Callers pass the codebase's naive-UTC `now`; the calendars want it aware.
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=dt.timezone.utc)
-    us_live = session_state('us', now) == 'regular'
-    de_live = session_state('de', now) == 'regular'
-    return 'us' if us_live and not de_live else 'de'
+    getlist = getattr(args, 'getlist', None)
+    if getlist is not None:
+        return getlist('market')
+    value = args.get('market')
+    return [] if value is None else [value]
+
+
+def require_us_market(args):
+    """Raise BadQuery unless every supplied market is empty or `us`.
+
+    Shared with the human pages' check ahead of their friendly fallback, so a
+    repeated parameter cannot open the US board while also naming another
+    market, whichever position that value takes.
+    """
+    if any(value not in ('', 'us') for value in _supplied_markets(args)):
+        raise BadQuery('unsupported market')
 
 
 def parse_query(args, now=None):
@@ -269,10 +272,16 @@ def parse_query(args, now=None):
     Every parameter is validated rather than coerced. Silently ignoring an
     unknown source would return the default board under a selection the viewer
     never made, which is worse than an error.
+
+    Radar covers US listings only: an omitted market is US, and any supplied
+    value other than `us` -- including a retired market from an old bookmark,
+    in any position of a repeated parameter -- is refused rather than
+    normalized to the US board. `now` is accepted for callers that parse
+    a question at a fixed instant; nothing here reads the clock.
     """
-    market = args.get('market') or default_market(now)
-    if market not in {'us', 'de'}:
-        raise BadQuery('unknown market')
+    del now
+    require_us_market(args)
+    market = 'us'
 
     raw_sources = args.get('sources')
     if raw_sources:
@@ -731,12 +740,10 @@ def serialize_detail(d, *, tone=None):
             'sessions': _chart_sessions(d.chart, d.quote.market, d.span,
                                         mic=d.quote.mic),
             # Where this line came from. The axis reads `currency` from
-            # here, never from the quote: they differ exactly when the
-            # basis is a converted foreign listing, which is the case the
-            # reader most needs told (spec §1/§3).
+            # here, never from the quote; the venue may be an exact-ISIN US
+            # sibling of the quote's own.
             'currency': d.chart.currency,
             'basis_venue': d.chart.basis_venue,
-            'converted_from': d.chart.converted_from,
             'priced_from': d.chart.priced_from,
             **({'chatter_tone': tone} if tone is not None else {}),
         },

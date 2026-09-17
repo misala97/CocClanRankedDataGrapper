@@ -9,7 +9,7 @@ const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
   from: '2026-09-13T00:00:00Z', span: '1D', step_minutes: 15,
   closes: [100, 101], chatter: [10, 0, null], sessions: [],
   normal_per_slot: null, watched_from: null, currency: 'USD',
-  basis_venue: 'XNAS', converted_from: null, priced_from: 'intraday',
+  basis_venue: 'XNAS', priced_from: 'intraday',
   chatter_tone: {
     version: 1, basis: 'recorded-judgments', calculated_at: '2026-09-13T01:00:00Z',
     retained_from: '2026-09-11T01:00:00Z',

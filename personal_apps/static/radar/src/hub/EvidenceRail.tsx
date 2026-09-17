@@ -127,8 +127,8 @@ export function EvidenceRail({ ticker, row, detail, windowHours, marketVenue,
         </>
       ) : (
         <p className="muted small rh-evidencenone">
-          This board has no row for {ticker} in the current window, market and
-          feed selection, so its attention, voices, platforms and tone are
+          This board has no row for {ticker} in the current window and feed
+          selection, so its attention, voices, platforms and tone are
           unknown here. The panels beside this one are the company’s own
           detail and are unaffected.
         </p>

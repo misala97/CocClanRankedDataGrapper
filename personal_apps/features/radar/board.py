@@ -50,6 +50,9 @@ SERIES_HOURS = 24
 # How many rows get the full treatment at the top of the page.
 LEAD_COUNT = 3
 
+# Radar prices US listings only; the board states that once above its rows.
+MARKET_VENUE = 'US markets'
+
 
 @dataclasses.dataclass
 class Point:
@@ -140,7 +143,7 @@ def _hour_floor(when):
 
 
 def _next_boundary(market, now, session, mic=None):
-    """The selected market's next meaningful open/close in aware UTC."""
+    """The US market's next meaningful open/close in aware UTC."""
     aware_now = now.replace(tzinfo=dt.timezone.utc)
     bounds = session_bounds(market, aware_now, mic=mic)
     if session == 'premarket':
@@ -154,13 +157,6 @@ def _next_boundary(market, now, session, mic=None):
     if (bounds.opens_at > aware_now and
             session_state(market, bounds.opens_at, mic=mic) == 'premarket'):
         return 'opens', bounds.opens_at
-    # Xetra has a closed gap between its 08:55 extended session and the 09:00
-    # regular session.  It is still today's trading day, so do not skip to the
-    # next premarket opening.
-    if (bounds.regular_opens_at > aware_now and
-            session_state(market, bounds.regular_opens_at,
-                          mic=mic) == 'regular'):
-        return 'opens', bounds.regular_opens_at
     # Nights, weekends and closures need the next actual trading day rather
     # than a calendar date that happens to contain no session.
     for days in range(1, 8):
@@ -231,10 +227,9 @@ def _hourly_prices(ranked, since, now):
     the panel shows one ticker, but a board did that once for quotes and it
     was the 1.58s TTFB bug.
 
-    Identity per row, not per market: each row's quote already names the
-    venue that answered (market, mic), including the US-fallback case on the
-    German board, and the history drawn beside a quote must be the history
-    OF that quote. `_quote_matches` is reused so the two cannot disagree.
+    Identity per row: each row's quote already names the US venue that
+    answered (market, mic), and the history drawn beside a quote must be the
+    history OF that quote. `_quote_matches` is reused so the two cannot disagree.
 
     No carry-forward, same as the detail chart: an hour nobody priced is
     None, and the line breaks rather than flat-lining through it.
@@ -554,14 +549,8 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
     label the filter's own buttons -- computing them after it would report the
     selected segment's size in every slot.
     """
-    # The board-wide Germany clock is Tradegate-first: XGAT is the
-    # preferred venue and carries the longer retail session. A row or
-    # fallback chart still uses its actual selected quote MIC.
-    board_mic = 'XGAT' if market == 'de' else None
-    session = session_state(market, now.replace(tzinfo=dt.timezone.utc),
-                            mic=board_mic)
-    boundary_label, boundary_at = _next_boundary(market, now, session,
-                                                 mic=board_mic)
+    session = session_state(market, now.replace(tzinfo=dt.timezone.utc))
+    boundary_label, boundary_at = _next_boundary(market, now, session)
     ranking = leaderboard.build_rows(sources, now, window_hours=window_hours,
                                      segments=(), limit=None, market=market)
     ranked = ranking.rows
@@ -614,8 +603,7 @@ def build(sources, now, window_hours=4, segments=(), limit=50,
 
     return Board(generated_at=now, sources=list(sources), market=market,
                  display_timezone='Europe/Berlin',
-                 market_venue=('Tradegate-first Germany' if market == 'de'
-                               else 'US markets'),
+                 market_venue=MARKET_VENUE,
                  next_boundary_label=boundary_label, next_boundary_at=boundary_at,
                   segments=list(segments),
                  window_hours=window_hours, segment_counts=segment_counts,

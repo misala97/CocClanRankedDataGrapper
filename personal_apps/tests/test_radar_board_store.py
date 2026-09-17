@@ -1474,7 +1474,7 @@ def test_a_real_key_and_a_real_payload_survive_the_whole_path(store):
     names = ['reddit:' + ('x' * 100) + str(index) for index in range(37)]
     key_hash, key_json = board_keys.canonical(Query(
         sources=names, segments=['mid', 'micro', 'mid'], window=24, limit=100,
-        min_venues=2, market='de', sort='lean', direction='asc'))
+        min_venues=2, market='us', sort='lean', direction='asc'))
     assert len(key_json) > 3500
     blob = zlib.compress(bytes(range(256)) * 96, 6)
 

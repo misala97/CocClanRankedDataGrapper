@@ -401,7 +401,6 @@ def build(ticker, sources, now, window_hours=4, span=chart_mod.DEFAULT_SPAN,
             chart_mod.first_watched_day(sources, from_dt, now))
         chart.currency = basis.currency or quote.currency
         chart.basis_venue = basis.venue or quote.venue
-        chart.converted_from = basis.converted_from
 
     breakdown = breakdown_for(ticker, sources, since, now)
     breakdown.first_seen = first_mention_day(ticker)

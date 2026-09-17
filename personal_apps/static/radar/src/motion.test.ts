@@ -101,7 +101,7 @@ describe('accessibility contracts in the stylesheet', () => {
   })
 
   it('stacks the identity price below its facts on a 390px screen', () => {
-    /* The compact USD fallback label can be longer than the available inline
+    /* The compact venue and currency label can be longer than the available inline
        space beside an unbroken company name.  Keeping price as a flex item
        made its right edge clip; the small layout needs one full-width price
        lane instead. */

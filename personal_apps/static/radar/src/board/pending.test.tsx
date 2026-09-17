@@ -11,7 +11,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { detail, envelope, payload, row } from '../fixtures'
-import type { BoardPayload, Detail } from '../types'
+import type { BoardPayload } from '../types'
 import { BoardPage } from './BoardPage'
 
 /** A waiting shell exactly as `board_shared._waiting` writes one: the
@@ -51,9 +51,7 @@ const ok = (body: unknown) => ({
 function stubFetch(board: (url: string) => BoardPayload | Promise<unknown>) {
   const spy = vi.fn(async (url: string) => {
     if (url.includes('/api/ticker/')) {
-      return ok(detail(url.split('/api/ticker/')[1]!.split('?')[0]!,
-        (new URL(url, 'https://radar.test').searchParams
-          .get('market') as Detail['market']) ?? 'us'))
+      return ok(detail(url.split('/api/ticker/')[1]!.split('?')[0]!))
     }
     const answer = board(url)
     return { ok: true, redirected: false, status: 200, json: async () => answer }

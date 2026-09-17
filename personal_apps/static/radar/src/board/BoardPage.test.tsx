@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BoardPayload, Detail } from '../types'
+import type { BoardPayload } from '../types'
 import { detail, payload, row } from '../fixtures'
 import { BoardPage } from './BoardPage'
 
@@ -13,9 +13,7 @@ function stubFetch(board: BoardPayload = payload()) {
     ok: true,
     redirected: false,
     json: async () => (url.includes('/api/ticker/')
-      ? detail(url.split('/api/ticker/')[1]!.split('?')[0]!,
-        (new URL(url, 'https://radar.test').searchParams.get('market') as Detail['market'])
-          ?? 'us')
+      ? detail(url.split('/api/ticker/')[1]!.split('?')[0]!)
       : board),
   }))
   vi.stubGlobal('fetch', spy)
@@ -117,125 +115,30 @@ describe('selecting a ticker', () => {
 })
 
 describe('the controls', () => {
-  it('does not show a loaded US panel while Germany is loading', async () => {
-    /* Detail state is retained so a retry can recover, but it is only valid
-       for the request that produced it. A market change must put that cached
-       US view behind a loader before the German response is available. */
-    let resolveDe!: (response: object) => void
-    const deResponse = new Promise<object>((resolve) => { resolveDe = resolve })
-    vi.stubGlobal('fetch', vi.fn((url: string) => {
-      if (url.includes('/api/board')) {
-        return Promise.resolve({ ok: true, redirected: false,
-          json: async () => payload({ market: 'de' }) })
-      }
-      if (url.includes('market=de')) return deResponse
-      return Promise.resolve({ ok: true, redirected: false,
-        json: async () => detail('AAA', 'us') })
-    }))
-
-    render(<BoardPage initial={payload()} />)
-    expect(await screen.findByText(/^AAA is being discussed\.$/)).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
-      .some((url) => url.includes('/api/ticker/AAA?') && url.includes('market=de')))
-      .toBe(true))
-    expect(screen.getByRole('main', { busy: true })).toHaveTextContent('Loading AAA')
-    expect(screen.queryByText(/^AAA is being discussed\.$/)).toBeNull()
-
-    resolveDe({ ok: true, redirected: false, json: async () => detail('AAA', 'de') })
-    expect(await screen.findByText(/AAA on de is being discussed/)).toBeInTheDocument()
-  })
-
-  it('keeps the Germany panel when an aborted US response arrives late', async () => {
-    /* An abort asks the transport to stop but cannot unsend a response already
-       in flight. The late US payload used to overwrite Germany's same-ticker
-       panel because only the ticker was checked before rendering it. */
-    let resolveUs!: (response: object) => void
-    let resolveDe!: (response: object) => void
-    const usResponse = new Promise<object>((resolve) => { resolveUs = resolve })
-    const deResponse = new Promise<object>((resolve) => { resolveDe = resolve })
-    vi.stubGlobal('fetch', vi.fn((url: string) => {
-      if (url.includes('/api/board')) {
-        return Promise.resolve({ ok: true, redirected: false,
-          json: async () => payload({ market: 'de' }) })
-      }
-      return url.includes('market=de') ? deResponse : usResponse
-    }))
-
-    render(<BoardPage initial={payload()} />)
-    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
-
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
-      .some((url) => url.includes('/api/ticker/AAA?') && url.includes('market=de')))
-      .toBe(true))
-    resolveDe({ ok: true, redirected: false, json: async () => detail('AAA', 'de') })
-    expect(await screen.findByText(/AAA on de is being discussed/)).toBeInTheDocument()
-
-    resolveUs({ ok: true, redirected: false, json: async () => detail('AAA', 'us') })
-    await waitFor(() => expect(screen.getByText(/AAA on de is being discussed/))
-      .toBeInTheDocument())
-    expect(screen.queryByText(/^AAA is being discussed\.$/)).toBeNull()
-  })
-
-  it('switches market while retaining ticker, filters, and panel span', async () => {
-    /* The market is price context, not a reset button: the reader keeps the
-       company and every filter while swapping the venue underneath it. */
+  it('offers no market to choose and never asks for one', async () => {
+    /* Radar is US-only: no switch beside the wordmark, no market in the
+       board, detail or address-bar queries. */
     render(<BoardPage initial={payload()} />)
     await screen.findByText(/AAA is being discussed/)
-    await userEvent.click(screen.getByRole('button', { name: '1M' }))
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Germany' }))
+    expect(screen.queryByRole('radiogroup', { name: /market/i })).toBeNull()
+    expect(screen.queryByRole('radio')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/Germany|Xetra|Tradegate/)
 
-    await waitFor(() => expect(boardCalls()).toContain(
-      '/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=4&segment=&market=de'))
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
-      .some((url) => url.includes('/api/ticker/AAA?')
-        && url.includes('sources=bluesky%2Cfourchan%2Creddit')
-        && url.includes('window=4') && url.includes('span=1M')
-        && url.includes('market=de'))).toBe(true))
-    expect(window.location.search).toContain('market=de')
-    expect(window.location.search).toContain('t=AAA')
-    expect(window.location.search).toContain('window=4')
-    expect(screen.getByRole('button', { name: '1M' }))
-      .toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('keeps the selected company when the other market board omits it', async () => {
-    /* On the fake clock, so the German board has answered by the time this
-       looks. On the real one every assertion here was already true before
-       the debounce let that request out -- `t=BBB` was the row click's own
-       doing -- and the test usually ended first, the board it is named for
-       never asked for. */
-    vi.useFakeTimers()
-    render(<BoardPage initial={payload()} />)
-    await advance(0)
-    expect(screen.getByText(/AAA is being discussed/)).toBeInTheDocument()
-    await click(screen.getByRole('link', { name: /BBB/ }))
-
-    stubFetch(payload({ market: 'de', market_venue: 'Xetra',
-      rows: [row({ ticker: 'AAA' })] }))
-    await click(screen.getByRole('radio', { name: 'Germany' }))
-    await advance(300)
-
-    expect(boardCalls()).toEqual([
-      '/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=4&segment=&market=de'])
-    // The German board is on screen, and BBB is not on it...
-    expect(document.querySelectorAll('.row')).toHaveLength(1)
-    // ...but the reader is still on BBB: in the address bar the answer
-    // wrote, and in the panel, which now asks about it on the German market.
-    expect(window.location.search).toContain('market=de')
-    expect(window.location.search).toContain('t=BBB')
-    expect(vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
-      .some((url) => url.includes('/api/ticker/BBB?') && url.includes('market=de')))
-      .toBe(true)
+    await userEvent.click(screen.getByRole('button', { name: /change/i }))
+    await userEvent.click(screen.getByRole('button', { name: /4chan/ }))
+    await waitFor(() => expect(boardCalls()).toHaveLength(1))
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]))
+    expect(urls.some((url) => url.includes('/api/ticker/'))).toBe(true)
+    expect(urls.filter((url) => url.includes('market='))).toEqual([])
+    expect(window.location.search).not.toContain('market=')
   })
 
   it('names the venue, session, and next boundary in the header', () => {
     render(<BoardPage initial={payload({
-      market: 'de', market_venue: 'Xetra', session: 'regular',
+      market: 'us', market_venue: 'US markets', session: 'regular',
       next_boundary_label: 'closes',
-      next_boundary_at: '2026-08-28T15:30:00Z',
+      next_boundary_at: '2026-08-28T20:00:00Z',
     })} />)
 
     /* The enum used to be printed raw ("regular"); the status line says it
@@ -244,7 +147,7 @@ describe('the controls', () => {
     // The head's status line is the FIRST status region; the empty-board
     // account further down is its own.
     const [head] = screen.getAllByRole('status')
-    expect(head).toHaveTextContent('Xetra open · closes 17:30')
+    expect(head).toHaveTextContent('US markets open · closes 22:00')
   })
 
   it('refetches and rewrites the address bar when a source is dropped', async () => {
@@ -256,7 +159,7 @@ describe('the controls', () => {
 
     await waitFor(() => expect(boardCalls()).toHaveLength(1))
     expect(boardCalls()[0]).toBe(
-      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=&market=us')
+      '/radar/api/board?sources=bluesky%2Creddit&window=4&segment=')
     await waitFor(() =>
       expect(window.location.search)
         .toContain('sources=bluesky%2Creddit&window=4&segment='))

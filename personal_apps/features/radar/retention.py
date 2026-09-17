@@ -1,8 +1,14 @@
-"""Rolling deletion of raw text and of stale price snapshots.
+"""Rolling deletion of raw text and of stale US price snapshots and closes.
 
 Buckets are never touched here. They are the queryable layer and are retained
 forever; raw posts exist only long enough to be extracted from and read on a
 detail page (spec 5).
+
+Archived rows of the retired non-US market -- quotes, closes, trade events,
+collection cycles, cursors, mapping generations and reference rates -- are
+historical evidence. No query here selects, ranks or deletes one: every price
+retention query is scoped to US and legacy-US (NULL market) rows before it
+decides anything.
 """
 import datetime as dt
 import time
@@ -46,67 +52,10 @@ def _pinned(cutoff):
     return min(cutoff, floor)
 
 
-def prune_market_data(now, chunk_size=5000):
-    """Bound the v2 operational tables: events 48h, cycles 14 days.
-
-    Cursor and mapping-generation tables are deliberately excluded -- they
-    are the restart and rollback state. An event still referenced by a
-    correction inside the window survives: revocation evidence cannot
-    outlive its target.
-    """
-    from models import RadarMarketDataCycle, RadarMarketTradeEvent
-
-    event_horizon = now - dt.timedelta(hours=48)
-    cycle_horizon = now - dt.timedelta(days=14)
-    deleted = 0
-    while True:
-        batch = [row_id for (row_id,) in
-                 db.session.query(RadarMarketTradeEvent.id)
-                 .filter(RadarMarketTradeEvent.received_at < event_horizon)
-                 .limit(chunk_size).all()]
-        if not batch:
-            break
-        referenced = {original for (original,) in
-                      db.session.query(
-                          RadarMarketTradeEvent.original_event_id)
-                      .filter(
-                          RadarMarketTradeEvent.original_event_id.isnot(None),
-                          RadarMarketTradeEvent.received_at >= event_horizon)
-                      .all()}
-        doomed = batch
-        if referenced:
-            keep = {row_id for (row_id,) in
-                    db.session.query(RadarMarketTradeEvent.id)
-                    .filter(RadarMarketTradeEvent.id.in_(batch),
-                            RadarMarketTradeEvent.event_id.in_(referenced))
-                    .all()}
-            doomed = [row_id for row_id in batch if row_id not in keep]
-        if not doomed:
-            break
-        RadarMarketTradeEvent.query.filter(
-            RadarMarketTradeEvent.id.in_(doomed)).delete(
-            synchronize_session=False)
-        db.session.commit()
-        deleted += len(doomed)
-        if len(batch) < chunk_size:
-            break
-
-    while True:
-        batch = [row_id for (row_id,) in
-                 db.session.query(RadarMarketDataCycle.id)
-                 .filter(RadarMarketDataCycle.scheduled_at < cycle_horizon)
-                 .limit(chunk_size).all()]
-        if not batch:
-            break
-        RadarMarketDataCycle.query.filter(
-            RadarMarketDataCycle.id.in_(batch)).delete(
-            synchronize_session=False)
-        db.session.commit()
-        deleted += len(batch)
-        if len(batch) < chunk_size:
-            break
-
-    deleted += _prune_daily_closes(now, chunk_size)
+def prune_closes(now, chunk_size=5000):
+    """Bound the US daily-close store: the calendar horizon, then the
+    evidence-armed Massive shadow cleanup. Returns rows deleted."""
+    deleted = _prune_daily_closes(now, chunk_size)
     deleted += _prune_massive_shadow(now, chunk_size)
     return deleted
 
@@ -123,8 +72,8 @@ def _close_horizon_days():
 def _prune_daily_closes(now, chunk_size):
     """[A1] Universe-wide grouped ingestion is bounded only if pruned.
 
-    Native ``deutsche_boerse_delayed`` closes are excepted: they are
-    observed, not refetchable, and their universe is small enough to keep.
+    US and legacy-US (NULL market) rows only; archived non-US closes are
+    never candidates.
     """
     from models import RadarDailyClose
 
@@ -135,9 +84,8 @@ def _prune_daily_closes(now, chunk_size):
         batch = [row_id for (row_id,) in
                  db.session.query(RadarDailyClose.id)
                  .filter(RadarDailyClose.close_date < horizon,
-                         sa.or_(RadarDailyClose.source.is_(None),
-                                RadarDailyClose.source !=
-                                'deutsche_boerse_delayed'))
+                         sa.or_(RadarDailyClose.market == 'us',
+                                RadarDailyClose.market.is_(None)))
                  .limit(chunk_size).all()]
         if not batch:
             break
@@ -187,7 +135,7 @@ def _prune_massive_shadow(now, chunk_size):
 
     Retains the complete shadow lane through the gate and seven days past
     activation; then prunes only ``massive_grouped`` SHADOW closes older
-    than 30 calendar days. Live rows and native German closes are never
+    than 30 calendar days. Live rows and archived non-US closes are never
     touched here.
     """
     from models import RadarDailyClose
@@ -276,16 +224,14 @@ def prune_quotes(now, keep=STALE_QUOTE_POLLS, chunk_size=5000,
     Deletable ids are collected in one pass rather than re-ranked per chunk:
     the window function would otherwise sort the whole table once per chunk,
     and this runs nightly against a table nothing else is reading at 04:30.
+
+    Only US and legacy-US rows are ranked at all: the market filter sits
+    inside the ranked subquery, so an archived non-US row is never a
+    candidate rather than a candidate filtered out afterwards.
     """
     cutoff = now - dt.timedelta(days=QUOTE_RETENTION_DAYS)
 
-    ranked = sa.select(
-        RadarQuote.id.label('id'),
-        RadarQuote.fetched_at.label('fetched_at'),
-        sa.func.row_number().over(
-            partition_by=(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic),
-            order_by=RadarQuote.fetched_at.desc()).label('rn'),
-    ).subquery()
+    ranked = _ranked_quotes()
 
     doomed = [row_id for (row_id,) in db.session.execute(
         sa.select(ranked.c.id)
@@ -302,6 +248,19 @@ def prune_quotes(now, keep=STALE_QUOTE_POLLS, chunk_size=5000,
             time.sleep(pause)
 
     return total
+
+
+def _ranked_quotes():
+    """Every US and legacy-US snapshot with its newest-first rank per
+    (ticker, market, mic)."""
+    return sa.select(
+        RadarQuote.id.label('id'),
+        RadarQuote.fetched_at.label('fetched_at'),
+        sa.func.row_number().over(
+            partition_by=(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic),
+            order_by=RadarQuote.fetched_at.desc()).label('rn'),
+    ).where(sa.or_(RadarQuote.market == 'us',
+                   RadarQuote.market.is_(None))).subquery()
 
 
 def prune_mention_events(now, chunk_size=5000, pause=_CHUNK_PAUSE_SECONDS):

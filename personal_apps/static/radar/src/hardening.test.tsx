@@ -25,7 +25,6 @@ function quote(over: Partial<MarketQuote> = {}): MarketQuote {
     market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 10,
     regular_move: 0.012, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
-    is_fallback: false,
     ...over,
     tape_status: over.tape_status ?? 'ok',
     score_eligible: over.score_eligible ?? true,
@@ -88,7 +87,7 @@ function detail(ticker = 'AAA'): Detail {
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
       sessions: [],
-      currency: null, basis_venue: null, converted_from: null,
+      currency: null, basis_venue: null,
       priced_from: 'daily',
       normal_per_slot: null,
       watched_from: '2026-08-18',
@@ -151,12 +150,13 @@ describe('the embedded payload', () => {
     expect(parsePayload('{"rows":[]}')).not.toBeNull()
   })
 
-  it('falls back to US for a legacy embedded payload with an invalid market', () => {
-    /* An invalid API query is rejected server-side. The already-embedded page
-       cannot ask the server to correct itself, so it takes the same safe US
-       default instead of emitting a third market into client state. */
-    expect(parsePayload('{"rows":[],"market":"elsewhere"}')?.market)
-      .toBe('us')
+  it('refuses an embedded payload for any market but the US one', () => {
+    /* The server only builds US boards and refuses any other market. A
+       payload that names another is not a board this page can show, and
+       relabelling it as US would present another market's prices as
+       dollars -- so it is refused, and the entry renders words instead. */
+    expect(parsePayload('{"rows":[],"market":"elsewhere"}')).toBeNull()
+    expect(parsePayload('{"rows":[],"market":"us"}')?.market).toBe('us')
   })
 })
 
@@ -592,12 +592,11 @@ describe('mobile continuity', () => {
   it('keeps the chart basis note outside the horizontally panning plot', async () => {
     const converted = detail()
     converted.identity.quote = quote({
-      market: 'de', venue: 'Tradegate BSX', mic: 'XGAT', currency: 'EUR',
+      market: 'us', venue: 'NASDAQ', mic: 'XNAS', currency: 'USD',
     })
     converted.chart = {
       ...converted.chart,
-      currency: 'EUR', basis_venue: 'Nasdaq Global Market',
-      converted_from: 'USD',
+      currency: 'USD', basis_venue: 'NYSE',
     }
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
       ok: true,
@@ -607,8 +606,7 @@ describe('mobile continuity', () => {
     })))
 
     render(<BoardPage initial={payload()} />)
-    const note = await screen.findByText(
-      'Nasdaq Global Market closes, converted to EUR at the ECB daily rate')
+    const note = await screen.findByText('NYSE closes · quoted at NASDAQ')
     const scroller = document.querySelector('.chartwrap')!
 
     expect(scroller).not.toContainElement(note)

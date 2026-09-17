@@ -16,14 +16,14 @@ import { SelectedPriceCharts } from './selectedPriceContext'
 
 const selection: Selection = selectionOf(payload())
 
-function show({ offered = true, span = '1D' as PanelSpan, ticker = 'AAA', market = 'us' as 'us' | 'de',
+function show({ offered = true, span = '1D' as PanelSpan, ticker = 'AAA',
                 client = new QueryClient({ defaultOptions: { queries: { retry: false } } }) } = {}) {
   const tree = (t: string) => (
     <QueryClientProvider client={client}>
       <SelectedPriceCharts.Provider value={offered}>
         <div className="rh">
           <ChartSection chart={detail(t).chart} ticker={t} span={span} onSpan={vi.fn()}
-                        selection={{ ...selection, market }} />
+                        selection={selection} />
         </div>
       </SelectedPriceCharts.Provider>
     </QueryClientProvider>
@@ -42,9 +42,9 @@ describe('which chart the section draws', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it.each([['1M', 'us'], ['1D', 'de']] as const)('keeps it for %s on %s', (span, market) => {
+  it.each(['1M', '6M'] as const)('keeps it for %s', (span) => {
     const fetch = vi.spyOn(priceChart, 'fetchPriceChart')
-    const { container } = show({ span, market })
+    const { container } = show({ span })
     expect(container.querySelector('svg.pxchart')).not.toBeNull()
     expect(fetch).not.toHaveBeenCalled()
   })
@@ -141,7 +141,7 @@ describe('when a refresh fails after an answer', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
     expectNoOldChart(container)
     // The previous answer is still in the cache; it is simply not shown.
-    expect(client.getQueryData(priceChartKey('AAA', 'us', selection.sources, '1D'))).toBeDefined()
+    expect(client.getQueryData(priceChartKey('AAA', selection.sources, '1D'))).toBeDefined()
   }, 10_000)
 
   it('draws the chart again once a refresh succeeds', async () => {
@@ -229,9 +229,9 @@ describe('when the chart asks again', () => {
     }
   })
 
-  it('keys on ticker, market, sources and span, and not on the board window', () => {
-    const key = priceChartKey('AAA', 'us', ['bluesky', 'reddit'], '1W')
-    expect(key).toEqual(['radar-hub', 'price-chart', 'AAA', 'us', 'bluesky,reddit', '1W',
+  it('keys on ticker, sources and span, and not on the board window', () => {
+    const key = priceChartKey('AAA', ['bluesky', 'reddit'], '1W')
+    expect(key).toEqual(['radar-hub', 'price-chart', 'AAA', 'bluesky,reddit', '1W',
       'selected-price-v1'])
   })
 })

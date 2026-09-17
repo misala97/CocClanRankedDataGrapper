@@ -1,5 +1,5 @@
 # personal_apps/tests/test_radar_daemon.py
-"""Cadence follows the NYSE session, not a fixed interval and not German local
+"""Cadence follows the NYSE session, not a fixed interval and not Berlin local
 time (spec 4.3, 4.4).
 
 The DST case is the one that would otherwise ship broken: for about three weeks
@@ -42,8 +42,8 @@ def test_interval_during_a_live_session_is_the_fast_one():
 
 
 def test_interval_during_the_dst_desync_window():
-    """2026-03-16 13:45 UTC is 09:45 ET -- open -- but only 14:45 in Berlin,
-    an hour earlier than the usual German open."""
+    """2026-03-16 13:45 UTC is 09:45 ET -- open -- but only 14:45 in Berlin:
+    during the desync the US open lands an hour earlier in Berlin than usual."""
     state = daemon.current_state(_utc(2026, 3, 16, 13, 45))
     assert state == 'regular'
     assert daemon.interval_for(state) == 180
@@ -206,87 +206,12 @@ def test_one_source_failing_to_score_does_not_stop_the_others(monkeypatch):
     assert result['fourchan'] == 3
 
 
-def test_quote_polling_targets_the_loudest_tickers(monkeypatch):
-    """The free tier is 60 calls a minute, so quotes go to the tickers actually
-    on the board rather than to all 12,000 in the universe."""
-    asked = {}
-
-    class FakeProvider:
-        def quotes(self, symbols):
-            asked['symbols'] = list(symbols)
-            return {}
-
-    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA', 'BBB'])
-    monkeypatch.setattr(daemon.quotes, 'record_quotes', lambda q, now: 0)
-    daemon.poll_quotes(_utc(2026, 8, 21, 14), FakeProvider(), limit=50)
-    assert asked['symbols'] == ['AAA', 'BBB']
-
-
-def test_a_dead_provider_does_not_kill_the_job(monkeypatch):
-    class Dead:
-        def quotes(self, symbols):
-            raise RuntimeError('provider down')
-
-    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
-    result = daemon.poll_quotes(_utc(2026, 8, 21, 14), Dead())
-    assert result['stored'] == 0
-    assert result['error'] is True
-
-
-def test_nothing_loud_means_no_provider_call(monkeypatch):
-    """An empty board must not burn rate limit on a call with no symbols."""
-    called = {'n': 0}
-
-    class Counting:
-        def quotes(self, symbols):
-            called['n'] += 1
-            return {}
-
-    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: [])
-    daemon.poll_quotes(_utc(2026, 8, 21, 14), Counting())
-    assert called['n'] == 0
-
-
-def test_german_quote_failure_does_not_block_us_quotes(monkeypatch):
-    """A denied German entitlement is not a US board outage."""
-    us = SimpleNamespace(ticker='AAA', market='us', venue='Nasdaq', mic='XNAS',
-                         provider_symbol='AAA', currency='USD')
-    de = SimpleNamespace(ticker='AAA', market='de', venue='Xetra', mic='XETR',
-                         provider_symbol='AAA1', currency='EUR')
-    calls = []
-
-    class UsProvider:
-        def quotes(self, symbols):
-            calls.append(('us', list(symbols)))
-            from features.radar.prices import Quote
-            return {'AAA': Quote('AAA', decimal.Decimal('220.00'),
-                                 currency='USD')}
-
-    class DeniedGermany:
-        def quotes(self, symbols):
-            calls.append(('de', list(symbols)))
-            raise RuntimeError('entitlement denied')
-
-    monkeypatch.setattr(daemon, '_loud_tickers', lambda now, limit: ['AAA'])
-    monkeypatch.setattr(daemon, 'has_app_context', lambda: True)
-    monkeypatch.setattr(
-        daemon, '_market_instruments',
-        lambda tickers, market: [us] if market == 'us' else [de])
-    monkeypatch.setattr(daemon, '_mapping_refresh_due', lambda now: True)
-    monkeypatch.setattr(daemon.instruments, 'refresh_mappings',
-                        lambda provider, now: calls.append(('mapping', provider)))
-    monkeypatch.setattr(daemon.quotes, 'record_quotes', lambda found, now: len(found))
-
-    mapping_provider = object()
-    result = daemon.poll_quotes(
-        _utc(2026, 8, 21, 14), UsProvider(), de_provider=DeniedGermany(),
-        mapping_provider=mapping_provider)
-
-    assert result['us_stored'] == 1
-    assert result['de_stored'] == 0
-    assert result['de_error'] is True
-    assert calls == [('us', ['AAA']), ('mapping', mapping_provider),
-                     ('de', ['AAA1'])]
+def test_the_unreachable_combined_quote_poll_is_gone():
+    """The old combined US/German poll had no scheduler job; the US cycle
+    (`_run_us_price_cycle`) is the only quote writer."""
+    for name in ('poll_quotes', '_scheduled_quotes', 'DE_QUOTE_LIMIT',
+                 'DE_HISTORY_LIMIT'):
+        assert not hasattr(daemon, name), name
 
 
 def test_sigma_refresh_covers_the_board(monkeypatch):
@@ -394,14 +319,18 @@ def test_the_nightly_prune_covers_quotes_as_well_as_posts():
         lambda now: called.append('quotes') or 0, daemon.retention.prune_quotes)
     daemon.retention.prune_mention_events, real_events = (
         lambda now: called.append('events') or 0, daemon.retention.prune_mention_events)
+    daemon.retention.prune_closes, real_closes = (
+        lambda now: called.append('closes') or 0, daemon.retention.prune_closes)
     try:
         daemon._scheduled_prune()
     finally:
         daemon.retention.prune_posts = real_posts
         daemon.retention.prune_quotes = real_quotes
         daemon.retention.prune_mention_events = real_events
+        daemon.retention.prune_closes = real_closes
 
-    assert called == ['posts', 'quotes', 'events']
+    assert called == ['posts', 'quotes', 'events', 'closes']
+    assert not hasattr(daemon.retention, 'prune_market_data')
 
 
 def test_the_daemon_schedules_a_profile_job():
@@ -497,89 +426,6 @@ def test_a_failing_history_provider_does_not_kill_the_cycle(monkeypatch):
     assert daemon.refresh_history(_utc(2026, 8, 21, 14), object()) == (0, 0)
 
 
-def test_german_history_has_its_own_bound_and_provider_symbols(monkeypatch):
-    de = SimpleNamespace(ticker='AAA', market='de', venue='Xetra', mic='XETR',
-                         provider_symbol='APC', currency='EUR',
-                         history_due_at=None)
-    seen = {}
-
-    def fake_fetch(provider, tickers, now, **kwargs):
-        seen['tickers'] = list(tickers)
-        seen.update(kwargs)
-        return len(tickers), 0
-
-    monkeypatch.setattr(daemon, '_xetra_history_instruments', lambda: [de],
-                        raising=False)
-    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
-    monkeypatch.setattr(daemon.db.session, 'commit', lambda: None)
-
-    assert daemon.refresh_de_history(
-        _utc(2026, 8, 21, 14), object(), limit=1) == (1, 0)
-    assert seen == {
-        'tickers': ['AAA'], 'market': 'de', 'mic': 'XETR', 'currency': 'EUR',
-        'provider_symbols': {'AAA': 'APC'},
-    }
-
-
-def test_yahoo_german_history_uses_the_xetra_dot_de_symbol(monkeypatch):
-    row = SimpleNamespace(
-        ticker='AAA', market='de', venue='Xetra', mic='XETR',
-        provider_symbol='APC', currency='EUR', history_due_at=None)
-    seen = {}
-    provider = SimpleNamespace(source='yahoo_chart')
-
-    def fake_fetch(_provider, tickers, now, **kwargs):
-        seen.update(kwargs)
-        return 1, 0
-
-    monkeypatch.setattr(daemon, '_xetra_history_instruments', lambda: [row])
-    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
-    monkeypatch.setattr(daemon.db.session, 'commit', lambda: None)
-
-    assert daemon.refresh_de_history(
-        _utc(2026, 8, 21, 14), provider, limit=1) == (1, 0)
-    assert seen['provider_symbols'] == {'AAA': 'APC.DE'}
-
-
-def test_german_history_advances_an_empty_never_fetched_instrument(monkeypatch):
-    """A refused symbol is visible and moves behind untouched queue entries."""
-    now = _utc(2026, 8, 21, 14)
-    never = SimpleNamespace(
-        ticker='NEVER', market='de', venue='Xetra', mic='XETR',
-        provider_symbol='NVR', currency='EUR', history_due_at=None)
-    older_attempt = SimpleNamespace(
-        ticker='OLD', market='de', venue='Xetra', mic='XETR',
-        provider_symbol='OLD', currency='EUR',
-        history_due_at=now.replace(tzinfo=None) - dt.timedelta(hours=1))
-    seen = {}
-    commits = []
-
-    def fake_fetch(provider, tickers, fetched_at, **kwargs):
-        seen['tickers'] = list(tickers)
-        seen.update(kwargs)
-        return 0, len(tickers)
-
-    monkeypatch.setattr(
-        daemon, '_loud_tickers',
-        lambda *_: pytest.fail('German history must not depend on chatter'))
-    monkeypatch.setattr(
-        daemon, '_xetra_history_instruments',
-        lambda: [older_attempt, never], raising=False)
-    monkeypatch.setattr(daemon.history, 'fetch_into_store', fake_fetch)
-    monkeypatch.setattr(daemon.db.session, 'commit',
-                        lambda: commits.append('commit'))
-
-    assert daemon.refresh_de_history(now, object(), limit=1) == (0, 1)
-    assert seen == {
-        'tickers': ['NEVER'], 'market': 'de', 'mic': 'XETR',
-        'currency': 'EUR', 'provider_symbols': {'NEVER': 'NVR'},
-    }
-    assert never.history_due_at == now.replace(tzinfo=None) + dt.timedelta(days=1)
-    assert older_attempt.history_due_at == (
-        now.replace(tzinfo=None) - dt.timedelta(hours=1))
-    assert commits == ['commit']
-
-
 def test_nothing_due_spends_no_requests(monkeypatch):
     called = {'n': 0}
 
@@ -606,33 +452,11 @@ def test_the_daemon_schedules_a_history_job():
     assert '_scheduled_history' in source
 
 
-def test_daily_ecb_refresh_records_the_publication(monkeypatch):
-    day = dt.date(2026, 9, 4)
-    seen = {}
-    provider = SimpleNamespace(rates=lambda: [(day, decimal.Decimal('1.16'))])
-    monkeypatch.setattr(
-        daemon.fx, 'record_rates',
-        lambda rates, now: seen.update(rates=list(rates), now=now) or 1)
-
-    assert daemon.refresh_ecb_rates(_utc(2026, 9, 4, 14, 30), provider) == 1
-    assert seen['rates'] == [(day, decimal.Decimal('1.16'))]
-
-
-def test_daily_ecb_refresh_keeps_an_absent_publication_nonfatal(caplog):
-    provider = SimpleNamespace(rates=lambda: [])
-    assert daemon.refresh_ecb_rates(_utc(2026, 9, 5, 14, 30), provider) == 0
-    assert 'returned no publication' in caplog.text
-
-
-def test_scheduled_ecb_failure_does_not_kill_the_daemon(monkeypatch, caplog):
-    from features.radar.prices import ecb
-    monkeypatch.setattr(
-        ecb, 'EcbProvider',
-        lambda http: SimpleNamespace(
-            rates=lambda: (_ for _ in ()).throw(RuntimeError('ECB down'))))
-
-    assert daemon._scheduled_ecb_fx() == 0
-    assert 'ECB daily refresh failed' in caplog.text
+def test_no_exchange_rate_or_german_history_job_remains():
+    for name in ('refresh_ecb_rates', '_scheduled_ecb_fx', 'fx',
+                 'refresh_de_history', '_yahoo_de_history_provider',
+                 '_xetra_history_instruments'):
+        assert not hasattr(daemon, name), name
 
 
 def test_the_daemon_schedules_a_sentiment_job():
@@ -848,214 +672,19 @@ def test_main_prepares_the_rollup_generation_before_building_fetchers(monkeypatc
                         'process actually exits')
 
 
-def test_manual_mapping_refresh_uses_the_catalog_provider(monkeypatch):
-    """A manual operator refresh must run the same safe mapping path as cron."""
-    seen = {}
-    provider = object()
-    from features.radar.instruments import MappingResult
-
-    monkeypatch.setattr(daemon, '_mapping_provider', lambda: provider,
-                        raising=False)
-    monkeypatch.setattr(
-        daemon.instruments, 'refresh_mappings',
-        lambda selected, now: seen.update(provider=selected, now=now) or
-        MappingResult(True, 2, 1, 1, 1))
-
-    daemon.main(['--refresh-mappings'])
-
-    assert seen['provider'] is provider
-    assert seen['now'].tzinfo is dt.timezone.utc
+def test_no_mapping_or_german_collection_entry_point_remains():
+    for name in ('instruments', 'probe_german_data', '_german_quote_sample',
+                 '_mapping_provider', '_scheduled_mappings',
+                 '_build_mapping_generation', '_mapping_refresh_due',
+                 '_current_de_generation_id', '_legacy_de_poll',
+                 '_de_should_collect', '_scheduled_de_market_data'):
+        assert not hasattr(daemon, name), name
 
 
-def test_shadow_mode_mapping_job_builds_a_generation(monkeypatch):
-    """R6 satisfied (§3.5/§3.6): shadow/active builds an OpenFIGI
-    generation from the live reference catalogs instead of refusing."""
-    from features.radar import reference_universe
-
-    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
-    catalogs = {'XETR': object(), 'XGAT': object()}
-    seen = {}
-    generation = type('G', (), {'id': 7, 'payload_sha256': 'f' * 64})()
-
-    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
-                        lambda http, now: seen.update(now=now) or catalogs)
-    monkeypatch.setattr(daemon.instruments, 'load_overrides',
-                        lambda now=None: {})
-    monkeypatch.setattr(
-        daemon.instruments, 'build_generation',
-        lambda provider, references, overrides, now:
-        seen.update(references=references) or generation)
-    monkeypatch.setattr(
-        daemon.instruments, 'refresh_mappings',
-        lambda provider, now: pytest.fail(
-            'shadow mode must not run the legacy catalog refresh'))
-
-    result = daemon._scheduled_mappings()
-
-    assert result is generation
-    assert seen['references'] is catalogs
-    assert seen['now'].tzinfo is None
-
-
-def test_shadow_mode_mapping_job_writes_nothing_on_incomplete_reference(
-        monkeypatch, caplog):
-    from features.radar import reference_universe
-    from features.radar.instruments import IncompleteReference
-
-    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
-    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
-                        lambda http, now: {})
-    monkeypatch.setattr(daemon.instruments, 'load_overrides',
-                        lambda now=None: {})
-
-    def refuse(provider, references, overrides, now):
-        raise IncompleteReference('XGAT: official reference universe is '
-                                  'not complete')
-    monkeypatch.setattr(daemon.instruments, 'build_generation', refuse)
-
-    with caplog.at_level('ERROR'):
-        assert daemon._scheduled_mappings() is None
-    assert any('reference incomplete' in record.message
-               for record in caplog.records)
-
-
-def test_shadow_mode_mapping_job_survives_a_provider_outage(monkeypatch):
-    from features.radar import reference_universe
-    from features.radar.prices import PriceUnavailable
-
-    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
-    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
-                        lambda http, now: {})
-    monkeypatch.setattr(daemon.instruments, 'load_overrides',
-                        lambda now=None: {})
-
-    def outage(provider, references, overrides, now):
-        raise PriceUnavailable('openfigi 429')
-    monkeypatch.setattr(daemon.instruments, 'build_generation', outage)
-
-    assert daemon._scheduled_mappings() is None
-
-
-def test_mapping_success_details_are_read_inside_the_session(monkeypatch):
-    """Production 2026-09-01: the success log read generation.id AFTER the
-    app context closed -- DetachedInstanceError out of a job whose build
-    had already committed. The fake here detaches exactly like the ORM:
-    attribute reads outside an app context raise."""
-    from flask import has_app_context
-    from features.radar import reference_universe
-
-    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
-    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
-                        lambda http, now: {})
-    monkeypatch.setattr(daemon.instruments, 'load_overrides',
-                        lambda now=None: {})
-
-    class DetachingGeneration:
-        @property
-        def id(self):
-            if not has_app_context():
-                raise RuntimeError('detached read')
-            return 7
-
-        @property
-        def payload_sha256(self):
-            if not has_app_context():
-                raise RuntimeError('detached read')
-            return 'f' * 64
-
-    monkeypatch.setattr(
-        daemon.instruments, 'build_generation',
-        lambda provider, references, overrides, now: DetachingGeneration())
-
-    result = daemon._scheduled_mappings()
-
-    assert isinstance(result, DetachingGeneration)
-
-
-def test_shadow_mode_mapping_job_never_lets_an_exception_escape(monkeypatch):
-    """The scheduled job runs under APScheduler: an escaped exception would
-    poison the job, so even an unforeseen error must degrade to None."""
-    from features.radar import reference_universe
-
-    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
-
-    def explode(http, now):
-        raise RuntimeError('unforeseen')
-    monkeypatch.setattr(reference_universe, 'build_reference_catalogs',
-                        explode)
-
-    assert daemon._scheduled_mappings() is None
-
-
-def test_daemon_schedules_weekly_mapping_refresh(monkeypatch):
-    """Mappings otherwise stay frozen after the deploy-time probe succeeds."""
-    created = []
-
-    class CapturingScheduler:
-        def __init__(self, **kwargs):
-            self.jobs = []
-            created.append(self)
-
-        def add_job(self, func, trigger, **kwargs):
-            self.jobs.append((func, trigger, kwargs))
-
-        def start(self):
-            pass
-
-        def shutdown(self):
-            pass
-
-    monkeypatch.setattr(daemon, 'BackgroundScheduler', CapturingScheduler)
-    monkeypatch.setattr(daemon, '_prepare_rollup_generation', lambda now: (0, 0))
-    monkeypatch.setattr(daemon, 'build_fetchers', lambda: {})
-    monkeypatch.setattr(daemon.time, 'sleep',
-                        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt))
-
-    daemon.main([])
-
-    jobs = {job[2]['id']: job for job in created[0].jobs}
-    mapping = jobs['radar_mappings']
-    assert mapping[0] is daemon._scheduled_mappings
-    assert mapping[1] == 'interval'
-    assert mapping[2]['weeks'] == 1
-    assert mapping[2]['max_instances'] == 1
-    assert mapping[2]['coalesce'] is True
-    # Pre-v2 legacy cadence: weekly only, no startup fire.
-    assert 'next_run_time' not in mapping[2]
-
-
-def test_shadow_mode_builds_a_mapping_generation_shortly_after_restart(
-        monkeypatch):
-    """The German collector maps nothing without a generation; a restart
-    under shadow must not wait a week for the first interval fire."""
-    created = []
-
-    class CapturingScheduler:
-        def __init__(self, **kwargs):
-            self.jobs = []
-            created.append(self)
-
-        def add_job(self, func, trigger, **kwargs):
-            self.jobs.append((func, trigger, kwargs))
-
-        def start(self):
-            pass
-
-        def shutdown(self):
-            pass
-
-    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'shadow')
-    monkeypatch.setattr(daemon, 'BackgroundScheduler', CapturingScheduler)
-    monkeypatch.setattr(daemon, '_prepare_rollup_generation', lambda now: (0, 0))
-    monkeypatch.setattr(daemon, 'build_fetchers', lambda: {})
-    monkeypatch.setattr(daemon.time, 'sleep',
-                        lambda seconds: (_ for _ in ()).throw(KeyboardInterrupt))
-
-    daemon.main([])
-
-    mapping = {job[2]['id']: job for job in created[0].jobs}['radar_mappings']
-    assert mapping[2]['weeks'] == 1
-    assert mapping[2]['next_run_time'] is not None
+@pytest.mark.parametrize('flag', ['--probe-german-data', '--refresh-mappings'])
+def test_the_german_cli_flags_are_gone(flag):
+    with pytest.raises(SystemExit):
+        daemon.main([flag])
 
 
 def test_a_broken_review_pass_does_not_take_the_daemon_down(monkeypatch):
@@ -1104,43 +733,58 @@ def _captured_jobs(monkeypatch):
             CapturingScheduler.instances[0].jobs}
 
 
-def test_the_five_market_data_jobs_register_once_and_radar_quotes_is_gone(
-        monkeypatch):
+RETIRED_JOBS = {'radar_de_market_data', 'radar_ecb_fx', 'radar_mappings',
+                'radar_quotes'}
+EXPECTED_JOBS = {
+    'radar_cycle', 'radar_scoring', 'radar_us_quotes',
+    'radar_us_grouped_closes', 'radar_volatility', 'radar_profiles',
+    'radar_history', 'radar_prune', 'radar_board_observations',
+    'radar_sentiment',
+}
+
+
+@pytest.mark.parametrize('stale_mode', [None, 'legacy', 'shadow', 'active',
+                                        'not-a-mode'])
+def test_the_us_market_data_jobs_register_and_no_german_job_does(
+        monkeypatch, stale_mode):
+    """The exact job set, whatever a stale German variable still says:
+    nothing reads it, so its presence neither adds a job nor blocks startup."""
     monkeypatch.delenv('RADAR_US_PRICE_PROVIDER', raising=False)
+    if stale_mode is None:
+        monkeypatch.delenv('RADAR_DE_PRICE_MODE', raising=False)
+    else:
+        monkeypatch.setenv('RADAR_DE_PRICE_MODE', stale_mode)
     jobs = _captured_jobs(monkeypatch)
-    assert 'radar_quotes' not in jobs
+    assert set(jobs) == EXPECTED_JOBS
+    assert RETIRED_JOBS.isdisjoint(jobs)
     assert jobs['radar_us_quotes'][2]['minutes'] == 5      # finnhub default
-    assert jobs['radar_de_market_data'][2]['minutes'] == 5
-    assert jobs['radar_market_history' if 'radar_market_history' in jobs
-                else 'radar_history'][1] == 'interval'
+    assert jobs['radar_history'][1] == 'interval'
     grouped = jobs['radar_us_grouped_closes']
     assert grouped[1] == 'cron'
     assert (grouped[2]['hour'], grouped[2]['minute']) == (23, 30)
-    assert jobs['radar_mappings'][2]['weeks'] == 1
-    ecb = jobs['radar_ecb_fx']
-    assert ecb[0] is daemon._scheduled_ecb_fx
-    assert ecb[1] == 'cron'
-    assert (ecb[2]['hour'], ecb[2]['minute']) == (16, 30)
-    assert ecb[2]['timezone'] == 'Europe/Berlin'
+    prune = jobs['radar_prune']
+    assert (prune[1], prune[2]['hour'], prune[2]['minute']) == ('cron', 4, 30)
 
 
-@pytest.mark.parametrize('mode', ['legacy', 'shadow', 'active'])
-def test_scheduled_history_always_runs_the_bounded_yahoo_xetra_queue(
-        monkeypatch, mode):
+@pytest.mark.parametrize('close_source, twelve, tail', [
+    ('legacy', True, False), ('shadow', True, True), ('massive', False, True),
+])
+def test_scheduled_history_runs_only_the_us_writers(
+        monkeypatch, close_source, twelve, tail):
     seen = []
     monkeypatch.setattr(
         'features.radar.config.price_provider_config',
-        lambda: ('finnhub', mode, 'massive'))
-    monkeypatch.setattr(daemon, '_yahoo_de_history_provider',
-                        lambda: 'yahoo-de')
-    monkeypatch.setattr(daemon, 'refresh_de_history',
+        lambda: ('finnhub', close_source))
+    monkeypatch.setattr(daemon.twelvedata_provider, 'TwelveDataProvider',
+                        lambda http: 'twelve')
+    monkeypatch.setattr(daemon, 'refresh_history',
                         lambda now, provider: seen.append(provider) or (1, 0))
-    monkeypatch.setattr(daemon, '_yahoo_deep_tail', lambda now: 0)
-    monkeypatch.setattr(daemon, '_current_de_generation_id', lambda: None)
+    monkeypatch.setattr(daemon, '_yahoo_deep_tail',
+                        lambda now: seen.append('tail') or 0)
 
     daemon._scheduled_history()
 
-    assert seen == ['yahoo-de']
+    assert seen == (['twelve'] if twelve else []) + (['tail'] if tail else [])
 
 
 def test_the_yahoo_fallback_flag_widens_the_us_cadence(monkeypatch):
@@ -1159,6 +803,16 @@ def test_invalid_flags_refuse_startup(monkeypatch):
     monkeypatch.delenv('RADAR_MASSIVE_API_KEY', raising=False)
     with pytest.raises(RuntimeError, match='RADAR_MASSIVE_API_KEY'):
         price_provider_config()
+
+
+def test_the_price_configuration_is_us_only(monkeypatch):
+    """Two validated values; a stale German mode is neither read nor
+    validated, so even a value the old code refused does not block startup."""
+    from features.radar.config import price_provider_config
+    monkeypatch.delenv('RADAR_US_PRICE_PROVIDER', raising=False)
+    monkeypatch.delenv('RADAR_US_CLOSE_SOURCE', raising=False)
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'nonsense')
+    assert price_provider_config() == ('finnhub', 'legacy')
 
 
 def test_cleanup_evidence_is_all_or_none(monkeypatch):

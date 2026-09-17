@@ -24,7 +24,7 @@ const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
 })
 
 const selection = (over: Partial<Selection> = {}): Selection => ({
-  market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
+  sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
   window: 4, minVenues: 1, sort: null, dir: 'desc' as const, ...over,
 })
 

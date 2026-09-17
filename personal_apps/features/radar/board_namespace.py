@@ -28,8 +28,9 @@ import pathlib
 import re
 
 # Bumped when the stored payload's shape changes. Rows written under the old
-# shape keep their old namespace and are never read again.
-PAYLOAD_VERSION = 1
+# shape keep their old namespace and are never read again. Version 2 dropped
+# the retired market's operations fields and quote/chart fallback fields.
+PAYLOAD_VERSION = 2
 
 # git writes lowercase hex; a short revision is accepted because a deploy
 # that stamps `git rev-parse --short HEAD` into the file is stamping a real

@@ -338,7 +338,7 @@ function SelectedCompany({ ticker, board, selection, row, outside, onBoard,
                   ? `${identity.ticker} is on this board, but the filter you `
                     + 'typed leaves it out of the list beside this.'
                   : `${identity.ticker} did not rank on this board at all in `
-                    + 'the current window, market and feed selection, so it '
+                    + 'the current window and feed selection, so it '
                     + 'has no row in the list beside this.'}
                 {' '}Its own figures below are unaffected.
                 {first ? (

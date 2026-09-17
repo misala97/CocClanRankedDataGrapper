@@ -25,7 +25,7 @@ function Probe({ selection: sel, initial: seed }: {
   const board = useBoard(sel, seed, true)
   return (
     <div>
-      <p data-testid="market">{board.data ? board.data.market : 'none'}</p>
+      <p data-testid="window">{board.data ? board.data.window_hours : 'none'}</p>
       <p data-testid="status">{board.status}</p>
       <p data-testid="stamp">{board.data?.generated_at ?? '—'}</p>
       <p data-testid="failed">{board.error ? 'failed' : 'ok'}</p>
@@ -52,7 +52,7 @@ describe('seeding the cache with the embedded board', () => {
     const fetchBoard = vi.spyOn(api, 'fetchBoard')
     mount({ selection, initial })
 
-    expect(screen.getByTestId('market')).toHaveTextContent('us')
+    expect(screen.getByTestId('window')).toHaveTextContent('4')
     expect(screen.getByTestId('status')).toHaveTextContent('success')
     // Seeded, so nothing was fetched to paint the first screen.
     expect(fetchBoard).not.toHaveBeenCalled()
@@ -61,14 +61,14 @@ describe('seeding the cache with the embedded board', () => {
   it('refuses to seed a different selection with it', async () => {
     // The failure this prevents is silent: a board built for one filter shown
     // as the answer to another, as real data, with a fresh timestamp.
-    const german = payload({ market: 'de', generated_at: '2026-08-22T20:00:00Z' })
-    const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(german)
+    const daily = payload({ window_hours: 24, generated_at: '2026-08-22T20:00:00Z' })
+    const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(daily)
 
-    mount({ selection: { ...selection, market: 'de' }, initial })
+    mount({ selection: { ...selection, window: 24 }, initial })
 
-    expect(screen.getByTestId('market')).not.toHaveTextContent('us')
+    expect(screen.getByTestId('window')).not.toHaveTextContent('4')
     await waitFor(() => {
-      expect(screen.getByTestId('market')).toHaveTextContent('de')
+      expect(screen.getByTestId('window')).toHaveTextContent('24')
     })
     expect(fetchBoard).toHaveBeenCalledTimes(1)
   })
@@ -88,7 +88,7 @@ describe('when a refresh fails', () => {
     })
     // Data that was true a minute ago beats a blank page -- as long as the
     // surface says when it was true, which is what the stamp is for.
-    expect(screen.getByTestId('market')).toHaveTextContent('us')
+    expect(screen.getByTestId('window')).toHaveTextContent('4')
     expect(screen.getByTestId('stamp')).toHaveTextContent(initial.generated_at!)
   })
 
@@ -96,7 +96,7 @@ describe('when a refresh fails', () => {
     for (const reason of ['session', 'forbidden', 'missing'] as const) {
       const fetchBoard = vi.spyOn(api, 'fetchBoard')
         .mockRejectedValue(new BoardUnavailable(reason))
-      const client = mount({ selection: { ...selection, market: 'de' } })
+      const client = mount({ selection: { ...selection, window: 24 } })
       await waitFor(() => {
         expect(screen.getByTestId('status')).toHaveTextContent('error')
       })
@@ -119,7 +119,7 @@ describe('the reasons a request can fail', () => {
     })
     render(
       <QueryClientProvider client={client}>
-        <Probe selection={{ ...selection, market: 'de' }} />
+        <Probe selection={{ ...selection, window: 24 }} />
       </QueryClientProvider>,
     )
     await waitFor(() => expect(fetchBoard.mock.calls.length).toBeGreaterThan(1),
@@ -299,9 +299,9 @@ describe('a mark that lands while a board is still being built', () => {
   it('adopts the list into the waiting shell, which stays waiting and as old as it was', async () => {
     const setWatch = vi.spyOn(api, 'setWatch').mockResolvedValue(['AAA'])
     // The board on screen is another selection's; the shell is only cached.
-    const german = payload({ market: 'de' })
+    const daily = payload({ window_hours: 24 })
     const fetchBoard = vi.spyOn(api, 'fetchBoard').mockImplementation(
-      async (asked) => (asked.market === 'de' ? german : shell))
+      async (asked) => (asked.window === 24 ? daily : shell))
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -325,8 +325,8 @@ describe('a mark that lands while a board is still being built', () => {
         <Mark />
       </QueryClientProvider>
     )
-    // The reader asked for the US board and was answered with a shell, then
-    // moved to the German board: the shell stays cached, read by nobody -- an
+    // The reader asked for the 4-hour board and was answered with a shell,
+    // then moved to the 24-hour board: the shell stays cached, read by nobody -- an
     // answered query, with the request it was asked with still on it, so a
     // refetch of it could go out.
     const { rerender } = render(tree(selection))
@@ -334,7 +334,7 @@ describe('a mark that lands while a board is still being built', () => {
       expect(client.getQueryData(boardKey(selection))).toEqual(shell)
     })
     const arrived = client.getQueryState(boardKey(selection))?.dataUpdatedAt
-    rerender(tree(selectionOf(german), german))
+    rerender(tree(selectionOf(daily), daily))
     const before = fetchBoard.mock.calls.length
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark' }))
@@ -356,7 +356,7 @@ describe('a mark that lands while a board is still being built', () => {
     await waitFor(() => {
       expect(fetchBoard.mock.calls.length).toBeGreaterThan(before)
     })
-    expect(fetchBoard.mock.calls.slice(before).map(([asked]) => asked.market))
-      .toEqual(['de'])
+    expect(fetchBoard.mock.calls.slice(before).map(([asked]) => asked.window))
+      .toEqual([24])
   })
 })

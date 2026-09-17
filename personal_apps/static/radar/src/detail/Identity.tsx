@@ -58,7 +58,7 @@ export function Identity({ identity, watching = false, onToggleWatch }: {
 
 function quotePrice(value: number, quote: Detail['identity']['quote']): string {
   if (!quote.currency) return UNKNOWN
-  return formatPrice(value, quote.currency, { explicitCode: quote.is_fallback })
+  return formatPrice(value, quote.currency)
 }
 
 /** The segment, said the way a person would say it.

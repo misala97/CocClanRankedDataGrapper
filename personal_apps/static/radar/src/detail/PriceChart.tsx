@@ -56,14 +56,11 @@ export function ChartBasisNote({ chart, quoteVenue }: {
   chart: DetailChart
   quoteVenue?: string | null
 }) {
-  const currency = chart.currency ?? 'USD'
   /* The basis is stated in text NEXT TO the chart, never in a tooltip: a
-   * converted or foreign-venue line must not read as native (spec §1/§3). */
+   * line drawn from a sibling US venue must say so (spec §1/§3). */
   const basisNote = !chart.basis_venue || chart.basis_venue === quoteVenue
     ? null
-    : chart.converted_from
-      ? `${chart.basis_venue} closes, converted to ${currency} at the ECB daily rate`
-      : `${chart.basis_venue} closes${quoteVenue ? ` · quoted at ${quoteVenue}` : ''}`
+    : `${chart.basis_venue} closes${quoteVenue ? ` · quoted at ${quoteVenue}` : ''}`
 
   return basisNote ? <p className="history-proxy-note">{basisNote}</p> : null
 }
@@ -79,7 +76,6 @@ export function PriceChart({ chart, chatterMode = 'area' }: {
 }
 
 function PricePlot({ chart, showChatter }: { chart: DetailChart; showChatter: boolean }) {
-  const currency = chart.currency ?? 'USD'
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 
   const { paths, gaps, low, high, lastX, lastY } = pricePaths(chart, priced)
@@ -128,8 +124,8 @@ function PricePlot({ chart, showChatter }: { chart: DetailChart; showChatter: bo
           <>
             {/* One format for both: `$202` above `$46.33` is two different
                 kinds of number stacked in one gutter. The larger end decides. */}
-            <Gutter y={priceY(high, low, high)} label={money(high, high, currency)} />
-            <Gutter y={priceY(low, low, high)} label={money(low, high, currency)} />
+            <Gutter y={priceY(high, low, high)} label={money(high, high)} />
+            <Gutter y={priceY(low, low, high)} label={money(low, high)} />
           </>
         ) : (
           // One sentence instead of an empty upper band. Muted, not amber: a
@@ -224,7 +220,7 @@ function PricePlot({ chart, showChatter }: { chart: DetailChart; showChatter: bo
       </g>
       {/* The chart answering the cursor: a hairline on the nearest slot and its
           three facts in words. Last, so it sits over everything it reads. */}
-      <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} currency={currency} />
+      <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} />
     </svg>
   )
 }

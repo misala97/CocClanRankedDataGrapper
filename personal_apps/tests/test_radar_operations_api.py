@@ -11,7 +11,7 @@ runs prove partial coverage and no more.
 admin authorisation, with no control actions and no new provider requests.
 
 Berlin days are real calendar days. The window is built from
-`zoneinfo.ZoneInfo('Europe/Berlin')` midnights, so the day Germany changes clock
+`zoneinfo.ZoneInfo('Europe/Berlin')` midnights, so the day Berlin changes clock
 is 23 or 25 hours long and never 86,400 seconds.
 """
 import datetime as dt
@@ -231,7 +231,7 @@ def test_the_window_covers_the_requested_number_of_berlin_days(app_context):
 
 
 def test_the_spring_forward_day_is_twenty_three_hours(app_context):
-    """Germany loses an hour on 2026-03-29. Subtracting 86,400 seconds would
+    """Berlin loses an hour on 2026-03-29. Subtracting 86,400 seconds would
     put the boundary in the wrong day and silently move runs between days."""
     payload = activity.summary(dt.datetime(2026, 3, 29, 12), 1)
     span = _parse(payload['to']) - _parse(payload['from'])
@@ -368,14 +368,18 @@ def test_ops_makes_no_provider_requests(client, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError('the ops endpoint reached a provider')
 
-    monkeypatch.setattr(market_data, 'collect_german_cycle', forbidden)
     monkeypatch.setattr(market_data, 'ingest_grouped_day', forbidden)
     monkeypatch.setattr(llm_sentiment, 'run_pass', forbidden)
     # The summary memoises for 60 seconds, so a previous test in this module
     # could otherwise satisfy this one without the body ever running.
     market_data.clear_ops_memo()
 
-    assert client.get('/radar/api/ops').status_code == 200
+    response = client.get('/radar/api/ops')
+    assert response.status_code == 200
+    # US sections only; the retired collector's cycles, mapping generations
+    # and download budget are not read or reported.
+    assert set(response.get_json()['market_data']) == {
+        'quote_basis_24h', 'grouped_closes', 'post_close_claims'}
 
 
 def test_activity_payload_carries_its_own_provenance(client):

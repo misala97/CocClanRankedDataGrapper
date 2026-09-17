@@ -30,8 +30,14 @@ import json
 
 # Bumped when the fields, their names or their normalization change -- an
 # old key must never be mistaken for a current one that happens to hash the
-# same way. Version 1 was the spike's; nothing stored it.
-KEY_VERSION = 2
+# same way. Version 1 was the spike's; nothing stored it. Version 3 narrowed
+# the market to US only: a version-2 key could name the retired market, so
+# every version-2 key is retired by version rather than half of them by a
+# field error.
+KEY_VERSION = 3
+
+# The one market a key may name.
+MARKETS = ('us',)
 
 
 class BadKey(ValueError):
@@ -53,7 +59,7 @@ def canonical(query):
     halves of the key are only trustworthy together if the text is stable.
 
     The market is checked rather than trusted. parse_query resolves it to
-    us|de before a Query exists, so a third value here is a caller that built
+    `us` before a Query exists, so any other value here is a caller that built
     a Query by hand -- a bug to stop where it happened, not a viewer's typo
     to answer politely.
 
@@ -64,8 +70,8 @@ def canonical(query):
     query_from_json validates every field it decodes, so this is belt and
     braces for a Query no round-trip built.
     """
-    if query.market not in ('us', 'de'):
-        raise BadKey(f'market must be resolved: {query.market!r}')
+    if query.market not in MARKETS:
+        raise BadKey(f'market must be US: {query.market!r}')
     if not all(isinstance(item, str) for item in query.sources):
         raise BadKey(f'sources must all be str: {query.sources!r}')
     if not all(isinstance(item, str) for item in query.segments):
@@ -148,8 +154,8 @@ def query_from_json(key_json):
         raise BadKey(f'limit must be an int: {limit!r}')
     if not _is_plain_int(venues):
         raise BadKey(f'venues must be an int: {venues!r}')
-    if not isinstance(market, str):
-        raise BadKey(f'market must be a str: {market!r}')
+    if market not in MARKETS:
+        raise BadKey(f'market must be US: {market!r}')
     if sort is not None and not isinstance(sort, str):
         raise BadKey(f'sort must be a str or None: {sort!r}')
     if not isinstance(direction, str):

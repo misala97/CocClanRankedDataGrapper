@@ -132,19 +132,18 @@ export function DetailPane({ ticker, selection, windowHours, listing,
   // hundred pixels in is its own accessibility problem.
   const focused = useRef<string | null>(ticker)
   const request = ticker === null ? null
-    : `${ticker}|${selection.market}|${selection.sources.join(',')}|${selection.window}|${span}`
+    : `${ticker}|${selection.sources.join(',')}|${selection.window}|${span}`
   const fresh = loaded !== null && loaded.request === request
-  // Stale-while-revalidate, but only within one ticker and market: a span,
+  // Stale-while-revalidate, but only within one ticker: a span,
   // source or window change keeps the previous chart on screen, dimmed,
   // instead of blanking the whole panel into "Loading" -- which is what a
   // span click did for the full length of the fetch (measured at 7s on 1W
   // before coverage.py; the blank was most of "the chart does not load").
-  // A different ticker or market still gets the loading state: showing
+  // A different ticker still gets the loading state: showing
   // MRNA's chart under NVDA's name would be worse than a blank.
   const detail = fresh ? loaded.detail
     : loaded !== null
         && loaded.detail.identity.ticker === ticker
-        && loaded.detail.market === selection.market
       ? loaded.detail : null
   const revalidating = !fresh && detail !== null
 
@@ -190,9 +189,9 @@ export function DetailPane({ ticker, selection, windowHours, listing,
         // for is not something to sit in a spinner over. The guard below
         // renders "Loading" for any mismatch, and a mismatch that is the
         // server's rather than a race would have loaded forever.
-        if (next.identity.ticker !== ticker || next.market !== selection.market) {
-          setFailed(`The board answered about ${next.identity.ticker} on ${next.market}, `
-            + `not ${ticker} on ${selection.market}.`)
+        if (next.identity.ticker !== ticker) {
+          setFailed(`The board answered about ${next.identity.ticker}, `
+            + `not ${ticker}.`)
           return
         }
         setLoaded({ detail: next, request: activeRequest })
@@ -207,7 +206,7 @@ export function DetailPane({ ticker, selection, windowHours, listing,
     return () => controller.abort()
     // `selection` is a fresh object each render in the parent; the fields it
     // holds are what actually change the request.
-  }, [ticker, span, attempt, request, selection.market, selection.sources.join(','), selection.window])
+  }, [ticker, span, attempt, request, selection.sources.join(','), selection.window])
 
   if (!ticker) {
     return (

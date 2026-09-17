@@ -21,8 +21,7 @@ class CurrencyMismatch(ValueError):
 
 PRICE_BASES = frozenset({'trade', 'midpoint', 'close'})
 QUOTE_SOURCES = frozenset({
-    'legacy', 'finnhub', 'twelvedata',
-    'deutsche_boerse_delayed', 'yahoo_chart',
+    'legacy', 'finnhub', 'twelvedata', 'yahoo_chart',
 })
 # massive_grouped is a daily-close source and NEVER an intraday quote
 # source; the sets stay separate so a future call site cannot accidentally

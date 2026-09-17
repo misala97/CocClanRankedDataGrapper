@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { row, quote } from '../fixtures'
 import type { Row } from '../types'
 import {
-  firstDirection, knownCount, nextSort, priceCurrencies, readingWord, sortRows,
+  firstDirection, knownCount, nextSort, readingWord, sortRows,
 } from './chatterSort'
 
 const tickers = (rows: Row[]) => rows.map((r) => r.ticker)
@@ -173,21 +173,14 @@ describe('price and today', () => {
     row({ ticker, price, price_move: move,
           quote: { ...quote(), price, currency, quality } as Row['quote'] })
 
-  it('groups by currency rather than pretending they are converted', () => {
-    const rows = [priced('USD_LO', 5, 'USD'), priced('EUR_HI', 400, 'EUR'),
-                  priced('USD_HI', 300, 'USD'), priced('EUR_LO', 4, 'EUR')]
-    // Descending reverses the whole ordering, currency group included.
+  it('orders dollar prices and never ranks a non-dollar one among them', () => {
+    const rows = [priced('USD_LO', 5, 'USD'), priced('OTHER', 400, 'EUR'),
+                  priced('USD_HI', 300, 'USD')]
     expect(tickers(sortRows(rows, { key: 'price', dir: 'desc' })))
-      .toEqual(['USD_HI', 'USD_LO', 'EUR_HI', 'EUR_LO'])
+      .toEqual(['USD_HI', 'USD_LO', 'OTHER'])
     expect(tickers(sortRows(rows, { key: 'price', dir: 'asc' })))
-      .toEqual(['EUR_LO', 'EUR_HI', 'USD_LO', 'USD_HI'])
-  })
-
-  it('names the currencies present so the page can say it groups', () => {
-    const rows = [priced('A', 5, 'USD'), priced('B', 4, 'EUR'),
-                  priced('C', 9, 'USD'), priced('D', null, null, 'unavailable')]
-    expect(priceCurrencies(rows)).toEqual(['EUR', 'USD'])
-    expect(priceCurrencies([priced('A', 5, 'USD')])).toEqual(['USD'])
+      .toEqual(['USD_LO', 'USD_HI', 'OTHER'])
+    expect(knownCount(rows, 'price')).toBe(2)
   })
 
   it('treats an unavailable quote as unknown, both ways', () => {
@@ -211,12 +204,12 @@ describe('price and today', () => {
   })
 
   it('sorts a move the page displays even with no currency on the quote', () => {
-    // Price needs a currency because it groups by one. Today does not: it is a
-    // percentage, `formatPrice` prints a bare number when the currency is
-    // absent, so the page shows `12.34` and `+5.0%` -- and parking that row
-    // last in both directions would call a move the reader can see "no
-    // reading". Not reachable through today's backend, which admits only USD
-    // and EUR, but the display half already survives it.
+    // Price needs the US dollar. Today does not: it is a percentage,
+    // `formatPrice` prints a bare number when the currency is absent, so the
+    // page shows `12.34` and `+5.0%` -- and parking that row last in both
+    // directions would call a move the reader can see "no reading". Not
+    // reachable through today's backend, which admits only USD, but the
+    // display half already survives it.
     const nameless = row({ ticker: 'NOCUR', price: 12.34, price_move: 0.05,
                            quote: { ...quote(), price: 12.34,
                                     currency: null } as Row['quote'] })
@@ -224,18 +217,18 @@ describe('price and today', () => {
     expect(tickers(sortRows([usual, nameless], { key: 'move', dir: 'desc' })))
       .toEqual(['NOCUR', 'USUAL'])
     expect(knownCount([usual, nameless], 'move')).toBe(2)
-    // Price still refuses it: there is no group to put it in.
+    // Price still refuses it: it is not a dollar price.
     expect(knownCount([usual, nameless], 'price')).toBe(1)
     expect(tickers(sortRows([nameless, usual], { key: 'price', dir: 'desc' })))
       .toEqual(['USUAL', 'NOCUR'])
   })
 
-  it('sorts the move without regard to the currency it moved in', () => {
-    // A percentage move is comparable across currencies; a price is not.
-    const rows = [priced('EUR_UP', 4, 'EUR', 'ok', 0.09),
+  it('sorts the move without regard to the price behind it', () => {
+    // A percentage move needs no currency; a price does.
+    const rows = [priced('NC_UP', 4, null, 'ok', 0.09),
                   priced('USD_UP', 400, 'USD', 'ok', 0.02)]
     expect(tickers(sortRows(rows, { key: 'move', dir: 'desc' })))
-      .toEqual(['EUR_UP', 'USD_UP'])
+      .toEqual(['NC_UP', 'USD_UP'])
   })
 })
 

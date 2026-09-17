@@ -87,74 +87,69 @@ def test_quote_timestamp_decides_premarket_session_and_close_baseline():
     assert view.extended_move == decimal.Decimal('0.02')
 
 
-def test_missing_de_quote_selects_marked_us_fallback():
-    selected = select_quote('AAPL', 'de', {'us': snapshot()}, NOW)
-    assert (selected.market, selected.currency, selected.is_fallback) == (
-        'us', 'USD', True)
+def test_only_the_us_market_can_be_selected():
+    """Radar is US-only: any other requested market is a caller bug."""
+    for market in ('de', 'moon', ''):
+        with pytest.raises(ValueError, match='unknown market'):
+            select_quote('AAPL', market, {'us': snapshot()}, NOW)
 
 
-def test_timestamp_less_de_snapshot_does_not_block_marked_us_fallback():
-    selected = select_quote('AAPL', 'de', {
-        'de': snapshot(market='de', venue='Xetra', mic='XETR', currency='EUR',
-                       quote_ts=None),
-        'us': snapshot(),
-    }, NOW)
-    assert (selected.market, selected.currency, selected.is_fallback) == (
-        'us', 'USD', True)
+def test_us_never_reads_a_non_us_snapshot():
+    """An archived non-US quote is never a US price, under any key."""
+    archived = snapshot(market='de', venue='Xetra', mic='XETR',
+                        currency='EUR')
+    for snapshots in ({'de': archived}, {'us': archived},
+                      {'us': [archived]}):
+        selected = select_quote('AAPL', 'us', snapshots, NOW)
+        assert selected.quality == 'unavailable'
+        assert selected.market == 'us'
+        assert selected.price is None and selected.currency is None
 
 
-def test_de_prefers_retained_xetra_snapshot_to_fresh_us_fallback():
-    selected = select_quote('AAPL', 'de', {
-        'de': snapshot(market='de', venue='Xetra', mic='XETR', currency='EUR',
-                       quote_ts=NOW - dt.timedelta(minutes=31),
-                       provider_delay='delayed'),
-        'us': snapshot(),
-    }, NOW)
-    assert (selected.market, selected.mic, selected.is_fallback) == (
-        'de', 'XETR', False)
-
-
-def test_us_does_not_fall_back_to_germany():
-    selected = select_quote('AAPL', 'us', {
-        'de': snapshot(market='de', venue='Xetra', mic='XETR', currency='EUR'),
-    }, NOW)
+def test_a_non_usd_us_snapshot_is_never_selected():
+    """No currency is relabelled or converted: a non-USD row is absent."""
+    selected = select_quote('AAPL', 'us', {'us': snapshot(currency='EUR')},
+                            NOW)
     assert selected.quality == 'unavailable'
-    assert selected.is_fallback is False
+    assert selected.currency is None
 
 
-def test_currency_mismatched_snapshot_is_not_selected_for_live_divergence():
-    selected = select_quote('AAPL', 'de', {
-        'de': snapshot(market='de', venue='Xetra', mic='XETR', currency='USD'),
-    }, NOW)
+def test_missing_us_data_stays_unavailable():
+    selected = select_quote('AAPL', 'us', {}, NOW)
     assert selected.quality == 'unavailable'
+    assert selected.score_eligible is False
+
+
+def test_there_is_no_fallback_dimension():
+    import inspect
+
+    from features.radar.markets import QuoteView
+    assert 'is_fallback' not in QuoteView.__dataclass_fields__
+    assert 'allow_us_fallback' not in inspect.signature(select_quote).parameters
+    assert 'is_fallback' not in inspect.signature(
+        QuoteView.from_snapshot).parameters
+
+
+def test_a_view_is_never_built_from_a_non_us_snapshot():
+    from features.radar.markets import QuoteView
+    archived = snapshot(market='de', venue='Xetra', mic='XETR',
+                        currency='EUR')
+    with pytest.raises(ValueError, match='US'):
+        QuoteView.from_snapshot(archived, NOW)
+    with pytest.raises(ValueError, match='USD'):
+        QuoteView.from_snapshot(snapshot(currency='EUR'), NOW)
 
 
 # --- Market data v2 (plan Task 3) --------------------------------------------
 
 def test_midpoint_is_visible_but_never_score_eligible():
     from features.radar.markets import QuoteView
-    quote = snapshot(
-        market='de', mic='XGAT', venue='Tradegate BSX', currency='EUR',
-        source='deutsche_boerse_delayed', price_basis='midpoint',
-        price=None, bid='99.90', ask='100.10', provider_delay='delayed')
+    quote = snapshot(price_basis='midpoint', price=None, bid='99.90',
+                     ask='100.10', provider_delay='delayed')
     view = QuoteView.from_snapshot(quote, NOW)
     assert view.price == decimal.Decimal('100.00')
     assert view.price_basis == 'midpoint'
     assert view.score_eligible is False
-
-
-def test_verified_german_mapping_does_not_fallback_during_feed_failure():
-    selected = select_quote('AAPL', 'de', {'us': snapshot()}, NOW,
-                            allow_us_fallback=False)
-    assert selected.quality == 'unavailable'
-    assert selected.is_fallback is False
-
-
-def test_us_fallback_in_germany_mode_is_never_score_eligible():
-    selected = select_quote('AAPL', 'de', {'us': snapshot()}, NOW)
-    assert selected.is_fallback is True
-    assert selected.score_eligible is False
-    assert selected.score_term == 'chatter'
 
 
 def test_quote_validation_rejects_dishonest_values():
@@ -190,18 +185,17 @@ def test_missing_provider_time_is_unavailable_not_fetch_time_fresh():
     assert view.score_eligible is False
 
 
-def test_xgat_late_quote_without_regular_close_has_no_extended_move():
-    """Plan Task 3 Step 7: no official/last-trade 17:30 value means NO
-    extended move -- never a midpoint- or Xetra-derived number."""
+def test_late_quote_without_regular_close_has_no_extended_move():
+    """No regular-session close means NO extended move -- never a number
+    derived from a midpoint or another venue."""
     from features.radar.markets import QuoteView
-    late = dt.datetime(2026, 8, 31, 18, 0)  # 20:00 Berlin, afterhours
+    late = dt.datetime(2026, 8, 31, 21, 0)  # 17:00 New York, afterhours
     quote = Quote(
-        ticker='AAPL', market='de', venue='Tradegate BSX', mic='XGAT',
-        provider_symbol='APC', currency='EUR',
+        ticker='AAPL', market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol='AAPL', currency='USD',
         price=decimal.Decimal('100'), previous_close=decimal.Decimal('98'),
         regular_close=None, quote_ts=late, volume=None,
-        provider_delay='delayed', source='deutsche_boerse_delayed',
-        price_basis='trade')
+        provider_delay='delayed', source='finnhub', price_basis='trade')
     view = QuoteView.from_snapshot(quote, late)
     assert view.session == 'afterhours'
     assert view.extended_move is None

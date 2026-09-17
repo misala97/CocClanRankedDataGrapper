@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { loadPayload, parsePayload } from './embedded'
 
-const board = '{"rows":[],"market":"de"}'
+const board = '{"rows":[],"market":"us"}'
 
 function embed(text: string | null) {
   document.body.innerHTML = text === null
@@ -15,7 +15,7 @@ function embed(text: string | null) {
 }
 
 beforeEach(() => {
-  window.history.replaceState(null, '', '/static/radar/dev.html?market=de&window=12')
+  window.history.replaceState(null, '', '/static/radar/dev.html?window=12')
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -30,7 +30,7 @@ describe('the opening board', () => {
 
     const payload = await loadPayload()
 
-    expect(payload?.market).toBe('de')
+    expect(payload?.market).toBe('us')
     expect(spy).not.toHaveBeenCalled()
   })
 
@@ -43,8 +43,18 @@ describe('the opening board', () => {
 
     const payload = await loadPayload()
 
-    expect(payload?.market).toBe('de')
-    expect(spy.mock.calls[0]?.[0]).toBe('/radar/api/board?market=de&window=12')
+    expect(payload?.market).toBe('us')
+    expect(spy.mock.calls[0]?.[0]).toBe('/radar/api/board?window=12')
+  })
+
+  it('reads an older document without a market as the US board', () => {
+    expect(parsePayload('{"rows":[]}')?.market).toBe('us')
+  })
+
+  it('refuses a board for any market but the US one, never relabelling it', () => {
+    for (const market of ['de', 'DE', 'eu', '', null, 1]) {
+      expect(parsePayload(JSON.stringify({ rows: [], market }))).toBeNull()
+    }
   })
 
   it('is null when the fetch lands on the login page', async () => {

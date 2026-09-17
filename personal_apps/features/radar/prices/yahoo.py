@@ -2,10 +2,10 @@
 """The one module that knows Yahoo's chart JSON.
 
 Yahoo is unofficial and unsupported: no key, no contract, and endpoints
-that change without notice. Market-data v2 therefore keeps it to three
-bounded roles -- the German Xetra history backfill, the deep US history
-tail, and a flag-gated US quote fallback that is not a planned activation
-[A2] -- and this adapter is built around refusal: identity mismatch,
+that change without notice. Market-data v2 therefore keeps it to bounded
+US roles -- the deep US history tail, the flag-gated selected-price source,
+and a flag-gated US quote fallback that is not a planned activation [A2] --
+and this adapter is built around refusal: identity mismatch,
 missing timestamps, auth walls, and malformed parallel arrays all make an
 instrument absent for the cycle. No cookie scraping, no browser
 automation, no escalating retries; a 401/403/429 opens an exponential
@@ -50,7 +50,6 @@ _EXCHANGE_ALLOWLIST = {
     'XASE': {'ASE', 'AMX'},
     'BATS': {'BTS', 'CBT'},
     'IEXG': {'IEX'},
-    'XETR': {'GER', 'XETRA', 'EBS'},
 }
 
 _BACKOFF_STEPS = (60, 120, 240, 480, 960, 1800)
@@ -355,8 +354,7 @@ class YahooProvider:
             return []
         meta = result.get('meta')
         if mic_code is not None:
-            currency = 'EUR' if mic_code == 'XETR' else 'USD'
-            if not _identity_ok(meta, symbol, currency, mic_code):
+            if not _identity_ok(meta, symbol, 'USD', mic_code):
                 return []
         elif not isinstance(meta, dict) or meta.get('symbol') != symbol:
             # Compatibility callers may omit the MIC, but an exact symbol

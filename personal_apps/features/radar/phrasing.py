@@ -228,7 +228,7 @@ def _read_price(detail, session):
     The move is stated whenever one was measured. `move_since` returns None
     for one honest reason -- fewer than two snapshots in the window -- and
     that absence stays an absence rather than becoming a zero. Being shut,
-    frozen, quoted at a non-trade basis or quoted from a fallback listing
+    frozen or quoted at a non-trade basis
     are LIMITS on the number, said beside it; none of them makes the
     measurement disappear. Scoring is untouched: the leaderboard's
     `score_eligible` gate decides what earns a divergence score, and this
@@ -271,9 +271,9 @@ def _quote_limits(quote):
     """Why the quote behind a measured move is not a scored one.
 
     `score_eligible` is not a session gate: markets.py refuses a non-trade
-    basis and a fallback listing as well as a frozen tape. Those two are
-    stated here, because a reader shown "+2.3%" beside a closing price or a
-    foreign-market fallback would otherwise take the move for a live trade.
+    basis as well as a frozen tape. The basis is stated here, because a
+    reader shown "+2.3%" beside a closing price would otherwise take the move
+    for a live trade.
     Absent quote, absent clause -- the fakes in the phrasing tests carry
     none, and the original board panel carries the same quote view the hub
     does.
@@ -288,8 +288,4 @@ def _quote_limits(quote):
                           f'The latest quote is {word}, not an executed '
                           f'trade, so this move is context rather than a '
                           f'scored signal.'))
-    if getattr(quote, 'is_fallback', False):
-        out.append(Clause('warn',
-                          'Quoted from a fallback listing rather than this '
-                          'market\'s own.'))
     return out

@@ -10,21 +10,21 @@ import {
 
 const initial = payload()
 const selection: Selection = {
-  market: initial.market, sources: initial.sources, segments: initial.segments,
+  sources: initial.sources, segments: initial.segments,
   minVenues: initial.min_venues, window: initial.window_hours,
   sort: initial.sort, dir: initial.dir,
 }
 
 describe('reading the address bar', () => {
   it('opens legacy filter bookmarks in chatter without changing bare-root or hash precedence', () => {
-    for (const search of ['?market=de&window=24', '?sources=reddit', '?segment=', '?venues=2', '?sort=mentions&dir=asc']) {
+    for (const search of ['?market=us&window=24', '?sources=reddit', '?segment=', '?venues=2', '?sort=mentions&dir=asc']) {
       expect(readRootRoute(search, '')).toEqual({ page: 'chatter' })
       expect(readRootRoute(search, '#nonsense')).toEqual({ page: 'chatter' })
       expect(readRootRoute(search, '#overview')).toEqual({ page: 'overview' })
     }
     expect(readRootRoute('', '')).toEqual({ page: 'overview' })
     expect(readRootRoute('?unrelated=value', '')).toEqual({ page: 'overview' })
-    expect(readRootRoute('?t=AAA&market=de', '')).toEqual({ page: 'chatter', ticker: 'AAA' })
+    expect(readRootRoute('?t=AAA&market=us', '')).toEqual({ page: 'chatter', ticker: 'AAA' })
   })
 
   it('maps a valid legacy root ticker to Human Chatter unless a hub hash wins', () => {
@@ -138,10 +138,10 @@ describe('reading the filters out of the query', () => {
 
   it('honours a selection the reader made', () => {
     const read = readSelection(
-      '?market=de&sources=bluesky&window=24&segment=large,fund&venues=2'
+      '?sources=bluesky&window=24&segment=large,fund&venues=2'
       + '&sort=mentions&dir=asc', selection)
     expect(read).toEqual({
-      market: 'de', sources: ['bluesky'], segments: ['large', 'fund'],
+      sources: ['bluesky'], segments: ['large', 'fund'],
       minVenues: 2, window: 24, sort: 'mentions', dir: 'asc',
     })
   })
@@ -155,8 +155,7 @@ describe('reading the filters out of the query', () => {
 
   it('refuses values the API would reject instead of forwarding them', () => {
     const read = readSelection(
-      '?market=moon&window=abc&venues=9&sort=vibes&dir=sideways', selection)
-    expect(read.market).toBe(selection.market)
+      '?window=abc&venues=9&sort=vibes&dir=sideways', selection)
     expect(read.window).toBe(selection.window)
     expect(read.minVenues).toBe(selection.minVenues)
     expect(read.sort).toBe(selection.sort)
@@ -233,6 +232,16 @@ describe('the research span', () => {
     expect(readSpan('?span=1M')).toBe('1M')
   })
 
+  it('has no market to read, whatever the address says', () => {
+    // The server refuses a non-US market before this page loads; the page
+    // itself neither reads nor keeps one.
+    for (const search of ['?market=us', '?market=de', '?market=moon']) {
+      const read = readSelection(search, selection)
+      expect(read).toEqual(selection)
+      expect('market' in read).toBe(false)
+    }
+  })
+
   it('ignores a span the panel cannot draw', () => {
     expect(readSpan('?span=10Y')).toBe('1D')
   })
@@ -242,7 +251,8 @@ describe('writing the address bar', () => {
   it('carries route, filters and span together', () => {
     const url = urlFor({ page: 'research', ticker: 'AAA' }, selection, '1M')
     expect(url).toContain('#research/AAA')
-    expect(url).toContain('market=us')
+    expect(url).toContain('window=')
+    expect(url).not.toContain('market=')
     expect(url).toContain('span=1M')
   })
 
@@ -287,9 +297,9 @@ describe('the analysis destination (HA1)', () => {
   })
 
   it('reads analysis dates outside the board selection and keeps invalid ones visible', () => {
-    expect(readAnalysisRange('?market=de&analysis_from=2026-09-07&analysis_to=2026-09-13'))
+    expect(readAnalysisRange('?window=24&analysis_from=2026-09-07&analysis_to=2026-09-13'))
       .toEqual({ from: '2026-09-07', to: '2026-09-13' })
-    expect(readAnalysisRange('?market=de')).toBeNull()
+    expect(readAnalysisRange('?window=24')).toBeNull()
     // Present but malformed is NOT null: the page must show the value it was
     // given and refuse to guess a range for it.
     expect(readAnalysisRange('?analysis_from=2026-9-7&analysis_to=2026-09-13'))
@@ -297,17 +307,17 @@ describe('the analysis destination (HA1)', () => {
     expect(readAnalysisRange('?analysis_from=2026-09-07'))
       .toEqual({ from: '2026-09-07', to: '' })
     // The board's own selection is untouched by analysis keys.
-    const read = readSelection('?market=de&analysis_from=2026-09-07', selection)
-    expect(read.market).toBe('de')
+    const read = readSelection('?window=24&analysis_from=2026-09-07', selection)
+    expect(read.window).toBe(24)
   })
 
   it('writes analysis dates only on analysis routes and keeps board context beside them', () => {
     const range = { from: '2026-09-07', to: '2026-09-13' }
     const url = urlFor({ page: 'analysis', ticker: 'AAPL', companyId: 1, instrumentId: 2 },
-                       { ...selection, market: 'de' }, '1D', range)
+                       { ...selection, window: 24 }, '1D', range)
     expect(url).toContain('analysis_from=2026-09-07')
     expect(url).toContain('analysis_to=2026-09-13')
-    expect(url).toContain('market=de')
+    expect(url).toContain('window=24')
     expect(url.endsWith('#analysis/AAPL/1/2')).toBe(true)
     expect(url).not.toContain('span=')
     const board = urlFor({ page: 'chatter' }, selection, '1D', range)

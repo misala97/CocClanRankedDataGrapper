@@ -10,9 +10,10 @@ different. This file checks it where it can fail:
   cut, and has to decide it BEFORE the limit on both paths;
 * real tones of every kind -- judged, legacy, word-list, null, none at all and
   judged out of the denominator -- so `lean` has ties and Nones;
-* quotes that move for forty tickers and not for twenty, on two markets, with
-  US fallbacks, a German listing that is mapped but silent, a stale German tape
-  and a frozen US one, so `move` and `divergence` have values, ties and Nones;
+* quotes that move for forty tickers and not for twenty, and a frozen US tape,
+  so `move` and `divergence` have values, ties and Nones -- beside archived
+  non-US instrument, quote and close rows for eleven of the same tickers, which
+  the US-only board must never read;
 * a pre-split root `reddit` bucket under the old source stamp, which a score
   must not see and a count must;
 * selections spelled differently that are one question, and selections that
@@ -58,13 +59,12 @@ from models import (AppUser, RadarBucketSource, RadarDailyClose,
 # A Tuesday in January, where the test database holds no radar data at all.
 # Coverage is decided across EVERY ticker by design, so a clock overlapping
 # real rows would let them decide which of this file's hours count as
-# measured. At 15:00 UTC both sessions are regular, so an unqualified request
-# opens on Germany (routes.api.default_market).
+# measured. At 15:00 UTC the US regular session is live.
 NOW = dt.datetime(2026, 1, 20, 15, 0)
-# The omitted-market clocks: the US regular while Germany is in its evening
-# session, and Germany regular while the US is in premarket.
+# More omitted-market clocks: late in the US regular session, and in the US
+# pre-market. Omission is the US board at every one of them.
 US_CLOCK = dt.datetime(2026, 1, 20, 18, 0)
-DE_CLOCK = dt.datetime(2026, 1, 20, 10, 0)
+PREMARKET_CLOCK = dt.datetime(2026, 1, 20, 10, 0)
 
 REVISION = 'c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3'
 OWNER = 'parity-producer:1'
@@ -117,16 +117,19 @@ FROZEN = 13
 # Repeats on purpose, so a move sort has ties to break.
 MOVES = ('0.05', '-0.03', '0', '0.12', '-0.08', '0.05', '0.021', '-0.15', '0',
          '0.07')
-# Quoted on both markets: a verified Tradegate primary plus the US tape.
-XGAT = frozenset({3, 4, 10, 16, 21, 28, 34, 41, 46, 53})
-# Mapped to Tradegate and never quoted there: the German board must show it
-# unavailable, not dress its US quote up as German.
-XGAT_SILENT = 45
-# Its last Tradegate print is two hours old: shown, never scored.
-XGAT_STALE = 53
+# Archived rows from the retired non-US market: mapped instruments, quotes
+# and closes that the database keeps and no Radar read may reach. Their prices
+# differ from the US tape, so a leak would change a move, a sigma or a price.
+ARCHIVED = frozenset({3, 4, 10, 16, 21, 28, 34, 41, 46, 53})
+# Mapped and never quoted: its US quote must stay the one shown.
+ARCHIVED_SILENT = 45
+# Its last archived print is the newest row, so a leak would be the shown quote.
+ARCHIVED_RECENT = 53
 # Daily closes behind a volatility estimate, without which no divergence.
 US_HISTORY = frozenset(index for index in MOVING if index % 3 != 2)
-XGAT_HISTORY = frozenset({3, 4, 10, 16, 21})
+ARCHIVED_HISTORY = frozenset({3, 4, 10, 16, 21})
+# The archived rows' market value, as the immutable CHECK constraint spells it.
+ARCHIVED_MARKET = 'de'
 
 # Three accounts reading one key, and one whose enrichment will fail.
 ACCOUNTS = (('one', ('PT05',)), ('two', ('PT58', 'PT01')), ('three', ()))
@@ -207,6 +210,8 @@ def post(ticker, number, minutes_ago, source, *, lexicon=0.0, llm=None,
 
 def quote(ticker, minutes_ago, price, *, market='us', prev_close=None,
           printed_minutes_ago=None):
+    """A US quote, or -- with `market` set to the archived value -- an
+    archived row in the shape the retired collector stored."""
     fetched = _at(minutes_ago)
     printed = _at(minutes_ago if printed_minutes_ago is None
                   else printed_minutes_ago)
@@ -347,22 +352,22 @@ def _seed():
     for index in sorted(ONE_QUOTE):
         quote(TICKERS[index], 10, _money(10 + index))
 
-    for index in sorted(XGAT | {XGAT_SILENT}):
+    for index in sorted(ARCHIVED | {ARCHIVED_SILENT}):
         db.session.add(RadarInstrument(
-            ticker=TICKERS[index], market='de', venue='Tradegate', mic='XGAT',
-            provider_symbol=TICKERS[index], currency='EUR', isin=None,
-            is_primary=True, mapping_status='mapped', mapping_source='parity',
-            mapped_at=NOW - dt.timedelta(days=30)))
-    for index in sorted(XGAT):
+            ticker=TICKERS[index], market=ARCHIVED_MARKET, venue='Tradegate',
+            mic='XGAT', provider_symbol=TICKERS[index], currency='EUR',
+            isin=None, is_primary=True, mapping_status='mapped',
+            mapping_source='parity', mapped_at=NOW - dt.timedelta(days=30)))
+    for index in sorted(ARCHIVED):
         ticker = TICKERS[index]
         base = _money(decimal.Decimal(10 + index) * decimal.Decimal('0.9'))
         move = decimal.Decimal(MOVES[(index + 3) % len(MOVES)])
-        times = (355, 240, 120) if index == XGAT_STALE else (355, 175, 5)
+        times = (355, 175, 1) if index == ARCHIVED_RECENT else (355, 175, 5)
         for minutes, fraction in zip(times, (0, move / 2, move)):
-            quote(ticker, minutes, _money(base * (1 + fraction)), market='de',
-                  prev_close=base)
-        if index in XGAT_HISTORY:
-            closes(ticker, index, base, market='de')
+            quote(ticker, minutes, _money(base * (1 + fraction)),
+                  market=ARCHIVED_MARKET, prev_close=base)
+        if index in ARCHIVED_HISTORY:
+            closes(ticker, index, base, market=ARCHIVED_MARKET)
     db.session.commit()
 
     from werkzeug.security import generate_password_hash
@@ -664,13 +669,12 @@ def test_the_fixture_is_adversarial(store):
     tie in the other keys falls back to -- without it, two correct builds
     could disagree about a tie and look like a finding.
     """
-    assert api.default_market(NOW) == 'de'
-    assert api.default_market(US_CLOCK) == 'us'
-    assert api.default_market(DE_CLOCK) == 'de'
+    assert not hasattr(api, 'default_market')
+    for clock in (NOW, US_CLOCK, PREMARKET_CLOCK):
+        assert api.parse_query({}, now=clock).market == 'us'
 
-    boards = {market: direct_payload({'market': market, 'segment': '',
-                                      'limit': '100'})
-              for market in ('us', 'de')}
+    boards = {'us': direct_payload({'market': 'us', 'segment': '',
+                                    'limit': '100'})}
     for market, payload in boards.items():
         rows = payload['rows']
         assert len(rows) == 60, market
@@ -702,20 +706,21 @@ def test_the_fixture_is_adversarial(store):
         assert sum(row['ratio'] is None for row in rows) == len(RATIO_NONE)
 
     us = {row['ticker']: row for row in boards['us']['rows']}
-    de = {row['ticker']: row for row in boards['de']['rows']}
     assert sum(row['price_move'] is not None for row in us.values()) == 40
     assert us[TICKERS[FROZEN]]['price_status'] == 'stale'
     assert 'no-print' in us[TICKERS[FROZEN]]['marks']
     assert us[TICKERS[PENNY]]['segment'] == 'micro'
-    # Germany: its own quotes, US fallbacks, and a mapped listing that is
-    # silent rather than dressed in a dollar price.
-    assert {de[TICKERS[index]]['quote']['mic'] for index in XGAT} == {'XGAT'}
-    assert any(row['quote']['is_fallback'] for row in de.values())
-    assert de[TICKERS[XGAT_SILENT]]['price'] is None
-    assert us[TICKERS[XGAT_SILENT]]['price'] is not None
-    assert de[TICKERS[XGAT_STALE]]['quote']['quality'] == 'stale'
-    assert sum(row['divergence'] is not None for row in de.values()) == len(
-        XGAT_HISTORY)
+    # The archived rows are inert: every quote the board shows is the US tape,
+    # in dollars, and the mapped-but-silent archived listing keeps its US price.
+    assert {row['quote']['market'] for row in us.values()} == {'us'}
+    assert {row['quote']['currency'] for row in us.values()} <= {'USD', None}
+    assert {us[TICKERS[index]]['quote']['mic'] for index in ARCHIVED
+            if us[TICKERS[index]]['quote']['mic']} <= {'XNAS'}
+    assert us[TICKERS[ARCHIVED_SILENT]]['price'] is not None
+    recent = decimal.Decimal(10 + ARCHIVED_RECENT) * (
+        1 + decimal.Decimal(MOVES[ARCHIVED_RECENT % len(MOVES)]))
+    assert us[TICKERS[ARCHIVED_RECENT]]['price'] == float(_money(recent))
+    assert not any('is_fallback' in row['quote'] for row in us.values())
 
     # The source-version rule is exercised: PT02's pre-split root bucket is in
     # its 11:00 series point and nowhere in its score. Nine is the root
@@ -755,13 +760,12 @@ def test_the_fixture_is_adversarial(store):
     assert any(members != default for members in memberships.values())
 
 
-# --- every sort, both directions, both markets, across the limit ------------
+# --- every sort, both directions, across the limit ------------------------
 
 MATRIX = [
-    pytest.param({'market': market, 'segment': '', 'sort': key,
+    pytest.param({'market': 'us', 'segment': '', 'sort': key,
                   'dir': direction, 'limit': str(limit)},
-                 id=f'{market}-{key}-{direction}-{limit}')
-    for market in ('us', 'de')
+                 id=f'us-{key}-{direction}-{limit}')
     for key in board_mod.SORT_KEYS
     for direction in ('asc', 'desc')
     for limit in (50, 100)
@@ -769,11 +773,11 @@ MATRIX = [
 
 OTHERS = [
     # No sort named, the direction still asked for: the echo keeps it and so
-    # does the key. The market is omitted, so this is Germany at NOW.
+    # does the key. The market is omitted, so this is the US board.
     pytest.param({'segment': '', 'dir': 'asc'}, id='no-sort-dir-asc'),
     pytest.param({'market': 'us', 'segment': '', 'venues': '2'},
                  id='venues-2'),
-    pytest.param({'market': 'de'}, id='market-de'),
+    pytest.param({}, id='market-omitted'),
     pytest.param({'market': 'us', 'segment': '', 'sources': 'reddit'},
                  id='sources-reddit-root'),
     pytest.param({'market': 'us', 'segment': '',
@@ -852,20 +856,23 @@ def test_one_question_spelled_two_ways_is_one_key_and_one_board(store,
     assert answers[0].shared['rows']
 
 
-@pytest.mark.parametrize('clock, market', [
-    (US_CLOCK, 'us'), (DE_CLOCK, 'de'), (NOW, 'de'),
-], ids=['18:00-resolves-us', '10:00-resolves-de', '15:00-resolves-de'])
-def test_an_omitted_market_is_keyed_by_the_market_it_resolved_to(
-        store, clock, market):
-    assert api.default_market(clock) == market
-
+@pytest.mark.parametrize('clock', [US_CLOCK, PREMARKET_CLOCK, NOW],
+                         ids=['18:00', '10:00', '15:00'])
+def test_an_omitted_market_is_the_us_key_at_every_hour(store, clock):
     answer = parity(store, {}, now=clock)
 
-    assert json.loads(answer.key_json)['market'] == market
-    assert answer.shared['market'] == market
+    assert json.loads(answer.key_json)['market'] == 'us'
+    assert answer.shared['market'] == 'us'
     assert answer.key_hash == board_keys.canonical(
-        api.parse_query({'market': market}, now=clock))[0]
+        api.parse_query({'market': 'us'}, now=clock))[0]
     assert answer.shared['rows'], 'an empty board proves nothing'
+
+
+def test_an_unsupported_market_is_refused_before_the_store(store):
+    with pytest.raises(api.BadQuery, match='unsupported market'):
+        store.read({'market': 'de'})
+    with pytest.raises(api.BadQuery, match='unsupported market'):
+        direct_payload({'market': 'de'})
 
 
 def test_the_longest_selection_the_parser_accepts(store):

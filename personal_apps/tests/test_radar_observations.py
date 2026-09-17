@@ -128,7 +128,7 @@ def test_account_state_and_operational_counters_never_enter_the_archive(
     monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     observations.capture(BASE.replace(minute=2))
 
-    for market in ('us', 'de'):
+    for market in ('us',):
         stored = _stored(BASE).payload_json[market]
         for forbidden in ('watching', 'watch_rows', 'spend', 'sentiment_ops',
                           'market_data_ops'):
@@ -160,7 +160,7 @@ def test_how_a_board_was_delivered_never_enters_the_archive(
     monkeypatch.setattr(observations, 'build_payload_direct', with_envelope)
     observations.capture(BASE.replace(minute=3))
 
-    for market in ('us', 'de'):
+    for market in ('us',):
         stored = _stored(BASE).payload_json[market]
         assert not board_shared.ENVELOPE_KEYS & set(stored), (
             'the archive kept how the board was delivered: '
@@ -170,7 +170,7 @@ def test_how_a_board_was_delivered_never_enters_the_archive(
 
 
 def test_the_board_is_never_asked_for_a_caller(app_context, monkeypatch):
-    """user_id=None is what makes the pair viewer-independent."""
+    """user_id=None is what makes the board viewer-independent."""
     seen = []
 
     def spy(args, **kwargs):
@@ -181,20 +181,22 @@ def test_the_board_is_never_asked_for_a_caller(app_context, monkeypatch):
     now = BASE.replace(minute=3)
     observations.capture(now)
 
-    assert [call[1]['user_id'] for call in seen] == [None, None]
+    assert [call[1]['user_id'] for call in seen] == [None]
     # The build is handed the real instant, not the slot boundary: passing the
     # boundary would date the board's own reads to a time that never happened.
-    assert [call[1]['now'] for call in seen] == [now, now]
+    assert [call[1]['now'] for call in seen] == [now]
 
 
-def test_the_captured_queries_are_the_fixed_pair(app_context, monkeypatch):
+def test_the_captured_query_is_the_fixed_us_board(app_context, monkeypatch):
     """Recorded beside the answer, so no later reader has to assume which
     selection produced these rows."""
     monkeypatch.setattr(observations, 'build_payload_direct', fake_payload)
     observations.capture(BASE.replace(minute=4))
 
     selections = _stored(BASE).selections_json
-    assert set(selections['queries']) == {'us', 'de'}
+    assert set(selections['queries']) == {'us'}
+    assert set(_stored(BASE).payload_json) == {'us'}
+    assert observations.MARKETS == ('us',)
     for market, query in selections['queries'].items():
         assert query == {'market': market, 'sources': ','.join(SOURCES),
                          'segment': '', 'window': '24', 'venues': '1',
@@ -215,15 +217,12 @@ def test_the_searched_subreddits_are_recoverable(app_context, monkeypatch):
     assert len(expanded) > len(SOURCES), 'the roots were stored unexpanded'
 
 
-def test_one_missing_market_records_nothing(app_context, monkeypatch):
-    """A pair is the unit. Half of one would be an observation of a board
-    nobody selected."""
-    def half(args, **kwargs):
-        if args['market'] == 'de':
-            raise RuntimeError('the German board could not be built')
-        return fake_payload(args)
+def test_a_board_that_cannot_be_built_records_nothing(app_context, monkeypatch):
+    """A failed build is a gap, never an empty observation."""
+    def broken(args, **kwargs):
+        raise RuntimeError('the US board could not be built')
 
-    monkeypatch.setattr(observations, 'build_payload_direct', half)
+    monkeypatch.setattr(observations, 'build_payload_direct', broken)
     with pytest.raises(RuntimeError):
         observations.capture(BASE.replace(minute=5))
 
@@ -272,7 +271,10 @@ def test_an_unknown_producer_revision_is_recorded_as_unknown(
     observations.capture(BASE.replace(minute=7), producer_revision=None)
 
     assert _stored(BASE).producer_revision is None
-    assert _stored(BASE).schema_version == 1
+    # Version 2: the archive holds the US board only (version 1 held a
+    # two-market pair). Old rows keep their own version.
+    assert _stored(BASE).schema_version == 2
+    assert observations.SCHEMA_VERSION == 2
 
 
 def test_the_revision_comes_from_configuration_not_a_subprocess(monkeypatch):

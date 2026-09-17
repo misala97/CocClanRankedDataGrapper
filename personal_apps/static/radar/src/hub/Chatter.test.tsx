@@ -10,7 +10,7 @@ import type { ChatterSort } from './chatterSort'
 
 const initial = payload()
 const selection: Selection = {
-  market: initial.market, sources: initial.sources, segments: initial.segments,
+  sources: initial.sources, segments: initial.segments,
   minVenues: initial.min_venues, window: initial.window_hours,
   sort: initial.sort, dir: initial.dir,
 }
@@ -413,16 +413,16 @@ describe('ordering the candidates on screen', () => {
     expect(listed()).toEqual(['A', 'B'])
   })
 
-  it('says prices are grouped when more than one currency is on screen',
-    async () => {
-      const priced = (ticker: string, price: number, currency: string) =>
-        row({ ticker, price,
-              quote: { ...quote(), price, currency } as Row['quote'] })
-      render(<Sortable rows={[priced('US', 90, 'USD'), priced('DE', 4, 'EUR')]} />)
-      await userEvent.click(screen.getByTestId('rh-sort-price'))
-      expect(screen.getByText(/grouped by currency \(EUR, USD\)/i)).toBeVisible()
-      expect(screen.getByText(/rather than\s+converted/i)).toBeVisible()
-    })
+  it('never speaks of currency groups or conversion', async () => {
+    const priced = (ticker: string, price: number, currency: 'USD' | null) =>
+      row({ ticker, price,
+            quote: { ...quote(), price, currency } as Row['quote'] })
+    render(<Sortable rows={[priced('US', 90, 'USD'), priced('NC', 4, null)]} />)
+    await userEvent.click(screen.getByTestId('rh-sort-price'))
+    expect(screen.queryByText(/grouped by currency/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/converted/i)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/€|EUR/)
+  })
 
   it('does not claim grouping when every price is in one currency', async () => {
     render(<Sortable rows={three()} />)
@@ -542,16 +542,6 @@ describe('ordering the candidates on screen', () => {
     expect(screen.queryByText(/no today reading/i)).toBeNull()
   })
 
-  it('warns that reversing moves the currency groups too', async () => {
-    const priced = (ticker: string, price: number, currency: string) =>
-      row({ ticker, price,
-            quote: { ...quote(), price, currency } as Row['quote'] })
-    render(<Sortable rows={[priced('US', 90, 'USD'), priced('DE', 4, 'EUR')]} />)
-    await userEvent.click(screen.getByTestId('rh-sort-price'))
-    expect(screen.getByText(/reversing moves the groups as well as the rows/i))
-      .toBeVisible()
-  })
-
   it('renders plain headers when no sort control was given', () => {
     // Chatter without `onSort` is exactly what it was before sorting existed.
     show([row({ ticker: 'AAA' })])
@@ -576,13 +566,16 @@ describe('filtering the list in place', () => {
     // The in-page text box narrows what is on screen; these change which
     // board the server builds, which is a different thing and a new request.
     //
-    // Market, window and size are on the bar. Breadth and the feeds moved
-    // behind a disclosure in the VC1 correction -- one press, not gone.
+    // Window and size are on the bar. Breadth and the feeds moved behind a
+    // disclosure in the VC1 correction -- one press, not gone. There is no
+    // market to choose: Radar is US-only.
     render(<Chatter board={payloadWithRows([row()])} selection={selection}
                     onOpen={vi.fn()} onSelect={vi.fn()} />)
-    for (const label of [/market/i, /window/i, /size/i]) {
+    for (const label of [/window/i, /size/i]) {
       expect(screen.getByLabelText(label)).toBeVisible()
     }
+    expect(screen.queryByLabelText(/market/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /germany/i })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /more filters/i }))
     expect(screen.getByLabelText(/breadth/i)).toBeVisible()
     expect(screen.getByRole('group', { name: /feeds/i })).toBeVisible()
@@ -605,9 +598,10 @@ describe('filtering the list in place', () => {
     const onSelect = vi.fn()
     render(<Chatter board={payloadWithRows([row()])} selection={selection}
                     onOpen={vi.fn()} onSelect={onSelect} />)
-    await userEvent.selectOptions(screen.getByLabelText(/market/i), 'de')
+    await userEvent.selectOptions(screen.getByLabelText(/window/i), '24')
     expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ market: 'de' }))
+      expect.objectContaining({ window: 24 }))
+    expect(onSelect.mock.calls[0]?.[0]).not.toHaveProperty('market')
   })
 
   it('asks for All with an empty segment rather than omitting it', async () => {

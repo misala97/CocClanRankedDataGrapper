@@ -108,11 +108,12 @@ describe('the shell', () => {
   })
 
   it('carries the reader’s filters through every link', () => {
-    window.history.replaceState(null, '', '/radar/hub/?market=de&window=24#overview')
+    window.history.replaceState(null, '', '/radar/hub/?sources=bluesky&window=24#overview')
     mount()
     const link = screen.getByRole('link', { name: 'Human Chatter' })
-    expect(link.getAttribute('href')).toContain('market=de')
+    expect(link.getAttribute('href')).toContain('sources=bluesky')
     expect(link.getAttribute('href')).toContain('window=24')
+    expect(link.getAttribute('href')).not.toContain('market=')
   })
 
   it('leaves a modified click to the browser', () => {
@@ -211,12 +212,11 @@ describe('the shell', () => {
                    review: { demanded: 0, attempted: 0, served: 0, capped: 0,
                              over_ceiling: 0 } },
       market_data: {
-        cycles: {}, mapping_generations: {}, quote_basis_24h: {},
+        quote_basis_24h: {},
         grouped_closes: { latest_accepted_date: null, retryable_gaps: [],
                           counts: null, error_code: null, http_status: null,
                           backoff_until: null },
         post_close_claims: {},
-        de_download_budget_24h: { spent: 0, limit: 40, remaining: 40 },
       },
       capture: { latest_observed_at: null },
     })
@@ -485,7 +485,7 @@ describe('the Analysis destination (HA1, C12/C15)', () => {
     ])
     vi.spyOn(analysisApi, 'fetchAnalysisResolve').mockResolvedValue(resolved())
     vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
-    window.history.replaceState(null, '', '/radar/hub/?market=de&window=24#overview')
+    window.history.replaceState(null, '', '/radar/hub/?sources=bluesky&window=24#overview')
     mount()
     await userEvent.click(screen.getByRole('link', { name: 'Analysis' }))
     expect(window.location.hash).toBe('#analysis')
@@ -493,10 +493,10 @@ describe('the Analysis destination (HA1, C12/C15)', () => {
     const option = await screen.findByRole('option', { name: /AAA/ })
     await userEvent.click(within(option).getByRole('button'))
     // Resolved and REPLACED with the canonical pinned link plus explicit
-    // dates; the DE board context stays in the query beside them.
+    // dates; the board context stays in the query beside them.
     await waitFor(() => expect(window.location.hash).toBe('#analysis/AAA/11/7'))
     expect(window.location.search).toContain('analysis_from=')
-    expect(window.location.search).toContain('market=de')
+    expect(window.location.search).toContain('sources=bluesky')
     expect(window.location.search).toContain('window=24')
     await screen.findByRole('group', { name: 'Select a day' })
     expect(screen.getByText(/US primary · USD · all retained sources/)).toBeInTheDocument()
@@ -508,7 +508,7 @@ describe('the Analysis destination (HA1, C12/C15)', () => {
     window.history.back()
     await waitFor(() => expect(screen.getByRole('main')).toHaveAccessibleName('Overview'))
     expect(window.location.search).not.toContain('analysis_from')
-    expect(window.location.search).toContain('market=de')
+    expect(window.location.search).toContain('sources=bluesky')
   })
 
   it('restores a canonical link with explicit dates on refresh', async () => {

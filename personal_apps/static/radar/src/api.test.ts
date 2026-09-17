@@ -7,7 +7,7 @@ import { resetCsrfCache } from './csrf'
 import type { Selection } from './types'
 
 const baseSelection: Selection = {
-  market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
+  sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
   window: 4, minVenues: 1, sort: null, dir: 'desc' as const,
 }
 
@@ -16,6 +16,22 @@ beforeEach(() => {
   resetCsrfCache()
 })
 afterEach(() => { vi.unstubAllGlobals(); document.head.innerHTML = '' })
+
+describe('the market', () => {
+  it('is never written into a board, detail or link query', async () => {
+    // Radar is US-only and the server treats an omitted market as US.
+    expect(queryFor(baseSelection)).not.toContain('market')
+    const spy = vi.fn(async (_url: string) => ({
+      ok: true, redirected: false, status: 200, json: async () => ({}),
+    }))
+    vi.stubGlobal('fetch', spy)
+
+    await fetchBoard(baseSelection)
+    await fetchDetail('AAA', baseSelection, '1D')
+
+    for (const [url] of spy.mock.calls) expect(String(url)).not.toContain('market')
+  })
+})
 
 describe('the board request', () => {
   it('marks a repeat ask as a poll, and an ordinary one not at all', async () => {

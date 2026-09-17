@@ -14,7 +14,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { detail, payload, row } from '../fixtures'
-import type { BoardPayload, Detail } from '../types'
+import type { BoardPayload } from '../types'
 import { Hub } from './Hub'
 
 /** A waiting shell exactly as `board_shared._waiting` writes one: the
@@ -49,9 +49,7 @@ const ok = (body: unknown) => ({
 function stubFetch(board: (url: string, init?: RequestInit) => unknown) {
   const spy = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes('/api/ticker/')) {
-      return ok(detail(url.split('/api/ticker/')[1]!.split('?')[0]!,
-        (new URL(url, 'https://radar.test').searchParams
-          .get('market') as Detail['market']) ?? 'us'))
+      return ok(detail(url.split('/api/ticker/')[1]!.split('?')[0]!))
     }
     if (url.includes('/api/search')) return ok({ matches: [] })
     return ok(await board(url, init))
@@ -491,22 +489,21 @@ describe('a new selection while the last one is on screen', () => {
   })
 })
 
-describe('the top bar while a new market loads', () => {
-  it('names the market the reader chose, not the one they left', async () => {
-    // The previous market's board is kept as placeholder data while the new
-    // one loads. It says nothing about the market the reader is now on --
-    // least of all whether that market is open.
-    stubFetch((url) => (url.includes('market=de') ? never() : served()))
+describe('the top bar while a new selection loads', () => {
+  it('names the US market and offers no market to choose', async () => {
+    // The previous selection's board is kept as placeholder data while the
+    // new one loads. Every board is a US board, so the bar keeps naming it.
+    stubFetch((url) => (url.includes('window=12') ? never() : served()))
     mount(served(), '#chatter')
     const bar = () => document.querySelector('.rh-session')
     expect(bar()).toHaveTextContent('US markets · open')
+    expect(screen.queryByLabelText(/market/i)).toBeNull()
 
-    await choose(screen.getByLabelText(/market/i), 'de')
+    await choose(screen.getByLabelText(/window/i), '12')
     await advance(50)
 
-    expect(bar()).not.toHaveTextContent('US markets')
-    expect(bar()).toHaveTextContent('Germany')
-    expect(bar()).not.toHaveTextContent(/open|closed/)
+    expect(bar()).toHaveTextContent('US markets')
+    expect(bar()).not.toHaveTextContent(/Germany/)
   })
 })
 

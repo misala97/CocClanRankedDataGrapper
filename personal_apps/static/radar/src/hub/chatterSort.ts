@@ -70,32 +70,27 @@ function numberOf(value: unknown): Value {
     : UNKNOWN
 }
 
-/** The price a row DISPLAYS, with the currency it is displayed in.
+/** The price a row DISPLAYS, when it is a US dollar price.
  *
- *  Grouped rather than compared across currencies: €4.44 is not "less than"
- *  $18.20 in any sense a reader would accept, and this board has no conversion
- *  to make it one. A German fallback row therefore sorts among the other euro
- *  rows, and the page says so when it happens. A quote with no currency at all
- *  cannot be placed in a group, so it is unknown. */
+ *  Only dollars are compared. A quote with no currency at all -- or with
+ *  anything but the US dollar, which the server no longer sends -- has no
+ *  price reading, so it is unknown. */
 function priceOf(row: Row): Value {
   if (!priced(row)) return UNKNOWN
-  const currency = row.quote?.currency
-  // No currency, no group -- and without a group there is nothing honest to
-  // compare this price against. Price alone requires it; see `move`.
-  if (typeof currency !== 'string' || !currency) return UNKNOWN
-  return { group: currency, value: row.price as number }
+  // Price alone requires the currency; see `move`.
+  if (row.quote?.currency !== 'USD') return UNKNOWN
+  return { group: null, value: row.price as number }
 }
 
 /** Whether the row shows a price at all, which is the condition a MOVE
  *  depends on -- `Price` renders neither when this is false.
  *
  *  Deliberately not the same test as `priceOf`. Today's move is a percentage,
- *  and a percentage is comparable across currencies where a price is not, so
- *  requiring a currency here would park a row the page is visibly showing as
- *  `+5.0%` at the bottom of the list in both directions and count it as having
- *  no reading. `formatPrice` prints a bare number when the currency is absent,
- *  so that row exists on screen even though today's backend cannot produce
- *  one -- markets.py admits only USD and EUR quotes. */
+ *  so requiring a currency here would park a row the page is visibly showing
+ *  as `+5.0%` at the bottom of the list in both directions and count it as
+ *  having no reading. `formatPrice` prints a bare number when the currency is
+ *  absent, so that row exists on screen even though today's backend cannot
+ *  produce one -- markets.py admits only USD quotes. */
 function priced(row: Row): boolean {
   const quote = row.quote
   if (!quote || quote.quality === 'unavailable') return false
@@ -209,22 +204,6 @@ export function sortRows(rows: Row[], sort: ChatterSort | null): Row[] {
   return decorated.map((entry) => entry.row)
 }
 
-/** The currencies actually present among the rows that HAVE a usable price.
- *
- *  More than one means the price sort groups, and the page has to say so
- *  rather than letting a reader assume the column is one ranked list. */
-export function priceCurrencies(rows: Row[]): string[] {
-  const seen = new Set<string>()
-  for (const row of rows) {
-    const price = priceOf(row)
-    if (price.group) seen.add(price.group)
-  }
-  return Array.from(seen).sort()
-}
-
-/** How many of the loaded rows this key could actually order. The rest are
- *  parked at the end, and a reader deserves to know that before wondering why
- *  the bottom of the list looks unsorted. */
 export function knownCount(rows: Row[], key: SortKey): number {
   return rows.filter((row) => valueOf(row, key).value !== null).length
 }

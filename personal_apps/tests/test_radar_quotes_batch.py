@@ -149,29 +149,37 @@ def test_an_empty_ticker_list_asks_the_database_nothing(ctx):
     assert quotes_mod.moves_for([], 4, NOW) == {}
 
 
-def test_explicit_market_windows_never_read_another_venue(ctx):
-    """A shared social ticker has independent US and Xetra tapes."""
-    for market, mic, price in (('us', 'XNAS', '220'), ('de', 'XETR', '194')):
-        for minutes in (10, 5, 0):
+def test_us_batches_never_read_an_archived_tape(ctx):
+    """An archived non-US tape for the same ticker stays in the database
+    and out of the US window, even when it is newer and moving."""
+    # US prints at 10, 5 and 1 minute ago; archived prints newer at every step.
+    rows = (('us', 'XNAS', 'USD', (10, 5, 1), ('220', '220', '220')),
+            ('de', 'XETR', 'EUR', (9, 4, 0), ('150', '194', '250')))
+    for market, mic, currency, ages, prices in rows:
+        for minutes, price in zip(ages, prices):
             when = NOW - dt.timedelta(minutes=minutes)
             db.session.add(RadarQuote(
                 ticker=f'{PREFIX}DUAL', market=market, mic=mic,
-                currency='USD' if market == 'us' else 'EUR',
-                provider_symbol=f'{PREFIX}DUAL', fetched_at=when,
-                quote_ts=when, price=decimal.Decimal(price),
+                currency=currency, provider_symbol=f'{PREFIX}DUAL',
+                fetched_at=when, quote_ts=when, price=decimal.Decimal(price),
                 prev_close=decimal.Decimal('100.000000')))
     db.session.commit()
 
-    status, latest = quotes_mod.statuses_for(
-        [(f'{PREFIX}DUAL', 'de', 'XETR')], NOW, session='regular')[
-            (f'{PREFIX}DUAL', 'de')]
-    move = quotes_mod.moves_for(
-        [(f'{PREFIX}DUAL', 'de', 'XETR')], 1, NOW)[(f'{PREFIX}DUAL', 'de')]
+    for identity, key in (((f'{PREFIX}DUAL', 'us', 'XNAS'), (f'{PREFIX}DUAL', 'us')),
+                          (f'{PREFIX}DUAL', f'{PREFIX}DUAL')):
+        status, latest = quotes_mod.statuses_for(
+            [identity], NOW, session='regular')[key]
+        move = quotes_mod.moves_for([identity], 1, NOW)[key]
 
-    assert status == 'ok'
-    assert latest.mic == 'XETR'
-    assert latest.price == decimal.Decimal('194')
-    assert move == 0
+        assert status == 'ok'
+        assert (latest.market, latest.mic) == ('us', 'XNAS')
+        assert latest.price == decimal.Decimal('220')
+        assert move == 0
+
+    with pytest.raises(ValueError, match='unknown market'):
+        quotes_mod.statuses_for([(f'{PREFIX}DUAL', 'de', 'XETR')], NOW)
+    with pytest.raises(ValueError, match='unknown market'):
+        quotes_mod.moves_for([(f'{PREFIX}DUAL', 'de', 'XETR')], 1, NOW)
 
 
 def test_primary_mic_us_batches_read_the_null_legacy_identity(ctx):

@@ -50,8 +50,10 @@ def test_a_different_selection_is_its_own_build(monkeypatch):
         api.build_payload({'market': 'us'}, now=NOW)
         # 12h is the default since 2026-09-08; 4h is the other selection now.
         api.build_payload({'market': 'us', 'window': '4'}, now=NOW)
-        api.build_payload({'market': 'de'}, now=NOW)
+        api.build_payload({'market': 'us', 'segment': ''}, now=NOW)
         api.build_payload({'market': 'us', 'sources': 'bluesky'}, now=NOW)
+        # Omission is the same US question as an explicit market=us.
+        api.build_payload({}, now=NOW)
 
     assert len(calls) == 4
 

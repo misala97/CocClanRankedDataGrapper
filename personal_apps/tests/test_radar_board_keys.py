@@ -33,7 +33,7 @@ def _key_json(**over):
     """A raw key payload, json-encoded exactly like canonical() writes it,
     for tests that need to hand round_trips/query_from_json a shape no
     Query can produce on its own."""
-    fields = dict(v=2, sources=['bluesky', 'reddit'], segments=[], window=12,
+    fields = dict(v=board_keys.KEY_VERSION, sources=['bluesky', 'reddit'], segments=[], window=12,
                   limit=50, venues=1, market='us', sort=None, dir='desc')
     fields.update(over)
     return json.dumps(fields, sort_keys=True, separators=(',', ':'))
@@ -85,14 +85,24 @@ def test_sources_are_deduplicated_and_sorted():
     assert a == b and ja == jb
 
 
-def test_market_must_be_resolved():
+@pytest.mark.parametrize('market', ['moon', 'de', None])
+def test_only_the_us_market_has_a_key(market):
     with pytest.raises(board_keys.BadKey):
-        board_keys.canonical(q(market='moon'))
+        board_keys.canonical(q(market=market))
+
+
+def test_a_stored_non_us_key_is_refused_even_at_the_current_version():
+    _, key_json = board_keys.canonical(q())
+    fields = json.loads(key_json)
+    fields['market'] = 'de'
+    tampered = json.dumps(fields, sort_keys=True, separators=(',', ':'))
+    with pytest.raises(board_keys.BadKey):
+        board_keys.query_from_json(tampered)
 
 
 def test_the_json_is_the_exact_inverse():
     query = q(segments=['mid', 'mid'], sort='lean', direction='asc',
-              limit=100, min_venues=2, market='de',
+              limit=100, min_venues=2, market='us',
               sources=['reddit:wallstreetbets', 'bluesky'])
     key_hash, key_json = board_keys.canonical(query)
     back = board_keys.query_from_json(key_json)
@@ -109,8 +119,20 @@ def test_a_long_legal_key_round_trips():
     assert not board_keys.round_trips(key_hash, key_json[:-1])
 
 
-def test_the_key_version_is_two():
-    assert json.loads(board_keys.canonical(q())[1])['v'] == 2
+def test_the_key_version_is_three():
+    assert json.loads(board_keys.canonical(q())[1])['v'] == 3
+
+
+def test_a_version_two_key_no_longer_round_trips():
+    """v2 keys could name the German board; the version retires them all
+    rather than leaving the US half looking valid."""
+    key_hash, key_json = board_keys.canonical(q())
+    fields = json.loads(key_json)
+    fields['v'] = 2
+    old_json = json.dumps(fields, sort_keys=True, separators=(',', ':'))
+    with pytest.raises(board_keys.BadKey):
+        board_keys.query_from_json(old_json)
+    assert not board_keys.round_trips(key_hash, old_json)
 
 
 def test_round_trips_catches_a_hash_match_that_cannot_reproduce():

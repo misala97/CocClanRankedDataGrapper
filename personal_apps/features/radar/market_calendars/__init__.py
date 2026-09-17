@@ -1,4 +1,4 @@
-"""Market-specific session calendars, expressed through UTC instants."""
+"""The US market session calendar, expressed through UTC instants."""
 import dataclasses
 from datetime import datetime
 from typing import Literal
@@ -15,24 +15,20 @@ class SessionBounds:
     closes_at: datetime
 
 
-from . import de, tradegate, us
+from . import us
 
 
 def _calendar(market: str, mic: str | None = None):
-    """Calendars are selected by MIC, not one process-global German clock.
+    """Radar keeps one calendar: the US one.
 
-    ``de`` with no MIC stays Xetra-compatible for every pre-v2 caller.
+    Every US caller passes its quote's MIC (XNAS, XNYS, ...); the US calendar
+    serves them all, so the MIC is accepted and not consulted. Any other
+    market -- including the retired one -- is refused whatever MIC it names.
     """
+    del mic
     if market == 'us':
         return us
-    if market == 'de' and mic == 'XGAT':
-        return tradegate
-    if market == 'de' and mic in (None, 'XETR'):
-        return de
-    if mic is None:
-        # Preserve the registry's pre-MIC public error contract.
-        raise ValueError(f'unknown market: {market}')
-    raise ValueError(f'unknown market/MIC: {market}/{mic}')
+    raise ValueError(f'unknown market: {market}')
 
 
 def session_state(market: str, when_utc: datetime,

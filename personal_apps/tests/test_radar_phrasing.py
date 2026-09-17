@@ -143,9 +143,8 @@ class FakeChart:
 
 @dataclasses.dataclass
 class FakeQuote:
-    """Only the two quote facts the price clause reads."""
+    """Only the quote fact the price clause reads."""
     price_basis: str | None = 'trade'
-    is_fallback: bool = False
 
 
 @dataclasses.dataclass
@@ -396,14 +395,14 @@ def test_a_midpoint_basis_is_named_as_one():
     assert 'bid/ask midpoint, not an executed trade' in joined
 
 
-def test_a_fallback_listing_is_a_warning_beside_the_move():
-    clauses = _read(FakeDetail(price_move=0.02,
-                               quote=FakeQuote(is_fallback=True)))
+def test_no_clause_speaks_of_another_listing():
+    """Radar quotes US listings only; there is no other listing to name."""
+    clauses = _read(FakeDetail(price_move=0.02, quote=FakeQuote()))
     joined = ' '.join(c.text for c in clauses)
 
     assert 'The price moved +2.0% over the measured window.' in joined
-    assert any(c.kind == 'warn' and 'fallback listing' in c.text
-               for c in clauses)
+    assert 'listing' not in joined
+    assert not any(c.kind == 'warn' for c in clauses)
 
 
 def test_a_trade_basis_native_listing_adds_no_limitation():

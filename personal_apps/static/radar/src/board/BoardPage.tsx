@@ -49,7 +49,6 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   // the two always move together.
   const [received, setReceived] = useState(() => Date.now())
   const [selection, setSelection] = useState<Selection>({
-    market: initial.market,
     sources: initial.sources,
     segments: initial.segments,
     window: initial.window_hours,
@@ -118,7 +117,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
   const own = useRef<Promise<Outcome> | null>(null)
   // Whether asking the question on screen again keeps a ticker the answer
   // does not list. It does while the board on screen answers that question.
-  // A change to any control but the market that FAILED leaves the old board
+  // A change to any control that FAILED leaves the old board
   // up and the question's first answer still owed: a Retry or a refetch then
   // asks what the change asked, and treats the ticker as the change would
   // have. Set by the request that failed; reset by any answer that lands.
@@ -199,21 +198,18 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
       // and an answer that restored the ticker it was sent with put back a
       // row the reader had already left.
       //
-      // Selection follows filtering, but a market change is different: the
-      // company identity stays the same even when its new market board does
-      // not rank it. The detail endpoint can still show its marked fallback.
-      // A Retry and the two refetches keep it the same way (`preserveTicker`):
+      // Selection follows filtering. A Retry and the two refetches keep the
+      // ticker (`preserveTicker`):
       // each asks again about the board the reader is already reading --
       // unless that board is the one a failed change left up, when each asks
       // what the change asked and keeps the ticker only as the change would
       // have (`keepOnRetry`).
       //
       // A poll is the page asking on the reader's behalf, so its ticker
-      // stays, listed in this build or not, as it would through a market
-      // switch.
+      // stays, listed in this build or not.
       //
       // Which leaves one answer that can take the ticker away: a change to
-      // any control but the market. The ticker stays only if the new board
+      // a control. The ticker stays only if the new board
       // lists it -- and a waiting shell lists nothing, so there the panel
       // empties with the list rather than describing a company the board
       // beside it has stopped listing.
@@ -507,14 +503,8 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     return () => document.removeEventListener('visibilitychange', change)
   }, [])
 
-  const previousMarket = useRef(initial.market)
-  // Remembered across a burst: a market flip followed within the debounce by
-  // a source toggle must still preserve the ticker the way a market flip does.
-  const marketPending = useRef(false)
   useEffect(() => {
     if (first.current) { first.current = false; return }
-    if (previousMarket.current !== selection.market) marketPending.current = true
-    previousMarket.current = selection.market
     // The old question is over HERE, where the reader left it, and not 250ms
     // later when the request for the new one goes out. The wait belonged to
     // a selection nobody is on any more: its next poll must not go out, and
@@ -540,9 +530,7 @@ export function BoardPage({ initial }: { initial: BoardPayload }) {
     // single click still feels immediate.
     const timer = setTimeout(() => {
       settling.current = false
-      const marketChanged = marketPending.current
-      marketPending.current = false
-      void load(selection, marketChanged)
+      void load(selection)
     }, SETTLE_MS)
     return () => {
       clearTimeout(timer)

@@ -1,9 +1,10 @@
 """JSON for the selected-instrument price chart (MD-SELECTED-PRICE).
 
-  GET /radar/api/ticker/<ticker>/price-chart?span=1D|1W&market=us&sources=...
+  GET /radar/api/ticker/<ticker>/price-chart?span=1D|1W[&market=us][&sources=...]
 
 Ordinary `login_required` access, as the ticker detail it sits beside. Only
-three query keys exist: no from/to, no provider, no symbol override. The
+three query keys exist: no from/to, no provider, no symbol override. An
+omitted market is US; any other supplied market is refused. The
 request is validated and the identity resolved before any acquisition is
 admitted, and the answer is assembled from local data only -- provider I/O
 happens in price_chart_acquisition's background child, never here. An
@@ -43,15 +44,12 @@ def parse_chart_query(pairs):
         if key in seen:
             raise ChartError('duplicate_query', 400, f'query parameter {key!r} was given more than once')
         seen[key] = value
-    if 'span' not in seen or 'market' not in seen:
-        raise ChartError('missing_query', 400, 'span and market are required')
+    if 'span' not in seen:
+        raise ChartError('missing_query', 400, 'span is required')
     if seen['span'] not in SPANS:
         raise ChartError('invalid_span', 400, 'span must be 1D or 1W')
-    if seen['market'] not in ('us', 'de'):
-        raise ChartError('invalid_market', 400, 'unknown market')
-    if seen['market'] != 'us':
-        raise ChartError('unsupported_instrument', 422,
-                         'selected price charts cover US primary listings only')
+    if seen.get('market', 'us') != 'us':
+        raise ChartError('invalid_market', 400, 'unsupported market')
     raw = seen.get('sources')
     if raw is not None and not raw.strip():
         raise ChartError('invalid_sources', 400, 'sources must name at least one source')

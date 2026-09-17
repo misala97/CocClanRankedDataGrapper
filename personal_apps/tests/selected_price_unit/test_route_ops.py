@@ -57,10 +57,13 @@ def test_signed_out_is_sent_to_sign_in_before_anything_runs(app, store, monkeypa
 @pytest.mark.parametrize('query,code,status', [
     ('span=1D&market=us&from=2026-09-01', 'unknown_query', 400),
     ('span=1D&span=1W&market=us', 'duplicate_query', 400),
-    ('span=1D', 'missing_query', 400),
+    ('market=us', 'missing_query', 400),
+    ('', 'missing_query', 400),
     ('span=1M&market=us', 'invalid_span', 400),
     ('span=1D&market=xx', 'invalid_market', 400),
-    ('span=1D&market=de', 'unsupported_instrument', 422),
+    ('span=1D&market=de', 'invalid_market', 400),
+    ('span=1D&market=US', 'invalid_market', 400),
+    ('span=1D&market=', 'invalid_market', 400),
     ('span=1D&market=us&sources=myspace', 'invalid_sources', 400),
     ('span=1D&market=us&sources=', 'invalid_sources', 400),
     ('span=1D&market=us&symbol=MSFT', 'unknown_query', 400),
@@ -68,6 +71,26 @@ def test_signed_out_is_sent_to_sign_in_before_anything_runs(app, store, monkeypa
 def test_only_three_validated_query_keys(app, store, query, code, status):
     response = app.test_client().get(f'{URL}?{query}')
     assert (response.status_code, response.get_json()['code']) == (status, code)
+    assert store.calls == []
+
+
+def test_an_omitted_market_is_the_same_us_request(app, store):
+    """Omission means US; the answer matches an explicit market=us."""
+    client = app.test_client()
+    omitted = client.get(URL + '?span=1D')
+    explicit = client.get(URL + '?span=1D&market=us')
+    assert omitted.status_code == explicit.status_code == 200
+    first, second = omitted.get_json(), explicit.get_json()
+    assert first['identity'] == second['identity']
+    assert first['identity']['currency'] == 'USD'
+    assert set(first) == set(second)
+
+
+def test_an_unsupported_market_names_the_reason(app, store):
+    response = app.test_client().get(URL + '?span=1D&market=de')
+    assert response.status_code == 400
+    assert response.get_json() == {'code': 'invalid_market',
+                                   'error': 'unsupported market'}
     assert store.calls == []
 
 

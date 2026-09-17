@@ -55,9 +55,8 @@ export function queryFor(selection: Selection): string {
   // default, which is Discover -- so the All chip would silently do nothing.
   // Comma-separated; empty is how the surface asks for All.
   params.set('segment', selection.segments.join(','))
-  // Always explicit. An omitted market is US for old links, but a selected
-  // market must travel through every request and cache boundary.
-  params.set('market', selection.market)
+  // No market: Radar is US-only and the server treats an omitted market as
+  // US. There is nothing to select, so there is nothing to send or key on.
   // Omitted at 1 so the default board keeps a clean URL.
   if (selection.minVenues > 1) params.set('venues', String(selection.minVenues))
   // Omitted at the default, the way venues is omitted at 1, so an unsorted
@@ -170,7 +169,6 @@ export async function fetchDetail(
   params.set('sources', selection.sources.join(','))
   params.set('window', String(selection.window))
   params.set('span', span)
-  params.set('market', selection.market)
   if (includeTone) params.set('tone', '1')
   return getJson<Detail>(
     `/radar/api/ticker/${encodeURIComponent(ticker)}?${params}`, signal)

@@ -10,20 +10,22 @@ import { boardKey, detailKey, searchKey, selectionOf, useBoard } from './queries
 
 const initial = payload()
 const selection: Selection = {
-  market: initial.market, sources: initial.sources, segments: initial.segments,
+  sources: initial.sources, segments: initial.segments,
   minVenues: initial.min_venues, window: initial.window_hours,
   sort: initial.sort, dir: initial.dir,
 }
 
 describe('cache identity', () => {
-  it('keeps listing context in cache identity', () => {
-    const us = { ...selection, market: 'us' as const }
-    expect(boardKey(us)).not.toEqual(boardKey({ ...us, market: 'de' }))
-    expect(detailKey('AAA', us, '1D')).not.toEqual(detailKey('AAA', us, '1M'))
+  it('keeps listing context in cache identity, and no market', () => {
+    expect(boardKey(selection)).not.toEqual(boardKey({ ...selection, window: 24 }))
+    expect(detailKey('AAA', selection, '1D'))
+      .not.toEqual(detailKey('AAA', selection, '1M'))
+    expect(JSON.stringify(boardKey(selection))).not.toContain('market')
+    expect(detailKey('AAA', selection, '1D')).not.toContain('us')
   })
 
   it('separates every dimension the server filters on', () => {
-    // A key that held only the market would serve the reader a board built
+    // A key that held only the sources would serve the reader a board built
     // for a different window, sort or source set -- silently, and only
     // sometimes, which is the worst kind of only sometimes.
     const variants: Selection[] = [
@@ -82,8 +84,9 @@ describe('cache identity', () => {
     // would arrive as real data with a fresh timestamp.
     expect(selectionOf(initial)).toEqual(selection)
     expect(boardKey(selectionOf(initial))).toEqual(boardKey(selection))
-    expect(boardKey(selectionOf(payload({ market: 'de' }))))
+    expect(boardKey(selectionOf(payload({ window_hours: 24 }))))
       .not.toEqual(boardKey(selection))
+    expect('market' in selectionOf(initial)).toBe(false)
   })
 })
 

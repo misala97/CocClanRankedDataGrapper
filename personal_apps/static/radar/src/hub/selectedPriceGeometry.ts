@@ -270,7 +270,6 @@ const SOURCE_WORD: Record<string, string> = {
   alpaca_sip: 'Alpaca consolidated SIP (delayed)',
   yahoo_chart: 'Yahoo chart', finnhub: 'Finnhub', twelvedata: 'Twelve Data',
   massive_grouped: 'Massive', legacy: 'legacy feed',
-  deutsche_boerse_delayed: 'Deutsche Börse (delayed)',
 }
 
 export function sourceWord(source: string): string {

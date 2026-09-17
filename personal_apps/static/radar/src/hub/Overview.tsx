@@ -14,6 +14,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 
+import { usdText } from '../format'
 import { isReady } from '../types'
 import type { BoardPayload, ReadyBoard, Row } from '../types'
 import { AgeLine } from './PageState'
@@ -255,12 +256,7 @@ function priceText(row: Row): string {
   if (row.price === null || row.quote.quality === 'unavailable') {
     return 'Price unavailable'
   }
-  const symbol = row.quote.currency === 'EUR' ? '€'
-    : row.quote.currency === 'USD' ? '$' : ''
-  const value = row.price.toLocaleString('en-US',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const move = row.price_move === null ? ''
     : ` ${row.price_move > 0 ? '+' : ''}${(row.price_move * 100).toFixed(1)}%`
-  const price = symbol ? `${symbol}${value}` : `${value} ${row.quote.currency ?? ''}`
-  return `${price.trim()}${move}`
+  return `${usdText(row.price, row.quote.currency)}${move}`
 }

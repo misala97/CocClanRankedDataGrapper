@@ -13,6 +13,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { BoardUnavailable } from '../api'
+import { usdText } from '../format'
 import { isReady } from '../types'
 import type { BoardPayload, ReadyBoard, Row } from '../types'
 import { AgeLine, Empty } from './PageState'
@@ -245,11 +246,7 @@ function moveClass(move: number | null): string {
 }
 
 function price(row: Row): string {
-  const symbol = row.quote.currency === 'EUR' ? '€'
-    : row.quote.currency === 'USD' ? '$' : ''
-  const text = (row.price as number).toLocaleString('en-US',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return symbol ? `${symbol}${text}` : `${text} ${row.quote.currency ?? ''}`.trim()
+  return usdText(row.price as number, row.quote.currency)
 }
 
 function Cell({ label, className, testId, children }: {

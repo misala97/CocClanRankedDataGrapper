@@ -14,26 +14,12 @@ import os
 import requests
 
 from . import PriceUnavailable, Profile, Quote
-from ..instruments import CatalogInstrument
 
 API_BASE = 'https://finnhub.io/api/v1'
 
 # Finnhub reports market capitalisation in MILLIONS of the listing currency.
 # Storing the raw number would put every mega cap in the micro segment.
 MARKET_CAP_UNIT = decimal.Decimal('1000000')
-
-FINNHUB_EXCHANGE_BY_MIC = {
-    'XETR': 'DE',
-    'XNAS': 'US', 'XNGS': 'US', 'XNMS': 'US', 'XNCM': 'US',
-    'XNYS': 'US', 'ARCX': 'US', 'XASE': 'US', 'BATS': 'US', 'IEXG': 'US',
-}
-
-# A missing type is not neutral metadata.  Finnhub's country directory also
-# carries instruments that Radar must not map as common shares or ETFs.
-FINNHUB_CATALOG_TYPES = frozenset({
-    'common stock', 'common shares', 'etf', 'exchange traded fund',
-    'exchange-traded fund',
-})
 
 
 class FinnhubHttp:
@@ -136,33 +122,3 @@ class FinnhubProvider:
             ipo_date=dt.date.fromisoformat(ipo) if ipo else None,
             exchange=payload.get('exchange'),
         )
-
-    def stock_catalog(self, mic_code):
-        """Finnhub symbol directory normalized to the catalog identity shape.
-
-        A country directory is not proof that every row is Xetra. Rows without
-        a provider-supplied MIC therefore remain unqualified and cannot map.
-        """
-        exchange = FINNHUB_EXCHANGE_BY_MIC.get(mic_code)
-        if exchange is None:
-            raise PriceUnavailable(f'/stock/symbol: unsupported MIC {mic_code}')
-        payload = self._http.get('/stock/symbol', {'exchange': exchange})
-        if not isinstance(payload, list):
-            raise PriceUnavailable('/stock/symbol: provider returned no catalog')
-
-        catalog = []
-        for row in payload:
-            if not isinstance(row, dict):
-                continue
-            kind = str(row.get('type') or '').strip().casefold()
-            if kind not in FINNHUB_CATALOG_TYPES:
-                continue
-            symbol = row.get('symbol') or row.get('displaySymbol')
-            currency = row.get('currency')
-            if not symbol or not currency:
-                continue
-            catalog.append(CatalogInstrument(
-                symbol=str(symbol), name=row.get('description') or row.get('name'),
-                mic=row.get('mic'), currency=currency, isin=row.get('isin'),
-                figi=row.get('figi')))
-        return catalog

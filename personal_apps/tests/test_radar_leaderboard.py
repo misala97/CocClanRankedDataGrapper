@@ -110,67 +110,82 @@ def test_a_scored_eligible_ticker_becomes_a_row(board):
     assert rows[0].mentions == 10
 
 
-def test_germany_row_uses_a_marked_us_quote_fallback(board):
-    """A missing Xetra instrument does not disappear or pretend to be EUR."""
-    universe_row('LBDE')
-    scored('LBDE')
-    quoted('LBDE', '100.00', '98.00')
+def test_the_board_ranks_us_quotes_only(board):
+    """A US row carries its US dollar quote; no other market can be asked."""
+    universe_row('LBUS')
+    scored('LBUS')
+    quoted('LBUS', '100.00', '98.00')
     db.session.commit()
 
-    row = build_rows(['bluesky'], NOW, market='de')[0]
+    row = build_rows(['bluesky'], NOW)[0]
 
     assert row.quote.market == 'us'
     assert row.quote.currency == 'USD'
-    assert row.quote.is_fallback is True
+    assert not hasattr(row.quote, 'is_fallback')
     assert row.quote.session == 'regular'
+    with pytest.raises(ValueError, match='unknown market'):
+        build_rows(['bluesky'], NOW, market='de')
 
 
-def test_eod_german_quote_cannot_produce_divergence(board):
-    """A retained prior-day Xetra print remains readable but never looks live."""
+def test_eod_quote_cannot_produce_divergence(board):
+    """A retained prior-day print remains readable but never looks live."""
     ticker = 'LBEOD'
     universe_row(ticker)
     scored(ticker)
     db.session.add(RadarInstrument(
-        ticker=ticker, market='de', venue='Xetra', mic='XETR',
-        provider_symbol='LBEOD', currency='EUR', is_primary=True,
+        ticker=ticker, market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol='LBEOD', currency='USD', is_primary=True,
         mapping_status='mapped', mapped_at=NOW))
     db.session.add(RadarQuote(
-        ticker=ticker, market='de', mic='XETR', currency='EUR',
+        ticker=ticker, market='us', mic='XNAS', currency='USD',
         provider_symbol='LBEOD', fetched_at=NOW - dt.timedelta(minutes=5),
         quote_ts=NOW - dt.timedelta(days=1), price=decimal.Decimal('100'),
         prev_close=decimal.Decimal('98'), volume=1000))
     db.session.commit()
 
-    row = build_rows(['bluesky'], NOW, market='de')[0]
+    row = build_rows(['bluesky'], NOW)[0]
 
     assert row.quote.quality == 'eod'
     assert row.divergence is None
 
 
-def test_german_quote_does_not_use_the_us_cached_sigma(board):
-    """No Xetra close history means no German volatility opinion."""
-    ticker = 'LBDESIG'
+def test_archived_prints_never_move_or_price_a_us_row(board):
+    """Archived non-US instruments and moving prints for the same ticker
+    stay in the database and out of the ranking."""
+    ticker = 'LBARCH'
     universe_row(ticker)
     scored(ticker)
-    profile = TickerUniverse.query.filter_by(symbol=ticker).one()
-    profile.daily_sigma = 0.01
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol=ticker, currency='USD', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW))
     db.session.add(RadarInstrument(
         ticker=ticker, market='de', venue='Xetra', mic='XETR',
         provider_symbol=ticker, currency='EUR', is_primary=True,
         mapping_status='mapped', mapped_at=NOW))
-    for minutes, price in ((30, '100'), (5, '101')):
+    for minutes, us_price, archived_price in ((30, '100', '80'),
+                                              (5, '100', '120')):
         when = NOW - dt.timedelta(minutes=minutes)
         db.session.add(RadarQuote(
-            ticker=ticker, market='de', mic='XETR', currency='EUR',
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
             provider_symbol=ticker, fetched_at=when, quote_ts=when,
-            price=decimal.Decimal(price), prev_close=decimal.Decimal('100')))
+            price=decimal.Decimal(us_price),
+            prev_close=decimal.Decimal('100')))
+        db.session.add(RadarQuote(
+            ticker=ticker, market='de', mic='XETR', currency='EUR',
+            provider_symbol=ticker,
+            fetched_at=when + dt.timedelta(minutes=1),
+            quote_ts=when + dt.timedelta(minutes=1),
+            price=decimal.Decimal(archived_price),
+            prev_close=decimal.Decimal('100')))
     db.session.commit()
 
-    row = build_rows(['bluesky'], NOW, market='de')[0]
+    row = build_rows(['bluesky'], NOW)[0]
 
-    assert row.quote.market == 'de'
-    assert row.price_move == decimal.Decimal('0.01')
-    assert row.divergence is None
+    assert (row.quote.market, row.quote.mic, row.quote.currency) == (
+        'us', 'XNAS', 'USD')
+    assert row.quote.price == decimal.Decimal('100')
+    assert row.price_move == decimal.Decimal('0')
 
 
 def test_an_ineligible_ticker_is_excluded_not_ranked_low(board):

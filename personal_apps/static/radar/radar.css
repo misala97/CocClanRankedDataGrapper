@@ -390,35 +390,6 @@ body {
   margin: 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.015em;
 }
 
-/* The market beside the wordmark, in the strip's own tab vocabulary. Both
-   labels hold weight 600 in every state -- pressed is said by ink and the
-   underline alone, so nothing changes width when the market flips. */
-.brand .market-switch {
-  display: inline-flex; align-items: baseline;
-  margin: 0; padding: 0; border: 0;
-}
-.market-switch legend {
-  position: absolute; width: 1px; height: 1px; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
-}
-.market-switch label { cursor: pointer; }
-.market-switch label + label::before {
-  content: "/"; color: var(--rule); font-size: var(--t-sm); padding: 0 6px;
-}
-.market-switch input { position: absolute; opacity: 0; }
-.market-switch span {
-  font-size: var(--t-sm); font-weight: 600; color: var(--dim);
-  padding: 0 1px 3px; border-bottom: 2px solid transparent;
-  transition: color var(--fast) var(--ease);
-}
-.market-switch label:hover span { color: var(--ink-2); }
-.market-switch input:checked + span {
-  color: var(--ink); border-bottom-color: var(--mark);
-}
-.market-switch input:focus-visible + span {
-  outline: 2px solid var(--mark); outline-offset: 2px;
-}
-
 /* When this board was built. After fifteen minutes the same corner becomes
    an amber age with a reload control; fresh and stale each state the one
    number that matters in that state, never both. */
@@ -1594,7 +1565,6 @@ body {
      the text and below the underline instead. */
   .t { padding-block: 8px; }
   .summary button { padding-block: 6px; }
-  .market-switch span { padding-block: 8px; }
   .spans button { padding-block: 7px; }
   .tabs, .grp, .spans { column-gap: var(--s3); }
   .post .more { padding-block: var(--s2); }

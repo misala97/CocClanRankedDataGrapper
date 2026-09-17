@@ -1,24 +1,21 @@
 # personal_apps/scripts/backfill_radar_market_history.py
 """Resumable market-data v2 history backfill (plan Task 8).
 
-Three bounded modes, all defaulting to --dry-run:
+Two bounded US modes, both defaulting to --dry-run:
 
     cd personal_apps && python -m scripts.backfill_radar_market_history \
         --market us --apply --limit 40
-    ... --market de --apply
     ... --market us-universe --apply --resume-after 2026-06-30
 
 ``us``          Yahoo deep tail for the ACTIVE board union's US instruments
                 that do not yet reach the 3Y floor -- the deep history
                 beyond Massive's two-year window [A1][A2].
-``de``          Yahoo ``.DE`` backfill for verified Xetra-identity German
-                instruments (the §8.2 proxy input).
 ``us-universe`` The complete Massive grouped backfill, one request per US
                 trading day, newest first, to the free tier's two-year
                 depth. REFUSES to run under RADAR_US_CLOSE_SOURCE=legacy:
                 the shadow/live lane comes from that flag alone.
 
-Resume keys: instrument modes use ``TICKER:MIC`` and continue strictly
+Resume keys: the instrument mode uses ``TICKER:MIC`` and continues strictly
 after it; the grouped mode's cursor is the DATE and it continues strictly
 before it. ``--limit`` bounds ATTEMPTED items, not successful ones, so a
 wall of failures cannot spin forever.
@@ -32,28 +29,21 @@ def _instrument_targets(mode, now):
     from features.radar import history, market_data
     from models import RadarInstrument
 
-    if mode == 'us':
-        active = set(market_data.active_price_tickers(now))
-        rows = (RadarInstrument.query
-                .filter(RadarInstrument.market == 'us',
-                        RadarInstrument.is_primary.is_(True),
-                        RadarInstrument.mapping_status == 'mapped',
-                        RadarInstrument.ticker.in_(active))
-                .order_by(RadarInstrument.ticker, RadarInstrument.mic).all()
-                ) if active else []
-        floor = int(history.HISTORY_DAYS * history.MIN_STORED_RATIO)
-        stored = history.closes_for([row.ticker for row in rows],
-                                    today=now.date())
-        return [row for row in rows
-                if len(stored.get(row.ticker, [])) < floor]
-
+    if mode != 'us':
+        raise ValueError(f'unknown market: {mode}')
+    active = set(market_data.active_price_tickers(now))
     rows = (RadarInstrument.query
-            .filter(RadarInstrument.market == 'de',
-                    RadarInstrument.mic == 'XETR',
+            .filter(RadarInstrument.market == 'us',
+                    RadarInstrument.is_primary.is_(True),
                     RadarInstrument.mapping_status == 'mapped',
-                    RadarInstrument.isin.isnot(None))
-            .order_by(RadarInstrument.ticker, RadarInstrument.mic).all())
-    return rows
+                    RadarInstrument.ticker.in_(active))
+            .order_by(RadarInstrument.ticker, RadarInstrument.mic).all()
+            ) if active else []
+    floor = int(history.HISTORY_DAYS * history.MIN_STORED_RATIO)
+    stored = history.closes_for([row.ticker for row in rows],
+                                today=now.date())
+    return [row for row in rows
+            if len(stored.get(row.ticker, [])) < floor]
 
 
 def _run_instruments(args, now):
@@ -82,19 +72,14 @@ def _run_instruments(args, now):
     print(f'{args.market}: starting {total} instruments')
     for attempted, row in enumerate(targets, start=1):
         last_key = f'{row.ticker}:{row.mic}'
-        symbol = row.provider_symbol
-        if args.market == 'de':
-            symbol = symbol if symbol.endswith('.DE') else f'{symbol}.DE'
         # Yahoo history is accepted only after exact returned metadata agrees
         # with this mapped identity.
-        history_mic = 'XETR' if args.market == 'de' else row.mic
         closes = provider.daily_closes(
-            symbol, history.HISTORY_DAYS, mic_code=history_mic)
+            row.provider_symbol, history.HISTORY_DAYS, mic_code=row.mic)
         if closes:
-            currency = 'EUR' if args.market == 'de' else row.currency
             history.record_closes(
                 row.ticker, closes, now, market=row.market, mic=row.mic,
-                currency=currency, source='yahoo_chart',
+                currency=row.currency, source='yahoo_chart',
                 adjustment_basis='split')
             stored += 1
         if attempted % 10 == 0 or attempted == total:
@@ -183,7 +168,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description='Resumable market-data v2 history backfill.')
     parser.add_argument('--market', required=True,
-                        choices=('us', 'de', 'us-universe', 'all'))
+                        choices=('us', 'us-universe'))
     parser.add_argument('--limit', type=int, default=None)
     parser.add_argument('--resume-after', default=None)
     action = parser.add_mutually_exclusive_group()
@@ -194,15 +179,6 @@ def main(argv=None):
     from app import app
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     with app.app_context():
-        if args.market == 'all':
-            for market in ('us', 'de'):
-                sub = argparse.Namespace(**{**vars(args), 'market': market})
-                code = _run_instruments(sub, now)
-                if code:
-                    return code
-            sub = argparse.Namespace(**{**vars(args),
-                                        'market': 'us-universe'})
-            return _run_universe(sub, now)
         if args.market == 'us-universe':
             return _run_universe(args, now)
         return _run_instruments(args, now)

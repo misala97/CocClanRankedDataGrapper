@@ -22,14 +22,18 @@ from models import RadarDailyClose
 
 # Higher priority wins a live row; equal priority permits provider
 # restatement. massive_grouped outranks the unofficial and incumbent US
-# writers; native Deutsche Börse closes outrank everything [A1].
+# writers [A1].
 CLOSE_SOURCE_PRIORITY = {
     'legacy': 0,
     'twelvedata': 10,
     'yahoo_chart': 10,
     'massive_grouped': 12,
-    'deutsche_boerse_delayed': 20,
 }
+
+# Radar stores and reads US dollar closes only. Archived non-US rows stay in
+# the table untouched; no reader here selects them and no writer adds one.
+MARKET = 'us'
+CURRENCY = 'USD'
 
 # Three years of trading days. Was 260 -- a single year -- until 2026-08-23,
 # when the detail panel gained a 3Y span.
@@ -63,23 +67,22 @@ def _market_filters(ticker, market, mic):
     return [RadarDailyClose.ticker == ticker, _market_filter(market, mic)]
 
 
-def _market_filter(market, mic):
-    """Match an instrument while treating `(NULL, NULL)` as legacy US."""
-    if market == 'us' and mic is not None:
-        return sa.or_(
-            sa.and_(RadarDailyClose.market == 'us', RadarDailyClose.mic == mic),
-            sa.and_(RadarDailyClose.market.is_(None),
-                    RadarDailyClose.mic.is_(None)))
+def _require_us(market):
+    if market != MARKET:
+        raise ValueError(f'unknown market: {market}')
 
-    market_filter = RadarDailyClose.market == market
-    if market == 'us':
-        market_filter = sa.or_(
-            market_filter,
-            sa.and_(RadarDailyClose.market.is_(None),
-                    RadarDailyClose.mic.is_(None)))
-    if mic is None:
-        return market_filter
-    return sa.and_(market_filter, RadarDailyClose.mic == mic)
+
+def _market_filter(market, mic):
+    """Match a US instrument while treating `(NULL, NULL)` as legacy US."""
+    _require_us(market)
+    legacy = sa.and_(RadarDailyClose.market.is_(None),
+                     RadarDailyClose.mic.is_(None))
+    if mic is not None:
+        return sa.or_(
+            sa.and_(RadarDailyClose.market == MARKET,
+                    RadarDailyClose.mic == mic),
+            legacy)
+    return sa.or_(RadarDailyClose.market == MARKET, legacy)
 
 
 def record_closes(ticker, closes, now, *, market='us', mic=None,
@@ -92,8 +95,13 @@ def record_closes(ticker, closes, now, *, market='us', mic=None,
     write, equal priority is provider restatement, and a migration-era NULL
     source reads as ``legacy``. The upsert identity includes ``is_shadow``:
     the shadow lane can never overwrite or block the live row for one date.
+
+    Only US dollar closes are written; the archived non-US lane has no writer.
     """
     from .prices import validate_close_source
+    if market != MARKET or currency != CURRENCY:
+        raise ValueError(
+            f'only US USD closes are stored, not {market}/{currency}')
     validate_close_source(source, price_basis, adjustment_basis)
     if source in ('massive_grouped',) and adjustment_basis != 'split':
         # Every selected v2 provider writes split-only provenance; a
@@ -202,25 +210,21 @@ class HistoryBasis:
     """Where one chart's price line actually came from.
 
     The venue that QUOTES a ticker and the venue that has its HISTORY are
-    different questions, and the panel used to answer both with the quote.
-    On the German board that made a Nasdaq listing read its two stored
-    Tradegate closes instead of its 780 stored Nasdaq ones.
+    different questions: a listing's exact-ISIN sibling on another US venue
+    may hold the deeper series.
 
     `currency` is the currency `closes` is expressed in, which the axis and
-    the hover read. `converted_from` is set only when these closes were
-    priced in another currency and converted here -- the renderer states it
-    beside the chart, because a converted line must never read as native.
+    the hover read. It is always the US dollar: nothing is ever converted.
     """
     closes: tuple
     market: str | None
     mic: str | None
     venue: str | None
     currency: str | None
-    converted_from: str | None
 
 
 EMPTY_BASIS = HistoryBasis(closes=(), market=None, mic=None, venue=None,
-                           currency=None, converted_from=None)
+                           currency=None)
 
 
 def _native_basis(ticker, quote, days, today):
@@ -228,19 +232,18 @@ def _native_basis(ticker, quote, days, today):
                       market=quote.market, mic=quote.mic).get(ticker, [])
     return HistoryBasis(closes=tuple(rows), market=quote.market,
                         mic=quote.mic, venue=quote.venue,
-                        currency=quote.currency, converted_from=None)
+                        currency=quote.currency)
 
 
 def _sibling_basis(ticker, quote, days, today):
-    """The other venue in the same market, when it is provably the same paper.
+    """Another US venue, when it is provably the same paper.
 
-    Same ISIN, both non-null, same currency. That is the §8.2 test the old
-    Xetra proxy used, moved here: it was always a question about which
-    series may stand in for which, and never about how to stitch them.
+    Same ISIN, both non-null, same currency: a question about which series may
+    stand in for which, and never about how to stitch them.
     """
     from models import RadarInstrument
     rows = RadarInstrument.query.filter_by(
-        ticker=ticker, market=quote.market).all()
+        ticker=ticker, market=MARKET).all()
     here = next((r for r in rows if r.mic == quote.mic), None)
     if here is None or here.isin is None:
         return None
@@ -253,60 +256,27 @@ def _sibling_basis(ticker, quote, days, today):
                         market=sibling.market, mic=sibling.mic).get(ticker, [])
     return HistoryBasis(closes=tuple(closes), market=sibling.market,
                         mic=sibling.mic, venue=sibling.venue,
-                        currency=sibling.currency, converted_from=None)
-
-
-def _converted_basis(ticker, quote, days, today):
-    """The primary US listing, in the quote's currency.
-
-    Only EUR is served, because only the German board asks. A pair we cannot
-    price returns None rather than an unconverted dollar series: a USD line
-    under a EUR axis label is the exact lie this whole basis exists to stop.
-    """
-    if quote.currency != 'EUR':
-        return None
-
-    from models import RadarInstrument
-    us = (RadarInstrument.query
-          .filter_by(ticker=ticker, market='us', is_primary=True)
-          .first())
-    if us is None:
-        return None
-
-    closes = closes_for([ticker], days=days, today=today,
-                        market='us', mic=us.mic).get(ticker, [])
-    if not closes:
-        return None
-
-    from . import fx
-    first_close = min(day for day, _ in closes)
-    series = fx.rate_series(
-        first_close - dt.timedelta(days=fx.MAX_CARRY_DAYS), today)
-    converted = fx.convert_usd_to_eur(closes, series)
-    if not converted:
-        return None
-    return HistoryBasis(closes=converted, market='us', mic=us.mic,
-                        venue=us.venue, currency='EUR', converted_from='USD')
+                        currency=sibling.currency)
 
 
 def resolve_basis(ticker, quote, days, today):
-    """The chartable series for one ticker over `days`, and where it is from.
+    """The chartable US series for one ticker over `days`, and its venue.
 
-    Candidates in precedence order -- the quote's own venue, the ISIN-matched
-    sibling, the converted US primary -- and the one with the MOST closes in
-    the span wins. `max` keeps the first of equal counts, so precedence breaks
-    ties. Evaluated per span on purpose: a ticker may have a deep Xetra month
-    and a deeper converted three years, and each span should draw the most
-    price it can while saying which venue that was.
+    Candidates in precedence order -- the quote's own venue, then the
+    ISIN-matched US sibling -- and the one with the MOST closes in the span
+    wins. `max` keeps the first of equal counts, so precedence breaks ties.
+    Evaluated per span on purpose: each span should draw the most price it
+    can while saying which venue that was. A quote from any other market is a
+    caller bug; archived non-US closes are never a candidate.
 
     Fewer than MIN_BASIS_CLOSES is not a candidate at all. When nothing
     qualifies the caller gets EMPTY_BASIS and the panel says so, which is the
     honest answer and the one the renderer already draws.
     """
+    _require_us(quote.market)
     first_visible = today - dt.timedelta(days=max(days - 1, 0))
     candidates = [_native_basis(ticker, quote, days, today),
-                  _sibling_basis(ticker, quote, days, today),
-                  _converted_basis(ticker, quote, days, today)]
+                  _sibling_basis(ticker, quote, days, today)]
     # closes_for intentionally includes `today-days` for other callers. A
     # chart of N calendar days starts at today-(N-1), so choose the basis from
     # the points the reader can actually see rather than an extra boundary row.
@@ -383,8 +353,7 @@ def fetch_into_store(provider, tickers, now, *, market='us', mic=None,
             # Counted, not swallowed. A provider that refuses an identity --
             # Yahoo rejects any MIC outside its allowlist before it looks at
             # a single bar -- otherwise reports a successful cycle that
-            # stored nothing, which is how the German history fetcher ran
-            # for weeks writing zero rows.
+            # stored nothing.
             empty += 1
             continue
         record_closes(ticker, closes, now, market=market, mic=mic,
@@ -396,20 +365,3 @@ def fetch_into_store(provider, tickers, now, *, market='us', mic=None,
                               'twelvedata') else None))
         stored += 1
     return stored, empty
-
-
-def due_instruments(instruments, now, limit):
-    """The next `limit` instruments to spend history requests on.
-
-    Never fetched first, then longest overdue. A plain ordering over a stored
-    timestamp, so the queue DRAINS: a budget that runs out delays an
-    instrument rather than dropping it, which is the difference between a
-    backlog and a ticker that is never reachable at all.
-    """
-    eligible = (row for row in instruments
-                if row.history_due_at is None or row.history_due_at <= now)
-    ordered = sorted(
-        eligible,
-        key=lambda row: (row.history_due_at is not None, row.history_due_at
-                         or now))
-    return ordered[:limit]

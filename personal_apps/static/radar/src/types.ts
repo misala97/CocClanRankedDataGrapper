@@ -56,8 +56,12 @@ export interface Clause {
  *  it changes one ticker's chart, not which rows are listed. */
 export type PanelSpan = '1D' | '1W' | '1M' | '6M' | '1Y' | '3Y'
 
-/** Price context is independent from Radar's stable social ticker identity. */
-export type Market = 'us' | 'de'
+/** Radar prices US listings only; the server names the market on every
+ *  payload, and it is always this one. */
+export type Market = 'us'
+
+/** Every displayed Radar market price is a native US dollar value. */
+export type QuoteCurrency = 'USD'
 
 /** The provider's freshness classification, never inferred from a missing
  * price on the client. */
@@ -71,13 +75,12 @@ export interface ChartSession {
   kind: Extract<Session, 'premarket' | 'afterhours' | 'closed'>
 }
 
-/** One selected venue quote. Germany-mode fallbacks retain their real US/USD
- * identity rather than appearing as converted German quotes. */
+/** One selected US venue quote. Null currency means no quote. */
 export interface MarketQuote {
   market: Market
   venue: string | null
   mic: string | null
-  currency: string | null
+  currency: QuoteCurrency | null
   price: number | null
   regular_move: number | null
   extended_move: number | null
@@ -90,7 +93,6 @@ export interface MarketQuote {
   /** Server-side decision; never re-derived from the displayed session. */
   score_eligible: boolean
   score_term: QuoteScoreTerm
-  is_fallback: boolean
   /** Market-data v2 provenance. Null on legacy rows; never controls
    *  client-side eligibility. */
   source: QuoteSource | null
@@ -101,8 +103,7 @@ export interface MarketQuote {
 
 export type PriceBasis = 'trade' | 'midpoint' | 'close'
 export type QuoteSource =
-  | 'legacy' | 'finnhub' | 'twelvedata'
-  | 'deutsche_boerse_delayed' | 'yahoo_chart'
+  | 'legacy' | 'finnhub' | 'twelvedata' | 'yahoo_chart'
 
 /** Price and chatter over the same calendar days, sharing `from`.
  *
@@ -129,14 +130,11 @@ export interface DetailChart {
   /** The day observation began. Before it the chatter lane is unobserved
    *  rather than silent, and the panel draws that boundary. */
   watched_from: string | null
-  /** The currency `closes` is expressed in, and the venue those closes came
-   *  from. Not necessarily the quote's: a Nasdaq listing quoted at Tradegate
-   *  draws its Nasdaq closes converted to EUR. */
-  currency: string | null
+  /** The currency `closes` is expressed in -- always US dollars -- and the
+   *  US venue those closes came from, which may be an exact-ISIN sibling of
+   *  the quote's own. Nothing is ever converted. */
+  currency: QuoteCurrency | null
   basis_venue: string | null
-  /** Set only when `closes` was converted out of another currency. The panel
-   *  states it beside the chart -- a converted line must never read native. */
-  converted_from: string | null
   /** 'intraday' when the line is quote snapshots, 'daily' when it is stored
    *  closes. 1D may be either. */
   priced_from: 'intraday' | 'daily'
@@ -433,7 +431,6 @@ export const SORT_KEYS = ['ticker', 'mentions', 'divergence', 'ratio',
 export type SortKey = typeof SORT_KEYS[number]
 
 export interface Selection {
-  market: Market
   sources: string[]
   /** Server-side filter, unlike the chart span -- changing it refetches. */
   minVenues: number
@@ -511,17 +508,6 @@ export interface OpsPayload {
     }
   }
   market_data: {
-    cycles: Record<string, {
-      status: string
-      scheduled_at: string
-      files_seen: number
-      files_accepted: number
-      selected: number
-      rejected: number
-      parse_ms: number
-      error_code: string | null
-    }>
-    mapping_generations: Record<string, number>
     quote_basis_24h: Record<string, number>
     grouped_closes: {
       latest_accepted_date: string | null
@@ -533,7 +519,6 @@ export interface OpsPayload {
     }
     /** Keyed `source:market`; the claim, or null where none was made. */
     post_close_claims: Record<string, string | null>
-    de_download_budget_24h: { spent: number; limit: number; remaining: number }
   }
   /** How old the board archive is. Null until capture is switched on and has
    *  stored its first quarter-hour. */

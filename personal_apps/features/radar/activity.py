@@ -233,7 +233,7 @@ def _day_bounds(day: dt.date) -> tuple[dt.datetime, dt.datetime]:
     """This Berlin calendar day, as naive UTC instants.
 
     Built from two Berlin midnights, never by adding 86,400 seconds: the day
-    Germany starts summer time is 23 hours long and the day it ends is 25, and
+    Berlin starts summer time is 23 hours long and the day it ends is 25, and
     a fixed-width day would put the boundary inside the wrong day and move
     runs between them.
 

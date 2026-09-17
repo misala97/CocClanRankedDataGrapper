@@ -1,7 +1,7 @@
-"""Keeping what two fixed board selections showed, quarter-hour by quarter-hour.
+"""Keeping what a fixed board selection showed, quarter-hour by quarter-hour.
 
 This is a bounded observation history and nothing larger. It records the rows
-and coverage marks that the US and DE boards presented -- every configured
+and coverage marks that the US board presented -- every configured
 source, all segments, a 24-hour window, one venue, default ordering -- at the
 moment the capture ran. It cannot answer what an unselected filter would have
 shown, cannot resurrect a post whose retention has expired, and is not evidence
@@ -14,9 +14,10 @@ A slot is written once. `slot_start` is unique in SQL, and only that conflict
 is read as "already recorded": every other database error stays an error,
 because swallowing an outage would turn it into a gap nobody notices.
 
-A pair is the unit. Both boards are built before anything is stored, so a
-capture that could build only one leaves no row at all -- half a pair would be
-an observation of a selection nobody made.
+A whole board is the unit. The board is built before anything is stored, so
+a capture that cannot build it leaves no row at all. Schema version 1 rows hold
+the two-market pair the archive recorded before Radar became US-only; they are
+never rewritten.
 
 `observed_at` is the instant the caller supplied, copied verbatim. It is
 deliberately not the slot boundary and deliberately not the payload's own
@@ -65,9 +66,11 @@ from .routes.api import build_payload_direct
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+# Version 2 archives the US board alone; version 1 rows hold a two-market
+# pair and stay as they were written.
+SCHEMA_VERSION = 2
 SLOT_MINUTES = 15
-MARKETS = ('us', 'de')
+MARKETS = ('us',)
 
 # Explicit rather than inherited from the API's default, so the archive keeps
 # comparing like with like if that default ever moves.
@@ -118,8 +121,8 @@ def _slot(now: dt.datetime) -> dt.datetime:
 
 
 def _queries() -> dict[str, dict[str, str]]:
-    """The fixed pair, spelled the way the API parses it. Stored with the
-    answer so no later reader has to assume which selection produced it.
+    """The fixed US selection, spelled the way the API parses it. Stored with
+    the answer so no later reader has to assume which selection produced it.
 
     `limit` is sent explicitly rather than left to the server's default. It
     decides how many rows the board holds, so an archive that did not record
@@ -146,7 +149,7 @@ def _selections() -> dict:
 
 
 def capture(now: dt.datetime, *, producer_revision: str | None = None) -> bool:
-    """Record the pair for `now`'s quarter-hour.
+    """Record the US board for `now`'s quarter-hour.
 
     True when a new observation was stored, False when that slot already had
     one. Anything else raises, for the scheduled job to contain: a capture that

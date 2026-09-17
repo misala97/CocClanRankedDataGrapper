@@ -4,8 +4,8 @@ Every web worker reads; this builds. That is the whole of the design, and
 everything below is a consequence of it.
 
 *What it keeps warm is derived, not typed.* The eight standing boards are
-whatever `parse_query` makes of the two markets, the two segment selections a
-bare URL can carry, and the two windows the surface offers. Writing `limit=50`
+whatever `parse_query` makes of the US market, the two segment selections a
+bare URL can carry, and the four windows the surface offers. Writing `limit=50`
 here would be a second place for the default limit to live, and the day the
 parser's default moved, the eight warm boards would quietly stop being the
 boards anybody actually asks for.
@@ -69,9 +69,12 @@ logger = logging.getLogger('radar.board')
 
 # The standing selections, as arguments to the parser rather than as a Query.
 # `''` is how a URL asks for All; DEFAULT_SEGMENT is what a bare URL asks for.
-WARM_MARKETS = ('us', 'de')
+WARM_MARKETS = ('us',)
 WARM_SEGMENTS = ('', DEFAULT_SEGMENT)
-WARM_WINDOWS = (12, 24)
+# Every window the API accepts and the surface offers (owner addendum
+# 2026-09-17): the four warm slots the retired market held now keep the
+# 1h and 4h US boards warm, so the warm total stays eight.
+WARM_WINDOWS = (1, 4, 12, 24)
 
 # zlib level 6 is its own default: the board payload compresses ~10x at 6 and
 # ~10.5x at 9 for three times the CPU, and this runs once per key per two
@@ -144,10 +147,9 @@ def warm_queries(now):
 
     Built by putting arguments through the same parser a request goes through,
     so limit, venues, sources, sort and direction are the parser's defaults and
-    not a copy of them. Two markets, All versus the default segments, twelve
-    hours versus twenty-four: sixteen selections would be the full cross with
-    the other two windows, and measurement said the short windows are asked for
-    rarely enough to be on-demand work.
+    not a copy of them. The US market, All versus the default segments, and
+    every window the surface offers: 1 x 2 x 4 = 8 selections, the same warm
+    total the producer carried when it split them across two markets.
     """
     parse_query = _api().parse_query
     return [parse_query({'market': market, 'segment': segment,

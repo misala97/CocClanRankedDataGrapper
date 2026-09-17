@@ -11,14 +11,14 @@
 // refuse -- a control that produces a 400 is a control that strands the
 // reader.
 //
-// Market, window and size stay on the bar. Breadth and the feed checkboxes
+// Window and size stay on the bar. Breadth and the feed checkboxes
 // moved behind a disclosure in the VC1 correction: four selects plus a
 // checkbox group wrapped onto two rows above the table and pushed the data
 // down the page. The disclosure carries a summary of what is selected, so
 // moving them does not hide a filter that is doing something.
 import { useState } from 'react'
 
-import type { BoardPayload, Market, SegmentFilter, Selection } from '../types'
+import type { BoardPayload, SegmentFilter, Selection } from '../types'
 import { sourceLabel } from '../format'
 
 /** api.py WINDOWS. A window outside this is rejected there with a 400. */
@@ -29,11 +29,6 @@ const VENUES = [
   { value: 1, label: 'Any venue' },
   { value: 2, label: 'More than one venue' },
 ] as const
-
-const MARKETS: { value: Market; label: string }[] = [
-  { value: 'us', label: 'US' },
-  { value: 'de', label: 'Germany' },
-]
 
 /** The groups the board offers, in the order the server counts them. `all` is
  *  the empty selection -- present-but-empty is how the API is asked for All,
@@ -55,7 +50,7 @@ export function Filters({ board, selection, onChange, compact = false }: {
   onChange: (next: Selection) => void
   /** The candidate rail is 320px wide and already carries a text filter and
    *  an ordering control. `compact` puts EVERY server-side filter behind one
-   *  labelled disclosure rather than three selects on a bar -- the controls
+   *  labelled disclosure rather than two selects on a bar -- the controls
    *  are identical, the summary line still says what they are doing, and
    *  nothing is dropped to save the width. */
   compact?: boolean
@@ -83,19 +78,6 @@ export function Filters({ board, selection, onChange, compact = false }: {
       <div className={compact ? 'rh-morepanel' : 'rh-filterbar'}
            id={compact ? MORE_ID : undefined}
            hidden={compact && !more}>
-      <label className="rh-field">
-        <span>Market</span>
-        <select
-          value={selection.market}
-          onChange={(event) => onChange({
-            ...selection, market: event.target.value as Market })}
-        >
-          {MARKETS.map((market) => (
-            <option key={market.value} value={market.value}>{market.label}</option>
-          ))}
-        </select>
-      </label>
-
       <label className="rh-field">
         <span>Window</span>
         <select
@@ -245,16 +227,14 @@ function summarise(board: BoardPayload, selection: Selection): string {
   return `${venue ? venue.label : `${selection.minVenues}+ venues`} · ${feeds}`
 }
 
-/** Everything the compact disclosure is hiding, in one line: the three
+/** Everything the compact disclosure is hiding, in one line: the two
  *  controls that used to sit on the bar as well as the two that were already
  *  behind it. A filter nobody can see has to announce itself. */
 function summariseAll(board: BoardPayload, selection: Selection): string {
-  const market = MARKETS.find((m) => m.value === selection.market)
   const hours = selection.window
   const segment = SEGMENTS.find(
     (s) => s.value === (selection.segments[0] ?? 'all'))
   return [
-    market ? market.label : selection.market.toUpperCase(),
     hours === 1 ? 'last hour' : `last ${hours} hours`,
     segment ? segment.label : 'All companies',
     summarise(board, selection),

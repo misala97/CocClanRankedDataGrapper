@@ -139,6 +139,23 @@ def test_the_fingerprint_reads_the_live_configuration():
     assert len(board_namespace.config_fingerprint()) == 16
 
 
+def test_the_payload_version_is_two():
+    """Version 2 dropped the German operations fields from the stored
+    payload; a version-1 blob must never be claimed again."""
+    assert board_namespace.PAYLOAD_VERSION == 2
+
+
+def test_the_price_fingerprint_names_only_us_configuration(monkeypatch):
+    """The price input is the US quote provider and the US close source;
+    no German mode is read, so a stale variable cannot move the namespace."""
+    monkeypatch.delenv('RADAR_US_PRICE_PROVIDER', raising=False)
+    monkeypatch.delenv('RADAR_US_CLOSE_SOURCE', raising=False)
+    before = board_namespace._fingerprint_inputs()['price_provider']
+    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'active')
+    assert board_namespace._fingerprint_inputs()['price_provider'] == before
+    assert before == ['finnhub', 'legacy']
+
+
 def test_the_process_namespace_is_memoised_and_resolves_here():
     """This worktree is a git checkout, so the git fallback resolves."""
     a = board_namespace.namespace(); b = board_namespace.namespace()

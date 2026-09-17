@@ -7,7 +7,7 @@ import { SortCols } from './ListPane'
 import type { Selection } from '../types'
 
 const selection: Selection = {
-  market: 'us', sources: ['bluesky'], segments: [], window: 4,
+  sources: ['bluesky'], segments: [], window: 4,
   minVenues: 1, sort: null, dir: 'desc',
 }
 

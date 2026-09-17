@@ -4,7 +4,8 @@ import type { PricePoint } from './priceChart'
 import { PREMARKET, alpacaPrice, bar, priceChartResponse } from './priceChartFixtures'
 import {
   PLOT_R, PRICE_BOTTOM, areaPathOf, berlinClock, berlinZone, chatterBars, frameOf, latestValid,
-  newYorkDate, pathOf, pointsInSlot, priceSegments, sessionDateLabel, slotIndexAt, toneFor, xOf,
+  newYorkDate, pathOf, pointsInSlot, priceSegments, sessionDateLabel, slotIndexAt, sourceWord,
+  toneFor, xOf,
 } from './selectedPriceGeometry'
 
 const data = priceChartResponse()
@@ -136,6 +137,13 @@ describe('counts and tone', () => {
 })
 
 describe('wording', () => {
+  it('names the US sources and passes an unknown source code through', () => {
+    expect(sourceWord('alpaca_sip')).toBe('Alpaca consolidated SIP (delayed)')
+    expect(sourceWord('yahoo_chart')).toBe('Yahoo chart')
+    // A source code with no entry is shown as its raw code, never dressed up.
+    expect(sourceWord('some_future_feed')).toBe('some_future_feed')
+  })
+
   it('labels session dates without shifting them and hover times in Berlin', () => {
     expect(sessionDateLabel('2026-09-15')).toBe('Tue 15 Sep')
     expect(berlinClock('2026-09-15T08:00:00Z')).toBe('10:00')

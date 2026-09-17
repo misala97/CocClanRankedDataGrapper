@@ -19,13 +19,16 @@
 import { useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
+import { usdText } from '../format'
 import { isReady } from '../types'
-import type { BoardPayload, PanelSpan, ReadyBoard, Row, Selection } from '../types'
+import type {
+  BoardPayload, PanelSpan, QuoteCurrency, ReadyBoard, Row, Selection,
+} from '../types'
 import { ChatterWorkspace } from './ChatterWorkspace'
 import { sourcePresentation, tonePresentation } from './chatterPresentation'
 import type { SourcePresentation, TonePresentation } from './chatterPresentation'
 import {
-  SORT_LABELS, knownCount, nextSort, priceCurrencies, readingWord, sortRows,
+  SORT_LABELS, knownCount, nextSort, readingWord, sortRows,
 } from './chatterSort'
 import type { ChatterSort, SortKey } from './chatterSort'
 import { Disclosure } from './Disclosure'
@@ -518,7 +521,6 @@ function SortNote({ rows, sort, onSort, onReset }: {
 }) {
   if (!sort) return null
   const missing = rows.length - knownCount(rows, sort.key)
-  const currencies = sort.key === 'price' ? priceCurrencies(rows) : []
   return (
     <p className="small muted rh-sortnote">
       <span>
@@ -540,12 +542,6 @@ function SortNote({ rows, sort, onSort, onReset }: {
         <span>
           {missing} with no {readingWord(sort.key)} reading{' '}
           {missing === 1 ? 'stays' : 'stay'} at the end.
-        </span>
-      ) : null}
-      {currencies.length > 1 ? (
-        <span>
-          Prices are grouped by currency ({currencies.join(', ')}) rather than
-          converted, so reversing moves the groups as well as the rows.
         </span>
       ) : null}
       {/* Focus is handed on deliberately: pressing this unmounts it, and
@@ -804,11 +800,8 @@ function moveClass(move: number | null): string {
   return move > 0 ? 'positive' : 'negative'
 }
 
-function formatPrice(value: number, currency: string | null): string {
-  const symbol = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : ''
-  const text = value.toLocaleString('en-US',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return symbol ? `${symbol}${text}` : `${text} ${currency ?? ''}`.trim()
+function formatPrice(value: number, currency: QuoteCurrency | null): string {
+  return usdText(value, currency)
 }
 
 /** What the numbers above mean, once, under the table.

@@ -13,7 +13,7 @@
 // blank page, which is the one outcome worse than a wrong page.
 import { queryFor } from '../api'
 import { SORT_KEYS } from '../types'
-import type { Market, PanelSpan, SegmentFilter, Selection, SortKey } from '../types'
+import type { PanelSpan, SegmentFilter, Selection, SortKey } from '../types'
 
 export type HubRoute =
   | { page: 'overview' | 'watching' | 'activity' | 'admin' }
@@ -145,7 +145,9 @@ export function readRootRoute(search: string, hash: string): HubRoute {
   }
   // Old board links can select a population without selecting a company.
   // Value validation remains in readSelection; unrelated query keys do not
-  // turn a bare hub visit into a board visit.
+  // turn a bare hub visit into a board visit. An old link's `market=us` is
+  // still a board link; the server refuses any other market before this
+  // page loads.
   const boardKeys = ['market', 'sources', 'window', 'segment', 'venues', 'sort', 'dir']
   return boardKeys.some((key) => params.has(key))
     ? { page: 'chatter' }
@@ -229,7 +231,6 @@ export function readSelection(search: string, fallback: Selection,
                            SORT_KEYS as unknown as (SortKey | null)[], null)
     : null
   return {
-    market: pick<Market>(params.get('market'), ['us', 'de'], fallback.market),
     sources: readSources(params, fallback, offered),
     segments: readSegments(params, fallback),
     minVenues: params.has('venues')

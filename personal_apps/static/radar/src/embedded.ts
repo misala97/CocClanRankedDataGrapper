@@ -33,12 +33,14 @@ export function parsePayload(text: string | null | undefined): BoardPayload | nu
     if (!Array.isArray(board.rows) && !(board.rows === null && waiting)) {
       return null
     }
-    // Older server-rendered documents omitted these fields. Keep them usable
-    // at the boundary rather than letting legacy embeds create an untyped
-    // third market inside the page.
+    // Radar is US-only. Older server-rendered documents omitted the market,
+    // which was always US for them; any other market is not a board this
+    // page can show, and is refused rather than relabelled.
+    const market: unknown = (parsed as { market?: unknown }).market
+    if (market !== undefined && market !== 'us') return null
     return {
       ...(parsed as BoardPayload),
-      market: board.market === 'de' ? 'de' : 'us',
+      market: 'us',
       display_timezone: 'Europe/Berlin',
     }
   } catch {
@@ -52,8 +54,8 @@ export function parsePayload(text: string | null | undefined): BoardPayload | nu
  *  page, and a spinner on arrival for data the server had in hand is a
  *  self-inflicted wait). Fetched when nothing is embedded -- the Vite dev
  *  harness at static/radar/dev.html has no Jinja to embed it -- for the
- *  page's own query, so `?market=de&window=12` opens the same board it would
- *  under Flask. Null on any failure; the entry renders words, not a throw.
+ *  page's own query, so `?window=12` opens the same board it would under
+ *  Flask. Null on any failure; the entry renders words, not a throw.
  *
  *  A redirected response is a failure: @login_required redirects rather than
  *  401s and fetch follows it transparently, so a signed-out harness would

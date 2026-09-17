@@ -121,6 +121,17 @@ describe('the last remaining feed', () => {
 })
 
 describe('the server-side filters', () => {
+  it('offers no market to choose, open or closed', () => {
+    show(['bluesky', 'reddit'])
+    expect(screen.queryByLabelText(/market/i)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/Germany|\bDE\b/)
+    const onChange = vi.fn()
+    render(<Filters board={board} selection={base} onChange={onChange}
+                    compact />)
+    expect(screen.getAllByText(/last \d+ hours?/i)[0]?.textContent)
+      .not.toMatch(/^US|Germany/)
+  })
+
   it('asks for All with an empty segment rather than omitting it', async () => {
     const onChange = vi.fn()
     render(<Filters board={board} selection={{ ...base, segments: ['large'] }}

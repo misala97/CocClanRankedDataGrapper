@@ -228,9 +228,9 @@ def producer():
 
 # --- the warm set -----------------------------------------------------------
 
-def test_the_warm_set_is_eight_selections_nobody_typed():
-    """Two markets x (All | the default segments) x two windows, and every
-    other field from the parser's own defaults.
+def test_the_warm_set_is_eight_us_selections_nobody_typed():
+    """The US market x (All | the default segments) x all four windows, and
+    every other field from the parser's own defaults.
 
     Typing `limit=50` here would be a second place for it to be wrong: the
     warm boards have to be the boards a bare URL asks for, and the only thing
@@ -247,12 +247,30 @@ def test_the_warm_set_is_eight_selections_nobody_typed():
         assert query.direction == 'desc'
         assert query.sources == list(SOURCES)
 
-    default_segments = [name for name in DEFAULT_SEGMENT.split(',') if name]
+    # The two segment selections as the parser itself normalizes them, not
+    # as this test would re-split them.
+    all_segments = api.parse_query({'segment': ''}, now=NOW).segments
+    discover = api.parse_query({'segment': DEFAULT_SEGMENT}, now=NOW).segments
+    assert all_segments == [] and discover
     segments = [query.segments for query in queries]
-    assert segments.count([]) == 4
-    assert segments.count(default_segments) == 4
-    assert sorted(query.market for query in queries) == ['de'] * 4 + ['us'] * 4
-    assert sorted(query.window for query in queries) == [12] * 4 + [24] * 4
+    assert segments.count(all_segments) == 4
+    assert segments.count(discover) == 4
+    assert {query.market for query in queries} == {'us'}
+    assert board_producer.WARM_MARKETS == ('us',)
+    assert board_producer.WARM_WINDOWS == (1, 4, 12, 24)
+    assert sorted(query.window for query in queries) == [1, 1, 4, 4, 12, 12,
+                                                         24, 24]
+    # Every (segment, window) pair exactly once.
+    assert sorted((tuple(q.segments), q.window) for q in queries) == sorted(
+        (tuple(segment), window)
+        for segment in (all_segments, discover)
+        for window in (1, 4, 12, 24))
+    # And each is the board a bare URL with that selection asks for.
+    for query in queries:
+        spelled = api.parse_query(
+            {'segment': ','.join(query.segments), 'window': str(query.window)},
+            now=NOW)
+        assert board_keys.canonical(query) == board_keys.canonical(spelled)
 
 
 def test_the_warm_set_matches_the_number_readiness_compares_against():
