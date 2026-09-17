@@ -1,0 +1,58 @@
+features\gym\analytics.py:20:It also contains NO German prose. Every function returns figures plus a
+features\gym\stats.py:453:    German decimal comma, a real multiplication sign, and a middot between
+static/radar/src\hardening.test.tsx:527:       German-formatted date on it. Berlin time stays. */
+features\radar\config.py:533:    # the German WSB stay out (their symbols collide with the US universe).
+static/radar/src\format.ts:141: * `de-DE` owns the local clock presentation. ICU uses the German spellings
+static/radar/src\format.ts:172: *  2026` was the one German-formatted figure on an English surface, beside
+static/radar/src\format.ts:390: *  this app, and one number switching to `1.284.392` under a German locale
+features\gym\schemas.py:14:formats them for display, because German date formatting is a presentation
+features\gym\schemas.py:749:    identifier, not a label: the component owns the German, exactly as it does
+static/radar/src\format.test.ts:115:    // German-formatted date on it, next to en-US counts that had been
+static/radar/src\format.test.ts:230:  // number in `1.284.392` under a German locale would be the only figure on
+static/radar/src\board\BoardPage.test.tsx:126:    expect(document.body.textContent).not.toMatch(/Germany|Xetra|Tradegate/)
+features\radar\data\name_shapes.txt:976:german
+features\radar\data\name_shapes.txt:977:germans
+features\radar\data\name_shapes.txt:978:germany
+static/radar/src\hub\Admin.test.tsx:199:    expect(document.body.textContent).not.toMatch(/German|XETR|XGAT/)
+static/radar/src\list\Spend.test.tsx:59:    /* A bare toLocaleString() follows the READER's locale. Under a German one
+static/radar/src\hub\Chatter.test.tsx:578:    expect(screen.queryByRole('option', { name: /germany/i })).not.toBeInTheDocument()
+features\gym\routes\reports.py:116:    # how a template starts doing arithmetic. German month names live here for
+static/radar/src\hub\Filters.test.tsx:127:    expect(document.body.textContent).not.toMatch(/Germany|\bDE\b/)
+static/radar/src\hub\Filters.test.tsx:132:      .not.toMatch(/^US|Germany/)
+static/radar/src\list\Spend.tsx:86:        // German one this came out as `1.284.392` -- the only figure on a
+features\gym\routes\helpers.py:31:# The UI is German regardless of the server's locale, so month names are stated
+features\gym\routes\helpers.py:33:# English on this machine and German on the VPS, or vice versa.
+features\gym\routes\helpers.py:68:    to text without JS and a German keyboard produces `2,5`. Blank,
+features\gym\routes\helpers.py:111:    "5, 13, 21, 29" or "5.5; 13.2"), not a German-locale comma decimal --
+features\gym\matching.py:31:    to understand German gym vocabulary -- and a wrong guess only costs a
+tests\test_radar_board_namespace.py:143:    """Version 2 dropped the German operations fields from the stored
+tests\test_radar_board_namespace.py:150:    no German mode is read, so a stale variable cannot move the namespace."""
+tests\test_gym_session_fields.py:77:        assert session.bodyweight_kg == 96.8, 'a German decimal comma is accepted'
+tests\test_gym_session_fields.py:137:        assert session.bodyweight_kg == 91.4, 'a German decimal comma is accepted'
+tests\test_radar_board_keys.py:127:    """v2 keys could name the German board; the version retires them all
+static/radar/src\hub\pending.test.tsx:506:    expect(bar()).not.toHaveTextContent(/Germany/)
+tests\test_radar_calendar.py:67:def test_the_registry_has_no_german_calendar(mic):
+tests\test_radar_calendar.py:68:    """Radar is US-only: no German clock is reachable, with or without a
+tests\test_gym_routes_smoke.py:648:    """A German keyboard produces '2,5', not '2.5' -- the docstring's claim,
+tests\test_gym_routes_smoke.py:1815:            'a logged set says its weight the German way too'
+tests\test_radar_daemon.py:210:    """The old combined US/German poll had no scheduler job; the US cycle
+tests\test_radar_daemon.py:455:def test_no_exchange_rate_or_german_history_job_remains():
+tests\test_radar_daemon.py:675:def test_no_mapping_or_german_collection_entry_point_remains():
+tests\test_radar_daemon.py:676:    for name in ('instruments', 'probe_german_data', '_german_quote_sample',
+tests\test_radar_daemon.py:684:@pytest.mark.parametrize('flag', ['--probe-german-data', '--refresh-mappings'])
+tests\test_radar_daemon.py:685:def test_the_german_cli_flags_are_gone(flag):
+tests\test_radar_daemon.py:748:def test_the_us_market_data_jobs_register_and_no_german_job_does(
+tests\test_radar_daemon.py:750:    """The exact job set, whatever a stale German variable still says:
+tests\test_radar_daemon.py:809:    """Two validated values; a stale German mode is neither read nor
+tests\test_radar_hub_page.py:95:    a German bookmark must not silently open the US board."""
+tests\test_gym_rest.py:293:    the latter only asserts that two German substrings are present, never an
+features\radar\PRODUCT.md:28:  pure option. Note this differs from the gym feature, which is German.
+tests\test_gym_ownership.py:493:# The pages render weights German-style (123,5); progress.json emits a raw JSON
+tests\test_gym_matching.py:38:    float "KH Bankdrücken" to the top without pretending to understand German
+tests\test_radar_market_data.py:42:RETIRED = ('select_price', 'Selected', 'CycleSummary', 'collect_german_cycle',
+tests\test_radar_market_data_report.py:64:    for name in ('GERMAN_GATES', '_german_gates', '_active_generation',
+tests\test_radar_market_data_report.py:75:        exit_code(report, 'german')
+tests\test_radar_market_data_report.py:76:    for argv in (['--from', 'x', '--to', 'y', '--gate', 'german'],
+tests\test_radar_market_data_report.py:80:    assert 'german' in capsys.readouterr().err
+tests\test_radar_migration.py:556:    """Old ticker-only keys cannot safely represent a German price row."""
+tests\test_scripts.py:280:    def test_sums_the_week_in_german(self):

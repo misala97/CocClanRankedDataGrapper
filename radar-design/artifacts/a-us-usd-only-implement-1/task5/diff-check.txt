@@ -1,0 +1,13 @@
+warning: in the working copy of 'HANDOFF.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/board/pending.test.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/Filters.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personal_apps/static/radar/src/hub/pending.test.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personal_apps/tests/test_radar_history_basis.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personal_apps/tests/test_radar_observations.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/ASSIGNMENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/HANDOFF.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/MARKET-DATA-ROADMAP.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/MASTERMIND-STATE.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/MD-SELECTED-PRICE-LEDGER.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/ROADMAP.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'radar-design/WORKFLOW.md', LF will be replaced by CRLF the next time Git touches it
