@@ -37,9 +37,13 @@ BUCKET_ROW_SENTINEL = BUCKET_ROW_LIMIT + 1
 DAILY_ROW_LIMIT = MAX_DAYS
 DAILY_ROW_SENTINEL = DAILY_ROW_LIMIT + 1
 
-#: US MICs the rule-based NYSE calendar is allowed to model (MD-01C Q4
-#: eligible MIC distribution). Anything else is `unknown`, never guessed.
-KNOWN_US_MICS = frozenset({'ARCX', 'XNMS', 'XNYS', 'XNCM', 'BATS', 'XNGS', 'XASE'})
+#: US MICs the rule-based NYSE calendar is allowed to model: exactly the eight
+#: listing MICs the Nasdaq directory contract can produce, each confirmed
+#: ACTIVE and US in the ISO 10383 register. Anything else -- including
+#: Nasdaq's operating MIC `XNAS`, which no listing resolves to -- is
+#: `unknown`, never guessed.
+KNOWN_US_MICS = frozenset({'ARCX', 'XNMS', 'XNYS', 'XNCM', 'BATS', 'XNGS',
+                           'XASE', 'IEXG'})
 
 SOURCE_STATUSES = frozenset({'ok', 'missing', 'truncated'})
 USABLE_STATUSES = frozenset({'ok', 'truncated'})

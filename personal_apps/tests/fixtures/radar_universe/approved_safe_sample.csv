@@ -1,0 +1,4 @@
+symbol,mic,source_kind,exchange_code,directory_sha256
+AAAA,XNMS,nasdaqlisted,G,bd5524e05ab8530c482882df7f9eb109b9a9f96cf73dd67872ee911251262ddd
+BBBB,XNGS,nasdaqlisted,Q,bd5524e05ab8530c482882df7f9eb109b9a9f96cf73dd67872ee911251262ddd
+CCCC,XNCM,nasdaqlisted,S,bd5524e05ab8530c482882df7f9eb109b9a9f96cf73dd67872ee911251262ddd

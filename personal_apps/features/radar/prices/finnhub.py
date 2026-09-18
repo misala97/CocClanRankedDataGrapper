@@ -73,6 +73,12 @@ class FinnhubProvider:
                 stamp = payload.get('t')
                 found[symbol] = Quote(
                     ticker=symbol,
+                    # /quote answers a price and nothing about the listing.
+                    # The mapped path replaces this with the instrument's MIC
+                    # in normalize_snapshot; the unmapped path has no
+                    # instrument, and record_quotes refuses the row rather
+                    # than letting a stand-in venue reach storage.
+                    mic=None,
                     price=price,
                     prev_close=_decimal(payload.get('pc')),
                     # Do not substitute ``pc``: it is yesterday's close, while

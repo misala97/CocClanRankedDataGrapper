@@ -106,7 +106,8 @@ class TwelveDataProvider:
             return None
         return Quote(
             ticker=symbol, provider_symbol=symbol,
-            mic=mic_code or 'XNAS', provider_mic=mic_code,
+            # No stand-in when the provider did not name a venue.
+            mic=mic_code, provider_mic=mic_code,
             price=price, previous_close=previous_close,
             regular_close=regular_close, quote_ts=quote_ts,
             currency=payload.get('currency') or '', provider_delay='delayed',

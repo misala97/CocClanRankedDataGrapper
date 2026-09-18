@@ -449,26 +449,32 @@ def _run_us_price_cycle(provider_name, now_aware):
     if not due:
         return {'skipped': 'nothing_due', 'stored': 0, 'error': False}
 
+    interval = dt.timedelta(minutes=US_QUOTE_MINUTES[provider_name])
+    instruments_rows = _market_instruments(due, 'us')
+    if not instruments_rows:
+        # D8: nothing due has a mapped US primary, so nothing due has a venue
+        # anyone verified. No provider is asked and no quote is stored -- a
+        # structured no-op, not an error. The attempts are still stamped, as
+        # an unmapped symbol in a mixed batch is: left due, an unmapped batch
+        # would head every following cycle and starve the mapped symbols.
+        for symbol in due:
+            scheduling.record_fixed_poll(poll_source, symbol, now, interval)
+        return {'skipped': 'no_mapped_instruments', 'stored': 0,
+                'error': False}
+
     if provider_name == 'finnhub':
         provider = finnhub_provider.FinnhubProvider(
             finnhub_provider.FinnhubHttp())
     else:
         provider = yahoo_provider.YahooProvider(yahoo_provider.YahooHttp())
 
-    instruments_rows = _market_instruments(due, 'us')
     try:
-        if instruments_rows:
-            stored = _poll_instruments(provider, instruments_rows, now_aware)
-        else:
-            found = provider.quotes(due) if hasattr(provider, 'quotes') \
-                else provider.quotes_for_instruments([])
-            stored = quotes.record_quotes(found, now)
+        stored = _poll_instruments(provider, instruments_rows, now_aware)
         error = False
     except Exception:
         logger.exception('radar US quote cycle failed')
         stored = 0
         error = True
-    interval = dt.timedelta(minutes=US_QUOTE_MINUTES[provider_name])
     for symbol in due:
         scheduling.record_fixed_poll(poll_source, symbol, now, interval)
     return {'skipped': None, 'stored': stored, 'error': error,

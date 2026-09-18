@@ -40,6 +40,14 @@ def record_quotes(quotes, now, *, is_shadow=False, commit=True):
             raise ValueError(
                 f'only US USD quotes are stored, not '
                 f'{quote.market}/{quote.currency}')
+        # A snapshot without a venue belongs to no instrument. Storing one
+        # under a stand-in MIC produces a row every reader filters past once
+        # the real mapping arrives, so an unmapped identity is refused here
+        # rather than recorded under a venue nobody verified.
+        if quote.mic is None:
+            raise ValueError(
+                f'{quote.ticker} has no MIC; an unmapped identity is not '
+                f'quoted')
     written = 0
     for quote in quotes.values():
         db.session.add(RadarQuote(
@@ -82,9 +90,15 @@ def _require_us(market):
 def _stored_quote(row, instrument):
     """Adapt one persisted US snapshot to the immutable presentation contract.
 
-    The rows reaching here were selected as US or legacy-US (NULL market and
-    MIC) rows, so the market is US and missing identity reads as US.
+    The instrument is required and supplies the whole identity. It used to be
+    optional, and a missing one produced `XNAS`: a MIC no listing resolves to,
+    on a row whose real venue nobody had verified. Legacy `(NULL, NULL)` rows
+    stay readable -- they are selected for a mapped instrument and read under
+    that instrument's actual MIC.
     """
+    if instrument is None:
+        raise ValueError(f'{row.ticker} has no mapped US instrument; a stored '
+                         f'row carries no venue identity of its own')
     # The transitional snapshot table predates a provider-quality column.  A
     # print from an earlier UTC date is therefore an EOD retention, not a
     # delayed intraday quote merely because the poll that kept it ran recently.
@@ -93,12 +107,10 @@ def _stored_quote(row, instrument):
         row.quote_ts.date() < row.fetched_at.date() else 'live')
     return Quote(
         ticker=row.ticker, market=MARKET,
-        venue=(instrument.venue if instrument else 'US'),
-        mic=(instrument.mic if instrument else (row.mic or 'XNAS')),
-        provider_symbol=(instrument.provider_symbol if instrument else
-                         (row.provider_symbol or row.ticker)),
-        currency=(instrument.currency if instrument else
-                  (row.currency or CURRENCY)),
+        venue=instrument.venue,
+        mic=instrument.mic,
+        provider_symbol=instrument.provider_symbol,
+        currency=instrument.currency,
         price=row.price, previous_close=row.prev_close,
         regular_close=getattr(row, 'regular_close', None), quote_ts=row.quote_ts,
         volume=row.volume, provider_delay=provider_delay,
@@ -114,10 +126,12 @@ def _stored_quote(row, instrument):
 def quote_views_for(tickers, requested_market, now):
     """Return one selected, market-honest US ``QuoteView`` per ticker.
 
-    Only the US primary instrument (or the legacy NULL US identity) is read,
-    so frozen-tape eligibility and calendar session remain facts of the
-    selected row. Archived non-US instruments and quotes are never loaded;
-    a ticker without US data is unavailable.
+    Only a verified, mapped US primary instrument is read, so frozen-tape
+    eligibility and calendar session remain facts of the selected row.
+    Archived non-US instruments and quotes are never loaded, and a ticker
+    with no mapped US primary is unavailable even when rows are stored under
+    its symbol: without an instrument nothing verifies which venue, currency
+    or provider symbol those rows belong to.
     """
     _require_us(requested_market)
     tickers = list(tickers)
@@ -133,18 +147,21 @@ def quote_views_for(tickers, requested_market, now):
                              RadarInstrument.mic).all())
     primary = {row.ticker: row for row in instruments}
 
-    candidates = [primary.get(ticker) or (ticker, MARKET, None)
-                  for ticker in tickers]
+    candidates = [primary[ticker] for ticker in tickers if ticker in primary]
     statuses = statuses_for(
         candidates, now,
-        session=session_state(MARKET, now.replace(tzinfo=dt.timezone.utc)))
+        session=session_state(MARKET, now.replace(tzinfo=dt.timezone.utc))
+    ) if candidates else {}
 
     views = {}
     for ticker in tickers:
-        status, row = statuses.get((ticker, MARKET), ('unknown', None))
+        instrument = primary.get(ticker)
         snapshots = {}
-        if row is not None:
-            snapshots[MARKET] = _stored_quote(row, primary.get(ticker))
+        status = 'unknown'
+        if instrument is not None:
+            status, row = statuses.get((ticker, MARKET), ('unknown', None))
+            if row is not None:
+                snapshots[MARKET] = _stored_quote(row, instrument)
         views[ticker] = select_quote(ticker, MARKET, snapshots, now,
                                      tape_status=status)
     return views

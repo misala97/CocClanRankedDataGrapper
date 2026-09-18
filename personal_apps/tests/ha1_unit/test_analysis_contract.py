@@ -469,6 +469,40 @@ def _partition(src):
                                 'invalid_slots', 'absent_slots'))
 
 
+# --- modeled US calendars ------------------------------------------------------
+
+class TestKnownUsMics:
+    """The calendar's MIC set must be the confirmed listing vocabulary.
+
+    All eight codes in the Nasdaq directory contract resolve to an ACTIVE US
+    listing MIC (ISO 10383, September 2026 publication). `IEXG` was missing
+    here, so the first `V` listing Radar ever mapped would silently have lost
+    its trading-day hints -- fail-soft, but wrong, and there is no reason for
+    IEX to model differently from the other seven.
+    """
+
+    def test_all_eight_confirmed_listing_mics_are_known(self):
+        from features.radar.universe_directory import KNOWN_LISTING_MICS
+
+        assert ac.KNOWN_US_MICS == frozenset(
+            {'XNGS', 'XNMS', 'XNCM', 'XNYS', 'XASE', 'ARCX', 'BATS', 'IEXG'})
+        assert KNOWN_LISTING_MICS <= ac.KNOWN_US_MICS
+
+    def test_iexg_gets_the_modeled_us_calendar(self):
+        saturday, monday = dt.date(2026, 9, 12), dt.date(2026, 9, 14)
+        hints = ac.calendar_for('IEXG')
+        assert hints(saturday) == 'modeled_closed'
+        assert hints(monday) == 'modeled_open'
+        assert [hints(day) for day in (saturday, monday)] == [
+            ac.calendar_for('XNGS')(saturday), ac.calendar_for('XNGS')(monday)]
+
+    @pytest.mark.parametrize('mic', ['XXXX', 'XNAS', 'XETR', '', None])
+    def test_everything_outside_the_confirmed_set_stays_unknown(self, mic):
+        """`XNAS` is Nasdaq's operating MIC and this codebase's former
+        fallback sentinel; no listing resolves to it, so it is not modeled."""
+        assert ac.calendar_for(mic)(dt.date(2026, 9, 14)) == 'unknown'
+
+
 # --- payload assembly ---------------------------------------------------------
 
 class TestPayloadShape:

@@ -93,8 +93,39 @@ def test_a_finnhub_quote_declares_live_trade_provenance():
 def test_a_massive_quote_cannot_exist():
     """[A1] massive_grouped is a daily-close source, never an intraday quote."""
     with pytest.raises(ValueError, match='quote source'):
-        Quote(ticker='AAA', price=decimal.Decimal('1'),
+        Quote(ticker='AAA', price=decimal.Decimal('1'), mic='XNGS',
               source='massive_grouped', price_basis='close')
+
+
+def test_a_quote_cannot_be_built_without_an_explicit_mic():
+    """D8: the constructor used to default to `mic='XNAS'`.
+
+    `XNAS` is Nasdaq's *operating* MIC and no listing resolves to it, so a
+    defaulted row was indistinguishable from a legitimately-Nasdaq one while
+    belonging to no instrument at all. Whoever builds a quote now has to say
+    what venue it came from, even if the honest answer is that they do not
+    know.
+    """
+    with pytest.raises(TypeError):
+        Quote(ticker='AAA', price=decimal.Decimal('1'))
+
+    assert Quote(ticker='AAA', price=decimal.Decimal('1'), mic=None).mic is None
+    assert Quote(ticker='AAA', price=decimal.Decimal('1'),
+                 mic='XNGS').mic == 'XNGS'
+
+
+def test_a_provider_that_cannot_name_a_venue_says_so_instead_of_guessing():
+    """Finnhub's `/quote` answers a price and nothing about the listing, so
+    its raw snapshot carries no MIC. `normalize_snapshot` supplies the
+    instrument's MIC on the mapped path; the unmapped path has no instrument
+    and `record_quotes` refuses the row rather than inventing one."""
+    http = FakeHttp({'/quote': {'c': 123.45, 'pc': 120.0, 't': 1786000000}})
+    quote = finnhub.FinnhubProvider(http).quotes(['BRKB'])['BRKB']
+    assert quote.mic is None
+
+    bound = normalize_snapshot(Instrument(), quote)
+    assert bound.mic == Instrument.mic
+    assert bound.venue == Instrument.venue
 
 
 def test_prices_arrive_as_decimal_not_float():
@@ -286,6 +317,7 @@ def test_the_retired_feed_is_not_an_active_source():
     assert 'deutsche_boerse_delayed' not in QUOTE_SOURCES
     assert 'deutsche_boerse_delayed' not in CLOSE_SOURCES
     with pytest.raises(ValueError, match='unknown quote source'):
-        Quote('AAPL', decimal.Decimal('1'), source='deutsche_boerse_delayed')
+        Quote('AAPL', decimal.Decimal('1'), mic='XNGS',
+              source='deutsche_boerse_delayed')
     with pytest.raises(ValueError, match='unknown close source'):
         validate_close_source('deutsche_boerse_delayed', 'close', 'split')

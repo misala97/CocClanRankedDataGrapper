@@ -109,17 +109,22 @@ def test_persisted_eod_quality_is_not_reconstructed_as_live():
     assert (restored.market, restored.currency) == ('us', 'USD')
 
 
-def test_a_stored_row_without_an_instrument_is_read_as_us():
+def test_a_stored_row_without_an_instrument_has_no_identity_to_read():
+    """This used to read as `us`/`US`/`XNAS`/`USD`.
+
+    `XNAS` is Nasdaq's operating MIC and no listing resolves to it, so the
+    fallback claimed a venue nobody had verified, on a row that belonged to no
+    instrument. The identity now comes from a mapped US primary or the read
+    does not happen (D8).
+    """
     row = SimpleNamespace(
         ticker='QQA', mic=None, currency=None, provider_symbol=None,
         fetched_at=NOW, quote_ts=NOW, price=decimal.Decimal('10'),
         prev_close=decimal.Decimal('9'), regular_close=None, volume=None,
         provider_delay=None)
 
-    restored = quotes_mod._stored_quote(row, None)
-
-    assert (restored.market, restored.venue, restored.mic,
-            restored.currency) == ('us', 'US', 'XNAS', 'USD')
+    with pytest.raises(ValueError, match='instrument'):
+        quotes_mod._stored_quote(row, None)
 
 
 @pytest.mark.parametrize('provider_kind, payload', [
@@ -138,7 +143,7 @@ def test_provider_regular_close_survives_storage_into_afterhours_view(
     Removing the provider's ``regular_close`` mapping makes this fail with an
     unavailable extended move even though the snapshot itself remains usable.
     """
-    from features.radar.prices import finnhub, twelvedata
+    from features.radar.prices import finnhub, normalize_snapshot, twelvedata
 
     class QuoteHttp:
         def get(self, path, params):
@@ -147,7 +152,13 @@ def test_provider_regular_close_survives_storage_into_afterhours_view(
 
     provider = (finnhub.FinnhubProvider(QuoteHttp()) if provider_kind == 'finnhub'
                 else twelvedata.TwelveDataProvider(QuoteHttp()))
-    quote = provider.quotes(['QQA'])['QQA']
+    # A raw provider snapshot carries no venue. The poll binds it to the
+    # mapped instrument before storage, exactly as the US quote cycle does;
+    # an unbound one has no MIC and `record_quotes` refuses it (D8).
+    quote = normalize_snapshot(
+        SimpleNamespace(ticker='QQA', market='us', venue='NASDAQ', mic='XNAS',
+                        provider_symbol='QQA', currency='USD'),
+        provider.quotes(['QQA'])['QQA'])
     afterhours = dt.datetime(2026, 8, 28, 21, 0)
     engine = sa.create_engine('sqlite://')
     sa.event.listen(
@@ -565,3 +576,124 @@ def test_legacy_null_basis_rows_still_count_as_trades(ctx):
     db.session.commit()
     move = quotes.move_since('QQLEG', 1, NOW, market='us', mic='XNAS')
     assert move == pytest.approx(decimal.Decimal('0.05'))
+
+
+# --- D8: an unmapped identity gets no fabricated venue ------------------------
+#
+# These run on an isolated in-memory SQLite database, never on the bound one:
+# the reader's module-level `db` and `RadarInstrument.query` are pointed at a
+# private session, the same seam `test_archived_non_us_rows_never_reach_a_us_view`
+# uses.
+
+@pytest.fixture()
+def isolated(monkeypatch):
+    engine = sa.create_engine('sqlite://')
+    sa.event.listen(
+        engine, 'connect',
+        lambda connection, _: connection.create_collation(
+            'utf8mb4_bin', lambda left, right: (left > right) - (left < right)))
+    RadarInstrument.__table__.create(engine)
+    RadarQuote.__table__.create(engine)
+    session = sa.orm.Session(engine)
+    try:
+        with flask_app.app_context():
+            monkeypatch.setattr(quotes_mod, 'db',
+                                SimpleNamespace(session=session))
+            monkeypatch.setattr(RadarInstrument, 'query',
+                                session.query(RadarInstrument))
+            yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _stored_row(session, ticker, market, mic, row_id=1):
+    session.add(RadarQuote(
+        id=row_id, ticker=ticker, market=market, mic=mic, currency='USD',
+        provider_symbol=ticker, fetched_at=NOW - dt.timedelta(minutes=5),
+        quote_ts=NOW - dt.timedelta(minutes=5),
+        price=decimal.Decimal('194.20'), prev_close=decimal.Decimal('193.50'),
+        source='finnhub', price_basis='trade', is_shadow=False))
+    session.commit()
+
+
+def _mapped(session, ticker, mic, venue, row_id=1):
+    session.add(RadarInstrument(
+        id=row_id, ticker=ticker, market='us', venue=venue, mic=mic,
+        provider_symbol=ticker, currency='USD', is_primary=True,
+        mapping_status='mapped', mapping_source='test',
+        mapped_at=dt.datetime(2026, 8, 20)))
+    session.commit()
+
+
+@pytest.mark.parametrize('market, mic', [('us', 'XNAS'), (None, None)],
+                         ids=['stored_us_rows', 'legacy_null_rows'])
+def test_a_ticker_with_no_mapped_primary_stays_unavailable(isolated, market,
+                                                           mic):
+    """Stored rows are not an identity. Without a mapped US primary there is
+    no verified venue, currency or provider symbol for them, and the reader
+    used to invent `XNAS` for exactly this case."""
+    _stored_row(isolated, 'QQUN', market, mic)
+
+    view = quotes_mod.quote_views_for(['QQUN'], 'us', NOW)['QQUN']
+
+    assert view.quality == 'unavailable'
+    assert view.price is None
+    assert view.mic is None
+    assert isolated.query(RadarQuote).filter_by(ticker='QQUN').count() == 1
+
+
+def test_a_mapped_ticker_still_reads_its_legacy_null_snapshot(isolated):
+    """The expand/write overlap left `(NULL, NULL)` rows behind. A mapped
+    instrument supplies the explicit identity, so they stay readable -- under
+    the instrument's real segment MIC, not a stand-in."""
+    _mapped(isolated, 'QQLG', 'XNMS', 'Nasdaq Global Market')
+    _stored_row(isolated, 'QQLG', None, None)
+
+    view = quotes_mod.quote_views_for(['QQLG'], 'us', NOW)['QQLG']
+
+    assert view.price == decimal.Decimal('194.20')
+    assert view.mic == 'XNMS'
+    assert view.venue == 'Nasdaq Global Market'
+    assert view.currency == 'USD'
+
+
+def test_an_explicit_unknown_mic_is_read_as_itself(isolated):
+    """A mapped instrument's MIC is used as stored. Nothing normalizes an
+    unexpected value into a known one."""
+    _mapped(isolated, 'QQWH', 'XXXX', 'Unverified')
+    _stored_row(isolated, 'QQWH', 'us', 'XXXX')
+
+    view = quotes_mod.quote_views_for(['QQWH'], 'us', NOW)['QQWH']
+    assert view.mic == 'XXXX'
+    assert view.price == decimal.Decimal('194.20')
+
+
+def test_mapped_and_unmapped_tickers_in_one_batch(isolated):
+    """The mapped ticker keeps its view; the unmapped one is unavailable even
+    though a row is stored under its symbol."""
+    _mapped(isolated, 'QQMA', 'XNCM', 'Nasdaq Capital Market')
+    _stored_row(isolated, 'QQMA', 'us', 'XNCM', row_id=1)
+    _stored_row(isolated, 'QQUN', 'us', 'XNAS', row_id=2)
+
+    views = quotes_mod.quote_views_for(['QQMA', 'QQUN'], 'us', NOW)
+    assert (views['QQMA'].mic, views['QQMA'].price) == (
+        'XNCM', decimal.Decimal('194.20'))
+    assert (views['QQUN'].quality, views['QQUN'].mic) == ('unavailable', None)
+
+
+def test_record_quotes_refuses_a_snapshot_with_no_venue(isolated):
+    """The write side of D8. A provider that cannot name a venue must not
+    reach storage: the row would belong to no instrument and would be
+    invisible to every reader once a real mapping arrived."""
+    from features.radar.prices import Quote
+
+    quote = Quote(ticker='QQNM', market='us', venue='US', mic=None,
+                  provider_symbol='QQNM', currency='USD',
+                  price=decimal.Decimal('194.20'), quote_ts=NOW,
+                  provider_delay='live', source='finnhub')
+
+    with pytest.raises(ValueError, match='MIC'):
+        quotes_mod.record_quotes({'QQNM': quote}, NOW)
+    isolated.rollback()
+    assert isolated.query(RadarQuote).count() == 0
