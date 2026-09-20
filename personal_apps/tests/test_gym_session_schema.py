@@ -29,6 +29,7 @@ def _minimal():
         'visible_exercises': [{
             'id': 10, 'exercise_id': 5, 'name': 'Bankdrücken',
             'muscle_group': 'Brust', 'position': 1, 'skipped': False,
+            'mirrored': False,
             'is_unilateral': False, 'rest_seconds': 90, 'increment': 2.5,
             'notes': None, 'pain': False,
             'sets': [{
@@ -40,6 +41,8 @@ def _minimal():
         'tick_states': ['now'], 'sets_done': 0, 'sets_total': 1, 'sets_open': 1,
         'session_volume': 0.0, 'resting': False, 'rest_total_seconds': 0,
         'suggestions': {'10': {'weight': 60.0, 'reps': 8}},
+        'seed_sources': {'10': {'date': '2026-08-01T09:00:00', 'position': 1,
+                                'basis': 'slot'}},
         'stagnation_counts': {}, 'stall_next_weight': {}, 'record_set_ids': [],
         'ready_for_more': None, 'min_full_reps': 5,
         'default_plan_weight': 20.0, 'default_plan_reps': 8,

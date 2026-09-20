@@ -398,20 +398,77 @@ def test_reorder_carries_across_translated(linked_pair):
 
 
 def test_skipping_carries_across(linked_pair):
+    """As the one event it is (propagate_structure's skip_changed), which is
+    how the skip route calls in. Reconciliation alone no longer mirrors the
+    flag -- see test_reconciliation_alone_does_not_reimpose_the_leaders_skip."""
     from extensions import db
     from features.gym import sharing
-    from models import SessionExercise, SharedSession, WorkoutSession
+    from models import SessionExercise, WorkoutSession
 
     with flask_app.app_context():
         row = db.session.get(SessionExercise, linked_pair['leader_row'])
         row.skipped = True
         db.session.commit()
-        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
-        db.session.commit()
+        sharing.propagate_structure(row.session, skip_changed=row)
 
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
         assert len(list(follower_session.exercises)) == 1
         assert all(se.skipped for se in follower_session.exercises)
+
+
+def test_reconciliation_alone_does_not_reimpose_the_leaders_skip(linked_pair):
+    """Owner decision 2026-09-20: the follower's own choices stick. Mirroring
+    `skipped` on every reconciliation un-skipped what the follower had skipped
+    -- and re-skipped what they had chosen to do -- whenever the leader changed
+    anything at all."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_session.exercises[0].skipped = True
+        db.session.commit()
+
+        sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
+        db.session.commit()
+
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert follower_session.exercises[0].skipped is True
+
+
+def test_remove_mirrors_of_keeps_a_row_the_follower_has_logged_on(linked_pair):
+    """Owner decision 2026-09-20. The leader dropping an exercise says nothing
+    about sets a partner already lifted: the row stays, stops being shared,
+    and the rest its last set started keeps running."""
+    from extensions import db
+    from features.gym import sharing
+    from models import PendingPush, SessionExercise, SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_row = follower_session.exercises[0]
+        follower_row.sets.append(SessionSet(position=1, weight=40.0, reps=8, completed=True))
+        db.session.commit()
+        follower_row_id, set_id = follower_row.id, follower_row.sets[0].id
+        follower_session.resting_set_id = set_id
+        db.session.add(PendingPush(session_id=follower_session.id,
+                                   fire_at=dt.datetime.utcnow() + dt.timedelta(seconds=90),
+                                   sent=False))
+        db.session.commit()
+
+        leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        sharing.remove_mirrors_of(leader_row)
+        db.session.delete(leader_row)
+        db.session.commit()
+
+        kept = db.session.get(SessionExercise, follower_row_id)
+        assert kept is not None and kept.mirrors_id is None
+        assert db.session.get(SessionSet, set_id) is not None
+        refreshed = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        assert refreshed.resting_set_id == set_id
+        assert PendingPush.query.filter_by(
+            session_id=linked_pair['follower_session'], sent=False).count() == 1
 
 
 def test_the_followers_sets_are_never_touched(linked_pair):
@@ -758,7 +815,12 @@ def test_remove_mirrors_of_cancels_the_followers_pending_push(linked_pair):
     with flask_app.app_context():
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
         follower_row = follower_session.exercises[0]
-        follower_row.sets.append(SessionSet(position=1, weight=40.0, reps=8, completed=True))
+        # Pending, not completed: since 2026-09-20 a row the follower has
+        # LOGGED on is kept when the leader removes the exercise (see
+        # test_remove_mirrors_of_keeps_a_row_the_follower_has_logged_on), so
+        # only an untouched row is still deleted -- and that is the path this
+        # contract is about.
+        follower_row.sets.append(SessionSet(position=1, weight=40.0, reps=8, completed=False))
         db.session.commit()
         resting_set_id = follower_row.sets[0].id
         follower_session.resting_set_id = resting_set_id
@@ -804,7 +866,9 @@ def test_reconciles_own_removal_pass_also_clears_the_resting_set_id(linked_pair)
     with flask_app.app_context():
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
         follower_row = follower_session.exercises[0]
-        follower_row.sets.append(SessionSet(position=1, weight=45.0, reps=8, completed=True))
+        # Pending, not completed -- a logged row is kept now, not deleted; see
+        # the note in test_remove_mirrors_of_cancels_the_followers_pending_push.
+        follower_row.sets.append(SessionSet(position=1, weight=45.0, reps=8, completed=False))
         db.session.commit()
         resting_set_id = follower_row.sets[0].id
         follower_session.resting_set_id = resting_set_id
