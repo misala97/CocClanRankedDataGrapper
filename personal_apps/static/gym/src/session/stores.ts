@@ -165,6 +165,29 @@ export const usePush = create<PushState>((set) => ({
 // announcements in a row are two events. Hence the nonce.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// "Your partner changed the plan" -- for eyes, not only for a screen reader.
+//
+// The announcer below is sr-only text. For everyone else the follower's queue
+// used to rearrange itself in silence, which is the one change on this screen
+// the lifter did not cause. The nonce is what lets a second change restart the
+// notice's clock while the first is still showing.
+// ---------------------------------------------------------------------------
+
+interface PartnerNoticeState {
+  visible: boolean
+  nonce: number
+  show(): void
+  dismiss(): void
+}
+
+export const usePartnerNotice = create<PartnerNoticeState>((set) => ({
+  visible: false,
+  nonce: 0,
+  show: () => set((state) => ({ visible: true, nonce: state.nonce + 1 })),
+  dismiss: () => set({ visible: false }),
+}))
+
 interface AnnouncerState {
   message: string
   nonce: number

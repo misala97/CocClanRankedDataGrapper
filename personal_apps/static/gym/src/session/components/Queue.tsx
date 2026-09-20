@@ -292,7 +292,7 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
     <div className={`queue${reordering ? ' is-reordering' : ''}`} id="queue">
       <h2 className="sr-only">Übungen</h2>
 
-      {ordered.map((se) => {
+      {ordered.map((se, index) => {
         const done = se.sets.filter((s) => s.completed).length
         const total = se.sets.length
         const isLive = se.id === liveId
@@ -334,13 +334,17 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
               }}>⠿</button>
 
             {/* Never colour alone: a tick for finished, a filled dot for the
-                one you are on, the slot number for one still ahead. */}
+                one you are on, the slot number for one still ahead. The number
+                is the row's place in THIS list, not the stored position: that
+                can have holes (a workout from before removals closed them) or
+                twins, and "1, 3, 4" is not a sequence anyone can read. It also
+                keeps counting correctly while a row is mid-drag. */}
             <span className="row__lead queue__lead">
               {isLive
                 ? <span className="queue__now" aria-hidden="true" />
                 : isDone
                   ? <span className="queue__mark"><Icon name="check" /></span>
-                  : se.position}
+                  : index + 1}
             </span>
 
             <button type="button" className="row__main"

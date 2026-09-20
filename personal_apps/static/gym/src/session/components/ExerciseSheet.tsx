@@ -156,9 +156,12 @@ export function ExerciseSheet({
               {exercise.skipped ? 'Nicht mehr überspringen' : 'Übung überspringen'}
             </span>
             <span className="sheet-row__meta">
+              {/* What the server does, which the old "Sätze bleiben" was not:
+                  a skip drops every set still open, keeps the ones already
+                  logged, and coming back plans the exercise afresh. */}
               {exercise.skipped
-                ? 'Zählt wieder ganz normal.'
-                : 'Sätze bleiben, zählen aber nicht.'}
+                ? 'Zählt wieder — offene Sätze werden neu geplant.'
+                : 'Offene Sätze entfallen, erledigte bleiben.'}
             </span>
           </span>
         </button>
@@ -213,18 +216,28 @@ export function ExerciseSheet({
           )}
         </details>
 
-        <button type="button" className="sheet-row sheet-row--danger"
-          onClick={() => offerUndo({
-            label: `${exercise.name} wird entfernt.`,
-            undo: () => {},
-            commit: () => onRemove(),
-          })}>
-          <span className="sheet-row__lead"><Icon name="trash" /></span>
-          <span className="sheet-row__main">
-            <span className="sheet-row__name">Übung entfernen</span>
-            <span className="sheet-row__meta">Aus diesem Workout, samt Sätzen.</span>
-          </span>
-        </button>
+        {/* A shared exercise is the leader's structure: a follower's remove
+            was brought back by the leader's next change, so it is not offered
+            (and the route refuses it). Skipping above is theirs, and sticks.
+            An exercise they added themselves keeps its remove. */}
+        {exercise.mirrored ? (
+          <p className="sheet__note">
+            Gehört zum gemeinsamen Plan — überspringen oder ersetzen geht, entfernen nicht.
+          </p>
+        ) : (
+          <button type="button" className="sheet-row sheet-row--danger"
+            onClick={() => offerUndo({
+              label: `${exercise.name} wird entfernt.`,
+              undo: () => {},
+              commit: () => onRemove(),
+            })}>
+            <span className="sheet-row__lead"><Icon name="trash" /></span>
+            <span className="sheet-row__main">
+              <span className="sheet-row__name">Übung entfernen</span>
+              <span className="sheet-row__meta">Aus diesem Workout, samt Sätzen.</span>
+            </span>
+          </button>
+        )}
       </div>
     </Sheet>
   )

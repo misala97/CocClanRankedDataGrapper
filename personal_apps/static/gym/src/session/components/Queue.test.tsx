@@ -78,6 +78,18 @@ describe('Queue', () => {
     expect(within(aheadRow).getByText(String(ahead.position))).toBeInTheDocument()
   })
 
+  it('numbers the rows by where they stand, not by the stored slot', () => {
+    // The stored position can have holes (a workout from before removals
+    // closed them) or twins (a substitute shares its hidden original's). What
+    // the lifter reads here is "third thing I will do", and that is the row's
+    // place in this list.
+    const gappy = exercises.map((se, i) => ({ ...se, skipped: false, position: (i + 1) * 3 }))
+    const { container } = render(<Queue exercises={gappy} liveId={liveId} onReorder={noop} />)
+    const second = container.querySelector(`[data-se-id="${gappy[1]!.id}"]`) as HTMLElement
+    expect(within(second).getByText('2')).toBeInTheDocument()
+    expect(within(second).queryByText('6')).toBeNull()
+  })
+
   it('summarises each row by what it is', () => {
     const { container } = render(<Queue exercises={exercises} liveId={liveId} onReorder={noop} />)
     const skipped = exercises.find((se) => se.skipped)!

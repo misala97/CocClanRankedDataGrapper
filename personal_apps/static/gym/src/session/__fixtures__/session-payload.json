@@ -185,6 +185,18 @@
   "record_set_ids": [],
   "rest_total_seconds": 0,
   "resting": false,
+  "seed_sources": {
+    "10": {
+      "basis": "slot",
+      "date": "2026-08-25T09:47:25",
+      "position": 1
+    },
+    "11": {
+      "basis": "earlier_slot",
+      "date": "2026-08-30T09:57:42",
+      "position": 1
+    }
+  },
   "session": {
     "bodyweight_kg": null,
     "deload_pct": null,
@@ -229,6 +241,7 @@
       "id": 10,
       "increment": 2.5,
       "is_unilateral": true,
+      "mirrored": false,
       "muscle_group": "Rücken",
       "name": "Lat Pulldown (Single Arm, Hauptbahnhof)",
       "notes": null,
@@ -265,6 +278,7 @@
       "id": 11,
       "increment": 2.5,
       "is_unilateral": false,
+      "mirrored": false,
       "muscle_group": "Rücken",
       "name": "Seated Row (Machine, Good)",
       "notes": null,

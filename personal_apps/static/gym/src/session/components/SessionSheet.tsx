@@ -11,6 +11,9 @@ interface Props {
   resting: boolean
   partners: Partner[]
   partnerStatus: PartnerStatus[]
+  /** This workout is the FOLLOWER half of a live shared one (the payload's
+   *  session_is_shared): its order is the leader's. */
+  following?: boolean
   pushSupported: boolean
   onMetaSave(meta: { bodyweightKg: number | null; notes: string }): void
   onSkipRest(): void
@@ -25,7 +28,7 @@ interface Props {
  * a single set.
  */
 export function SessionSheet({
-  session, resting, partners, partnerStatus, pushSupported,
+  session, resting, partners, partnerStatus, following = false, pushSupported,
   onMetaSave, onSkipRest, onInvite, onEnablePush,
 }: Props) {
   const openSheet = useSheets((s) => s.open)
@@ -62,16 +65,27 @@ export function SessionSheet({
           </button>
         )}
 
-        <button type="button" className="sheet-row"
-          onClick={() => { setReorder(!reorderUnlocked); close() }}>
-          <span className="sheet-row__lead"><Icon name="swap" /></span>
-          <span className="sheet-row__main">
-            <span className="sheet-row__name">
-              {reorderUnlocked ? 'Reihenfolge fertig' : 'Reihenfolge ändern'}
+        {/* Training together means one order, and it is the leader's. A
+            follower's own reorder was undone by the leader's next change --
+            ANY change -- so the mode is not offered rather than offered and
+            silently reverted (the route refuses it too). Said in the row's
+            place, so the missing control reads as a rule and not as a bug. */}
+        {following ? (
+          <p className="sheet__note">
+            Die Reihenfolge gibt dein Trainingspartner vor, solange ihr zusammen trainiert.
+          </p>
+        ) : (
+          <button type="button" className="sheet-row"
+            onClick={() => { setReorder(!reorderUnlocked); close() }}>
+            <span className="sheet-row__lead"><Icon name="swap" /></span>
+            <span className="sheet-row__main">
+              <span className="sheet-row__name">
+                {reorderUnlocked ? 'Reihenfolge fertig' : 'Reihenfolge ändern'}
+              </span>
+              <span className="sheet-row__meta">Übungen per Ziehen sortieren.</span>
             </span>
-            <span className="sheet-row__meta">Übungen per Ziehen sortieren.</span>
-          </span>
-        </button>
+          </button>
+        )}
 
         <button type="button" className="sheet-row"
           onClick={() => openSheet('sheet-add-exercise')}>

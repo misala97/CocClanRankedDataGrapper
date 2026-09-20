@@ -30,6 +30,15 @@ describe('the session payload fixture', () => {
     expect(fixture.sets_total).toBe(everySet - skippedSets)
   })
 
+  it('only names seed bases the union allows, keyed like suggestions', () => {
+    const allowed = new Set(['slot', 'earlier_slot', 'layoff'])
+    const ids = fixture.visible_exercises.map((se) => String(se.id))
+    for (const [key, source] of Object.entries(fixture.seed_sources)) {
+      expect(ids).toContain(key)
+      expect(allowed.has(source.basis)).toBe(true)
+    }
+  })
+
   it('keys suggestions by SessionExercise id as a string', () => {
     const ids = fixture.visible_exercises.map((se) => String(se.id))
     for (const key of Object.keys(fixture.suggestions)) {

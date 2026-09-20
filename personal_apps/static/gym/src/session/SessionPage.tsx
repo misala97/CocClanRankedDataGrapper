@@ -5,6 +5,7 @@ import { SessionHeader } from './components/SessionHeader'
 import { SaveErrorBanner } from './components/SaveErrorBanner'
 import { SavingSweep } from './components/SavingSweep'
 import { ReorderBar } from './components/ReorderBar'
+import { PartnerNotice } from './components/PartnerNotice'
 import { LiveRegion } from './components/LiveRegion'
 import { Rail } from './components/Rail'
 import { LivePanel } from './components/LivePanel'
@@ -77,6 +78,7 @@ export function SessionPage({
       <SaveErrorBanner />
       <SavingSweep />
       <ReorderBar />
+      <PartnerNotice />
       <LiveRegion />
 
       <Rail exercises={payload.visible_exercises} liveId={payload.live_id}
@@ -110,6 +112,7 @@ export function SessionPage({
           and saves the wrapper that did. */}
       <SessionSheet session={payload.session} resting={payload.resting}
         partners={payload.partners} partnerStatus={payload.partner_status}
+        following={payload.session_is_shared}
         pushSupported={pushSupported}
         onMetaSave={actions.onSessionMetaSave}
         onSkipRest={actions.onSkipRest}

@@ -46,6 +46,18 @@ describe('SessionSheet', () => {
     expect(screen.getByText('Dieses Workout')).toBeInTheDocument()
   })
 
+  it('does not offer reordering to a follower, and says whose order it is', () => {
+    // Training together means one order, the leader's. The follower's own
+    // reorder was undone by the leader's next change, so the mode is not
+    // offered at all rather than offered and silently reverted.
+    const { rerender } = open({ following: true })
+    expect(screen.queryByText('Reihenfolge ändern')).toBeNull()
+    expect(screen.getByText(/Die Reihenfolge gibt dein Trainingspartner vor/)).toBeInTheDocument()
+
+    rerender(<SessionSheet {...base} following={false} />)
+    expect(screen.getByText('Reihenfolge ändern')).toBeInTheDocument()
+  })
+
   it('offers to end a rest only while one is running', () => {
     // The Jinja version had to render this always and hide it, because the
     // sheets survived every refresh and a `{% if %}` would have frozen at

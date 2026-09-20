@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchSync } from './api'
 import { sessionKey } from './useSessionMutation'
-import { useAnnouncer } from './stores'
+import { useAnnouncer, usePartnerNotice } from './stores'
 
 /** How often the follower asks whether the plan moved. The leader's edit is
  *  already committed to the follower's own rows by then, so this is a cheap
@@ -35,6 +35,7 @@ export function useFollowerSync(sessionId: number, options: {
   const { enabled, knownVersion } = options
   const client = useQueryClient()
   const announce = useAnnouncer((s) => s.announce)
+  const showNotice = usePartnerNotice((s) => s.show)
   // Sharing ends by stamping SharedSession.ended_at, which never touches
   // structure_version -- so "the link is over" has to be its own signal or
   // the page would poll forever after the leader finishes.
@@ -60,7 +61,10 @@ export function useFollowerSync(sessionId: number, options: {
     // caught up even if this refetch then failed.
     void client.invalidateQueries({ queryKey: sessionKey(sessionId) })
     // The queue changing on its own is the one thing on this screen the
-    // lifter did not cause, so it says so rather than moving silently.
+    // lifter did not cause, so it says so rather than moving silently -- to a
+    // screen reader through the live region, and to everyone else through the
+    // bar PartnerNotice renders (the live region is sr-only text).
     announce('Dein Partner hat den Plan geändert.')
-  }, [data, knownVersion, client, sessionId, announce])
+    showNotice()
+  }, [data, knownVersion, client, sessionId, announce, showNotice])
 }

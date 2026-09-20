@@ -202,6 +202,24 @@ describe('ExerciseSheet', () => {
     expect(screen.getByText('Nicht mehr überspringen')).toBeInTheDocument()
   })
 
+  it('says what skipping does to the sets that are still open', () => {
+    // The old line promised "Sätze bleiben" while the server dropped every
+    // pending set on skip and re-seeded from history on the way back.
+    open()
+    expect(screen.getByText('Offene Sätze entfallen, erledigte bleiben.')).toBeInTheDocument()
+    expect(screen.queryByText(/Sätze bleiben, zählen aber nicht/)).toBeNull()
+  })
+
+  it('does not offer to remove an exercise that belongs to the shared plan', () => {
+    // A follower's remove was undone by the leader's next change -- the row is
+    // the leader's structure. Skipping is theirs, and sticks.
+    open({ exercise: { ...exercise, mirrored: true } })
+    expect(screen.queryByText('Übung entfernen')).toBeNull()
+    expect(screen.getByText('Übung überspringen')).toBeInTheDocument()
+    expect(screen.getByText('Übung ersetzen')).toBeInTheDocument()
+    expect(screen.getByText(/Gehört zum gemeinsamen Plan/)).toBeInTheDocument()
+  })
+
   it('offers undo instead of a confirm before removing the exercise', async () => {
     const user = userEvent.setup()
     const { actions: a } = open()
