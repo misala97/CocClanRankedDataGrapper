@@ -44,6 +44,7 @@ def _minimal():
         'seed_sources': {'10': {'date': '2026-08-01T09:00:00', 'position': 1,
                                 'basis': 'slot'}},
         'stagnation_counts': {}, 'stall_next_weight': {}, 'record_set_ids': [],
+        'record_details': {},
         'ready_for_more': None, 'min_full_reps': 5,
         'default_plan_weight': 20.0, 'default_plan_reps': 8,
         'exercises': [{'id': 5, 'name': 'Bankdrücken', 'muscle_group': 'Brust'}],
@@ -120,6 +121,35 @@ def test_int_keyed_dicts_serialize_as_string_keys():
     assert list(dumped['stagnation_counts']) == ['10']
     assert list(dumped['suggestions']) == ['10']
     assert list(dumped['stall_next_weight']) == ['10']
+
+
+def test_record_details_are_keyed_by_set_id_as_strings():
+    """Keyed by Set.id, not SessionExercise.id -- the takeover looks a detail
+    up by the same id it found in record_set_ids."""
+    data = _minimal()
+    data['record_set_ids'] = [100]
+    data['record_details'] = {'100': {
+        'kind': 'weight', 'value': 82.5, 'previous': 80.0,
+        'previous_at': '2026-09-09T18:30:00',
+    }}
+    dumped = SessionDetailPayload.model_validate(data).model_dump(mode='json')
+    assert list(dumped['record_details']) == ['100']
+    assert dumped['record_details']['100']['kind'] == 'weight'
+    assert dumped['record_details']['100']['previous'] == 80.0
+
+
+def test_rejects_a_record_kind_the_live_screen_cannot_render():
+    """'volume' is a real kind in session_report's debrief, but no set-level
+    volume record exists live -- accepting one would put a word on the gold
+    slab that the copy has no branch for."""
+    data = _minimal()
+    data['record_set_ids'] = [100]
+    data['record_details'] = {'100': {
+        'kind': 'volume', 'value': 1830.0, 'previous': 1656.0,
+        'previous_at': '2026-09-09T18:30:00',
+    }}
+    with pytest.raises(ValidationError, match='kind'):
+        SessionDetailPayload.model_validate(data)
 
 
 def test_round_trips_to_json_mode():

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import type { SeedSource, SessionDetailPayload } from '../types'
 import { useSheets } from '../stores'
 import { useRestTick } from '../useRestTick'
+import { useRecordTakeover } from '../useRecordTakeover'
 import { Icon } from '../../components/Icon'
 import { kg1, shortDate } from '../../format'
+import { RecordTakeover } from './RecordTakeover'
 import { SetRow } from './SetRow'
 import { Stepper } from './Stepper'
 
@@ -98,6 +100,13 @@ export function LivePanel({
     return () => clearTimeout(timer)
   }, [ringing])
 
+  // Above the `live === null` return, with every other hook, and in THIS
+  // component rather than in the island: LivePanel is rendered without a key,
+  // so the instance survives a change of live exercise. A hook mounted per
+  // exercise would reseed its seen-set to empty on every switch and then
+  // celebrate every record already in the payload.
+  const { celebration, dismiss } = useRecordTakeover(payload)
+
   const rest = useRestTick(
     payload.resting ? payload.session.rest_ends_at : null,
     payload.rest_total_seconds,
@@ -148,6 +157,9 @@ export function LivePanel({
 
   return (
     <section className="live" data-se-id={live.id}>
+      {celebration !== null && (
+        <RecordTakeover celebration={celebration} onDismiss={dismiss} />
+      )}
       <div className="live__head">
         <span className="live__kick">Jetzt</span>
         <button type="button" className="live__more"

@@ -182,6 +182,7 @@
   "partner_status": [],
   "partners": [],
   "ready_for_more": null,
+  "record_details": {},
   "record_set_ids": [],
   "rest_total_seconds": 0,
   "resting": false,
