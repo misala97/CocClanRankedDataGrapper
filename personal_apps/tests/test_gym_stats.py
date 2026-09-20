@@ -851,6 +851,59 @@ def test_is_new_best_is_false_when_only_deload_history_exists():
     assert stats.is_new_best(200.0, 8, prior) is False
 
 
+def test_new_best_detail_names_the_weight_it_beat_and_when():
+    prior = [perf([(77.5, 8)], started_at=day(0)),
+             perf([(80.0, 8)], started_at=day(7)),
+             perf([(80.0, 6)], started_at=day(14))]
+    detail = stats.new_best_detail(82.5, 7, prior)
+    assert detail['kind'] == 'weight'
+    assert detail['value'] == 82.5
+    assert detail['previous'] == 80.0
+    # The session that HELD the best, not the most recent one.
+    assert detail['previous_at'] == day(7)
+
+
+def test_new_best_detail_reports_an_e1rm_record_when_the_weight_did_not_move():
+    # Same weight, two more reps: no weight record, but a real one.
+    prior = [perf([(80.0, 8)], started_at=day(0))]
+    detail = stats.new_best_detail(80.0, 10, prior)
+    assert detail['kind'] == 'e1rm'
+    assert detail['previous'] == round(stats.epley_1rm(80.0, 8), 1)
+
+
+def test_weight_outranks_e1rm_when_a_set_beats_both():
+    # session_report's _record_rank puts weight first; the live screen has to
+    # agree or one set gets two different names on two screens.
+    prior = [perf([(80.0, 8)], started_at=day(0))]
+    assert stats.new_best_detail(85.0, 10, prior)['kind'] == 'weight'
+
+
+def test_new_best_detail_is_none_when_nothing_was_beaten():
+    prior = [perf([(80.0, 8)], started_at=day(0))]
+    assert stats.new_best_detail(80.0, 8, prior) is None
+    assert stats.new_best_detail(75.0, 5, prior) is None
+
+
+def test_new_best_detail_and_is_new_best_never_disagree():
+    """is_new_best delegates, so this is a guard against someone
+    reintroducing a second copy of the two comparisons."""
+    prior = [perf([(80.0, 8)], started_at=day(0)),
+             perf([(60.0, 12)], started_at=day(7))]
+    for weight, reps in [(85.0, 8), (80.0, 8), (80.0, 10), (79.0, 20),
+                         (60.0, 12), (100.0, 1), (20.0, 30)]:
+        assert stats.is_new_best(weight, reps, prior) is (
+            stats.new_best_detail(weight, reps, prior) is not None)
+
+
+def test_new_best_detail_ignores_deload_history_like_is_new_best():
+    prior = [perf([(80.0, 8)], started_at=day(0)),
+             perf([(200.0, 8)], started_at=day(7), is_deload=True)]
+    detail = stats.new_best_detail(85.0, 8, prior)
+    assert detail['kind'] == 'weight'
+    # 200 kg came from a deload, so it is not what 85 kg beat.
+    assert detail['previous'] == 80.0
+
+
 def test_stall_report_ignores_deload_sessions():
     rows = [perf([(80.0, 8)], started_at=day(0)), perf([(85.0, 8)], started_at=day(7))]
     rows += [perf([(60.0, 8)], started_at=day(14 + 7 * n), is_deload=True) for n in range(6)]

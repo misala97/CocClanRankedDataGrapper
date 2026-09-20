@@ -1682,6 +1682,11 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 
 /* ---- the one lifted plane ---- */
 .live {
+  /* Positioned so the record takeover's `inset: 0` anchors to THIS panel.
+     Static, it resolved against whatever positioned ancestor happened to be
+     up the tree and the scrim covered the whole viewport -- the header, the
+     progress bar and the tick strip all went behind the blur. */
+  position: relative;
   margin: var(--sp-4) var(--sp-4) 0;
   padding: var(--sp-4);
   border-radius: var(--r-panel); background: var(--chassis); box-shadow: var(--lift);
@@ -1728,6 +1733,83 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 .live__record-lbl {
   display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--record-ink);
+}
+
+/* ---- the record takeover -------------------------------------------------
+   One second of gold over the live panel the moment a set beats the
+   exercise's best. The note above still renders underneath and still says the
+   same thing -- the takeover is the announcement, the note is the record.
+
+   .record-takeover itself carries NO filter and NO transform. The scrim below
+   does, and a filtered ancestor makes `position: fixed` resolve against that
+   ancestor rather than the viewport -- which would trap every confetti
+   particle inside a 22px-rounded panel. Animating opacity on the root is
+   fine: that makes a stacking context, not a containing block.
+
+   Named in full, NOT `.rec`: that class is Verlauf's record row, and
+   `.rec__name` is Statistik's. A three-letter prefix here would have given
+   every one of them `position: absolute; inset: 0`. */
+.record-takeover {
+  position: absolute; inset: 0; z-index: 3; display: grid; place-items: center;
+  border-radius: var(--r-panel); padding: var(--sp-4);
+}
+.record-takeover.is-out {
+  animation: takeover-out var(--dur-3) var(--ease) both; pointer-events: none;
+}
+@keyframes takeover-out { to { opacity: 0; } }
+.record-takeover__scrim {
+  position: absolute; inset: 0; border-radius: var(--r-panel);
+  background: color-mix(in oklab, var(--chassis), transparent 8%);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  animation: takeover-scrim 180ms var(--ease-out);
+}
+@keyframes takeover-scrim { from { opacity: 0; } }
+.record-takeover__slab {
+  position: relative; inline-size: 100%;
+  padding: var(--sp-5); border-radius: var(--r-inset);
+  background: var(--record); color: var(--on-record);
+  box-shadow: var(--glow-record), var(--lift);
+  animation: takeover-slab 360ms var(--ease-out) both;
+}
+@keyframes takeover-slab { from { opacity: 0; transform: scale(.86) translateY(14px); } }
+.record-takeover__kind {
+  font-size: var(--t-label); font-weight: var(--w-max);
+  letter-spacing: var(--track-label); text-transform: uppercase;
+}
+.record-takeover__name {
+  font-size: var(--t-body); font-weight: var(--w-bold); margin-top: 2px; opacity: .85;
+}
+.record-takeover__row {
+  display: flex; align-items: flex-end; gap: var(--sp-2); margin-top: var(--sp-3);
+}
+.record-takeover__num {
+  font-size: var(--num-xl); font-weight: var(--w-max);
+  letter-spacing: var(--track-num); line-height: .92; font-variant-numeric: tabular-nums;
+}
+.record-takeover__unit { font-size: var(--t-sm); font-weight: var(--w-semi); padding-bottom: 6px; }
+/* .84, not the flare's .8: measured on the composited pixels, .78 gives
+   4.74:1 on this gold against a 4.5 floor, and passing by a rounding error is
+   not passing. */
+.record-takeover__prev {
+  font-size: var(--t-meta); font-weight: var(--w-semi); opacity: .84; margin-top: var(--sp-3);
+}
+/* Fixed, so the confetti falls past the panel and down the screen. The
+   explicit 100%/100% is load-bearing: a canvas is a REPLACED element, so
+   `inset: 0` alone does not stretch it -- it keeps the intrinsic size its
+   width/height attributes give it, and the particle coordinates then have
+   nothing to do with where the slab is. */
+.record-takeover__fx {
+  position: fixed; inset: 0; inline-size: 100%; block-size: 100%;
+  z-index: var(--z-bar); pointer-events: none;
+}
+
+/* The record still reads; nothing moves and nothing is thrown. The confetti
+   is skipped in the component too -- this is the belt, that is the braces. */
+@media (prefers-reduced-motion: reduce) {
+  .record-takeover__scrim,
+  .record-takeover__slab { animation: none; }
+  .record-takeover.is-out { animation: takeover-out var(--dur-2) linear both; }
+  .record-takeover__fx { display: none; }
 }
 .live__stall {
   margin-top: var(--sp-4); padding: var(--sp-3);

@@ -275,6 +275,24 @@ class SeedSource(_Model):
     basis: Literal['slot', 'earlier_slot', 'layoff']
 
 
+class LiveRecord(_Model):
+    """What one just-logged set beat, for the record takeover to say.
+
+    Only ever present for a set id that is also in record_set_ids -- the two
+    are built from the same judgement in the same loop, so a detail without a
+    gold chip (or the reverse) is a bug, not a state.
+
+    `value` and `previous` are kilograms for a weight record and estimated
+    one-rep-max kilograms for an e1rm one: the same units as each other, and
+    the same pair session_report's flare prints, so the live screen and the
+    debrief never name one set's record two different ways."""
+    kind: Literal['weight', 'e1rm']
+    value: float
+    previous: float
+    # The start of the session that held the old best.
+    previous_at: datetime
+
+
 class ReadyForMore(_Model):
     """`that weight went easy` -- only ever computed for the live exercise,
     and never during a deload."""
@@ -330,6 +348,9 @@ class SessionDetailPayload(_Model):
     # A set in the route; a list here. json.dumps cannot serialize a set, so
     # the builder converts and this type is what makes that non-optional.
     record_set_ids: list[int]
+    # Keyed by Set.id, string-keyed on the wire like suggestions above. One
+    # entry per id in record_set_ids and no others.
+    record_details: dict[str, LiveRecord]
     ready_for_more: ReadyForMore | None
 
     min_full_reps: int

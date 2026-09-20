@@ -202,13 +202,48 @@ def is_new_best(weight, reps, prior_rows):
     lower the bar a normal set is judged against. If deloads are the only
     history, this is False, the same as having no history at all.
     """
+    return new_best_detail(weight, reps, prior_rows) is not None
+
+
+def new_best_detail(weight, reps, prior_rows):
+    """What a just-logged set beat, or None if it beat nothing.
+
+    is_new_best answers whether; this answers which and by how much, so a
+    screen can say "82,5 kg, vorher 80,0 kg am 09.09." instead of only
+    "Bestwert". Same judgement, one implementation -- is_new_best delegates
+    here rather than repeating the two comparisons, because the two drifting
+    apart would show as a record that celebrates and then is not listed.
+
+    Weight outranks e1RM when a set beats both, matching session_report's
+    _record_rank (kind first, weight before e1rm): the debrief and the live
+    screen must not name the same set's record differently.
+
+    The returned `previous_at` is the start of the session that held the old
+    best, so "vorher" names a real workout the lifter can remember.
+    """
     prior_rows = _progression_rows(prior_rows)
     if not prior_rows:
-        return False
-    return (
-        weight > max(best_weight(row) for row in prior_rows)
-        or epley_1rm(weight, reps) > max(best_e1rm(row) for row in prior_rows)
-    )
+        return None
+
+    previous_weight_row = max(prior_rows, key=best_weight)
+    if weight > best_weight(previous_weight_row):
+        return {
+            'kind': 'weight',
+            'value': weight,
+            'previous': best_weight(previous_weight_row),
+            'previous_at': previous_weight_row.started_at,
+        }
+
+    previous_e1rm_row = max(prior_rows, key=best_e1rm)
+    if epley_1rm(weight, reps) > best_e1rm(previous_e1rm_row):
+        return {
+            'kind': 'e1rm',
+            'value': round(epley_1rm(weight, reps), 1),
+            'previous': round(best_e1rm(previous_e1rm_row), 1),
+            'previous_at': previous_e1rm_row.started_at,
+        }
+
+    return None
 
 
 def _chronological(rows):

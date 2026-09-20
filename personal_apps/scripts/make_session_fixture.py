@@ -117,6 +117,12 @@ def _stabilise(payload):
         payload['live_id'] = se_map[payload['live_id']]
     payload['record_set_ids'] = sorted(
         set_map[i] for i in payload['record_set_ids'] if i in set_map)
+    # Keyed by Set.id, not SessionExercise.id -- so it renumbers with set_map,
+    # not with the loop below.
+    payload['record_details'] = {
+        str(set_map[int(k)]): v for k, v in payload['record_details'].items()
+        if int(k) in set_map
+    }
     payload['suggestions'] = {
         str(se_map[int(k)]): v for k, v in payload['suggestions'].items()
         if int(k) in se_map

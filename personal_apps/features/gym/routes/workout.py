@@ -436,6 +436,7 @@ def _live_data(session_):
             by_exercise.setdefault(row.exercise_id, []).append(row)
     stagnation_counts = {}
     record_set_ids = set()
+    record_details = {}
     # Both signals below are progress judgements, and a deload session is not
     # an attempt at progress -- so neither is computed during one. The PR flare
     # must agree with the recap screen (session_report awards no record on a
@@ -454,9 +455,18 @@ def _live_data(session_):
             # same prior-sessions-only pool, so a set can light up cyan the
             # instant it's confirmed rather than only on the recap screen an
             # hour later.
+            # One judgement, two outputs: the ids the chips read, and what each
+            # record actually beat, for the takeover to say. Asking
+            # is_new_best and then asking again for the detail would run the
+            # same comparison twice per completed set.
             for s in se.sets:
-                if s.completed and stats.is_new_best(s.weight, s.reps, prior):
-                    record_set_ids.add(s.id)
+                if not s.completed:
+                    continue
+                detail = stats.new_best_detail(s.weight, s.reps, prior)
+                if detail is None:
+                    continue
+                record_set_ids.add(s.id)
+                record_details[s.id] = detail
     # The stall line's prescription: the same "+one increment, snapped up
     # onto the machine's real stops" the debrief's Nächstes-Mal advice
     # computes, anchored on the weight the steppers will actually pre-fill.
@@ -580,6 +590,7 @@ def _live_data(session_):
         stagnation_counts=stagnation_counts,
         stall_next_weight=stall_next_weight,
         record_set_ids=record_set_ids,
+        record_details=record_details,
         ready_for_more=ready_for_more,
         # Passed in rather than hardcoded in the template, so the badge's
         # copy cannot drift from the rule that decides it.
@@ -618,9 +629,10 @@ def _session_payload(session_):
 
     Three conversions are not cosmetic. record_set_ids is a set in _live_data
     and json.dumps cannot serialize one. suggestions and stagnation_counts are
-    keyed by SessionExercise.id, an int, and JSON object keys are always
-    strings -- doing it here rather than letting Pydantic coerce keeps the
-    client contract explicit. MUSCLE_GROUPS is a tuple.
+    keyed by SessionExercise.id, and record_details by Set.id -- all ints, and
+    JSON object keys are always strings, so doing it here rather than letting
+    Pydantic coerce keeps the client contract explicit. MUSCLE_GROUPS is a
+    tuple.
     """
     data = _live_data(session_)
     row = data['session']
@@ -684,6 +696,7 @@ def _session_payload(session_):
         'stagnation_counts': {str(k): v for k, v in data['stagnation_counts'].items()},
         'stall_next_weight': {str(k): v for k, v in data['stall_next_weight'].items()},
         'record_set_ids': sorted(data['record_set_ids']),
+        'record_details': {str(k): v for k, v in data['record_details'].items()},
         'ready_for_more': data['ready_for_more'],
         'min_full_reps': data['min_full_reps'],
         'default_plan_weight': data['default_plan_weight'],

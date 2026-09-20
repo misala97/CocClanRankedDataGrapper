@@ -83,6 +83,21 @@ export interface SeedSource {
   basis: 'slot' | 'earlier_slot' | 'layoff'
 }
 
+/** What one just-logged set beat. 'weight' wins when a set beats both, which
+ *  is session_report's own ranking -- the live takeover and the debrief must
+ *  not name the same record two different ways.
+ *
+ *  `value` and `previous` are kilograms for a weight record and estimated
+ *  one-rep-max kilograms for an e1rm one. No 'volume' kind: that exists per
+ *  session in the debrief, never per set. */
+export interface LiveRecord {
+  kind: 'weight' | 'e1rm'
+  value: number
+  previous: number
+  /** ISO. The start of the session that held the old best. */
+  previous_at: string
+}
+
 /** "That weight went easy" -- only ever computed for the live exercise, and
  *  never during a deload. Null or a verdict; never an empty object. */
 export interface ReadyForMore {
@@ -139,6 +154,10 @@ export interface SessionDetailPayload {
   stall_next_weight: Record<string, number>
   /** A set on the server, a list on the wire. */
   record_set_ids: number[]
+  /** Keyed by Set.id, string-keyed like suggestions. One entry per id in
+   *  record_set_ids and no others -- both are built from the same judgement
+   *  in the same server loop. */
+  record_details: Record<string, LiveRecord>
   ready_for_more: ReadyForMore | null
 
   min_full_reps: number

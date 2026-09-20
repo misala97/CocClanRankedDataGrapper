@@ -46,6 +46,25 @@ describe('the session payload fixture', () => {
     }
   })
 
+  it('keys record details by SET id, and only for sets that are records', () => {
+    // The one dict on this payload keyed by Set.id rather than by
+    // SessionExercise.id -- and the takeover looks a detail up by an id it
+    // read out of record_set_ids, so a mismatch is a celebration with nothing
+    // to say.
+    const setIds = fixture.visible_exercises
+      .flatMap((se) => se.sets).map((s) => String(s.id))
+    const allowed = new Set(['weight', 'e1rm'])
+    for (const [key, record] of Object.entries(fixture.record_details)) {
+      expect(setIds).toContain(key)
+      expect(fixture.record_set_ids).toContain(Number(key))
+      expect(allowed.has((record as { kind: string }).kind)).toBe(true)
+    }
+    // The other direction: every gold chip can say what it beat.
+    for (const id of fixture.record_set_ids) {
+      expect(Object.keys(fixture.record_details)).toContain(String(id))
+    }
+  })
+
   it('is rich enough to render the components against', () => {
     // A one-exercise fixture cannot exercise the queue, the live/not-live
     // split, or the tick strip's grouping -- the generator builds two on
