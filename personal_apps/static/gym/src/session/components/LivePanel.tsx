@@ -1,11 +1,29 @@
 import { useEffect, useState } from 'react'
-import type { SessionDetailPayload } from '../types'
+import type { SeedSource, SessionDetailPayload } from '../types'
 import { useSheets } from '../stores'
 import { useRestTick } from '../useRestTick'
 import { Icon } from '../../components/Icon'
-import { kg1 } from '../../format'
+import { kg1, shortDate } from '../../format'
 import { SetRow } from './SetRow'
 import { Stepper } from './Stepper'
+
+/** The sentence after "Vorgabe". Day and month only: every basis but the
+ *  layoff is inside seeding's four-week window, where a year is noise. No
+ *  number of weeks in the layoff copy -- the window is a server constant
+ *  (stats.ROLLING_WINDOW_DAYS) and a figure here would drift from it. */
+function seedSourceText(source: SeedSource, slot: number): string {
+  const day = shortDate(source.date).slice(0, 6)
+  if (source.basis === 'layoff') {
+    return `vom ${day} — schon länger her, daher dein letztes Workout statt des besten.`
+  }
+  if (source.basis === 'earlier_slot') {
+    return `vom ${day} aus Slot ${source.position} — so spät im Workout gibt es noch nichts, daher dein bestes Ergebnis von früher.`
+  }
+  if (source.position > slot) {
+    return `vom ${day}, damals später im Workout (Slot ${source.position}).`
+  }
+  return `vom ${day}, gleicher Slot.`
+}
 
 /** Length of the go-ready keyframes in gym.css. The class comes off after it,
  *  so the ring is an event and not a state the button gets stuck in. */
@@ -53,11 +71,20 @@ export function LivePanel({
   const [reps, setReps] = useState(seedReps)
 
   // The server is authoritative about what comes next; re-seed whenever it
-  // says the pending set changed.
+  // says the pending set changed. WHICH set is up decides that, not only what
+  // it holds: keyed on the numbers alone, two equal seeds in a row read as
+  // "nothing changed", so a bump made for one set carried into the next -- or
+  // into the next EXERCISE -- but only when the numbers happened to match, and
+  // snapped back when they did not. No carry-forward is the owner's ruling (it
+  // would override drop sets and ramp-ups), so the coincidence was the bug.
+  // The numbers stay in the list for the other direction: a plan re-seeded in
+  // place (a reorder, a partner's reorder) keeps its set ids and changes only
+  // what they hold.
+  const boundTo = `${live?.id ?? 'none'}:${nextSet?.id ?? `after-${lastDone?.id ?? 'none'}`}`
   useEffect(() => {
     setWeight(seedWeight)
     setReps(seedReps)
-  }, [seedWeight, seedReps])
+  }, [boundTo, seedWeight, seedReps])
 
   // One ring when the countdown lands, then settle. The rest hitting zero is
   // the cue to start the next set and it arrives with the phone face-down on a
@@ -113,6 +140,7 @@ export function LivePanel({
 
   const stall = payload.stagnation_counts[String(live.id)]
   const stallNext = payload.stall_next_weight[String(live.id)]
+  const source = payload.seed_sources[String(live.id)] ?? null
   const ready = payload.ready_for_more
   const perSide = live.is_unilateral ? ' je Seite' : ''
   const records = live.sets.filter(
@@ -153,6 +181,19 @@ export function LivePanel({
         <p className="live__ready">
           <span className="live__ready-lbl">Bereit</span>
           {` ${ready.is_latest ? 'Letztes Mal' : 'Zuletzt in diesem Slot'} ${ready.sets} Sätze auf ${kg1(ready.weight)} kg${perSide} mit ${payload.min_full_reps}+ Wdh.`}
+        </p>
+      )}
+
+      {/* Where the numbers below come from, said rather than left to guess.
+          Seeding reads the slot as a fatigue proxy, so moving an exercise can
+          change its plan -- or, this late in a workout, visibly NOT change it,
+          because nothing was ever lifted that late and the best earlier result
+          stands in. The owner kept that fallback on the condition that the
+          screen says so. Quiet: same note anatomy, no ink of its own. */}
+      {source !== null && (
+        <p className="live__seed">
+          <span className="live__seed-lbl">Vorgabe</span>
+          {` ${seedSourceText(source, live.position)}`}
         </p>
       )}
 

@@ -54,6 +54,86 @@ describe('useSessionMutation', () => {
       .toBe(new MutationFailed('network').germanMessage)
   })
 
+  /** Two writes, each with an optimistic guess, answered by hand. */
+  function twoWrites() {
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+    })
+    const key = sessionKey(payload.session.id)
+    client.setQueryData(key, payload)
+
+    const started: string[] = []
+    const answer: Record<string, (value: typeof payload) => void> = {}
+    const refuse: Record<string, (error: MutationFailed) => void> = {}
+    const run = (name: string) => {
+      started.push(name)
+      return new Promise<typeof payload>((resolve, reject) => {
+        answer[name] = resolve
+        refuse[name] = reject
+      })
+    }
+    const named = (name: string) => ({ ...payload, session: { ...payload.session, name } })
+
+    let mutate: (name: string) => void = () => {}
+    function Probe() {
+      const mutation = useSessionMutation(payload.session.id, run,
+        (current, name: string) => ({
+          ...current, session: { ...current.session, name: `guess ${name}` },
+        }))
+      mutate = (name) => mutation.mutate([name])
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}><Probe /></QueryClientProvider>)
+    const shown = () => client.getQueryData<typeof payload>(key)!.session.name
+    return { client, key, started, answer, refuse, named, shown,
+      fire: (name: string) => act(() => { mutate(name) }) }
+  }
+
+  it('sends one write at a time, in the order they were made', async () => {
+    // Two drops in quick succession, or the arrow-key path (a POST per key
+    // press), used to put two reorders on the server at once -- each read the
+    // same rows and wrote its own half, and the queue came back as a blend.
+    const { started, answer, named, fire } = twoWrites()
+    fire('first')
+    fire('second')
+
+    await waitFor(() => expect(started).toEqual(['first']))
+    await act(async () => { answer.first!(named('first')) })
+    await waitFor(() => expect(started).toEqual(['first', 'second']))
+    await act(async () => { answer.second!(named('second')) })
+  })
+
+  it('does not let an older answer undo a newer guess', async () => {
+    // The first answer describes the screen BEFORE the second write. Applying
+    // it wholesale put the row the lifter had just dropped back where it came
+    // from for as long as the second request took -- over a second on gym
+    // wifi -- and then moved it again.
+    const { answer, named, shown, fire } = twoWrites()
+    fire('first')
+    fire('second')
+    await waitFor(() => expect(shown()).toBe('guess second'))
+
+    await act(async () => { answer.first!(named('first')) })
+    expect(shown()).toBe('guess second')
+
+    await waitFor(() => expect(answer.second).toBeDefined())
+    await act(async () => { answer.second!(named('second')) })
+    await waitFor(() => expect(shown()).toBe('second'))
+  })
+
+  it('asks the server again after a failed write', async () => {
+    // Rolling back restores the screen from before THIS write, which may still
+    // hold an earlier write's guess whose answer was skipped above. Only the
+    // server knows what is actually stored.
+    const { client, key, refuse, fire } = twoWrites()
+    fire('first')
+    await waitFor(() => expect(refuse.first).toBeDefined())
+    await act(async () => { refuse.first!(new MutationFailed('network')) })
+
+    await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true))
+  })
+
   it('takes the banner down once a write actually lands', async () => {
     useSaveState.getState().fail('alte Meldung', vi.fn())
     const { fire } = harness(() => Promise.resolve(payload))

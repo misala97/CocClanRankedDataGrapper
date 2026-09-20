@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useFollowerSync } from './useFollowerSync'
 import { sessionKey } from './useSessionMutation'
-import { useAnnouncer } from './stores'
+import { useAnnouncer, usePartnerNotice } from './stores'
 
 /* The contract this pins is the one the React port lost: the follower's poll
  * was deleted with the Jinja page and never rebuilt, so a leader's structural
@@ -31,6 +31,7 @@ const sync = (over: Partial<{ version: number; shared: boolean }> = {}) =>
 
 beforeEach(() => {
   useAnnouncer.setState(useAnnouncer.getInitialState(), true)
+  usePartnerNotice.setState(usePartnerNotice.getInitialState(), true)
 })
 afterEach(() => { vi.unstubAllGlobals() })
 
@@ -59,6 +60,9 @@ describe('useFollowerSync', () => {
       { queryKey: sessionKey(SESSION) }))
     // The one thing on this screen the lifter did not cause says so.
     expect(useAnnouncer.getState().message).toBe('Dein Partner hat den Plan geändert.')
+    // ...and says it where a sighted lifter can see it. The announcement alone
+    // is sr-only text: the queue used to rearrange itself in silence.
+    expect(usePartnerNotice.getState().visible).toBe(true)
   })
 
   it('stays quiet while the version is unchanged', async () => {

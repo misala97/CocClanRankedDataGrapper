@@ -50,6 +50,132 @@ describe('LivePanel', () => {
       next.weight + payload.live_increment, next.reps)
   })
 
+  it('snaps the steppers to the next pending set even when its numbers are the same', async () => {
+    // The reset used to key on the seed VALUES. Two equal seeds in a row then
+    // read as "nothing changed", so a bump made for one set silently carried
+    // into the next -- but only then; a different seed snapped back. The owner
+    // ruled no carry-forward (it overrides drop sets and ramp-ups), so the
+    // coincidence is the bug: identity of the set decides, not its numbers.
+    const user = userEvent.setup()
+    const twoEqual: SessionDetailPayload = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === live.id
+          ? { ...se, sets: [
+            { id: 900, weight: 50, reps: 10, completed: false, base_weight: null },
+            { id: 901, weight: 50, reps: 10, completed: false, base_weight: null },
+          ] }
+          : se),
+    }
+    const { rerender } = render(<LivePanel payload={twoEqual} {...handlers()} />)
+    await user.click(screen.getByLabelText('Gewicht erhöhen'))
+    expect(screen.getByLabelText('Gewicht eingeben'))
+      .toHaveTextContent(kg1(50 + payload.live_increment))
+
+    const firstDone: SessionDetailPayload = {
+      ...twoEqual,
+      visible_exercises: twoEqual.visible_exercises.map((se) =>
+        se.id === live.id
+          ? { ...se, sets: se.sets.map((s) => (s.id === 900
+            ? { ...s, completed: true, weight: 50 + payload.live_increment } : s)) }
+          : se),
+    }
+    rerender(<LivePanel payload={firstDone} {...handlers()} />)
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent(kg1(50))
+  })
+
+  it('snaps the steppers when another exercise goes live with the same numbers', async () => {
+    const user = userEvent.setup()
+    const other = payload.visible_exercises.find((se) => se.id !== live.id)!
+    const next = live.sets.find((s) => !s.completed)!
+    const { rerender } = render(<LivePanel payload={payload} {...handlers()} />)
+    await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
+    expect(screen.getByLabelText('Wiederholungen eingeben'))
+      .toHaveTextContent(String(next.reps + 1))
+
+    const switched: SessionDetailPayload = {
+      ...payload,
+      live_id: other.id,
+      visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === other.id
+          ? { ...se, skipped: false, sets: [
+            { id: 950, weight: next.weight, reps: next.reps, completed: false, base_weight: null },
+          ] }
+          : se),
+    }
+    rerender(<LivePanel payload={switched} {...handlers()} />)
+    expect(screen.getByLabelText('Wiederholungen eingeben'))
+      .toHaveTextContent(String(next.reps))
+  })
+
+  it('keeps a bump while the same set is still the one up', async () => {
+    // A refetch that changes nothing about the pending set must not throw the
+    // lifter's dialled-in number away.
+    const user = userEvent.setup()
+    const { rerender } = render(<LivePanel payload={payload} {...handlers()} />)
+    await user.click(screen.getByLabelText('Gewicht erhöhen'))
+    const next = live.sets.find((s) => !s.completed)!
+
+    rerender(<LivePanel payload={{ ...payload, sets_done: payload.sets_done }} {...handlers()} />)
+    expect(screen.getByLabelText('Gewicht eingeben'))
+      .toHaveTextContent(kg1(next.weight + payload.live_increment))
+  })
+
+  it('says where the plan came from', () => {
+    render(<LivePanel payload={payload} {...handlers()} />)
+    const line = screen.getByText('Vorgabe').closest('p')!
+    expect(line).toHaveTextContent('Vorgabe vom 25.08., gleicher Slot.')
+  })
+
+  it('says so when the plan comes from an earlier, fresher slot', () => {
+    const late: SessionDetailPayload = {
+      ...payload,
+      seed_sources: {
+        ...payload.seed_sources,
+        [String(live.id)]: { date: '2026-08-30T09:57:42', position: 1, basis: 'earlier_slot' },
+      },
+      visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === live.id ? { ...se, position: 4 } : se),
+    }
+    render(<LivePanel payload={late} {...handlers()} />)
+    expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
+      'Vorgabe vom 30.08. aus Slot 1 — so spät im Workout gibt es noch nichts, daher dein bestes Ergebnis von früher.')
+  })
+
+  it('says so when the plan comes from a later slot, and after a layoff', () => {
+    const later: SessionDetailPayload = {
+      ...payload,
+      seed_sources: {
+        ...payload.seed_sources,
+        [String(live.id)]: { date: '2026-08-30T09:57:42', position: 5, basis: 'slot' },
+      },
+    }
+    const { unmount } = render(<LivePanel payload={later} {...handlers()} />)
+    expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
+      'Vorgabe vom 30.08., damals später im Workout (Slot 5).')
+    unmount()
+
+    const layoff: SessionDetailPayload = {
+      ...payload,
+      seed_sources: {
+        ...payload.seed_sources,
+        [String(live.id)]: { date: '2026-06-14T09:00:00', position: 2, basis: 'layoff' },
+      },
+    }
+    render(<LivePanel payload={layoff} {...handlers()} />)
+    expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
+      'Vorgabe vom 14.06. — schon länger her, daher dein letztes Workout statt des besten.')
+  })
+
+  it('says nothing about a source when there is no history', () => {
+    const none: SessionDetailPayload = {
+      ...payload,
+      seed_sources: { ...payload.seed_sources, [String(live.id)]: null },
+    }
+    render(<LivePanel payload={none} {...handlers()} />)
+    expect(screen.queryByText('Vorgabe')).not.toBeInTheDocument()
+  })
+
   it('falls back to the last set done when nothing is pending', () => {
     // Appending after everything is logged starts from the set you just did,
     // not the session's opening suggestion: the reason you are adding one is

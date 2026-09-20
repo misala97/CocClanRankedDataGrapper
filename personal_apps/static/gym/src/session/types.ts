@@ -43,6 +43,10 @@ export interface LiveExercise {
   muscle_group: string | null
   position: number
   skipped: boolean
+  /** True while this row is the leader's structure in a LIVE shared workout:
+   *  the follower may skip or substitute it, never remove it. False for an
+   *  exercise they added themselves, and for every row once the link ended. */
+  mirrored: boolean
   is_unilateral: boolean
   rest_seconds: number | null
   increment: number
@@ -65,6 +69,18 @@ export interface CatalogueExercise {
 export interface Suggestion {
   weight: number
   reps: number
+}
+
+/** Which past workout a plan's numbers came from, and by which of seeding's
+ *  rules. 'slot': the best fresh result at this slot or a later one.
+ *  'earlier_slot': nothing fresh this late in a workout, so the best fresh
+ *  result from an earlier, fresher slot -- may run heavy. 'layoff': nothing
+ *  fresh at all, so the most recent workout rather than the best. */
+export interface SeedSource {
+  date: string
+  /** The slot the exercise sat in during THAT workout. */
+  position: number
+  basis: 'slot' | 'earlier_slot' | 'layoff'
 }
 
 /** "That weight went easy" -- only ever computed for the live exercise, and
@@ -115,6 +131,8 @@ export interface SessionDetailPayload {
    *  these read '10', never 10. Pinned server-side by
    *  test_int_keyed_dicts_serialize_as_string_keys. */
   suggestions: Record<string, Suggestion | null>
+  /** Keyed the same way. Null for an exercise with no history at all. */
+  seed_sources: Record<string, SeedSource | null>
   stagnation_counts: Record<string, number>
   /** Keyed like stagnation_counts. The stall line's "go to X" number --
    *  display only, never seeded. Absent when a known stack is topped out. */
