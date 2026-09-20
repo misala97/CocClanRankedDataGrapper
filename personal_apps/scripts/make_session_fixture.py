@@ -125,6 +125,13 @@ def _stabilise(payload):
         str(se_map[int(k)]): v for k, v in payload['stagnation_counts'].items()
         if int(k) in se_map
     }
+    # Every dict keyed by SessionExercise.id has to be renumbered with the
+    # rows, or the fixture names exercises it does not contain.
+    for keyed_by_se in ('seed_sources', 'stall_next_weight'):
+        payload[keyed_by_se] = {
+            str(se_map[int(k)]): v for k, v in payload[keyed_by_se].items()
+            if int(k) in se_map
+        }
     if payload['session'].get('resting_set_id') in set_map:
         payload['session']['resting_set_id'] = set_map[payload['session']['resting_set_id']]
     return payload

@@ -232,6 +232,9 @@ class LiveExercise(_Model):
     muscle_group: str | None
     position: int
     skipped: bool
+    # True while this row is the leader's structure in a live shared workout:
+    # the follower's screen offers skip and substitute for it, never remove.
+    mirrored: bool
     is_unilateral: bool
     rest_seconds: int | None
     increment: float
@@ -255,6 +258,21 @@ class Suggestion(_Model):
     to seed from, so the containing dict's value is optional."""
     weight: float
     reps: int
+
+
+class SeedSource(_Model):
+    """Which past workout a plan's numbers were taken from, and by which of
+    seeding's rules -- so the screen can say so instead of leaving the lifter
+    to guess why moving an exercise did or did not change its weights.
+
+    `basis`: 'slot' -- the best fresh result at this slot or a later one;
+    'earlier_slot' -- nothing fresh this late in a workout, so the best fresh
+    result from an earlier, fresher slot (may run heavy); 'layoff' -- nothing
+    fresh at all, so the most recent workout rather than the best."""
+    date: datetime
+    # The slot the exercise sat in during THAT workout.
+    position: int
+    basis: Literal['slot', 'earlier_slot', 'layoff']
 
 
 class ReadyForMore(_Model):
@@ -302,6 +320,8 @@ class SessionDetailPayload(_Model):
     # so model_dump(mode='json') emits '10', not 10 -- the client reads
     # string keys. Pinned by test_int_keyed_dicts_serialize_as_string_keys.
     suggestions: dict[str, Suggestion | None]
+    # Keyed the same way. None for an exercise with no history at all.
+    seed_sources: dict[str, SeedSource | None]
     stagnation_counts: dict[str, int]
     #: Keyed like stagnation_counts. The stall line's "go to X" number --
     #: display only, never seeded (owner decision: a stall is already at the

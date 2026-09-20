@@ -25,8 +25,9 @@ from extensions import db
 from models import (Exercise, PendingPush, SessionExercise, SharedSession,
                     SharedSessionExercise, WorkoutSession)
 
+from .locking import lock_sessions
 from .matching import normalise
-from .seeding import _seeded_sets
+from .seeding import _seeded_sets, reseed_for_slot
 
 
 def active_links_led_by(session_id):
@@ -174,26 +175,164 @@ def remove_mirrors_of(session_exercise):
         ).first()
         if row is None:
             continue
-        # Deleting an exercise cascades to its sets, so clear the session's
-        # pointer at a resting set first or the foreign key blocks it -- and
-        # cancel any pending push for this session at the same time, exactly
-        # as routes._cancel_pending_push's contract requires whenever
-        # resting_set_id/rest_ends_at is cleared: an orphaned PendingPush row
-        # has no way to tell the notifier daemon the set it was scheduled for
-        # is gone, and the daemon fires it regardless. sharing.py cannot
-        # import from routes (circular once routes calls into this module),
-        # so this is inlined rather than shared.
-        if follower.resting_set_id in [s.id for s in row.sets]:
-            follower.resting_set_id = None
-            follower.rest_ends_at = None
-            PendingPush.query.filter_by(session_id=follower.id, sent=False).delete()
-        db.session.delete(row)
+        _release_mirror(follower, row)
         follower.structure_version = (follower.structure_version or 0) + 1
+
+
+def is_live_follower(session_id):
+    """Whether this session is the follower half of an accepted, unended link.
+
+    While it is, its ORDER is the leader's: the follower's own reorder would be
+    undone by the leader's next change, so the route refuses it rather than
+    pretend. The same test gates the follower's page polling for changes.
+    """
+    return SharedSession.query.filter(
+        SharedSession.follower_session_id == session_id,
+        SharedSession.accepted_at.isnot(None),
+        SharedSession.ended_at.is_(None)).first() is not None
+
+
+def _release_mirror(follower, row):
+    """What becomes of a follower row whose leader row is going away.
+    Returns True if the row was kept.
+
+    Work the follower has LOGGED is theirs: the leader deciding not to do an
+    exercise says nothing about the sets a partner already lifted, and deleting
+    those was data loss on somebody else's phone. Such a row is kept and simply
+    stops being shared -- mirrors_id goes, so from here on it is an exercise
+    the follower added themselves. An untouched row still disappears.
+    """
+    if any(s.completed for s in row.sets):
+        row.mirrors_id = None
+        return True
+    # Deleting an exercise cascades to its sets, so clear the session's
+    # pointer at a resting set first or the foreign key blocks it -- and
+    # cancel any pending push for this session at the same time, exactly
+    # as routes._cancel_pending_push's contract requires whenever
+    # resting_set_id/rest_ends_at is cleared: an orphaned PendingPush row
+    # has no way to tell the notifier daemon the set it was scheduled for
+    # is gone, and the daemon fires it regardless. sharing.py cannot
+    # import from routes (circular once routes calls into this module),
+    # so this is inlined rather than shared.
+    if follower.resting_set_id in [s.id for s in row.sets]:
+        follower.resting_set_id = None
+        follower.rest_ends_at = None
+        PendingPush.query.filter_by(session_id=follower.id, sent=False).delete()
+    db.session.delete(row)
+    return False
+
+
+def _place_own_rows(shared, leader, follower, doomed):
+    """Slot the follower's OWN rows around the shared ones. Returns True if
+    any of them moved.
+
+    The shared rows take the leader's slot numbers, so a row the follower
+    created themselves has to be put somewhere those numbers never reach, or
+    two exercises end up in one slot in an order the database does not define:
+
+    - a substitute goes wherever the row it stands in for went, however long
+      the chain. The follower swapped a busy machine for a free one; when the
+      leader moves that exercise, the swap moves with it.
+    - everything else -- an exercise they added, or one the leader has since
+      removed that they had already logged -- queues up after the last shared
+      slot, in the order it already had.
+    """
+    rows = [se for se in follower.exercises if se not in doomed]
+    by_id = {se.id: se for se in rows}
+    hidden_ids = {se.replaces_id for se in rows if se.replaces_id}
+
+    def root(se):
+        while se.replaces_id and se.replaces_id in by_id:
+            se = by_id[se.replaces_id]
+        return se
+
+    moved = False
+
+    def move(se, slot):
+        nonlocal moved
+        if se.position == slot:
+            return
+        old_position = se.position
+        se.position = slot
+        if se.id not in hidden_ids:
+            reseed_for_slot(follower, se, old_position, slot,
+                            user_id=shared.follower_user_id)
+        moved = True
+
+    own = sorted((se for se in rows if se.mirrors_id is None),
+                 key=lambda se: (se.position, se.id))
+    next_slot = max((se.position for se in leader.exercises), default=0)
+    for se in own:
+        if root(se) is se:
+            next_slot += 1
+            move(se, next_slot)
+    for se in own:
+        if root(se) is not se:
+            move(se, root(se).position)
+    return moved
+
+
+def _carry_skip(shared, leader_row):
+    """The leader just skipped, or un-skipped, one exercise: carry THAT.
+    Returns True if the follower's row changed.
+
+    An event rather than part of reconciliation -- see the note in
+    reconcile_follower for what mirroring the flag on every structural change
+    did to the follower's own choices. Applied with the same meaning a skip
+    has on your own screen (gym_toggle_skip_session_exercise): skipping drops
+    the pending sets, un-skipping seeds a plan if none is left -- from the
+    FOLLOWER's history, at the follower's slot.
+
+    An exercise the follower has already started is left alone. Their logged
+    sets say they are doing it, and yanking it out from under them mid-set is
+    exactly the surprise this module exists to avoid.
+    """
+    if shared is None or shared.accepted_at is None or shared.ended_at is not None:
+        return False
+    if shared.follower_session_id is None:
+        return False
+    leader = db.session.get(WorkoutSession, shared.leader_session_id)
+    follower = db.session.get(WorkoutSession, shared.follower_session_id)
+    if leader is None or follower is None:
+        return False
+    if leader.user_id != shared.leader_user_id or follower.user_id != shared.follower_user_id:
+        return False
+    if follower.finished_at is not None or leader_row.session_id != leader.id:
+        return False
+
+    row = SessionExercise.query.filter_by(
+        session_id=follower.id, mirrors_id=leader_row.id).first()
+    if row is None or row.skipped == leader_row.skipped:
+        return False
+    if leader_row.skipped:
+        if any(s.completed for s in row.sets):
+            return False
+        row.skipped = True
+        for pending in list(row.sets):
+            row.sets.remove(pending)
+    else:
+        row.skipped = False
+        if not row.sets:
+            row.sets.extend(_seeded_sets(follower, row.exercise_id, row.position,
+                                         user_id=shared.follower_user_id))
+    follower.structure_version = (follower.structure_version or 0) + 1
+    return True
 
 
 def reconcile_follower(shared):
     """Make the follower's structure mirror the leader's. Returns True if
     anything changed.
+
+    "Structure" is WHICH exercises and in WHAT ORDER -- the two things that
+    make it one workout. It is deliberately not everything (owner decision,
+    2026-09-20): the follower's own choices stick. A skip travels once, as an
+    event (_carry_skip), and is never re-imposed here; a substitute the
+    follower made, an exercise they added and work they have logged all
+    survive, slotted around the shared rows by _place_own_rows. Order is the
+    exception that stays absolute -- the routes refuse a follower's reorder
+    while the link is live -- and a row that moves is re-seeded for its new
+    slot from the FOLLOWER's history, unless its plan is no longer untouched
+    (seeding.reseed_for_slot).
 
     Idempotent by construction: it compares the two sides and applies the
     difference, so calling it twice is the same as calling it once, and it is
@@ -293,12 +432,27 @@ def reconcile_follower(shared):
             changed = True
             continue
         if row.position != leader_row.position:
+            old_position = row.position
             row.position = leader_row.position
+            # The slot moved, so the plan seeded for the old one is stale --
+            # the same reason the leader's own reorder re-seeds. Read from the
+            # FOLLOWER's history, and only ever a plan nobody has touched:
+            # reseed_for_slot refuses a row with a logged set or a typed
+            # weight, which is what keeps "the follower's sets are never
+            # touched" true for every set that is actually theirs.
+            reseed_for_slot(follower, row, old_position, leader_row.position,
+                            user_id=shared.follower_user_id)
             changed = True
-        if row.skipped != leader_row.skipped:
-            row.skipped = leader_row.skipped
-            changed = True
+        # `skipped` is deliberately NOT compared here. Reconciliation runs
+        # after every structural change, so mirroring the flag re-imposed the
+        # leader's skips on each one: a follower who skipped an exercise had
+        # it un-skipped (with no sets left) the next time the leader swapped
+        # two unrelated rows, and one who chose to do an exercise the leader
+        # skipped was thrown out of it mid-set. A skip travels once, as the
+        # event it is -- see _carry_skip -- and a NEW row above still starts
+        # from the leader's flag.
 
+    doomed = set()
     live_leader_ids = {se.id for se in leader.exercises}
     for leader_row_id, row in list(mirrored.items()):
         if leader_row_id in live_leader_ids:
@@ -317,15 +471,14 @@ def reconcile_follower(shared):
         leader_row = db.session.get(SessionExercise, leader_row_id)
         if leader_row is not None and leader_row.session_id != shared.leader_session_id:
             continue
-        # Deleting an exercise cascades to its sets, so clear the session's
-        # pointer at a resting set first or the foreign key blocks it -- and
-        # cancel any pending push for the same reason remove_mirrors_of does.
-        if follower.resting_set_id in [s.id for s in row.sets]:
-            follower.resting_set_id = None
-            follower.rest_ends_at = None
-            PendingPush.query.filter_by(session_id=follower.id, sent=False).delete()
-        db.session.delete(row)
+        # Logged work stays with the follower; an untouched row goes -- the
+        # same rule, and the same code, as remove_mirrors_of.
+        if not _release_mirror(follower, row):
+            doomed.add(row)
         del mirrored[leader_row_id]
+        changed = True
+
+    if _place_own_rows(shared, leader, follower, doomed):
         changed = True
 
     # Substitutes second, once every row exists and has an id: a leader row
@@ -369,11 +522,15 @@ def reconcile_follower(shared):
     return changed
 
 
-def propagate_structure(session_):
+def propagate_structure(session_, skip_changed=None):
     """Carry this session's structure to every partner who accepted.
 
     Called by the leader's structural routes after they commit their own
     change. Safe to call on any session: one that leads no link does nothing.
+
+    `skip_changed` is the leader's SessionExercise whose skipped flag the
+    calling route just flipped, if that is what happened. Skips are carried as
+    that one event (_carry_skip), never re-derived by reconciliation.
 
     Guarded end to end: this runs entirely inside the LEADER's request, after
     the leader's own change already committed durably. A constraint violation
@@ -384,8 +541,20 @@ def propagate_structure(session_):
     worst case here is the partner falling out of sync until the next
     structural change reconciles cleanly -- never a crash.
     """
+    session_id = session_.id
+    follower_session_ids = [shared.follower_session_id
+                            for shared in active_links_led_by(session_id)]
+    if not follower_session_ids:
+        return
     try:
-        for shared in active_links_led_by(session_.id):
+        # The follower may be in the middle of a structural write of their
+        # own -- adding an exercise, skipping one. Take their session's lock
+        # and read their rows as they stand once it is ours (locking.py), or
+        # both sides pick "the next free slot" from the same stale rows.
+        lock_sessions(follower_session_ids)
+        for shared in active_links_led_by(session_id):
+            if skip_changed is not None:
+                _carry_skip(shared, skip_changed)
             reconcile_follower(shared)
         db.session.commit()
     except IntegrityError:
@@ -393,7 +562,7 @@ def propagate_structure(session_):
         current_app.logger.exception(
             'propagate_structure: reconciliation failed for session %s, '
             'partner(s) left out of sync until the next structural change',
-            session_.id)
+            session_id)
 
 
 def end_links_for(session_):

@@ -18,6 +18,8 @@ follower has real history for that exercise).
 """
 import datetime as dt
 
+from sqlalchemy.orm import contains_eager, selectinload
+
 from extensions import db
 from models import Exercise, SessionExercise, SessionSet, WorkoutSession
 from features.gym import stats
@@ -35,8 +37,42 @@ def _session_exercise_e1rm(session_exercise):
     )
 
 
-def _last_session_exercise(exercise_id, position=None, user_id=None):
-    """The SessionExercise to seed from. Owner-decided rules, in order:
+def _last_session_exercise(exercise_id, position=None, user_id=None, exclude_session_id=None):
+    """The SessionExercise to seed from -- see _pick_session_exercise, which
+    also says which rule picked it."""
+    return _pick_session_exercise(exercise_id, position=position, user_id=user_id,
+                                  exclude_session_id=exclude_session_id)[0]
+
+
+def _seed_source(picked):
+    """Where a plan's numbers come from, for the screen to say out loud.
+
+    `picked` is _pick_session_exercise's return value. None when there is no
+    history at all (the default plan names no workout). The owner kept the
+    'earlier_slot' fallback on 2026-09-20 on the condition that it is visible:
+    a slot later than anything in the fresh window is seeded from a fresher
+    one, so the numbers may run heavy, and the lifter should be told rather
+    than left to wonder why moving an exercise down changed nothing.
+    """
+    session_exercise, basis = picked
+    if session_exercise is None:
+        return None
+    return {'date': session_exercise.session.started_at,
+            'position': session_exercise.position,
+            'basis': basis}
+
+
+def _pick_session_exercise(exercise_id, position=None, user_id=None, exclude_session_id=None):
+    """(SessionExercise to seed from, which rule picked it) -- or (None, None).
+
+    `exclude_session_id` is the workout being seeded, which is never its own
+    history. It qualifies on every other count the moment one set is logged --
+    fresh, and quite possibly the best e1RM on record -- so without this the
+    running workout won its own pick: the source line named today, and a
+    second row of the same lift was seeded from the first.
+
+    The second value is 'slot', 'earlier_slot' or 'layoff', matching rules 2,
+    2's fallback and 3 below. Owner-decided rules, in order:
 
     1. **Fresh history wins, best first.** Among sessions inside
        stats.ROLLING_WINDOW_DAYS, pick the highest e1RM -- not the most
@@ -65,7 +101,7 @@ def _last_session_exercise(exercise_id, position=None, user_id=None):
     """
     if user_id is None:
         user_id = current_user_id()
-    pool = (
+    query = (
         SessionExercise.query
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
         .filter(
@@ -74,33 +110,46 @@ def _last_session_exercise(exercise_id, position=None, user_id=None):
             # Never seed from a deload -- see the docstring.
             WorkoutSession.is_deload == False,
             WorkoutSession.user_id == user_id,
-        )
+        ))
+    if exclude_session_id is not None:
+        query = query.filter(WorkoutSession.id != exclude_session_id)
+    pool = (
+        query
         .order_by(WorkoutSession.started_at.desc())
+        # Both are read for every row below (started_at for the window, the
+        # sets for the e1RM). Lazily that is two queries per past workout of
+        # this exercise, and a reorder asks this for every row it moves.
+        .options(contains_eager(SessionExercise.session),
+                 selectinload(SessionExercise.sets))
         .all()
     )
     if not pool:
-        return None
+        return None, None
 
     cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
     fresh = [se for se in pool if se.session.started_at >= cutoff]
     if not fresh:
         # Layoff: rule 3. `pool` is newest-first.
-        return pool[0]
+        return pool[0], 'layoff'
 
-    candidates = (
-        [se for se in fresh if position is None or se.position >= position]
-        or fresh
-    )
-    # Best e1RM; the newest wins a tie because `candidates` is newest-first
+    # Best e1RM; the newest wins a tie because the lists are newest-first
     # and max() keeps the first of equals.
-    return max(candidates, key=_session_exercise_e1rm)
+    at_or_after = [se for se in fresh if position is None or se.position >= position]
+    if at_or_after:
+        return max(at_or_after, key=_session_exercise_e1rm), 'slot'
+    return max(fresh, key=_session_exercise_e1rm), 'earlier_slot'
 
 
-def _last_performance(exercise_id, position=None, user_id=None):
+def _last_performance(exercise_id, position=None, user_id=None, picked=None):
     """The last completed set of the session _last_session_exercise picks
     (best fresh e1RM, fatigue-direction preferred, most-recent after a
-    layoff), used to pre-fill the steppers and the add-set form."""
-    last_session_exercise = _last_session_exercise(exercise_id, position=position, user_id=user_id)
+    layoff), used to pre-fill the steppers and the add-set form.
+
+    `picked` is an already-made _pick_session_exercise result for the same
+    arguments, for a caller that needs the pick for something else too."""
+    if picked is None:
+        picked = _pick_session_exercise(exercise_id, position=position, user_id=user_id)
+    last_session_exercise = picked[0]
     if not last_session_exercise:
         return None
     completed_sets = [s for s in last_session_exercise.sets if s.completed]
@@ -110,11 +159,13 @@ def _last_performance(exercise_id, position=None, user_id=None):
     return {'weight': last_set.weight, 'reps': last_set.reps}
 
 
-def _last_full_performance(exercise_id, position=None, user_id=None):
+def _last_full_performance(exercise_id, position=None, user_id=None, exclude_session_id=None):
     """All completed sets of the session _last_session_exercise picks, in
     order -- used to pre-fill a new session's sets, mirroring the strongest
     recent performance that is valid evidence for this slot."""
-    last_session_exercise = _last_session_exercise(exercise_id, position=position, user_id=user_id)
+    last_session_exercise = _last_session_exercise(
+        exercise_id, position=position, user_id=user_id,
+        exclude_session_id=exclude_session_id)
     if not last_session_exercise:
         return []
     return [{'weight': s.weight, 'reps': s.reps} for s in last_session_exercise.sets if s.completed]
@@ -142,7 +193,10 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
     the deload back off restores these sets to the working weight like any
     other.
     """
-    seeded = _last_full_performance(exercise_id, position=position, user_id=user_id)
+    # session_.id is None while gym_start is still building the workout --
+    # nothing to exclude yet, and nothing of it is in the database to find.
+    seeded = _last_full_performance(exercise_id, position=position, user_id=user_id,
+                                    exclude_session_id=session_.id)
     if not seeded:
         # No history: a plain default plan, NOT a deload-scaled one. A deload is
         # a percentage of a real working weight, and there isn't one here --
@@ -185,7 +239,65 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
     ]
 
 
-def _seeded_suggestion(session_, exercise, position, user_id=None):
+def _plan_signature(sets):
+    """What a plan says, without which rows say it."""
+    return [(s.weight, s.reps) for s in sets]
+
+
+def reseed_for_slot(session_, session_exercise, old_position, new_position, user_id=None):
+    """Re-derive a moved exercise's pending sets for the slot it landed in.
+    Returns True when a set changed.
+
+    Position is a fatigue proxy (see _last_session_exercise), so a plan seeded
+    for one slot is stale in another. But only a plan nobody has touched is
+    ours to replace, and three things say somebody has:
+
+    - a completed set: the lifter has started, and these are real data;
+    - a skipped exercise: it carries no pending sets at all, by
+      gym_toggle_skip_session_exercise's own rule;
+    - pending sets that are no longer what seeding handed out for the OLD
+      slot: a typed weight, a set removed to do three instead of four, or a
+      deload that was flagged after the first set and so never rescaled the
+      plan. The plan is the lifter's from that point on. This is derived by
+      asking seeding the same question again rather than kept as a flag on the
+      row, so it needs no schema and cannot drift from what seeding does.
+
+    Moving ONE exercise renumbers every row between its old and new slot, so
+    this runs for rows the lifter never touched -- which is exactly why the
+    old clear-and-reseed destroyed typed weights on exercises nobody dragged.
+
+    The rows are rewritten IN PLACE, keeping their ids: the live screen keys
+    its editors and its confirm button on set ids, and a partner's phone may be
+    about to post against one.
+
+    `user_id` is whose history to read -- see _seeded_sets.
+    """
+    if old_position == new_position or session_exercise.skipped:
+        return False
+    current = list(session_exercise.sets)
+    if any(s.completed for s in current):
+        return False
+    exercise_id = session_exercise.exercise_id
+    seeded_for_old_slot = _seeded_sets(session_, exercise_id, old_position, user_id=user_id)
+    if _plan_signature(current) != _plan_signature(seeded_for_old_slot):
+        return False
+    wanted = _seeded_sets(session_, exercise_id, new_position, user_id=user_id)
+    if _plan_signature(current) == _plan_signature(wanted):
+        return False
+
+    for kept, fresh in zip(current, wanted):
+        kept.weight, kept.reps = fresh.weight, fresh.reps
+        kept.base_weight, kept.base_reps = fresh.base_weight, fresh.base_reps
+        kept.is_default_seeded = bool(fresh.is_default_seeded)
+        kept.position = fresh.position
+    for surplus in current[len(wanted):]:
+        session_exercise.sets.remove(surplus)
+    for extra in wanted[len(current):]:
+        session_exercise.sets.append(extra)
+    return True
+
+
+def _seeded_suggestion(session_, exercise, position, user_id=None, picked=None):
     """The single weight/reps pair the steppers pre-fill with, deload-aware.
 
     The scalar sibling of _seeded_sets, and it honours the deload for exactly
@@ -199,7 +311,10 @@ def _seeded_suggestion(session_, exercise, position, user_id=None):
     to be a second such gap; gym_add_session_exercise seeds a full plan now,
     like every other path that puts an exercise into a session.)
     """
-    last = _last_performance(exercise.id, position=position, user_id=user_id)
+    if picked is None:
+        picked = _pick_session_exercise(exercise.id, position=position, user_id=user_id,
+                                        exclude_session_id=session_.id)
+    last = _last_performance(exercise.id, position=position, user_id=user_id, picked=picked)
     if not last:
         return None
     pct = session_.deload_pct if session_.is_deload else None

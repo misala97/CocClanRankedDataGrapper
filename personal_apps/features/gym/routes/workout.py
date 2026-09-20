@@ -27,7 +27,11 @@ from features.gym.scope import (
     owned_exercise, owned_session, owned_session_exercise, owned_set,
 )
 from .. import sharing
-from ..seeding import _seeded_sets, _seeded_suggestion
+from ..locking import lock_sessions
+from ..seeding import (
+    _pick_session_exercise, _seed_source, _seeded_sets, _seeded_suggestion,
+    reseed_for_slot,
+)
 from ._blueprint import gym_bp
 from .helpers import (
     DEFAULT_REST_SECONDS, NON_MUSCLE_GROUPS, RECENT_SESSIONS, WEEKDAY_SHORT,
@@ -58,6 +62,59 @@ def _template_exercises_from_session(session_):
         result.append(TemplateExercise(exercise_id=se.exercise_id, position=position, rest_seconds=se.rest_seconds))
         position += 1
     return result
+
+
+def _locked_session_exercise(session_exercise_id, with_partners=False):
+    """owned_session_exercise, holding its workout's structural lock (see
+    locking.py). Read twice on purpose: once to learn which workout to lock,
+    and again under the lock -- the request this one waited for may have been
+    a second tap on "remove", and the row is then simply gone (404).
+
+    `with_partners` also locks the session of every partner following this
+    workout, for the one route that writes into theirs BEFORE its own commit
+    (removing an exercise -- see sharing.remove_mirrors_of)."""
+    session_id = owned_session_exercise(session_exercise_id).session_id
+    partner_ids = ([link.follower_session_id
+                    for link in sharing.active_links_led_by(session_id)]
+                   if with_partners else [])
+    lock_sessions([session_id, *partner_ids])
+    return owned_session_exercise(session_exercise_id)
+
+
+def _close_position_gaps(session_):
+    """Renumber the session's slots 1..n, keeping their order.
+
+    Slots are what seeding reads as a fatigue proxy and what the queue prints,
+    so a hole in them is a lie in both: removing the second of five exercises
+    left the last one claiming slot 5 of 4, and the next reorder -- even one
+    that put a row back where it was -- then "moved" everything after the hole
+    and re-seeded it.
+
+    A substitute shares its slot with the hidden rows behind it, however long
+    the chain, so they count as ONE slot and move together. Only a visible row
+    is re-seeded: a replaced original is not on screen and its plan is not
+    going to be lifted.
+    """
+    rows = sorted(session_.exercises, key=lambda se: (se.position, se.id))
+    by_id = {se.id: se for se in rows}
+    hidden_ids = {se.replaces_id for se in rows if se.replaces_id}
+
+    def root_id(se):
+        while se.replaces_id and se.replaces_id in by_id:
+            se = by_id[se.replaces_id]
+        return se.id
+
+    slots = {}
+    for se in rows:
+        slots.setdefault(root_id(se), []).append(se)
+    for number, members in enumerate(slots.values(), start=1):
+        for se in members:
+            old_position = se.position
+            if old_position == number:
+                continue
+            se.position = number
+            if se.id not in hidden_ids:
+                reseed_for_slot(session_, se, old_position, number)
 
 
 def _schedule_rest(session_set):
@@ -284,8 +341,11 @@ def gym_start():
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
-def _live_context(session_):
+def _live_context(session_, keep_started=False):
     """The ordered, visible exercise list and which one of them is live.
+
+    `keep_started` is True for the follower half of a live shared workout --
+    see the branch below for what it changes and why only there.
 
     session_detail computes both anyway for its own purposes (suggestions,
     the tick strip, the rest lookup...), so this is a straight extraction --
@@ -309,11 +369,30 @@ def _live_context(session_):
     # strip's "current exercise", and the rail that marks which segment is
     # live -- and a rule expressed three times in Jinja is a rule that drifts.
     live_se = None
-    for se in visible_exercises:
-        done = sum(1 for s in se.sets if s.completed)
-        if not se.skipped and not (se.sets and done == len(se.sets)):
-            live_se = se
-            break
+    if keep_started:
+        # The follower half of a live shared workout: whatever they have
+        # STARTED stays live until it is finished or skipped. They are
+        # physically at that exercise, and the order is not theirs -- so the
+        # leader dragging another row to the top used to swap this panel
+        # under their thumb, and the next "Satz geschafft" logged a set on a
+        # lift they never touched. Alone, or leading, the rule below is left
+        # as it was: there the drag is the lifter's own instruction, and
+        # pulling another exercise above a started one is how you step away
+        # from a busy machine. Most recently logged wins if there are two.
+        started = [
+            se for se in visible_exercises
+            if not se.skipped
+            and any(s.completed for s in se.sets)
+            and not all(s.completed for s in se.sets)]
+        if started:
+            live_se = max(started, key=lambda se: max(
+                (s.completed_at or dt.datetime.min) for s in se.sets if s.completed))
+    if live_se is None:
+        for se in visible_exercises:
+            done = sum(1 for s in se.sets if s.completed)
+            if not se.skipped and not (se.sets and done == len(se.sets)):
+                live_se = se
+                break
     if live_se is None and visible_exercises:
         live_se = visible_exercises[-1]
 
@@ -330,10 +409,26 @@ def _live_data(session_):
     """
     # visible_exercises and which one is live: see _live_context's own
     # docstring for why this is a call rather than the computation itself.
-    live_ctx = _live_context(session_)
+    # Whether THIS session is the FOLLOWER half of a live link. Decides which
+    # exercise is live (_live_context), marks the shared rows, and gates the
+    # page's poll: only the follower's structure ever changes out from under
+    # them, so only the follower needs to ask. Deliberately NOT "either half":
+    # the leader's own structure_version is never bumped by anything, so a
+    # leader polling sync.json would burn a request every 5s forever for a
+    # version that can never change.
+    session_is_shared = sharing.is_live_follower(session_.id)
+    live_ctx = _live_context(session_, keep_started=session_is_shared)
     visible_exercises = live_ctx['visible_exercises']
     live_se = next((se for se in visible_exercises if se.id == live_ctx['live_id']), None)
-    suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position) for se in visible_exercises}
+    # One history pick per exercise, read twice: for the numbers the steppers
+    # pre-fill with, and for the line that says where those numbers came from.
+    picks = {se.id: _pick_session_exercise(se.exercise_id, position=se.position,
+                                           exclude_session_id=session_.id)
+             for se in visible_exercises}
+    suggestions = {se.id: _seeded_suggestion(session_, se.exercise, se.position,
+                                             picked=picks[se.id])
+                   for se in visible_exercises}
+    seed_sources = {se.id: _seed_source(picks[se.id]) for se in visible_exercises}
     history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
     by_exercise = {}
     for row in history:
@@ -450,18 +545,6 @@ def _live_data(session_):
          'accepted': link.accepted_at is not None}
         for link in shared_out
     ]
-    # Whether THIS session is the FOLLOWER half of a live link -- gates the
-    # polling script in session_detail.html. Only the follower's structure
-    # ever changes out from under them, so only the follower needs to poll.
-    # Deliberately NOT db.or_(leader_session_id == ..., follower_session_id
-    # == ...): the leader's own structure_version is never bumped by
-    # anything (only reconcile_follower bumps it, and only on the FOLLOWER's
-    # session), so a leader polling sync.json would burn a request every 5s
-    # forever for a version that can never change.
-    session_is_shared = SharedSession.query.filter(
-        SharedSession.ended_at.is_(None),
-        SharedSession.accepted_at.isnot(None),
-        SharedSession.follower_session_id == session_.id).first() is not None
 
     return dict(
         session=session_,
@@ -493,6 +576,7 @@ def _live_data(session_):
         # the wrong rest length the moment the rest spans an exercise boundary.
         rest_total_seconds=rest_total_seconds,
         suggestions=suggestions,
+        seed_sources=seed_sources,
         stagnation_counts=stagnation_counts,
         stall_next_weight=stall_next_weight,
         record_set_ids=record_set_ids,
@@ -549,6 +633,11 @@ def _session_payload(session_):
             'muscle_group': se.exercise.muscle_group,
             'position': se.position,
             'skipped': se.skipped,
+            # The leader's structure, carried here by a LIVE link: the follower
+            # can skip or substitute it, but not remove it. False for an
+            # exercise they added themselves, and for every row once the link
+            # has ended -- the session is fully theirs again from then on.
+            'mirrored': data['session_is_shared'] and se.mirrors_id is not None,
             'is_unilateral': se.exercise.is_unilateral,
             'rest_seconds': se.rest_seconds,
             # Resolved, never raw: the fallback lives in stats and a second
@@ -591,6 +680,7 @@ def _session_payload(session_):
         'resting': data['resting'],
         'rest_total_seconds': data['rest_total_seconds'],
         'suggestions': {str(k): v for k, v in data['suggestions'].items()},
+        'seed_sources': {str(k): v for k, v in data['seed_sources'].items()},
         'stagnation_counts': {str(k): v for k, v in data['stagnation_counts'].items()},
         'stall_next_weight': {str(k): v for k, v in data['stall_next_weight'].items()},
         'record_set_ids': sorted(data['record_set_ids']),
@@ -863,6 +953,8 @@ def session_detail(session_id):
 @login_required
 def gym_add_session_exercise(session_id):
     session_ = owned_session(session_id)
+    # Before anything is created: taking the lock ends the transaction.
+    lock_sessions([session_id])
 
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
@@ -916,7 +1008,7 @@ def gym_replace_session_exercise(session_exercise_id):
     exercise's history/PRs), a new SessionExercise is created for the
     replacement at the same position, and _template_exercises_from_session
     skips substitutes entirely so this never gets written into a template."""
-    original = owned_session_exercise(session_exercise_id)
+    original = _locked_session_exercise(session_exercise_id)
     session_id = original.session_id
 
     exercise_id = request.form.get('exercise_id', type=int)
@@ -1071,12 +1163,19 @@ def gym_add_set(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/delete', methods=['POST'])
 @login_required
 def gym_delete_session_exercise(session_exercise_id):
-    session_exercise = owned_session_exercise(session_exercise_id)
+    session_exercise = _locked_session_exercise(session_exercise_id, with_partners=True)
     # Captured before the delete: walking session_exercise.session afterwards
     # would traverse a row that no longer exists.
     _doomed_session = session_exercise.session
     session_id = session_exercise.session_id
     session_ = session_exercise.session
+    # A shared exercise is not the follower's to remove while the link is
+    # live: the row is the leader's structure, and the leader's next change
+    # would only bring it back. Skipping it is theirs, and sticks. The screen
+    # does not offer this (payload `mirrored`); this is the stale tab.
+    if session_exercise.mirrors_id is not None and sharing.is_live_follower(session_id):
+        return _mutation_response(
+            _doomed_session, 'gym.session_detail', session_id=session_id)
     # If the currently-resting set belongs to this exercise, clear the
     # reference first -- otherwise deleting it (cascades to its sets) would
     # violate the WorkoutSession.resting_set_id foreign key.
@@ -1093,6 +1192,12 @@ def gym_delete_session_exercise(session_exercise_id):
     # would eventually delete their own work and the sets they logged on it.
     sharing.remove_mirrors_of(session_exercise)
     db.session.delete(session_exercise)
+    # Flushed and re-read before renumbering: the collection still holds the
+    # doomed row until then, and the database has only now cleared a
+    # substitute's replaces_id (ON DELETE SET NULL) if this was its original.
+    db.session.flush()
+    db.session.expire(session_, ['exercises'])
+    _close_position_gaps(session_)
     db.session.commit()
     sharing.propagate_structure(session_)
     return _mutation_response(
@@ -1109,7 +1214,7 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     needed there: it already includes every non-substitute row). Toggling
     back off (undo) re-derives pending sets the same way a fresh template
     start does, but only if nothing is left over from before the skip."""
-    session_exercise = owned_session_exercise(session_exercise_id)
+    session_exercise = _locked_session_exercise(session_exercise_id)
     session_ = session_exercise.session
     if session_.finished_at:
         return _mutation_response(
@@ -1129,7 +1234,9 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
         )
 
     db.session.commit()
-    sharing.propagate_structure(session_)
+    # The skip itself is what travels -- once, as this event. Reconciliation
+    # no longer mirrors the flag, so that a partner's own skip survives it.
+    sharing.propagate_structure(session_, skip_changed=session_exercise)
     return _mutation_response(
         session_, 'gym.session_detail', session_id=session_.id)
 
@@ -1371,6 +1478,15 @@ def gym_update_set(set_id):
 @login_required
 def gym_reorder_session_exercises(session_id):
     session_ = owned_session(session_id)
+    # Training together means one order, and it is the leader's. A follower's
+    # own reorder was undone by the leader's next change -- any change -- so it
+    # is refused outright rather than allowed and then silently reverted. The
+    # screen hides the mode for a follower; this is the stale tab. Once either
+    # side finishes the link is over and the order is theirs again.
+    if sharing.is_live_follower(session_.id):
+        return _mutation_response(
+            session_, 'gym.session_detail', session_id=session_id)
+    lock_sessions([session_id])
     data = request.get_json(silent=True) or {}
     order = data.get('order')
     if order is None:
@@ -1387,21 +1503,26 @@ def gym_reorder_session_exercises(session_id):
             se.position = position
             # A substitute shares its slot with the original it replaced (which
             # is hidden from `order` -- it's not rendered while the session is
-            # active) -- keep the hidden original's position in sync so the two
-            # don't drift apart / collide with an unrelated exercise's position.
-            if se.replaces_id and se.replaces:
-                se.replaces.position = position
+            # active) -- keep every hidden row behind it in step, all the way
+            # down: a substitute can itself be substituted, and syncing one
+            # link only left the root original at its old slot, colliding with
+            # an unrelated exercise and deciding the order a saved template
+            # gets (_template_exercises_from_session reads originals only).
+            hidden = se.replaces if se.replaces_id else None
+            while hidden is not None:
+                hidden.position = position
+                hidden = hidden.replaces if hidden.replaces_id else None
             # Its pending sets (if any) were pre-filled from history matched to
             # the OLD position -- e.g. at gym_start, or a previous reorder --
-            # which is now stale for the new slot. Re-derive them for the new
-            # position, but only when nothing has been logged for this exercise
-            # yet this session: one completed set means the lifter has already
-            # started on it, and overwriting sets at that point would destroy
-            # real in-progress data rather than a stale suggestion.
-            if position != old_position and not any(s.completed for s in se.sets):
-                se.sets.clear()
-                se.sets.extend(_seeded_sets(session_, se.exercise_id, position))
+            # which is now stale for the new slot. reseed_for_slot re-derives
+            # them, and owns the rule for when it must NOT: a logged set, a
+            # skipped exercise, or a plan the lifter has made their own.
+            reseed_for_slot(session_, se, old_position, position)
             position += 1
+    # A posted order can miss a row -- a second tab, or a partner's addition
+    # that landed mid-drag. It keeps its old number, which may now be somebody
+    # else's; settle that here rather than serve two rows in one slot.
+    _close_position_gaps(session_)
     db.session.commit()
     sharing.propagate_structure(session_)
     return _mutation_response(
