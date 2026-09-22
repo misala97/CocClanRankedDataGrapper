@@ -3,13 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useUndo } from '../../undo'
 import { ExerciseSheet } from './ExerciseSheet'
-import { useSheets } from '../stores'
+import { useSaveState, useSheets } from '../stores'
 import { payload } from '../types.test-d'
 import type { LiveExercise } from '../types'
 
 beforeEach(() => {
   useUndo.setState({ pending: null, timer: null })
   useSheets.setState(useSheets.getInitialState(), true)
+  useSaveState.setState({ locked: {} })
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
@@ -24,14 +25,14 @@ const actions = () => ({
   onRestChange: vi.fn(), onIncrementChange: vi.fn(), onMetaSave: vi.fn(),
   onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
   onToggleSkip: vi.fn(), onReplace: vi.fn(), onReplaceWithNew: vi.fn(),
-  onRemove: vi.fn(), onShowProgress: vi.fn(),
+  onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
 })
 
 function open(props: Partial<Parameters<typeof ExerciseSheet>[0]> = {}) {
   const a = actions()
   const result = render(
     <ExerciseSheet exercise={exercise} catalogue={catalogue}
-      suggestion={{ weight: 60, reps: 8 }} {...a} {...props} />)
+      suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...a} {...props} />)
   act(() => { useSheets.getState().open(`sheet-ex-${exercise.id}`) })
   return { ...result, actions: a }
 }
@@ -65,13 +66,26 @@ describe('ExerciseSheet', () => {
     expect(a.onRestChange).toHaveBeenCalledWith(null)
   })
 
-  it('saves the twinge and the note together', async () => {
+  it('saves the twinge on the tap, with no button to forget', async () => {
+    // It waited for a Speichern beside the note: tick it, close the sheet,
+    // and the tick stayed on screen while nothing was saved.
     const user = userEvent.setup()
     const { actions: a } = open()
     await user.click(screen.getByText('Schmerz / Zwicken'))
+    expect(a.onMetaSave).toHaveBeenCalledWith({ pain: true, notes: '' })
+    expect(screen.queryByText('Speichern')).toBeNull()
+  })
+
+  it('saves the note when the field is left, and only if it changed', async () => {
+    const user = userEvent.setup()
+    const { actions: a } = open()
+    await user.click(screen.getByLabelText('Notiz'))
+    await user.tab()
+    expect(a.onMetaSave).not.toHaveBeenCalled()
+
     await user.type(screen.getByLabelText('Notiz'), 'linke Schulter')
-    await user.click(screen.getByText('Speichern'))
-    expect(a.onMetaSave).toHaveBeenCalledWith({ pain: true, notes: 'linke Schulter' })
+    await user.tab()
+    expect(a.onMetaSave).toHaveBeenCalledWith({ pain: false, notes: 'linke Schulter' })
   })
 
   it('edits and deletes an individual set', async () => {
@@ -79,8 +93,12 @@ describe('ExerciseSheet', () => {
     const { actions: a } = open()
     const first = exercise.sets[0]!
 
+    // Unchanged, there is nothing to save.
+    expect(screen.getByLabelText('Satz 1 speichern')).toBeDisabled()
+    await user.clear(screen.getByLabelText('Satz 1, Wiederholungen'))
+    await user.type(screen.getByLabelText('Satz 1, Wiederholungen'), '7')
     await user.click(screen.getByLabelText('Satz 1 speichern'))
-    expect(a.onSetUpdate).toHaveBeenCalledWith(first.id, first.weight, first.reps)
+    expect(a.onSetUpdate).toHaveBeenCalledWith(first.id, first.weight, 7)
 
     const rowsBefore = screen.getAllByLabelText(/Satz \d+ löschen/).length
     await user.click(screen.getByLabelText('Satz 1 löschen'))
@@ -108,16 +126,29 @@ describe('ExerciseSheet', () => {
     }
     const view = render(
       <ExerciseSheet exercise={exercise} catalogue={catalogue}
-        suggestion={{ weight: 60, reps: 8 }} {...a} />)
+        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...a} />)
     view.rerender(
       <ExerciseSheet exercise={logged} catalogue={catalogue}
-        suggestion={{ weight: 60, reps: 8 }} {...a} />)
+        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...a} />)
     act(() => { useSheets.getState().open(`sheet-ex-${exercise.id}`) })
 
     expect(screen.getByLabelText('Satz 1, Gewicht in kg')).toHaveValue(60)
     expect(screen.getByLabelText('Satz 1, Wiederholungen')).toHaveValue(5)
+    await user.clear(screen.getByLabelText('Satz 1, Wiederholungen'))
+    await user.type(screen.getByLabelText('Satz 1, Wiederholungen'), '6')
     await user.click(screen.getByLabelText('Satz 1 speichern'))
-    expect(a.onSetUpdate).toHaveBeenCalledWith(first.id, 60, 5)
+    expect(a.onSetUpdate).toHaveBeenCalledWith(first.id, 60, 6)
+  })
+
+  it('will not save a cleared field as zero', async () => {
+    // Number('') is 0: clearing the reps and saving overwrote a real set
+    // with 0 reps.
+    const user = userEvent.setup()
+    const { actions: a } = open()
+    await user.clear(screen.getByLabelText('Satz 1, Wiederholungen'))
+    expect(screen.getByLabelText('Satz 1 speichern')).toBeDisabled()
+    await user.click(screen.getByLabelText('Satz 1 speichern'))
+    expect(a.onSetUpdate).not.toHaveBeenCalled()
   })
 
   it('follows a set that changes while the sheet is open', async () => {
@@ -133,7 +164,7 @@ describe('ExerciseSheet', () => {
       sets: exercise.sets.map((s, i) => (i === 0 ? { ...s, weight: 42.5 } : s)),
     }
     rerender(<ExerciseSheet exercise={changed} catalogue={catalogue}
-      suggestion={{ weight: 60, reps: 8 }} {...actions()} />)
+      suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...actions()} />)
     expect(screen.getByLabelText('Satz 1, Gewicht in kg')).toHaveValue(42.5)
   })
 
@@ -146,16 +177,53 @@ describe('ExerciseSheet', () => {
     expect(a.onSetDelete).not.toHaveBeenCalled()
   })
 
-  it('pre-fills the append row from the suggestion', async () => {
+  it('pre-fills the append row from the last set', async () => {
+    // Appending is usually one more of what you just did.
     const user = userEvent.setup()
     const { actions: a } = open()
+    const last = exercise.sets[exercise.sets.length - 1]!
+    await user.click(screen.getByRole('button', { name: 'Satz anhängen' }))
+    expect(a.onAddSet).toHaveBeenCalledWith(last.weight, last.reps)
+  })
+
+  it('pre-fills the append row from the suggestion when nothing is logged', async () => {
+    const user = userEvent.setup()
+    const { actions: a } = open({ exercise: { ...exercise, sets: [] } })
     await user.click(screen.getByRole('button', { name: 'Satz anhängen' }))
     expect(a.onAddSet).toHaveBeenCalledWith(60, 8)
   })
 
-  it('leaves the append row empty when there is nothing to seed from', () => {
-    open({ suggestion: null })
+  it('leaves the append row empty, and shut, when there is nothing to seed from', async () => {
+    // An empty row used to log a completed 0 kg x 0 set.
+    const user = userEvent.setup()
+    const { actions: a } = open({ exercise: { ...exercise, sets: [] }, suggestion: null })
     expect(screen.getByLabelText('Neuer Satz, Gewicht in kg')).toHaveValue(null)
+    const add = screen.getByRole('button', { name: 'Satz anhängen' })
+    expect(add).toBeDisabled()
+    await user.type(screen.getByLabelText('Neuer Satz, Gewicht in kg'), '20')
+    await user.type(screen.getByLabelText('Neuer Satz, Wiederholungen'), '0')
+    expect(add).toBeDisabled()
+    await user.clear(screen.getByLabelText('Neuer Satz, Wiederholungen'))
+    await user.type(screen.getByLabelText('Neuer Satz, Wiederholungen'), '10')
+    await user.click(add)
+    expect(a.onAddSet).toHaveBeenCalledWith(20, 10)
+  })
+
+  it('holds the append row while an append for this exercise is in flight', () => {
+    useSaveState.setState({ locked: { [`add-${exercise.id}`]: true } })
+    open()
+    expect(screen.getByRole('button', { name: 'Satz anhängen' })).toBeDisabled()
+  })
+
+  it('offers "Jetzt machen" only when asked to, and pulls the exercise forward', async () => {
+    const user = userEvent.setup()
+    const first = open()
+    expect(screen.queryByText('Jetzt machen')).toBeNull()
+    first.unmount()
+
+    const { actions: a } = open({ canMakeLive: true })
+    await user.click(screen.getByText('Jetzt machen'))
+    expect(a.onMakeLive).toHaveBeenCalled()
   })
 
   it('offers the replace picker filtered to the same muscle group', async () => {
@@ -198,7 +266,7 @@ describe('ExerciseSheet', () => {
     expect(screen.getByText('Übung überspringen')).toBeInTheDocument()
 
     rerender(<ExerciseSheet exercise={skipped} catalogue={catalogue}
-      suggestion={null} {...actions()} />)
+      suggestion={null} canMakeLive={false} {...actions()} />)
     expect(screen.getByText('Nicht mehr überspringen')).toBeInTheDocument()
   })
 

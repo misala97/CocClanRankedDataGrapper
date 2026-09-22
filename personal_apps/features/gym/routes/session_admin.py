@@ -10,7 +10,7 @@ from extensions import (
     db,
 )
 from models import (
-    SharedSession, SharedSessionExercise, WorkoutTemplate,
+    WorkoutTemplate,
 )
 from auth import (
     login_required,
@@ -19,7 +19,7 @@ from features.gym.scope import (
     current_user_id, my_sessions, my_templates, owned_session, owned_template,
 )
 from .helpers import (
-    _to_int, _wants_json,
+    _delete_session_and_links, _refuse_live_write_if_finished, _to_int, _wants_json,
 )
 from .workout import (
     _heute_payload, _mutation_response, _template_exercises_from_session,
@@ -63,6 +63,9 @@ def gym_toggle_deload(session_id):
     then on.
     """
     session_ = owned_session(session_id)
+    refusal = _refuse_live_write_if_finished(session_)
+    if refusal is not None:
+        return refusal
 
     on = request.form.get('on') == '1'
     pct = _to_int(request.form.get('pct', ''), fallback=stats.DELOAD_DEFAULT_PCT)
@@ -153,33 +156,10 @@ def gym_session_summary(session_id):
 def gym_delete_session(session_id):
     session_ = owned_session(session_id)
     if session_.finished_at is not None:  # never delete the active workout by accident
-        # Null the self-referencing rest-timer FK first -- deleting a session
-        # whose resting_set_id still points at one of its own (about to be
-        # cascade-deleted) sets would otherwise violate the FK constraint.
-        session_.resting_set_id = None
-        db.session.commit()
-        # Plain FKs with no ondelete point at this session from both halves of
-        # any link it took part in. Deleting the workout without clearing them
-        # is a constraint violation -- and the link is spent anyway, since a
-        # session can only be deleted once it has finished.
-        #
-        # SharedSessionExercise.shared_session_id is itself a plain FK, with
-        # no ondelete and no ORM-level cascade -- SharedSession carries no
-        # relationship to it at all. A bulk delete() bypasses ORM cascades in
-        # any case, so the exercise-map rows have to be cleared explicitly
-        # first, or deleting the link row 500s on exactly the same kind of
-        # constraint this comment is already warning about, one table deeper.
-        doomed_link_ids = [row.id for row in SharedSession.query.filter(
-            db.or_(SharedSession.leader_session_id == session_.id,
-                   SharedSession.follower_session_id == session_.id)).all()]
-        if doomed_link_ids:
-            SharedSessionExercise.query.filter(
-                SharedSessionExercise.shared_session_id.in_(doomed_link_ids)).delete(
-                synchronize_session=False)
-            SharedSession.query.filter(SharedSession.id.in_(doomed_link_ids)).delete(
-                synchronize_session=False)
-        db.session.delete(session_)
-        db.session.commit()
+        # The link is spent anyway, since a session can only be deleted here
+        # once it has finished. An unfinished one goes through
+        # gym_discard_session, which refuses anything with a logged set.
+        _delete_session_and_links(session_)
     # The island's delayed-commit undo posts this via fetch; it needs an
     # answer, not a redirect it would have to parse HTML out of.
     if _wants_json():

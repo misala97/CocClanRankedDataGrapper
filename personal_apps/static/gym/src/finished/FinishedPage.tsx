@@ -32,6 +32,10 @@ const signed = (pct: number) => `${pct >= 0 ? '+' : '-'}${Math.abs(pct)}`
 const minutes = (count: number) =>
   count < 1 ? 'unter 1 Minute' : `${count} ${count === 1 ? 'Minute' : 'Minuten'}`
 
+/** 185 -> "3:05". */
+const clock = (seconds: number) =>
+  `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
+
 /** The verdict. Every branch says something -- the zero-record case gets a real
  *  substitute rather than falling through to silence. The deload branch sits
  *  after the empty-session case (an empty session is empty whatever it is
@@ -100,6 +104,34 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
   const [payload, setPayload] = useState(initial)
   const [saveError, setSaveError] = useState<string | null>(null)
   const { session } = payload
+  const offerUndo = useUndo((s) => s.offer)
+  // Sets hidden while their delete waits out the undo window.
+  const [hiddenSetIds, setHiddenSetIds] = useState<number[]>([])
+
+  /** A set logged by mistake -- the double tap, the wrong exercise -- used to
+   *  be permanent once the workout finished: this sheet could only retype
+   *  numbers. Delayed commit like every other delete here. */
+  const deleteSet = (setId: number, label: string) => {
+    setHiddenSetIds((ids) => [...ids, setId])
+    const unhide = () => setHiddenSetIds((ids) => ids.filter((id) => id !== setId))
+    offerUndo({
+      label: `${label} gelöscht.`,
+      undo: unhide,
+      commit: (keepalive) => {
+        postForm<FinishedPayload>(`/gym/set/${setId}/delete`, {}, { keepalive })
+          .then((fresh) => {
+            setPayload((previous) => ({ ...fresh, just_finished: previous.just_finished }))
+            setSaveError(null)
+          })
+          .catch((error: unknown) => {
+            unhide()
+            setSaveError(error instanceof MutationFailed
+              ? error.germanMessage
+              : 'Löschen fehlgeschlagen.')
+          })
+      },
+    })
+  }
 
   /** Submit this form's fields over fetch instead of navigating. just_finished
    *  is preserved from the mount: the flare celebrates the visit, not the
@@ -152,10 +184,13 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             {`${weekday} · ${dmy(session.started_at)} · ${minutes(elapsed)}`}
           </span>
           {/* Measured, not planned. Absent for every session logged before
-              completed_at existed, and silent rather than zero in that case. */}
-          {payload.rest_taken_seconds !== null && payload.rest_taken_seconds > 0 && (
+              completed_at existed, and silent rather than zero in that case.
+              Pace, not "Pause": the gap between two logged sets includes the
+              set itself, so "davon 50 Minuten Pause" in a 55-minute workout
+              claimed almost all of it was spent resting. */}
+          {payload.set_pace_seconds !== null && payload.set_pace_seconds > 0 && (
             <span className="finished__rest">
-              {`davon ${minutes(Math.floor(payload.rest_taken_seconds / 60))} Pause`}
+              {`Ø ${clock(payload.set_pace_seconds)} min pro Satz`}
             </span>
           )}
         </span>
@@ -472,24 +507,39 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                 is explicit that exercise names are sentence case in the body
                 face, and calls it the most-violated rule in this project. */}
             <h3 className="correct__name">{entry.name}</h3>
-            {entry.set_rows.map((s, i) => (
-              <form method="post" action={`/gym/set/${s.id}/update`} className="sheet__row"
+            {entry.set_rows.filter((s) => !hiddenSetIds.includes(s.id)).map((s, i) => (
+              // .sset, the live sheet's set grid: with a delete beside the save
+              // the old flex row outgrew a phone and pushed the sheet sideways.
+              <form method="post" action={`/gym/set/${s.id}/update`} className="sset"
                 key={s.id} onSubmit={saves(`/gym/set/${s.id}/update`)}>
                 <CsrfField />
                 <span className="label">{i + 1}</span>
-                <input type="number" name="weight" step="0.5" min="0"
+                {/* required + min: the browser refuses an empty or zero-rep
+                    row before the submit handler ever runs. */}
+                <input type="number" name="weight" step="0.5" min="0" required
                   className="input input--num" defaultValue={s.weight}
                   aria-label={`${entry.name}, Satz ${i + 1}, Gewicht in kg`} />
-                <span className="load__unit">kg</span><span className="load__x">×</span>
-                <input type="number" name="reps" min="0" className="input input--num"
+                <span className="sset__unit">kg</span><span className="sset__unit">×</span>
+                <input type="number" name="reps" min="1" required className="input input--num"
                   defaultValue={s.reps}
                   aria-label={`${entry.name}, Satz ${i + 1}, Wiederholungen`} />
-                <button type="submit" className="icon-btn"
-                  aria-label={`Satz ${i + 1} speichern`}>
-                  <Icon name="save" />
-                </button>
+                <span className="sset__acts">
+                  <button type="submit" className="icon-btn"
+                    aria-label={`Satz ${i + 1} speichern`}>
+                    <Icon name="save" />
+                  </button>
+                  <button type="button" className="icon-btn"
+                    aria-label={`${entry.name}, Satz ${i + 1} löschen`}
+                    onClick={() => deleteSet(s.id, `${entry.name}, Satz ${i + 1}`)}>✕</button>
+                </span>
               </form>
             ))}
+            {entry.session_exercise_id !== null && (
+              <AddSetForm key={`add-${entry.session_exercise_id}-${entry.set_rows.length}`}
+                sessionExerciseId={entry.session_exercise_id} name={entry.name}
+                seed={entry.set_rows[entry.set_rows.length - 1] ?? null}
+                onSubmit={saves(`/gym/session-exercise/${entry.session_exercise_id}/sets/add`)} />
+            )}
             {/* The opposite lifetime to the sets above: a twinge and a note
                 belong to this workout, not to the set values. */}
             {entry.session_exercise_id !== null && (
@@ -514,9 +564,53 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             )}
           </div>
         ))}
+        {/* Exercises of this workout with nothing logged are not in the
+            debrief at all, so the set that did happen but never got its tap
+            had nowhere to go. */}
+        {payload.unlogged.map((entry) => (
+          <div className="sheet__group" key={`unlogged-${entry.session_exercise_id}`}>
+            <h3 className="correct__name">{entry.name}</h3>
+            <p className="sheet__note">Nichts erfasst.</p>
+            <AddSetForm key={`add-${entry.session_exercise_id}-0`}
+              sessionExerciseId={entry.session_exercise_id} name={entry.name} seed={null}
+              onSubmit={saves(`/gym/session-exercise/${entry.session_exercise_id}/sets/add`)} />
+          </div>
+        ))}
       </Sheet>
       <UndoToast />
     </>
+  )
+}
+
+/** One more set for an exercise of a finished workout. Keyed by the caller on
+ *  the set count, so a successful add remounts it -- empty of what was just
+ *  typed and seeded from the new last set. The server files it as logged
+ *  without starting a rest: the workout is over. */
+function AddSetForm({ sessionExerciseId, name, seed, onSubmit }: {
+  sessionExerciseId: number
+  name: string
+  seed: { weight: number; reps: number } | null
+  onSubmit(event: FormEvent<HTMLFormElement>): void
+}) {
+  return (
+    <form method="post" action={`/gym/session-exercise/${sessionExerciseId}/sets/add`}
+      className="sset" onSubmit={onSubmit}>
+      <CsrfField />
+      <span className="label" aria-hidden="true">+</span>
+      <input type="number" name="weight" step="0.5" min="0" required
+        className="input input--num" defaultValue={seed?.weight ?? ''}
+        aria-label={`${name}, neuer Satz, Gewicht in kg`} />
+      <span className="sset__unit">kg</span><span className="sset__unit">×</span>
+      <input type="number" name="reps" min="1" required className="input input--num"
+        defaultValue={seed?.reps ?? ''}
+        aria-label={`${name}, neuer Satz, Wiederholungen`} />
+      <span className="sset__acts">
+        {/* Short visible text so the action track never wraps, like the live
+            sheet's "Anhängen"; the accessible name carries the full phrase. */}
+        <button type="submit" className="btn btn--ghost btn--sm"
+          aria-label={`${name}, Satz nachtragen`}>Nachtragen</button>
+      </span>
+    </form>
   )
 }
 

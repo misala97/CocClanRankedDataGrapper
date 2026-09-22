@@ -82,4 +82,24 @@ describe('UndoToast', () => {
     render(<UndoToast />)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
+
+  it('lives inside an open sheet, where it can still be tapped', () => {
+    // A modal <dialog> makes everything outside it inert: a toast beside the
+    // sheet was visible behind the backdrop and could not be undone.
+    const sheet = document.createElement('dialog')
+    sheet.setAttribute('open', '')
+    document.body.append(sheet)
+    render(<UndoToast />)
+    act(() => { offer() })
+    expect(sheet.querySelector('.undo-toast')).not.toBeNull()
+
+    // Closing the sheet moves it back out rather than hiding it with the sheet.
+    act(() => {
+      sheet.removeAttribute('open')
+      sheet.dispatchEvent(new Event('close'))
+    })
+    expect(sheet.querySelector('.undo-toast')).toBeNull()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    sheet.remove()
+  })
 })

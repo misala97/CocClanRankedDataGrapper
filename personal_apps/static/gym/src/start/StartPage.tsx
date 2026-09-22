@@ -236,7 +236,11 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                   ? <>Zuletzt <b>gestern</b></>
                   : <>Zuletzt vor <b>{payload.consistency.days_since_last}</b> Tagen</>}
               {' · '}
+              {/* The window is said: a rate over the last four weeks read as a
+                  lifetime average, and after a break it disagreed with the
+                  "Zuletzt vor 20 Tagen" right beside it. */}
               <b>{kg1(payload.consistency.per_week)}</b> Workouts pro Woche
+              {` (letzte ${Math.round(payload.consistency.window_days / 7)} Wochen)`}
             </>
           ) : 'Noch keine Workouts protokolliert'}
         </p>

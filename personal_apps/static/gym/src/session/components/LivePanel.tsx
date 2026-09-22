@@ -12,19 +12,23 @@ import { Stepper } from './Stepper'
 /** The sentence after "Vorgabe". Day and month only: every basis but the
  *  layoff is inside seeding's four-week window, where a year is noise. No
  *  number of weeks in the layoff copy -- the window is a server constant
- *  (stats.ROLLING_WINDOW_DAYS) and a figure here would drift from it. */
-function seedSourceText(source: SeedSource, slot: number): string {
+ *  (stats.ROLLING_WINDOW_DAYS) and a figure here would drift from it.
+ *
+ *  "Position", not "Slot": the queue, the rail and the reorder announcements
+ *  all say Position, and a second word for the same number read as a second
+ *  concept. */
+function seedSourceText(source: SeedSource, position: number): string {
   const day = shortDate(source.date).slice(0, 6)
   if (source.basis === 'layoff') {
     return `vom ${day} — schon länger her, daher dein letztes Workout statt des besten.`
   }
   if (source.basis === 'earlier_slot') {
-    return `vom ${day} aus Slot ${source.position} — so spät im Workout gibt es noch nichts, daher dein bestes Ergebnis von früher.`
+    return `vom ${day}, damals an Position ${source.position} — so spät im Workout gibt es noch nichts, daher dein bestes Ergebnis von früher.`
   }
-  if (source.position > slot) {
-    return `vom ${day}, damals später im Workout (Slot ${source.position}).`
+  if (source.position > position) {
+    return `vom ${day}, damals später im Workout (Position ${source.position}).`
   }
-  return `vom ${day}, gleicher Slot.`
+  return `vom ${day}, gleiche Position im Workout.`
 }
 
 /** Length of the go-ready keyframes in gym.css. The class comes off after it,
@@ -33,13 +37,15 @@ const READY_RING_MS = 320
 
 interface Props {
   payload: SessionDetailPayload
-  /** Confirms the pending set, or appends one when nothing is pending --
-   *  gym_add_set creates it already completed, which is what "Satz geschafft"
-   *  means everywhere else on this screen. */
-  onConfirm(weight: number, reps: number): void
+  /** Confirms `setId`, the open set the steppers are bound to, or appends one
+   *  when it is null -- gym_add_set creates it already completed, which is
+   *  what "Satz geschafft" means everywhere else on this screen. */
+  onConfirm(weight: number, reps: number, setId: number | null): void
+  /** A logged chip was tapped: put it back to open. */
   onToggleSet(setId: number, completed: boolean): void
   onRestOver(): void
-  busySetId?: number | null
+  /** A set write is still on its way. The confirm button waits for it. */
+  confirmBusy?: boolean
 }
 
 /**
@@ -53,11 +59,19 @@ interface Props {
  * state needed the control, not new machinery.
  */
 export function LivePanel({
-  payload, onConfirm, onToggleSet, onRestOver, busySetId = null,
+  payload, onConfirm, onToggleSet, onRestOver, confirmBusy = false,
 }: Props) {
   const openSheet = useSheets((s) => s.open)
   const live = payload.visible_exercises.find((se) => se.id === payload.live_id) ?? null
-  const nextSet = live?.sets.find((s) => !s.completed) ?? null
+
+  // Tapping an open chip picks it: the steppers bind to it and "Satz
+  // geschafft" logs it. It used to log the chip on the spot with its PLANNED
+  // numbers, whatever the steppers said -- a tap to look became a set logged
+  // at the wrong weight. The pick lapses by itself once that set is done or
+  // the live exercise changes, because it is looked up, never stored as a set.
+  const [pickedId, setPickedId] = useState<number | null>(null)
+  const picked = live?.sets.find((s) => s.id === pickedId && !s.completed) ?? null
+  const nextSet = picked ?? live?.sets.find((s) => !s.completed) ?? null
 
   // Appending after everything is logged starts from the set you just did, not
   // from the session's opening suggestion: the reason you are adding one is
@@ -122,6 +136,25 @@ export function LivePanel({
       `${Math.floor(rest.remaining / 60)}:${String(rest.remaining % 60).padStart(2, '0')} Pause · ${base}`
     return () => { document.title = base }
   }, [rest.running, rest.remaining])
+
+  if (live === null && payload.visible_exercises.length > 0) {
+    // Every exercise skipped. The server used to call the last skipped one
+    // live and put it here under "Jetzt"; now nothing is live, and saying so
+    // beats the no-exercises copy below, which would be wrong.
+    return (
+      <section className="live">
+        <h2 className="live__name">Alles übersprungen</h2>
+        <p className="live__empty">
+          Hol eine Übung über ihr Menü in der Liste zurück — oder füge eine neue hinzu.
+        </p>
+        <button type="button" className="go"
+          onClick={() => openSheet('sheet-add-exercise')}>
+          <Icon name="plus" />
+          Übung hinzufügen
+        </button>
+      </section>
+    )
+  }
 
   if (live === null) {
     return (
@@ -189,10 +222,14 @@ export function LivePanel({
       {/* Same slot and the same reason. The two never contradict each other --
           stagnation counts sessions without a PR, this reads the last
           session's reps -- but if both fire, both are worth saying. */}
+      {/* Names the step as well as the evidence for it, with the same step-up
+          the stall line uses. Said, not seeded, like that one. A stack that
+          is topped out has no next weight and keeps the evidence alone. */}
       {ready !== null && (
         <p className="live__ready">
           <span className="live__ready-lbl">Bereit</span>
-          {` ${ready.is_latest ? 'Letztes Mal' : 'Zuletzt in diesem Slot'} ${ready.sets} Sätze auf ${kg1(ready.weight)} kg${perSide} mit ${payload.min_full_reps}+ Wdh.`}
+          {` ${ready.is_latest ? 'Letztes Mal' : 'Zuletzt an dieser Position'} ${ready.sets} Sätze auf ${kg1(ready.weight)} kg${perSide} mit ${payload.min_full_reps}+ Wdh.`}
+          {ready.next_weight !== null && ` Zeit für ${kg1(ready.next_weight)} kg${perSide}.`}
         </p>
       )}
 
@@ -221,8 +258,10 @@ export function LivePanel({
                 isRecord={payload.record_set_ids.includes(s.id)}
                 isNext={nextSet !== null && s.id === nextSet.id}
                 isUnilateral={live.is_unilateral}
-                busy={busySetId === s.id}
-                onToggle={onToggleSet} />
+                onToggle={(setId, completed) => {
+                  if (completed) setPickedId(setId)
+                  else onToggleSet(setId, false)
+                }} />
             </div>
           ))}
         </div>
@@ -265,13 +304,16 @@ export function LivePanel({
           region, which speaks twice per rest rather than ninety times. */}
       {/* Disabled for the length of the round trip: a sweaty double-tap on a
           64px thumb target is normal use, and the second press must not race
-          the first one's answer. The optimistic path keeps this window to a
-          few hundred ms, so there is no visual disabled treatment -- styling
-          a flash would be noise. */}
+          the first one's answer. It keyed on the NEXT set's id, which is null
+          the moment the last set is optimistically done -- so the second tap
+          on an exercise's last set went down the append path and logged a set
+          nobody did. Any set write in flight holds it now. No visual disabled
+          treatment: the window is a few hundred ms, and styling a flash would
+          be noise. */}
       <button type="button"
         className={`go${rest.running ? ' is-resting' : ''}${ringing ? ' is-ready' : ''}`}
-        id="set-confirm" disabled={busySetId !== null}
-        onClick={() => onConfirm(weight, reps)}>
+        id="set-confirm" disabled={confirmBusy}
+        onClick={() => onConfirm(weight, reps, nextSet?.id ?? null)}>
         <span className="go__lbl">
           <Icon name="check" />
           Satz geschafft

@@ -134,6 +134,18 @@ describe('useSessionMutation', () => {
     await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true))
   })
 
+  it('reloads instead of bannering a write to a workout that has finished', async () => {
+    // The page for a finished workout is the debrief, and the reload is what
+    // shows it. A retry could never land.
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    const { fire } = harness(() => Promise.reject(new MutationFailed('finished')))
+    fire()
+    await waitFor(() => expect(reload).toHaveBeenCalled())
+    expect(screen.queryByText('Nicht gespeichert')).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
   it('takes the banner down once a write actually lands', async () => {
     useSaveState.getState().fail('alte Meldung', vi.fn())
     const { fire } = harness(() => Promise.resolve(payload))

@@ -38,7 +38,7 @@ export function SetRow({
     ? `Satz ${ordinal} — Rekord, ${amount} — antippen zum Zurücksetzen`
     : set.completed
       ? `Satz ${ordinal} erledigt, ${amount} — antippen zum Zurücksetzen`
-      : `Satz ${ordinal}, geplant ${weight} kg${perSide} mal ${set.reps}`
+      : `Satz ${ordinal}, geplant ${weight} kg${perSide} mal ${set.reps} — antippen zum Auswählen`
 
   const className = isRecord
     ? 'set is-record'
@@ -54,7 +54,9 @@ export function SetRow({
       disabled={busy}
       // States the state it wants, not "flip me" -- see
       // gym_toggle_set_complete, which is idempotent precisely because the
-      // client names its target rather than asking for an inversion.
+      // client names its target rather than asking for an inversion. The
+      // live panel reads `true` on an open chip as "pick this one" rather
+      // than "log it": the steppers decide the numbers, not the plan.
       onClick={() => onToggle(set.id, !set.completed)}
     >
       {`${weight} × ${set.reps}`}

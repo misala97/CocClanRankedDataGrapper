@@ -25,7 +25,7 @@ const writeHeaders = () => ({ ...JSON_HEADERS, 'X-CSRF-Token': csrfToken() })
 const TIMEOUT_MS = 8000
 
 export class MutationFailed extends Error {
-  constructor(readonly reason: 'timeout' | 'network' | 'forbidden') {
+  constructor(readonly reason: 'timeout' | 'network' | 'forbidden' | 'finished') {
     super(reason)
   }
 
@@ -37,6 +37,11 @@ export class MutationFailed extends Error {
     if (this.reason === 'forbidden') {
       return 'Sitzung abgelaufen — bitte Seite neu laden.'
     }
+    // A live-screen write to a workout that already finished (409, see
+    // _refuse_live_write_if_finished). Nothing to retry: the screen is stale.
+    if (this.reason === 'finished') {
+      return 'Das Workout ist schon beendet.'
+    }
     return this.reason === 'timeout'
       ? 'Keine Antwort vom Server — deine letzte Änderung wurde nicht gespeichert.'
       : 'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.'
@@ -46,9 +51,15 @@ export class MutationFailed extends Error {
 /** POST form fields, get the page's fresh payload back. The caller names the
  *  payload type it is owed -- which page answers is the server's decision
  *  (_mutation_response branches on finished_at). */
+export interface PostOptions {
+  keepalive?: boolean
+  /** Extra request headers -- the live workout names itself with one. */
+  headers?: Record<string, string>
+}
+
 export function postForm<T>(
   url: string, fields: Record<string, string | number | boolean> = {},
-  opts: { keepalive?: boolean } = {},
+  opts: PostOptions = {},
 ): Promise<T> {
   const body = new FormData()
   for (const [key, value] of Object.entries(fields)) {
@@ -60,20 +71,22 @@ export function postForm<T>(
 /** Same, from a real form's FormData -- the only shape that keeps a
  *  multi-select's repeated keys (request.form.getlist on the other side). */
 export async function postFormData<T>(
-  url: string, body: FormData, opts: { keepalive?: boolean } = {},
+  url: string, body: FormData, opts: PostOptions = {},
 ): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
     const response = await fetch(url, {
-      method: 'POST', body, headers: writeHeaders(),
+      method: 'POST', body, headers: { ...writeHeaders(), ...opts.headers },
       credentials: 'same-origin', signal: controller.signal,
       // The pagehide flush posts a write the page will not stay alive to see
       // answered; keepalive lets the request outlive the document.
       keepalive: opts.keepalive ?? false,
     })
     if (!response.ok) {
-      throw new MutationFailed(response.status === 403 ? 'forbidden' : 'network')
+      throw new MutationFailed(
+        response.status === 403 ? 'forbidden'
+          : response.status === 409 ? 'finished' : 'network')
     }
     return await response.json() as T
   } catch (error) {

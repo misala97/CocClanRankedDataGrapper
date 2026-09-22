@@ -76,8 +76,16 @@ export function SharedConfirmPage({ payload }: { payload: SharedConfirmPayload }
   const ranked = rankedAll
     .filter((template) => template.covered > 0 || String(template.id) === routine)
 
-  const perfect = ranked.filter((template) => template.covered === total)
-  const autoPick = perfect.length === 1 ? String(perfect[0]!.id) : ''
+  // The best-covering routine is preselected when it clearly leads: at least
+  // half the workout, and no other routine level with it. Only a PERFECT
+  // match used to be, so one exercise the leader added on the way in left
+  // the picker on "Keine Routine" -- and the workout filed under nothing.
+  // A tie is still the reader's call: picking by name would be a guess.
+  const best = ranked[0]
+  const clearLead = best !== undefined
+    && best.covered * 2 >= total
+    && (ranked[1] === undefined || ranked[1].covered < best.covered)
+  const autoPick = clearLead ? String(best.id) : ''
   const routineValue = routine ?? autoPick
 
   return (
@@ -139,6 +147,13 @@ export function SharedConfirmPage({ payload }: { payload: SharedConfirmPayload }
               </div>
             )}
 
+            {/* Said before the button, not after: the server drops it on
+                accept, and it is the one thing on this page that goes away. */}
+            {payload.discards_active && (
+              <p className="sheet__note">
+                Dein laufendes Workout ist noch leer — es wird verworfen.
+              </p>
+            )}
             <button type="submit" className="btn btn--live btn--block">Mitmachen</button>
           </form>
 

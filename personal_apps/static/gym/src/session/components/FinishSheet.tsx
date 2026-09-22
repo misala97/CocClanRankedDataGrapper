@@ -6,7 +6,11 @@ interface Props {
   setsDone: number
   setsTotal: number
   startedAt: string
+  /** Waiting for writes still on their way before leaving -- see the
+   *  island's onFinish. */
+  finishing?: boolean
   onFinish(): void
+  onDiscard(): void
 }
 
 /**
@@ -19,10 +23,13 @@ interface Props {
  * tech: platform focus trap, Esc, backdrop.
  *
  * "Abbrechen" dismisses; the primary states the decision. An empty workout is
- * told it will not count -- honestly, not alarmingly -- and its confirm is a
- * ghost: quiet-danger, the word carries the weight.
+ * told it will not count -- honestly, not alarmingly -- and is offered the way
+ * out it usually wants: gone, not filed as an empty entry in the history.
+ * Finishing it anyway stays, as the ghost below.
  */
-export function FinishSheet({ volume, setsDone, setsTotal, startedAt, onFinish }: Props) {
+export function FinishSheet({
+  volume, setsDone, setsTotal, startedAt, finishing = false, onFinish, onDiscard,
+}: Props) {
   // Subscribed so the minutes are computed when the sheet OPENS, not when the
   // page first rendered.
   const isOpen = useSheets((s) => s.openId === 'sheet-finish')
@@ -54,11 +61,26 @@ export function FinishSheet({ volume, setsDone, setsTotal, startedAt, onFinish }
           </>
         )}
       </div>
-      <button type="button"
-        className={`btn ${empty ? 'btn--ghost' : 'btn--live'} btn--block`}
-        onClick={onFinish}>
-        {empty ? 'Trotzdem beenden' : 'Beenden'}
-      </button>
+      {finishing ? (
+        // A set write was still on its way. Leaving now lost it, so the sheet
+        // waits for the answer and says so.
+        <button type="button" className="btn btn--live btn--block" disabled>
+          Speichert noch…
+        </button>
+      ) : empty ? (
+        <>
+          <button type="button" className="btn btn--live btn--block" onClick={onDiscard}>
+            Workout verwerfen
+          </button>
+          <button type="button" className="btn btn--ghost btn--block" onClick={onFinish}>
+            Trotzdem beenden
+          </button>
+        </>
+      ) : (
+        <button type="button" className="btn btn--live btn--block" onClick={onFinish}>
+          Beenden
+        </button>
+      )}
     </Sheet>
   )
 }

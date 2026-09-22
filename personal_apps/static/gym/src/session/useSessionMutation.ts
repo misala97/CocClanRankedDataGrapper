@@ -80,6 +80,13 @@ export function useSessionMutation<Args extends unknown[]>(
     },
 
     onError: (error, args, context) => {
+      // The workout finished under this screen -- on the other phone, or
+      // before the back button restored it. The page for it now is the
+      // debrief, and a reload is what shows it; there is nothing to retry.
+      if (error.reason === 'finished') {
+        window.location.reload()
+        return
+      }
       if (context?.previous !== undefined) {
         client.setQueryData(key, context.previous)
       }

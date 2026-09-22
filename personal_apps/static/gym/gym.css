@@ -573,6 +573,9 @@ label.label {
   transition: color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
 }
 .icon-btn:hover { color: var(--ink); background: var(--raised); }
+/* Same treatment as .btn: a set editor's save is disabled while its fields
+   are unchanged or cannot make a set, and should look it. */
+.icon-btn:disabled { opacity: 0.45; pointer-events: none; }
 
 /* ============================================================================
    FORM CONTROLS  ·  recessed wells
@@ -4000,6 +4003,15 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 }
 /* The focus-mode session screen has no tab bar to clear. */
 body.is-focus .undo-toast { bottom: calc(env(safe-area-inset-bottom, 0px) + var(--sp-3)); }
+/* Inside an open sheet (see UndoToast): the open sheet carries a transform, so
+   `fixed` would resolve against it, not the viewport. Sticky to the bottom of
+   the sheet's own scrollport keeps it in view however far the sheet scrolls. */
+.sheet .undo-toast {
+  position: sticky;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--sp-3));
+  margin: 0 var(--sp-4) var(--sp-3);
+  box-shadow: var(--lift);
+}
 .undo-toast__label { flex: 1; min-inline-size: 0; font-size: var(--t-sm); font-weight: var(--w-semi); }
 .undo-toast__act {
   flex: none; min-block-size: var(--tap); padding-inline: var(--sp-2);

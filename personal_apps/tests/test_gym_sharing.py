@@ -1454,39 +1454,79 @@ def test_declining_removes_the_invite(leader_with_partner):
         assert db.session.get(SharedSession, shared_id) is None
 
 
-def test_a_partner_with_a_live_workout_is_refused(leader_with_partner):
-    """One active session per person. Joining would mean abandoning theirs,
-    which is not a decision to make on their behalf."""
+def _partner_with_own_workout(leader_with_partner, logged):
+    """Invite the partner, and give them a running workout of their own --
+    with one logged set, or with nothing logged yet."""
     from extensions import db
-    from models import SharedSession, WorkoutSession
+    from models import SessionExercise, SessionSet, SharedSession, WorkoutSession
 
     _client_for(leader_with_partner['leader']).post(
         f"/gym/session/{leader_with_partner['session']}/invite",
         data={'partner_id': leader_with_partner['partner']})
-
-    own_session_id = None
     with flask_app.app_context():
         shared_id = SharedSession.query.filter_by(
             leader_session_id=leader_with_partner['session']).first().id
         own = WorkoutSession(name='pytest invite own workout',
                              started_at=dt.datetime.utcnow(),
                              user_id=leader_with_partner['partner'])
+        if logged:
+            from models import Exercise
+            lift = Exercise(name='pytest invite own lift',
+                            user_id=leader_with_partner['partner'])
+            db.session.add(lift)
+            db.session.flush()
+            se = SessionExercise(exercise_id=lift.id, position=1)
+            se.sets = [SessionSet(position=1, weight=20.0, reps=8, completed=True)]
+            own.exercises.append(se)
         db.session.add(own)
         db.session.commit()
-        own_session_id = own.id
+        return shared_id, own.id
+
+
+def test_a_partner_with_logged_sets_is_refused(leader_with_partner):
+    """One active session per person. A workout with real sets in it is not
+    something to throw away on the partner's behalf."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    shared_id, own_session_id = _partner_with_own_workout(leader_with_partner, logged=True)
 
     html = _client_for(leader_with_partner['partner']).get(
         f'/gym/shared/{shared_id}/confirm').get_data(as_text=True)
     payload = embedded_payload(html)
-    assert payload['refusal'] == 'Du hast bereits ein laufendes Workout.'
+    assert payload['refusal'] == (
+        'Du hast schon Sätze in einem laufenden Workout — beende es zuerst.')
     # A refusal replaces the form: there is nothing left to confirm.
     assert payload['proposals'] == []
 
+    _client_for(leader_with_partner['partner']).post(f'/gym/shared/{shared_id}/accept')
     with flask_app.app_context():
         shared = db.session.get(SharedSession, shared_id)
         assert shared.accepted_at is None
         assert db.session.get(WorkoutSession, own_session_id) is not None, (
             'the partner\'s own workout was disturbed')
+
+
+def test_a_partner_whose_own_workout_is_empty_can_join(leader_with_partner):
+    """Arriving first and tapping Start is the normal way to end up with an
+    empty workout of your own. The confirm page says it will be discarded, and
+    accepting does exactly that instead of refusing."""
+    from extensions import db
+    from models import SharedSession, WorkoutSession
+
+    shared_id, own_session_id = _partner_with_own_workout(leader_with_partner, logged=False)
+    partner = _client_for(leader_with_partner['partner'])
+
+    payload = embedded_payload(
+        partner.get(f'/gym/shared/{shared_id}/confirm').get_data(as_text=True))
+    assert payload['refusal'] is None
+    assert payload['discards_active'] is True
+
+    partner.post(f'/gym/shared/{shared_id}/accept')
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert shared.accepted_at is not None
+        assert db.session.get(WorkoutSession, own_session_id) is None
 
 
 def test_an_invite_to_a_finished_workout_is_refused(leader_with_partner):
@@ -1516,24 +1556,12 @@ def test_a_partner_with_a_live_workout_is_refused_on_post_accept(leader_with_par
     that /confirm's GET already turned the follower away -- a refusal guarding
     only the GET would be trivially bypassable by posting straight to
     /accept. Sibling of test_a_partner_with_a_live_workout_is_refused, which
-    only ever exercises the GET."""
+    only ever exercises the GET. The workout has a logged set: an empty one
+    is discarded on accept instead (test_a_partner_whose_own_workout_is_empty_can_join)."""
     from extensions import db
     from models import SharedSession, WorkoutSession
 
-    _client_for(leader_with_partner['leader']).post(
-        f"/gym/session/{leader_with_partner['session']}/invite",
-        data={'partner_id': leader_with_partner['partner']})
-
-    own_session_id = None
-    with flask_app.app_context():
-        shared_id = SharedSession.query.filter_by(
-            leader_session_id=leader_with_partner['session']).first().id
-        own = WorkoutSession(name='pytest invite own workout',
-                             started_at=dt.datetime.utcnow(),
-                             user_id=leader_with_partner['partner'])
-        db.session.add(own)
-        db.session.commit()
-        own_session_id = own.id
+    shared_id, own_session_id = _partner_with_own_workout(leader_with_partner, logged=True)
 
     _client_for(leader_with_partner['partner']).post(
         f'/gym/shared/{shared_id}/accept',

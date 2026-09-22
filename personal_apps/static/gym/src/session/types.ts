@@ -104,6 +104,9 @@ export interface ReadyForMore {
   sets: number
   weight: number
   is_latest: boolean
+  /** The step up the note names -- the stall advice's own rule. Null when
+   *  the stack has nothing heavier. */
+  next_weight: number | null
 }
 
 export interface Partner {

@@ -15,7 +15,8 @@ beforeEach(() => {
 })
 
 const actions = (): SessionActions => ({
-  onConfirmSet: vi.fn(), onToggleSet: vi.fn(), onFinish: vi.fn(), onReorder: vi.fn(),
+  onConfirmSet: vi.fn(), onToggleSet: vi.fn(), onFinish: vi.fn(), onDiscard: vi.fn(),
+  onReorder: vi.fn(),
   onSessionMetaSave: vi.fn(), onSkipRest: vi.fn(), onInvite: vi.fn(),
   onEnablePush: vi.fn(), onToggleDeload: vi.fn(), onAddExercise: vi.fn(),
   onCreateExercise: vi.fn(), onSaveTemplate: vi.fn(),
@@ -23,7 +24,7 @@ const actions = (): SessionActions => ({
     onRestChange: vi.fn(), onIncrementChange: vi.fn(), onMetaSave: vi.fn(),
     onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
     onToggleSkip: vi.fn(), onReplace: vi.fn(), onReplaceWithNew: vi.fn(),
-    onRemove: vi.fn(), onShowProgress: vi.fn(),
+    onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
   }),
 })
 

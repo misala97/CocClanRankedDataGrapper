@@ -42,6 +42,23 @@ describe('postForm failure reasons', () => {
     expect((error as MutationFailed).germanMessage).toContain('neu laden')
   })
 
+  it('names a 409 as a workout that has already finished', async () => {
+    // _refuse_live_write_if_finished: the live screen outlived its workout.
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 409 } as Response)))
+    const error = await postForm('/gym/x').catch((e: unknown) => e)
+    expect((error as MutationFailed).reason).toBe('finished')
+  })
+
+  it('sends extra headers alongside the ones every write carries', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({}) } as Response))
+    vi.stubGlobal('fetch', fetchMock)
+    await postForm('/gym/x', {}, { headers: { 'X-Gym-Surface': 'live' } })
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const headers = init.headers as Record<string, string>
+    expect(headers['X-Gym-Surface']).toBe('live')
+    expect(headers['Accept']).toBe('application/json')
+  })
+
   it('keeps any other non-ok as a network failure', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500 } as Response)))
     const error = await postForm('/gym/x').catch((e: unknown) => e)

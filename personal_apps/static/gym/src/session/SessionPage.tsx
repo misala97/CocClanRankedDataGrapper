@@ -25,9 +25,13 @@ import { ExerciseSheet, type ExerciseSheetActions } from './components/ExerciseS
  * only that these exist, which is what keeps it renderable from a fixture.
  */
 export interface SessionActions {
-  onConfirmSet(weight: number, reps: number): void
+  /** `setId` is the open set the steppers are bound to; null appends one. */
+  onConfirmSet(weight: number, reps: number, setId: number | null): void
   onToggleSet(setId: number, completed: boolean): void
   onFinish(): void
+  /** Throw away a workout with nothing logged -- the finish sheet offers it
+   *  only then, and the server refuses it otherwise. */
+  onDiscard(): void
   onReorder(order: number[]): void
   onSessionMetaSave(meta: { bodyweightKg: number | null; notes: string }): void
   onSkipRest(): void
@@ -44,7 +48,10 @@ interface Props {
   payload: SessionDetailPayload
   actions: SessionActions
   pushSupported: boolean
-  busySetId?: number | null
+  /** A set write is in flight; the confirm button waits for it. */
+  confirmBusy?: boolean
+  /** Finish or discard is waiting for writes still on their way. */
+  finishing?: boolean
   /** Which add-exercise row is waiting on the server -- see AddExerciseSheet. */
   busyExerciseId?: number | 'new' | null
 }
@@ -61,7 +68,8 @@ interface Props {
  * have to agree on it, and a rule expressed three times is a rule that drifts.
  */
 export function SessionPage({
-  payload, actions, pushSupported, busySetId = null, busyExerciseId = null,
+  payload, actions, pushSupported, confirmBusy = false, finishing = false,
+  busyExerciseId = null,
 }: Props) {
   const announce = useAnnouncer((s) => s.announce)
   const openSheet = useSheets((s) => s.open)
@@ -85,7 +93,7 @@ export function SessionPage({
         liveIndex={payload.live_index}
         setsOpen={payload.sets_open} setsTotal={payload.sets_total} />
 
-      <LivePanel payload={payload} busySetId={busySetId}
+      <LivePanel payload={payload} confirmBusy={confirmBusy}
         onConfirm={actions.onConfirmSet}
         onToggleSet={actions.onToggleSet}
         onRestOver={() => announce('Pause vorbei.')} />
@@ -137,12 +145,21 @@ export function SessionPage({
       <FinishSheet volume={payload.session_volume}
         setsDone={payload.sets_done} setsTotal={payload.sets_total}
         startedAt={payload.session.started_at}
-        onFinish={actions.onFinish} />
+        finishing={finishing}
+        onFinish={actions.onFinish}
+        onDiscard={actions.onDiscard} />
 
       {payload.visible_exercises.map((se) => (
         <ExerciseSheet key={se.id} exercise={se}
           catalogue={payload.exercises}
           suggestion={payload.suggestions[String(se.id)] ?? null}
+          // Moving a row is a reorder, which a follower's order refuses (it
+          // is the leader's). A finished or skipped exercise has nothing to
+          // do now, and the live one is already up.
+          canMakeLive={!payload.session_is_shared
+            && se.id !== payload.live_id
+            && !se.skipped
+            && !(se.sets.length > 0 && se.sets.every((s) => s.completed))}
           {...actions.exerciseActions(se.id)} />
       ))}
       <UndoToast />

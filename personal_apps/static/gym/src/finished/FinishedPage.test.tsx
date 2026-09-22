@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinishedPage } from './FinishedPage'
 import type { FinishedExercise, FinishedPayload, SessionRecord } from './types'
 import { useSheets } from '../session/stores'
+import { useUndo } from '../undo'
 
 beforeEach(() => {
   useSheets.setState(useSheets.getInitialState(), true)
@@ -44,7 +45,8 @@ const base: FinishedPayload = {
   deload_applied: false,
   previous_session: null,
   tick_states: ['done', 'done'],
-  rest_taken_seconds: null,
+  set_pace_seconds: null,
+  unlogged: [],
   weekday_short: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
   just_finished: false,
   template_exercises: null,
@@ -350,22 +352,18 @@ describe('FinishedPage', () => {
     })
   })
 
-  describe('measured rest', () => {
-    it('reports what it counted', () => {
-      mount({ rest_taken_seconds: 300 })
-      expect(screen.getByText('davon 5 Minuten Pause')).toBeInTheDocument()
-    })
-
-    it('says nothing without timestamps to build it from', () => {
-      mount({ rest_taken_seconds: null })
+  describe('measured pace', () => {
+    // Pace per set, not "Pause": the gap between two logged sets includes the
+    // set itself, so the old total claimed nearly the whole workout as rest.
+    it('reports what it counted, per set', () => {
+      mount({ set_pace_seconds: 185 })
+      expect(screen.getByText('Ø 3:05 min pro Satz')).toBeInTheDocument()
       expect(screen.queryByText(/Pause/)).not.toBeInTheDocument()
     })
 
-    it('never prints the wrong plural or a literal zero', () => {
-      mount({ rest_taken_seconds: 45 })
-      expect(screen.getByText('davon unter 1 Minute Pause')).toBeInTheDocument()
-      mount({ rest_taken_seconds: 90 })
-      expect(screen.getByText('davon 1 Minute Pause')).toBeInTheDocument()
+    it('says nothing without timestamps to build it from', () => {
+      mount({ set_pace_seconds: null })
+      expect(screen.queryByText(/pro Satz/)).not.toBeInTheDocument()
     })
   })
 
@@ -437,6 +435,66 @@ describe('saving without a reload', () => {
       .toHaveTextContent('Verbindung fehlgeschlagen')
     // Nothing navigated, nothing blanked.
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Push Day')
+    vi.unstubAllGlobals()
+  })
+
+  it('deletes a set after the undo window, and the debrief follows', async () => {
+    // A set logged by mistake used to be permanent once the workout finished.
+    useUndo.setState({ pending: null, timer: null })
+    const fetchMock = fetchPayload({
+      exercises: [exercise({ sets_display: '1 × 60 kg',
+        set_rows: [{ id: 502, weight: 60, reps: 8 }] })],
+      total_sets: 1,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    const sheet = screen.getByRole('dialog')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Bankdrücken, Satz 1 löschen' }))
+
+    // Hidden at once, nothing sent yet.
+    expect(within(sheet).getAllByRole('button', { name: /Satz \d speichern/ })).toHaveLength(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    useUndo.getState().commitNow()
+    const [url] = fetchMock.mock.calls[0] as unknown as [string]
+    expect(url).toBe('/gym/set/501/delete')
+    expect(await screen.findByText('1 × 60 kg')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('adds a set -- also to an exercise with nothing logged', async () => {
+    const fetchMock = fetchPayload({})
+    vi.stubGlobal('fetch', fetchMock)
+    mount({ unlogged: [{ session_exercise_id: 91, name: 'Butterfly' }] })
+    await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    const sheet = screen.getByRole('dialog')
+
+    // Seeded from the last set of the exercise it belongs to.
+    expect(within(sheet).getByLabelText('Bankdrücken, neuer Satz, Gewicht in kg')).toHaveValue(60)
+    expect(within(sheet).getByText('Butterfly')).toBeInTheDocument()
+
+    await userEvent.type(within(sheet).getByLabelText('Butterfly, neuer Satz, Gewicht in kg'), '30')
+    await userEvent.type(within(sheet).getByLabelText('Butterfly, neuer Satz, Wiederholungen'), '12')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Butterfly, Satz nachtragen' }))
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/gym/session-exercise/91/sets/add')
+    expect((init.body as FormData).get('weight')).toBe('30')
+    expect((init.body as FormData).get('reps')).toBe('12')
+    // The debrief writes without the live screen's header: corrections to a
+    // finished workout are allowed, a stale live screen's writes are not.
+    expect((init.headers as Record<string, string>)['X-Gym-Surface']).toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+
+  it('will not add an empty set', async () => {
+    const fetchMock = fetchPayload({})
+    vi.stubGlobal('fetch', fetchMock)
+    mount({ unlogged: [{ session_exercise_id: 91, name: 'Butterfly' }] })
+    await userEvent.click(screen.getByRole('button', { name: /Sätze & Notizen/ }))
+    const sheet = screen.getByRole('dialog')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Butterfly, Satz nachtragen' }))
+    expect(fetchMock).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
   })
 })

@@ -12,13 +12,14 @@ leaving it in workout.py would make helpers and workout import each other.
 Moved verbatim from the pre-split routes.py.
 """
 import datetime as dt
+import math
 
-from flask import request
+from flask import jsonify, redirect, request, url_for
 
 from extensions import db
 from models import (
-    AppUser, WorkoutSession, PendingPush, STALE_SESSION_TIMEOUT,
-    MUSCLE_GROUPS, EQUIPMENT_TYPES,
+    AppUser, WorkoutSession, PendingPush, SharedSession, SharedSessionExercise,
+    STALE_SESSION_TIMEOUT, MUSCLE_GROUPS, EQUIPMENT_TYPES,
 )
 from features.gym import stats
 from features.gym.scope import my_sessions
@@ -79,6 +80,73 @@ def _to_int(value, fallback=None):
         return int(value)
     except (TypeError, ValueError):
         return fallback
+
+
+def _to_weight(value):
+    """A set's weight as typed, or None when it cannot be one.
+
+    Stricter than _to_float on purpose: float() also accepts 'nan' and 'inf',
+    and an empty add row on the live screen used to arrive as 0 x 0 and be
+    logged as a completed set. Zero itself stays valid -- a bodyweight set
+    is logged at 0 kg. Comma-tolerant for the same reason as _to_increment.
+    """
+    parsed = _to_float(str(value).replace(',', '.').strip())
+    if parsed is None or not math.isfinite(parsed) or parsed < 0:
+        return None
+    return parsed
+
+
+def _to_reps(value):
+    """A set's rep count, or None. A set of zero reps is not a set."""
+    parsed = _to_int(value)
+    return parsed if parsed is not None and parsed >= 1 else None
+
+
+# Sent by the live workout island on every write. The debrief writes to the
+# same set routes on purpose -- a finished workout is corrected there -- so
+# finished_at alone cannot tell the two apart; the surface that asked can.
+LIVE_SURFACE_HEADER = 'X-Gym-Surface'
+
+
+def _refuse_live_write_if_finished(session_):
+    """409 for a live-screen write to a workout that has already finished,
+    else None.
+
+    The live screen outlives the workout: the back button restores it, and a
+    second phone never saw the finish. Its "Satz geschafft" used to land in
+    the finished workout, queue a rest push for it, and hand the island a
+    debrief payload it could not render. The island answers a 409 by
+    reloading, which shows the debrief.
+    """
+    if session_.finished_at is None or request.headers.get(LIVE_SURFACE_HEADER) != 'live':
+        return None
+    if _wants_json():
+        return jsonify({'finished': True}), 409
+    return redirect(url_for('gym.session_detail', session_id=session_.id))
+
+
+def _delete_session_and_links(session_):
+    """Delete a workout together with every partner link it took part in.
+
+    Plain FKs with no ondelete point at the session from both halves of a
+    link, and SharedSessionExercise points at the link the same way, with no
+    ORM cascade either -- so the link rows have to go first, map rows before
+    them. The resting-set pointer is cleared before the cascade deletes the
+    set it names. Commits.
+    """
+    session_.resting_set_id = None
+    db.session.commit()
+    doomed_link_ids = [row.id for row in SharedSession.query.filter(
+        db.or_(SharedSession.leader_session_id == session_.id,
+               SharedSession.follower_session_id == session_.id)).all()]
+    if doomed_link_ids:
+        SharedSessionExercise.query.filter(
+            SharedSessionExercise.shared_session_id.in_(doomed_link_ids)).delete(
+            synchronize_session=False)
+        SharedSession.query.filter(SharedSession.id.in_(doomed_link_ids)).delete(
+            synchronize_session=False)
+    db.session.delete(session_)
+    db.session.commit()
 
 
 def _clean_muscle_group(value, current=None):

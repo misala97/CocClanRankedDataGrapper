@@ -1,4 +1,5 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 
 /**
@@ -82,8 +83,25 @@ export function UndoToast() {
     return () => window.removeEventListener('pagehide', flush)
   }, [pending])
 
+  // Most offers are made from inside a sheet -- a set deleted in the exercise
+  // sheet or the debrief's correction sheet. A modal <dialog> makes the rest
+  // of the page inert, so a toast rendered beside it could be seen behind the
+  // backdrop and not tapped: "Rückgängig" was unreachable until the sheet was
+  // closed. While a sheet is open the toast lives inside it, and moves back
+  // out when the sheet closes.
+  const [host, setHost] = useState<HTMLDialogElement | null>(null)
+  useEffect(() => {
+    if (pending === null) { setHost(null); return }
+    const sheet = document.querySelector<HTMLDialogElement>('dialog[open]')
+    setHost(sheet)
+    if (sheet === null) return
+    const leave = () => setHost(null)
+    sheet.addEventListener('close', leave)
+    return () => sheet.removeEventListener('close', leave)
+  }, [pending])
+
   if (pending === null) return null
-  return (
+  const toast = (
     <div className="undo-toast" role="status">
       <span className="undo-toast__label">{pending.label}</span>
       <button type="button" className="undo-toast__act" onClick={undoNow}>
@@ -95,4 +113,5 @@ export function UndoToast() {
         onClick={() => commitNow()}>✕</button>
     </div>
   )
+  return host === null ? toast : createPortal(toast, host)
 }

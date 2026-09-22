@@ -76,7 +76,8 @@ def test_ready_for_more_is_none_or_a_verdict():
     data = _minimal()
     assert SessionDetailPayload.model_validate(data).ready_for_more is None
 
-    data['ready_for_more'] = {'sets': 3, 'weight': 60.0, 'is_latest': True}
+    data['ready_for_more'] = {'sets': 3, 'weight': 60.0, 'is_latest': True,
+                              'next_weight': 62.5}
     verdict = SessionDetailPayload.model_validate(data).ready_for_more
     assert verdict is not None and verdict.sets == 3
 

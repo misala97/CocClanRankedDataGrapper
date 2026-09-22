@@ -8,6 +8,7 @@ const base: SharedConfirmPayload = {
   shared_id: 7,
   leader_name: 'Michi',
   refusal: null,
+  discards_active: false,
   proposals: [
     {
       name: 'Bankdrücken', leader_exercise_id: 10, exact_id: 55,
@@ -121,6 +122,39 @@ describe('the routine picker', () => {
   it('preselects a routine that covers the whole workout', () => {
     mount({ proposals, templates })
     expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('1')
+  })
+
+  it('preselects the best-covering routine even when it is not perfect', () => {
+    // Only a perfect match was preselected, so one exercise the leader added
+    // on the way in left the workout filed under no routine at all.
+    mount({ proposals, templates: [
+      { id: 1, name: 'Push', exercise_ids: [55] },
+      { id: 2, name: 'Beine', exercise_ids: [99] },
+    ] })
+    expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('1')
+  })
+
+  it('preselects nothing when the best routine covers under half', () => {
+    mount({
+      proposals: [...proposals,
+        { name: 'Dips', leader_exercise_id: 12, exact_id: 58, candidates: [[58, 'Dips']] },
+        { name: 'Curls', leader_exercise_id: 13, exact_id: 59, candidates: [[59, 'Curls']] }],
+      templates: [{ id: 1, name: 'Push', exercise_ids: [55] }],
+    })
+    expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('')
+  })
+
+  it('preselects nothing when two routines tie for best', () => {
+    mount({ proposals, templates: [
+      { id: 1, name: 'Push', exercise_ids: [55] },
+      { id: 2, name: 'Push alt', exercise_ids: [57] },
+    ] })
+    expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('')
+  })
+
+  it('says before the button that an empty workout of your own goes away', () => {
+    mount({ discards_active: true })
+    expect(screen.getByText(/es wird verworfen/)).toBeInTheDocument()
   })
 
   it('preselects nothing when two routines cover it', () => {

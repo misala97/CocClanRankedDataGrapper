@@ -60,7 +60,11 @@ export function Rail({ exercises, liveId, liveIndex, setsOpen, setsTotal }: Prop
         <span className="label">
           {exercises.length === 0
             ? 'Noch keine Übungen'
-            : `Übung ${liveIndex} von ${exercises.length}${skipped ? `, ${skipped} übersprungen` : ''}`}
+            // Nothing live only when everything is skipped -- "Übung 0 von 2"
+            // was a position that does not exist.
+            : liveId === null
+              ? `${skipped} von ${exercises.length} übersprungen`
+              : `Übung ${liveIndex} von ${exercises.length}${skipped ? `, ${skipped} übersprungen` : ''}`}
         </span>
         <span className="label">{remaining}</span>
       </div>

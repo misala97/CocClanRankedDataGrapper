@@ -35,8 +35,9 @@ from ..seeding import (
 from ._blueprint import gym_bp
 from .helpers import (
     DEFAULT_REST_SECONDS, NON_MUSCLE_GROUPS, RECENT_SESSIONS, WEEKDAY_SHORT,
-    _cancel_pending_push, _clean_muscle_group, _get_active_session,
-    _to_float, _to_increment, _to_int, _username, _wants_json,
+    _cancel_pending_push, _clean_muscle_group, _delete_session_and_links,
+    _get_active_session, _refuse_live_write_if_finished,
+    _to_increment, _to_int, _to_reps, _to_weight, _username, _wants_json,
 )
 from .history import load_performed, performed_from_session, _session_rest_entries
 
@@ -119,8 +120,14 @@ def _close_position_gaps(session_):
 
 def _schedule_rest(session_set):
     """Start (or restart) the rest timer for this set's session, based on the
-    exercise's configured rest time. Called whenever a set is confirmed done."""
+    exercise's configured rest time. Called whenever a set is confirmed done.
+
+    Never on a finished workout: a set added from the debrief was lifted a
+    while ago, and a countdown -- with its push -- for a workout that is over
+    is the one thing gym_finish_session exists to cancel."""
     session_exercise = session_set.session_exercise
+    if session_exercise.session.finished_at is not None:
+        return
     rest_seconds = session_exercise.rest_seconds
     if rest_seconds is None:
         rest_seconds = session_exercise.exercise.default_rest_seconds
@@ -393,8 +400,15 @@ def _live_context(session_, keep_started=False):
             if not se.skipped and not (se.sets and done == len(se.sets)):
                 live_se = se
                 break
-    if live_se is None and visible_exercises:
-        live_se = visible_exercises[-1]
+    if live_se is None:
+        # Everything is logged: the last exercise that still counts stays live,
+        # so "Satz geschafft" appends to it. Never a skipped one -- skipping the
+        # last exercise and finishing the rest used to bring it back as "Jetzt"
+        # with an empty plan, and a set logged there counted nowhere. With
+        # everything skipped nothing is live, and the panel says so.
+        counting = [se for se in visible_exercises if not se.skipped]
+        if counting:
+            live_se = counting[-1]
 
     return {'visible_exercises': visible_exercises,
             'live_id': live_se.id if live_se else None}
@@ -473,20 +487,23 @@ def _live_data(session_):
     # DISPLAY ONLY, an owner decision: a stall means the current weight is
     # already at the edge, so seeding heavier would push straight into failed
     # sets -- the number is said, never written.
+    def step_up(exercise, weight):
+        """One loadable step above `weight`, snapped onto the machine's real
+        stops -- or None when topped out on a known stack, where snapping
+        clamps back to the top stop and repeating that number is not advice."""
+        increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
+        heavier = stats.snap_to_stack(
+            stats._next_weight(weight, increment), exercise.stack_kg, 'up')
+        return heavier if heavier > weight else None
+
     stall_next_weight = {}
     for se_id, _count in stagnation_counts.items():
         se = next(x for x in visible_exercises if x.id == se_id)
         suggestion = suggestions.get(se_id)
         if suggestion is None:
             continue
-        increment = stats.resolve_increment(
-            se.exercise.weight_increment, se.exercise.is_unilateral)
-        next_weight = stats.snap_to_stack(
-            stats._next_weight(suggestion['weight'], increment),
-            se.exercise.stack_kg, 'up')
-        # Topped out on a known stack: snapping clamps back to the top stop,
-        # and repeating the number the plateau is stuck at is not advice.
-        if next_weight > suggestion['weight']:
+        next_weight = step_up(se.exercise, suggestion['weight'])
+        if next_weight is not None:
             stall_next_weight[se_id] = next_weight
 
     ready_for_more = None
@@ -502,6 +519,12 @@ def _live_data(session_):
         planned_top = max((s.weight for s in live_se.sets), default=None)
         if ready_for_more and planned_top is not None and planned_top > ready_for_more['weight']:
             ready_for_more = None
+        # The note used to stop at the evidence ("2 Sätze auf 40 kg mit 10+
+        # Wdh.") and leave the arithmetic to the lifter. Said, never seeded --
+        # the same owner ruling as the stall line: going up is their call.
+        if ready_for_more:
+            ready_for_more = {**ready_for_more,
+                              'next_weight': step_up(live_se.exercise, ready_for_more['weight'])}
     exercises = my_exercises().order_by(Exercise.name).all()
 
     # One tick per set in the whole workout, in order, so the strip reads as
@@ -857,6 +880,19 @@ def _finished_payload(session_):
         entry['session_exercise_id'] = None
         entry['notes'] = None
         entry['pain'] = False
+    # The rest of the workout: rows that ran but carry nothing logged. The
+    # correction sheet offers them an add row, so a set lost to a flaky
+    # connection or never ticked can still be entered after finishing --
+    # otherwise the only exercises it could correct were the ones already
+    # right. A replaced-away original stays out, as everywhere on this page.
+    # From replaces_id, already loaded on every row, like _live_context --
+    # se.replaced_by would lazy-load a query per row.
+    replaced_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
+    data['unlogged'] = [
+        {'session_exercise_id': se.id, 'name': se.exercise.name}
+        for se in sorted(session_.exercises, key=lambda row: row.position)
+        if se.id not in replaced_ids and not any(s.completed for s in se.sets)
+    ]
     for entry, se in zip(data['exercises'], reported_session_exercises):
         entry['set_rows'] = [{'id': s.id, 'weight': s.weight, 'reps': s.reps}
                              for s in se.sets if s.completed]
@@ -902,11 +938,15 @@ def _finished_payload(session_):
                 claimed = True
             tick_states.append('record' if is_record else 'done')
     data['tick_states'] = tick_states
-    # Rest measured rather than planned: the gap between consecutive sets, which
-    # exists only for sessions logged since completed_at was added. None means
-    # "no timestamps", which the template must render as silence, not as zero.
+    # Measured pace: the average gap between consecutive sets, which exists
+    # only for sessions logged since completed_at was added. A pace, not a
+    # rest total: each gap runs from one confirm to the next, so it holds the
+    # next set itself -- summed, it read "107 min, davon 96 min Pause" as if
+    # nine tenths of the workout had been spent sitting. None means "no
+    # timestamps", which the page renders as silence, not as zero.
     rest_gaps = stats.rest_gaps(_session_rest_entries(session_))
-    data['rest_taken_seconds'] = sum(actual for actual, _ in rest_gaps) or None
+    data['set_pace_seconds'] = (
+        round(sum(actual for actual, _ in rest_gaps) / len(rest_gaps)) if rest_gaps else None)
     data['weekday_short'] = list(WEEKDAY_SHORT)
     # Reading a three-week-old session from Verlauf is not celebrating, so
     # the flare only fires on arrival. A query argument, not state -- the
@@ -966,6 +1006,9 @@ def session_detail(session_id):
 @login_required
 def gym_add_session_exercise(session_id):
     session_ = owned_session(session_id)
+    refusal = _refuse_live_write_if_finished(session_)
+    if refusal is not None:
+        return refusal
     # Before anything is created: taking the lock ends the transaction.
     lock_sessions([session_id])
 
@@ -1023,6 +1066,9 @@ def gym_replace_session_exercise(session_exercise_id):
     skips substitutes entirely so this never gets written into a template."""
     original = _locked_session_exercise(session_exercise_id)
     session_id = original.session_id
+    refusal = _refuse_live_write_if_finished(original.session)
+    if refusal is not None:
+        return refusal
 
     exercise_id = request.form.get('exercise_id', type=int)
     new_name = request.form.get('new_exercise_name', '').strip()
@@ -1085,6 +1131,9 @@ def gym_replace_session_exercise(session_exercise_id):
 @login_required
 def gym_update_session_exercise_rest(session_exercise_id):
     session_exercise = owned_session_exercise(session_exercise_id)
+    refusal = _refuse_live_write_if_finished(session_exercise.session)
+    if refusal is not None:
+        return refusal
     session_exercise.rest_seconds = _to_int(request.form.get('rest_seconds', ''))
     session_id = session_exercise.session_id
     db.session.commit()
@@ -1100,6 +1149,9 @@ def gym_update_session_meta(session_id):
     start path deliberately does not ask for either: a field between "start"
     and the first set is a field you skip anyway."""
     session = owned_session(session_id)
+    refusal = _refuse_live_write_if_finished(session)
+    if refusal is not None:
+        return refusal
     session.bodyweight_kg = _to_increment(request.form.get('bodyweight_kg', ''))
     session.notes = request.form.get('notes', '').strip() or None
     db.session.commit()
@@ -1114,6 +1166,9 @@ def gym_update_session_exercise_meta(session_exercise_id):
     belong to the session rather than the catalogue: "shoulder pinched
     today" is not a property of the machine."""
     session_exercise = owned_session_exercise(session_exercise_id)
+    refusal = _refuse_live_write_if_finished(session_exercise.session)
+    if refusal is not None:
+        return refusal
     session_exercise.notes = request.form.get('notes', '').strip() or None
     session_exercise.pain = request.form.get('pain') == 'on'
     db.session.commit()
@@ -1139,6 +1194,9 @@ def gym_update_exercise_increment(session_exercise_id):
     from the rename/recategorise in gym_update_exercise.
     """
     session_exercise = owned_session_exercise(session_exercise_id)
+    refusal = _refuse_live_write_if_finished(session_exercise.session)
+    if refusal is not None:
+        return refusal
     session_exercise.exercise.weight_increment = _to_increment(
         request.form.get('weight_increment', ''))
     session_id = session_exercise.session_id
@@ -1151,18 +1209,26 @@ def gym_update_exercise_increment(session_exercise_id):
 @login_required
 def gym_add_set(session_exercise_id):
     session_exercise = owned_session_exercise(session_exercise_id)
+    refusal = _refuse_live_write_if_finished(session_exercise.session)
+    if refusal is not None:
+        return refusal
 
-    weight = _to_float(request.form.get('weight', ''))
-    reps = _to_int(request.form.get('reps', ''))
+    weight = _to_weight(request.form.get('weight', ''))
+    reps = _to_reps(request.form.get('reps', ''))
     if weight is not None and reps is not None:
         next_position = max([s.position for s in session_exercise.sets], default=0) + 1
+        finished = session_exercise.session.finished_at is not None
         new_set = SessionSet(
             session_exercise_id=session_exercise.id,
             position=next_position,
             weight=weight,
             reps=reps,
             completed=True,  # logged live via this form, so it's inherently just-performed
-            completed_at=dt.datetime.utcnow(),
+            # Added from the debrief, it was lifted at some unknown point during
+            # the workout. A stamp of "now" would read as a rest of hours after
+            # the last real set; no stamp is the honest answer, and every rest
+            # measurement already treats NULL as silence.
+            completed_at=None if finished else dt.datetime.utcnow(),
         )
         db.session.add(new_set)
         db.session.flush()
@@ -1177,6 +1243,9 @@ def gym_add_set(session_exercise_id):
 @login_required
 def gym_delete_session_exercise(session_exercise_id):
     session_exercise = _locked_session_exercise(session_exercise_id, with_partners=True)
+    refusal = _refuse_live_write_if_finished(session_exercise.session)
+    if refusal is not None:
+        return refusal
     # Captured before the delete: walking session_exercise.session afterwards
     # would traverse a row that no longer exists.
     _doomed_session = session_exercise.session
@@ -1229,6 +1298,9 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     start does, but only if nothing is left over from before the skip."""
     session_exercise = _locked_session_exercise(session_exercise_id)
     session_ = session_exercise.session
+    refusal = _refuse_live_write_if_finished(session_)
+    if refusal is not None:
+        return refusal
     if session_.finished_at:
         return _mutation_response(
         session_, 'gym.session_detail', session_id=session_.id)
@@ -1258,6 +1330,9 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
 @login_required
 def gym_delete_set(set_id):
     set_ = owned_set(set_id)
+    refusal = _refuse_live_write_if_finished(set_.session_exercise.session)
+    if refusal is not None:
+        return refusal
     # Captured before the delete, for the same reason as
     # gym_delete_session_exercise.
     _doomed_session = set_.session_exercise.session
@@ -1346,8 +1421,10 @@ def _apply_typed_weight_reps(set_):
     than from a separate local.
     """
     was_default_seeded = set_.is_default_seeded
-    weight = _to_float(request.form.get('weight', ''))
-    reps = _to_int(request.form.get('reps', ''))
+    # An empty or impossible field is not an edit: None leaves the stored
+    # number standing, exactly like a field the form never sent.
+    weight = _to_weight(request.form.get('weight', ''))
+    reps = _to_reps(request.form.get('reps', ''))
     weight_changed = False
     reps_changed = False
     if weight is not None:
@@ -1385,6 +1462,9 @@ def gym_toggle_set_complete(set_id):
     sensible."""
     set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
+    refusal = _refuse_live_write_if_finished(session_)
+    if refusal is not None:
+        return refusal
 
     # See _apply_typed_weight_reps for why was_default_seeded has to be read
     # before this call rather than after: it clears the flag itself.
@@ -1446,6 +1526,9 @@ def gym_update_set(set_id):
     case where this route must still apply the edit but must NOT propagate."""
     set_ = owned_set(set_id)
     session_ = set_.session_exercise.session
+    refusal = _refuse_live_write_if_finished(session_)
+    if refusal is not None:
+        return refusal
     # See _apply_typed_weight_reps for why was_default_seeded has to be read
     # before this call rather than after: it clears the flag itself.
     was_default_seeded, weight_changed, reps_changed = _apply_typed_weight_reps(set_)
@@ -1491,6 +1574,9 @@ def gym_update_set(set_id):
 @login_required
 def gym_reorder_session_exercises(session_id):
     session_ = owned_session(session_id)
+    refusal = _refuse_live_write_if_finished(session_)
+    if refusal is not None:
+        return refusal
     # Training together means one order, and it is the leader's. A follower's
     # own reorder was undone by the leader's next change -- any change -- so it
     # is refused outright rather than allowed and then silently reverted. The
@@ -1557,6 +1643,9 @@ def gym_skip_rest(session_id):
     "Pause vorbei" for a rest the lifter already ended themselves.
     """
     session_ = owned_session(session_id)
+    refusal = _refuse_live_write_if_finished(session_)
+    if refusal is not None:
+        return refusal
     session_.rest_ends_at = None
     session_.resting_set_id = None
     _cancel_pending_push(session_)
@@ -1569,6 +1658,11 @@ def gym_skip_rest(session_id):
 @login_required
 def gym_finish_session(session_id):
     session_ = owned_session(session_id)
+    if session_.finished_at is not None:
+        # A second finish -- a double submit, or a live screen restored hours
+        # later -- used to re-stamp the workout and stretch its duration to
+        # however long the phone sat in a pocket. The first stamp stands.
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
     session_.finished_at = dt.datetime.utcnow()
     session_.rest_ends_at = None
     session_.resting_set_id = None
@@ -1581,6 +1675,26 @@ def gym_finish_session(session_id):
     sharing.end_links_for(session_)
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
+
+
+@gym_bp.route('/gym/session/<int:session_id>/discard', methods=['POST'])
+@login_required
+def gym_discard_session(session_id):
+    """Throw away a running workout that has nothing logged in it.
+
+    Tapping the wrong routine used to leave two ways out, both wrong: finish
+    it (an empty workout on the books) or finish it and then delete it from
+    the debrief. Only while no set is logged -- once one is, the workout has
+    happened and finishing is the honest way out; gym_delete_session remains
+    for removing it afterwards. Ends any partner link it held, like finishing
+    does: the other side trains on alone.
+    """
+    session_ = owned_session(session_id)
+    logged = any(s.completed for se in session_.exercises for s in se.sets)
+    if session_.finished_at is not None or logged:
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+    _delete_session_and_links(session_)
+    return redirect(url_for('gym.gym_heute'))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/sync.json')

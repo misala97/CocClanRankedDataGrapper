@@ -1871,6 +1871,8 @@ def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
         assert ready is not None, 'no ready-for-more verdict'
         assert (ready['sets'], ready['weight']) == (2, 35.0)
         assert ready['is_latest'] is True, 'the badge would claim Letztes Mal'
+        # The note names the step, not only the evidence for it.
+        assert ready['next_weight'] is not None and ready['next_weight'] > 35.0
         # The threshold copy has to track stats.DELOAD_REPS, not restate it.
         # LivePanel renders "mit {min_full_reps}+ Wdh." from the payload, so
         # what has to hold here is that the server sends the constant rather

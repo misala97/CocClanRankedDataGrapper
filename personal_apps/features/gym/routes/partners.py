@@ -25,7 +25,7 @@ from features.gym.scope import (
     current_user_id, my_exercises, my_templates, owned_exercise, owned_session,
 )
 from .helpers import (
-    _get_active_session, _to_int, _username,
+    _delete_session_and_links, _get_active_session, _to_int, _username,
 )
 from ._blueprint import (
     gym_bp,
@@ -114,9 +114,30 @@ def _invite_refusal(shared):
     leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
     if leader_session is None or leader_session.finished_at is not None:
         return 'Das Workout ist schon vorbei.'
-    if _get_active_session() is not None:
-        return 'Du hast bereits ein laufendes Workout.'
+    active = _get_active_session()
+    if active is None:
+        return None
+    # A workout with nothing logged in it is given up on joining -- see
+    # _discardable_active. Before this, opening the app on the way to the gym
+    # (which starts one) locked you out of your partner's invite until you
+    # found the way to finish an empty workout.
+    if any(s.completed for se in active.exercises for s in se.sets):
+        return 'Du hast schon Sätze in einem laufenden Workout — beende es zuerst.'
+    if sharing.active_links_led_by(active.id) or sharing.is_live_follower(active.id):
+        # Nothing logged yet, but somebody else is training it with you --
+        # discarding it would pull their link out from under them.
+        return 'Du trainierst gerade mit jemandem — beende das Workout zuerst.'
     return None
+
+
+def _discardable_active():
+    """The caller's running workout that joining will throw away, or None.
+
+    Only ever an empty one: _invite_refusal refuses the join outright when
+    the running workout has a logged set or a live partner, so by the time
+    this is asked, whatever is running holds nothing worth keeping.
+    """
+    return _get_active_session()
 
 
 @gym_bp.route('/gym/shared/<int:shared_id>/confirm')
@@ -167,6 +188,7 @@ def gym_shared_confirm(shared_id):
         shared_id=shared.id,
         leader_name=_username(shared.leader_user_id),
         refusal=refusal,
+        discards_active=refusal is None and _discardable_active() is not None,
         proposals=proposals,
         templates=templates,
     )
@@ -202,6 +224,12 @@ def gym_shared_accept(shared_id):
     if refusal is not None:
         flash(refusal, 'error')
         return redirect(url_for('gym.gym_heute'))
+
+    # The confirm page said so above the button: an empty workout of your own
+    # is dropped, not left running beside this one.
+    abandoned = _discardable_active()
+    if abandoned is not None:
+        _delete_session_and_links(abandoned)
 
     leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
 

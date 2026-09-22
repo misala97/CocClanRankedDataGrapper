@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { CatalogueExercise, LiveExercise, Suggestion } from '../types'
 import { useUndo } from '../../undo'
+import { useSaveState } from '../stores'
+import { parseSetInput } from '../../setInput'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
 
@@ -16,14 +18,19 @@ export interface ExerciseSheetActions {
   onReplaceWithNew(name: string): void
   onRemove(): void
   onShowProgress(): void
+  /** Pull this exercise in front of the live one, so it is up next. */
+  onMakeLive(): void
 }
 
 interface Props extends ExerciseSheetActions {
   exercise: LiveExercise
   catalogue: CatalogueExercise[]
-  /** What the add-a-set row pre-fills with. Null for an exercise with no
-   *  history to seed from. */
+  /** What the add-a-set row pre-fills with when the exercise has no set yet.
+   *  Null for an exercise with no history to seed from. */
   suggestion: Suggestion | null
+  /** Whether "Jetzt machen" is offered: not for the live exercise itself,
+   *  a finished or skipped one, or a follower whose order is the leader's. */
+  canMakeLive: boolean
 }
 
 /**
@@ -37,12 +44,16 @@ interface Props extends ExerciseSheetActions {
  * opposite lifetimes invisible, which is why each carries its own note.
  */
 export function ExerciseSheet({
-  exercise, catalogue, suggestion,
+  exercise, catalogue, suggestion, canMakeLive,
   onRestChange, onIncrementChange, onMetaSave, onSetUpdate, onSetDelete,
   onAddSet, onToggleSkip, onReplace, onReplaceWithNew, onRemove, onShowProgress,
+  onMakeLive,
 }: Props) {
   const [pain, setPain] = useState(exercise.pain)
   const [notes, setNotes] = useState(exercise.notes ?? '')
+  // The island locks the same key for the confirm button's add -- one append
+  // per exercise in flight, whichever control asked for it.
+  const adding = useSaveState((s) => s.locked[`add-${exercise.id}`] === true)
   const [newName, setNewName] = useState('')
   const offerUndo = useUndo((s) => s.offer)
   // Sets hidden while their delete waits out the undo window. Ids, not
@@ -102,25 +113,32 @@ export function ExerciseSheet({
       </div>
 
       {/* The opposite lifetime to the increment above: a twinge and a note
-          belong to this workout, not to the machine. */}
+          belong to this workout, not to the machine.
+
+          Both save by themselves, like the settings above. The flag used to
+          wait for a Speichern button beside the note, so ticking it and
+          closing the sheet kept the tick on screen and saved nothing. */}
       <div className="sheet__group">
         <div className="sheet__group-head">
           <span className="label">Heute</span>
         </div>
         <label className="sheet__row">
           <input type="checkbox" className="check" checked={pain}
-            onChange={(e) => setPain(e.target.checked)} />
+            onChange={(e) => {
+              setPain(e.target.checked)
+              onMetaSave({ pain: e.target.checked, notes })
+            }} />
           <span className="check__text">Schmerz / Zwicken</span>
         </label>
-        <div className="sheet__save-row">
-          <div className="field">
-            <label className="label" htmlFor={`ex-notes-${exercise.id}`}>Notiz</label>
-            <input type="text" id={`ex-notes-${exercise.id}`} className="input"
-              placeholder="—" value={notes}
-              onChange={(e) => setNotes(e.target.value)} />
-          </div>
-          <button type="button" className="btn btn--ghost btn--sm"
-            onClick={() => onMetaSave({ pain, notes })}>Speichern</button>
+        <div className="field">
+          <label className="label" htmlFor={`ex-notes-${exercise.id}`}>Notiz</label>
+          <input type="text" id={`ex-notes-${exercise.id}`} className="input"
+            placeholder="—" value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+            onBlur={() => {
+              if (notes !== (exercise.notes ?? '')) onMetaSave({ pain, notes })
+            }} />
         </div>
       </div>
 
@@ -138,10 +156,25 @@ export function ExerciseSheet({
           <SetEditor set={s} ordinal={i + 1} key={`${s.id}-${s.weight}-${s.reps}`}
             onSave={onSetUpdate} onDelete={deleteSet} />
         ))}
-        <AddSetRow suggestion={suggestion} onAdd={onAddSet} />
+        {/* Seeded from the last set, not only from the session's opening
+            suggestion: appending is usually one more of what you just did.
+            Keyed on that seed so a new last set re-seeds the row. */}
+        <AddSetRow key={lastSetKey(exercise)} seed={addSeed(exercise, suggestion)}
+          busy={adding} onAdd={onAddSet} />
       </div>
 
       <div className="sheet__group">
+        {canMakeLive && (
+          <button type="button" className="sheet-row" onClick={onMakeLive}>
+            <span className="sheet-row__lead"><Icon name="check" /></span>
+            <span className="sheet-row__main">
+              <span className="sheet-row__name">Jetzt machen</span>
+              <span className="sheet-row__meta">
+                Kommt vor die aktuelle Übung — etwa wenn gerade dieses Gerät frei ist.
+              </span>
+            </span>
+          </button>
+        )}
         <button type="button" className="sheet-row" onClick={onShowProgress}>
           <span className="sheet-row__lead"><Icon name="chart" /></span>
           <span className="sheet-row__main">
@@ -251,6 +284,11 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
 }) {
   const [weight, setWeight] = useState(String(set.weight))
   const [reps, setReps] = useState(String(set.reps))
+  // A cleared field used to save as 0 -- Number('') is 0 -- and overwrite the
+  // real numbers. Invalid or unchanged, there is nothing to save.
+  const parsed = parseSetInput(weight, reps)
+  const changed = parsed !== null
+    && (parsed.weight !== set.weight || parsed.reps !== set.reps)
 
   return (
     <div className="sset">
@@ -260,13 +298,14 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
         onChange={(e) => setWeight(e.target.value)} />
       <span className="sset__unit">kg</span>
       <span className="sset__unit">×</span>
-      <input type="number" min="0" className="input input--num"
+      <input type="number" min="1" className="input input--num"
         aria-label={`Satz ${ordinal}, Wiederholungen`} value={reps}
         onChange={(e) => setReps(e.target.value)} />
       <span className="sset__acts">
         <button type="button" className="icon-btn"
           aria-label={`Satz ${ordinal} speichern`}
-          onClick={() => onSave(set.id, Number(weight), Number(reps))}>
+          disabled={!changed}
+          onClick={() => { if (parsed !== null) onSave(set.id, parsed.weight, parsed.reps) }}>
           <Icon name="save" />
         </button>
         {/* The multiplication-sign delete stays a typographic mark on
@@ -279,12 +318,28 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
   )
 }
 
-function AddSetRow({ suggestion, onAdd }: {
-  suggestion: Suggestion | null
+/** What the add row starts from: the last set of this exercise, else the
+ *  session's suggestion, else nothing. */
+function addSeed(exercise: LiveExercise, suggestion: Suggestion | null) {
+  const last = exercise.sets[exercise.sets.length - 1]
+  if (last !== undefined) return { weight: last.weight, reps: last.reps }
+  return suggestion
+}
+
+function lastSetKey(exercise: LiveExercise): string {
+  const last = exercise.sets[exercise.sets.length - 1]
+  return last === undefined ? 'none' : `${last.id}-${last.weight}-${last.reps}`
+}
+
+function AddSetRow({ seed, busy, onAdd }: {
+  seed: { weight: number; reps: number } | null
+  /** An append for this exercise is still on its way to the server. */
+  busy: boolean
   onAdd(weight: number, reps: number): void
 }) {
-  const [weight, setWeight] = useState(suggestion ? String(suggestion.weight) : '')
-  const [reps, setReps] = useState(suggestion ? String(suggestion.reps) : '')
+  const [weight, setWeight] = useState(seed ? String(seed.weight) : '')
+  const [reps, setReps] = useState(seed ? String(seed.reps) : '')
+  const parsed = parseSetInput(weight, reps)
 
   return (
     <div className="sset">
@@ -294,14 +349,19 @@ function AddSetRow({ suggestion, onAdd }: {
         onChange={(e) => setWeight(e.target.value)} />
       <span className="sset__unit">kg</span>
       <span className="sset__unit">×</span>
-      <input type="number" min="0" className="input input--num" required
+      <input type="number" min="1" className="input input--num" required
         aria-label="Neuer Satz, Wiederholungen" value={reps}
         onChange={(e) => setReps(e.target.value)} />
       <span className="sset__acts">
         {/* Visible text short so the action slot never wraps; the accessible
-            name stays the full phrase. */}
+            name stays the full phrase. Disabled while the fields cannot make a
+            set -- an empty row used to log 0 kg x 0 as done -- and while an
+            append is in flight, since a second tap would be a second set. */}
         <button type="button" className="btn btn--ghost btn--sm" aria-label="Satz anhängen"
-          onClick={() => onAdd(Number(weight), Number(reps))}>Anhängen</button>
+          disabled={parsed === null || busy}
+          onClick={() => { if (parsed !== null) onAdd(parsed.weight, parsed.reps) }}>
+          Anhängen
+        </button>
       </span>
     </div>
   )

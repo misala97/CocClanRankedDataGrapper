@@ -23,6 +23,9 @@ export interface SharedConfirmPayload {
   leader_name: string
   /** Why this invite cannot be accepted, or null. */
   refusal: string | null
+  /** Accepting throws away the lifter's own running workout -- only ever an
+   *  empty one; a logged set refuses the invite instead. */
+  discards_active: boolean
   proposals: MatchProposal[]
   /** The follower's routines, for booking this workout under one of them. */
   templates: ConfirmTemplate[]

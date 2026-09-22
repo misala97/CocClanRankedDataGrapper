@@ -150,11 +150,12 @@ def finished_with_rest():
             db.session.commit()
 
 
-def test_the_finished_page_reports_the_rest_it_measured(client, finished_with_rest):
-    """3 minutes then 2 gives 5 minutes of counted rest."""
+def test_the_finished_page_reports_the_pace_it_measured(client, finished_with_rest):
+    """3 minutes then 2 is one set every 2:30. Reported as a pace, not as
+    "5 minutes of rest": each gap also holds the next set itself."""
     session_id, _ = finished_with_rest
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
-    assert embedded_payload(html)['rest_taken_seconds'] == 300
+    assert embedded_payload(html)['set_pace_seconds'] == 150
 
 
 def test_the_finished_page_says_nothing_about_rest_without_stamps(client, scratch_live_set):
@@ -173,8 +174,8 @@ def test_the_finished_page_says_nothing_about_rest_without_stamps(client, scratc
 
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
     # None, not 0: the page renders the absence as silence, and a 0 would have
-    # it print "davon unter 1 Minute Pause" about a session it cannot time.
-    assert embedded_payload(html)['rest_taken_seconds'] is None,         'claimed a rest figure with no timestamps to build it from'
+    # it print a pace for a session it cannot time.
+    assert embedded_payload(html)['set_pace_seconds'] is None,         'claimed a pace with no timestamps to build it from'
 
 
 def test_statistik_reports_planned_against_actual_rest(client, finished_with_rest):

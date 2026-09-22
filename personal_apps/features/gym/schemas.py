@@ -299,6 +299,8 @@ class ReadyForMore(_Model):
     sets: int
     weight: float
     is_latest: bool
+    # One loadable step above `weight`, or None when the stack is topped out.
+    next_weight: float | None
 
 
 class PartnerStatus(_Model):
@@ -621,6 +623,13 @@ class CorrectableSet(_Model):
     reps: int
 
 
+class UnloggedExercise(_Model):
+    """An exercise the workout held but nothing was logged on -- the
+    correction sheet can still add a set to it."""
+    session_exercise_id: int
+    name: str
+
+
 class FinishedExercise(_Model):
     """One row of the Nach-Übung list, and one group of the correction sheet.
 
@@ -710,10 +719,13 @@ class FinishedPayload(_Model):
     # One entry per logged set, in order: 'record' only for the single set that
     # lifted a WEIGHT record, 'done' for the rest.
     tick_states: list[Literal['record', 'done']]
-    # Measured rest, not planned -- the gap between consecutive sets. None for
-    # any session logged before completed_at existed, which the page renders as
-    # silence rather than as zero.
-    rest_taken_seconds: int | None
+    # Measured pace -- the average gap between consecutive sets, which holds
+    # the rest AND the next set. None for any session logged before
+    # completed_at existed, which the page renders as silence rather than zero.
+    set_pace_seconds: int | None
+    # Exercises of this workout with nothing logged, for the correction
+    # sheet's add rows.
+    unlogged: list[UnloggedExercise]
     weekday_short: list[str]
     # Celebrate on arrival, not on every later visit from Verlauf.
     just_finished: bool
@@ -1034,6 +1046,9 @@ class SharedConfirmPayload(_Model):
     #: Why this invite cannot be accepted, or None. Present means the form is
     #: replaced by the reason -- there is nothing to confirm.
     refusal: str | None
+    #: Whether accepting throws away the lifter's own running workout. Only
+    #: ever an empty one -- a logged set refuses the invite instead.
+    discards_active: bool
     proposals: list[MatchProposal]
     #: The follower's routines, for booking this workout under one of them.
     #: Empty when the invite carries a refusal -- there is nothing to book.

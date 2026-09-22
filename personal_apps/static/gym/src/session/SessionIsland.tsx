@@ -1,10 +1,13 @@
-import { useEffect } from 'react'
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import {
+  QueryClient, QueryClientProvider, useQuery, useQueryClient,
+} from '@tanstack/react-query'
 import type { SessionDetailPayload } from './types'
 import { api, fetchSession } from './api'
 import { postNavigate } from '../api'
 import { csrfToken } from '../csrf'
 import { heartbeatSubscription } from '../push'
+import { useUndo } from '../undo'
 import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
 import { usePush, useSaveState, useSheets } from './stores'
@@ -14,6 +17,19 @@ import { SessionPage, type SessionActions } from './SessionPage'
 import type { ExerciseSheetActions } from './components/ExerciseSheet'
 
 const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window
+
+/** Resolves once no write to this workout is in flight or queued behind one.
+ *  Mutations share a scope per session (useSessionMutation), so a queued write
+ *  counts as pending until its own request has answered. */
+export function writesSettled(client: QueryClient, key: readonly unknown[]): Promise<void> {
+  return new Promise((resolve) => {
+    const idle = () => client.isMutating({ mutationKey: key }) === 0
+    if (idle()) { resolve(); return }
+    const unsubscribe = client.getMutationCache().subscribe(() => {
+      if (idle()) { unsubscribe(); resolve() }
+    })
+  })
+}
 
 /**
  * Wires the page's actions to the mutation layer.
@@ -25,10 +41,22 @@ const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window
  */
 function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   const sessionId = initial.session.id
+  const client = useQueryClient()
 
   // The screen stays on for as long as the workout is live -- this island
   // only ever renders an unfinished session, so the flag is simply true.
   useWakeLock(true)
+
+  // Back from the debrief, the browser restores this page from its cache,
+  // still live and still accepting taps -- into a workout that has finished.
+  // A restored page is a stale one; the server knows what it is now.
+  useEffect(() => {
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) window.location.reload()
+    }
+    window.addEventListener('pageshow', onShow)
+    return () => window.removeEventListener('pageshow', onShow)
+  }, [])
 
   const { data } = useQuery({
     queryKey: sessionKey(sessionId),
@@ -119,36 +147,98 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   const close = useSheets((s) => s.close)
   const lock = useSaveState((s) => s.lock)
   const unlock = useSaveState((s) => s.unlock)
+  const offerUndo = useUndo((s) => s.offer)
 
-  const live = data.visible_exercises.find((se) => se.id === data.live_id) ?? null
-  const nextSet = live?.sets.find((s) => !s.completed) ?? null
+  // Un-logging a chip waits out the undo window before it is sent, like every
+  // other destructive tap here -- a sweaty thumb on a done chip used to undo
+  // the set on the spot. Until then the screen shows it open, drawn over the
+  // server's payload with the same guess the write itself would make.
+  const [pendingUnlog, setPendingUnlog] = useState<number | null>(null)
+  const unlogged = pendingUnlog === null
+    ? undefined
+    : data.visible_exercises.flatMap((se) => se.sets).find((s) => s.id === pendingUnlog)
+  const view = unlogged === undefined
+    ? data
+    : optimistic.toggleSet(data, unlogged.id, false, unlogged.weight, unlogged.reps)
+
+  const [finishing, setFinishing] = useState(false)
+
+  const live = view.visible_exercises.find((se) => se.id === view.live_id) ?? null
+
+  /** Leave for `url` once every write has landed. Finishing with a set still
+   *  on its way used to navigate away from it: the form post won the race and
+   *  the set never reached the workout. A pending undo is sent first, and a
+   *  write that FAILS while waiting keeps the lifter here, with the banner. */
+  const leaveAfterWrites = (url: string) => {
+    setFinishing(true)
+    const errorBefore = useSaveState.getState().error
+    useUndo.getState().commitNow()
+    void writesSettled(client, sessionKey(sessionId)).then(() => {
+      const error = useSaveState.getState().error
+      if (error !== null && error !== errorBefore) {
+        setFinishing(false)
+        close()
+        return
+      }
+      postNavigate(url)
+    })
+  }
+
+  const appendSet = (seId: number, weight: number, reps: number) => {
+    // add cannot be made idempotent -- a second POST creates a second set --
+    // so the lock is what protects it from a double tap. One key per
+    // exercise, shared by the confirm button and the sheet's add row.
+    const formId = `add-${seId}`
+    if (useSaveState.getState().isLocked(formId)) return
+    lock(formId)
+    addSet.mutateAsync([seId, weight, reps])
+      .catch(() => {}) // the banner already says so
+      .finally(() => unlock(formId))
+  }
 
   const actions: SessionActions = {
-    onConfirmSet: (weight, reps) => {
+    onConfirmSet: (weight, reps, setId) => {
       if (live === null) return
-      // The pending set is confirmed; with nothing pending, gym_add_set
-      // creates one already completed -- which is what "Satz geschafft" means
-      // everywhere else on this screen. Only the endpoint differs.
-      if (nextSet !== null) {
-        toggleSet.mutate([nextSet.id, true, weight, reps])
-      } else {
-        // add cannot be made idempotent -- a second POST creates a second set
-        // -- so the lock is what protects it from a double tap.
-        const formId = `add-${live.id}`
-        if (useSaveState.getState().isLocked(formId)) return
-        lock(formId)
-        addSet.mutateAsync([live.id, weight, reps]).finally(() => unlock(formId))
+      // The set the steppers are bound to is confirmed; with nothing open,
+      // gym_add_set creates one already completed -- which is what "Satz
+      // geschafft" means everywhere else on this screen.
+      if (setId === null) {
+        appendSet(live.id, weight, reps)
+        return
       }
+      if (setId === pendingUnlog) {
+        // Re-logging the chip whose un-log is still in its undo window: send
+        // the un-log now, so the numbers on the steppers are what lands.
+        useUndo.getState().commitNow()
+        setPendingUnlog(null)
+      }
+      toggleSet.mutate([setId, true, weight, reps])
     },
     onToggleSet: (setId, completed) => {
-      const target = data.visible_exercises
-        .flatMap((se) => se.sets).find((s) => s.id === setId)
-      if (target === undefined) return
-      toggleSet.mutate([setId, completed, target.weight, target.reps])
+      const owner = data.visible_exercises.find((se) => se.sets.some((s) => s.id === setId))
+      const target = owner?.sets.find((s) => s.id === setId)
+      if (owner === undefined || target === undefined) return
+      if (completed) {
+        toggleSet.mutate([setId, true, target.weight, target.reps])
+        return
+      }
+      setPendingUnlog(setId)
+      offerUndo({
+        label: `Satz ${owner.sets.indexOf(target) + 1} wieder offen.`,
+        undo: () => setPendingUnlog(null),
+        commit: () => {
+          toggleSet.mutateAsync([setId, false, target.weight, target.reps])
+            .catch(() => {}) // rolled back and bannered by the mutation layer
+            // Cleared once the answer is in the payload, not before -- the
+            // chip would flash back to done for the length of the request.
+            .finally(() => setPendingUnlog((id) => (id === setId ? null : id)))
+        },
+      })
     },
     // A POST that redirects to the debrief. This was `window.location.href`
     // -- a GET to a POST-only route, a 405 for everyone -- until 2026-08-11.
-    onFinish: () => postNavigate(`/gym/session/${sessionId}/finish`),
+    onFinish: () => leaveAfterWrites(`/gym/session/${sessionId}/finish`),
+    onDiscard: () => leaveAfterWrites(`/gym/session/${sessionId}/discard`),
     onReorder: (order) => reorder.mutate([order]),
     onSessionMetaSave: (meta) => { sessionMeta.mutate([meta]); close() },
     onSkipRest: () => { skipRest.mutate([]); close() },
@@ -166,10 +256,21 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     exerciseActions: (seId: number): ExerciseSheetActions => ({
       onRestChange: (seconds) => setRest.mutate([seId, seconds]),
       onIncrementChange: (kg) => setIncrement.mutate([seId, kg]),
-      onMetaSave: (meta) => { exerciseMeta.mutate([seId, meta]); close() },
+      // No close(): the flag saves on the tap and the note on blur, both
+      // while the sheet stays open.
+      onMetaSave: (meta) => exerciseMeta.mutate([seId, meta]),
       onSetUpdate: (setId, weight, reps) => updateSet.mutate([setId, weight, reps]),
       onSetDelete: (setId) => deleteSet.mutate([setId]),
-      onAddSet: (weight, reps) => addSet.mutate([seId, weight, reps]),
+      onAddSet: (weight, reps) => appendSet(seId, weight, reps),
+      // In front of the live exercise, which is how the live rule reads a
+      // step away from a busy machine (_live_context).
+      onMakeLive: () => {
+        const order = data.visible_exercises.map((se) => se.id).filter((id) => id !== seId)
+        const at = data.live_id === null ? 0 : Math.max(0, order.indexOf(data.live_id))
+        order.splice(at, 0, seId)
+        reorder.mutate([order])
+        close()
+      },
       onToggleSkip: () => { toggleSkip.mutate([seId]); close() },
       onReplace: (exerciseId) => { replaceExercise.mutate([seId, exerciseId]); close() },
       onReplaceWithNew: (name) => { replaceWithNew.mutate([seId, name]); close() },
@@ -182,8 +283,9 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   }
 
   return (
-    <SessionPage payload={data} actions={actions} pushSupported={pushSupported}
-      busySetId={toggleSet.isPending ? (nextSet?.id ?? null) : null}
+    <SessionPage payload={view} actions={actions} pushSupported={pushSupported}
+      confirmBusy={toggleSet.isPending || addSet.isPending}
+      finishing={finishing}
       // Neither add has an optimistic path, so the row is the only place that
       // can say the tap landed. `variables` is the argument tuple of the write
       // still in flight.
@@ -232,9 +334,12 @@ export function SessionIsland({ initial }: { initial: SessionDetailPayload }) {
   // user action with a visible banner and an explicit retry button, and a
   // silent second attempt would be a second POST to routes that are not all
   // idempotent.
-  const [client] = [new QueryClient({
+  //
+  // useState's initialiser, not a bare `new` in the body: that built a fresh
+  // client -- and an empty cache -- on every render of this component.
+  const [client] = useState(() => new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
-  })]
+  }))
 
   return (
     <QueryClientProvider client={client}>

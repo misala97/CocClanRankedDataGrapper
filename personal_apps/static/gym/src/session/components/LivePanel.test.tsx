@@ -47,7 +47,52 @@ describe('LivePanel', () => {
     await user.click(screen.getByText('Satz geschafft'))
     const next = live.sets.find((s) => !s.completed)!
     expect(h.onConfirm).toHaveBeenCalledWith(
-      next.weight + payload.live_increment, next.reps)
+      next.weight + payload.live_increment, next.reps, next.id)
+  })
+
+  it('binds the steppers to an open chip instead of logging it', async () => {
+    // Tapping an open chip logged it on the spot with its PLANNED numbers,
+    // whatever the steppers said.
+    const user = userEvent.setup()
+    const h = handlers()
+    render(<LivePanel payload={payload} {...h} />)
+    const open = live.sets.filter((s) => !s.completed)
+    const later = open[open.length - 1]!
+
+    await user.click(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(later) + 1}, geplant`)))
+    expect(h.onToggleSet).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent(kg1(later.weight))
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent(String(later.reps))
+
+    await user.click(screen.getByText('Satz geschafft'))
+    expect(h.onConfirm).toHaveBeenCalledWith(later.weight, later.reps, later.id)
+  })
+
+  it('hands a tap on a done chip to the island, which offers the undo', async () => {
+    const user = userEvent.setup()
+    const h = handlers()
+    render(<LivePanel payload={payload} {...h} />)
+    const done = live.sets.find((s) => s.completed)!
+    await user.click(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(done) + 1} erledigt`)))
+    expect(h.onToggleSet).toHaveBeenCalledWith(done.id, false)
+  })
+
+  it('holds the confirm button while a set write is in flight', () => {
+    // It keyed on the next set's id -- null once the last set was optimistically
+    // done, so a double tap on an exercise's last set appended a phantom one.
+    render(<LivePanel payload={payload} {...handlers()} confirmBusy />)
+    expect(screen.getByText('Satz geschafft').closest('button')).toBeDisabled()
+  })
+
+  it('says everything is skipped rather than showing a skipped exercise as live', () => {
+    const skipped: SessionDetailPayload = {
+      ...payload,
+      live_id: null,
+      visible_exercises: payload.visible_exercises.map((se) => ({ ...se, skipped: true })),
+    }
+    render(<LivePanel payload={skipped} {...handlers()} />)
+    expect(screen.getByRole('heading', { name: 'Alles übersprungen' })).toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Übung')).toBeNull()
   })
 
   it('snaps the steppers to the next pending set even when its numbers are the same', async () => {
@@ -124,7 +169,7 @@ describe('LivePanel', () => {
   it('says where the plan came from', () => {
     render(<LivePanel payload={payload} {...handlers()} />)
     const line = screen.getByText('Vorgabe').closest('p')!
-    expect(line).toHaveTextContent('Vorgabe vom 25.08., gleicher Slot.')
+    expect(line).toHaveTextContent('Vorgabe vom 25.08., gleiche Position im Workout.')
   })
 
   it('says so when the plan comes from an earlier, fresher slot', () => {
@@ -139,7 +184,7 @@ describe('LivePanel', () => {
     }
     render(<LivePanel payload={late} {...handlers()} />)
     expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
-      'Vorgabe vom 30.08. aus Slot 1 — so spät im Workout gibt es noch nichts, daher dein bestes Ergebnis von früher.')
+      'Vorgabe vom 30.08., damals an Position 1 — so spät im Workout gibt es noch nichts, daher dein bestes Ergebnis von früher.')
   })
 
   it('says so when the plan comes from a later slot, and after a layoff', () => {
@@ -152,7 +197,7 @@ describe('LivePanel', () => {
     }
     const { unmount } = render(<LivePanel payload={later} {...handlers()} />)
     expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
-      'Vorgabe vom 30.08., damals später im Workout (Slot 5).')
+      'Vorgabe vom 30.08., damals später im Workout (Position 5).')
     unmount()
 
     const layoff: SessionDetailPayload = {
@@ -226,7 +271,7 @@ describe('LivePanel', () => {
     const advised: SessionDetailPayload = {
       ...payload,
       stagnation_counts: { [String(live.id)]: 4 },
-      ready_for_more: { sets: 3, weight: 35, is_latest: true },
+      ready_for_more: { sets: 3, weight: 35, is_latest: true, next_weight: 37.5 },
     }
     const { container } = render(<LivePanel payload={advised} {...handlers()} />)
     const stall = container.querySelector('.live__stall')!
@@ -241,6 +286,8 @@ describe('LivePanel', () => {
     expect(ready.textContent).toContain('Bereit')
     expect(ready.textContent).toContain('Letztes Mal 3 Sätze auf 35,0 kg')
     expect(ready.textContent).toContain(`mit ${payload.min_full_reps}+ Wdh.`)
+    // Names the step, not only the evidence for it.
+    expect(ready.textContent).toContain('Zeit für 37,5 kg')
     // Says "je Seite" exactly when the lift is logged per side.
     expect(ready.textContent!.includes('je Seite')).toBe(live.is_unilateral)
   })
@@ -353,6 +400,15 @@ describe('Rail', () => {
     expect(screen.getByText(
       `Übung ${payload.live_index} von ${payload.visible_exercises.length}, ${skipped} übersprungen`,
     )).toBeInTheDocument()
+  })
+
+  it('names no position when everything is skipped', () => {
+    const skipped = payload.visible_exercises.map((se) => ({ ...se, skipped: true }))
+    render(<Rail exercises={skipped} liveId={null} liveIndex={0}
+      setsOpen={0} setsTotal={0} />)
+    expect(screen.getByText(`${skipped.length} von ${skipped.length} übersprungen`))
+      .toBeInTheDocument()
+    expect(screen.queryByText(/Übung 0 von/)).toBeNull()
   })
 
   it('hides the segments from assistive tech', () => {

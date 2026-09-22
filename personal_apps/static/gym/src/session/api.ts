@@ -8,8 +8,13 @@ import { getJson, postForm, MutationFailed } from '../api'
  */
 export { MutationFailed }
 
+/** Every write names the live screen as its source. The debrief posts to the
+ *  same set routes to correct a finished workout; this header is how the
+ *  server tells a stale live screen (refused, 409) from a correction. */
+const LIVE = { 'X-Gym-Surface': 'live' }
+
 const post = (url: string, fields: Record<string, string | number | boolean> = {}) =>
-  postForm<SessionDetailPayload>(url, fields)
+  postForm<SessionDetailPayload>(url, fields, { headers: LIVE })
 
 export function fetchSession(sessionId: number): Promise<SessionDetailPayload> {
   return getJson<SessionDetailPayload>(`/gym/session/${sessionId}/detail.json`)

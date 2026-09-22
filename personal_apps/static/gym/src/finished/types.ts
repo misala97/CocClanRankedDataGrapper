@@ -85,9 +85,14 @@ export interface FinishedPayload {
   deload_applied: boolean
   previous_session: PreviousSession | null
   tick_states: ('record' | 'done')[]
-  /** null for any session logged before completed_at existed -- rendered as
-   *  silence, never as zero. */
-  rest_taken_seconds: number | null
+  /** Average seconds from one logged set to the next, the set itself
+   *  included -- there is no stamp for when a set began, so this is pace,
+   *  never "rest". null for fewer than two stamped sets, or for any session
+   *  logged before completed_at existed: rendered as silence, never as zero. */
+  set_pace_seconds: number | null
+  /** Exercises of this workout with nothing logged, so the correction sheet
+   *  can still add a set to them. */
+  unlogged: { session_exercise_id: number; name: string }[]
   weekday_short: string[]
   just_finished: boolean
   /** The update prompt's diff, both halves: the template's current list, and

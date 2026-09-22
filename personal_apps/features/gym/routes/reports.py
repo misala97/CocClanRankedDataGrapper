@@ -251,6 +251,21 @@ def _progression_view(ranking):
     return out
 
 
+def _longest_break_days(session_dates, now):
+    """The longest run of days without a workout, the one still going included.
+
+    Only the gaps BETWEEN workouts used to count, so a lifter three weeks into
+    a break was told their longest one was eight days -- the page understated
+    exactly the break it was most likely being opened about.
+    """
+    dates = sorted(session_dates)
+    if not dates:
+        return 0
+    gaps = [(b - a).days for a, b in zip(dates, dates[1:])]
+    gaps.append((now - dates[-1]).days)
+    return max(gaps)
+
+
 @gym_bp.route('/gym/statistik')
 @login_required
 def gym_statistik():
@@ -281,11 +296,7 @@ def gym_statistik():
     # it reports. The longest break is the only figure here not already in
     # analytics -- it is cheap from the session dates this page has loaded
     # anyway, and it is the fact that makes the sentence worth reading.
-    session_dates = sorted({row.started_at for row in performed})
-    longest_gap = max(
-        ((b - a).days for a, b in zip(session_dates, session_dates[1:])),
-        default=0,
-    )
+    longest_gap = _longest_break_days({row.started_at for row in performed}, now)
 
     # Records: the most recent RECENT_RECORDS shown flat, everything older
     # folded into year bands.
