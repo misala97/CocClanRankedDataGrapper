@@ -40,6 +40,7 @@ const base: HeutePayload = {
   tonnage_peak: 0,
   templates: [routine()],
   pending_invites: [],
+  onboarding: null,
 }
 
 const mount = (over: Partial<HeutePayload> = {}) =>
@@ -336,5 +337,109 @@ describe('editing a routine in place', () => {
     const routines = screen.getByRole('region', { name: /Am längsten her|Routinen/ })
     expect(within(routines).getByText('Push')).toBeInTheDocument()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('the first-run checklist', () => {
+  const empty: Partial<HeutePayload> = {
+    consistency: { sessions: 0, per_week: 0, days_since_last: null, window_days: 28 },
+    routines: [], templates: [],
+    onboarding: { workouts: 0, last: null },
+  }
+  const once: Partial<HeutePayload> = {
+    ...empty,
+    consistency: { sessions: 1, per_week: 0.25, days_since_last: 0, window_days: 28 },
+    onboarding: {
+      workouts: 1,
+      last: {
+        session_id: 7, name: 'Oberkörper', exercises: 5,
+        started_at: '2026-08-10T16:00:00', finished_at: '2026-08-10T16:42:30',
+      },
+    },
+  }
+  const step = (name: RegExp) => screen.getByText(name, { selector: '.onb__t' }).closest('li')!
+
+  it('makes the first workout the one thing to do on an empty account', () => {
+    mount(empty)
+    expect(screen.getByRole('heading', { name: 'So fängst du an' })).toBeInTheDocument()
+    expect(screen.getByText('0 von 3')).toBeInTheDocument()
+    const first = step(/Erstes Workout/)
+    expect(first).toHaveAttribute('aria-current', 'step')
+    // Straight in: no sheet asking for a name and a template it cannot have.
+    const go = within(first).getByRole('button', { name: /Workout starten/ })
+    expect(go.closest('form')).toHaveAttribute('action', '/gym/start')
+    expect(go.closest('form')!.querySelector('[name=template_id]')).toBeNull()
+  })
+
+  it('hides the sections that have nothing to say yet', () => {
+    mount(empty)
+    for (const name of ['Tonnage pro Woche', 'Sätze pro Muskelgruppe', 'Letzte Workouts',
+      'Routinen']) {
+      expect(screen.queryByRole('heading', { name })).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText(/Pausen-Benachrichtigung aktivieren/)).not.toBeInTheDocument()
+  })
+
+  it('ticks the workout off and asks to keep it as a routine', () => {
+    mount(once)
+    expect(screen.getByText('1 von 3')).toBeInTheDocument()
+    const first = step(/Erstes Workout/)
+    expect(first).toHaveClass('is-done')
+    expect(first).toHaveTextContent('Heute · 5 Übungen · 42 min')
+    const save = step(/Als Routine speichern/)
+    expect(save).toHaveAttribute('aria-current', 'step')
+    const form = within(save).getByRole('button', { name: 'Als Routine speichern' }).closest('form')!
+    expect(form).toHaveAttribute('action', '/gym/session/7/save_as_template')
+    expect(form.querySelector('[name=next]')).toHaveValue('start')
+    expect(within(save).getByLabelText('Name der Routine')).toHaveValue('Oberkörper')
+    // The next workout still has a way in, and the page now has data to show.
+    expect(screen.getByRole('button', { name: /Freies Workout starten/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Tonnage pro Woche' })).toBeInTheDocument()
+  })
+
+  it('counts workouts once there is more than one', () => {
+    mount({ ...once, onboarding: { ...once.onboarding!, workouts: 2 } })
+    expect(step(/Erstes Workout/)).toHaveTextContent('2 Workouts · zuletzt heute')
+  })
+
+  it('steps aside while a workout runs', () => {
+    mount({ ...empty, active_session_id: 42, active_session_started_at: '2026-08-10T17:00:00' })
+    expect(screen.getByRole('heading', { name: 'Läuft gerade' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'So fängst du an' })).not.toBeInTheDocument()
+  })
+
+  it('explains the home-screen step where the browser cannot push', () => {
+    // jsdom has neither serviceWorker nor PushManager.
+    mount(empty)
+    const push = step(/Pausen-Timer aufs Handy/)
+    expect(push).toHaveTextContent(/Zum Home-Bildschirm/)
+    expect(within(push).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('ticks the push step off on a subscribed device', async () => {
+    const subscription = { toJSON: () => ({}) }
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        getRegistration: async () =>
+          ({ pushManager: { getSubscription: async () => subscription } }),
+      },
+    })
+    vi.stubGlobal('PushManager', function PushManager() {})
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true })))
+    try {
+      mount(empty)
+      expect(await screen.findByText('Auf diesem Gerät aktiv.')).toBeInTheDocument()
+      expect(screen.getByText('1 von 3')).toBeInTheDocument()
+      expect(step(/Pausen-Timer aufs Handy/)).toHaveClass('is-done')
+    } finally {
+      Reflect.deleteProperty(navigator, 'serviceWorker')
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('is gone once the account has a routine', () => {
+    mount()
+    expect(screen.queryByRole('heading', { name: 'So fängst du an' })).not.toBeInTheDocument()
   })
 })

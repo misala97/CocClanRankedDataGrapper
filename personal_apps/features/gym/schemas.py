@@ -559,6 +559,23 @@ class PendingInvite(_Model):
     session_name: str
 
 
+class OnboardingLast(_Model):
+    """The newest finished workout that logged something: step 1's receipt,
+    and what step 2 saves as a routine."""
+    session_id: int
+    name: str | None
+    started_at: datetime
+    finished_at: datetime
+    exercises: int
+
+
+class Onboarding(_Model):
+    # Finished workouts with at least one logged set -- the count every other
+    # section of the page is built on, so the steps never disagree with them.
+    workouts: int
+    last: OnboardingLast | None
+
+
 class HeutePayload(_Model):
     now: datetime
     active_session_id: int | None
@@ -587,6 +604,10 @@ class HeutePayload(_Model):
     tonnage_peak: float
     templates: list[RoutineMemory]
     pending_invites: list[PendingInvite]
+    # The first-run checklist. None once the account has a routine, or has
+    # finished enough workouts without one that it is a way of training rather
+    # than a step not yet taken.
+    onboarding: Onboarding | None
 
 
 # ---------------------------------------------------------------------------

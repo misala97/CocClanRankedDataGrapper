@@ -2970,6 +2970,40 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
 }
 
+/* ---- first run: a real sequence, so the numbers carry the order ----
+   One step at a time is Jetzt: the lifted plane, the orange dot, the live
+   button. Done steps turn Erledigt (rose, a check); the rest stay Offen
+   (an outline) -- the same three states a set chip wears. */
+.onb { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.onb__step {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr); column-gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-3);
+}
+.onb__step.is-now {
+  padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-3);
+  border-radius: var(--r-panel); background: var(--chassis); box-shadow: var(--lift);
+}
+.onb__dot {
+  inline-size: 32px; block-size: 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: var(--t-sm); font-weight: var(--w-bold); font-variant-numeric: tabular-nums;
+  color: var(--dim); box-shadow: inset 0 0 0 1.5px var(--edge-hi);
+}
+.onb__dot svg { inline-size: 16px; block-size: 16px; stroke-width: 2.2; }
+.onb__step.is-now .onb__dot { background: var(--live); color: var(--on-live); box-shadow: var(--glow-live); }
+.onb__step.is-done .onb__dot { background: var(--done); color: var(--on-done); box-shadow: none; }
+.onb__t { display: block; padding-top: 5px; font-size: var(--t-body); font-weight: var(--w-bold); color: var(--ink); }
+.onb__step.is-done .onb__t { color: var(--done-ink); }
+.onb__d { margin-top: 2px; font-size: var(--t-sm); line-height: 1.5; color: var(--dim); text-wrap: pretty; }
+.onb__step .lead__go, .onb__step .btn { margin-top: var(--sp-3); }
+.onb__save { margin-top: var(--sp-3); }
+.onb__count { font-variant-numeric: tabular-nums; }
+/* The checklist is prose and one button: at 1080 it would be three lines of
+   sentence stretched across the page. It keeps a reading measure. */
+@media (min-width: 900px) {
+  .sec.onb-sec { max-inline-size: 36rem; }
+}
+
 /* ---- the answer: one lifted plane, one primary button ---- */
 .lead {
   padding: var(--sp-4); border-radius: var(--r-panel);

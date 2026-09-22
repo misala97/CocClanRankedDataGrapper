@@ -30,7 +30,7 @@ mockups-before-code rule: direction round first, code after the pick.
 | U8 | "Slot" copy becomes "Position" | done |
 | U9 | "Bereit" note names the next weight | done |
 | U10 | QueryClient created once (useState) | done |
-| V1 | First-run Start — mockup round, then build | open |
+| V1 | First-run Start — mockup round, then build | done (lane C) |
 | V2 | Shared-confirm: collapse exact matches — mockup round, then build | open |
 
 ## Ledger
@@ -51,3 +51,18 @@ mockups-before-code rule: direction round first, code after the pick.
   portals into the open dialog. Debrief correction rows moved onto the `.sset` grid (the
   added delete button overflowed a 390px sheet). Disabled `.icon-btn` now looks disabled.
 - Open: V1, V2 (mockup rounds). Not pushed to main.
+- 2026-09-23 — V1 direction round rendered: `personal_apps/scratchpad/puls/firstrun/06_start_firstrun_{a,b,c,c2}.html`
+  (real gym.css shell, 390x844, light + dark, no overflow, no target < 44px). Lanes: A one
+  lifted card + prose; B card + the Start charts drawn as Offen outlines; C ordered 3-step
+  checklist (erstes Workout / als Routine speichern / Pausen-Timer), c2 = after workout 1.
+  Recommended C. Awaiting Michi's pick; no production code for V1 yet.
+- 2026-09-23 — V1 built as lane C (Michi: "go with c"). Server: `HeutePayload.onboarding`
+  ({workouts, last}) while the account has no routine and < 3 finished workouts with a logged
+  set; `save_as_template` takes `next=start` (a fixed token, not a URL). Client: `FirstRun`
+  checklist replaces the routines section; reading sections hidden until the first workout;
+  push prompt folded into step 3; checklist steps aside while a workout runs.
+  Tests: gym pytest 674 passed + 1 flake (test_gym_reorder_reseed seed-date `days_ago`,
+  ran while the playwright script wrote to the dev DB near UTC midnight; 39/39 alone);
+  vitest 471 passed; tsc clean; build ok. Driven at 390x844 as user 4: empty -> Workout
+  starten (no sheet) -> running card, no checklist -> first exercise + set + finish ->
+  "1 von 3", save form -> back on Start with the routine as the lead. User 4 restored empty.

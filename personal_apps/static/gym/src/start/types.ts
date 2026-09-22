@@ -62,6 +62,21 @@ export interface PendingInvite {
   session_name: string
 }
 
+export interface OnboardingLast {
+  session_id: number
+  name: string | null
+  started_at: string
+  finished_at: string
+  exercises: number
+}
+
+/** The first-run checklist. Null once a routine exists, or after enough
+ *  freeform workouts that freeform is the habit. */
+export interface Onboarding {
+  workouts: number
+  last: OnboardingLast | null
+}
+
 export interface HeutePayload {
   now: string
   active_session_id: number | null
@@ -87,4 +102,5 @@ export interface HeutePayload {
   tonnage_peak: number
   templates: RoutineMemory[]
   pending_invites: PendingInvite[]
+  onboarding: Onboarding | null
 }

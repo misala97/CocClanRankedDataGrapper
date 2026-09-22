@@ -289,6 +289,11 @@ NON_MUSCLE_GROUPS = ('Cardio', 'Sonstiges')
 # How many finished workouts the Start page lists.
 RECENT_SESSIONS = 5
 
+# Start's first-run checklist stops asking after this many finished workouts
+# without a routine: by then freeform is how this person trains, not a step
+# they have not found yet.
+ONBOARDING_WORKOUTS = 3
+
 def _username(user_id):
     row = db.session.get(AppUser, user_id)
     return row.username if row is not None else 'Jemand'

@@ -34,7 +34,7 @@ from ..seeding import (
 )
 from ._blueprint import gym_bp
 from .helpers import (
-    DEFAULT_REST_SECONDS, NON_MUSCLE_GROUPS, RECENT_SESSIONS, WEEKDAY_SHORT,
+    DEFAULT_REST_SECONDS, NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT,
     _cancel_pending_push, _clean_muscle_group, _delete_session_and_links,
     _get_active_session, _refuse_live_write_if_finished,
     _to_increment, _to_int, _to_reps, _to_weight, _username, _wants_json,
@@ -249,6 +249,21 @@ def _heute_payload():
 
     tonnage = stats.weekly_tonnage(performed, now)
 
+    # First run: the steps from an empty account to a routine on this page.
+    # Counted off `performed` like everything above, so "1 Workout" here and
+    # "Zuletzt heute" in the header are the same fact.
+    onboarding = None
+    if not templates and len(volume_by_session) < ONBOARDING_WORKOUTS:
+        last = recent_sessions[0]['session'] if recent_sessions else None
+        onboarding = {
+            'workouts': len(volume_by_session),
+            'last': last and {
+                'session_id': last.id, 'name': last.name,
+                'started_at': last.started_at, 'finished_at': last.finished_at,
+                'exercises': sum(1 for row in performed if row.session_id == last.id),
+            },
+        }
+
     # Addressed to one person: an invite is only ever visible to its recipient.
     pending_invites = [
         {'shared_id': link.id,
@@ -298,6 +313,7 @@ def _heute_payload():
             'tonnage_peak': max((week['volume'] for week in tonnage), default=0.0),
             'templates': [_as_routine(t, None, None) for t in templates],
             'pending_invites': pending_invites,
+            'onboarding': onboarding,
         })
 
 

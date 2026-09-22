@@ -8,6 +8,8 @@ not correct what the live screen got wrong.
 """
 import datetime as dt
 
+import pytest
+
 from app import app as flask_app
 from conftest import _admin_id, embedded_payload
 
@@ -237,3 +239,117 @@ def test_the_debrief_reports_pace_per_set(client, live_session):
     payload = embedded_payload(html)
     assert payload['set_pace_seconds'] == 180
     assert 'rest_taken_seconds' not in payload
+
+
+# --- V1: the first-run checklist on Start -------------------------------------
+
+@pytest.fixture()
+def newcomer():
+    """A brand-new account and a client logged in as it. Yields
+    (client, user_id); workouts are added with _train()."""
+    from extensions import db
+    from models import AppUser
+    from werkzeug.security import generate_password_hash
+
+    flask_app.config['TESTING'] = True
+    with flask_app.app_context():
+        user = AppUser(username='pytest newcomer',
+                       password_hash=generate_password_hash('x'), is_admin=False)
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
+    with flask_app.test_client() as test_client:
+        with test_client.session_transaction() as flask_session:
+            flask_session['user_id'] = user_id
+        yield test_client, user_id
+
+    from models import Exercise, WorkoutSession, WorkoutTemplate
+    with flask_app.app_context():
+        for model in (WorkoutSession, WorkoutTemplate, Exercise):
+            for row in model.query.filter_by(user_id=user_id).all():
+                db.session.delete(row)
+            db.session.commit()
+        db.session.delete(db.session.get(AppUser, user_id))
+        db.session.commit()
+
+
+def _train(user_id, logged=True, minutes=42):
+    """One finished workout for `user_id`, with a completed set unless
+    `logged` is False. Returns the session id."""
+    from extensions import db
+    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    now = dt.datetime.utcnow()
+    with flask_app.app_context():
+        exercise = Exercise.query.filter_by(user_id=user_id).first()
+        if exercise is None:
+            exercise = Exercise(name='pytest newcomer squat', user_id=user_id)
+            db.session.add(exercise)
+            db.session.flush()
+        session_ = WorkoutSession(user_id=user_id, name='Beine',
+                                  started_at=now - dt.timedelta(minutes=minutes), finished_at=now)
+        se = SessionExercise(exercise_id=exercise.id, position=1)
+        se.sets = [SessionSet(position=1, weight=40.0, reps=10, completed=logged,
+                              completed_at=now if logged else None)]
+        session_.exercises.append(se)
+        db.session.add(session_)
+        db.session.commit()
+        return session_.id
+
+
+def _start_payload(test_client):
+    return embedded_payload(test_client.get('/gym').get_data(as_text=True))
+
+
+def test_an_empty_account_gets_the_checklist(newcomer):
+    test_client, _ = newcomer
+    assert _start_payload(test_client)['onboarding'] == {'workouts': 0, 'last': None}
+
+
+def test_a_finished_workout_is_step_one_done(newcomer):
+    test_client, user_id = newcomer
+    session_id = _train(user_id)
+    onboarding = _start_payload(test_client)['onboarding']
+    assert onboarding['workouts'] == 1
+    assert onboarding['last']['session_id'] == session_id
+    assert onboarding['last']['name'] == 'Beine'
+    assert onboarding['last']['exercises'] == 1
+
+
+def test_a_workout_that_logged_nothing_does_not_count(newcomer):
+    """Same rule as "Zuletzt vor N Tagen": a finished session where nothing
+    was ticked off is not a workout the page can build on."""
+    test_client, user_id = newcomer
+    _train(user_id, logged=False)
+    assert _start_payload(test_client)['onboarding'] == {'workouts': 0, 'last': None}
+
+
+def test_saving_from_the_checklist_lands_back_on_start(newcomer):
+    test_client, user_id = newcomer
+    session_id = _train(user_id)
+    response = test_client.post(f'/gym/session/{session_id}/save_as_template',
+                                data={'template_name': 'Beine', 'next': 'start'})
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/gym')
+    payload = _start_payload(test_client)
+    assert payload['onboarding'] is None
+    assert [r['name'] for r in payload['routines']] == ['Beine']
+
+
+def test_the_next_token_is_not_a_url(newcomer):
+    test_client, user_id = newcomer
+    session_id = _train(user_id)
+    response = test_client.post(f'/gym/session/{session_id}/save_as_template',
+                                data={'template_name': 'Beine', 'next': 'https://example.com'})
+    assert response.headers['Location'].endswith(f'/gym/session/{session_id}')
+
+
+def test_freeform_becomes_the_habit_after_three_workouts(newcomer):
+    test_client, user_id = newcomer
+    for _ in range(3):
+        _train(user_id)
+    assert _start_payload(test_client)['onboarding'] is None
+
+
+def test_an_account_with_routines_gets_no_checklist(client):
+    assert _start_payload(client)['onboarding'] is None
+

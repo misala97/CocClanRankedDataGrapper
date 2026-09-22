@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import type { HeutePayload, RoutineMemory, Stall } from './types'
+import type { HeutePayload, Onboarding, RoutineMemory, Stall } from './types'
 import { postForm, MutationFailed } from '../api'
 import { csrfToken, CsrfField } from '../csrf'
 import { heartbeatSubscription } from '../push'
@@ -145,6 +145,150 @@ function RoutineEdit({ routine, onSave, onDelete }: RoutineEditProps) {
   )
 }
 
+type PushState = 'on' | 'off' | 'unsupported' | 'unknown'
+
+interface FirstRunProps {
+  onboarding: Onboarding
+  daysSinceLast: number | null
+  push: PushState
+  onEnablePush: () => void
+  onStartFree: () => void
+}
+
+/**
+ * An empty account used to land on four empty sections, a setup prompt on
+ * top and the only way in as a small text link. This is a real sequence --
+ * the order is the content, which is what earns the numbers: train once,
+ * keep it as a routine (the one-tap start the rest of the page is built
+ * around), then let the phone call the end of a rest. One step at a time
+ * wears the lifted plane and the live button.
+ */
+function FirstRun({ onboarding, daysSinceLast, push, onEnablePush, onStartFree }: FirstRunProps) {
+  const { workouts, last } = onboarding
+  const trained = workouts > 0
+  const done = (trained ? 1 : 0) + (push === 'on' ? 1 : 0)
+
+  let receipt = ''
+  if (last !== null) {
+    const when = recency(daysSinceLast)
+    const minutes = Math.floor(
+      (local(last.finished_at).getTime() - local(last.started_at).getTime()) / 60000)
+    receipt = workouts > 1
+      ? `${workouts} Workouts · zuletzt ${when.toLowerCase()}`
+      : `${when.charAt(0).toUpperCase()}${when.slice(1)} · ${last.exercises} ${last.exercises === 1 ? 'Übung' : 'Übungen'} · ${minutes < 1 ? '< 1' : minutes} min`
+  }
+
+  const dot = (n: number, isDone: boolean) => (
+    <span className="onb__dot" aria-hidden="true">{isDone ? <Icon name="check" /> : n}</span>
+  )
+
+  return (
+    <section className="sec onb-sec" aria-labelledby="sec-onb">
+      <div className="sec__head">
+        <h2 className="label" id="sec-onb">So fängst du an</h2>
+        <span className="sec__sp" />
+        <span className="label onb__count">{`${done} von 3`}</span>
+      </div>
+      <ol className="onb">
+        <li className={`onb__step ${trained ? 'is-done' : 'is-now'}`}
+          aria-current={trained ? undefined : 'step'}>
+          {dot(1, trained)}
+          <div className="onb__body">
+            <span className="onb__t">
+              {trained && <span className="sr-only">Erledigt: </span>}
+              Erstes Workout
+            </span>
+            {trained ? (
+              <p className="onb__d">{receipt}</p>
+            ) : (
+              <>
+                <p className="onb__d">Leer starten, Übungen anlegen, während du sie machst.</p>
+                <form method="post" action="/gym/start">
+                  <CsrfField />
+                  <button type="submit" className="lead__go">
+                    <Icon name="skip" />
+                    Workout starten
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        </li>
+
+        <li className={`onb__step${trained ? ' is-now' : ''}`}
+          aria-current={trained ? 'step' : undefined}>
+          {dot(2, false)}
+          <div className="onb__body">
+            <span className="onb__t">Als Routine speichern</span>
+            {trained && last !== null ? (
+              <>
+                <p className="onb__d">
+                  Dann startest du es hier mit einem Tipp — samt Gewichten vom letzten Mal.
+                </p>
+                <form method="post" action={`/gym/session/${last.session_id}/save_as_template`}
+                  className="onb__save">
+                  <CsrfField />
+                  <input type="hidden" name="next" value="start" />
+                  <div className="field grow">
+                    <label className="label" htmlFor="onb-name">Name der Routine</label>
+                    <input type="text" id="onb-name" name="template_name" className="input"
+                      defaultValue={last.name ?? ''} placeholder="z. B. Oberkörper" required />
+                  </div>
+                  <button type="submit" className="lead__go">Als Routine speichern</button>
+                </form>
+              </>
+            ) : (
+              <p className="onb__d">
+                Am Ende des Workouts. Danach startest du es hier mit einem Tipp — samt
+                Gewichten vom letzten Mal.
+              </p>
+            )}
+          </div>
+        </li>
+
+        <li className={`onb__step${push === 'on' ? ' is-done' : ''}`}>
+          {dot(3, push === 'on')}
+          <div className="onb__body">
+            <span className="onb__t">
+              {push === 'on' && <span className="sr-only">Erledigt: </span>}
+              Pausen-Timer aufs Handy
+            </span>
+            {push === 'on' ? (
+              <p className="onb__d">Auf diesem Gerät aktiv.</p>
+            ) : push === 'unsupported' ? (
+              <p className="onb__d">
+                Füge die App über „Zum Home-Bildschirm“ hinzu und öffne sie von dort — dann
+                meldet sich das Handy, wenn die Pause um ist.
+              </p>
+            ) : (
+              <>
+                <p className="onb__d">
+                  Zum Home-Bildschirm hinzufügen — dann meldet sich das Handy, wenn die Pause
+                  um ist.
+                </p>
+                {push === 'off' && (
+                  <button type="button" className="btn btn--ghost btn--sm" onClick={onEnablePush}>
+                    Benachrichtigung aktivieren
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </li>
+      </ol>
+
+      {/* Step 1 IS the start button until it is done. After it, the checklist
+          asks for a save, and the next workout still needs a way in. */}
+      {trained && (
+        <button type="button" className="start__free" onClick={onStartFree}>
+          <Icon name="plus" />
+          Freies Workout starten
+        </button>
+      )}
+    </section>
+  )
+}
+
 export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   const openSheet = useSheets((s) => s.open)
   const subscribed = usePush((s) => s.subscribed)
@@ -216,6 +360,15 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   useReloadWhenStale()
   const lead = payload.routines[0]
   const rest = payload.routines.slice(canStart ? 1 : 0)
+  // The checklist is what to do next, and while a workout runs the answer is
+  // the running card. Nothing on an account's first run has data yet, so the
+  // reading sections wait for the first finished workout instead of
+  // announcing four times that they are empty.
+  const firstRun = payload.onboarding
+  const showChecklist = firstRun !== null && !running
+  const nothingToRead = firstRun !== null && firstRun.workouts === 0
+  const pushState: PushState = !pushSupported ? 'unsupported'
+    : subscribed === null ? 'unknown' : subscribed ? 'on' : 'off'
   const lastWeek = payload.tonnage[payload.tonnage.length - 1]
   const deloadWeeks = payload.tonnage.filter((w) => w.has_deload)
 
@@ -276,7 +429,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
           it. Shown once on a device without a subscription, gone for good
           after the tap. BELOW the running card: a one-time setup prompt must
           not outrank the workout that is happening right now. */}
-      {pushSupported && subscribed === false && (
+      {pushSupported && subscribed === false && !showChecklist && (
         <section className="sec notify-prompt" id="notify-start">
           <button type="button" className="notify-prompt__btn"
             onClick={() => { void enablePush(payload.vapid_public_key, setSubscribed) }}>
@@ -305,267 +458,278 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
         </section>
       ))}
 
-      <section className="sec" aria-labelledby="sec-routinen">
-        {saveError !== null && (
-          <p className="flash flash--error" role="alert">{saveError}</p>
-        )}
-        {payload.routines.length > 0 ? (
-          <>
-            <div className="sec__head">
-              <h2 className="label" id="sec-routinen">
-                {canStart ? 'Am längsten her' : 'Routinen'}
-              </h2>
-            </div>
+      {showChecklist && (
+        <FirstRun onboarding={firstRun} daysSinceLast={payload.consistency.days_since_last}
+          push={pushState}
+          onEnablePush={() => { void enablePush(payload.vapid_public_key, setSubscribed) }}
+          onStartFree={() => openSheet('sheet-free')} />
+      )}
 
-            {canStart && lead !== undefined ? (
-              <div className="lead">
-                <div className="lead__top">
-                  <span className="lead__main stack">
-                    <span className="lead__due">{recency(lead.days_ago, true)}</span>
-                    <span className="lead__name">{lead.name}</span>
-                  </span>
-                  <RoutineEdit routine={lead} onSave={saveRoutine} onDelete={deleteRoutine} />
+      {firstRun === null && (
+        <section className="sec" aria-labelledby="sec-routinen">
+          {saveError !== null && (
+            <p className="flash flash--error" role="alert">{saveError}</p>
+          )}
+          {payload.routines.length > 0 ? (
+            <>
+              <div className="sec__head">
+                <h2 className="label" id="sec-routinen">
+                  {canStart ? 'Am längsten her' : 'Routinen'}
+                </h2>
+              </div>
+
+              {canStart && lead !== undefined ? (
+                <div className="lead">
+                  <div className="lead__top">
+                    <span className="lead__main stack">
+                      <span className="lead__due">{recency(lead.days_ago, true)}</span>
+                      <span className="lead__name">{lead.name}</span>
+                    </span>
+                    <RoutineEdit routine={lead} onSave={saveRoutine} onDelete={deleteRoutine} />
+                  </div>
+                  <p className="lead__list">
+                    {lead.exercises.length > 0 ? lead.exercises.join(' · ') : 'Keine Übungen'}
+                  </p>
+                  {/* The stalls section further down covers every exercise you
+                      own. This is the one to watch in the routine you are about
+                      to tap, and it is silent when there is none -- which is
+                      what makes it worth reading when it appears. */}
+                  <LeadWatch lead={lead} stalls={payload.stalls} />
+                  <form method="post" action="/gym/start">
+                    <CsrfField />
+                    <input type="hidden" name="template_id" value={lead.template_id} />
+                    <button type="submit" className="lead__go">
+                      <Icon name="skip" />
+                      Starten
+                    </button>
+                  </form>
                 </div>
-                <p className="lead__list">
-                  {lead.exercises.length > 0 ? lead.exercises.join(' · ') : 'Keine Übungen'}
+              ) : (
+                <p className="start__blocked">
+                  Ein Workout läuft schon. Beende es, um ein neues zu starten.
                 </p>
-                {/* The stalls section further down covers every exercise you
-                    own. This is the one to watch in the routine you are about
-                    to tap, and it is silent when there is none -- which is
-                    what makes it worth reading when it appears. */}
-                <LeadWatch lead={lead} stalls={payload.stalls} />
-                <form method="post" action="/gym/start">
-                  <CsrfField />
-                  <input type="hidden" name="template_id" value={lead.template_id} />
-                  <button type="submit" className="lead__go">
-                    <Icon name="skip" />
-                    Starten
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <p className="start__blocked">
-                Ein Workout läuft schon. Beende es, um ein neues zu starten.
-              </p>
-            )}
+              )}
 
-            {/* The rest are quiet rows, never a second card. */}
-            {rest.map((routine) => (
-              <div className="row" key={routine.template_id}>
-                <span className="row__main stack">
-                  <span className="row__name row__name--strong">{routine.name}</span>
-                  <span className="row__meta row__meta--clip">
-                    {recency(routine.days_ago)}
-                    {routine.exercises.length > 0 && ` · ${routine.exercises.join(' · ')}`}
+              {/* The rest are quiet rows, never a second card. */}
+              {rest.map((routine) => (
+                <div className="row" key={routine.template_id}>
+                  <span className="row__main stack">
+                    <span className="row__name row__name--strong">{routine.name}</span>
+                    <span className="row__meta row__meta--clip">
+                      {recency(routine.days_ago)}
+                      {routine.exercises.length > 0 && ` · ${routine.exercises.join(' · ')}`}
+                    </span>
                   </span>
-                </span>
-                <span className="row__trail">
-                  <RoutineEdit routine={routine} onSave={saveRoutine} onDelete={deleteRoutine} />
-                  {canStart && (
-                    <form method="post" action="/gym/start">
-                      <CsrfField />
-                      <input type="hidden" name="template_id" value={routine.template_id} />
-                      <button type="submit" className="row__go">Starten</button>
-                    </form>
-                  )}
-                </span>
-              </div>
-            ))}
-          </>
-        ) : (
-          <>
-            <div className="sec__head"><h2 className="label" id="sec-routinen">Routinen</h2></div>
-            <p className="empty">
-              Noch keine Vorlagen. Speichere ein Workout als Vorlage, um es hier zu sehen.
-            </p>
-          </>
-        )}
+                  <span className="row__trail">
+                    <RoutineEdit routine={routine} onSave={saveRoutine} onDelete={deleteRoutine} />
+                    {canStart && (
+                      <form method="post" action="/gym/start">
+                        <CsrfField />
+                        <input type="hidden" name="template_id" value={routine.template_id} />
+                        <button type="submit" className="row__go">Starten</button>
+                      </form>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              <div className="sec__head"><h2 className="label" id="sec-routinen">Routinen</h2></div>
+              <p className="empty">
+                Noch keine Vorlagen. Speichere ein Workout als Vorlage, um es hier zu sehen.
+              </p>
+            </>
+          )}
 
-        {/* Starting without a template is a real path, but the secondary one. */}
-        {canStart && (
-          <button type="button" className="start__free"
-            onClick={() => openSheet('sheet-free')}>
-            <Icon name="plus" />
-            Freies Workout starten
-          </button>
-        )}
-      </section>
+          {/* Starting without a template is a real path, but the secondary one. */}
+          {canStart && (
+            <button type="button" className="start__free"
+              onClick={() => openSheet('sheet-free')}>
+              <Icon name="plus" />
+              Freies Workout starten
+            </button>
+          )}
+        </section>
+      )}
 
       {/* The four reading sections, paired into two columns on desktop by
           KIND: what wants attention on the left, what is reference on the
           right. Not four sections auto-placed into a grid -- auto-placement
           locked section 3 to the tallest section in row 1 and left a 250px
           hole under "Steht still". */}
-      <div className="start__read">
-        <div className="start__col">
-          {payload.stalls.length > 0 && (
-            <section className="sec" aria-labelledby="sec-still">
+      {!nothingToRead && (
+        <div className="start__read">
+          <div className="start__col">
+            {payload.stalls.length > 0 && (
+              <section className="sec" aria-labelledby="sec-still">
+                <div className="sec__head">
+                  <h2 className="label" id="sec-still">Steht still</h2>
+                  <span className="sec__sp" />
+                  <span className="label">
+                    {`${payload.stalls.length} ${payload.stalls.length === 1 ? 'Übung' : 'Übungen'}`}
+                  </span>
+                </div>
+                {/* "davon aktiv trainiert": the deload signal counts only lifts
+                    trained inside the rolling window, while the roster below is
+                    unfiltered. Unscoped, the note said "4 Übungen stehen still"
+                    directly above six rows. */}
+                {payload.deload_suggestion !== null && (
+                  <p className="stall-note">
+                    <b>{`${payload.deload_suggestion.count} davon aktiv trainiert`}</b>
+                    {' — ein Deload könnte fällig sein.'}
+                  </p>
+                )}
+                {/* Bounded by count: stall_report is unbounded, and after a
+                    layoff essentially the whole catalogue qualifies. */}
+                {payload.stalls.slice(0, 5).map((item) => (
+                  <StallRow item={item} key={item.exercise_id} />
+                ))}
+                {payload.stalls.length > 5 && (
+                  <details className="year">
+                    <summary className="year__head">
+                      <svg className="group__chev" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+                        strokeLinejoin="round" aria-hidden="true">
+                        <path d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="label">{`${payload.stalls.length - 5} weitere`}</span>
+                    </summary>
+                    {payload.stalls.slice(5).map((item) => (
+                      <StallRow item={item} key={item.exercise_id} />
+                    ))}
+                  </details>
+                )}
+              </section>
+            )}
+
+            <section className="sec" aria-labelledby="sec-tonnage">
               <div className="sec__head">
-                <h2 className="label" id="sec-still">Steht still</h2>
+                <h2 className="label" id="sec-tonnage">Tonnage pro Woche</h2>
                 <span className="sec__sp" />
-                <span className="label">
-                  {`${payload.stalls.length} ${payload.stalls.length === 1 ? 'Übung' : 'Übungen'}`}
-                </span>
+                <span className="label">8 Wochen</span>
               </div>
-              {/* "davon aktiv trainiert": the deload signal counts only lifts
-                  trained inside the rolling window, while the roster below is
-                  unfiltered. Unscoped, the note said "4 Übungen stehen still"
-                  directly above six rows. */}
-              {payload.deload_suggestion !== null && (
-                <p className="stall-note">
-                  <b>{`${payload.deload_suggestion.count} davon aktiv trainiert`}</b>
-                  {' — ein Deload könnte fällig sein.'}
-                </p>
-              )}
-              {/* Bounded by count: stall_report is unbounded, and after a
-                  layoff essentially the whole catalogue qualifies. */}
-              {payload.stalls.slice(0, 5).map((item) => (
-                <StallRow item={item} key={item.exercise_id} />
-              ))}
-              {payload.stalls.length > 5 && (
-                <details className="year">
-                  <summary className="year__head">
-                    <svg className="group__chev" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" strokeWidth="3" strokeLinecap="round"
-                      strokeLinejoin="round" aria-hidden="true">
-                      <path d="M9 5l7 7-7 7" />
-                    </svg>
-                    <span className="label">{`${payload.stalls.length - 5} weitere`}</span>
-                  </summary>
-                  {payload.stalls.slice(5).map((item) => (
-                    <StallRow item={item} key={item.exercise_id} />
-                  ))}
-                </details>
+              {payload.tonnage_peak > 0 ? (
+                <>
+                  {/* Every bar states its value. The chart carried no numbers at
+                      all -- no scale, no per-bar figure, no accessible text --
+                      so its whole magnitude dimension existed only as relative
+                      height. The peak is named so the heights have something to
+                      be read against. */}
+                  <p className="vbars__peak">
+                    <span className="label">Höchste Woche</span>{' '}
+                    <b>{de(payload.tonnage_peak)}</b> kg
+                  </p>
+                  <div className="vbars" role="list">
+                    {payload.tonnage.map((week) => (
+                      <span key={week.week_start}
+                        className={`vbar${week.is_current ? ' is-live' : ''}${week.has_deload ? ' vbar--deload' : ''}`}
+                        role="listitem"
+                        aria-label={`${week.is_current ? 'Diese Woche' : `Woche ab ${dm(week.week_start)}`}: ${de(week.volume)} kg${week.has_deload ? ', mit Deload-Einheit' : ''}`}
+                        style={{ blockSize: `${Math.round((week.volume / payload.tonnage_peak) * 1000) / 10}%` }} />
+                    ))}
+                  </div>
+                  <div className="vbars__axis" aria-hidden="true">
+                    {payload.tonnage.map((week) => (
+                      <span key={week.week_start}>
+                        {week.is_current ? 'Jetzt' : dm(week.week_start)}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="start__note">
+                    {`${de(lastWeek?.volume ?? 0)} kg diese Woche bisher — läuft noch.`}
+                    {deloadWeeks.length > 0 && ' Schraffiert: Woche mit Deload-Einheit.'}
+                  </p>
+                </>
+              ) : (
+                <p className="empty">Noch keine Sätze in den letzten 8 Wochen.</p>
               )}
             </section>
-          )}
+          </div>
 
-          <section className="sec" aria-labelledby="sec-tonnage">
-            <div className="sec__head">
-              <h2 className="label" id="sec-tonnage">Tonnage pro Woche</h2>
-              <span className="sec__sp" />
-              <span className="label">8 Wochen</span>
-            </div>
-            {payload.tonnage_peak > 0 ? (
-              <>
-                {/* Every bar states its value. The chart carried no numbers at
-                    all -- no scale, no per-bar figure, no accessible text --
-                    so its whole magnitude dimension existed only as relative
-                    height. The peak is named so the heights have something to
-                    be read against. */}
-                <p className="vbars__peak">
-                  <span className="label">Höchste Woche</span>{' '}
-                  <b>{de(payload.tonnage_peak)}</b> kg
-                </p>
-                <div className="vbars" role="list">
-                  {payload.tonnage.map((week) => (
-                    <span key={week.week_start}
-                      className={`vbar${week.is_current ? ' is-live' : ''}${week.has_deload ? ' vbar--deload' : ''}`}
-                      role="listitem"
-                      aria-label={`${week.is_current ? 'Diese Woche' : `Woche ab ${dm(week.week_start)}`}: ${de(week.volume)} kg${week.has_deload ? ', mit Deload-Einheit' : ''}`}
-                      style={{ blockSize: `${Math.round((week.volume / payload.tonnage_peak) * 1000) / 10}%` }} />
-                  ))}
-                </div>
-                <div className="vbars__axis" aria-hidden="true">
-                  {payload.tonnage.map((week) => (
-                    <span key={week.week_start}>
-                      {week.is_current ? 'Jetzt' : dm(week.week_start)}
-                    </span>
-                  ))}
-                </div>
-                <p className="start__note">
-                  {`${de(lastWeek?.volume ?? 0)} kg diese Woche bisher — läuft noch.`}
-                  {deloadWeeks.length > 0 && ' Schraffiert: Woche mit Deload-Einheit.'}
-                </p>
-              </>
-            ) : (
-              <p className="empty">Noch keine Sätze in den letzten 8 Wochen.</p>
-            )}
-          </section>
-        </div>
-
-        <div className="start__col">
-          <section className="sec" aria-labelledby="sec-balance">
-            <div className="sec__head">
-              <h2 className="label" id="sec-balance">Sätze pro Muskelgruppe</h2>
-              <span className="sec__sp" />
-              <span className="label">Letzte 4 Wochen</span>
-            </div>
-            {payload.balance.length > 0 ? (() => {
-              // Six identical "0 · zu wenig" rows drowned the one
-              // under-trained group that mattered -- and "Ohne Muskelgruppe ·
-              // zu wenig" attached advice to a data-hygiene artifact. Trained
-              // groups keep their bars; the untouched ones collapse into one
-              // stated line.
-              const NO_GROUP = 'Ohne Muskelgruppe'
-              const trained = payload.balance.filter((bucket) => bucket.sets > 0)
-              // An untouched no-group bucket is a catalogue artifact, not a
-              // training gap -- it appears nowhere rather than in the line.
-              const zero = payload.balance.filter(
-                (bucket) => bucket.sets === 0 && bucket.group !== NO_GROUP)
-              return (
-                <>
-                  {trained.map((bucket) => (
-                    <div className="hbar" key={bucket.group}>
-                      <span className="hbar__name">{bucket.group}</span>
-                      <span className="hbar__track">
-                        <span className={bucket.under_trained ? 'hbar__fill is-stall' : 'hbar__fill'}
-                          style={{ inlineSize: `${Math.round(bucket.share * 1000) / 10}%` }} />
-                      </span>
-                      <span className="hbar__val">
-                        {bucket.sets}
-                        {bucket.under_trained && <small>zu wenig</small>}
-                      </span>
-                    </div>
-                  ))}
-                  {zero.length > 0 && (
-                    <p className="start__note">
-                      {`Ohne Sätze: ${zero.map((bucket) => bucket.group).join(', ')}.`}
-                    </p>
-                  )}
-                </>
-              )
-            })() : (
-              <p className="empty">Noch keine Übungen im Katalog.</p>
-            )}
-          </section>
-
-          <section className="sec" aria-labelledby="sec-letzte">
-            <div className="sec__head">
-              <h2 className="label" id="sec-letzte">Letzte Workouts</h2>
-              <span className="sec__sp" />
-              <a className="sec__more" href="/gym/verlauf">Verlauf ›</a>
-            </div>
-            {payload.recent_sessions.length > 0 ? payload.recent_sessions.map((s) => {
-              const minutes = Math.floor(
-                (local(s.finished_at).getTime() - local(s.started_at).getTime()) / 60000)
-              return (
-                <a className="row" href={`/gym/session/${s.session_id}`} key={s.session_id}
-                  onClick={morphFrom('session')}>
-                  <span className="row__main stack">
-                    <span className="row__name row__name--strong">{s.name ?? 'Workout'}</span>
-                    <span className="row__meta">
-                      {/* Sub-minute sessions printed "0 min" -- same guard as
-                          Verlauf's rows. */}
-                      {`${dmy(s.started_at)} · ${minutes < 1 ? '< 1' : minutes} min${s.is_deload ? ' · Deload' : ''}`}
-                    </span>
-                  </span>
-                  <span className="row__trail row__trail--stack">
-                    <span className="vol">{de(s.volume)}<small>kg</small></span>
-                    {s.records > 0 && (
-                      <span className="vtag vtag--record">
-                        {`${s.records} ${s.records === 1 ? 'Rekord' : 'Rekorde'}`}
-                      </span>
+          <div className="start__col">
+            <section className="sec" aria-labelledby="sec-balance">
+              <div className="sec__head">
+                <h2 className="label" id="sec-balance">Sätze pro Muskelgruppe</h2>
+                <span className="sec__sp" />
+                <span className="label">Letzte 4 Wochen</span>
+              </div>
+              {payload.balance.length > 0 ? (() => {
+                // Six identical "0 · zu wenig" rows drowned the one
+                // under-trained group that mattered -- and "Ohne Muskelgruppe ·
+                // zu wenig" attached advice to a data-hygiene artifact. Trained
+                // groups keep their bars; the untouched ones collapse into one
+                // stated line.
+                const NO_GROUP = 'Ohne Muskelgruppe'
+                const trained = payload.balance.filter((bucket) => bucket.sets > 0)
+                // An untouched no-group bucket is a catalogue artifact, not a
+                // training gap -- it appears nowhere rather than in the line.
+                const zero = payload.balance.filter(
+                  (bucket) => bucket.sets === 0 && bucket.group !== NO_GROUP)
+                return (
+                  <>
+                    {trained.map((bucket) => (
+                      <div className="hbar" key={bucket.group}>
+                        <span className="hbar__name">{bucket.group}</span>
+                        <span className="hbar__track">
+                          <span className={bucket.under_trained ? 'hbar__fill is-stall' : 'hbar__fill'}
+                            style={{ inlineSize: `${Math.round(bucket.share * 1000) / 10}%` }} />
+                        </span>
+                        <span className="hbar__val">
+                          {bucket.sets}
+                          {bucket.under_trained && <small>zu wenig</small>}
+                        </span>
+                      </div>
+                    ))}
+                    {zero.length > 0 && (
+                      <p className="start__note">
+                        {`Ohne Sätze: ${zero.map((bucket) => bucket.group).join(', ')}.`}
+                      </p>
                     )}
-                  </span>
-                </a>
-              )
-            }) : (
-              <p className="empty">Noch keine abgeschlossenen Workouts.</p>
-            )}
-          </section>
+                  </>
+                )
+              })() : (
+                <p className="empty">Noch keine Übungen im Katalog.</p>
+              )}
+            </section>
+
+            <section className="sec" aria-labelledby="sec-letzte">
+              <div className="sec__head">
+                <h2 className="label" id="sec-letzte">Letzte Workouts</h2>
+                <span className="sec__sp" />
+                <a className="sec__more" href="/gym/verlauf">Verlauf ›</a>
+              </div>
+              {payload.recent_sessions.length > 0 ? payload.recent_sessions.map((s) => {
+                const minutes = Math.floor(
+                  (local(s.finished_at).getTime() - local(s.started_at).getTime()) / 60000)
+                return (
+                  <a className="row" href={`/gym/session/${s.session_id}`} key={s.session_id}
+                    onClick={morphFrom('session')}>
+                    <span className="row__main stack">
+                      <span className="row__name row__name--strong">{s.name ?? 'Workout'}</span>
+                      <span className="row__meta">
+                        {/* Sub-minute sessions printed "0 min" -- same guard as
+                            Verlauf's rows. */}
+                        {`${dmy(s.started_at)} · ${minutes < 1 ? '< 1' : minutes} min${s.is_deload ? ' · Deload' : ''}`}
+                      </span>
+                    </span>
+                    <span className="row__trail row__trail--stack">
+                      <span className="vol">{de(s.volume)}<small>kg</small></span>
+                      {s.records > 0 && (
+                        <span className="vtag vtag--record">
+                          {`${s.records} ${s.records === 1 ? 'Rekord' : 'Rekorde'}`}
+                        </span>
+                      )}
+                    </span>
+                  </a>
+                )
+              }) : (
+                <p className="empty">Noch keine abgeschlossenen Workouts.</p>
+              )}
+            </section>
+          </div>
         </div>
-      </div>
+      )}
 
       <Sheet id="sheet-free" title="Freies Workout" closeLabel="Abbrechen">
         <form method="post" action="/gym/start">

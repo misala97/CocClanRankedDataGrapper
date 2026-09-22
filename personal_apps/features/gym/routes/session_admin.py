@@ -207,6 +207,11 @@ def gym_save_as_template(session_id):
         flash(f'Als Routine „{template_name}“ gespeichert.', 'success')
     else:
         flash('Kein Name eingegeben — nichts gespeichert.', 'error')
+    # Start's first-run checklist saves from the page it is on, and the answer
+    # is the routine appearing there -- not a detour through the debrief.
+    # A fixed token, never a URL: nothing here redirects where the form says.
+    if request.form.get('next') == 'start':
+        return redirect(url_for('gym.gym_heute'))
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
