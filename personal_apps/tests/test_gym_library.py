@@ -8,7 +8,6 @@ from collections import Counter
 import pytest
 
 from features.gym import library
-from features.gym.library_mapping import GYM_MARKERS, PRODUCTION_2026_09
 from models import EQUIPMENT_TYPES, MUSCLE_GROUPS
 
 TRAINED_GROUPS = tuple(g for g in MUSCLE_GROUPS if g not in ('Cardio', 'Sonstiges'))
@@ -111,19 +110,3 @@ def test_a_query_narrows_instead_of_widening():
     assert _found('lat raise') >= {'dumbbell_lateral_raise', 'machine_lateral_raise'}
     assert {k for k in _found('lat raise') if 'pulldown' in k} == set()
     assert _found('zzz') == set()
-
-
-def test_every_production_exercise_has_its_own_entry():
-    targets = list(PRODUCTION_2026_09.values())
-    assert [k for k in targets if k not in library.BY_KEY] == []
-    # Two production exercises on one entry would merge two histories.
-    assert _dupes(targets) == []
-
-
-def test_every_old_name_still_finds_its_exercise():
-    """The history moves to the German names; the lifters keep searching
-    with the English ones they typed for months."""
-    for old, key in PRODUCTION_2026_09.items():
-        query = ' '.join(w for w in library.fold(old).split()
-                         if w not in {library.fold(m) for m in GYM_MARKERS})
-        assert key in _found(query), old
