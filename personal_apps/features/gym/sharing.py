@@ -1,9 +1,10 @@
 """Shared live sessions: the link's lifecycle, and the one cross-user write.
 
 Two people training together share structure and nothing else. Each owns an
-ordinary WorkoutSession; a SharedSession links them. SharedSessionExercise
-translated between their per-user catalogues until the one exercise list
-(2026-09-23); since then it maps each lift to itself, and G3 retires it.
+ordinary WorkoutSession; a SharedSession links them. Since the one exercise
+list (2026-09-23) both log the same exercise rows, so a lift needs no
+translating: the follower's row names the leader's exercise, and what differs
+between them -- settings, history, plans -- is keyed by user, not by row.
 
 Propagation is a RECONCILIATION rather than a per-operation replay. After any
 structural change the leader's route calls propagate_structure(), which makes
@@ -23,8 +24,7 @@ from flask import current_app
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
-from models import (Exercise, PendingPush, SessionExercise, SharedSession,
-                    SharedSessionExercise, WorkoutSession)
+from models import PendingPush, SessionExercise, SharedSession, WorkoutSession
 
 from .exercises import setup as exercise_setup
 from .locking import lock_sessions
@@ -38,45 +38,6 @@ def active_links_led_by(session_id):
                     SharedSession.accepted_at.isnot(None),
                     SharedSession.ended_at.is_(None))
             .all())
-
-
-def follower_exercise_for(shared, leader_exercise_id):
-    """The follower's exercise corresponding to one of the leader's.
-
-    Since 2026-09-23 there is one exercise list, so that is the leader's own
-    exercise: both lifters log onto the same row, each with their own
-    settings and history. A map row accepted before then may still name a
-    different id, and it is honoured. Otherwise the identity is recorded as
-    a map row, which keeps the rest of this module -- written when every
-    lifter had a catalogue of their own -- working unchanged.
-
-    Guards its own link state rather than trusting the caller: the map row is
-    a write on the link, so it must not happen for a link that was never
-    accepted or has since ended, even though its one caller today already
-    checks this before calling in. `shared is None` is checked first for the
-    same reason -- reconcile_follower checks it before calling in, but this
-    function must not borrow that invariant either.
-    """
-    if shared is None or shared.accepted_at is None or shared.ended_at is not None:
-        return None
-
-    mapped = (SharedSessionExercise.query
-              .filter_by(shared_session_id=shared.id,
-                         leader_exercise_id=leader_exercise_id)
-              .first())
-    if mapped is not None:
-        return mapped.follower_exercise_id
-
-    if db.session.get(Exercise, leader_exercise_id) is None:
-        return None
-
-    db.session.add(SharedSessionExercise(
-        shared_session_id=shared.id,
-        leader_exercise_id=leader_exercise_id,
-        follower_exercise_id=leader_exercise_id,
-    ))
-    db.session.flush()
-    return leader_exercise_id
 
 
 def remove_mirrors_of(session_exercise):
@@ -305,10 +266,10 @@ def reconcile_follower(shared):
     difference, so calling it twice is the same as calling it once, and it is
     correct after any structural operation rather than one per operation.
 
-    Rows are matched on SessionExercise.mirrors_id, never on exercise_id. A
-    link accepted before the one list (2026-09-23) can still map a lift to a
-    different id, and one exercise can legitimately appear twice in a
-    session -- an original plus the substitute that replaced it.
+    Rows are matched on SessionExercise.mirrors_id, never on exercise_id: one
+    exercise can legitimately appear twice in a session -- an original plus
+    the substitute that replaced it -- and a row the follower added on their
+    own can name it too.
 
     Removing a leader row is NOT handled here -- see remove_mirrors_of(),
     which must run BEFORE db.session.delete() is called on the leader's row
@@ -330,9 +291,9 @@ def reconcile_follower(shared):
     ahead (see stats.DEFAULT_PLAN_* / gym_add_session_exercise). This runs
     inside the LEADER's request, where current_user_id() names the leader, so
     the history lookup is passed shared.follower_user_id explicitly rather
-    than left to default. The exercise row is usually the leader's own too
-    (one list), so the user id is the only thing that makes the seeding read
-    the FOLLOWER's history rather than the leader's.
+    than left to default. The exercise row is the leader's own too (one
+    list), so the user id is the only thing that makes the seeding read the
+    FOLLOWER's history rather than the leader's.
     """
     if shared is None or shared.accepted_at is None or shared.ended_at is not None:
         return False
@@ -365,19 +326,14 @@ def reconcile_follower(shared):
     for leader_row in sorted(leader.exercises, key=lambda se: se.position):
         row = mirrored.get(leader_row.id)
         if row is None:
-            follower_exercise_id = follower_exercise_for(shared, leader_row.exercise_id)
-            if follower_exercise_id is None:
-                continue
-            follower_exercise = db.session.get(Exercise, follower_exercise_id)
             row = SessionExercise(
                 session_id=follower.id,
-                exercise_id=follower_exercise_id,
+                exercise_id=leader_row.exercise_id,
                 position=leader_row.position,
                 # Rest follows the person, so this is the FOLLOWER's setting,
                 # never the leader's per-session override.
-                rest_seconds=(exercise_setup(shared.follower_user_id,
-                                             follower_exercise).default_rest_seconds
-                              if follower_exercise else None),
+                rest_seconds=exercise_setup(shared.follower_user_id,
+                                            leader_row.exercise).default_rest_seconds,
                 skipped=leader_row.skipped,
                 mirrors_id=leader_row.id,
             )
@@ -394,7 +350,7 @@ def reconcile_follower(shared):
                 # leader. A skipped leader row gets none, matching
                 # gym_toggle_skip_session_exercise's own rule that a skipped
                 # exercise carries no pending sets.
-                row.sets.extend(_seeded_sets(follower, follower_exercise_id, leader_row.position,
+                row.sets.extend(_seeded_sets(follower, leader_row.exercise_id, leader_row.position,
                                              user_id=shared.follower_user_id))
             db.session.add(row)
             mirrored[leader_row.id] = row
@@ -504,8 +460,7 @@ def propagate_structure(session_, skip_changed=None):
     Guarded end to end: this runs entirely inside the LEADER's request, after
     the leader's own change already committed durably. A constraint violation
     originating in the FOLLOWER's data (Fix 1's replaces_id collision before
-    it was closed off, or a race on uq_gym_shared_session_exercises_link_leader)
-    must never turn into a 500 on someone
+    it was closed off, say) must never turn into a 500 on someone
     else's request over a write the leader has no way to see or retry. The
     worst case here is the partner falling out of sync until the next
     structural change reconciles cleanly -- never a crash.

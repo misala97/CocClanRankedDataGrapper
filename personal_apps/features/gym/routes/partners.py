@@ -2,7 +2,6 @@
 accept / decline flow they land in."""
 
 from features.gym.schemas import SharedConfirmPayload
-from .. import matching
 from .. import push
 from .. import sharing
 import datetime as dt
@@ -15,13 +14,11 @@ from extensions import (
     db,
 )
 from models import (
-    AppUser, Exercise, SharedSession, SharedSessionExercise, WorkoutSession,
-    WorkoutTemplate,
+    AppUser, SharedSession, WorkoutSession, WorkoutTemplate,
 )
 from auth import (
     login_required,
 )
-from features.gym.exercises import library_exercises
 from features.gym.scope import (
     current_user_id, my_templates, owned_session,
 )
@@ -144,41 +141,26 @@ def _discardable_active():
 @gym_bp.route('/gym/shared/<int:shared_id>/confirm')
 @login_required
 def gym_shared_confirm(shared_id):
-    """Show the leader's exercises, once, before the workout starts.
+    """The invite as one card: who trains what, and Mitmachen.
 
-    Since the one exercise list (2026-09-23) each of them is already the
-    follower's too, so every proposal is an exact match and the page is the
-    one-tap confirm card; picking another list exercise stays possible until
-    G3 redesigns the page. An exercise the leader adds LATER resolves
-    silently (see sharing.follower_exercise_for).
+    Nothing to confirm about the exercises since the one list (2026-09-23):
+    the follower logs the leader's own rows, each with their own settings and
+    history, and one the leader adds later arrives the same way. The one
+    choice left is optional -- which of the follower's routines, if any, the
+    workout counts as.
     """
     shared = _invite_for_recipient(shared_id)
     refusal = _invite_refusal(shared)
 
-    proposals = []
+    exercises = []
     templates = []
     if refusal is None:
         leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
-        leader_rows = sorted(leader_session.exercises, key=lambda se: se.position)
-        # Exercise ids, in order, de-duplicated: an original and the substitute
-        # that replaced it are two rows but at most two exercises to match.
-        leader_exercises = []
-        for se in leader_rows:
-            if se.exercise_id not in [row.id for row in leader_exercises]:
-                leader_exercises.append(se.exercise)
-        # The whole list, plus any leader exercise that has left it (a
-        # retired row can still sit in a live workout).
-        catalogue = {row.id: row.name for row in library_exercises()}
-        catalogue.update((exercise.id, exercise.name) for exercise in leader_exercises)
-        proposals = [
-            # The exact match is the leader's own row, not whichever row the
-            # name compares equal to first.
-            dict(proposal, leader_exercise_id=exercise.id, exact_id=exercise.id)
-            for exercise, proposal in zip(
-                leader_exercises,
-                matching.propose_matches([e.name for e in leader_exercises],
-                                         catalogue.items()))
-        ]
+        # In order, de-duplicated: an original and the substitute that
+        # replaced it are two rows but can name one exercise.
+        for se in sorted(leader_session.exercises, key=lambda se: se.position):
+            if se.exercise_id not in [exercise['id'] for exercise in exercises]:
+                exercises.append({'id': se.exercise_id, 'name': se.exercise.name})
 
         # The follower's own routines. joinedload because each one's exercise
         # ids are read below: without it this is a query per routine, the
@@ -200,7 +182,7 @@ def gym_shared_confirm(shared_id):
         started_at=leader_session.started_at if leader_session else None,
         refusal=refusal,
         discards_active=refusal is None and _discardable_active() is not None,
-        proposals=proposals,
+        exercises=exercises,
         templates=templates,
     )
     # `leader_name` is passed separately too: the shell's <title> block reads
@@ -208,35 +190,6 @@ def gym_shared_confirm(shared_id):
     return render_template('gym/shared_confirm.html',
                            leader_name=payload.leader_name,
                            payload_json=payload.model_dump(mode='json'))
-
-
-def _confirmed_matches(leader_session):
-    """{leader exercise id: the exercise the follower logs it as}, from the
-    confirm page's `match_<id>` answers.
-
-    Only exercises in the leader's workout count. `new` ("my own copy") is an
-    answer from before the one list, and the leader's row is that copy now.
-    Any other answer must be an exercise row -- a retired one included, since
-    it can sit in a live workout -- and anything else is a 400: a page that
-    posts it is broken, and guessing would log the lifter's sets somewhere
-    they never chose.
-    """
-    leader_ids = {se.exercise_id for se in leader_session.exercises}
-    matches = {}
-    for key, value in request.form.items():
-        if not key.startswith('match_'):
-            continue
-        leader_exercise_id = _to_int(key[len('match_'):])
-        if leader_exercise_id not in leader_ids:
-            continue
-        if value == 'new':
-            matches[leader_exercise_id] = leader_exercise_id
-            continue
-        chosen_id = _to_int(value)
-        if chosen_id is None or db.session.get(Exercise, chosen_id) is None:
-            abort(400)
-        matches[leader_exercise_id] = chosen_id
-    return matches
 
 
 @gym_bp.route('/gym/shared/<int:shared_id>/accept', methods=['POST'])
@@ -266,8 +219,6 @@ def gym_shared_accept(shared_id):
         return redirect(url_for('gym.gym_heute'))
 
     leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
-    # Read before anything is discarded, so a bad answer costs nothing.
-    matches = _confirmed_matches(leader_session)
 
     # The confirm page said so above the button: an empty workout of your own
     # is dropped, not left running beside this one.
@@ -300,15 +251,6 @@ def gym_shared_accept(shared_id):
     )
     db.session.add(follower_session)
     db.session.flush()
-
-    # The confirmed matches, before any structure is built -- reconciliation
-    # reads this map rather than guessing.
-    for leader_exercise_id, chosen_id in matches.items():
-        db.session.add(SharedSessionExercise(
-            shared_session_id=shared.id,
-            leader_exercise_id=leader_exercise_id,
-            follower_exercise_id=chosen_id,
-        ))
 
     shared.follower_session_id = follower_session.id
     shared.accepted_at = dt.datetime.utcnow()

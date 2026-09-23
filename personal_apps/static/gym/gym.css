@@ -2943,29 +2943,14 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 
 /* ---- joining a partner: the invite is one lifted card ----
    The same plane and live button as Start's invite card, so the tap that
-   led here and the tap that confirms read as one gesture. A leader exercise
-   with no same-named one of yours asks in the ATTENTION hue inside the card;
-   everything already matched is one Erledigt line, its selects one tap away
-   under "Zuordnung ändern". */
+   led here and the tap that confirms read as one gesture. Both partners log
+   the one exercise list, so nothing asks: the card names the exercises, and
+   the one optional choice -- which routine it counts as -- is a tap away. */
 .confirm .lead__due, .confirm .lead__name { display: block; }
-.confirm__ask {
-  margin-top: var(--sp-4); font-size: var(--t-sm); font-weight: var(--w-semi);
-  line-height: 1.45; color: var(--stall-ink); text-wrap: pretty;
-}
-.confirm .confirm__field {
-  margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge);
-}
-.confirm .confirm__field .label { color: var(--ink); font-weight: var(--w-bold); }
 .confirm__ok {
-  display: flex; align-items: flex-start; gap: var(--sp-2); margin-top: var(--sp-4);
-  font-size: var(--t-sm); line-height: 1.45; color: var(--dim);
+  margin-top: var(--sp-4); font-size: var(--t-sm); line-height: 1.45; color: var(--dim);
 }
 .confirm__ok b { color: var(--ink); font-weight: var(--w-bold); }
-.confirm__tick {
-  flex: none; inline-size: 22px; block-size: 22px; border-radius: 50%;
-  display: grid; place-items: center; background: var(--done); color: var(--on-done);
-}
-.confirm__tick svg { inline-size: 13px; block-size: 13px; stroke-width: 2.2; }
 .confirm__note { margin-top: var(--sp-3); font-size: var(--t-meta); line-height: 1.5; color: var(--dim); }
 .confirm__refusal { margin-top: var(--sp-3); font-size: var(--t-sm); line-height: 1.5; color: var(--dim); }
 .confirm__back { margin-top: var(--sp-4); }

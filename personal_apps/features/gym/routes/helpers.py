@@ -18,8 +18,7 @@ from flask import jsonify, redirect, request, url_for
 
 from extensions import db
 from models import (
-    AppUser, WorkoutSession, PendingPush, SharedSession, SharedSessionExercise,
-    STALE_SESSION_TIMEOUT,
+    AppUser, WorkoutSession, PendingPush, SharedSession, STALE_SESSION_TIMEOUT,
 )
 from features.gym import stats
 from features.gym.exercises import list_values
@@ -128,10 +127,9 @@ def _delete_session_and_links(session_):
     """Delete a workout together with every partner link it took part in.
 
     Plain FKs with no ondelete point at the session from both halves of a
-    link, and SharedSessionExercise points at the link the same way, with no
-    ORM cascade either -- so the link rows have to go first, map rows before
-    them. The resting-set pointer is cleared before the cascade deletes the
-    set it names. Commits.
+    link, with no ORM cascade either -- so the link rows have to go first.
+    The resting-set pointer is cleared before the cascade deletes the set it
+    names. Commits.
     """
     session_.resting_set_id = None
     db.session.commit()
@@ -139,9 +137,6 @@ def _delete_session_and_links(session_):
         db.or_(SharedSession.leader_session_id == session_.id,
                SharedSession.follower_session_id == session_.id)).all()]
     if doomed_link_ids:
-        SharedSessionExercise.query.filter(
-            SharedSessionExercise.shared_session_id.in_(doomed_link_ids)).delete(
-            synchronize_session=False)
         SharedSession.query.filter(SharedSession.id.in_(doomed_link_ids)).delete(
             synchronize_session=False)
     db.session.delete(session_)

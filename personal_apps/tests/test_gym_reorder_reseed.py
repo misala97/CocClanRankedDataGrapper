@@ -104,12 +104,11 @@ def _build_lifter(username, history, lifts):
 def _destroy_lifter(user_id):
     from extensions import db
     from models import (AppUser, ExerciseSettings, PendingPush, SharedSession,
-                        SharedSessionExercise, WorkoutSession, WorkoutTemplate)
+                        WorkoutSession, WorkoutTemplate)
 
     for shared in SharedSession.query.filter(
             db.or_(SharedSession.leader_user_id == user_id,
                    SharedSession.follower_user_id == user_id)).all():
-        SharedSessionExercise.query.filter_by(shared_session_id=shared.id).delete()
         db.session.delete(shared)
     db.session.commit()
     for row in WorkoutSession.query.filter_by(user_id=user_id).all():

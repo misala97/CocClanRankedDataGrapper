@@ -1039,30 +1039,17 @@ class StatistikPayload(_Model):
 # ---------------------------------------------------------------------------
 
 
-class MatchProposal(_Model):
-    """One of the leader's exercises, and what you log it as.
-
-    Since the one list the exact match is always the leader's own row, so
-    every proposal arrives resolved; the candidates (the whole list) are
-    there for picking another, e.g. the machine version.
-    """
-    #: The leader's name for it, verbatim.
+class SharedExercise(_Model):
+    """One of the leader's exercises -- which, since the one list, the
+    follower logs as it is."""
+    id: int
     name: str
-    leader_exercise_id: int
-    #: A normalised-equal match, which needs no question.
-    exact_id: int | None
-    #: (id, name), best-first, always the full catalogue.
-    candidates: list[tuple[int, str]]
 
 
 class ConfirmTemplate(_Model):
     """One of the FOLLOWER's own routines, offered as what this shared
-    workout counts as on their side.
-
-    exercise_ids are theirs, not the leader's: the island compares them
-    against the matches selected on the page, which resolve to this
-    lifter's catalogue.
-    """
+    workout counts as on their side. The island ranks them by how many of
+    the workout's exercises they hold."""
     id: int
     name: str
     exercise_ids: list[int]
@@ -1081,7 +1068,9 @@ class SharedConfirmPayload(_Model):
     #: Whether accepting throws away the lifter's own running workout. Only
     #: ever an empty one -- a logged set refuses the invite instead.
     discards_active: bool
-    proposals: list[MatchProposal]
+    #: The leader's exercises in workout order, each once. Empty when the
+    #: invite carries a refusal, or the leader has not added one yet.
+    exercises: list[SharedExercise]
     #: The follower's routines, for booking this workout under one of them.
     #: Empty when the invite carries a refusal -- there is nothing to book.
     templates: list[ConfirmTemplate]

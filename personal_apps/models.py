@@ -469,33 +469,6 @@ class SharedSession(db.Model):
                             name='uq_gym_shared_sessions_leader_session_follower'),
     )
 
-    exercise_map = db.relationship('SharedSessionExercise', lazy=True,
-                                   cascade="all, delete-orphan")
-
-
-class SharedSessionExercise(db.Model):
-    """One exercise, named twice.
-
-    Exercises were per-user from 2026-08-02 to 2026-09-23, so "Bankdruecken"
-    in two catalogues was two rows with two ids and a structural change in
-    the leader's ids meant nothing against the follower's data without this.
-    Since the one list, both columns hold the same id (G3 retires the table).
-    """
-    __tablename__ = 'gym_shared_session_exercises'
-    id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    shared_session_id    = db.Column(db.Integer, db.ForeignKey('gym_shared_sessions.id'), nullable=False, index=True)
-    # CASCADE on both: a spent link's map row is not a reason to keep an
-    # exercise row alive. (Written when lifters could delete their own
-    # exercises; since the one list nothing deletes one, and the cascade
-    # stays as the harmless answer if anything ever does.)
-    leader_exercise_id   = db.Column(db.Integer, db.ForeignKey('gym_exercises.id', ondelete='CASCADE'), nullable=False)
-    follower_exercise_id = db.Column(db.Integer, db.ForeignKey('gym_exercises.id', ondelete='CASCADE'), nullable=False)
-
-    __table_args__ = (
-        db.UniqueConstraint('shared_session_id', 'leader_exercise_id',
-                            name='uq_gym_shared_session_exercises_link_leader'),
-    )
-
 
 class PushSubscription(db.Model):
     __tablename__ = 'gym_push_subscriptions'

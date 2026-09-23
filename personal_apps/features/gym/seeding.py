@@ -3,7 +3,7 @@
 Split out of routes.py so sharing.py can call it too, without a circular
 import -- sharing.py's module docstring already states it cannot import
 routes.py, since routes.py imports sharing. No Flask blueprint here, same as
-matching.py and push.py: this is a concern module, not a route surface.
+push.py: this is a concern module, not a route surface.
 
 Every history lookup here takes an explicit `user_id`, defaulting to the
 caller's own id (current_user_id()) so every existing call site in routes.py

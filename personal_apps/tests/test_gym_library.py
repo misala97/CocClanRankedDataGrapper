@@ -1,7 +1,6 @@
 """The exercise library (L1) is static data. These tests hold its mechanical
 rules and the search contract; the judgement calls are in
-features/gym/library.py's docstring. No ORM and no database -- plain tuples,
-like test_gym_matching."""
+features/gym/library.py's docstring. No ORM and no database -- plain tuples."""
 import re
 from collections import Counter
 

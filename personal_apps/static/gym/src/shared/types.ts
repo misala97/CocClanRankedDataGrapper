@@ -1,20 +1,16 @@
 // Mirrors SharedConfirmPayload in features/gym/schemas.py.
 
-export interface MatchProposal {
-  /** The leader's name for it, verbatim. */
+/** One of the leader's exercises -- which, since the one list, the follower
+ *  logs as it is. */
+export interface SharedExercise {
+  id: number
   name: string
-  leader_exercise_id: number
-  /** A normalised-equal match, which needs no question. */
-  exact_id: number | null
-  /** [id, name], best-first, always the full catalogue. */
-  candidates: [number, string][]
 }
 
 export interface ConfirmTemplate {
   id: number
   name: string
-  /** The FOLLOWER's own exercise ids -- compared against the selected
-   *  matches, which resolve to the same catalogue. */
+  /** List exercise ids, compared against the workout's. */
   exercise_ids: number[]
 }
 
@@ -30,7 +26,8 @@ export interface SharedConfirmPayload {
   /** Accepting throws away the lifter's own running workout -- only ever an
    *  empty one; a logged set refuses the invite instead. */
   discards_active: boolean
-  proposals: MatchProposal[]
+  /** The leader's exercises in workout order, each once. */
+  exercises: SharedExercise[]
   /** The follower's routines, for booking this workout under one of them. */
   templates: ConfirmTemplate[]
 }
