@@ -26,10 +26,9 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
   "Deploy" entry.
 
 ## Open from the release
-1. The shared local dev DB is still at `b7e3f9c1a2d4`. Claude's upgrade was refused by
-   the auto-mode permission guard ("Modify Shared Resources"); the owner runs it or
-   allows it (scratchpad `upgrade_dev_db.py`). Its gym tables were copied first to the
-   schema `personal_apps_gymbak_20260923`; re-copy if gym rows change before the upgrade.
+1. The shared local dev DB is at `fc72f159a49f` (upgraded 2026-09-23 on the owner's OK,
+   ledger "Dev DB upgrade"). G2 cannot be downgraded, so its pre-upgrade gym tables stay
+   in the schema `personal_apps_gymbak_20260923` until the owner drops it.
 2. Radar: `.worktrees/radar-selected-price-charts` has an untracked `3f82a7e5b5dc` on
    `b7e3f9c1a2d4`. Before it ships, its `down_revision` must be main's head:
    `fc72f159a49f` (on main since ef6ca0e, on prod since the deploy), or

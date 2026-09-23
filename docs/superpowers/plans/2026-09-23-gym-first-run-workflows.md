@@ -303,3 +303,9 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   `weight`/`reps` NULL-able; 0 NULL weights, so V2 found no open placeholder set to
   blank; 0 completed sets with a blank; all six services active; `/gym` 302, `/login`
   200; no error lines in the web or notifier journal over 30 minutes.
+- 2026-09-23 — Dev DB upgrade (owner: "upgrade it"). The shared local dev DB
+  `personal_apps` went b7e3f9c1a2d4 -> fc72f159a49f with `upgrade_dev_db.py` (main
+  checkout's code, 30 s lock cap). Before: the 11 tables in
+  `personal_apps_gymbak_20260923` still matched it (CHECKSUM TABLE); no other
+  connections. G2's mapping: 36 per-user rows -> 34 by mapping, 0 by name, 2 retired
+  (user 1's and user 3's test exercise "Probe Neu"); 25 settings rows; 158 list rows.
