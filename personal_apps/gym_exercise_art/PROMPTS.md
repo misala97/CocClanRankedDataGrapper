@@ -35,7 +35,7 @@ not quite the same distance from the chest; redo 08 if that bothers you.
 
 | # | Movement | Save as | Picture shows | Saved |
 |---|---|---|---|---|
-| 01 | Bankdrücken | `bankdruecken.png` | Bankdrücken (Kurzhantel): the variant you log most |  |
+| 01 | Bankdrücken | `bankdruecken.png` | Bankdrücken (Kurzhantel): the variant you log most | yes |
 | 02 | Schrägbankdrücken | `schraegbankdruecken.png` | Schrägbankdrücken (Langhantel): the list's first variant |  |
 | 03 | Negativbankdrücken | `negativbankdruecken.png` | Negativbankdrücken (Langhantel): the list's first variant |  |
 | 04 | Floor Press | `floor-press.png` | Floor Press (Langhantel): the list's first variant |  |
