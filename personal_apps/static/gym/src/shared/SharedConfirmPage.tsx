@@ -3,28 +3,6 @@ import type { MatchProposal, SharedConfirmPayload } from './types'
 import { CsrfField } from '../csrf'
 import { Icon } from '../components/Icon'
 
-/**
- * The follower exercise id `gym_shared_accept` will file this proposal's sets
- * under, or null if none exists yet. Mirrors partners.py's two branches
- * exactly:
- *  - an explicit match posts that candidate's id straight through
- *    (`owned_exercise(value)`);
- *  - "Neu anlegen" is NOT a guaranteed miss -- the server's `'new'` branch
- *    first reuses an owned exercise of the same name
- *    (`my_exercises().filter_by(name=leader_exercise.name)`) and only
- *    creates a fresh row if none exists. `candidates` is documented as
- *    always the full catalogue, so the same name lookup here reproduces
- *    that reuse. Raw equality on purpose: normalising on only one side
- *    would drift from the server's exact `filter_by(name=...)`.
- */
-function resolveFollowerExerciseId(proposal: MatchProposal, matchValue: string): number | null {
-  if (matchValue !== 'new') {
-    return Number(matchValue)
-  }
-  const reused = proposal.candidates.find(([, name]) => name === proposal.name)
-  return reused ? reused[0] : null
-}
-
 /** "trainiert seit 12 min", said once at render -- the card is read in the
  *  seconds before a tap, not watched. */
 function runningFor(leader: string, startedAt: string | null): string {
@@ -51,7 +29,6 @@ function MatchField({ proposal, value, onChange, form }: MatchFieldProps) {
       <select className="select" id={id} form={form}
         name={`match_${proposal.leader_exercise_id}`}
         value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="new">Als neue Übung anlegen</option>
         {proposal.candidates.map(([candidateId, name]) => (
           <option value={candidateId} key={candidateId}>{name}</option>
         ))}
@@ -74,30 +51,31 @@ export function SharedConfirmPage({ payload }: { payload: SharedConfirmPayload }
   // list below counts against the CURRENT selection, so the page has to hold
   // it. The `name` attributes are untouched, so the form still posts exactly
   // what gym_shared_accept has always read.
+  //
+  // Since the one list the exact match is the leader's own row, which is the
+  // follower's too. A proposal without one starts on its best candidate --
+  // what the select shows is what the form posts, so the counting below has
+  // to start from the same value.
   const [matches, setMatches] = useState<Record<number, string>>(
     () => Object.fromEntries(payload.proposals.map((proposal) => [
       proposal.leader_exercise_id,
-      proposal.exact_id === null ? 'new' : String(proposal.exact_id),
+      String(proposal.exact_id ?? proposal.candidates[0]?.[0] ?? proposal.leader_exercise_id),
     ])))
   // null means "the reader has not touched it", which is what lets the
   // preselection keep following the matches until they do.
   const [routine, setRoutine] = useState<string | null>(null)
 
-  // number | null per proposal, in payload order. The `!` is safe: `matches`
-  // is seeded from these same proposals above and every change to it keys
-  // off a `leader_exercise_id` that already exists there, so a lookup can
-  // never miss.
-  const resolved = payload.proposals.map((proposal) =>
-    resolveFollowerExerciseId(proposal, matches[proposal.leader_exercise_id]!))
-  const chosen = new Set(resolved.filter((id): id is number => id !== null))
-  // The denominator has to count distinct exercises, like the numerator,
-  // not proposal rows: if two leader exercises resolve to the SAME one of
-  // the follower's own, counting both rows makes `covered === total`
-  // unreachable for a routine that genuinely covers everything the
-  // follower will perform. Two genuinely-new (null) proposals can't
-  // collide -- Exercise is unique per (user_id, name) -- so each null is
-  // still one more thing the workout contains.
-  const total = chosen.size + resolved.filter((id) => id === null).length
+  // The exercise each answer files its sets under: gym_shared_accept takes
+  // the id posted. The `!` is safe: `matches` is seeded from these same
+  // proposals above and every change to it keys off a `leader_exercise_id`
+  // that already exists there, so a lookup can never miss.
+  const chosen = new Set(payload.proposals.map((proposal) =>
+    Number(matches[proposal.leader_exercise_id]!)))
+  // Distinct exercises, not proposal rows: if two leader exercises are
+  // answered with the SAME exercise, counting both rows makes
+  // `covered === total` unreachable for a routine that covers everything the
+  // follower will perform.
+  const total = chosen.size
   const rankedAll = payload.templates
     .map((template) => ({
       ...template,
@@ -175,7 +153,7 @@ export function SharedConfirmPage({ payload }: { payload: SharedConfirmPayload }
                 <p className="lead__list">
                   {payload.proposals.length > 0
                     ? payload.proposals.map((proposal) => proposal.name).join(' · ')
-                    : `Noch keine Übungen — sie kommen dazu, sobald ${payload.leader_name} welche anlegt.`}
+                    : `Noch keine Übungen — sie kommen dazu, sobald ${payload.leader_name} welche hinzufügt.`}
                 </p>
 
                 {asks.length > 0 && (

@@ -28,8 +28,6 @@ from .. import sharing
 from ._blueprint import gym_bp
 
 
-DEFAULT_REST_SECONDS = 180  # the catalogue create sheet's rest placeholder (goes with it)
-
 # The UI is German regardless of the server's locale, so month names are stated
 # rather than taken from strftime('%B') -- which follows LC_TIME and would give
 # English on this machine and German on the VPS, or vice versa.

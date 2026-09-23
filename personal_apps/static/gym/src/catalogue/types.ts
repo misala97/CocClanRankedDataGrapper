@@ -24,12 +24,7 @@ export interface CatalogueGroup {
 
 export interface CataloguePayload {
   groups: CatalogueGroup[]
-  muscle_groups: string[]
-  equipment_labels: Record<string, string>
   open_by_default: boolean
-  default_rest_seconds: number
-  added_id: number | null
-  name_taken: boolean
 }
 
 export type SortMode = 'muscle' | 'stall' | 'recent'

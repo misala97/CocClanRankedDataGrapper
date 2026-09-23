@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { ExerciseDetailPayload } from '../types'
-import { getJson, postForm } from '../api'
-import { UndoToast, useUndo } from '../undo'
+import { getJson } from '../api'
 import { shortDate } from '../format'
 import { Icon } from '../components/Icon'
 import { ExerciseHeader } from '../components/ExerciseHeader'
@@ -13,22 +12,22 @@ import { EditSheet, type EditSheetHandle } from '../components/EditSheet'
 
 interface Props {
   payload: ExerciseDetailPayload
-  nameTaken: boolean
 }
 
 /**
  * Exercise detail (Puls): the single-exercise instrument.
  *
  * Order: what state it is in, the two records, the progression chart, every
- * session, and finally maintenance. Nothing here re-derives anything -- every
- * value comes from routes._exercise_detail_payload.
+ * session, and finally the lifter's own settings. Nothing here re-derives
+ * anything -- every value comes from routes._exercise_detail_payload. The
+ * exercise itself is the one list's: nobody renames or deletes it here.
  *
  * Position stays a SERIES, not just a filter: the same lift in slot 1 and slot
  * 3 is two different stories, and collapsing them would quietly drop that
  * dimension. The pills isolate one, and they are real links so deep links and
  * the back button keep working.
  */
-export function ExerciseDetailPage({ payload, nameTaken }: Props) {
+export function ExerciseDetailPage({ payload }: Props) {
   // State, not the prop: the position pills swap the whole payload in place
   // (detail.json honours the filter exactly), so a pill tap is one fetch
   // instead of a full navigation.
@@ -90,13 +89,6 @@ export function ExerciseDetailPage({ payload, nameTaken }: Props) {
       <div className="exdetail">
         <ExerciseHeader exercise={p.exercise} lastOverall={p.last_overall}
           chipClass={p.chip_class} chipLabel={p.chip_label} />
-
-        {nameTaken && (
-          <section className="next-time">
-            <div className="next-time__lbl">Name nicht geändert</div>
-            <p className="next-time__body">Eine Übung mit diesem Namen gibt es schon.</p>
-          </section>
-        )}
 
         {count > 0 ? (
           <>
@@ -182,38 +174,16 @@ export function ExerciseDetailPage({ payload, nameTaken }: Props) {
           </p>
         )}
 
-        <section className="sec sec--maint" aria-label="Übung verwalten">
+        <section className="sec sec--maint" aria-label="Deine Einstellungen">
           <button type="button" className="finished__correct"
             onClick={() => editSheet.current?.open()}>
             <Icon name="edit" />
-            Name, Muskelgruppe, Standard-Pause bearbeiten
+            Schrittweite und Pause einstellen
           </button>
-          {p.can_delete && (
-            /* Delayed-commit undo instead of confirm(): the toast reports it,
-               five seconds to take it back, then the POST fires and the page
-               moves on to the catalogue. */
-            <button type="button" className="quiet-acts__btn quiet-acts__btn--danger"
-              onClick={() => useUndo.getState().offer({
-                label: `Übung „${p.exercise.name}“ gelöscht.`,
-                commit: (keepalive) => {
-                  postForm<{ deleted: boolean }>(
-                    `/gym/exercises/${id}/delete`, {}, { keepalive })
-                    .then(() => { if (!keepalive) window.location.assign('/gym/uebungen') })
-                    // A failed delete leaves the exercise standing -- staying
-                    // on its page is the honest outcome.
-                    .catch(() => {})
-                },
-                undo: () => {},
-              })}>
-              Übung löschen
-            </button>
-          )}
         </section>
       </div>
 
-      <EditSheet ref={editSheet} exercise={p.exercise} muscleGroups={p.muscle_groups}
-        equipmentLabels={p.equipment_labels} openOnMount={nameTaken} />
-      <UndoToast />
+      <EditSheet ref={editSheet} exercise={p.exercise} equipmentLabels={p.equipment_labels} />
     </>
   )
 }

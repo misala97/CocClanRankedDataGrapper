@@ -12,7 +12,7 @@ from flask import (
     jsonify, render_template, request,
 )
 from models import (
-    EQUIPMENT_LABELS, MUSCLE_GROUPS,
+    EQUIPMENT_LABELS,
 )
 from auth import (
     login_required,
@@ -387,10 +387,7 @@ def _exercise_detail_payload(exercise, raw_position):
         'chart': _chart_geometry(data['series'], data.get('pr_e1rm')),
         'chip_class': chip_class,
         'chip_label': chip_label,
-        # The list is read-only (2026-09-23); the field goes with the UI's
-        # delete button.
-        'can_delete': False,
-        'muscle_groups': list(MUSCLE_GROUPS),
+        # The settings sheet names the equipment; it no longer picks one.
         'equipment_labels': dict(EQUIPMENT_LABELS),
         **data,
     })

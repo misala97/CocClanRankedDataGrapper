@@ -39,7 +39,6 @@ export interface SessionActions {
   onEnablePush(): void
   onToggleDeload(on: boolean, pct: number): void
   onAddExercise(exerciseId: number): void
-  onCreateExercise(name: string): void
   onSaveTemplate(name: string): void
   exerciseActions(sessionExerciseId: number): ExerciseSheetActions
 }
@@ -53,7 +52,7 @@ interface Props {
   /** Finish or discard is waiting for writes still on their way. */
   finishing?: boolean
   /** Which add-exercise row is waiting on the server -- see AddExerciseSheet. */
-  busyExerciseId?: number | 'new' | null
+  busyExerciseId?: number | null
 }
 
 /**
@@ -137,8 +136,7 @@ export function SessionPage({
       <AddExerciseSheet catalogue={payload.exercises}
         inSession={payload.visible_exercises}
         busyExerciseId={busyExerciseId}
-        onAdd={actions.onAddExercise}
-        onCreate={actions.onCreateExercise} />
+        onAdd={actions.onAddExercise} />
 
       <TemplateSheet onSave={actions.onSaveTemplate} />
 

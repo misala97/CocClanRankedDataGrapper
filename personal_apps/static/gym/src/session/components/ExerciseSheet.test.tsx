@@ -2,6 +2,7 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useUndo } from '../../undo'
+import { fold } from '../../search'
 import { ExerciseSheet } from './ExerciseSheet'
 import { useSaveState, useSheets } from '../stores'
 import { payload } from '../types.test-d'
@@ -16,15 +17,17 @@ beforeEach(() => {
 
 const exercise = payload.visible_exercises[0]!
 const catalogue = [
-  { id: exercise.exercise_id, name: exercise.name, muscle_group: exercise.muscle_group },
-  { id: 900, name: 'Andere Brustübung', muscle_group: exercise.muscle_group },
-  { id: 901, name: 'Ganz andere Gruppe', muscle_group: 'Waden' },
+  { id: exercise.exercise_id, name: exercise.name, muscle_group: exercise.muscle_group,
+    search: fold(exercise.name) },
+  { id: 900, name: 'Andere Brustübung', muscle_group: exercise.muscle_group,
+    search: 'andere brustubung' },
+  { id: 901, name: 'Ganz andere Gruppe', muscle_group: 'Waden', search: 'ganz andere gruppe' },
 ]
 
 const actions = () => ({
   onRestChange: vi.fn(), onIncrementChange: vi.fn(), onMetaSave: vi.fn(),
   onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
-  onToggleSkip: vi.fn(), onReplace: vi.fn(), onReplaceWithNew: vi.fn(),
+  onToggleSkip: vi.fn(), onReplace: vi.fn(),
   onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
 })
 
@@ -241,23 +244,27 @@ describe('ExerciseSheet', () => {
     expect(a.onReplace).toHaveBeenCalledWith(900)
   })
 
-  it('starts on the create pane when nothing in the group can replace it', () => {
-    // The pane choice keys off the FILTERED list, which can be empty even for
-    // a full catalogue -- that is why it is not keyed off the catalogue.
-    open({ catalogue: [{ id: 901, name: 'Ganz andere Gruppe', muscle_group: 'Waden' }] })
-    expect(screen.getByText(/Keine andere Übung für/)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Ersatzübung')).not.toBeInTheDocument()
+  it('offers the whole list when nothing in the group can replace it', async () => {
+    // The filtered list can be empty -- an exercise with no group, or one the
+    // list has no neighbour for -- and there is no creating one instead.
+    const user = userEvent.setup()
+    const { actions: a } = open({ catalogue: [catalogue[0]!, catalogue[2]!] })
+    await user.click(screen.getByText('Übung ersetzen'))
+
+    const select = screen.getByLabelText('Ersatzübung')
+    expect(select).toHaveTextContent('Ganz andere Gruppe')
+    expect(select).not.toHaveTextContent(exercise.name)
+
+    await user.click(screen.getByText('Ersetzen'))
+    expect(a.onReplace).toHaveBeenCalledWith(901)
   })
 
-  it('switches to creating a replacement and back', async () => {
+  it('replaces only with an exercise from the list', async () => {
     const user = userEvent.setup()
-    const { actions: a } = open()
+    open()
     await user.click(screen.getByText('Übung ersetzen'))
-    await user.click(screen.getByText('+ Neue Übung anlegen'))
-
-    await user.type(screen.getByLabelText('Name'), 'Kabelzug')
-    await user.click(screen.getByText('Anlegen und ersetzen'))
-    expect(a.onReplaceWithNew).toHaveBeenCalledWith('Kabelzug')
+    expect(screen.queryByText(/anlegen/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
   })
 
   it('names the skip action for what it will do', () => {

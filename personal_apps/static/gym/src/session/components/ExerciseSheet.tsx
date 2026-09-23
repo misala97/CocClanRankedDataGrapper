@@ -15,7 +15,6 @@ export interface ExerciseSheetActions {
   onAddSet(weight: number, reps: number): void
   onToggleSkip(): void
   onReplace(exerciseId: number): void
-  onReplaceWithNew(name: string): void
   onRemove(): void
   onShowProgress(): void
   /** Pull this exercise in front of the live one, so it is up next. */
@@ -24,6 +23,7 @@ export interface ExerciseSheetActions {
 
 interface Props extends ExerciseSheetActions {
   exercise: LiveExercise
+  /** The whole exercise list, which a replacement comes from. */
   catalogue: CatalogueExercise[]
   /** What the add-a-set row pre-fills with when the exercise has no set yet.
    *  Null for an exercise with no history to seed from. */
@@ -46,7 +46,7 @@ interface Props extends ExerciseSheetActions {
 export function ExerciseSheet({
   exercise, catalogue, suggestion, canMakeLive,
   onRestChange, onIncrementChange, onMetaSave, onSetUpdate, onSetDelete,
-  onAddSet, onToggleSkip, onReplace, onReplaceWithNew, onRemove, onShowProgress,
+  onAddSet, onToggleSkip, onReplace, onRemove, onShowProgress,
   onMakeLive,
 }: Props) {
   const [pain, setPain] = useState(exercise.pain)
@@ -54,7 +54,6 @@ export function ExerciseSheet({
   // The island locks the same key for the confirm button's add -- one append
   // per exercise in flight, whichever control asked for it.
   const adding = useSaveState((s) => s.locked[`add-${exercise.id}`] === true)
-  const [newName, setNewName] = useState('')
   const offerUndo = useUndo((s) => s.offer)
   // Sets hidden while their delete waits out the undo window. Ids, not
   // indices: the payload swap after the commit removes them for real.
@@ -73,13 +72,13 @@ export function ExerciseSheet({
     })
   }
 
-  // Filtered to the same muscle group, so it can be legitimately empty even
-  // for a full catalogue -- which is why the pane choice keys off this list
-  // rather than off the catalogue as a whole.
-  const swaps = catalogue.filter(
-    (e) => e.muscle_group === exercise.muscle_group && e.id !== exercise.exercise_id)
-  const [replacePane, setReplacePane] = useState<'pick' | 'new'>(
-    swaps.length > 0 ? 'pick' : 'new')
+  // The same muscle group first: a replacement is usually "the machine is
+  // taken, same muscles another way". That can be empty -- an exercise with
+  // no group, or one the list has no neighbour for -- and then the whole list
+  // stands in, since nothing is created here any more.
+  const others = catalogue.filter((e) => e.id !== exercise.exercise_id)
+  const sameGroup = others.filter((e) => e.muscle_group === exercise.muscle_group)
+  const swaps = sameGroup.length > 0 ? sameGroup : others
   const [replaceWith, setReplaceWith] = useState(swaps[0]?.id ?? 0)
 
   return (
@@ -199,16 +198,16 @@ export function ExerciseSheet({
           </span>
         </button>
 
-        <details>
-          <summary className="sheet-row">
-            <span className="sheet-row__lead"><Icon name="swap" /></span>
-            <span className="sheet-row__main">
-              <span className="sheet-row__name">Übung ersetzen</span>
-              <span className="sheet-row__meta">Nur für heute — die Routine bleibt.</span>
-            </span>
-          </summary>
+        {swaps.length > 0 && (
+          <details>
+            <summary className="sheet-row">
+              <span className="sheet-row__lead"><Icon name="swap" /></span>
+              <span className="sheet-row__main">
+                <span className="sheet-row__name">Übung ersetzen</span>
+                <span className="sheet-row__meta">Nur für heute — die Routine bleibt.</span>
+              </span>
+            </summary>
 
-          {replacePane === 'pick' && swaps.length > 0 && (
             <div className="sheet__pane">
               <div className="field grow">
                 <label className="label" htmlFor={`replace-select-${exercise.id}`}>Ersatzübung</label>
@@ -220,34 +219,9 @@ export function ExerciseSheet({
               </div>
               <button type="button" className="btn btn--live btn--sm"
                 onClick={() => onReplace(replaceWith)}>Ersetzen</button>
-              <button type="button" className="sheet__switch"
-                onClick={() => setReplacePane('new')}>+ Neue Übung anlegen</button>
             </div>
-          )}
-
-          {(replacePane === 'new' || swaps.length === 0) && (
-            <div className="sheet__pane">
-              {swaps.length > 0
-                ? (
-                  <button type="button" className="sheet__back"
-                    onClick={() => setReplacePane('pick')}>← Vorhandene wählen</button>
-                )
-                : (
-                  <p className="sheet__hint">
-                    {`Keine andere Übung für ${exercise.muscle_group ?? 'diese Gruppe'} in deiner Liste. Leg eine neue an.`}
-                  </p>
-                )}
-              <div className="field grow">
-                <label className="label" htmlFor={`replace-name-${exercise.id}`}>Name</label>
-                <input type="text" id={`replace-name-${exercise.id}`} className="input"
-                  placeholder="z.B. Kabelzug" value={newName}
-                  onChange={(e) => setNewName(e.target.value)} />
-              </div>
-              <button type="button" className="btn btn--live btn--sm"
-                onClick={() => onReplaceWithNew(newName)}>Anlegen und ersetzen</button>
-            </div>
-          )}
-        </details>
+          </details>
+        )}
 
         {/* A shared exercise is the leader's structure: a follower's remove
             was brought back by the leader's next change, so it is not offered

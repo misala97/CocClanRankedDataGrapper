@@ -17,7 +17,7 @@ from extensions import (
     db,
 )
 from models import (
-    EQUIPMENT_LABELS, MUSCLE_GROUPS,
+    MUSCLE_GROUPS,
 )
 from auth import (
     login_required,
@@ -29,7 +29,7 @@ from features.gym.scope import (
     current_user_id,
 )
 from .helpers import (
-    DEFAULT_REST_SECONDS, EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _exercise_meta,
+    EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _exercise_meta,
     _to_increment, _to_int, _to_stack_steps, _to_weight,
 )
 from .history import (
@@ -45,14 +45,11 @@ from ._blueprint import (
 def gym_uebungen():
     return render_template(
         'gym/uebungen.html',
-        payload_json=_catalogue_payload(
-            added_id=_to_int(request.args.get('added')),
-            name_taken=bool(request.args.get('name_taken')),
-        ).model_dump(mode='json'),
+        payload_json=_catalogue_payload().model_dump(mode='json'),
     )
 
 
-def _catalogue_payload(added_id=None, name_taken=False):
+def _catalogue_payload():
     """The caller's catalogue as a validated payload: the exercises they have
     logged, kept in a routine or set up, each with their settings."""
     now = dt.datetime.utcnow()
@@ -139,14 +136,7 @@ def _catalogue_payload(added_id=None, name_taken=False):
                          for entry in entries]}
             for name, entries in grouped
         ],
-        'muscle_groups': list(MUSCLE_GROUPS),
-        'equipment_labels': dict(EQUIPMENT_LABELS),
         'open_by_default': len(exercises) <= UEBUNGEN_FOLD_ABOVE,
-        # The sheet's rest placeholder said 90 while this is what a blank field
-        # actually stores.
-        'default_rest_seconds': DEFAULT_REST_SECONDS,
-        'added_id': added_id,
-        'name_taken': name_taken,
     })
     return payload
 

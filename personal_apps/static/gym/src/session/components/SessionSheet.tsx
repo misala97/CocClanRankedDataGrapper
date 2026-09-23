@@ -92,7 +92,7 @@ export function SessionSheet({
           <span className="sheet-row__lead"><Icon name="plus" /></span>
           <span className="sheet-row__main">
             <span className="sheet-row__name">Übung hinzufügen</span>
-            <span className="sheet-row__meta">Aus dem Katalog oder neu anlegen.</span>
+            <span className="sheet-row__meta">Aus der Übungsliste.</span>
           </span>
         </button>
 

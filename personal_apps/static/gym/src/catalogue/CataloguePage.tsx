@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { CatalogueEntry, CataloguePayload, SortMode } from './types'
 import { fold, recency, sincePr } from './format'
 import { kg1 } from '../format'
 import { useCatalogueUi } from './store'
-import { useSheets } from '../session/stores'
-import { Icon } from '../components/Icon'
-import { NewExerciseSheet } from './NewExerciseSheet'
-import { postFormData, MutationFailed } from '../api'
 import { morphFrom } from '../vt'
 
 const SORTS: { mode: SortMode; label: string }[] = [
@@ -15,10 +11,9 @@ const SORTS: { mode: SortMode; label: string }[] = [
   { mode: 'recent', label: 'Zuletzt' },
 ]
 
-function ExerciseRow({ entry, group, isNew }: {
+function ExerciseRow({ entry, group }: {
   entry: CatalogueEntry
   group: string
-  isNew: boolean
 }) {
   const stall = sincePr(entry.sessions_since_pr)
   const meta = recency(entry.days_ago) + (stall ? ` · ${stall}` : '')
@@ -26,7 +21,7 @@ function ExerciseRow({ entry, group, isNew }: {
   return (
     // The whole row is the link. The two figures used to sit outside it, so
     // link-list navigation announced the name and never the weight.
-    <a className={`row row--top uebungen-row${isNew ? ' is-new' : ''}`}
+    <a className="row row--top uebungen-row"
       href={`/gym/exercises/${entry.exercise.id}`}
       onClick={morphFrom('ex', '.nameline__n')}
       data-group={group}>
@@ -67,18 +62,18 @@ function ExerciseRow({ entry, group, isNew }: {
   )
 }
 
-export function CataloguePage({ payload: initial }: { payload: CataloguePayload }) {
+/**
+ * The lifter's own exercises -- the ones they logged, keep in a routine or set
+ * up -- out of the one list. Nothing is created here: an exercise arrives
+ * from the add sheet in a workout, and this page is where it is found again.
+ */
+export function CataloguePage({ payload }: { payload: CataloguePayload }) {
   const query = useCatalogueUi((s) => s.query)
   const setQuery = useCatalogueUi((s) => s.setQuery)
   const sort = useCatalogueUi((s) => s.sort)
   const setSort = useCatalogueUi((s) => s.setSort)
   const isOpen = useCatalogueUi((s) => s.isOpen)
   const toggleGroup = useCatalogueUi((s) => s.toggleGroup)
-  const openSheet = useSheets((s) => s.open)
-  const closeSheet = useSheets((s) => s.close)
-  // Which group an empty band's "anlegen" opened the sheet for; the header
-  // button clears it.
-  const [presetGroup, setPresetGroup] = useState<string | null>(null)
 
   // `/` focuses the search from anywhere on the page -- the desktop dividend
   // on the one page that is mostly a search box.
@@ -94,29 +89,6 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
-  // Creating an exercise answers with the fresh catalogue: added_id
-  // highlights the new row, name_taken raises the banner -- exactly what the
-  // ?added= / ?name_taken=1 redirects delivered, minus the reload.
-  const [payload, setPayload] = useState(initial)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
-  const createExercise = async (fields: FormData): Promise<boolean> => {
-    try {
-      const fresh = await postFormData<CataloguePayload>('/gym/exercises/add', fields)
-      setPayload(fresh)
-      setSaveError(null)
-      // Closed on the collision too: the redirect flow closed it (the page
-      // reloaded), and the banner explains itself in page context.
-      closeSheet()
-      return !fresh.name_taken
-    } catch (error) {
-      setSaveError(error instanceof MutationFailed
-        ? error.germanMessage
-        : 'Speichern fehlgeschlagen.')
-      return false
-    }
-  }
-
   const total = payload.groups.reduce((n, g) => n + g.entries.length, 0)
   const needle = fold(query.trim())
   const groupNames = payload.groups.map((g) => g.name)
@@ -147,23 +119,7 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
         {/* aria-live: search rewrites this, and it used to sit at 17 while
             four rows showed. */}
         <span className="verlauf__count" aria-live="polite">{hits.length}</span>
-        <span className="start__sp" />
-        <button type="button" className="verlauf__act"
-          onClick={() => { setPresetGroup(null); openSheet('sheet-new-exercise') }}>
-          <Icon name="plus" />
-          Neue Übung
-        </button>
       </header>
-
-      {saveError !== null && (
-        <p className="flash flash--error" role="alert">{saveError}</p>
-      )}
-      {payload.name_taken && (
-        <section className="next-time">
-          <div className="next-time__lbl">Nicht gespeichert</div>
-          <p className="next-time__body">Eine Übung mit diesem Namen gibt es schon.</p>
-        </section>
-      )}
 
       {total > 0 ? (
         <>
@@ -252,32 +208,20 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
                           </span>
                         </h2>
                         <p className="group__none">
-                          {/* The copy pointed at nothing: the only affordance
-                              was the header button, which does not know the
-                              group. This one does. */}
-                          <button type="button" className="linklike"
-                            onClick={() => {
-                              setPresetGroup(group.name)
-                              openSheet('sheet-new-exercise')
-                            }}>
-                            {`Übung für ${group.name} anlegen`}
-                          </button>
-                          {' — um die Gruppe zu trainieren.'}
+                          {`Übungen für ${group.name} findest du im Workout unter „Übung hinzufügen“.`}
                         </p>
                       </>
                     )}
 
                     {expanded && groupHits.map(({ entry }) => (
                       <ExerciseRow key={entry.exercise.id} entry={entry}
-                        group={group.name}
-                        isNew={payload.added_id === entry.exercise.id} />
+                        group={group.name} />
                     ))}
                   </section>
                 )
               })
               : flat.map(({ entry, group }) => (
-                <ExerciseRow key={entry.exercise.id} entry={entry} group={group}
-                  isNew={payload.added_id === entry.exercise.id} />
+                <ExerciseRow key={entry.exercise.id} entry={entry} group={group} />
               ))}
           </div>
         </>
@@ -285,21 +229,13 @@ export function CataloguePage({ payload: initial }: { payload: CataloguePayload 
         <section className="uebungen-blank">
           <h2 className="uebungen-blank__title">Noch keine Übungen</h2>
           <p className="uebungen-blank__body">
-            Übungen gehören dir allein — deine Namen, deine Gewichtsschritte. Leg die
-            erste an, oder füge sie unterwegs im Workout hinzu; sie bleibt dann hier.
+            Hier stehen die Übungen, die du trainierst. Im Workout findest du unter
+            „Übung hinzufügen“ die ganze Liste — was du dort loggst, steht danach
+            hier, mit deinen Einstellungen.
           </p>
-          <button type="button" className="btn btn--live"
-            onClick={() => openSheet('sheet-new-exercise')}>
-            <Icon name="plus" />
-            Erste Übung anlegen
-          </button>
+          <a className="btn btn--live" href="/gym">Auf Start ein Workout beginnen</a>
         </section>
       )}
-
-      <NewExerciseSheet muscleGroups={payload.muscle_groups}
-        equipmentLabels={payload.equipment_labels}
-        defaultRestSeconds={payload.default_rest_seconds}
-        onCreate={createExercise} presetGroup={presetGroup} />
     </>
   )
 }

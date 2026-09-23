@@ -62,6 +62,9 @@ export interface CatalogueExercise {
   id: number
   name: string
   muscle_group: string | null
+  /** The folded name and aliases (exercises.search_text) -- what the add
+   *  sheet matches a query against, see ../search. */
+  search: string
 }
 
 /** What the steppers pre-fill with. Null for an exercise with no history to

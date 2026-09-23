@@ -50,9 +50,6 @@ export const api = {
   addExercise: (sessionId: number, exerciseId: number) =>
     post(`/gym/session/${sessionId}/exercises/add`, { exercise_id: exerciseId }),
 
-  createExercise: (sessionId: number, name: string) =>
-    post(`/gym/session/${sessionId}/exercises/add`, { new_exercise_name: name }),
-
   removeExercise: (sessionExerciseId: number) =>
     post(`/gym/session-exercise/${sessionExerciseId}/delete`),
 
@@ -61,9 +58,6 @@ export const api = {
 
   replaceExercise: (sessionExerciseId: number, exerciseId: number) =>
     post(`/gym/session-exercise/${sessionExerciseId}/replace`, { exercise_id: exerciseId }),
-
-  replaceWithNew: (sessionExerciseId: number, name: string) =>
-    post(`/gym/session-exercise/${sessionExerciseId}/replace`, { new_exercise_name: name }),
 
   setRest: (sessionExerciseId: number, seconds: number | null) =>
     post(`/gym/session-exercise/${sessionExerciseId}/rest`,

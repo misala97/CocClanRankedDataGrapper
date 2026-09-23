@@ -2,6 +2,18 @@
 // here -- the Pydantic model uses extra='forbid', so drift fails loudly on the
 // Python side first, which is the intended order.
 
+/** The list's own values for the four personal settings -- what a blank field
+ *  in the settings form stands for. */
+export interface ListDefaults {
+  default_rest_seconds: number | null
+  weight_increment: number | null
+  bar_weight: number | null
+  stack_kg: number[] | null
+}
+
+/** The exercise as this lifter sees it. Name, groups, equipment and one side
+ *  are the list's; rest, step, bar and stack are the lifter's effective
+ *  values, over `list_defaults`. */
 export interface ExerciseMeta {
   id: number
   name: string
@@ -13,6 +25,7 @@ export interface ExerciseMeta {
   bar_weight: number | null
   stack_kg: number[] | null
   secondary_muscle_groups: string[] | null
+  list_defaults: ListDefaults
 }
 
 export interface SessionRow {
@@ -133,7 +146,6 @@ export interface ExerciseDetailPayload {
   chart: ChartGeometry | null
   chip_class: string | null
   chip_label: string | null
-  can_delete: boolean
-  muscle_groups: string[]
+  /** Shown as text in the settings sheet: the equipment is the list's. */
   equipment_labels: Record<string, string>
 }

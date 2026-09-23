@@ -33,8 +33,7 @@ def _minimal():
         'last_overall': None, 'pr_weight': None, 'pr_e1rm': None,
         'last_progression': None,
         'state': 'neu', 'sessions_since_pr': 0, 'chart': None,
-        'chip_class': None, 'chip_label': None, 'can_delete': True,
-        'muscle_groups': ['Brust', 'Trizeps'],
+        'chip_class': None, 'chip_label': None,
         'equipment_labels': {'barbell': 'Langhantel'},
     }
 

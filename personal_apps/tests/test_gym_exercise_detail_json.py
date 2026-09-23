@@ -50,8 +50,10 @@ def test_returns_the_payload_shape(client):
     body = response.get_json()
     assert set(body) >= {
         'exercise', 'table', 'available_positions', 'selected_position',
-        'chart', 'state', 'can_delete', 'muscle_groups', 'equipment_labels',
+        'chart', 'state', 'equipment_labels',
     }
+    # The list is everyone's: no delete flag, no group picker to fill.
+    assert not {'can_delete', 'muscle_groups'} & set(body)
     assert body['exercise']['id'] == _an_exercise_id()
 
 

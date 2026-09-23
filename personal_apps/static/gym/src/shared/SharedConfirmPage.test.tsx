@@ -86,9 +86,13 @@ describe('SharedConfirmPage', () => {
     expect(exact.closest('[hidden]')).toBeNull()
   })
 
-  it('falls back to creating a new exercise when nothing matched', () => {
+  it('offers only exercises of the list, the best candidate when nothing matched', () => {
+    // No creating one instead: the list is everyone's.
     mount()
-    expect(screen.getByLabelText('Butterfly')).toHaveValue('new')
+    const select = screen.getByLabelText('Butterfly') as HTMLSelectElement
+    expect(select).toHaveValue('57')
+    expect([...select.options].map((o) => o.value)).toEqual(['57'])
+    expect(screen.queryByText(/anlegen/i)).not.toBeInTheDocument()
   })
 
   it('posts each choice under the leader exercise it answers for', () => {
@@ -131,11 +135,10 @@ const templates = [
 ]
 
 // `base.proposals` leaves Butterfly on exact_id: null so the top-level suite
-// can exercise the "Neu anlegen" fallback. Coverage math needs both exercises
-// actually matched going in -- otherwise every "starts fully covered" case
-// here would be indistinguishable from "nothing is covered", and the
-// recount test would toggle a select that was already on its target value,
-// passing whether or not the recount logic works at all.
+// can exercise the unmatched fallback. Coverage math needs both exercises
+// matched going in -- otherwise every "starts fully covered" case here would
+// be indistinguishable from "nothing is covered". Butterfly has a second
+// candidate so the recount tests have somewhere to switch it to.
 const proposals = [
   {
     name: 'Bankdrücken', leader_exercise_id: 10, exact_id: 55,
@@ -143,7 +146,7 @@ const proposals = [
   },
   {
     name: 'Butterfly', leader_exercise_id: 11, exact_id: 57,
-    candidates: [[57, 'Reverse Fly (Machine)']] as [number, string][],
+    candidates: [[57, 'Reverse Fly (Machine)'], [60, 'Butterfly (Maschine)']] as [number, string][],
   },
 ]
 
@@ -213,18 +216,15 @@ describe('the routine picker', () => {
     // exercise away from the routine's drops its coverage in place.
     const user = userEvent.setup()
     mount({ proposals, templates })
-    await user.selectOptions(screen.getByLabelText('Butterfly'), 'new')
+    await user.selectOptions(screen.getByLabelText('Butterfly'), '60')
     const options = [...screen.getByLabelText('Zählt bei dir als')
       .querySelectorAll('option')].map((o) => o.textContent)
     expect(options).toContain('Push — 1 von 2 Übungen')
   })
 
-  it('counts a "Neu anlegen" proposal as covered when its name matches an owned exercise', () => {
-    // gym_shared_accept's 'new' branch (partners.py) reuses an owned
-    // exercise of the same name before creating one -- "Neu anlegen" is not
-    // a guaranteed miss. If the client didn't reproduce that reuse, this
-    // routine would read 1 von 2 and never preselect, even though the
-    // session the server actually creates holds both its exercises.
+  it('counts an unmatched proposal under the candidate its select shows', () => {
+    // What the form posts is what the select shows; counting anything else
+    // would claim coverage the accept route does not deliver.
     mount({
       proposals: [
         {
@@ -238,7 +238,7 @@ describe('the routine picker', () => {
       ],
       templates: [{ id: 1, name: 'Push', exercise_ids: [55, 57] }],
     })
-    expect(screen.getByLabelText('Bankdrücken')).toHaveValue('new')
+    expect(screen.getByLabelText('Bankdrücken')).toHaveValue('55')
     const options = [...screen.getByLabelText('Zählt bei dir als')
       .querySelectorAll('option')].map((o) => o.textContent)
     expect(options).toContain('Push — 2 von 2 Übungen')
@@ -268,49 +268,6 @@ describe('the routine picker', () => {
     expect(screen.getByLabelText('Zählt bei dir als')).toHaveValue('1')
   })
 
-  it('does not treat a near-miss name as the same exercise', () => {
-    // The server matches on filter_by(name=...) -- byte equality, no
-    // case-folding. Normalising here would silently claim coverage the
-    // accept route will not deliver, and every other test in this block
-    // uses byte-identical names, so nothing else would notice.
-    mount({
-      proposals: [{
-        name: 'Bankdrücken', leader_exercise_id: 10, exact_id: null,
-        candidates: [[55, 'bankdrücken ']] as [number, string][],
-      }],
-      templates: [{ id: 1, name: 'Push', exercise_ids: [55] }],
-    })
-    expect(screen.queryByLabelText('Zählt bei dir als')).not.toBeInTheDocument()
-  })
-
-  it('counts two genuinely new exercises as two, not as one', () => {
-    // Both resolve to null, and null === null: deduping the resolved list
-    // itself rather than only its ids would collapse them into a single
-    // missing exercise. One covered exercise is in the fixture on purpose --
-    // with none, the picker is absent either way and the denominator's bug
-    // would be invisible.
-    mount({
-      proposals: [
-        {
-          name: 'Kniebeuge', leader_exercise_id: 10, exact_id: 55,
-          candidates: [[55, 'Kniebeuge']] as [number, string][],
-        },
-        {
-          name: 'Zercher Squat', leader_exercise_id: 11, exact_id: null,
-          candidates: [[55, 'Kniebeuge']] as [number, string][],
-        },
-        {
-          name: 'Jefferson Curl', leader_exercise_id: 12, exact_id: null,
-          candidates: [[55, 'Kniebeuge']] as [number, string][],
-        },
-      ],
-      templates: [{ id: 1, name: 'Beine', exercise_ids: [55] }],
-    })
-    expect([...screen.getByLabelText('Zählt bei dir als')
-      .querySelectorAll('option')].map((o) => o.textContent))
-      .toContain('Beine — 1 von 3 Übungen')
-  })
-
   it('keeps a routine the reader picked even after its coverage drops to zero', async () => {
     // Filtering it out would leave the controlled select with no matching
     // option, so the browser resets it to the first one and the workout is
@@ -325,7 +282,7 @@ describe('the routine picker', () => {
     })
     const picker = screen.getByLabelText('Zählt bei dir als')
     await user.selectOptions(picker, '1')
-    await user.selectOptions(screen.getByLabelText('Butterfly'), 'new')
+    await user.selectOptions(screen.getByLabelText('Butterfly'), '60')
 
     expect(picker).toHaveValue('1')
     expect([...picker.querySelectorAll('option')].map((o) => o.textContent))

@@ -124,14 +124,10 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   // decision belongs to the server.
   const addExercise = useSessionMutation(sessionId,
     (exerciseId: number) => api.addExercise(sessionId, exerciseId))
-  const createExercise = useSessionMutation(sessionId,
-    (name: string) => api.createExercise(sessionId, name))
   const removeExercise = useSessionMutation(sessionId,
     (seId: number) => api.removeExercise(seId))
   const replaceExercise = useSessionMutation(sessionId,
     (seId: number, exerciseId: number) => api.replaceExercise(seId, exerciseId))
-  const replaceWithNew = useSessionMutation(sessionId,
-    (seId: number, name: string) => api.replaceWithNew(seId, name))
 
   const setRest = useSessionMutation(sessionId,
     (seId: number, seconds: number | null) => api.setRest(seId, seconds))
@@ -250,7 +246,6 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     onEnablePush: () => { void enablePush(data.vapid_public_key) },
     onToggleDeload: (on, pct) => { toggleDeload.mutate([on, pct]); close() },
     onAddExercise: (exerciseId) => addExercise.mutate([exerciseId]),
-    onCreateExercise: (name) => createExercise.mutate([name]),
     onSaveTemplate: (name) => postNavigate(
       `/gym/session/${sessionId}/save_as_template`, { template_name: name }),
     exerciseActions: (seId: number): ExerciseSheetActions => ({
@@ -273,7 +268,6 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       },
       onToggleSkip: () => { toggleSkip.mutate([seId]); close() },
       onReplace: (exerciseId) => { replaceExercise.mutate([seId, exerciseId]); close() },
-      onReplaceWithNew: (name) => { replaceWithNew.mutate([seId, name]); close() },
       onRemove: () => { removeExercise.mutate([seId]); close() },
       onShowProgress: () => {
         const se = data.visible_exercises.find((row) => row.id === seId)
@@ -286,12 +280,10 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     <SessionPage payload={view} actions={actions} pushSupported={pushSupported}
       confirmBusy={toggleSet.isPending || addSet.isPending}
       finishing={finishing}
-      // Neither add has an optimistic path, so the row is the only place that
-      // can say the tap landed. `variables` is the argument tuple of the write
+      // An add has no optimistic path, so the row is the only place that can
+      // say the tap landed. `variables` is the argument tuple of the write
       // still in flight.
-      busyExerciseId={createExercise.isPending
-        ? 'new'
-        : (addExercise.isPending ? addExercise.variables?.[0] ?? null : null)} />
+      busyExerciseId={addExercise.isPending ? addExercise.variables?.[0] ?? null : null} />
   )
 }
 

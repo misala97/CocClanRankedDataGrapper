@@ -185,8 +185,6 @@ class ExerciseDetailPayload(_Model):
     chart: ChartGeometry | None
     chip_class: str | None
     chip_label: str | None
-    can_delete: bool
-    muscle_groups: list[str]
     equipment_labels: dict[str, str]
 
 
@@ -425,16 +423,10 @@ class CatalogueGroup(_Model):
 
 class CataloguePayload(_Model):
     groups: list[CatalogueGroup]
-    muscle_groups: list[str]
-    equipment_labels: dict[str, str]
     # Above UEBUNGEN_FOLD_ABOVE the catalogue opens folded; at or below it
     # every group starts open. Hardcoded shut, the page's default state
     # contained no information about the catalogue's size.
     open_by_default: bool
-    # What a blank rest field actually stores. The sheet's placeholder said 90.
-    default_rest_seconds: int
-    added_id: int | None
-    name_taken: bool
 
 
 # ---------------------------------------------------------------------------

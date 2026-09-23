@@ -202,7 +202,7 @@ function FirstRun({ onboarding, daysSinceLast, push, onEnablePush, onStartFree }
               <p className="onb__d">{receipt}</p>
             ) : (
               <>
-                <p className="onb__d">Leer starten, Übungen anlegen, während du sie machst.</p>
+                <p className="onb__d">Leer starten, Übungen aus der Liste hinzufügen, während du sie machst.</p>
                 <form method="post" action="/gym/start">
                   <CsrfField />
                   <button type="submit" className="lead__go">

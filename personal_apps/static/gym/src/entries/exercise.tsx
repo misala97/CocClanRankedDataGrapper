@@ -10,10 +10,5 @@ const rootEl = document.getElementById('gym-root')
 
 if (dataEl && rootEl) {
   const payload: ExerciseDetailPayload = JSON.parse(dataEl.textContent ?? '{}')
-  // ?name_taken is set by gym_update_exercise when a rename collided. It is a
-  // query flag rather than payload state because it describes what just
-  // happened to this request, not what the exercise is.
-  const nameTaken = new URLSearchParams(window.location.search).has('name_taken')
-  createRoot(rootEl).render(
-    <ExerciseDetailPage payload={payload} nameTaken={nameTaken} />)
+  createRoot(rootEl).render(<ExerciseDetailPage payload={payload} />)
 }

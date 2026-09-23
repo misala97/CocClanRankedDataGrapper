@@ -2622,45 +2622,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    carries it instead of a hairline that has to. */
 .sheet .input, .sheet .field-num { background: var(--raised); }
 
-/* Two-pane sheets: pick an existing thing, or make a new one. Separate panes
-   because they are separate actions -- the add and replace sheets used to put
-   both sets of controls on screen at once with a "— Neue Übung —" option in
-   the select doubling as the mode switch, so neither path was signposted.
-   The explicit [hidden] rule is not belt-and-braces: an author `display` beats
-   the UA sheet's `[hidden] { display: none }` on specificity, and this file has
-   been caught by that often enough to comment it every time. */
-.sheet__pane[hidden] { display: none; }
-
-.sheet__switch {
-  display: flex; align-items: center; justify-content: center;
-  inline-size: 100%; min-block-size: 48px; margin-block-start: var(--sp-2);
-  padding-block-start: var(--sp-4);
-  background: none; border: 0; border-block-start: 1px solid var(--edge);
-  color: var(--live-ink); font: inherit; font-size: var(--t-sm);
-  font-weight: var(--w-semi); cursor: pointer;
-}
-.sheet__switch:hover { color: var(--live); }
-.sheet__switch:active { transform: scale(0.99); }
-
-.sheet__back {
-  display: inline-flex; align-items: center; gap: var(--sp-1);
-  min-block-size: 44px; padding: 0 var(--sp-1) var(--sp-2) 0;
-  background: none; border: 0;
-  color: var(--dim); font: inherit; font-size: var(--t-meta);
-  font-weight: var(--w-semi); cursor: pointer;
-}
-.sheet__back:hover { color: var(--ink); }
-
-.sheet__hint {
-  margin: 0 0 var(--sp-4); color: var(--dim);
-  font-size: var(--t-sm); line-height: 1.5;
-}
-
-/* .grow is `flex: 1 1 9rem`, so on a 390px sheet the new exercise's name ends
-   up sharing its row with the optional muscle group and each gets ~180px. The
-   name is the thing being typed; it takes the row. */
-.sheet__pane .field--full { flex: 1 1 100%; }
-
 /* ---- the add-exercise search list ---- */
 /* A list, not a <select>: the select could not be searched, could not show what
    is already in the session, and hid a catalogue behind a native picker. */
@@ -2679,8 +2640,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .exadd__name { flex: 1; min-inline-size: 0; font-weight: var(--w-med); }
 .exadd__group { font-size: var(--t-meta); color: var(--unlit); }
 .exadd__in { font-size: var(--t-meta); color: var(--live); font-weight: var(--w-semi); }
-.exadd__row--new .exadd__name b { color: var(--live); }
-.exadd__row--new[hidden] { display: none; }
 .exadd__empty { font-size: var(--t-meta); color: var(--unlit); padding: var(--sp-3) 0; }
 .exadd__empty[hidden] { display: none; }
 /* Never display:none -- it is the sheet's live region, and a region that
@@ -3484,9 +3443,6 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   font-size: var(--t-meta); color: var(--unlit);
 }
 .group__none[hidden] { display: none; }
-
-/* A just-added exercise, marked so the write is visible where it landed. */
-.uebungen-row.is-new { background: var(--raised); border-radius: var(--r-control); }
 
 /* Two lines, not a hard one-line ellipsis. "Lat Pulldown (Single Arm, H…"
    rendered directly above "Lat Pulldown Kabelzug", and the clipped part was

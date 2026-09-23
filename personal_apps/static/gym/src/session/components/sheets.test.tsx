@@ -91,41 +91,52 @@ describe('TemplateSheet', () => {
 })
 
 describe('AddExerciseSheet', () => {
+  // `search` as the server sends it (exercises.search_text): the folded name
+  // and aliases.
   const catalogue = [
-    { id: 1, name: 'Bankdrücken', muscle_group: 'Brust' },
-    { id: 2, name: 'Klimmzug', muscle_group: 'Rücken' },
+    { id: 1, name: 'Bankdrücken', muscle_group: 'Brust', search: 'bankdrucken bench press' },
+    { id: 2, name: 'Klimmzug', muscle_group: 'Rücken', search: 'klimmzug pull up' },
   ]
-  const props = { catalogue, inSession: [], onAdd: vi.fn(), onCreate: vi.fn() }
+  const props = { catalogue, inSession: [], onAdd: vi.fn() }
 
   it('filters the list as you type, without a round trip', async () => {
     const user = userEvent.setup()
     render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
 
-    await user.type(screen.getByLabelText('Übung suchen oder anlegen'), 'klimm')
+    await user.type(screen.getByLabelText('Übung suchen'), 'klimm')
     expect(screen.getByText('Klimmzug')).toBeInTheDocument()
     expect(screen.queryByText('Bankdrücken')).not.toBeInTheDocument()
   })
 
-  it('offers to create only when nothing matches', async () => {
-    // The create path is what the list offers when the search matches nothing
-    // -- never a mode to switch into.
+  it('finds a German name by an English one, and without the umlaut', async () => {
+    // The list renamed every lifter's exercise to German; "Bench Press" and
+    // "bankdruecken" are how they typed it before.
     const user = userEvent.setup()
     render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
-    expect(screen.queryByText(/Anlegen:/)).not.toBeInTheDocument()
+    const field = screen.getByLabelText('Übung suchen')
 
-    await user.type(screen.getByLabelText('Übung suchen oder anlegen'), 'Nackenzieher')
-    expect(screen.getByText(/Anlegen:/)).toBeInTheDocument()
+    await user.type(field, 'Bench Press')
+    expect(screen.getByText('Bankdrücken')).toBeInTheDocument()
+    expect(screen.queryByText('Klimmzug')).not.toBeInTheDocument()
+
+    await user.clear(field)
+    await user.type(field, 'bankdruecken')
+    expect(screen.getByText('Bankdrücken')).toBeInTheDocument()
   })
 
-  it('does not offer to create a duplicate of an exact match', async () => {
+  it('offers nothing to create, and says when the list has no match', async () => {
+    // One list for everyone: an exercise that is not on it cannot be made up
+    // here.
     const user = userEvent.setup()
-    render(<AddExerciseSheet {...props} />)
+    const { container } = render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
 
-    await user.type(screen.getByLabelText('Übung suchen oder anlegen'), 'Klimmzug')
-    expect(screen.queryByText(/Anlegen:/)).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Übung suchen'), 'Nackenzieher')
+    expect(screen.queryByText(/anlegen/i)).not.toBeInTheDocument()
+    expect(container.querySelectorAll('.exadd__row')).toHaveLength(0)
+    expect(screen.getByText(/Keine Übung in der Liste/)).toBeInTheDocument()
   })
 
   it('counts what is already in the session from the payload', () => {
@@ -134,7 +145,7 @@ describe('AddExerciseSheet', () => {
     render(<AddExerciseSheet {...props}
       inSession={payload.visible_exercises}
       catalogue={[{ id: payload.visible_exercises[0]!.exercise_id,
-                    name: 'Schon drin', muscle_group: null }]} />)
+                    name: 'Schon drin', muscle_group: null, search: 'schon drin' }]} />)
     open('sheet-add-exercise')
     expect(screen.getByText('1× drin')).toBeInTheDocument()
   })
@@ -143,11 +154,11 @@ describe('AddExerciseSheet', () => {
     const user = userEvent.setup()
     render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
-    await user.type(screen.getByLabelText('Übung suchen oder anlegen'), 'klimm')
+    await user.type(screen.getByLabelText('Übung suchen'), 'klimm')
 
     act(() => { useSheets.getState().close() })
     open('sheet-add-exercise')
-    expect(screen.getByLabelText('Übung suchen oder anlegen')).toHaveValue('klimm')
+    expect(screen.getByLabelText('Übung suchen')).toHaveValue('klimm')
   })
 
   it('marks the row it is adding and refuses a second tap on it', async () => {
@@ -170,22 +181,15 @@ describe('AddExerciseSheet', () => {
     expect(onAdd).not.toHaveBeenCalled()
   })
 
-  it('marks the create row while the new exercise is being created', () => {
-    render(<AddExerciseSheet {...props} busyExerciseId="new" />)
-    open('sheet-add-exercise')
-    act(() => { useSheets.getState().setAddQuery('Nackenzieher') })
-    expect(screen.getByText(/Anlegen:/).closest('button')).toHaveClass('is-busy')
-  })
-
   it('opens with the cursor in the search field, not on Fertig', () => {
     render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
-    expect(screen.getByLabelText('Übung suchen oder anlegen')).toHaveFocus()
+    expect(screen.getByLabelText('Übung suchen')).toHaveFocus()
   })
 
   it('asks before adding a second copy of an exercise already in the workout', async () => {
-    // After "Anlegen: X" the one row left under the thumb was X itself, and
-    // tapping it -- the natural "that one" -- added it twice.
+    // After an add the one row left under the thumb was that exercise itself,
+    // and tapping it -- the natural "that one" -- added it twice.
     const user = userEvent.setup()
     const onAdd = vi.fn()
     const inWorkout = [{ ...payload.visible_exercises[0]!, exercise_id: 1, name: 'Bankdrücken' }]
@@ -202,21 +206,22 @@ describe('AddExerciseSheet', () => {
 
   it('empties the search and confirms once the add has landed, not before', async () => {
     const user = userEvent.setup()
-    const { rerender } = render(<AddExerciseSheet {...props} />)
+    const onAdd = vi.fn()
+    const { rerender } = render(<AddExerciseSheet {...props} onAdd={onAdd} />)
     open('sheet-add-exercise')
-    const field = screen.getByLabelText('Übung suchen oder anlegen')
-    await user.type(field, 'Nacken')
-    await user.click(screen.getByText(/Anlegen:/))
+    const field = screen.getByLabelText('Übung suchen')
+    await user.type(field, 'bank')
+    await user.click(screen.getByText('Bankdrücken'))
 
-    // Still waiting on the server: the name stays for a retry.
-    expect(props.onCreate).toHaveBeenCalledWith('Nacken')
-    expect(field).toHaveValue('Nacken')
+    // Still waiting on the server: the query stays for a retry.
+    expect(onAdd).toHaveBeenCalledWith(1)
+    expect(field).toHaveValue('bank')
     expect(field).toHaveFocus()
 
-    const landed = [{ ...payload.visible_exercises[0]!, exercise_id: 9, name: 'Nacken' }]
-    rerender(<AddExerciseSheet {...props} inSession={landed} />)
+    const landed = [{ ...payload.visible_exercises[0]!, exercise_id: 1, name: 'Bankdrücken' }]
+    rerender(<AddExerciseSheet {...props} onAdd={onAdd} inSession={landed} />)
     expect(field).toHaveValue('')
-    expect(screen.getByRole('status')).toHaveTextContent('✓ Nacken ist drin.')
+    expect(screen.getByRole('status')).toHaveTextContent('✓ Bankdrücken ist drin.')
   })
 
   it('adds without closing, so six exercises is not six round trips', async () => {

@@ -1304,8 +1304,6 @@ def test_every_jinja_form_posts_fields_its_own_route_reads():
     assert not problems, 'form/route field mismatch:\n  ' + '\n  '.join(problems)
 
 
-@pytest.mark.xfail(strict=True, reason='G1 T4 removes NewExerciseSheet and the identity '
-                                      'fields of EditSheet; drop this mark with them')
 def test_every_react_form_posts_fields_its_own_route_reads():
     """The TSX half of the pairing check above, and the stricter of the two.
 

@@ -12,152 +12,182 @@
     {
       "id": 5528,
       "muscle_group": "Gesäß",
-      "name": "234234"
+      "name": "234234",
+      "search": "234234"
     },
     {
       "id": 738,
       "muscle_group": "Beine",
-      "name": "Beinpresse"
+      "name": "Beinpresse",
+      "search": "beinpresse"
     },
     {
       "id": 9,
       "muscle_group": "Brust",
-      "name": "Bench Press (Dumbbell)"
+      "name": "Bench Press (Dumbbell)",
+      "search": "bench press dumbbell"
     },
     {
       "id": 6,
       "muscle_group": "Bizeps",
-      "name": "Biceps Curl (Rotating)"
+      "name": "Biceps Curl (Rotating)",
+      "search": "biceps curl rotating"
     },
     {
       "id": 10,
       "muscle_group": "Brust",
-      "name": "Chest Fly (Machine)"
+      "name": "Chest Fly (Machine)",
+      "search": "chest fly machine"
     },
     {
       "id": 8,
       "muscle_group": "Brust",
-      "name": "Chest Press (Machine, Lying)"
+      "name": "Chest Press (Machine, Lying)",
+      "search": "chest press machine lying"
     },
     {
       "id": 7,
       "muscle_group": "Bizeps",
-      "name": "Hammer Curl (Dumbbell)"
+      "name": "Hammer Curl (Dumbbell)",
+      "search": "hammer curl dumbbell"
     },
     {
       "id": 5346,
       "muscle_group": "Schultern",
-      "name": "hihi"
+      "name": "hihi",
+      "search": "hihi"
     },
     {
       "id": 1,
       "muscle_group": "Rücken",
-      "name": "Lat Pulldown (Single Arm, Hauptbahnhof)"
+      "name": "Lat Pulldown (Single Arm, Hauptbahnhof)",
+      "search": "lat pulldown single arm hauptbahnhof"
     },
     {
       "id": 16,
       "muscle_group": "Rücken",
-      "name": "Lat Pulldown Kabelzug"
+      "name": "Lat Pulldown Kabelzug",
+      "search": "lat pulldown kabelzug"
     },
     {
       "id": 12,
       "muscle_group": "Schultern",
-      "name": "Lateral Raise (Machine, Good)"
+      "name": "Lateral Raise (Machine, Good)",
+      "search": "lateral raise machine good"
     },
     {
       "id": 11,
       "muscle_group": "Schultern",
-      "name": "Military Press"
+      "name": "Military Press",
+      "search": "military press"
     },
     {
       "id": 50210,
       "muscle_group": null,
-      "name": "Penispump"
+      "name": "Penispump",
+      "search": "penispump"
     },
     {
       "id": 5,
       "muscle_group": "Bizeps",
-      "name": "Preacher Curl (Machine, Good)"
+      "name": "Preacher Curl (Machine, Good)",
+      "search": "preacher curl machine good"
     },
     {
       "id": 17,
       "muscle_group": "Bizeps",
-      "name": "Preacher Curl Bilateral"
+      "name": "Preacher Curl Bilateral",
+      "search": "preacher curl bilateral"
     },
     {
       "id": 4,
       "muscle_group": "Schultern",
-      "name": "Reverse Fly (Machine)"
+      "name": "Reverse Fly (Machine)",
+      "search": "reverse fly machine"
     },
     {
       "id": 5527,
       "muscle_group": null,
-      "name": "sdfsdf"
+      "name": "sdfsdf",
+      "search": "sdfsdf"
     },
     {
       "id": 2,
       "muscle_group": "Rücken",
-      "name": "Seated Row (Machine, Good)"
+      "name": "Seated Row (Machine, Good)",
+      "search": "seated row machine good"
     },
     {
       "id": 15,
       "muscle_group": "Rücken",
-      "name": "T Bar Row (Lying)"
+      "name": "T Bar Row (Lying)",
+      "search": "t bar row lying"
     },
     {
       "id": 3,
       "muscle_group": "Rücken",
-      "name": "T Bar Row (Standing)"
+      "name": "T Bar Row (Standing)",
+      "search": "t bar row standing"
     },
     {
       "id": 14,
       "muscle_group": "Trizeps",
-      "name": "Triceps Extension (Cable, Overhead)"
+      "name": "Triceps Extension (Cable, Overhead)",
+      "search": "triceps extension cable overhead"
     },
     {
       "id": 13,
       "muscle_group": "Trizeps",
-      "name": "Triceps Pushdown (Cable, EZ Bar)"
+      "name": "Triceps Pushdown (Cable, EZ Bar)",
+      "search": "triceps pushdown cable ez bar"
     },
     {
       "id": 50211,
       "muscle_group": null,
-      "name": "ZZTEST Exercise A"
+      "name": "ZZTEST Exercise A",
+      "search": "zztest exercise a"
     },
     {
       "id": 50214,
       "muscle_group": null,
-      "name": "ZZTEST Exercise A2"
+      "name": "ZZTEST Exercise A2",
+      "search": "zztest exercise a2"
     },
     {
       "id": 50213,
       "muscle_group": "Brust",
-      "name": "ZZTEST Exercise B2"
+      "name": "ZZTEST Exercise B2",
+      "search": "zztest exercise b2"
     },
     {
       "id": 50215,
       "muscle_group": "Brust",
-      "name": "ZZTEST Exercise B3"
+      "name": "ZZTEST Exercise B3",
+      "search": "zztest exercise b3"
     },
     {
       "id": 50212,
       "muscle_group": null,
-      "name": "ZZTEST Exercise C"
+      "name": "ZZTEST Exercise C",
+      "search": "zztest exercise c"
     },
     {
       "id": 50216,
       "muscle_group": "Brust",
-      "name": "ZZTEST Exercise C2"
+      "name": "ZZTEST Exercise C2",
+      "search": "zztest exercise c2"
     },
     {
       "id": 50217,
       "muscle_group": null,
-      "name": "ZZTEST Multi 1"
+      "name": "ZZTEST Multi 1",
+      "search": "zztest multi 1"
     },
     {
       "id": 50218,
       "muscle_group": null,
-      "name": "ZZTEST Multi 2"
+      "name": "ZZTEST Multi 2",
+      "search": "zztest multi 2"
     }
   ],
   "has_completed_set": true,
