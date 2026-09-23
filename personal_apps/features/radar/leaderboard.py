@@ -50,6 +50,14 @@ class Row:
     text_ratio: float
     # Concrete stored names that contributed -- `reddit:pennystocks`, not
     # `reddit`. This is the breakdown, and it must stay concrete.
+    #
+    # It lists every scored feed the ticker has a bucket on in the window,
+    # INCLUDING feeds that counted nothing. `_aggregate` admits a bucket on
+    # `mention_z IS NOT NULL`, not on a positive mention count, and a scored
+    # feed that saw nothing still writes a row -- so this is the list of feeds
+    # that were LOOKED AT. Ranking, `venues` and the breadth filter are all
+    # built on it and keep it: changing what it means would change which
+    # companies appear. `activity_sources` answers the other question.
     sources: list
     # How many INDEPENDENT venues those names represent, which is the count of
     # their roots. Two subreddits are two entries in `sources` and one venue:
@@ -73,6 +81,19 @@ class Row:
     # 'no_mentions' (no bucket in the window at all). phrasing.py turns
     # it into words.
     floor_reason: str | None = None
+    # The subset of `sources` that actually counted something: concrete feeds
+    # whose summed mentions over the selected window are greater than zero.
+    #
+    # This is bucket-OBSERVED activity and nothing more. It does not claim the
+    # feeds are independent of each other, that anything on them was verified,
+    # or that a human read them -- two subreddits are two entries here and one
+    # venue, exactly as in `sources`.
+    #
+    # Additive on purpose. `sources`, `venues`, the eligibility floor and the
+    # breadth filter are untouched, so no ticker enters or leaves the board
+    # because this field exists. Defaulted so every existing constructor --
+    # tests included -- keeps working.
+    activity_sources: list = dataclasses.field(default_factory=list)
 
 
 def _universe_rows(tickers):
@@ -92,11 +113,10 @@ sigma_cache: dict = {}
 
 
 def _quote_sigmas(quote_views, today):
-    """Volatility from the history belonging to each selected quote identity.
+    """Volatility from the US history belonging to each selected quote.
 
-    A company-level cached US sigma is not evidence about its Xetra listing.
-    Grouping preserves the batched read for normal US boards while allowing a
-    Germany board's genuine and fallback rows to use their actual markets.
+    Grouped by (market, mic) so each primary venue's closes are read in one
+    batch; every identity here is a US one.
     """
     if any(key[3] != today for key in list(sigma_cache)):
         sigma_cache.clear()
@@ -111,22 +131,6 @@ def _quote_sigmas(quote_views, today):
             by_identity[(quote.market, quote.mic)].append(ticker)
 
     for (market, mic), tickers in by_identity.items():
-        if market == 'de':
-            # A German identity seeds its volatility from whichever of the
-            # ticker's listings actually has depth -- the Xetra sibling, or
-            # the US primary converted into euros. Tradegate itself stores
-            # about two days of closes, and a sigma from two closes is a
-            # number with no information in it.
-            #
-            # Converted rather than raw dollars on purpose: the move this
-            # sigma is compared against is measured in the quote's own
-            # currency, so the volatility must be too.
-            for ticker in tickers:
-                basis = history.resolve_basis(
-                    ticker, quote_views[ticker], history.HISTORY_DAYS, today)
-                sigmas[ticker] = quotes_mod.daily_sigma(list(basis.closes))
-                sigma_cache[(ticker, market, mic, today)] = sigmas[ticker]
-            continue
         closes = history.closes_for(tickers, days=history.HISTORY_DAYS,
                                     today=today, market=market, mic=mic)
         for ticker in tickers:
@@ -295,6 +299,14 @@ def _assemble(ticker, folded, parts, profile, quote, moves, quote_sigmas,
     contributing = sorted({part.source for part in parts})
     # One venue per ROOT, not per stored name -- see Row.venues.
     venues = len({source_root(name) for name in contributing})
+    # The feeds that counted something, out of the feeds that were looked at.
+    # Folded from the SAME aggregated `parts` -- no extra query, and none that
+    # grows with the number of rows. `mentions` is a SUM over an INTEGER
+    # column, so MySQL and MariaDB both hand it back as Decimal; compared
+    # against 0 rather than coerced, because Decimal('0') > 0 is False and a
+    # NULL sum (no rows folded into this source) must not raise.
+    active = sorted({part.source for part in parts
+                     if part.mentions is not None and part.mentions > 0})
     # MIN already skipped NULLs per source; this skips the sources that
     # had nothing but NULLs, so a row with no usable baseline anywhere
     # still reports None rather than raising. Coerced like the aggregates
@@ -306,14 +318,26 @@ def _assemble(ticker, folded, parts, profile, quote, moves, quote_sigmas,
                          if part.baseline_days is not None), default=None)
 
     status = quote.tape_status
-    move = (moves.get((ticker, quote.market))
-            if quote.score_eligible else None)
+    # The move as MEASURED, whatever the session. It used to be discarded
+    # whenever the quote was not score-eligible, which meant that with the
+    # exchange shut every row printed "Move unknown" over a number the board
+    # had already computed -- 50 of 50 rows priced and 0 with a move, measured
+    # on the live target 2026-09-10. It was never unknown; it was withheld,
+    # and the surface said the wrong one of those two things.
+    #
+    # `moves_for` returns None for its own honest reason -- fewer than two
+    # snapshots in the window -- and THAT is the unknown the row should name.
+    move = moves.get((ticker, quote.market))
 
     # A frozen tape reports no movement while mentions explode because it
     # froze. That is maximum divergence produced by an artifact, so the
-    # row carries the mark and no score rather than a flattering number.
+    # row carries the mark and no SCORE rather than a flattering number.
     # 'closed' lands here too and for the same reason -- but it earns no
     # mark, because the exchange being shut says nothing about the stock.
+    #
+    # Note this gate is on the DIVERGENCE and always was: it tests
+    # `score_eligible` itself rather than relying on `move` having been
+    # nulled, so carrying the move through above cannot weaken it.
     value = None
     if quote.score_eligible and move is not None and mention_z is not None:
         sigma = quote_sigmas.get(ticker)
@@ -365,6 +389,7 @@ def _assemble(ticker, folded, parts, profile, quote, moves, quote_sigmas,
         marks=marks,
         eligible=eligible,
         floor_reason=floor_reason,
+        activity_sources=active,
     )
 
 
@@ -382,9 +407,8 @@ def build_rows(sources, now, window_hours=4, segments=(), limit=50,
     The source list is a read-time filter: it re-pools components that were
     stored per source, and never touches how anything was scored (spec 8.6).
 
-    Quote selection supplies its own market/session/tape state per row.  A
-    Germany board can therefore rank a marked US fallback on its US session
-    without treating every row as if it shared the aggregate board session.
+    Quote selection supplies its own session/tape state per row, so no row
+    is treated as if it shared the aggregate board session.
     """
     survivors, excluded, grouped, channel_counts = _chatter_survivors(
         sources, now, window_hours)

@@ -1,0 +1,3988 @@
+{
+ "acquisition": {
+  "reason": null,
+  "retry_after_seconds": null,
+  "state": "ready"
+ },
+ "chatter": {
+  "from": "2026-09-15T08:00:00Z",
+  "normal_per_slot": null,
+  "slots": [
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "partial",
+    "end": "2026-09-15T08:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T08:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "partial",
+    "end": "2026-09-15T09:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T09:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 2,
+    "coverage": "partial",
+    "end": "2026-09-15T09:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T10:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T10:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 10,
+    "coverage": "partial",
+    "end": "2026-09-15T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "partial",
+    "end": "2026-09-15T10:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 8,
+    "coverage": "partial",
+    "end": "2026-09-15T11:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-15T11:15:00Z",
+    "overlap_ambiguous": true,
+    "start": "2026-09-15T11:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "partial",
+    "end": "2026-09-15T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "partial",
+    "end": "2026-09-15T11:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 10,
+    "coverage": "partial",
+    "end": "2026-09-15T12:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "partial",
+    "end": "2026-09-15T12:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 12,
+    "coverage": "partial",
+    "end": "2026-09-15T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:15:00Z",
+    "truncated": true
+   },
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "partial",
+    "end": "2026-09-15T12:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 4,
+    "coverage": "partial",
+    "end": "2026-09-15T13:00:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:45:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 18,
+    "coverage": "partial",
+    "end": "2026-09-15T13:15:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:00:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 12,
+    "coverage": "partial",
+    "end": "2026-09-15T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:15:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 6,
+    "coverage": "partial",
+    "end": "2026-09-15T13:45:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 18,
+    "coverage": "partial",
+    "end": "2026-09-15T13:50:21Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:45:00Z",
+    "truncated": false
+   }
+  ],
+  "step_minutes": 15,
+  "to": "2026-09-15T13:50:21Z",
+  "tone": {
+   "basis": "recorded-judgments",
+   "slots": [
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 3,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 4,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 4,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 1,
+     "neutral": 1,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 3,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 4,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 1,
+     "bullish": 4,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 1,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    null,
+    {
+     "bearish": 0,
+     "bullish": 1,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 1,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 1,
+     "bullish": 4,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 1,
+     "bullish": 5,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 0,
+     "bullish": 3,
+     "neutral": 2,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 1
+    },
+    {
+     "bearish": 0,
+     "bullish": 1,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 2,
+     "bullish": 8,
+     "neutral": 5,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 6,
+     "neutral": 3,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 2
+    },
+    {
+     "bearish": 0,
+     "bullish": 2,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 0
+    },
+    {
+     "bearish": 2,
+     "bullish": 9,
+     "neutral": 4,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    }
+   ]
+  }
+ },
+ "generated_at": "2026-09-15T13:50:21Z",
+ "identity": {
+  "company_id": 11,
+  "currency": "USD",
+  "fingerprint": "dd44d3e3910f39695382f18eca929cbe",
+  "instrument_id": 7,
+  "mapped_at": "2026-08-01T00:00:00Z",
+  "mic": "XNMS",
+  "provider_symbol": "AAPL",
+  "ticker": "AAPL",
+  "venue": "NASDAQ"
+ },
+ "price": {
+  "adjustment_basis": "raw",
+  "cache_age_seconds": 0,
+  "currency": "USD",
+  "expected_intervals": 350,
+  "fallback": false,
+  "interval_seconds": 60,
+  "kind": "bar_close",
+  "latest_observation_at": "2026-09-15T13:50:00Z",
+  "mic": "XNMS",
+  "observations": 350,
+  "points": [
+   {
+    "at": "2026-09-15T08:01:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:01:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:00:00Z",
+    "value": 330.3
+   },
+   {
+    "at": "2026-09-15T08:02:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:02:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:01:00Z",
+    "value": 330.3
+   },
+   {
+    "at": "2026-09-15T08:03:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:03:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:02:00Z",
+    "value": 330.29
+   },
+   {
+    "at": "2026-09-15T08:04:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:04:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:03:00Z",
+    "value": 330.4
+   },
+   {
+    "at": "2026-09-15T08:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:05:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:04:00Z",
+    "value": 330.4788
+   },
+   {
+    "at": "2026-09-15T08:06:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:06:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:05:00Z",
+    "value": 330.74
+   },
+   {
+    "at": "2026-09-15T08:07:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:07:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:06:00Z",
+    "value": 330.53
+   },
+   {
+    "at": "2026-09-15T08:08:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:08:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:07:00Z",
+    "value": 330.5284
+   },
+   {
+    "at": "2026-09-15T08:09:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:09:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:08:00Z",
+    "value": 330.5
+   },
+   {
+    "at": "2026-09-15T08:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:10:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:09:00Z",
+    "value": 330.5235
+   },
+   {
+    "at": "2026-09-15T08:11:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:11:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:10:00Z",
+    "value": 330.4612
+   },
+   {
+    "at": "2026-09-15T08:12:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:12:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:11:00Z",
+    "value": 330.94
+   },
+   {
+    "at": "2026-09-15T08:13:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:13:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:12:00Z",
+    "value": 330.94
+   },
+   {
+    "at": "2026-09-15T08:14:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:14:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:13:00Z",
+    "value": 331.1
+   },
+   {
+    "at": "2026-09-15T08:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:15:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:14:00Z",
+    "value": 331.31
+   },
+   {
+    "at": "2026-09-15T08:16:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:16:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:15:00Z",
+    "value": 331.2156
+   },
+   {
+    "at": "2026-09-15T08:17:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:17:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:16:00Z",
+    "value": 331.1589
+   },
+   {
+    "at": "2026-09-15T08:18:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:18:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:17:00Z",
+    "value": 331.3142
+   },
+   {
+    "at": "2026-09-15T08:19:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:19:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:18:00Z",
+    "value": 331.0995
+   },
+   {
+    "at": "2026-09-15T08:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:20:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:19:00Z",
+    "value": 330.7703
+   },
+   {
+    "at": "2026-09-15T08:21:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:21:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:20:00Z",
+    "value": 330.9942
+   },
+   {
+    "at": "2026-09-15T08:22:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:22:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:21:00Z",
+    "value": 330.9988
+   },
+   {
+    "at": "2026-09-15T08:23:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:23:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:22:00Z",
+    "value": 330.9805
+   },
+   {
+    "at": "2026-09-15T08:24:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:24:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:23:00Z",
+    "value": 330.69
+   },
+   {
+    "at": "2026-09-15T08:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:25:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:24:00Z",
+    "value": 330.85
+   },
+   {
+    "at": "2026-09-15T08:26:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:26:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:25:00Z",
+    "value": 330.94
+   },
+   {
+    "at": "2026-09-15T08:27:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:27:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:26:00Z",
+    "value": 330.905
+   },
+   {
+    "at": "2026-09-15T08:28:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:28:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:27:00Z",
+    "value": 331.13
+   },
+   {
+    "at": "2026-09-15T08:29:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:29:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:28:00Z",
+    "value": 331.0
+   },
+   {
+    "at": "2026-09-15T08:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:30:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:29:00Z",
+    "value": 330.96
+   },
+   {
+    "at": "2026-09-15T08:31:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:31:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:30:00Z",
+    "value": 331.1988
+   },
+   {
+    "at": "2026-09-15T08:32:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:32:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:31:00Z",
+    "value": 331.1121
+   },
+   {
+    "at": "2026-09-15T08:33:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:33:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:32:00Z",
+    "value": 330.99
+   },
+   {
+    "at": "2026-09-15T08:34:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:34:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:33:00Z",
+    "value": 330.9512
+   },
+   {
+    "at": "2026-09-15T08:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:35:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:34:00Z",
+    "value": 330.9545
+   },
+   {
+    "at": "2026-09-15T08:36:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:36:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:35:00Z",
+    "value": 330.976
+   },
+   {
+    "at": "2026-09-15T08:37:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:37:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:36:00Z",
+    "value": 330.9512
+   },
+   {
+    "at": "2026-09-15T08:38:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:38:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:37:00Z",
+    "value": 330.9562
+   },
+   {
+    "at": "2026-09-15T08:39:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:39:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:38:00Z",
+    "value": 331.09
+   },
+   {
+    "at": "2026-09-15T08:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:40:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:39:00Z",
+    "value": 331.15
+   },
+   {
+    "at": "2026-09-15T08:41:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:41:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:40:00Z",
+    "value": 330.9947
+   },
+   {
+    "at": "2026-09-15T08:42:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:42:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:41:00Z",
+    "value": 330.9695
+   },
+   {
+    "at": "2026-09-15T08:43:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:43:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:42:00Z",
+    "value": 331.1547
+   },
+   {
+    "at": "2026-09-15T08:44:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:44:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:43:00Z",
+    "value": 330.9578
+   },
+   {
+    "at": "2026-09-15T08:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:45:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:44:00Z",
+    "value": 330.99
+   },
+   {
+    "at": "2026-09-15T08:46:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:46:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:45:00Z",
+    "value": 330.84
+   },
+   {
+    "at": "2026-09-15T08:47:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:47:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:46:00Z",
+    "value": 331.034
+   },
+   {
+    "at": "2026-09-15T08:48:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:48:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:47:00Z",
+    "value": 331.0537
+   },
+   {
+    "at": "2026-09-15T08:49:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:49:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:48:00Z",
+    "value": 331.0437
+   },
+   {
+    "at": "2026-09-15T08:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:50:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:49:00Z",
+    "value": 330.8162
+   },
+   {
+    "at": "2026-09-15T08:51:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:51:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:50:00Z",
+    "value": 330.8352
+   },
+   {
+    "at": "2026-09-15T08:52:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:52:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:51:00Z",
+    "value": 330.89
+   },
+   {
+    "at": "2026-09-15T08:53:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:53:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:52:00Z",
+    "value": 330.8155
+   },
+   {
+    "at": "2026-09-15T08:54:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:54:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:53:00Z",
+    "value": 330.8345
+   },
+   {
+    "at": "2026-09-15T08:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:55:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:54:00Z",
+    "value": 330.81
+   },
+   {
+    "at": "2026-09-15T08:56:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:56:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:55:00Z",
+    "value": 330.839
+   },
+   {
+    "at": "2026-09-15T08:57:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:57:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:56:00Z",
+    "value": 330.8012
+   },
+   {
+    "at": "2026-09-15T08:58:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:58:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:57:00Z",
+    "value": 330.8003
+   },
+   {
+    "at": "2026-09-15T08:59:00Z",
+    "break_before": false,
+    "end": "2026-09-15T08:59:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:58:00Z",
+    "value": 330.8
+   },
+   {
+    "at": "2026-09-15T09:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:00:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T08:59:00Z",
+    "value": 330.8377
+   },
+   {
+    "at": "2026-09-15T09:01:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:01:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:00:00Z",
+    "value": 330.7647
+   },
+   {
+    "at": "2026-09-15T09:02:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:02:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:01:00Z",
+    "value": 330.7526
+   },
+   {
+    "at": "2026-09-15T09:03:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:03:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:02:00Z",
+    "value": 330.77
+   },
+   {
+    "at": "2026-09-15T09:04:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:04:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:03:00Z",
+    "value": 330.7415
+   },
+   {
+    "at": "2026-09-15T09:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:05:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:04:00Z",
+    "value": 330.77
+   },
+   {
+    "at": "2026-09-15T09:06:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:06:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:05:00Z",
+    "value": 330.81
+   },
+   {
+    "at": "2026-09-15T09:07:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:07:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:06:00Z",
+    "value": 330.7898
+   },
+   {
+    "at": "2026-09-15T09:08:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:08:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:07:00Z",
+    "value": 330.8385
+   },
+   {
+    "at": "2026-09-15T09:09:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:09:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:08:00Z",
+    "value": 330.75
+   },
+   {
+    "at": "2026-09-15T09:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:10:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:09:00Z",
+    "value": 330.75
+   },
+   {
+    "at": "2026-09-15T09:11:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:11:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:10:00Z",
+    "value": 330.58
+   },
+   {
+    "at": "2026-09-15T09:12:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:12:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:11:00Z",
+    "value": 330.4672
+   },
+   {
+    "at": "2026-09-15T09:13:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:13:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:12:00Z",
+    "value": 330.58
+   },
+   {
+    "at": "2026-09-15T09:14:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:14:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:13:00Z",
+    "value": 330.4672
+   },
+   {
+    "at": "2026-09-15T09:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:15:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:14:00Z",
+    "value": 330.57
+   },
+   {
+    "at": "2026-09-15T09:16:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:16:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:15:00Z",
+    "value": 330.7888
+   },
+   {
+    "at": "2026-09-15T09:17:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:17:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:16:00Z",
+    "value": 330.6383
+   },
+   {
+    "at": "2026-09-15T09:18:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:18:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:17:00Z",
+    "value": 330.66
+   },
+   {
+    "at": "2026-09-15T09:19:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:19:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:18:00Z",
+    "value": 330.58
+   },
+   {
+    "at": "2026-09-15T09:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:20:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:19:00Z",
+    "value": 330.58
+   },
+   {
+    "at": "2026-09-15T09:21:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:21:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:20:00Z",
+    "value": 330.65
+   },
+   {
+    "at": "2026-09-15T09:22:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:22:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:21:00Z",
+    "value": 330.6047
+   },
+   {
+    "at": "2026-09-15T09:23:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:23:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:22:00Z",
+    "value": 330.7852
+   },
+   {
+    "at": "2026-09-15T09:24:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:24:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:23:00Z",
+    "value": 330.73
+   },
+   {
+    "at": "2026-09-15T09:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:25:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:24:00Z",
+    "value": 330.68
+   },
+   {
+    "at": "2026-09-15T09:26:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:26:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:25:00Z",
+    "value": 330.7872
+   },
+   {
+    "at": "2026-09-15T09:27:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:27:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:26:00Z",
+    "value": 330.7877
+   },
+   {
+    "at": "2026-09-15T09:28:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:28:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:27:00Z",
+    "value": 330.788
+   },
+   {
+    "at": "2026-09-15T09:29:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:29:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:28:00Z",
+    "value": 330.6535
+   },
+   {
+    "at": "2026-09-15T09:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:30:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:29:00Z",
+    "value": 330.7865
+   },
+   {
+    "at": "2026-09-15T09:31:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:31:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:30:00Z",
+    "value": 330.6535
+   },
+   {
+    "at": "2026-09-15T09:32:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:32:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:31:00Z",
+    "value": 330.75
+   },
+   {
+    "at": "2026-09-15T09:33:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:33:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:32:00Z",
+    "value": 330.65
+   },
+   {
+    "at": "2026-09-15T09:34:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:34:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:33:00Z",
+    "value": 330.6688
+   },
+   {
+    "at": "2026-09-15T09:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:35:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:34:00Z",
+    "value": 330.855
+   },
+   {
+    "at": "2026-09-15T09:36:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:36:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:35:00Z",
+    "value": 330.88
+   },
+   {
+    "at": "2026-09-15T09:37:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:37:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:36:00Z",
+    "value": 330.89
+   },
+   {
+    "at": "2026-09-15T09:38:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:38:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:37:00Z",
+    "value": 330.89
+   },
+   {
+    "at": "2026-09-15T09:39:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:39:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:38:00Z",
+    "value": 330.83
+   },
+   {
+    "at": "2026-09-15T09:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:40:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:39:00Z",
+    "value": 331.0688
+   },
+   {
+    "at": "2026-09-15T09:41:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:41:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:40:00Z",
+    "value": 330.93
+   },
+   {
+    "at": "2026-09-15T09:42:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:42:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:41:00Z",
+    "value": 330.91
+   },
+   {
+    "at": "2026-09-15T09:43:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:43:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:42:00Z",
+    "value": 330.8155
+   },
+   {
+    "at": "2026-09-15T09:44:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:44:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:43:00Z",
+    "value": 330.8188
+   },
+   {
+    "at": "2026-09-15T09:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:45:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:44:00Z",
+    "value": 330.7961
+   },
+   {
+    "at": "2026-09-15T09:46:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:46:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:45:00Z",
+    "value": 330.64
+   },
+   {
+    "at": "2026-09-15T09:47:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:47:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:46:00Z",
+    "value": 330.7
+   },
+   {
+    "at": "2026-09-15T09:48:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:48:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:47:00Z",
+    "value": 330.7197
+   },
+   {
+    "at": "2026-09-15T09:49:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:49:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:48:00Z",
+    "value": 330.82
+   },
+   {
+    "at": "2026-09-15T09:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:50:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:49:00Z",
+    "value": 330.6489
+   },
+   {
+    "at": "2026-09-15T09:51:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:51:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:50:00Z",
+    "value": 330.67
+   },
+   {
+    "at": "2026-09-15T09:52:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:52:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:51:00Z",
+    "value": 330.8155
+   },
+   {
+    "at": "2026-09-15T09:53:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:53:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:52:00Z",
+    "value": 330.7788
+   },
+   {
+    "at": "2026-09-15T09:54:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:54:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:53:00Z",
+    "value": 330.7088
+   },
+   {
+    "at": "2026-09-15T09:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:55:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:54:00Z",
+    "value": 330.7007
+   },
+   {
+    "at": "2026-09-15T09:56:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:56:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:55:00Z",
+    "value": 330.77
+   },
+   {
+    "at": "2026-09-15T09:57:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:57:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:56:00Z",
+    "value": 330.7002
+   },
+   {
+    "at": "2026-09-15T09:58:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:58:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:57:00Z",
+    "value": 330.7
+   },
+   {
+    "at": "2026-09-15T09:59:00Z",
+    "break_before": false,
+    "end": "2026-09-15T09:59:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:58:00Z",
+    "value": 330.71
+   },
+   {
+    "at": "2026-09-15T10:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:00:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T09:59:00Z",
+    "value": 330.8188
+   },
+   {
+    "at": "2026-09-15T10:01:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:01:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:00:00Z",
+    "value": 330.8062
+   },
+   {
+    "at": "2026-09-15T10:02:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:02:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:01:00Z",
+    "value": 330.817
+   },
+   {
+    "at": "2026-09-15T10:03:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:03:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:02:00Z",
+    "value": 330.81
+   },
+   {
+    "at": "2026-09-15T10:04:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:04:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:03:00Z",
+    "value": 330.7047
+   },
+   {
+    "at": "2026-09-15T10:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:05:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:04:00Z",
+    "value": 330.7131
+   },
+   {
+    "at": "2026-09-15T10:06:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:06:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:05:00Z",
+    "value": 330.7
+   },
+   {
+    "at": "2026-09-15T10:07:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:07:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:06:00Z",
+    "value": 330.7
+   },
+   {
+    "at": "2026-09-15T10:08:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:08:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:07:00Z",
+    "value": 330.7888
+   },
+   {
+    "at": "2026-09-15T10:09:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:09:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:08:00Z",
+    "value": 330.77
+   },
+   {
+    "at": "2026-09-15T10:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:10:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:09:00Z",
+    "value": 330.79
+   },
+   {
+    "at": "2026-09-15T10:11:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:11:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:10:00Z",
+    "value": 330.69
+   },
+   {
+    "at": "2026-09-15T10:12:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:12:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:11:00Z",
+    "value": 330.6
+   },
+   {
+    "at": "2026-09-15T10:13:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:13:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:12:00Z",
+    "value": 330.67
+   },
+   {
+    "at": "2026-09-15T10:14:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:14:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:13:00Z",
+    "value": 330.6588
+   },
+   {
+    "at": "2026-09-15T10:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:15:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:14:00Z",
+    "value": 330.53
+   },
+   {
+    "at": "2026-09-15T10:16:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:16:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:15:00Z",
+    "value": 330.6464
+   },
+   {
+    "at": "2026-09-15T10:17:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:17:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:16:00Z",
+    "value": 330.3977
+   },
+   {
+    "at": "2026-09-15T10:18:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:18:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:17:00Z",
+    "value": 330.4788
+   },
+   {
+    "at": "2026-09-15T10:19:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:19:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:18:00Z",
+    "value": 330.3595
+   },
+   {
+    "at": "2026-09-15T10:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:20:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:19:00Z",
+    "value": 330.17
+   },
+   {
+    "at": "2026-09-15T10:21:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:21:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:20:00Z",
+    "value": 330.2655
+   },
+   {
+    "at": "2026-09-15T10:22:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:22:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:21:00Z",
+    "value": 330.15
+   },
+   {
+    "at": "2026-09-15T10:23:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:23:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:22:00Z",
+    "value": 330.3043
+   },
+   {
+    "at": "2026-09-15T10:24:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:24:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:23:00Z",
+    "value": 330.4817
+   },
+   {
+    "at": "2026-09-15T10:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:25:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:24:00Z",
+    "value": 330.37
+   },
+   {
+    "at": "2026-09-15T10:26:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:26:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:25:00Z",
+    "value": 330.46
+   },
+   {
+    "at": "2026-09-15T10:27:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:27:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:26:00Z",
+    "value": 330.4888
+   },
+   {
+    "at": "2026-09-15T10:28:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:28:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:27:00Z",
+    "value": 330.505
+   },
+   {
+    "at": "2026-09-15T10:29:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:29:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:28:00Z",
+    "value": 330.5995
+   },
+   {
+    "at": "2026-09-15T10:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:30:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:29:00Z",
+    "value": 330.57
+   },
+   {
+    "at": "2026-09-15T10:31:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:31:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:30:00Z",
+    "value": 330.37
+   },
+   {
+    "at": "2026-09-15T10:32:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:32:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:31:00Z",
+    "value": 330.3
+   },
+   {
+    "at": "2026-09-15T10:33:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:33:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:32:00Z",
+    "value": 330.54
+   },
+   {
+    "at": "2026-09-15T10:34:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:34:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:33:00Z",
+    "value": 330.2587
+   },
+   {
+    "at": "2026-09-15T10:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:35:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:34:00Z",
+    "value": 330.5988
+   },
+   {
+    "at": "2026-09-15T10:36:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:36:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:35:00Z",
+    "value": 330.36
+   },
+   {
+    "at": "2026-09-15T10:37:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:37:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:36:00Z",
+    "value": 330.2587
+   },
+   {
+    "at": "2026-09-15T10:38:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:38:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:37:00Z",
+    "value": 330.45
+   },
+   {
+    "at": "2026-09-15T10:39:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:39:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:38:00Z",
+    "value": 330.45
+   },
+   {
+    "at": "2026-09-15T10:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:40:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:39:00Z",
+    "value": 330.49
+   },
+   {
+    "at": "2026-09-15T10:41:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:41:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:40:00Z",
+    "value": 330.5237
+   },
+   {
+    "at": "2026-09-15T10:42:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:42:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:41:00Z",
+    "value": 330.48
+   },
+   {
+    "at": "2026-09-15T10:43:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:43:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:42:00Z",
+    "value": 330.4162
+   },
+   {
+    "at": "2026-09-15T10:44:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:44:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:43:00Z",
+    "value": 330.47
+   },
+   {
+    "at": "2026-09-15T10:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:45:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:44:00Z",
+    "value": 330.6188
+   },
+   {
+    "at": "2026-09-15T10:46:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:46:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:45:00Z",
+    "value": 330.45
+   },
+   {
+    "at": "2026-09-15T10:47:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:47:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:46:00Z",
+    "value": 330.47
+   },
+   {
+    "at": "2026-09-15T10:48:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:48:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:47:00Z",
+    "value": 330.4212
+   },
+   {
+    "at": "2026-09-15T10:49:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:49:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:48:00Z",
+    "value": 330.6188
+   },
+   {
+    "at": "2026-09-15T10:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:50:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:49:00Z",
+    "value": 330.4694
+   },
+   {
+    "at": "2026-09-15T10:51:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:51:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:50:00Z",
+    "value": 330.64
+   },
+   {
+    "at": "2026-09-15T10:52:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:52:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:51:00Z",
+    "value": 330.65
+   },
+   {
+    "at": "2026-09-15T10:53:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:53:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:52:00Z",
+    "value": 330.94
+   },
+   {
+    "at": "2026-09-15T10:54:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:54:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:53:00Z",
+    "value": 330.81
+   },
+   {
+    "at": "2026-09-15T10:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:55:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:54:00Z",
+    "value": 330.87
+   },
+   {
+    "at": "2026-09-15T10:56:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:56:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:55:00Z",
+    "value": 330.93
+   },
+   {
+    "at": "2026-09-15T10:57:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:57:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:56:00Z",
+    "value": 330.93
+   },
+   {
+    "at": "2026-09-15T10:58:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:58:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:57:00Z",
+    "value": 330.7512
+   },
+   {
+    "at": "2026-09-15T10:59:00Z",
+    "break_before": false,
+    "end": "2026-09-15T10:59:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:58:00Z",
+    "value": 330.8
+   },
+   {
+    "at": "2026-09-15T11:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:00:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T10:59:00Z",
+    "value": 331.1
+   },
+   {
+    "at": "2026-09-15T11:01:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:01:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:00:00Z",
+    "value": 331.07
+   },
+   {
+    "at": "2026-09-15T11:02:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:02:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:01:00Z",
+    "value": 331.005
+   },
+   {
+    "at": "2026-09-15T11:03:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:03:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:02:00Z",
+    "value": 330.53
+   },
+   {
+    "at": "2026-09-15T11:04:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:04:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:03:00Z",
+    "value": 330.5437
+   },
+   {
+    "at": "2026-09-15T11:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:05:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:04:00Z",
+    "value": 330.6869
+   },
+   {
+    "at": "2026-09-15T11:06:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:06:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:05:00Z",
+    "value": 330.82
+   },
+   {
+    "at": "2026-09-15T11:07:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:07:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:06:00Z",
+    "value": 330.8988
+   },
+   {
+    "at": "2026-09-15T11:08:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:08:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:07:00Z",
+    "value": 330.9922
+   },
+   {
+    "at": "2026-09-15T11:09:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:09:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:08:00Z",
+    "value": 330.9501
+   },
+   {
+    "at": "2026-09-15T11:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:10:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:09:00Z",
+    "value": 330.94
+   },
+   {
+    "at": "2026-09-15T11:11:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:11:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:10:00Z",
+    "value": 330.88
+   },
+   {
+    "at": "2026-09-15T11:12:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:12:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:11:00Z",
+    "value": 331.2488
+   },
+   {
+    "at": "2026-09-15T11:13:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:13:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:12:00Z",
+    "value": 331.16
+   },
+   {
+    "at": "2026-09-15T11:14:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:14:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:13:00Z",
+    "value": 331.2297
+   },
+   {
+    "at": "2026-09-15T11:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:15:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:14:00Z",
+    "value": 331.09
+   },
+   {
+    "at": "2026-09-15T11:16:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:16:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:15:00Z",
+    "value": 331.0
+   },
+   {
+    "at": "2026-09-15T11:17:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:17:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:16:00Z",
+    "value": 331.1
+   },
+   {
+    "at": "2026-09-15T11:18:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:18:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:17:00Z",
+    "value": 331.1555
+   },
+   {
+    "at": "2026-09-15T11:19:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:19:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:18:00Z",
+    "value": 330.9862
+   },
+   {
+    "at": "2026-09-15T11:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:20:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:19:00Z",
+    "value": 330.9
+   },
+   {
+    "at": "2026-09-15T11:21:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:21:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:20:00Z",
+    "value": 330.9888
+   },
+   {
+    "at": "2026-09-15T11:22:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:22:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:21:00Z",
+    "value": 330.82
+   },
+   {
+    "at": "2026-09-15T11:23:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:23:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:22:00Z",
+    "value": 330.8065
+   },
+   {
+    "at": "2026-09-15T11:24:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:24:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:23:00Z",
+    "value": 330.99
+   },
+   {
+    "at": "2026-09-15T11:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:25:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:24:00Z",
+    "value": 331.0014
+   },
+   {
+    "at": "2026-09-15T11:26:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:26:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:25:00Z",
+    "value": 330.95
+   },
+   {
+    "at": "2026-09-15T11:27:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:27:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:26:00Z",
+    "value": 330.895
+   },
+   {
+    "at": "2026-09-15T11:28:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:28:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:27:00Z",
+    "value": 330.9488
+   },
+   {
+    "at": "2026-09-15T11:29:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:29:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:28:00Z",
+    "value": 330.93
+   },
+   {
+    "at": "2026-09-15T11:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:30:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:29:00Z",
+    "value": 331.06
+   },
+   {
+    "at": "2026-09-15T11:31:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:31:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:30:00Z",
+    "value": 331.06
+   },
+   {
+    "at": "2026-09-15T11:32:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:32:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:31:00Z",
+    "value": 330.9412
+   },
+   {
+    "at": "2026-09-15T11:33:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:33:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:32:00Z",
+    "value": 330.8012
+   },
+   {
+    "at": "2026-09-15T11:34:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:34:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:33:00Z",
+    "value": 330.9267
+   },
+   {
+    "at": "2026-09-15T11:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:35:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:34:00Z",
+    "value": 330.8052
+   },
+   {
+    "at": "2026-09-15T11:36:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:36:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:35:00Z",
+    "value": 330.89
+   },
+   {
+    "at": "2026-09-15T11:37:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:37:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:36:00Z",
+    "value": 330.8988
+   },
+   {
+    "at": "2026-09-15T11:38:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:38:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:37:00Z",
+    "value": 330.8142
+   },
+   {
+    "at": "2026-09-15T11:39:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:39:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:38:00Z",
+    "value": 330.8003
+   },
+   {
+    "at": "2026-09-15T11:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:40:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:39:00Z",
+    "value": 330.878
+   },
+   {
+    "at": "2026-09-15T11:41:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:41:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:40:00Z",
+    "value": 330.8587
+   },
+   {
+    "at": "2026-09-15T11:42:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:42:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:41:00Z",
+    "value": 330.92
+   },
+   {
+    "at": "2026-09-15T11:43:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:43:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:42:00Z",
+    "value": 330.935
+   },
+   {
+    "at": "2026-09-15T11:44:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:44:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:43:00Z",
+    "value": 331.06
+   },
+   {
+    "at": "2026-09-15T11:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:45:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:44:00Z",
+    "value": 331.06
+   },
+   {
+    "at": "2026-09-15T11:46:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:46:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:45:00Z",
+    "value": 331.06
+   },
+   {
+    "at": "2026-09-15T11:47:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:47:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:46:00Z",
+    "value": 331.05
+   },
+   {
+    "at": "2026-09-15T11:48:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:48:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:47:00Z",
+    "value": 331.0899
+   },
+   {
+    "at": "2026-09-15T11:49:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:49:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:48:00Z",
+    "value": 331.0236
+   },
+   {
+    "at": "2026-09-15T11:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:50:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:49:00Z",
+    "value": 331.0252
+   },
+   {
+    "at": "2026-09-15T11:51:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:51:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:50:00Z",
+    "value": 331.1462
+   },
+   {
+    "at": "2026-09-15T11:52:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:52:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:51:00Z",
+    "value": 331.126
+   },
+   {
+    "at": "2026-09-15T11:53:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:53:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:52:00Z",
+    "value": 331.14
+   },
+   {
+    "at": "2026-09-15T11:54:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:54:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:53:00Z",
+    "value": 331.335
+   },
+   {
+    "at": "2026-09-15T11:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:55:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:54:00Z",
+    "value": 331.3232
+   },
+   {
+    "at": "2026-09-15T11:56:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:56:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:55:00Z",
+    "value": 331.3488
+   },
+   {
+    "at": "2026-09-15T11:57:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:57:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:56:00Z",
+    "value": 331.2996
+   },
+   {
+    "at": "2026-09-15T11:58:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:58:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:57:00Z",
+    "value": 331.4
+   },
+   {
+    "at": "2026-09-15T11:59:00Z",
+    "break_before": false,
+    "end": "2026-09-15T11:59:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:58:00Z",
+    "value": 331.3012
+   },
+   {
+    "at": "2026-09-15T12:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:00:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T11:59:00Z",
+    "value": 331.3
+   },
+   {
+    "at": "2026-09-15T12:01:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:01:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:00:00Z",
+    "value": 331.35
+   },
+   {
+    "at": "2026-09-15T12:02:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:02:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:01:00Z",
+    "value": 331.31
+   },
+   {
+    "at": "2026-09-15T12:03:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:03:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:02:00Z",
+    "value": 331.24
+   },
+   {
+    "at": "2026-09-15T12:04:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:04:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:03:00Z",
+    "value": 331.3
+   },
+   {
+    "at": "2026-09-15T12:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:05:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:04:00Z",
+    "value": 331.7
+   },
+   {
+    "at": "2026-09-15T12:06:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:06:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:05:00Z",
+    "value": 331.68
+   },
+   {
+    "at": "2026-09-15T12:07:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:07:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:06:00Z",
+    "value": 331.57
+   },
+   {
+    "at": "2026-09-15T12:08:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:08:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:07:00Z",
+    "value": 331.5093
+   },
+   {
+    "at": "2026-09-15T12:09:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:09:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:08:00Z",
+    "value": 331.6499
+   },
+   {
+    "at": "2026-09-15T12:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:10:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:09:00Z",
+    "value": 331.5
+   },
+   {
+    "at": "2026-09-15T12:11:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:11:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:10:00Z",
+    "value": 331.63
+   },
+   {
+    "at": "2026-09-15T12:12:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:12:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:11:00Z",
+    "value": 331.675
+   },
+   {
+    "at": "2026-09-15T12:13:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:13:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:12:00Z",
+    "value": 331.629
+   },
+   {
+    "at": "2026-09-15T12:14:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:14:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:13:00Z",
+    "value": 331.6585
+   },
+   {
+    "at": "2026-09-15T12:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:15:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:14:00Z",
+    "value": 331.6485
+   },
+   {
+    "at": "2026-09-15T12:16:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:16:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:15:00Z",
+    "value": 331.5261
+   },
+   {
+    "at": "2026-09-15T12:17:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:17:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:16:00Z",
+    "value": 331.4103
+   },
+   {
+    "at": "2026-09-15T12:18:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:18:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:17:00Z",
+    "value": 331.59
+   },
+   {
+    "at": "2026-09-15T12:19:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:19:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:18:00Z",
+    "value": 331.605
+   },
+   {
+    "at": "2026-09-15T12:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:20:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:19:00Z",
+    "value": 331.6335
+   },
+   {
+    "at": "2026-09-15T12:21:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:21:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:20:00Z",
+    "value": 331.4732
+   },
+   {
+    "at": "2026-09-15T12:22:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:22:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:21:00Z",
+    "value": 331.402
+   },
+   {
+    "at": "2026-09-15T12:23:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:23:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:22:00Z",
+    "value": 331.4796
+   },
+   {
+    "at": "2026-09-15T12:24:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:24:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:23:00Z",
+    "value": 331.4
+   },
+   {
+    "at": "2026-09-15T12:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:25:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:24:00Z",
+    "value": 331.323
+   },
+   {
+    "at": "2026-09-15T12:26:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:26:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:25:00Z",
+    "value": 331.4662
+   },
+   {
+    "at": "2026-09-15T12:27:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:27:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:26:00Z",
+    "value": 331.32
+   },
+   {
+    "at": "2026-09-15T12:28:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:28:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:27:00Z",
+    "value": 331.332
+   },
+   {
+    "at": "2026-09-15T12:29:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:29:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:28:00Z",
+    "value": 331.3
+   },
+   {
+    "at": "2026-09-15T12:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:30:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:29:00Z",
+    "value": 331.38
+   },
+   {
+    "at": "2026-09-15T12:31:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:31:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:30:00Z",
+    "value": 331.2298
+   },
+   {
+    "at": "2026-09-15T12:32:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:32:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:31:00Z",
+    "value": 331.2312
+   },
+   {
+    "at": "2026-09-15T12:33:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:33:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:32:00Z",
+    "value": 331.347
+   },
+   {
+    "at": "2026-09-15T12:34:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:34:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:33:00Z",
+    "value": 331.27
+   },
+   {
+    "at": "2026-09-15T12:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:35:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:34:00Z",
+    "value": 331.33
+   },
+   {
+    "at": "2026-09-15T12:36:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:36:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:35:00Z",
+    "value": 331.2516
+   },
+   {
+    "at": "2026-09-15T12:37:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:37:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:36:00Z",
+    "value": 331.27
+   },
+   {
+    "at": "2026-09-15T12:38:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:38:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:37:00Z",
+    "value": 331.2758
+   },
+   {
+    "at": "2026-09-15T12:39:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:39:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:38:00Z",
+    "value": 331.2
+   },
+   {
+    "at": "2026-09-15T12:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:40:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:39:00Z",
+    "value": 331.2
+   },
+   {
+    "at": "2026-09-15T12:41:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:41:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:40:00Z",
+    "value": 331.18
+   },
+   {
+    "at": "2026-09-15T12:42:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:42:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:41:00Z",
+    "value": 331.0412
+   },
+   {
+    "at": "2026-09-15T12:43:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:43:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:42:00Z",
+    "value": 331.18
+   },
+   {
+    "at": "2026-09-15T12:44:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:44:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:43:00Z",
+    "value": 331.17
+   },
+   {
+    "at": "2026-09-15T12:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:45:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:44:00Z",
+    "value": 331.2012
+   },
+   {
+    "at": "2026-09-15T12:46:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:46:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:45:00Z",
+    "value": 331.11
+   },
+   {
+    "at": "2026-09-15T12:47:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:47:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:46:00Z",
+    "value": 331.3
+   },
+   {
+    "at": "2026-09-15T12:48:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:48:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:47:00Z",
+    "value": 331.1749
+   },
+   {
+    "at": "2026-09-15T12:49:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:49:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:48:00Z",
+    "value": 331.49
+   },
+   {
+    "at": "2026-09-15T12:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:50:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:49:00Z",
+    "value": 331.4103
+   },
+   {
+    "at": "2026-09-15T12:51:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:51:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:50:00Z",
+    "value": 331.39
+   },
+   {
+    "at": "2026-09-15T12:52:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:52:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:51:00Z",
+    "value": 331.4224
+   },
+   {
+    "at": "2026-09-15T12:53:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:53:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:52:00Z",
+    "value": 331.43
+   },
+   {
+    "at": "2026-09-15T12:54:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:54:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:53:00Z",
+    "value": 331.4307
+   },
+   {
+    "at": "2026-09-15T12:55:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:55:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:54:00Z",
+    "value": 331.431
+   },
+   {
+    "at": "2026-09-15T12:56:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:56:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:55:00Z",
+    "value": 331.3635
+   },
+   {
+    "at": "2026-09-15T12:57:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:57:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:56:00Z",
+    "value": 331.35
+   },
+   {
+    "at": "2026-09-15T12:58:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:58:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:57:00Z",
+    "value": 331.36
+   },
+   {
+    "at": "2026-09-15T12:59:00Z",
+    "break_before": false,
+    "end": "2026-09-15T12:59:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:58:00Z",
+    "value": 331.4499
+   },
+   {
+    "at": "2026-09-15T13:00:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:00:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T12:59:00Z",
+    "value": 331.45
+   },
+   {
+    "at": "2026-09-15T13:01:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:01:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:00:00Z",
+    "value": 331.3655
+   },
+   {
+    "at": "2026-09-15T13:02:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:02:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:01:00Z",
+    "value": 331.3532
+   },
+   {
+    "at": "2026-09-15T13:03:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:03:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:02:00Z",
+    "value": 331.22
+   },
+   {
+    "at": "2026-09-15T13:04:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:04:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:03:00Z",
+    "value": 331.2435
+   },
+   {
+    "at": "2026-09-15T13:05:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:05:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:04:00Z",
+    "value": 331.26
+   },
+   {
+    "at": "2026-09-15T13:06:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:06:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:05:00Z",
+    "value": 331.19
+   },
+   {
+    "at": "2026-09-15T13:07:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:07:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:06:00Z",
+    "value": 331.18
+   },
+   {
+    "at": "2026-09-15T13:08:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:08:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:07:00Z",
+    "value": 331.1762
+   },
+   {
+    "at": "2026-09-15T13:09:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:09:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:08:00Z",
+    "value": 331.39
+   },
+   {
+    "at": "2026-09-15T13:10:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:10:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:09:00Z",
+    "value": 331.478
+   },
+   {
+    "at": "2026-09-15T13:11:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:11:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:10:00Z",
+    "value": 331.4487
+   },
+   {
+    "at": "2026-09-15T13:12:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:12:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:11:00Z",
+    "value": 331.21
+   },
+   {
+    "at": "2026-09-15T13:13:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:13:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:12:00Z",
+    "value": 331.3018
+   },
+   {
+    "at": "2026-09-15T13:14:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:14:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:13:00Z",
+    "value": 331.41
+   },
+   {
+    "at": "2026-09-15T13:15:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:15:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:14:00Z",
+    "value": 331.355
+   },
+   {
+    "at": "2026-09-15T13:16:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:16:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:15:00Z",
+    "value": 331.4
+   },
+   {
+    "at": "2026-09-15T13:17:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:17:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:16:00Z",
+    "value": 331.4
+   },
+   {
+    "at": "2026-09-15T13:18:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:18:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:17:00Z",
+    "value": 331.4173
+   },
+   {
+    "at": "2026-09-15T13:19:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:19:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:18:00Z",
+    "value": 331.39
+   },
+   {
+    "at": "2026-09-15T13:20:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:20:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:19:00Z",
+    "value": 331.4299
+   },
+   {
+    "at": "2026-09-15T13:21:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:21:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:20:00Z",
+    "value": 331.4507
+   },
+   {
+    "at": "2026-09-15T13:22:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:22:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:21:00Z",
+    "value": 331.57
+   },
+   {
+    "at": "2026-09-15T13:23:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:23:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:22:00Z",
+    "value": 331.63
+   },
+   {
+    "at": "2026-09-15T13:24:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:24:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:23:00Z",
+    "value": 331.6012
+   },
+   {
+    "at": "2026-09-15T13:25:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:25:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:24:00Z",
+    "value": 331.6
+   },
+   {
+    "at": "2026-09-15T13:26:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:26:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:25:00Z",
+    "value": 331.19
+   },
+   {
+    "at": "2026-09-15T13:27:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:27:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:26:00Z",
+    "value": 331.28
+   },
+   {
+    "at": "2026-09-15T13:28:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:28:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:27:00Z",
+    "value": 330.49
+   },
+   {
+    "at": "2026-09-15T13:29:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:29:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:28:00Z",
+    "value": 330.58
+   },
+   {
+    "at": "2026-09-15T13:30:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:30:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:29:00Z",
+    "value": 330.19
+   },
+   {
+    "at": "2026-09-15T13:31:00Z",
+    "break_before": true,
+    "end": "2026-09-15T13:31:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:30:00Z",
+    "value": 331.0299987792969
+   },
+   {
+    "at": "2026-09-15T13:32:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:32:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:31:00Z",
+    "value": 330.4200134277344
+   },
+   {
+    "at": "2026-09-15T13:33:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:33:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:32:00Z",
+    "value": 330.5899963378906
+   },
+   {
+    "at": "2026-09-15T13:34:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:34:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:33:00Z",
+    "value": 329.98968505859375
+   },
+   {
+    "at": "2026-09-15T13:35:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:35:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:34:00Z",
+    "value": 330.1700134277344
+   },
+   {
+    "at": "2026-09-15T13:36:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:36:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:35:00Z",
+    "value": 330.3699951171875
+   },
+   {
+    "at": "2026-09-15T13:37:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:37:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:36:00Z",
+    "value": 330.6449890136719
+   },
+   {
+    "at": "2026-09-15T13:38:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:38:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:37:00Z",
+    "value": 330.9200134277344
+   },
+   {
+    "at": "2026-09-15T13:39:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:39:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:38:00Z",
+    "value": 331.2250061035156
+   },
+   {
+    "at": "2026-09-15T13:40:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:40:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:39:00Z",
+    "value": 331.28509521484375
+   },
+   {
+    "at": "2026-09-15T13:41:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:41:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:40:00Z",
+    "value": 330.6200866699219
+   },
+   {
+    "at": "2026-09-15T13:42:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:42:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:41:00Z",
+    "value": 330.7900085449219
+   },
+   {
+    "at": "2026-09-15T13:43:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:43:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:42:00Z",
+    "value": 330.2049865722656
+   },
+   {
+    "at": "2026-09-15T13:44:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:44:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:43:00Z",
+    "value": 330.30999755859375
+   },
+   {
+    "at": "2026-09-15T13:45:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:45:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:44:00Z",
+    "value": 330.30499267578125
+   },
+   {
+    "at": "2026-09-15T13:46:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:46:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:45:00Z",
+    "value": 330.6400146484375
+   },
+   {
+    "at": "2026-09-15T13:47:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:47:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:46:00Z",
+    "value": 330.5400085449219
+   },
+   {
+    "at": "2026-09-15T13:48:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:48:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:47:00Z",
+    "value": 330.5950012207031
+   },
+   {
+    "at": "2026-09-15T13:49:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:49:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:48:00Z",
+    "value": 330.2850036621094
+   },
+   {
+    "at": "2026-09-15T13:50:00Z",
+    "break_before": false,
+    "end": "2026-09-15T13:50:00Z",
+    "provisional": false,
+    "regime": "alpaca_sip:provider_bar_close:raw",
+    "segment": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+    "start": "2026-09-15T13:49:00Z",
+    "value": 330.4599914550781
+   }
+  ],
+  "price_basis": "provider_bar_close",
+  "received_at": "2026-09-15T13:50:21Z",
+  "regimes": [
+   {
+    "adjustment_basis": "raw",
+    "id": "alpaca_sip:provider_bar_close:raw",
+    "price_basis": "provider_bar_close",
+    "source": "alpaca_sip"
+   }
+  ],
+  "source": "alpaca_sip",
+  "stale": false
+ },
+ "span": "1D",
+ "version": 1,
+ "warnings": [
+  "price: 1 provider point(s) off the bar grid were omitted; they are not completed intervals",
+  "chatter: bare reddit and a subreddit source overlap in a slot; that slot total is withheld",
+  "tone: colours use retained recorded judgments only; older chatter is unavailable"
+ ],
+ "window": {
+  "bands": [
+   {
+    "from": "2026-09-15T08:00:00Z",
+    "state": "premarket",
+    "to": "2026-09-15T13:30:00Z"
+   },
+   {
+    "from": "2026-09-15T13:30:00Z",
+    "state": "regular",
+    "to": "2026-09-15T13:50:21Z"
+   }
+  ],
+  "calendar_basis": "modeled",
+  "from": "2026-09-15T08:00:00Z",
+  "partial": true,
+  "session_dates": [
+   "2026-09-15"
+  ],
+  "timezone": "America/New_York",
+  "to": "2026-09-15T13:50:21Z"
+ }
+}

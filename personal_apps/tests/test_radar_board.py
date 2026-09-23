@@ -120,13 +120,29 @@ def at_hour(series, hours_ago):
     return next(point for point in series if point.hour == want)
 
 
-def test_xetra_gap_before_regular_open_points_to_todays_regular_open():
-    now = dt.datetime(2026, 8, 28, 6, 57)
+def test_before_the_us_premarket_the_boundary_is_todays_premarket_open():
+    # 03:57 New York on Friday 2026-08-28: closed, pre-market opens at 04:00.
+    now = dt.datetime(2026, 8, 28, 7, 57)
 
-    label, boundary = board._next_boundary('de', now, 'closed')
+    label, boundary = board._next_boundary('us', now, 'closed')
 
-    assert (label, boundary) == ('opens', dt.datetime(2026, 8, 28, 7, 0,
+    assert (label, boundary) == ('opens', dt.datetime(2026, 8, 28, 8, 0,
                                                        tzinfo=dt.timezone.utc))
+
+
+def test_a_weekend_boundary_is_the_next_trading_days_premarket():
+    # Saturday 2026-08-29: the next session is Monday's pre-market.
+    now = dt.datetime(2026, 8, 29, 12, 0)
+
+    label, boundary = board._next_boundary('us', now, 'closed')
+
+    assert (label, boundary) == ('opens', dt.datetime(2026, 8, 31, 8, 0,
+                                                       tzinfo=dt.timezone.utc))
+
+
+def test_the_board_names_only_the_us_market():
+    with pytest.raises(ValueError, match='unknown market: de'):
+        board._next_boundary('de', dt.datetime(2026, 8, 28, 7, 57), 'closed')
 
 
 # ----------------------------------------------------------------- series ---

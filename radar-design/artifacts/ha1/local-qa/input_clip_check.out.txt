@@ -1,0 +1,51 @@
+﻿{
+ "fingerprint": "8781d5381f8141f28720a469e3c415fe64f84a032b4a3dce952450398fde36c9",
+ "320": [
+  {
+   "name": "analysis_from",
+   "value": "2026-09-08",
+   "clientWidth": 117,
+   "scrollWidth": 126,
+   "clipped": true
+  },
+  {
+   "name": "analysis_to",
+   "value": "2026-09-14",
+   "clientWidth": 117,
+   "scrollWidth": 126,
+   "clipped": true
+  }
+ ],
+ "390": [
+  {
+   "name": "analysis_from",
+   "value": "2026-09-08",
+   "clientWidth": 152,
+   "scrollWidth": 152,
+   "clipped": false
+  },
+  {
+   "name": "analysis_to",
+   "value": "2026-09-14",
+   "clientWidth": 152,
+   "scrollWidth": 152,
+   "clipped": false
+  }
+ ],
+ "768": [
+  {
+   "name": "analysis_from",
+   "value": "2026-09-08",
+   "clientWidth": 237,
+   "scrollWidth": 237,
+   "clipped": false
+  },
+  {
+   "name": "analysis_to",
+   "value": "2026-09-14",
+   "clientWidth": 237,
+   "scrollWidth": 237,
+   "clipped": false
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+{
+  "rows": 43008,
+  "row_dicts_mib": 9.52,
+  "peak_including_rows_and_reducer_mib": 15.78,
+  "chatter_json_bytes": 99582,
+  "reducer_plus_build_seconds_under_tracemalloc": 1.2,
+  "budget_reference": {
+    "incremental_allocation_mib": 32,
+    "response_bytes": 1048576
+  },
+  "excluded": [
+    "pymysql/SQLAlchemy result rows",
+    "Flask/jsonify",
+    "price series"
+  ]
+}

@@ -110,67 +110,82 @@ def test_a_scored_eligible_ticker_becomes_a_row(board):
     assert rows[0].mentions == 10
 
 
-def test_germany_row_uses_a_marked_us_quote_fallback(board):
-    """A missing Xetra instrument does not disappear or pretend to be EUR."""
-    universe_row('LBDE')
-    scored('LBDE')
-    quoted('LBDE', '100.00', '98.00')
+def test_the_board_ranks_us_quotes_only(board):
+    """A US row carries its US dollar quote; no other market can be asked."""
+    universe_row('LBUS')
+    scored('LBUS')
+    quoted('LBUS', '100.00', '98.00')
     db.session.commit()
 
-    row = build_rows(['bluesky'], NOW, market='de')[0]
+    row = build_rows(['bluesky'], NOW)[0]
 
     assert row.quote.market == 'us'
     assert row.quote.currency == 'USD'
-    assert row.quote.is_fallback is True
+    assert not hasattr(row.quote, 'is_fallback')
     assert row.quote.session == 'regular'
+    with pytest.raises(ValueError, match='unknown market'):
+        build_rows(['bluesky'], NOW, market='de')
 
 
-def test_eod_german_quote_cannot_produce_divergence(board):
-    """A retained prior-day Xetra print remains readable but never looks live."""
+def test_eod_quote_cannot_produce_divergence(board):
+    """A retained prior-day print remains readable but never looks live."""
     ticker = 'LBEOD'
     universe_row(ticker)
     scored(ticker)
     db.session.add(RadarInstrument(
-        ticker=ticker, market='de', venue='Xetra', mic='XETR',
-        provider_symbol='LBEOD', currency='EUR', is_primary=True,
+        ticker=ticker, market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol='LBEOD', currency='USD', is_primary=True,
         mapping_status='mapped', mapped_at=NOW))
     db.session.add(RadarQuote(
-        ticker=ticker, market='de', mic='XETR', currency='EUR',
+        ticker=ticker, market='us', mic='XNAS', currency='USD',
         provider_symbol='LBEOD', fetched_at=NOW - dt.timedelta(minutes=5),
         quote_ts=NOW - dt.timedelta(days=1), price=decimal.Decimal('100'),
         prev_close=decimal.Decimal('98'), volume=1000))
     db.session.commit()
 
-    row = build_rows(['bluesky'], NOW, market='de')[0]
+    row = build_rows(['bluesky'], NOW)[0]
 
     assert row.quote.quality == 'eod'
     assert row.divergence is None
 
 
-def test_german_quote_does_not_use_the_us_cached_sigma(board):
-    """No Xetra close history means no German volatility opinion."""
-    ticker = 'LBDESIG'
+def test_archived_prints_never_move_or_price_a_us_row(board):
+    """Archived non-US instruments and moving prints for the same ticker
+    stay in the database and out of the ranking."""
+    ticker = 'LBARCH'
     universe_row(ticker)
     scored(ticker)
-    profile = TickerUniverse.query.filter_by(symbol=ticker).one()
-    profile.daily_sigma = 0.01
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol=ticker, currency='USD', is_primary=True,
+        mapping_status='mapped', mapped_at=NOW))
     db.session.add(RadarInstrument(
         ticker=ticker, market='de', venue='Xetra', mic='XETR',
         provider_symbol=ticker, currency='EUR', is_primary=True,
         mapping_status='mapped', mapped_at=NOW))
-    for minutes, price in ((30, '100'), (5, '101')):
+    for minutes, us_price, archived_price in ((30, '100', '80'),
+                                              (5, '100', '120')):
         when = NOW - dt.timedelta(minutes=minutes)
         db.session.add(RadarQuote(
-            ticker=ticker, market='de', mic='XETR', currency='EUR',
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
             provider_symbol=ticker, fetched_at=when, quote_ts=when,
-            price=decimal.Decimal(price), prev_close=decimal.Decimal('100')))
+            price=decimal.Decimal(us_price),
+            prev_close=decimal.Decimal('100')))
+        db.session.add(RadarQuote(
+            ticker=ticker, market='de', mic='XETR', currency='EUR',
+            provider_symbol=ticker,
+            fetched_at=when + dt.timedelta(minutes=1),
+            quote_ts=when + dt.timedelta(minutes=1),
+            price=decimal.Decimal(archived_price),
+            prev_close=decimal.Decimal('100')))
     db.session.commit()
 
-    row = build_rows(['bluesky'], NOW, market='de')[0]
+    row = build_rows(['bluesky'], NOW)[0]
 
-    assert row.quote.market == 'de'
-    assert row.price_move == decimal.Decimal('0.01')
-    assert row.divergence is None
+    assert (row.quote.market, row.quote.mic, row.quote.currency) == (
+        'us', 'XNAS', 'USD')
+    assert row.quote.price == decimal.Decimal('100')
+    assert row.price_move == decimal.Decimal('0')
 
 
 def test_an_ineligible_ticker_is_excluded_not_ranked_low(board):
@@ -738,3 +753,228 @@ def test_pinned_rows_keep_the_order_asked_and_drop_duplicates(board):
 
     assert [r.ticker for r in rows] == ['LBP2', 'LBP1']
     assert leaderboard.build_pinned([], ['bluesky'], NOW) == []
+
+
+def test_a_closed_exchange_keeps_the_move_and_drops_only_the_score(board):
+    """The move is measured; the SCORE is what a frozen tape invalidates.
+
+    Both used to be discarded together, so with the exchange shut every row
+    printed "Move unknown" over a number the board had already computed.
+    """
+    universe_row('LBSHUT')
+    scored('LBSHUT')
+    # Two snapshots in the window, so the move is genuinely measurable, and a
+    # quote_ts old enough that the tape is not printing.
+    quoted('LBSHUT', '110.00', '100.00', minutes_ago=200)
+    quoted('LBSHUT', '100.00', '100.00', minutes_ago=30,
+           quote_ts=NOW - dt.timedelta(hours=9))
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBSHUT'], ['bluesky'], NOW,
+                                     window_hours=24)
+
+    assert row.quote.score_eligible is False, 'the fixture must be ineligible'
+    assert row.price_move is not None, 'the measured move must survive'
+    # The score is what the artifact invalidates, and it is still refused.
+    assert row.divergence is None
+
+
+def test_a_move_nobody_could_measure_is_still_none(board):
+    """One snapshot is not a flat price. `moves_for` decides that, and it is
+    the only thing the row should ever call unknown."""
+    universe_row('LBONE')
+    scored('LBONE')
+    quoted('LBONE', '100.00', '100.00', minutes_ago=30)
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBONE'], ['bluesky'], NOW,
+                                     window_hours=24)
+
+    assert row.price_move is None
+
+
+# --- activity_sources: the feeds that counted something ---------------------
+#
+# `sources` lists the feeds that were LOOKED AT: _aggregate admits a bucket on
+# `mention_z IS NOT NULL`, not on a positive mention count, so a scored feed
+# that saw nothing still appears. On the live board that made "36 feeds" the
+# answer for every row. `activity_sources` is the measured subset, and it is
+# additive -- nothing below may change which tickers rank, or in what order.
+
+
+def test_a_scored_feed_that_counted_nothing_is_not_activity(board):
+    universe_row('LBACT')
+    scored('LBACT', source='bluesky', mentions=8)
+    scored('LBACT', source='reddit:options', mentions=0, authors=0)
+    quoted('LBACT', '10.00', '10.00')
+    db.session.commit()
+
+    [row] = build_rows(['bluesky', 'reddit'], NOW)
+
+    # Unchanged: both feeds were scored, so both were looked at.
+    assert row.sources == ['bluesky', 'reddit:options']
+    assert row.venues == 2
+    # New: only one of them said anything.
+    assert row.activity_sources == ['bluesky']
+
+
+def test_two_subreddits_that_both_counted_are_two_feeds_and_one_venue(board):
+    universe_row('LBSUB')
+    scored('LBSUB', source='reddit:options', mentions=5)
+    scored('LBSUB', source='reddit:pennystocks', mentions=4)
+    quoted('LBSUB', '10.00', '10.00')
+    db.session.commit()
+
+    [row] = build_rows(['reddit'], NOW)
+
+    assert row.activity_sources == ['reddit:options', 'reddit:pennystocks']
+    # Two entries, one venue. The new field claims no independence.
+    assert row.venues == 1
+
+
+def test_activity_sources_stops_at_the_selected_window(board):
+    """A feed that counted something yesterday did not count it in this
+    window, and the field is a statement about the window."""
+    universe_row('LBWIN')
+    scored('LBWIN', source='bluesky', mentions=9, minutes_ago=30)
+    scored('LBWIN', source='fourchan', mentions=7, minutes_ago=60 * 20)
+    quoted('LBWIN', '10.00', '10.00')
+    db.session.commit()
+
+    four_hour = build_rows(['bluesky', 'fourchan'], NOW, window_hours=4)[0]
+    day = build_rows(['bluesky', 'fourchan'], NOW, window_hours=24)[0]
+
+    assert four_hour.activity_sources == ['bluesky']
+    assert day.activity_sources == ['bluesky', 'fourchan']
+
+
+def test_a_pinned_row_whose_only_feed_counted_nothing_reports_an_empty_list(board):
+    """Empty is a measurement -- every feed on this ticker was looked at and
+    none counted anything. It is not the same as the field being absent."""
+    universe_row('LBQUIET')
+    scored('LBQUIET', source='bluesky', mentions=0, authors=0)
+    quoted('LBQUIET', '10.00', '10.00')
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBQUIET'], ['bluesky'], NOW)
+
+    assert row.eligible is False
+    assert row.sources == ['bluesky']
+    assert row.activity_sources == []
+
+
+def test_a_pinned_row_with_no_bucket_at_all_has_no_activity_either(board):
+    universe_row('LBNONE')
+    quoted('LBNONE', '10.00', '10.00')
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBNONE'], ['bluesky'], NOW)
+
+    assert row.sources == []
+    assert row.activity_sources == []
+
+
+def test_a_pinned_row_that_did_count_carries_its_active_feeds(board):
+    universe_row('LBPIN')
+    scored('LBPIN', source='bluesky', mentions=6)
+    scored('LBPIN', source='fourchan', mentions=0, authors=0)
+    quoted('LBPIN', '10.00', '10.00')
+    db.session.commit()
+
+    [row] = leaderboard.build_pinned(['LBPIN'], ['bluesky', 'fourchan'], NOW)
+
+    assert row.activity_sources == ['bluesky']
+
+
+def test_the_new_field_changes_no_ranking_eligibility_mark_or_score(board):
+    """The guard on the whole change. A ticker carried entirely by a silent
+    feed still fails the floor, and one that ranks ranks identically: the
+    field is a display fact, never an input."""
+    universe_row('LBR1')
+    scored('LBR1', source='bluesky', mentions=30, z=9.0)
+    scored('LBR1', source='reddit:options', mentions=0, authors=0)
+    quoted('LBR1', '10.00', '10.00')
+    universe_row('LBR2')
+    scored('LBR2', source='bluesky', mentions=12, z=4.0)
+    quoted('LBR2', '10.00', '10.00')
+    # Every feed silent: below the floor, and it stays below it.
+    universe_row('LBR3')
+    scored('LBR3', source='bluesky', mentions=0, authors=0)
+    quoted('LBR3', '10.00', '10.00')
+    db.session.commit()
+
+    ranking = leaderboard.build_rows(['bluesky', 'reddit'], NOW)
+
+    assert [r.ticker for r in ranking.rows] == ['LBR1', 'LBR2']
+    assert ranking.excluded.get('too_few_mentions') == 1
+    first = ranking.rows[0]
+    assert first.mentions == 30
+    assert first.venues == 2
+    assert first.marks == []
+    assert first.mention_z is not None
+
+
+def test_the_breadth_filter_still_counts_feeds_looked_at_not_feeds_talking(board):
+    """Recorded deliberately. `min_venues` follows legacy scoring breadth and
+    this correction does NOT move it onto the new field: doing that would
+    change which companies appear, which is a ranking change, not a display
+    one. A separate follow-up owns that question."""
+    universe_row('LBBR')
+    scored('LBBR', source='bluesky', mentions=11)
+    scored('LBBR', source='reddit:options', mentions=0, authors=0)
+    quoted('LBBR', '10.00', '10.00')
+    db.session.commit()
+
+    rows = build_rows(['bluesky', 'reddit'], NOW, min_venues=2)
+
+    # It survives a two-venue floor on one talking feed, exactly as before.
+    assert [r.ticker for r in rows] == ['LBBR']
+    assert rows[0].activity_sources == ['bluesky']
+
+
+def test_activity_sources_adds_no_query_that_grows_with_the_row_count(board):
+    """It is folded out of the aggregate `parts` the board already has, so a
+    board of four rows issues exactly as many statements as a board of one.
+    A per-ticker query for active feeds would fail this."""
+    import sqlalchemy as sa
+
+    def add(ticker, mentions):
+        universe_row(ticker)
+        scored(ticker, source='bluesky', mentions=mentions)
+        scored(ticker, source='reddit:options', mentions=0, authors=0)
+        quoted(ticker, '10.00', '10.00')
+        db.session.commit()
+
+    def build():
+        return leaderboard.build_rows(['bluesky', 'reddit'], NOW)
+
+    def statements():
+        # Warmed first: the daily-sigma cache is per (ticker, market, mic,
+        # day), so a ticker's FIRST build reads closes for it and later ones
+        # do not. Measuring cold would compare a cache miss with a cache hit
+        # rather than one row with four.
+        build()
+        seen = []
+
+        def record(conn, cursor, statement, *rest):
+            seen.append(statement)
+
+        sa.event.listen(db.engine, 'before_cursor_execute', record)
+        try:
+            built = build()
+        finally:
+            sa.event.remove(db.engine, 'before_cursor_execute', record)
+        return len(seen), built.rows
+
+    add('LBQ1', 10)
+    one, single = statements()
+
+    for index, ticker in enumerate(('LBQ2', 'LBQ3', 'LBQ4')):
+        add(ticker, 11 + index)
+    four, quartet = statements()
+
+    assert len(single) == 1 and len(quartet) == 4
+    assert all(r.activity_sources == ['bluesky'] for r in quartet)
+    assert one == four, (
+        f'{four} statements for four rows against {one} for one -- the board '
+        'must not issue a query per row')

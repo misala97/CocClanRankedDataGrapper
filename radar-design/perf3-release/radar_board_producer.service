@@ -1,0 +1,42 @@
+# radar_board_producer.service -- PROPOSED, NOT INSTALLED.
+#
+# PERF3 release package, radar-design/PERF3-RELEASE.md section 2. This is the
+# one process that builds Radar boards for the shared read path. Web workers
+# only read what it publishes. While RADAR_BOARD_SHARED_RESULTS is off, nothing
+# reads its tables, so installing and starting it changes no page.
+#
+# Reconciled read-only against the live personal_apps_web unit on 2026-09-12:
+# root, /root/coc-stats/personal_apps, shared venv, no EnvironmentFile.
+# app.py loads the authoritative root .env itself with override=True.
+#
+# Install (proposal): copy this file to /etc/systemd/system/, then run
+# `systemctl daemon-reload` and `systemctl enable radar_board_producer`. Start it
+# only after the deploy that brings its code and creates its tables
+# (PERF3-RELEASE.md section 4).
+
+[Unit]
+Description=Radar shared board producer
+After=network-online.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/coc-stats/personal_apps
+# The venv that update_coc.sh installs into, and the checkout it resets.
+ExecStart=/root/coc-stats/venv/bin/python run_radar_board_producer.py
+# On SIGTERM the producer sets its stop event, finishes the build in flight and
+# exits. A build takes about 5-6 s at production scale, or 12-16 s for a fresh
+# process's first 1h or 4h board. The 150 s timeout is above the 120 s build
+# lease. A build still running at that point has already lost its lease and
+# could not publish, so the SIGKILL that follows loses nothing a reader could
+# have been served.
+KillSignal=SIGTERM
+TimeoutStopSec=150
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

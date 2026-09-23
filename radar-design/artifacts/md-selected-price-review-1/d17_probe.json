@@ -1,0 +1,52 @@
+{
+  "python": "3.12.6",
+  "executable": "C:\\Users\\michi\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+  "file_mode": {
+    "child": {
+      "outcome": "done",
+      "result": {
+        "kind": "invalid",
+        "reason": "request_spec"
+      },
+      "confirmed": true,
+      "exitcode": 0,
+      "child_pid": 11196,
+      "seconds": 0.734
+    },
+    "marker_lines": [
+      {
+        "pid": "14152",
+        "name": "__main__ (after reset)",
+        "sentinel": "None"
+      },
+      {
+        "pid": "11196",
+        "name": "__mp_main__",
+        "sentinel": "set-in-parent-before-spawn"
+      }
+    ],
+    "child_executed_script_top_level": true,
+    "child_saw_parent_env_sentinel": true
+  },
+  "dash_c_mode": {
+    "returncode": 0,
+    "child": {
+      "outcome": "done",
+      "result": {
+        "kind": "invalid",
+        "reason": "request_spec"
+      },
+      "confirmed": true,
+      "exitcode": 0,
+      "child_pid": 14380
+    },
+    "marker_lines": [
+      {
+        "pid": "5960",
+        "name": "-c parent",
+        "sentinel": "set-in-parent-before-spawn"
+      }
+    ],
+    "child_executed_any_top_level": false
+  }
+}

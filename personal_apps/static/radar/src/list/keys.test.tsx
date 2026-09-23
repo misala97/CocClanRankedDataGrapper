@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { Controls } from '../board/Controls'
+import { envelope } from '../fixtures'
 import { ListPane } from './ListPane'
 import type { BoardPayload, Row, Selection } from '../types'
 
@@ -18,7 +19,7 @@ const row = (ticker: string): Row => ({
     regular_move: 0.02, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     tape_status: 'ok', score_eligible: false, score_term: 'chatter',
-    is_fallback: false, source: 'legacy', price_basis: 'trade',
+    source: 'legacy', price_basis: 'trade',
     bid: null, ask: null,
   }, baseline_days: 20, marks: [], series: [], price_series: [],
   normal_per_hour: null, triplet: {},
@@ -27,11 +28,12 @@ const row = (ticker: string): Row => ({
 })
 
 const selection: Selection = {
-  market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
+  sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
   window: 4, minVenues: 1, sort: null, dir: 'desc' as const,
 }
 
 const payload = (over: Partial<BoardPayload> = {}): BoardPayload => ({
+  ...envelope(),
   generated_at: '2026-08-22T19:00:00Z',
   market: 'us', display_timezone: 'Europe/Berlin',
   market_venue: 'US markets', next_boundary_label: 'closes',

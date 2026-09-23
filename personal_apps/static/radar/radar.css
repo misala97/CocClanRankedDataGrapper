@@ -390,35 +390,6 @@ body {
   margin: 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.015em;
 }
 
-/* The market beside the wordmark, in the strip's own tab vocabulary. Both
-   labels hold weight 600 in every state -- pressed is said by ink and the
-   underline alone, so nothing changes width when the market flips. */
-.brand .market-switch {
-  display: inline-flex; align-items: baseline;
-  margin: 0; padding: 0; border: 0;
-}
-.market-switch legend {
-  position: absolute; width: 1px; height: 1px; overflow: hidden;
-  clip-path: inset(50%); white-space: nowrap;
-}
-.market-switch label { cursor: pointer; }
-.market-switch label + label::before {
-  content: "/"; color: var(--rule); font-size: var(--t-sm); padding: 0 6px;
-}
-.market-switch input { position: absolute; opacity: 0; }
-.market-switch span {
-  font-size: var(--t-sm); font-weight: 600; color: var(--dim);
-  padding: 0 1px 3px; border-bottom: 2px solid transparent;
-  transition: color var(--fast) var(--ease);
-}
-.market-switch label:hover span { color: var(--ink-2); }
-.market-switch input:checked + span {
-  color: var(--ink); border-bottom-color: var(--mark);
-}
-.market-switch input:focus-visible + span {
-  outline: 2px solid var(--mark); outline-offset: 2px;
-}
-
 /* When this board was built. After fifteen minutes the same corner becomes
    an amber age with a reload control; fresh and stale each state the one
    number that matters in that state, never both. */
@@ -484,6 +455,19 @@ body {
 }
 
 .brand .age b { color: var(--warn); font-weight: 600; }
+/* `· refreshing` is not a warning. A stale board is being rebuilt behind the
+   reader and every row on screen is still the last real one; amber here would
+   put a caution on figures that do not deserve it.
+
+   On the token, not on the line: `Last refresh failed` and `not refreshed`
+   render in that same stale line and ARE cautions, and quieting them by
+   association would take the states that want the reader's eye out of the
+   colour that gets it. */
+.brand .age b.queued { color: var(--ink-2); }
+/* Past the hard expiry it does earn the amber: the rows describe a rolling
+   window that has moved on, so the age has stopped being worth printing and
+   the page has already gone to ask for a board that describes this one. */
+.brand .age.expired b { color: var(--warn); }
 .brand .age button {
   font: inherit; font-size: var(--t-xs);
   margin-left: var(--s2); padding: 1px 8px;
@@ -987,6 +971,24 @@ body {
 }
 .none .pointer { color: var(--muted); font-size: 12.5px; }
 .none .pointer b { color: var(--ink-2); font-weight: 600; }
+
+/* Waiting for a board somebody else is building. The same slot as the empty
+   board, and deliberately the same quiet register: nothing is wrong, and a
+   spinner where the rows go would say something is. The controls above stay
+   exactly where the reader left them, which is the way out -- another
+   selection is often one the store has already answered. */
+.none.pending { color: var(--muted); }
+.none.pending b { color: var(--ink-2); font-weight: 600; }
+.none.pending button {
+  font: inherit; font-size: var(--t-xs); display: inline-block;
+  margin-top: var(--s3); padding: 2px 10px;
+  border: 1px solid var(--rule); border-radius: var(--r-pill);
+  background: var(--raise); color: var(--ink-2); cursor: pointer;
+}
+.none.pending button:hover { color: var(--ink); }
+.none.pending button:focus-visible {
+  outline: 2px solid var(--mark); outline-offset: 1px;
+}
 
 /* ------------------------------------------------------- the mark glossary -
    PRODUCT.md: the marks are load-bearing rather than metadata. The rows
@@ -1495,6 +1497,19 @@ body {
   background: var(--raise); border-radius: var(--r-pill);
   padding: 2px 10px; cursor: pointer;
 }
+/* The same message, inside the rows scroller rather than across the top of
+   the page: this one is about the board the reader is waiting for and not
+   about the page, and it belongs where that board would have been. The grid
+   placement above is for the two-pane grid and would take it out of the flow
+   of the list, so it is undone here.
+
+   `inline` for where it sits. It was `busy` until 2026-09-11, which named a
+   state this banner is never in -- the busy generation has its own quiet
+   paragraph, and this one says the builds failed. */
+.oops.inline {
+  grid-row: auto; grid-column: auto;
+  margin: var(--s4) var(--s6); border-radius: var(--r);
+}
 
 /* ------------------------------------------------------------- the press --
    Every control on this page was hover-and-focus only: pressing one produced
@@ -1550,7 +1565,6 @@ body {
      the text and below the underline instead. */
   .t { padding-block: 8px; }
   .summary button { padding-block: 6px; }
-  .market-switch span { padding-block: 8px; }
   .spans button { padding-block: 7px; }
   .tabs, .grp, .spans { column-gap: var(--s3); }
   .post .more { padding-block: var(--s2); }

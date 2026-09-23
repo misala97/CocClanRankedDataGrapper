@@ -89,7 +89,7 @@ export function ChartHover({ chart, geometry, currency = 'USD' }: {
           )}
           <Readout x={xAt(at)} lines={[
             whenLabel(chart, at),
-            geometry.priced && close !== null ? money(close, geometry.high, currency) : 'no close',
+            geometry.priced && close !== null ? money(close, geometry.high) : 'no close',
             talk === null ? 'not observed' : `${count(talk)}${perSlot(chart)}`,
           ]} />
         </>

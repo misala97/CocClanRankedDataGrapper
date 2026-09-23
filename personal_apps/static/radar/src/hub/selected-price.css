@@ -1,0 +1,146 @@
+/* The selected-session chart (MD-SELECTED-PRICE). Scoped under .rh like the
+ * rest of the hub, and drawn in the hub's own tokens: cyan price, the tone
+ * colours the chatter histogram already uses, the neutral wash for a shut or
+ * extended market. Amber marks a qualification (stale, partial), never data
+ * direction. Nothing here restyles another component. */
+
+.rh .rh-sp { margin-top: 10px; }
+
+.rh .rh-sp-meta { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.rh .rh-sp-meta p { margin: 0; overflow-wrap: anywhere; }
+.rh .rh-sp-meta strong { color: var(--ink); font-weight: 600; }
+.rh .rh-sp-stale { color: var(--amber); }
+
+.rh .rh-sp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px !important;
+  font-size: 11px;
+}
+.rh .rh-sp-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.rh .rh-sp-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+.rh .rh-sp-legend i.price { width: 14px; height: 3px; background: var(--price); }
+.rh .rh-sp-legend i.unknown {
+  width: 14px;
+  height: 0;
+  border-top: 2px dashed var(--dim);
+  border-radius: 0;
+}
+.rh .rh-sp-legend i.band { background: var(--line-soft); border: 1px solid var(--line); }
+
+.rh .rh-sp-wrap { padding-right: 0; }
+.rh .rh-sp-canvas { outline: none; border-radius: 5px; width: max-content; }
+.rh .rh-sp-canvas:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.rh .rh-sp-svg {
+  display: block;
+  width: 912px;
+  min-width: 912px;
+  max-width: 912px;
+  /* The accepted area preview's proportions: a tall price lane over a short
+   * discussion lane. Must match selectedPriceGeometry's CHART_W / CHART_H. */
+  aspect-ratio: 912 / 306;
+  height: auto;
+  overflow: visible;
+  cursor: crosshair;
+}
+.rh .rh-sp-svg .ax { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.rh .rh-sp-svg .rh-sp-empty { fill: var(--dim); }
+.rh .rh-sp-svg .band-closed { fill: var(--line-soft); }
+.rh .rh-sp-svg .band-premarket,
+.rh .rh-sp-svg .band-afterhours { fill: rgba(177, 193, 211, 0.07); }
+.rh .rh-sp-svg .rule { stroke: var(--line-soft); stroke-dasharray: 2 4; }
+.rh .rh-sp-svg .floor,
+.rh .rh-sp-svg .tick { stroke: var(--line); vector-effect: non-scaling-stroke; }
+.rh .rh-sp-svg .price-line {
+  fill: none;
+  stroke: var(--price);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+/* The fill under a connected segment: the price colour fading to nothing, so
+ * it reads as one calm shape rather than a second series. Purely decorative --
+ * it carries no value, and nothing can be inspected inside it. The stops are
+ * CSS rather than SVG attributes so the price token stays the one definition. */
+.rh .rh-sp-svg .rh-sp-area { stroke: none; }
+.rh .rh-sp-svg .rh-sp-area-top { stop-color: var(--price); stop-opacity: 0.27; }
+.rh .rh-sp-svg .rh-sp-area-foot { stop-color: var(--price); stop-opacity: 0; }
+
+.rh .rh-sp-svg .price-dot,
+.rh .rh-sp-svg .price-last { fill: var(--price); }
+.rh .rh-sp-svg .price-provisional {
+  fill: var(--white);
+  stroke: var(--price);
+  stroke-width: 1.6;
+  stroke-dasharray: 2 2;
+}
+.rh .rh-sp-svg .price-active { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.rh .rh-sp-svg .unknown {
+  stroke: var(--dim);
+  stroke-width: 2;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+.rh .rh-sp-svg .zero { stroke: var(--muted); stroke-width: 1.5; }
+.rh .rh-sp-svg .partial {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+}
+.rh .rh-sp-svg .active {
+  fill: rgba(237, 243, 250, 0.06);
+  stroke: var(--muted);
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.rh .rh-sp-readout {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  min-height: 44px;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.rh .rh-sp-summary { margin: 8px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+.rh .rh-sp-notes { margin-top: 6px; font-size: 12px; color: var(--muted); }
+.rh .rh-sp-notes summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+}
+.rh .rh-sp-notes ul { margin: 0 0 6px; padding-left: 18px; }
+.rh .rh-sp-notes li { overflow-wrap: anywhere; margin-bottom: 3px; }
+
+.rh .rh-sp-state {
+  min-height: 200px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 16px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+.rh .rh-sp-state p { margin: 0; }

@@ -1,0 +1,32 @@
+static/radar/src/hardening.test.tsx :: the embedded payload falls back to US for a legacy embedded payload with an invalid market
+static/radar/src/hub/Admin.test.tsx :: the operations page says when a collection cycle actually ran
+static/radar/src/hub/Chatter.test.tsx :: filtering the list in place asks the server for a new board when a filter changes
+static/radar/src/hub/Chatter.test.tsx :: filtering the list in place offers the server-side filters the spec requires
+static/radar/src/hub/pending.test.tsx :: a board a worker built for itself, while the reader is looking asks nothing for a tab nobody is looking at
+static/radar/src/hub/pending.test.tsx :: a board a worker built for itself, while the reader is looking asks nothing past its bound when the connection comes back
+static/radar/src/hub/pending.test.tsx :: a board a worker built for itself, while the reader is looking reads again a minute after each answer
+static/radar/src/hub/pending.test.tsx :: a board a worker built for itself, while the reader is looking reads it again a minute after it arrived, once, as a read
+static/radar/src/hub/pending.test.tsx :: a board a worker built for itself, while the reader is looking reads once when the reader comes back inside the bound
+static/radar/src/hub/pending.test.tsx :: a board a worker built for itself, while the reader is looking sends nothing at or past its bound
+static/radar/src/hub/pending.test.tsx :: a board that goes stale while this page is holding it is marked past the bound, says nothing is refreshing it, and asks only when told to, when a worker built it
+static/radar/src/hub/pending.test.tsx :: a board that goes stale while this page is holding it is plain at the bound and refreshing past it when the store serves it
+static/radar/src/hub/pending.test.tsx :: a board that has outlived the window it names asks once when it expires while a poll is already out
+static/radar/src/hub/pending.test.tsx :: a board that has outlived the window it names is taken off the screen when the store has nothing newer
+static/radar/src/hub/pending.test.tsx :: a board that has outlived the window it names leaves a hidden tab asleep when a board a worker built expires
+static/radar/src/hub/pending.test.tsx :: a board that has outlived the window it names says it expired while the replacement is on its way
+static/radar/src/hub/pending.test.tsx :: a board that has outlived the window it names stops claiming a recalculation once the refetch has failed
+static/radar/src/hub/pending.test.tsx :: a board that is busy with other selections holds to what the first read of a new selection said
+static/radar/src/hub/pending.test.tsx :: a board that is busy with other selections says what is happening, keeps the controls, and slows down
+static/radar/src/hub/pending.test.tsx :: a board that is simply empty still says nothing cleared, with its age
+static/radar/src/hub/pending.test.tsx :: a board that is still being calculated draws the board the moment a poll brings one, and says when it was calculated
+static/radar/src/hub/pending.test.tsx :: a board that is still being calculated forgets the failures of a question the reader has left
+static/radar/src/hub/pending.test.tsx :: a board that is still being calculated keeps the filters on Human chatter while it waits
+static/radar/src/hub/pending.test.tsx :: a board that is still being calculated says at once why the reader's own ask failed, in the same notice
+static/radar/src/hub/pending.test.tsx :: a board that is still being calculated says so in the waiting notice once its polls keep failing, and keeps asking
+static/radar/src/hub/pending.test.tsx :: a board whose rebuilds are failing keeps the rows it has and says the refresh failed
+static/radar/src/hub/pending.test.tsx :: a board whose rebuilds are failing says so plainly when there is no board underneath it
+static/radar/src/hub/pending.test.tsx :: a board with a refresh queued behind it asks every five seconds until the refresh lands, and then stops
+static/radar/src/hub/pending.test.tsx :: a board with a refresh queued behind it shows its rows and says a fresher one is on the way
+static/radar/src/hub/pending.test.tsx :: a new selection while the last one is on screen shows it loading rather than the previous board under the new filters
+static/radar/src/hub/pending.test.tsx :: a request the server did not answer, or refused as busy sends a Retry that timed out once
+static/radar/src/hub/pending.test.tsx :: a request the server did not answer, or refused as busy sends a Retry the server refused as busy once

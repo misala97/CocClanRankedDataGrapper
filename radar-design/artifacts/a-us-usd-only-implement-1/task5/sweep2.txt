@@ -1,0 +1,187 @@
+static/radar/src\embedded.test.ts:55:    for (const market of ['de', 'DE', 'eu', '', null, 1]) {
+features\tips\routes.py:412:        flash('Neue Bestleistung — %.2f €/h!' % new_rate, 'best')
+tests\ha1_unit\test_analysis_reader.py:126:        {'currency': 'EUR'}, {'mic': ' '}, {'mic': None}, {'provider_symbol': ''},
+tests\ha1_unit\test_analysis_reader.py:136:        store = FakeStore(instruments=[instrument(market='de', mic='XETR', currency='EUR')])
+tests\ha1_unit\test_analysis_reader.py:183:        {'ticker': 'BBB'}, {'is_primary': 0}, {'market': 'de'}, {'mapping_status': 'stale'},
+tests\ha1_unit\test_analysis_reader.py:200:        store = FakeStore(instruments=[instrument(currency='EUR')])
+features\tips\PRODUCT.md:24:numbers (€/hour, €/delivery, €/trip) and cross-checked against when and
+features\tips\PRODUCT.md:55:€/hour, €/delivery, and €/trip are never shown alone, since they're one
+tests\ha1_unit\test_analysis_contract.py:190:        ({'currency': 'EUR'}, 'currency'),
+tests\ha1_unit\test_analysis_contract.py:204:        out = ac.price_days([close_row(9, currency='EUR')], INSTRUMENT, FIRST_SEEN,
+tests\ha1_unit\test_analysis_contract.py:210:        {'mic': None}, {'mic': 'XNAS'}, {'market': 'de'}, {'is_shadow': True},
+tests\ha1_unit\test_analysis_contract.py:225:        rows = [close_row(8), close_row(9, currency='EUR'), close_row(10)]
+static/radar/src\QuoteBadges.test.tsx:60:    expect(container.textContent).not.toMatch(/fallback|EUR|€/i)
+static/radar/src\format.test.ts:198:    for (const currency of [null, 'EUR', 'GBP']) {
+static/radar/src\format.test.ts:204:    expect(usdText(194.2, 'EUR' as unknown as 'USD')).toBe(UNKNOWN)
+static/radar/src\hub\Chatter.test.tsx:424:    expect(document.body.textContent).not.toMatch(/€|EUR/)
+static/radar/src\hub\chatterSort.test.ts:177:    const rows = [priced('USD_LO', 5, 'USD'), priced('OTHER', 400, 'EUR'),
+static/radar/src\hub\ChatterWorkspace.tsx:45:const SIDE_BY_SIDE = '(min-width: 860px)'
+static/radar/src\detail\PriceChart.test.tsx:276:    expect(us.textContent).not.toContain('€')
+static/radar/src\hub\navigation.test.ts:238:    for (const search of ['?market=us', '?market=de', '?market=moon']) {
+tests\test_radar_api.py:61:    for market in ('de', 'moon', 'US', 'eu'):
+tests\test_radar_api.py:65:    for path in ('/radar/api/board?market=de', '/radar/api/board?market=moon',
+tests\test_radar_api.py:66:                 '/radar/api/ticker/AAPL?market=de'):
+tests\test_radar_api.py:74:# 'de' (10, 14, 2 UTC) and 'us' (16 UTC).
+tests\test_radar_api.py:83:    assert not hasattr(api, 'default_market')
+tests\test_radar_api.py:92:    for path in ('/radar/?market=moon', '/radar/?market=de',
+tests\test_radar_api.py:93:                 '/radar/hub/?market=de&window=24',
+tests\test_radar_api.py:94:                 '/radar/legacy/?market=de'):
+tests\test_radar_api.py:891:        '/radar/api/ticker/AAPL?span=1M&market=de').status_code == 400
+tests\test_radar_api.py:901:                 'converted_from'):
+tests\test_radar_api.py:906:    assert 'is_fallback' not in quote
+tests\test_radar_analysis_api.py:102:        owned.instrument(symbol, market='de', mic='XETR', venue='Xetra', currency='EUR')
+tests\test_radar_analysis_api.py:106:        owned.close(symbol, dt.date(2026, 9, 9), close='98', market='de', mic='XETR', currency='EUR')
+tests\test_radar_analysis_api.py:212:        owned.instrument(s['E'], currency='EUR')
+tests\test_radar_board.py:145:        board._next_boundary('de', dt.datetime(2026, 8, 28, 7, 57), 'closed')
+tests\test_radar_board_parity.py:132:ARCHIVED_MARKET = 'de'
+tests\test_radar_board_parity.py:221:        currency='USD' if us else 'EUR', provider_symbol=ticker,
+tests\test_radar_board_parity.py:225:        source='finnhub' if us else 'deutsche_boerse_delayed',
+tests\test_radar_board_parity.py:241:            currency='USD' if us else 'EUR', close_date=close_date,
+tests\test_radar_board_parity.py:244:            source='finnhub' if us else 'deutsche_boerse_delayed',
+tests\test_radar_board_parity.py:358:            mic='XGAT', provider_symbol=TICKERS[index], currency='EUR',
+tests\test_radar_board_parity.py:672:    assert not hasattr(api, 'default_market')
+tests\test_radar_board_parity.py:723:    assert not any('is_fallback' in row['quote'] for row in us.values())
+tests\test_radar_board_parity.py:873:        store.read({'market': 'de'})
+tests\test_radar_board_parity.py:875:        direct_payload({'market': 'de'})
+tests\test_radar_board_keys.py:88:@pytest.mark.parametrize('market', ['moon', 'de', None])
+tests\test_radar_board_keys.py:97:    fields['market'] = 'de'
+tests\test_radar_board_namespace.py:154:    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'active')
+features\radar\price_chart_contract.py:59:INCLUDE_PREPOST = {'1D': True, '1W': False}
+tests\test_radar_calendar.py:67:def test_the_registry_has_no_german_calendar(mic):
+tests\test_radar_calendar.py:71:        session_state('de', _utc(2026, 8, 28, 12), mic=mic)
+tests\test_radar_calendar.py:73:        session_bounds('de', _utc(2026, 8, 28, 12), mic=mic)
+static/radar/src\hub\selectedPriceGeometry.test.ts:144:    expect(sourceWord('deutsche_boerse_delayed')).toBe('deutsche_boerse_delayed')
+tests\test_radar_detail.py:763:        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+tests\test_radar_detail.py:764:        provider_symbol=ticker + 'X', currency='EUR', isin=isin,
+tests\test_radar_detail.py:768:            ticker=ticker, market='de', mic='XETR', currency='EUR',
+tests\test_radar_detail.py:774:            ticker=ticker, market='de', mic='XETR', currency='EUR',
+tests\test_radar_detail.py:806:        assert not hasattr(chart, 'converted_from')
+tests\test_radar_detail.py:864:                quote=_Quote('de', 'XETR', 'Xetra', 'EUR'))
+tests\test_radar_detail.py:896:        assert not hasattr(built.quote, 'is_fallback')
+tests\test_radar_detail.py:900:        assert not hasattr(built.chart, 'converted_from')
+tests\test_radar_detail.py:903:                               market='de')
+tests\test_radar_detail.py:1273:    assert not hasattr(chart, 'converted_from')
+tests\test_radar_history.py:239:    """Archived EUR bars stay in the table and out of every history read,
+tests\test_radar_history.py:244:    add_close(f'{PREFIX}DUAL', TODAY, '194.00', market='de', mic='XETR',
+tests\test_radar_history.py:245:              currency='EUR')
+tests\test_radar_history.py:247:              market='de', mic='XETR', currency='EUR')
+tests\test_radar_history.py:248:    add_close(f'{PREFIX}ONLYDE', TODAY, '50.00', market='de', mic='XETR',
+tests\test_radar_history.py:249:              currency='EUR')
+tests\test_radar_history.py:261:        history.closes_for([f'{PREFIX}DUAL'], today=TODAY, market='de',
+tests\test_radar_history.py:265:                                        market='de')
+tests\test_radar_history.py:266:    for market, currency in (('de', 'EUR'), ('us', 'EUR'), ('de', 'USD')):
+tests\test_radar_history.py:273:        ticker=f'{PREFIX}DUAL', market='de').all()
+tests\test_radar_history.py:337:            source='deutsche_boerse_delayed', adjustment_basis='split')
+tests\test_radar_history.py:452:        RadarInstrument(ticker=ticker, market='de', venue='Xetra',
+tests\test_radar_history.py:454:                        currency='EUR', isin='US000ZZTST05',
+tests\test_radar_history.py:466:                  market='de', mic='XETR', currency='EUR',
+tests\test_radar_history.py:475:    assert not hasattr(basis, 'converted_from')
+tests\test_radar_history.py:493:        market, mic, venue, currency = 'de', 'XGAT', 'Tradegate BSX', 'EUR'
+tests\selected_price_unit\test_route_ops.py:64:    ('span=1D&market=de', 'invalid_market', 400),
+tests\selected_price_unit\test_route_ops.py:90:    response = app.test_client().get(URL + '?span=1D&market=de')
+tests\selected_price_unit\test_reader.py:59:    (FakeStore(instruments=[instrument_row(currency='EUR')]), 'unsupported_instrument', 422),
+tests\selected_price_unit\test_reader.py:62:    (FakeStore(instruments=[instrument_row(market='de')]), 'unsupported_instrument', 422),
+tests\selected_price_unit\test_reader.py:161:        quote(naive(2026, 9, 15, 9, 4), 104.0, currency='EUR'),
+tests\test_radar_daemon.py:455:def test_no_exchange_rate_or_german_history_job_remains():
+tests\test_radar_daemon.py:457:                 'refresh_de_history', '_yahoo_de_history_provider',
+tests\test_radar_daemon.py:675:def test_no_mapping_or_german_collection_entry_point_remains():
+tests\test_radar_daemon.py:676:    for name in ('instruments', 'probe_german_data', '_german_quote_sample',
+tests\test_radar_daemon.py:679:                 '_current_de_generation_id', '_legacy_de_poll',
+tests\test_radar_daemon.py:680:                 '_de_should_collect', '_scheduled_de_market_data'):
+tests\test_radar_daemon.py:684:@pytest.mark.parametrize('flag', ['--probe-german-data', '--refresh-mappings'])
+tests\test_radar_daemon.py:685:def test_the_german_cli_flags_are_gone(flag):
+tests\test_radar_daemon.py:736:RETIRED_JOBS = {'radar_de_market_data', 'radar_ecb_fx', 'radar_mappings',
+tests\test_radar_daemon.py:748:def test_the_us_market_data_jobs_register_and_no_german_job_does(
+tests\test_radar_daemon.py:754:        monkeypatch.delenv('RADAR_DE_PRICE_MODE', raising=False)
+tests\test_radar_daemon.py:756:        monkeypatch.setenv('RADAR_DE_PRICE_MODE', stale_mode)
+tests\test_radar_daemon.py:814:    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'nonsense')
+tests\selected_price_unit\test_window.py:259:                   {'currency': 'EUR'}, {'mic': 'XNYS'}, {'mapped_at_dt': dt.datetime(2026, 8, 2)}):
+tests\selected_price_unit\test_normalize.py:141:@pytest.mark.parametrize('meta', [{'symbol': 'AAPL.X'}, {'currency': 'EUR'}, {'exchange': 'NYQ'}])
+tests\test_radar_history_basis.py:108:    instrument(ticker, 'de', 'XETR', 'Xetra', 'EUR', isin)
+tests\test_radar_history_basis.py:110:        close(ticker, n, price, market='de', mic='XETR', currency='EUR')
+tests\test_radar_history_basis.py:113:            rate_date=TODAY - dt.timedelta(days=n), base='EUR', quote='USD',
+tests\test_radar_history_basis.py:133:    assert not hasattr(basis, 'converted_from')
+tests\test_radar_history_basis.py:223:    archived_quote = FakeQuote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+tests\test_radar_hub_page.py:97:                 '/radar/hub/?market=de', '/radar/?market=de&window=24',
+tests\test_radar_hub_page.py:98:                 '/radar/?t=AAA&market=de&window=24'):
+tests\test_radar_hub_page.py:147:    response = client.get('/radar/legacy/?t=AAA&market=de&window=24')
+tests\test_radar_leaderboard.py:124:    assert not hasattr(row.quote, 'is_fallback')
+tests\test_radar_leaderboard.py:127:        build_rows(['bluesky'], NOW, market='de')
+tests\test_radar_leaderboard.py:163:        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+tests\test_radar_leaderboard.py:164:        provider_symbol=ticker, currency='EUR', is_primary=True,
+tests\test_radar_leaderboard.py:175:            ticker=ticker, market='de', mic='XETR', currency='EUR',
+tests\test_radar_markets.py:92:    for market in ('de', 'moon', ''):
+tests\test_radar_markets.py:99:    archived = snapshot(market='de', venue='Xetra', mic='XETR',
+tests\test_radar_markets.py:100:                        currency='EUR')
+tests\test_radar_markets.py:101:    for snapshots in ({'de': archived}, {'us': archived},
+tests\test_radar_markets.py:111:    selected = select_quote('AAPL', 'us', {'us': snapshot(currency='EUR')},
+tests\test_radar_markets.py:127:    assert 'is_fallback' not in QuoteView.__dataclass_fields__
+tests\test_radar_markets.py:128:    assert 'allow_us_fallback' not in inspect.signature(select_quote).parameters
+tests\test_radar_markets.py:129:    assert 'is_fallback' not in inspect.signature(
+tests\test_radar_markets.py:135:    archived = snapshot(market='de', venue='Xetra', mic='XETR',
+tests\test_radar_markets.py:136:                        currency='EUR')
+tests\test_radar_markets.py:140:        QuoteView.from_snapshot(snapshot(currency='EUR'), NOW)
+tests\test_radar_market_data.py:42:RETIRED = ('select_price', 'Selected', 'CycleSummary', 'collect_german_cycle',
+tests\test_radar_market_data.py:69:@pytest.mark.parametrize('market', ['de', 'all'])
+tests\test_radar_market_data.py:455:        ticker=f'{PREFIX}GA', market='de', mic='XGAT', currency='EUR',
+tests\test_radar_market_data.py:457:        fetched_at=NOW, source='deutsche_boerse_delayed',
+tests\test_radar_market_data.py:466:        ticker=f'{PREFIX}GA', market='de', mic='XGAT',
+tests\test_radar_market_data.py:538:        RadarQuote(ticker=f'{PREFIX}OPS', market='de', mic='XGAT',
+tests\test_radar_market_data.py:539:                   currency='EUR', fetched_at=at, quote_ts=at,
+tests\test_radar_market_data.py:542:                   source='deutsche_boerse_delayed'),
+tests\test_radar_market_data.py:544:        RadarProviderSessionState(source=f'{PREFIX}:de', market='de'),
+tests\test_radar_market_data_report.py:64:    for name in ('GERMAN_GATES', '_german_gates', '_active_generation',
+tests\test_radar_migration.py:355:            (2, 'AAPL', 'de', 'XETR', 'EUR', 'APC',
+tests\test_radar_migration.py:362:            ('AAPL', 'de', 'XETR', 'EUR', '2026-08-27', 194.2,
+tests\test_radar_migration.py:437:            (2, 'QUALITY', 'de', 'XETR', '2026-08-28 12:05:00',
+tests\test_radar_migration.py:554:def test_market_migration_downgrade_prunes_de_context_but_keeps_us_and_null(
+tests\test_radar_migration.py:568:        "(31, 'DEROW', 'de', '2026-08-28 12:21:00', NULL, "
+tests\test_radar_migration.py:575:        "('DECLOSE', 'de', '2026-08-28', 1.0, '2026-08-28 12:21:00'), "
+tests\test_radar_migration.py:731:        " VALUES (3, 'AAPL', 'de', 'XGAT', 'EUR', 'APC',"
+tests\test_radar_migration.py:732:        " '2026-08-28 12:10:00', 88.0, 'deutsche_boerse_delayed',"
+tests\test_radar_models.py:204:        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
+tests\test_radar_models.py:205:        provider_symbol='APC', currency='EUR', isin='US0378331005',
+tests\test_radar_models.py:209:        ticker='AAPL', market='de', mic='XETR', currency='EUR',
+tests\test_radar_models.py:213:    assert instrument.market == quote.market == 'de'
+tests\test_radar_models.py:214:    assert instrument.currency == quote.currency == 'EUR'
+tests\test_radar_models.py:274:            id=1, ticker='QUALITY', market='de', mic='XETR', currency='EUR',
+tests\test_radar_models.py:409:        ticker='MDV2ZZ', market='de', mic='XGAT', currency='EUR',
+tests\test_radar_models.py:411:        source='deutsche_boerse_delayed', price_basis='trade',
+tests\test_radar_models.py:415:        'deutsche_boerse_delayed', 'trade', True)
+tests\test_radar_prices.py:48:        provider_symbol='BRKB', currency='EUR', price=decimal.Decimal('194.20'),
+tests\test_radar_prices.py:286:    assert 'deutsche_boerse_delayed' not in QUOTE_SOURCES
+tests\test_radar_prices.py:287:    assert 'deutsche_boerse_delayed' not in CLOSE_SOURCES
+tests\test_radar_prices.py:289:        Quote('AAPL', decimal.Decimal('1'), source='deutsche_boerse_delayed')
+tests\test_radar_prices.py:291:        validate_close_source('deutsche_boerse_delayed', 'close', 'split')
+tests\test_radar_quotes.py:78:@pytest.mark.parametrize('market, currency', [('de', 'EUR'), ('us', 'EUR'),
+tests\test_radar_quotes.py:79:                                              ('de', 'USD')])
+tests\test_radar_quotes.py:187:    newer archived EUR print, and never a converted one."""
+tests\test_radar_quotes.py:199:                id=1, ticker='QQA', market='de', venue='Xetra', mic='XETR',
+tests\test_radar_quotes.py:200:                provider_symbol='QQA', currency='EUR', is_primary=True,
+tests\test_radar_quotes.py:203:                id=1, ticker='QQA', market='de', mic='XETR', currency='EUR',
+tests\test_radar_quotes.py:230:                quotes_mod.quote_views_for(['QQA'], 'de', NOW)
+tests\test_radar_quotes.py:497:        ticker=ticker, market='de', venue='Tradegate BSX', mic='XGAT',
+tests\test_radar_quotes.py:498:        provider_symbol=ticker, currency='EUR', is_primary=True,
+tests\test_radar_quotes.py:502:            market='de', mic='XGAT', currency='EUR',
+tests\test_radar_quotes.py:503:            source='deutsche_boerse_delayed')
+tests\test_radar_quotes.py:550:    lambda q: q.move_since('QQSH', 1, NOW, market='de', mic='XGAT'),
+tests\test_radar_quotes.py:551:    lambda q: q.price_status('QQSH', NOW, market='de', mic='XGAT'),
+tests\test_radar_quotes.py:552:    lambda q: q.moves_for([('QQSH', 'de', 'XGAT')], 1, NOW),
+tests\test_radar_quotes.py:553:    lambda q: q.statuses_for([('QQSH', 'de', 'XGAT')], NOW),
+tests\test_radar_quote_retention.py:161:    for market, mic, currency in (('us', 'XNAS', 'USD'), ('de', 'XETR', 'EUR'),
+tests\test_radar_quote_retention.py:162:                                  ('de', 'XGAT', 'EUR')):
+tests\test_radar_quote_retention.py:182:        ticker=f'{PREFIX}DUAL', market='de', mic='XETR').count() == 8
+tests\test_radar_quote_retention.py:184:        ticker=f'{PREFIX}DUAL', market='de', mic='XGAT').count() == 8
+tests\test_radar_quote_retention.py:247:           market='de', mic='XETR', currency='EUR')
+tests\test_radar_quote_retention.py:248:    _close(f'{PREFIX}NATV', horizon + 30, source='deutsche_boerse_delayed',
+tests\test_radar_quote_retention.py:249:           market='de', mic='XGAT', currency='EUR')
+tests\test_radar_quotes_batch.py:157:            ('de', 'XETR', 'EUR', (9, 4, 0), ('150', '194', '250')))
+tests\test_radar_quotes_batch.py:180:        quotes_mod.statuses_for([(f'{PREFIX}DUAL', 'de', 'XETR')], NOW)
+tests\test_radar_quotes_batch.py:182:        quotes_mod.moves_for([(f'{PREFIX}DUAL', 'de', 'XETR')], 1, NOW)
+tests\test_radar_yahoo.py:82:    chart_payload(currency='EUR'),
+tests\test_radar_yahoo.py:109:    payload = chart_payload(symbol='SAP.DE', currency='EUR', exchange='GER')
+tests\test_radar_yahoo.py:113:        [instrument('SAP', mic='XETR', currency='EUR',
+tests\test_radar_yahoo.py:114:                    provider_symbol='SAP.DE', market='de',
+tests\test_radar_yahoo.py:161:    chart_payload(currency='EUR'),
+tests\test_radar_yahoo.py:225:                    return chart_payload(symbol='WRONG', currency='EUR')
+tests\test_scripts.py:280:    def test_sums_the_week_in_german(self):

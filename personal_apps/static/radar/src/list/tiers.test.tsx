@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import { envelope } from '../fixtures'
 import { ListPane, splitTiers } from './ListPane'
 import type { BoardPayload, Row, Selection } from '../types'
 
@@ -15,7 +16,7 @@ const row = (ticker: string, divergence: number | null): Row => ({
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     tape_status: 'ok', score_eligible: divergence !== null,
     score_term: divergence === null ? 'chatter' : 'divergence',
-    is_fallback: false, source: 'legacy', price_basis: 'trade',
+    source: 'legacy', price_basis: 'trade',
     bid: null, ask: null,
   }, baseline_days: 20, marks: [], series: [], price_series: [],
   normal_per_hour: null, triplet: {},
@@ -24,12 +25,13 @@ const row = (ticker: string, divergence: number | null): Row => ({
 })
 
 const selection: Selection = {
-  market: 'us', sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
+  sources: ['bluesky', 'fourchan', 'reddit'], segments: [],
   window: 4, minVenues: 1, sort: null, dir: 'desc' as const,
 }
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
+    ...envelope(),
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
     market_venue: 'US markets', next_boundary_label: 'closes',

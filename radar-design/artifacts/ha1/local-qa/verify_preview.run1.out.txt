@@ -1,0 +1,46 @@
+﻿[13:41:35] viewport 1440 started
+py : Traceback (most recent call last):
+In Zeile:1 Zeichen:467
++ ... /local-qa'; py -3.12 -u scratchpad/ha1/verify_preview.py 5061 *> "$ou ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\verify_pr
+eview.py", line 793, in <module>
+    main()
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\verify_pr
+eview.py", line 780, in main
+    results = run(port, manifest, credentials, record_fingerprint)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\verify_pr
+eview.py", line 370, in run
+    login(page, base, *admin)
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\verify_pr
+eview.py", line 226, in login
+    page.goto(f'{base}/login')
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\sync_api\_generated.py", 
+line 9770, in goto
+    self._sync(
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_sync_base.py", line 
+115, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_page.py", line 560, 
+in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_frame.py", line 
+156, in goto
+    await self._channel.send(
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_connection.py", 
+line 69, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_connection.py", 
+line 563, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.Error: Page.goto: net::ERR_UNSAFE_PORT at http://127.0.0.1:5061/login
+Call log:
+  - navigating to "http://127.0.0.1:5061/login", waiting until "load"
+

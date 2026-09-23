@@ -16,19 +16,31 @@ import type { BoardPayload } from './types'
  *
  *  `rows` is the check because it is what the page IS. A payload without it
  *  is not a thin board; it is not a board.
+ *
+ *  The one exception is a NULL `rows` under `pending` or `busy`, which is the
+ *  shared store saying "there is no board yet" in as many words. That is an
+ *  answer, and the surface has something to draw for it -- the selection it
+ *  echoes back, and a line saying what is happening -- so rejecting it here
+ *  would replace a page that says "calculating" with a page that says
+ *  nothing at all. A null `rows` with neither flag is still not a board.
  */
 export function parsePayload(text: string | null | undefined): BoardPayload | null {
   try {
     const parsed = JSON.parse(text ?? '') as unknown
     if (!parsed || typeof parsed !== 'object') return null
-    if (!Array.isArray((parsed as BoardPayload).rows)) return null
-    // Older server-rendered documents omitted these fields. Keep them usable
-    // at the boundary rather than letting legacy embeds create an untyped
-    // third market inside the page.
-    const embedded = parsed as Partial<BoardPayload>
+    const board = parsed as Partial<BoardPayload>
+    const waiting = board.pending === true || board.busy === true
+    if (!Array.isArray(board.rows) && !(board.rows === null && waiting)) {
+      return null
+    }
+    // Radar is US-only. Older server-rendered documents omitted the market,
+    // which was always US for them; any other market is not a board this
+    // page can show, and is refused rather than relabelled.
+    const market: unknown = (parsed as { market?: unknown }).market
+    if (market !== undefined && market !== 'us') return null
     return {
       ...(parsed as BoardPayload),
-      market: embedded.market === 'de' ? 'de' : 'us',
+      market: 'us',
       display_timezone: 'Europe/Berlin',
     }
   } catch {
@@ -42,8 +54,8 @@ export function parsePayload(text: string | null | undefined): BoardPayload | nu
  *  page, and a spinner on arrival for data the server had in hand is a
  *  self-inflicted wait). Fetched when nothing is embedded -- the Vite dev
  *  harness at static/radar/dev.html has no Jinja to embed it -- for the
- *  page's own query, so `?market=de&window=12` opens the same board it would
- *  under Flask. Null on any failure; the entry renders words, not a throw.
+ *  page's own query, so `?window=12` opens the same board it would under
+ *  Flask. Null on any failure; the entry renders words, not a throw.
  *
  *  A redirected response is a failure: @login_required redirects rather than
  *  401s and fetch follows it transparently, so a signed-out harness would

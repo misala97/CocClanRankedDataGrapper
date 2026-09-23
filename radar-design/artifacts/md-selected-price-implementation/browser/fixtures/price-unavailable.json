@@ -1,0 +1,2377 @@
+{
+ "acquisition": {
+  "reason": "the provider throttled this process",
+  "retry_after_seconds": 120,
+  "state": "backoff"
+ },
+ "chatter": {
+  "from": "2026-09-09T13:30:00Z",
+  "normal_per_slot": null,
+  "slots": [
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-09T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-09T15:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T14:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-09T16:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T15:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-09T17:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T16:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-09T18:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T17:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-09T19:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T18:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-09T20:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T19:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 40,
+    "coverage": "observed",
+    "end": "2026-09-09T21:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T20:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-09T22:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T21:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-09T23:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T22:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 10,
+    "coverage": "partial",
+    "end": "2026-09-10T00:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-09T23:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T01:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T00:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T02:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T01:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T03:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T02:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T04:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T03:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T05:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T04:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T06:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T05:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T07:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T06:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T07:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T15:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T14:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T16:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T15:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T17:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T16:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T18:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T17:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T19:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T18:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T20:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T19:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T21:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T20:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T22:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T21:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-10T23:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T22:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T00:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-10T23:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T01:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T00:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T02:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T01:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T03:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T02:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T04:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T03:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T05:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T04:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T06:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T05:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T07:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T06:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T07:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": null,
+    "coverage": "unknown",
+    "end": "2026-09-11T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 18,
+    "coverage": "partial",
+    "end": "2026-09-11T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 38,
+    "coverage": "observed",
+    "end": "2026-09-11T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-11T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-11T15:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T14:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-11T16:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T15:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-11T17:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T16:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-11T18:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T17:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-11T19:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T18:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-11T20:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T19:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 40,
+    "coverage": "observed",
+    "end": "2026-09-11T21:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T20:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-11T22:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T21:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-11T23:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T22:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-12T00:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-11T23:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-12T01:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T00:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-12T02:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T01:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-12T03:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T02:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-12T04:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T03:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-12T05:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T04:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-12T06:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T05:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-12T07:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T06:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-12T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T07:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-12T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-12T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-12T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-12T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 38,
+    "coverage": "observed",
+    "end": "2026-09-12T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-12T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-12T15:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T14:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-12T16:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T15:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-12T17:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T16:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-12T18:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T17:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-12T19:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T18:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-12T20:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T19:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 40,
+    "coverage": "observed",
+    "end": "2026-09-12T21:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T20:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-12T22:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T21:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-12T23:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T22:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-13T00:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-12T23:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-13T01:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T00:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-13T02:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T01:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-13T03:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T02:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-13T04:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T03:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-13T05:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T04:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-13T06:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T05:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-13T07:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T06:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-13T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T07:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-13T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-13T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-13T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-13T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 38,
+    "coverage": "observed",
+    "end": "2026-09-13T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-13T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-13T15:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T14:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-13T16:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T15:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-13T17:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T16:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-13T18:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T17:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-13T19:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T18:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-13T20:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T19:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 40,
+    "coverage": "observed",
+    "end": "2026-09-13T21:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T20:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-13T22:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T21:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-13T23:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T22:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-14T00:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-13T23:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-14T01:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T00:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-14T02:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T01:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-14T03:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T02:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-14T04:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T03:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-14T05:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T04:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-14T06:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T05:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-14T07:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T06:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-14T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T07:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-14T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-14T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-14T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-14T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 38,
+    "coverage": "observed",
+    "end": "2026-09-14T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-14T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-14T15:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T14:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-14T16:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T15:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-14T17:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T16:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 52,
+    "coverage": "observed",
+    "end": "2026-09-14T18:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T17:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 50,
+    "coverage": "observed",
+    "end": "2026-09-14T19:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T18:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-14T20:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T19:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 40,
+    "coverage": "observed",
+    "end": "2026-09-14T21:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T20:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-14T22:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T21:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-14T23:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T22:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-15T00:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-14T23:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-15T01:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T00:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-15T02:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T01:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-15T03:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T02:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-15T04:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T03:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-15T05:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T04:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-15T06:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T05:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-15T07:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T06:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-15T08:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T07:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-15T09:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T08:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 26,
+    "coverage": "observed",
+    "end": "2026-09-15T10:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T09:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 30,
+    "coverage": "observed",
+    "end": "2026-09-15T11:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T10:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 28,
+    "coverage": "observed",
+    "end": "2026-09-15T12:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T11:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 38,
+    "coverage": "observed",
+    "end": "2026-09-15T13:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T12:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 54,
+    "coverage": "observed",
+    "end": "2026-09-15T14:30:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T13:30:00Z",
+    "truncated": false
+   },
+   {
+    "config_transition": false,
+    "count": 36,
+    "coverage": "partial",
+    "end": "2026-09-15T15:12:00Z",
+    "overlap_ambiguous": false,
+    "start": "2026-09-15T14:30:00Z",
+    "truncated": false
+   }
+  ],
+  "step_minutes": 60,
+  "to": "2026-09-15T15:12:00Z",
+  "tone": {
+   "basis": "recorded-judgments",
+   "slots": [
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 52,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 50,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 52,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 50,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 40,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 10,
+     "unjudged": 0
+    },
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 18,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 38,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 52,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 50,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 52,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 50,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 40,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 38,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 52,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 50,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 52,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 50,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 40,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 26,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 30,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 28,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 38,
+     "unjudged": 0
+    },
+    {
+     "bearish": 0,
+     "bullish": 0,
+     "neutral": 0,
+     "status": "unavailable",
+     "unavailable": 54,
+     "unjudged": 0
+    },
+    {
+     "bearish": 2,
+     "bullish": 8,
+     "neutral": 4,
+     "status": "partial",
+     "unavailable": 36,
+     "unjudged": 2
+    },
+    {
+     "bearish": 5,
+     "bullish": 23,
+     "neutral": 14,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 8
+    },
+    {
+     "bearish": 6,
+     "bullish": 25,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 8
+    },
+    {
+     "bearish": 5,
+     "bullish": 24,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 8
+    },
+    {
+     "bearish": 6,
+     "bullish": 23,
+     "neutral": 14,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 7
+    },
+    {
+     "bearish": 5,
+     "bullish": 25,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 9
+    },
+    {
+     "bearish": 3,
+     "bullish": 18,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 11,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 13,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 12,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 11,
+     "neutral": 10,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 13,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 2,
+     "bullish": 12,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 11,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 13,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 12,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 11,
+     "neutral": 10,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 13,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 2,
+     "bullish": 12,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 11,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 13,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 12,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 5,
+     "bullish": 17,
+     "neutral": 10,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 6
+    },
+    {
+     "bearish": 5,
+     "bullish": 25,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 9
+    },
+    {
+     "bearish": 6,
+     "bullish": 24,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 7
+    },
+    {
+     "bearish": 5,
+     "bullish": 23,
+     "neutral": 14,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 8
+    },
+    {
+     "bearish": 6,
+     "bullish": 25,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 8
+    },
+    {
+     "bearish": 5,
+     "bullish": 24,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 8
+    },
+    {
+     "bearish": 6,
+     "bullish": 23,
+     "neutral": 14,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 7
+    },
+    {
+     "bearish": 5,
+     "bullish": 25,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 9
+    },
+    {
+     "bearish": 3,
+     "bullish": 18,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 11,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 13,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 12,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 11,
+     "neutral": 10,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 13,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 2,
+     "bullish": 12,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 11,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 13,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 12,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 11,
+     "neutral": 10,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 13,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 2,
+     "bullish": 12,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 1,
+     "bullish": 11,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 2,
+     "bullish": 13,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 4
+    },
+    {
+     "bearish": 1,
+     "bullish": 12,
+     "neutral": 12,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 3
+    },
+    {
+     "bearish": 5,
+     "bullish": 17,
+     "neutral": 10,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 6
+    },
+    {
+     "bearish": 5,
+     "bullish": 25,
+     "neutral": 15,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 9
+    },
+    {
+     "bearish": 4,
+     "bullish": 16,
+     "neutral": 11,
+     "status": "complete",
+     "unavailable": 0,
+     "unjudged": 5
+    }
+   ]
+  }
+ },
+ "generated_at": "2026-09-15T15:12:00Z",
+ "identity": {
+  "company_id": 11,
+  "currency": "USD",
+  "fingerprint": "a3c2f2cb31154635ef8aae98066e26e9",
+  "instrument_id": 7,
+  "mapped_at": "2026-08-01T00:00:00Z",
+  "mic": "XNMS",
+  "provider_symbol": "NVDA",
+  "ticker": "NVDA",
+  "venue": "NASDAQ"
+ },
+ "price": null,
+ "span": "1W",
+ "version": 1,
+ "warnings": [
+  "price: no usable price observation inside this window",
+  "tone: colours use retained recorded judgments only; older chatter is unavailable"
+ ],
+ "window": {
+  "bands": [
+   {
+    "from": "2026-09-09T13:30:00Z",
+    "state": "regular",
+    "to": "2026-09-09T20:00:00Z"
+   },
+   {
+    "from": "2026-09-09T20:00:00Z",
+    "state": "afterhours",
+    "to": "2026-09-10T00:00:00Z"
+   },
+   {
+    "from": "2026-09-10T00:00:00Z",
+    "state": "closed",
+    "to": "2026-09-10T08:00:00Z"
+   },
+   {
+    "from": "2026-09-10T08:00:00Z",
+    "state": "premarket",
+    "to": "2026-09-10T13:30:00Z"
+   },
+   {
+    "from": "2026-09-10T13:30:00Z",
+    "state": "regular",
+    "to": "2026-09-10T20:00:00Z"
+   },
+   {
+    "from": "2026-09-10T20:00:00Z",
+    "state": "afterhours",
+    "to": "2026-09-11T00:00:00Z"
+   },
+   {
+    "from": "2026-09-11T00:00:00Z",
+    "state": "closed",
+    "to": "2026-09-11T08:00:00Z"
+   },
+   {
+    "from": "2026-09-11T08:00:00Z",
+    "state": "premarket",
+    "to": "2026-09-11T13:30:00Z"
+   },
+   {
+    "from": "2026-09-11T13:30:00Z",
+    "state": "regular",
+    "to": "2026-09-11T20:00:00Z"
+   },
+   {
+    "from": "2026-09-11T20:00:00Z",
+    "state": "afterhours",
+    "to": "2026-09-12T00:00:00Z"
+   },
+   {
+    "from": "2026-09-12T00:00:00Z",
+    "state": "closed",
+    "to": "2026-09-14T08:00:00Z"
+   },
+   {
+    "from": "2026-09-14T08:00:00Z",
+    "state": "premarket",
+    "to": "2026-09-14T13:30:00Z"
+   },
+   {
+    "from": "2026-09-14T13:30:00Z",
+    "state": "regular",
+    "to": "2026-09-14T20:00:00Z"
+   },
+   {
+    "from": "2026-09-14T20:00:00Z",
+    "state": "afterhours",
+    "to": "2026-09-15T00:00:00Z"
+   },
+   {
+    "from": "2026-09-15T00:00:00Z",
+    "state": "closed",
+    "to": "2026-09-15T08:00:00Z"
+   },
+   {
+    "from": "2026-09-15T08:00:00Z",
+    "state": "premarket",
+    "to": "2026-09-15T13:30:00Z"
+   },
+   {
+    "from": "2026-09-15T13:30:00Z",
+    "state": "regular",
+    "to": "2026-09-15T15:12:00Z"
+   }
+  ],
+  "calendar_basis": "modeled",
+  "from": "2026-09-09T13:30:00Z",
+  "partial": true,
+  "session_dates": [
+   "2026-09-09",
+   "2026-09-10",
+   "2026-09-11",
+   "2026-09-14",
+   "2026-09-15"
+  ],
+  "timezone": "America/New_York",
+  "to": "2026-09-15T15:12:00Z"
+ }
+}

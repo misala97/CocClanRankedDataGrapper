@@ -1,0 +1,96 @@
+static/radar/src\detail\PriceChart.test.tsx:259:    expect(screen.queryByText(/converted|ECB/)).toBeNull()
+tests\test_radar_yahoo.py:109:    payload = chart_payload(symbol='SAP.DE', currency='EUR', exchange='GER')
+tests\test_radar_yahoo.py:111:    assert 'XETR' not in yahoo._EXCHANGE_ALLOWLIST
+tests\test_radar_yahoo.py:113:        [instrument('SAP', mic='XETR', currency='EUR',
+tests\test_radar_yahoo.py:114:                    provider_symbol='SAP.DE', market='de',
+tests\test_radar_yahoo.py:115:                    venue='Xetra')]) == {}
+tests\test_radar_yahoo.py:116:    assert provider.daily_closes('SAP.DE', 5, mic_code='XETR') == []
+static/radar/src\board\BoardPage.test.tsx:126:    expect(document.body.textContent).not.toMatch(/Germany|Xetra|Tradegate/)
+tests\ha1_unit\test_analysis_reader.py:136:        store = FakeStore(instruments=[instrument(market='de', mic='XETR', currency='EUR')])
+tests\test_radar_board_parity.py:220:        ticker=ticker, market=market, mic='XNAS' if us else 'XGAT',
+tests\test_radar_board_parity.py:225:        source='finnhub' if us else 'deutsche_boerse_delayed',
+tests\test_radar_board_parity.py:240:            ticker=ticker, market=market, mic='XNAS' if us else 'XGAT',
+tests\test_radar_board_parity.py:244:            source='finnhub' if us else 'deutsche_boerse_delayed',
+tests\test_radar_board_parity.py:357:            ticker=TICKERS[index], market=ARCHIVED_MARKET, venue='Tradegate',
+tests\test_radar_board_parity.py:358:            mic='XGAT', provider_symbol=TICKERS[index], currency='EUR',
+static/radar/src\hub\Admin.test.tsx:199:    expect(document.body.textContent).not.toMatch(/German|XETR|XGAT/)
+tests\test_radar_leaderboard.py:163:        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+tests\test_radar_leaderboard.py:175:            ticker=ticker, market='de', mic='XETR', currency='EUR',
+tests\test_radar_prices.py:286:    assert 'deutsche_boerse_delayed' not in QUOTE_SOURCES
+tests\test_radar_prices.py:287:    assert 'deutsche_boerse_delayed' not in CLOSE_SOURCES
+tests\test_radar_prices.py:289:        Quote('AAPL', decimal.Decimal('1'), source='deutsche_boerse_delayed')
+tests\test_radar_prices.py:291:        validate_close_source('deutsche_boerse_delayed', 'close', 'split')
+tests\test_radar_analysis_api.py:102:        owned.instrument(symbol, market='de', mic='XETR', venue='Xetra', currency='EUR')
+tests\test_radar_analysis_api.py:106:        owned.close(symbol, dt.date(2026, 9, 9), close='98', market='de', mic='XETR', currency='EUR')
+static/radar/src\hub\selectedPriceGeometry.test.ts:144:    expect(sourceWord('deutsche_boerse_delayed')).toBe('deutsche_boerse_delayed')
+tests\test_radar_models.py:202:    """Task 5 makes simultaneous US/Xetra snapshots independently addressable."""
+tests\test_radar_models.py:204:        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
+tests\test_radar_models.py:209:        ticker='AAPL', market='de', mic='XETR', currency='EUR',
+tests\test_radar_models.py:215:    assert instrument.mic == quote.mic == 'XETR'
+tests\test_radar_models.py:274:            id=1, ticker='QUALITY', market='de', mic='XETR', currency='EUR',
+tests\test_radar_models.py:409:        ticker='MDV2ZZ', market='de', mic='XGAT', currency='EUR',
+tests\test_radar_models.py:411:        source='deutsche_boerse_delayed', price_basis='trade',
+tests\test_radar_models.py:415:        'deutsche_boerse_delayed', 'trade', True)
+tests\test_radar_migration.py:339:def test_market_key_migration_keeps_same_time_us_and_xetra_prices_distinct(
+tests\test_radar_migration.py:355:            (2, 'AAPL', 'de', 'XETR', 'EUR', 'APC',
+tests\test_radar_migration.py:362:            ('AAPL', 'de', 'XETR', 'EUR', '2026-08-27', 194.2,
+tests\test_radar_migration.py:437:            (2, 'QUALITY', 'de', 'XETR', '2026-08-28 12:05:00',
+tests\test_radar_migration.py:731:        " VALUES (3, 'AAPL', 'de', 'XGAT', 'EUR', 'APC',"
+tests\test_radar_migration.py:732:        " '2026-08-28 12:10:00', 88.0, 'deutsche_boerse_delayed',"
+tests\test_radar_market_data.py:46:           'XETR_PRETRADE_LIMITS', 'STALE_SKIP_AGE', 'VENUE_BY_MIC',
+tests\test_radar_market_data.py:57:    for module in ('features.radar.prices.deutsche_boerse',
+tests\test_radar_market_data.py:58:                   'features.radar.prices.openfigi',
+tests\test_radar_market_data.py:59:                   'features.radar.prices.ecb',
+tests\test_radar_market_data.py:455:        ticker=f'{PREFIX}GA', market='de', mic='XGAT', currency='EUR',
+tests\test_radar_market_data.py:457:        fetched_at=NOW, source='deutsche_boerse_delayed',
+tests\test_radar_market_data.py:466:        ticker=f'{PREFIX}GA', market='de', mic='XGAT',
+tests\test_radar_market_data.py:538:        RadarQuote(ticker=f'{PREFIX}OPS', market='de', mic='XGAT',
+tests\test_radar_market_data.py:542:                   source='deutsche_boerse_delayed'),
+tests\test_radar_markets.py:99:    archived = snapshot(market='de', venue='Xetra', mic='XETR',
+tests\test_radar_markets.py:135:    archived = snapshot(market='de', venue='Xetra', mic='XETR',
+tests\test_radar_quote_retention.py:161:    for market, mic, currency in (('us', 'XNAS', 'USD'), ('de', 'XETR', 'EUR'),
+tests\test_radar_quote_retention.py:162:                                  ('de', 'XGAT', 'EUR')):
+tests\test_radar_quote_retention.py:182:        ticker=f'{PREFIX}DUAL', market='de', mic='XETR').count() == 8
+tests\test_radar_quote_retention.py:184:        ticker=f'{PREFIX}DUAL', market='de', mic='XGAT').count() == 8
+tests\test_radar_quote_retention.py:247:           market='de', mic='XETR', currency='EUR')
+tests\test_radar_quote_retention.py:248:    _close(f'{PREFIX}NATV', horizon + 30, source='deutsche_boerse_delayed',
+tests\test_radar_quote_retention.py:249:           market='de', mic='XGAT', currency='EUR')
+tests\test_radar_quote_retention.py:267:        mic='XGAT', isin='QR0000000001', event_id=f'{PREFIX}-retention-event',
+tests\test_radar_quote_retention.py:271:        source=f'{PREFIX}-retention', mic='XGAT', channel='posttrade',
+tests\test_radar_quotes_batch.py:157:            ('de', 'XETR', 'EUR', (9, 4, 0), ('150', '194', '250')))
+tests\test_radar_quotes_batch.py:180:        quotes_mod.statuses_for([(f'{PREFIX}DUAL', 'de', 'XETR')], NOW)
+tests\test_radar_quotes_batch.py:182:        quotes_mod.moves_for([(f'{PREFIX}DUAL', 'de', 'XETR')], 1, NOW)
+tests\test_radar_quotes.py:86:        ticker='QQA', market=market, venue='Xetra', mic='XETR',
+tests\test_radar_quotes.py:199:                id=1, ticker='QQA', market='de', venue='Xetra', mic='XETR',
+tests\test_radar_quotes.py:203:                id=1, ticker='QQA', market='de', mic='XETR', currency='EUR',
+tests\test_radar_quotes.py:497:        ticker=ticker, market='de', venue='Tradegate BSX', mic='XGAT',
+tests\test_radar_quotes.py:502:            market='de', mic='XGAT', currency='EUR',
+tests\test_radar_quotes.py:503:            source='deutsche_boerse_delayed')
+tests\test_radar_quotes.py:550:    lambda q: q.move_since('QQSH', 1, NOW, market='de', mic='XGAT'),
+tests\test_radar_quotes.py:551:    lambda q: q.price_status('QQSH', NOW, market='de', mic='XGAT'),
+tests\test_radar_quotes.py:552:    lambda q: q.moves_for([('QQSH', 'de', 'XGAT')], 1, NOW),
+tests\test_radar_quotes.py:553:    lambda q: q.statuses_for([('QQSH', 'de', 'XGAT')], NOW),
+tests\test_radar_history_basis.py:108:    instrument(ticker, 'de', 'XETR', 'Xetra', 'EUR', isin)
+tests\test_radar_history_basis.py:110:        close(ticker, n, price, market='de', mic='XETR', currency='EUR')
+tests\test_radar_history_basis.py:223:    archived_quote = FakeQuote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+tests\test_radar_history.py:244:    add_close(f'{PREFIX}DUAL', TODAY, '194.00', market='de', mic='XETR',
+tests\test_radar_history.py:247:              market='de', mic='XETR', currency='EUR')
+tests\test_radar_history.py:248:    add_close(f'{PREFIX}ONLYDE', TODAY, '50.00', market='de', mic='XETR',
+tests\test_radar_history.py:262:                           mic='XETR')
+tests\test_radar_history.py:270:                market=market, mic='XETR', currency=currency)
+tests\test_radar_history.py:337:            source='deutsche_boerse_delayed', adjustment_basis='split')
+tests\test_radar_history.py:452:        RadarInstrument(ticker=ticker, market='de', venue='Xetra',
+tests\test_radar_history.py:453:                        mic='XETR', provider_symbol=ticker + 'X',
+tests\test_radar_history.py:466:                  market='de', mic='XETR', currency='EUR',
+tests\test_radar_history.py:493:        market, mic, venue, currency = 'de', 'XGAT', 'Tradegate BSX', 'EUR'
+features\radar\data\ordinary_words.txt:2662:deutschen
+features\radar\data\ordinary_words.txt:3128:ecb
+features\radar\data\name_shapes.txt:653:deutsche
+features\radar\data\name_shapes.txt:654:deutschen
+tests\test_radar_detail.py:763:        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+tests\test_radar_detail.py:768:            ticker=ticker, market='de', mic='XETR', currency='EUR',
+tests\test_radar_detail.py:774:            ticker=ticker, market='de', mic='XETR', currency='EUR',
+tests\test_radar_detail.py:864:                quote=_Quote('de', 'XETR', 'Xetra', 'EUR'))
+tests\test_radar_daemon.py:458:                 '_xetra_history_instruments'):
+tests\test_radar_calendar.py:66:@pytest.mark.parametrize('mic', [None, 'XETR', 'XGAT'])
+features\quizbank\llm.py:48:                "abhängt (z.B. aktuelle Tabellenstände, aktuelle Kalenderwoche, Börsenkurse) und nicht "

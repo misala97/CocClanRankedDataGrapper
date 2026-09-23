@@ -1,0 +1,1186 @@
+.......................................................................F [  2%]
+........................................................................ [  4%]
+........................................................................ [  7%]
+........................................................................ [  9%]
+........................................................................ [ 12%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 19%]
+........................................................................ [ 21%]
+........................................................................ [ 24%]
+........................................................................ [ 26%]
+.........................................F.............................. [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 33%]
+........................................................................ [ 36%]
+........................................................................ [ 38%]
+........................................................................ [ 41%]
+........................................................................ [ 43%]
+........................................................................ [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 50%]
+........................................................................ [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+...................................................................sssss [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 87%]
+........................................................................ [ 89%]
+.........................F.............................................. [ 92%]
+....................................FFF................................. [ 94%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+...............                                                          [100%]
+================================== FAILURES ===================================
+__________ test_the_full_run_is_read_only_and_recommends_nothing_yet __________
+
+capsys = <_pytest.capture.CaptureFixture object at 0x000001B61EF258B0>
+
+    def test_the_full_run_is_read_only_and_recommends_nothing_yet(capsys):
+        """Acceptance §12.7 against the live restore: zero current-policy
+        coverage, no recommendation, exit 0 -- and the statement guard saw
+        only reads. The guard's teeth live in the next test."""
+        diag._read_statements.clear()
+        assert diag.main([]) == 0
+        out = capsys.readouterr().out
+        assert 'NO RECOMMENDATIONS' in out
+>       assert 'LEGACY-POLICY cohort' in out
+E       AssertionError: assert 'LEGACY-POLICY cohort' in '\n== CURRENT-POLICY cohort (first_seen >= 2026-09-01) ==\npopulation 0, judged 0 (0.0% coverage)\n  by source_root: {...l: {}\n  reconciliation: every table above sums to 0 OK\n\nNO RECOMMENDATIONS: no cohort passes the readiness gates.\n'
+
+tests\test_diagnose_extractor_feedback.py:103: AssertionError
+_________ test_the_migration_adds_and_removes_only_its_own_two_tables _________
+
+app_context = None
+
+    def test_the_migration_adds_and_removes_only_its_own_two_tables(app_context):
+        """Upgrade, downgrade, upgrade -- against the disposable database.
+    
+        The claim being pinned is not that the tables appear, but that nothing
+        else moves when they do. A column-shape fingerprint of every table is
+        taken before and after, and a pre-existing row is counted, so a migration
+        that quietly rebuilt or emptied a neighbour would be caught.
+    
+        The target is named rather than left as "one step back". Once another
+        revision was stacked on top of this one, a bare downgrade() stopped
+        reaching the point where these tables do not exist, and the test began
+        asserting something it was no longer doing.
+        """
+        from flask_migrate import downgrade, upgrade
+    
+        before = _schema_fingerprint()
+        watches_before = db.session.execute(
+            sa.text('select count(*) from radar_watch')).scalar()
+        assert 'radar_ingest_runs' in before
+    
+        with _logging_preserved():
+            downgrade(revision=BEFORE_THESE_TABLES)
+        after_down = _schema_fingerprint()
+        try:
+>           assert set(before) - set(after_down) == {
+                'radar_ingest_runs', 'radar_board_observations'}
+E               AssertionError: assert {'radar_board..._ingest_runs'} == {'radar_board..._ingest_runs'}
+E                 
+E                 Extra items in the left set:
+E                 'radar_board_namespaces'
+E                 'radar_board_results'
+E                 Use -v to get more diff
+
+tests\test_radar_activity.py:396: AssertionError
+---------------------------- Captured stdout call -----------------------------
+radar_ingest_runs: projected 0 rows
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl MySQLImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade b7e3f9c1a2d4 -> a7c31f0b52d4, add radar board results
+INFO  [alembic.runtime.migration] Running downgrade a7c31f0b52d4 -> d82f9afb5898, add the typed counter projection to radar_ingest_runs
+INFO  [alembic.runtime.migration] Running downgrade d82f9afb5898 -> b3d9e1f5a274, add radar observations
+INFO  [alembic.runtime.migration] Context impl MySQLImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade b3d9e1f5a274 -> d82f9afb5898, add radar observations
+INFO  [alembic.runtime.migration] Running upgrade d82f9afb5898 -> a7c31f0b52d4, add the typed counter projection to radar_ingest_runs
+INFO  [alembic.runtime.migration] Running upgrade a7c31f0b52d4 -> b7e3f9c1a2d4, add radar board results
+__________________ test_a_lexicon_tone_carries_no_model_name __________________
+
+clean_posts = None
+
+    def test_a_lexicon_tone_carries_no_model_name(clean_posts):
+        with flask_app.app_context():
+            mention_id = make_post('zztrial-label-lex', ticker='ZZM', lexicon=0.8)
+            judge_as([mention_id], {mention_id: ja()})
+            posts, _total = detail_panel._posts(
+                'ZZM', ['bluesky'], NOW - dt.timedelta(hours=1),
+                NOW + dt.timedelta(hours=1))
+>           assert [(judged_by, label) for _p, _t, judged_by, label in posts] == \
+                [('lexicon', None)]
+E           AssertionError: assert [('lexicon', 'wording')] == [('lexicon', None)]
+E             
+E             At index 0 diff: ('lexicon', 'wording') != ('lexicon', None)
+E             Use -v to get more diff
+
+tests\test_radar_trial_writes.py:725: AssertionError
+_______ test_daily_closes_use_the_split_only_close_series_not_adjclose ________
+
+    def test_daily_closes_use_the_split_only_close_series_not_adjclose():
+        """[A1] Yahoo adjclose is split AND dividend adjusted; Massive and the
+        incumbent store are split-only. Selecting adjclose would manufacture a
+        dividend seam. A dividend makes the two series differ; the adapter must
+        return quote.close."""
+        day1 = 1788170400
+        day2 = day1 + 86400
+        payload = chart_payload(
+            timestamps=(day1, day2), closes=(100.0, 101.0), volumes=(1, 1),
+            adjclose=(98.5, 101.0))  # dividend-adjusted history differs
+        closes = yahoo.YahooProvider(FakeHttp(payload)).daily_closes('AAPL', 5)
+>       assert closes == [
+            (dt.datetime.fromtimestamp(day1, dt.timezone.utc).date(),
+             decimal.Decimal('100.0')),
+            (dt.datetime.fromtimestamp(day2, dt.timezone.utc).date(),
+             decimal.Decimal('101.0')),
+        ]
+E       AssertionError: assert [] == [(datetime.da...mal('101.0'))]
+E         
+E         Right contains 2 more items, first extra item: (datetime.date(2026, 8, 31), Decimal('100.0'))
+E         Use -v to get more diff
+
+tests\test_radar_yahoo.py:127: AssertionError
+_______________ test_daily_closes_survive_a_split_shaped_series _______________
+
+    def test_daily_closes_survive_a_split_shaped_series():
+        day1 = 1788170400
+        day2 = day1 + 86400
+        payload = chart_payload(
+            timestamps=(day1, day2), closes=(500.0, 50.5), volumes=(1, 1),
+            adjclose=(50.0, 50.5))
+        closes = yahoo.YahooProvider(FakeHttp(payload)).daily_closes('AAPL', 5)
+>       assert closes[0][1] == decimal.Decimal('500.0')
+               ^^^^^^^^^
+E       IndexError: list index out of range
+
+tests\test_radar_yahoo.py:142: IndexError
+_________ test_daily_closes_deduplicate_by_date_and_sort_oldest_first _________
+
+    def test_daily_closes_deduplicate_by_date_and_sort_oldest_first():
+        day = 1788170400
+        payload = chart_payload(
+            timestamps=(day + 3600, day, day + 86400),
+            closes=(100.5, 100.0, 101.0), volumes=(1, 1, 1))
+        closes = yahoo.YahooProvider(FakeHttp(payload)).daily_closes('AAPL', 5)
+        dates = [entry[0] for entry in closes]
+        assert dates == sorted(dates)
+>       assert len(dates) == len(set(dates)) == 2
+E       assert 0 == 2
+E        +  where 0 = len(set())
+E        +    where set() = set([])
+
+tests\test_radar_yahoo.py:153: AssertionError
+============================== warnings summary ===============================
+tests\test_radar_chatter_eligibility.py:23
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_chatter_eligibility.py:23: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    WINDOW = dt.datetime.utcnow().replace(minute=0, second=0,
+
+tests/test_auth.py: 25 warnings
+tests/test_gym_cold_start.py: 1 warning
+tests/test_gym_equipment.py: 3 warnings
+tests/test_gym_exercise_ownership.py: 9 warnings
+tests/test_gym_mutation_json.py: 4 warnings
+tests/test_gym_ownership.py: 130 warnings
+tests/test_gym_push_pruning.py: 8 warnings
+tests/test_gym_rest.py: 4 warnings
+tests/test_gym_routes_smoke.py: 4 warnings
+tests/test_gym_sharing.py: 237 warnings
+tests/test_radar_api.py: 1 warning
+tests/test_radar_board_parity.py: 4 warnings
+tests/test_radar_board_shared_api.py: 5 warnings
+tests/test_radar_hub_page.py: 1 warning
+tests/test_radar_operations_api.py: 2 warnings
+tests/test_radar_watch.py: 16 warnings
+tests/test_scripts.py: 6 warnings
+  C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\sql\schema.py:3624: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
+
+tests/test_auth.py: 1 warning
+tests/test_gym_csrf.py: 2 warnings
+tests/test_gym_mutation_json.py: 5 warnings
+tests/test_gym_ownership.py: 2 warnings
+tests/test_gym_routes_smoke.py: 5 warnings
+tests/test_gym_sharing.py: 3 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\workout.py:101: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_encoder_audit_chain.py: 37 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_encoder_audit_chain.py:84: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=1, hours=6)
+
+tests/test_encoder_audit_chain.py::test_sampling_refuses_before_day_one
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_encoder_audit_chain.py:261: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    judge_trial.current().first_judged_at =             dt.datetime.utcnow() - dt.timedelta(hours=12)
+
+tests/test_encoder_audit_chain.py: 137 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\scripts\audit_encoder_trial.py:130: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return dt.datetime.utcnow()
+
+tests/test_encoder_audit_chain.py: 13 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_encoder_audit_chain.py:204: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    'at': dt.datetime.utcnow().isoformat()}, out)
+
+tests/test_encoder_audit_chain.py::test_a_minimal_report_is_refused_even_with_matching_identity
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_encoder_audit_chain.py:651: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    dt.datetime.utcnow(), passed=True)
+
+tests/test_encoder_audit_chain.py::test_acceptance_needs_a_first_judgment
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_encoder_audit_chain.py:673: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    judge_trial.accept_audit(report, 'c' * 64, dt.datetime.utcnow(),
+
+tests/test_gym_cold_start.py: 19 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_cold_start.py:33: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_cold_start.py: 11 warnings
+tests/test_gym_mutation_json.py: 4 warnings
+tests/test_gym_rest.py: 2 warnings
+tests/test_gym_routes_smoke.py: 1 warning
+tests/test_gym_sharing.py: 1 warning
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\workout.py:1278: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    set_.completed_at = dt.datetime.utcnow() if set_.completed else None
+
+tests/test_gym_cold_start.py: 3 warnings
+tests/test_gym_mutation_json.py: 35 warnings
+tests/test_gym_ownership.py: 1 warning
+tests/test_gym_routes_smoke.py: 24 warnings
+tests/test_gym_seeding.py: 8 warnings
+tests/test_gym_session_json.py: 5 warnings
+tests/test_gym_sharing.py: 1 warning
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\seeding.py:84: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
+
+tests/test_gym_cold_start.py: 1 warning
+tests/test_gym_ownership.py: 2 warnings
+tests/test_gym_routes_smoke.py: 15 warnings
+tests/test_gym_sharing.py: 8 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\helpers.py:154: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    if session_ and dt.datetime.utcnow() - session_.started_at > STALE_SESSION_TIMEOUT:
+
+tests/test_gym_cold_start.py::test_the_first_run_of_a_new_template_gets_the_default_plan
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_cold_start.py:264: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    running.finished_at = dt.datetime.utcnow()
+
+tests/test_gym_cold_start.py::test_history_still_wins_over_the_default
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_cold_start.py:358: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+
+tests/test_gym_cold_start.py::test_history_still_wins_over_the_default
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_cold_start.py:359: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+
+tests/test_gym_cold_start.py::test_correcting_a_history_seeded_set_does_not_propagate
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_cold_start.py:421: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+
+tests/test_gym_cold_start.py::test_correcting_a_history_seeded_set_does_not_propagate
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_cold_start.py:422: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+
+tests/test_gym_cold_start.py::test_gym_update_set_does_not_propagate_on_a_finished_session
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_cold_start.py:731: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    session_.finished_at = dt.datetime.utcnow()
+
+tests/test_gym_equipment.py: 1 warning
+tests/test_gym_sharing.py: 32 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:112: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_gym_exercise_detail_json.py: 62 warnings
+tests/test_gym_ownership.py: 1 warning
+tests/test_gym_routes_smoke.py: 18 warnings
+tests/test_gym_schemas.py: 1 warning
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\exercise_detail.py:111: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    dt.datetime.utcnow(),
+
+tests/test_gym_exercise_ownership.py::test_a_new_accounts_exercise_list_is_empty
+tests/test_gym_exercise_ownership.py::test_the_owner_still_sees_their_own_exercise
+tests/test_gym_mutation_json.py::test_creating_an_exercise_answers_with_the_fresh_catalogue
+tests/test_gym_mutation_json.py::test_creating_an_exercise_answers_with_the_fresh_catalogue
+tests/test_gym_ownership.py::test_the_list_pages_show_none_of_another_users_numbers[/gym/uebungen]
+tests/test_gym_routes_smoke.py::test_uebungen_renders
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\catalogue.py:51: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_gym_exercise_ownership.py::test_adding_a_session_exercise_by_name_does_not_link_to_another_users_exercise
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_exercise_ownership.py:178: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_export.py::test_route_returns_v2
+tests/test_gym_export.py::test_route_exports_a_real_finished_session
+tests/test_gym_ownership.py::test_the_list_pages_show_none_of_another_users_numbers[/gym/export]
+tests/test_gym_ownership.py::test_the_export_asked_for_a_foreign_session_returns_none_of_it
+tests/test_gym_sharing.py::test_the_leader_cannot_read_the_followers_workout
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\reports.py:405: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    payload = export.build_payload(sessions, session_ids, dt.datetime.utcnow())
+
+tests/test_gym_mutation_json.py: 9 warnings
+tests/test_gym_session_json.py: 4 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\conftest.py:91: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    session_ = WorkoutSession(user_id=user_id, started_at=dt.datetime.utcnow())
+
+tests/test_gym_mutation_json.py::test_a_form_post_still_redirects
+tests/test_gym_mutation_json.py::test_a_json_request_gets_the_session_payload
+tests/test_gym_mutation_json.py::test_the_payload_reflects_the_mutation
+tests/test_gym_mutation_json.py::test_a_bare_fetch_does_not_get_json
+tests/test_gym_rest.py::test_completing_a_set_stamps_it
+tests/test_gym_rest.py::test_un_completing_a_set_clears_the_stamp
+tests/test_gym_rest.py::test_a_set_appended_mid_workout_is_stamped
+tests/test_gym_routes_smoke.py::test_ticking_a_set_done_does_not_destroy_its_deload_baseline
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\workout.py:73: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    rest_ends_at = dt.datetime.utcnow() + dt.timedelta(seconds=rest_seconds)
+
+tests/test_gym_mutation_json.py::test_a_json_request_gets_the_session_payload
+tests/test_gym_mutation_json.py::test_the_payload_reflects_the_mutation
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\workout.py:428: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    resting = bool(session_.rest_ends_at and session_.rest_ends_at > dt.datetime.utcnow())
+
+tests/test_gym_mutation_json.py::test_the_two_navigations_still_redirect
+tests/test_gym_sharing.py::test_the_leader_finishing_ends_the_link_and_leaves_the_follower_live
+tests/test_gym_sharing.py::test_nothing_propagates_after_the_link_ended
+tests/test_gym_sharing.py::test_deleting_a_finished_shared_session_clears_the_link_too
+tests/test_gym_sharing.py::test_the_follower_finishing_ends_the_link_and_leaves_the_leader_live
+tests/test_gym_sharing.py::test_reinviting_after_the_link_ended_gives_an_honest_message
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\workout.py:1438: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    session_.finished_at = dt.datetime.utcnow()
+
+tests/test_gym_mutation_json.py::test_a_finished_session_mutation_answers_with_the_debrief
+tests/test_gym_mutation_json.py::test_a_finished_session_form_post_still_redirects
+tests/test_gym_session_fields.py::test_meta_routes_persist_against_a_finished_session
+tests/test_gym_session_fields.py::test_finished_session_page_renders_bodyweight_and_exercise_note_fields
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\conftest.py:134: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(hours=1),
+
+tests/test_gym_mutation_json.py::test_a_finished_session_mutation_answers_with_the_debrief
+tests/test_gym_mutation_json.py::test_a_finished_session_form_post_still_redirects
+tests/test_gym_session_fields.py::test_meta_routes_persist_against_a_finished_session
+tests/test_gym_session_fields.py::test_finished_session_page_renders_bodyweight_and_exercise_note_fields
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\conftest.py:135: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow())
+
+tests/test_gym_ownership.py: 54 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_ownership.py:78: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(), user_id=owner.id)
+
+tests/test_gym_ownership.py: 54 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_ownership.py:91: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_started = dt.datetime.utcnow() - dt.timedelta(days=3)
+
+tests/test_gym_ownership.py: 2 warnings
+tests/test_gym_push_pruning.py: 8 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\push_routes.py:65: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_gym_ownership.py::test_the_list_pages_show_none_of_another_users_numbers[/gym/statistik]
+tests/test_gym_rest.py::test_statistik_reports_planned_against_actual_rest
+tests/test_gym_rest.py::test_rest_gaps_are_built_per_session_not_flattened_across_history
+tests/test_gym_rest.py::test_statistik_says_nothing_about_rest_without_stamps
+tests/test_gym_routes_smoke.py::test_statistik_ships_every_progression_window
+tests/test_gym_routes_smoke.py::test_statistik_no_longer_caps_the_progression_list
+tests/test_gym_routes_smoke.py::test_every_progression_window_scales_its_own_bars
+tests/test_gym_routes_smoke.py::test_statistik_renders
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\reports.py:277: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_gym_push_pruning.py::test_subscribing_stamps_when_the_device_was_last_seen
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_push_pruning.py:53: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    assert (dt.datetime.utcnow() - row.last_seen_at).total_seconds() < 60
+
+tests/test_gym_push_pruning.py::test_resubscribing_the_same_endpoint_refreshes_the_stamp
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_push_pruning.py:63: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    row.last_seen_at = dt.datetime.utcnow() - dt.timedelta(days=40)
+
+tests/test_gym_push_pruning.py::test_replacing_cannot_reach_another_users_subscription
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_push_pruning.py:94: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    user_id=other.id, last_seen_at=dt.datetime.utcnow()))
+
+tests/test_gym_push_pruning.py::test_pruning_drops_a_device_that_stopped_confirming_itself
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_push_pruning.py:108: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    row.last_seen_at = (dt.datetime.utcnow()
+
+tests/test_gym_push_pruning.py::test_pruning_drops_a_device_that_stopped_confirming_itself
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_push_pruning.py:114: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    assert push.prune_stale_subscriptions(dt.datetime.utcnow()) >= 1
+
+tests/test_gym_push_pruning.py::test_pruning_keeps_a_device_still_in_use
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_push_pruning.py:124: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    row.last_seen_at = (dt.datetime.utcnow()
+
+tests/test_gym_push_pruning.py::test_pruning_keeps_a_device_still_in_use
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_push_pruning.py:128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    push.prune_stale_subscriptions(dt.datetime.utcnow())
+
+tests/test_gym_rest.py::test_completing_a_set_stamps_it
+tests/test_gym_rest.py::test_un_completing_a_set_clears_the_stamp
+tests/test_gym_rest.py::test_a_set_appended_mid_workout_is_stamped
+tests/test_gym_rest.py::test_the_finished_page_says_nothing_about_rest_without_stamps
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_rest.py:29: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_rest.py::test_a_set_appended_mid_workout_is_stamped
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\workout.py:1060: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow(),
+
+tests/test_gym_rest.py::test_the_finished_page_reports_the_rest_it_measured
+tests/test_gym_rest.py::test_statistik_reports_planned_against_actual_rest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_rest.py:122: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+
+tests/test_gym_rest.py::test_the_finished_page_says_nothing_about_rest_without_stamps
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_rest.py:168: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    session_.finished_at = dt.datetime.utcnow()
+
+tests/test_gym_rest.py::test_rest_gaps_are_built_per_session_not_flattened_across_history
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_rest.py:234: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    base = dt.datetime.utcnow() - dt.timedelta(hours=2)
+
+tests/test_gym_routes_smoke.py: 17 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:41: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    session_ = WorkoutSession(name='pytest scratch', started_at=dt.datetime.utcnow(),
+
+tests/test_gym_routes_smoke.py::test_deload_on_a_finished_session_is_label_only
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:236: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    session_.finished_at = dt.datetime.utcnow()
+
+tests/test_gym_routes_smoke.py::test_a_new_session_seeds_from_the_last_normal_session_not_the_deload
+tests/test_gym_routes_smoke.py::test_a_new_session_seeds_from_the_last_normal_session_not_the_deload
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:349: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=offset)
+
+tests/test_gym_routes_smoke.py::test_stale_slot_history_does_not_beat_a_recent_performance
+tests/test_gym_routes_smoke.py::test_stale_slot_history_does_not_beat_a_recent_performance
+tests/test_gym_routes_smoke.py::test_recent_slot_history_still_wins_over_another_slot
+tests/test_gym_routes_smoke.py::test_recent_slot_history_still_wins_over_another_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:404: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+
+tests/test_gym_routes_smoke.py::test_reordering_a_deload_session_keeps_the_deloaded_weights
+tests/test_gym_routes_smoke.py::test_reordering_a_deload_session_keeps_the_deloaded_weights
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:497: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=3)
+
+tests/test_gym_routes_smoke.py::test_reordering_a_deload_session_keeps_the_deloaded_weights
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:508: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    active = WorkoutSession(name='pytest reorder active', started_at=dt.datetime.utcnow(),
+
+tests/test_gym_routes_smoke.py::test_live_stepper_falls_back_when_the_exercise_has_no_increment
+tests/test_gym_routes_smoke.py::test_live_stepper_uses_the_exercises_own_increment
+tests/test_gym_routes_smoke.py::test_session_sheet_writes_the_increment_to_the_exercise
+tests/test_gym_routes_smoke.py::test_session_sheet_clears_the_increment_back_to_the_default
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:576: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(), user_id=_admin_id())
+
+tests/test_gym_routes_smoke.py::test_deload_scales_the_suggestion_for_an_exercise_added_mid_session
+tests/test_gym_routes_smoke.py::test_adding_an_exercise_mid_session_seeds_its_sets_from_history
+tests/test_gym_routes_smoke.py::test_adding_an_exercise_to_a_deload_session_seeds_scaled_sets
+tests/test_gym_routes_smoke.py::test_deload_seeding_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_deload_seeds_ten_reps_and_remembers_the_real_ones
+tests/test_gym_routes_smoke.py::test_toggling_a_deload_on_rewrites_reps_and_off_restores_them
+tests/test_gym_routes_smoke.py::test_deload_toggle_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_hand_typed_reps_drop_the_deload_baseline
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:755: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=3),
+
+tests/test_gym_routes_smoke.py::test_deload_scales_the_suggestion_for_an_exercise_added_mid_session
+tests/test_gym_routes_smoke.py::test_adding_an_exercise_mid_session_seeds_its_sets_from_history
+tests/test_gym_routes_smoke.py::test_adding_an_exercise_to_a_deload_session_seeds_scaled_sets
+tests/test_gym_routes_smoke.py::test_deload_seeding_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_deload_seeds_ten_reps_and_remembers_the_real_ones
+tests/test_gym_routes_smoke.py::test_toggling_a_deload_on_rewrites_reps_and_off_restores_them
+tests/test_gym_routes_smoke.py::test_deload_toggle_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_hand_typed_reps_drop_the_deload_baseline
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:756: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=3),
+
+tests/test_gym_routes_smoke.py::test_deload_scales_the_suggestion_for_an_exercise_added_mid_session
+tests/test_gym_routes_smoke.py::test_adding_an_exercise_mid_session_seeds_its_sets_from_history
+tests/test_gym_routes_smoke.py::test_adding_an_exercise_to_a_deload_session_seeds_scaled_sets
+tests/test_gym_routes_smoke.py::test_deload_seeding_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_deload_seeds_ten_reps_and_remembers_the_real_ones
+tests/test_gym_routes_smoke.py::test_toggling_a_deload_on_rewrites_reps_and_off_restores_them
+tests/test_gym_routes_smoke.py::test_deload_toggle_snaps_to_the_exercises_real_stack_stops
+tests/test_gym_routes_smoke.py::test_hand_typed_reps_drop_the_deload_baseline
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:763: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_routes_smoke.py::test_finished_session_advice_snaps_to_the_exercises_real_stack_stops
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:987: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    base = dt.datetime.utcnow() - dt.timedelta(days=28)
+
+tests/test_gym_routes_smoke.py::test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1173: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+
+tests/test_gym_routes_smoke.py::test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1175: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow(), user_id=_admin_id())
+
+tests/test_gym_routes_smoke.py::test_saving_a_session_as_a_template_counts_as_having_done_it
+tests/test_gym_routes_smoke.py::test_saving_as_a_new_template_does_not_steal_a_session_from_its_routine
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1378: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(hours=1)
+
+tests/test_gym_routes_smoke.py::test_saving_a_session_as_a_template_counts_as_having_done_it
+tests/test_gym_routes_smoke.py::test_saving_as_a_new_template_does_not_steal_a_session_from_its_routine
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1380: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow(), user_id=_admin_id())
+
+tests/test_gym_routes_smoke.py::test_the_lead_routine_names_a_stall_inside_it
+tests/test_gym_routes_smoke.py::test_the_lead_routine_names_a_stall_inside_it
+tests/test_gym_routes_smoke.py::test_the_lead_routine_names_a_stall_inside_it
+tests/test_gym_routes_smoke.py::test_the_lead_routine_names_a_stall_inside_it
+tests/test_gym_routes_smoke.py::test_the_lead_routine_names_a_stall_inside_it
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1532: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+
+tests/test_gym_routes_smoke.py::test_the_lead_routine_ignores_a_stall_it_does_not_contain
+tests/test_gym_routes_smoke.py::test_the_lead_routine_ignores_a_stall_it_does_not_contain
+tests/test_gym_routes_smoke.py::test_the_lead_routine_ignores_a_stall_it_does_not_contain
+tests/test_gym_routes_smoke.py::test_the_lead_routine_ignores_a_stall_it_does_not_contain
+tests/test_gym_routes_smoke.py::test_the_lead_routine_ignores_a_stall_it_does_not_contain
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1627: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+
+tests/test_gym_routes_smoke.py::test_the_lead_routine_briefing_is_silent_when_nothing_stalls
+tests/test_gym_routes_smoke.py::test_the_lead_routine_briefing_is_silent_when_nothing_stalls
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1728: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+
+tests/test_gym_routes_smoke.py::test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1788: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow())
+
+tests/test_gym_routes_smoke.py::test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1796: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow()))
+
+tests/test_gym_routes_smoke.py::test_the_live_card_badges_an_exercise_that_went_easy_last_time
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1845: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=7),
+
+tests/test_gym_routes_smoke.py::test_the_live_card_badges_an_exercise_that_went_easy_last_time
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1846: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=7))
+
+tests/test_gym_routes_smoke.py::test_the_live_card_badges_an_exercise_that_went_easy_last_time
+tests/test_gym_routes_smoke.py::test_the_live_card_badges_an_exercise_that_went_easy_last_time
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1855: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=7)))
+
+tests/test_gym_routes_smoke.py::test_the_live_card_badges_an_exercise_that_went_easy_last_time
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1857: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow())
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_je_seite_for_unilateral_exercises
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1921: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=7),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_je_seite_for_unilateral_exercises
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1922: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=7))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_je_seite_for_unilateral_exercises
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_je_seite_for_unilateral_exercises
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1931: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=7)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_je_seite_for_unilateral_exercises
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1933: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow())
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_je_seite_for_unilateral_exercises
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1945: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow()))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_je_seite_for_unilateral_exercises
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:1949: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow()))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2007: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=50),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2008: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=50))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2017: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=50)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2020: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=45),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2021: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=45))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2030: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=45)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2033: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=5),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2034: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=5))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2043: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=5)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2046: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow())
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_never_claims_a_false_letztes_mal
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2061: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() if i == 1 else None))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2102: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=60),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2103: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=60))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2112: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=60)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2115: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=45),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2116: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=45))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2125: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=45)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2128: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=5),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2129: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=5))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2138: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=5)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2141: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow())
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2193: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=10),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2194: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=10))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2203: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=10)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2206: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=8),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2207: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=8))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2216: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=8)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2219: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2220: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=2))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2229: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    completed_at=dt.datetime.utcnow() - dt.timedelta(days=2)))
+
+tests/test_gym_routes_smoke.py::test_the_ready_badge_respects_the_live_exercises_own_slot
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_routes_smoke.py:2232: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow())
+
+tests/test_gym_seeding.py: 15 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_seeding.py:39: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+
+tests/test_gym_session_fields.py::test_new_session_has_no_bodyweight_or_notes
+tests/test_gym_session_fields.py::test_session_fields_round_trip
+tests/test_gym_session_fields.py::test_session_meta_route_saves_bodyweight_and_notes
+tests/test_gym_session_fields.py::test_blank_bodyweight_clears_it
+tests/test_gym_session_fields.py::test_exercise_meta_route_saves_note_and_pain
+tests/test_gym_session_fields.py::test_unchecked_pain_clears_the_flag
+tests/test_gym_session_fields.py::test_meta_routes_require_login
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_session_fields.py:20: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow())
+
+tests/test_gym_session_json.py::test_a_stalling_live_exercise_carries_its_prescription
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_session_json.py:119: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    base = dt.datetime.utcnow() - dt.timedelta(days=27)
+
+tests/test_gym_session_json.py::test_a_stalling_live_exercise_carries_its_prescription
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_session_json.py:132: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(), user_id=_admin_id())
+
+tests/test_gym_sharing.py::test_a_shared_session_links_two_sessions_and_starts_pending
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:28: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_sharing.py::test_a_mid_workout_addition_seeds_from_the_followers_own_history_not_the_leaders
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:265: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+
+tests/test_gym_sharing.py::test_a_mid_workout_addition_seeds_from_the_followers_own_history_not_the_leaders
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:266: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    finished_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+
+tests/test_gym_sharing.py::test_reconciliation_refuses_an_ended_link
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:491: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    shared.ended_at = dt.datetime.utcnow()
+
+tests/test_gym_sharing.py::test_remove_mirrors_of_refuses_once_the_follower_has_finished
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:673: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    follower_session.finished_at = dt.datetime.utcnow()
+
+tests/test_gym_sharing.py::test_remove_mirrors_of_cancels_the_followers_pending_push
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:765: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    follower_session.rest_ends_at = dt.datetime.utcnow() + dt.timedelta(seconds=90)
+
+tests/test_gym_sharing.py::test_remove_mirrors_of_cancels_the_followers_pending_push
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:767: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    fire_at=dt.datetime.utcnow() + dt.timedelta(seconds=90),
+
+tests/test_gym_sharing.py::test_reconciles_own_removal_pass_also_clears_the_resting_set_id
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:812: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    fire_at=dt.datetime.utcnow(), sent=False))
+
+tests/test_gym_sharing.py::test_reconciling_one_link_leaves_a_second_links_mirror_alone
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:889: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_sharing.py::test_reconciling_one_link_leaves_a_second_links_mirror_alone
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:903: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    accepted_at=dt.datetime.utcnow())
+
+tests/test_gym_sharing.py: 45 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:975: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(), user_id=leader.id)
+
+tests/test_gym_sharing.py: 30 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\partners.py:221: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_sharing.py: 29 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\routes\partners.py:276: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    shared.accepted_at = dt.datetime.utcnow()
+
+tests/test_gym_sharing.py::test_the_booked_session_counts_as_that_routines_last_performance
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:1292: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    dt.datetime.utcnow())
+
+tests/test_gym_sharing.py::test_the_booked_session_counts_as_that_routines_last_performance
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:1299: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    memory = stats.routine_memory([template], sessions, dt.datetime.utcnow())
+
+tests/test_gym_sharing.py::test_a_partner_with_a_live_workout_is_refused
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:1408: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_sharing.py::test_an_invite_to_a_finished_workout_is_refused
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:1439: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    leader_with_partner['session']).finished_at = dt.datetime.utcnow()
+
+tests/test_gym_sharing.py::test_a_partner_with_a_live_workout_is_refused_on_post_accept
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:1468: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_gym_sharing.py::test_an_invite_to_a_finished_workout_is_refused_on_post_accept
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:1503: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    leader_with_partner['session']).finished_at = dt.datetime.utcnow()
+
+tests/test_gym_sharing.py::test_the_leader_finishing_ends_the_link_and_leaves_the_follower_live
+tests/test_gym_sharing.py::test_nothing_propagates_after_the_link_ended
+tests/test_gym_sharing.py::test_deleting_a_finished_shared_session_clears_the_link_too
+tests/test_gym_sharing.py::test_a_stale_leader_session_auto_finishing_also_ends_the_link
+tests/test_gym_sharing.py::test_the_follower_finishing_ends_the_link_and_leaves_the_leader_live
+tests/test_gym_sharing.py::test_reinviting_after_the_link_ended_gives_an_honest_message
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\gym\sharing.py:411: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    shared.ended_at = dt.datetime.utcnow()
+
+tests/test_gym_sharing.py::test_a_stale_leader_session_auto_finishing_also_ends_the_link
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_gym_sharing.py:1884: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    dt.datetime.utcnow() - STALE_SESSION_TIMEOUT - dt.timedelta(minutes=1))
+
+tests/test_radar_activity.py: 4 warnings
+tests/test_radar_board_results_migration.py: 46 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\migrations\env.py:21: DeprecationWarning: 'get_engine' is deprecated and will be removed in Flask-SQLAlchemy 3.2. Use 'engine' or 'engines[key]' instead. If you're using Flask-Migrate or Alembic, you'll need to update your 'env.py' file.
+    return current_app.extensions['migrate'].db.get_engine()
+
+tests/test_radar_api.py: 37 warnings
+tests/test_radar_board.py: 35 warnings
+tests/test_radar_board_parity.py: 154 warnings
+tests/test_radar_detail.py: 21 warnings
+tests/test_radar_hub_page.py: 7 warnings
+tests/test_radar_observations.py: 2 warnings
+tests/test_radar_watch_api.py: 2 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\coverage.py:51: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return dt.datetime.utcnow()
+
+tests/test_radar_api.py: 37 warnings
+tests/test_radar_board_shared_api.py: 3 warnings
+tests/test_radar_hub_page.py: 8 warnings
+tests/test_radar_observations.py: 2 warnings
+tests/test_radar_operations_api.py: 2 warnings
+tests/test_radar_watch_api.py: 1 warning
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\llm_sentiment.py:1132: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = now or dt.datetime.utcnow()
+
+tests/test_radar_board_parity.py: 4 warnings
+tests/test_radar_board_shared_api.py: 4 warnings
+tests/test_radar_watch.py: 5 warnings
+tests/test_radar_watch_api.py: 3 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\watch.py:55: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    created_at=now or dt.datetime.utcnow()))
+
+tests/test_radar_chatter_eligibility.py: 6 warnings
+tests/test_radar_judge_trial.py: 18 warnings
+tests/test_radar_llm_sentiment.py: 4 warnings
+tests/test_radar_sentiment_v2.py: 3 warnings
+tests/test_radar_trial_writes.py: 5 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\journal.py:236: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    decided_at = dt.datetime.utcnow()
+
+tests/test_radar_chatter_eligibility.py::test_rebuild_drops_the_excluded_and_preserves_baseline_inputs
+tests/test_radar_chatter_eligibility.py::test_rebuild_drops_the_excluded_and_preserves_baseline_inputs
+tests/test_radar_chatter_eligibility.py::test_removing_the_last_eligible_event_leaves_explicit_zeros
+tests/test_radar_chatter_eligibility.py::test_a_generation_mismatch_clears_scores_instead_of_recomputing
+tests/test_radar_chatter_eligibility.py::test_a_window_older_than_the_journal_horizon_is_refused
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\journal.py:273: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = now or dt.datetime.utcnow()
+
+tests/test_radar_chatter_eligibility.py::test_recent_decided_windows_keys_on_decision_time_not_event_age
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_chatter_eligibility.py:219: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_radar_daemon.py::test_daemon_schedules_weekly_mapping_refresh
+tests/test_radar_daemon.py::test_shadow_mode_builds_a_mapping_generation_shortly_after_restart
+tests/test_radar_daemon.py::test_the_five_market_data_jobs_register_once_and_radar_quotes_is_gone
+tests/test_radar_daemon.py::test_the_yahoo_fallback_flag_widens_the_us_cadence
+tests/test_radar_observations.py::test_the_job_is_registered_on_the_quarter_hour
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\run_radar_ingest.py:1322: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    expiry = judge_trial.tick(dt.datetime.utcnow())
+
+tests/test_radar_daemon.py: 4 warnings
+tests/test_radar_judge_config.py: 18 warnings
+tests/test_radar_observations.py: 1 warning
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\judge_config.py:131: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = now or dt.datetime.utcnow()
+
+tests/test_radar_instruments.py::test_activation_upserts_primaries_and_retires_the_previous_generation
+tests/test_radar_instruments.py::test_activation_persists_tradegate_primary_and_xetra_proxy
+tests/test_radar_instruments.py::test_later_generation_without_proxy_deactivates_the_old_proxy
+tests/test_radar_instruments.py::test_later_generation_without_proxy_deactivates_the_old_proxy
+tests/test_radar_instruments.py::test_rollback_restores_the_previous_primary
+tests/test_radar_instruments.py::test_rollback_removes_proxy_authority
+tests/test_radar_instruments.py::test_duplicate_proxy_identity_refuses_before_mutation
+tests/test_radar_instruments.py::test_a_failed_activation_leaves_the_previous_state_untouched
+tests/test_radar_market_data.py::test_de_backfill_discovers_an_activated_xetra_proxy
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\instruments.py:481: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    generation = RadarMappingGeneration.query.get(generation_id)
+
+tests/test_radar_instruments.py::test_activation_upserts_primaries_and_retires_the_previous_generation
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_instruments.py:413: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    active = RadarMappingGeneration.query.get(generation.id)
+
+tests/test_radar_instruments.py::test_rollback_restores_the_previous_primary
+tests/test_radar_instruments.py::test_rollback_removes_proxy_authority
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\instruments.py:506: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    generation = RadarMappingGeneration.query.get(generation_id)
+
+tests/test_radar_instruments.py::test_a_failed_activation_leaves_the_previous_state_untouched
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_instruments.py:586: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    assert RadarMappingGeneration.query.get(generation.id).status == 'shadow'
+
+tests/test_radar_judge_config.py::test_the_encoder_starts_against_its_own_armed_trial
+tests/test_radar_judge_config.py::test_a_different_artifact_than_the_one_armed_is_refused
+tests/test_radar_judge_config.py::test_a_retired_trial_serves_an_artifact_it_never_armed
+tests/test_radar_judge_config.py::test_retirement_does_not_lift_the_identity_checks[model_id]
+tests/test_radar_judge_config.py::test_retirement_does_not_lift_the_identity_checks[prompt_version]
+tests/test_radar_judge_config.py::test_a_finished_trial_disables_judging_without_stopping_ingestion[recovering]
+tests/test_radar_judge_config.py::test_a_finished_trial_disables_judging_without_stopping_ingestion[recovered]
+tests/test_radar_judge_config.py::test_a_backend_that_cannot_review_is_refused_for_the_review_role
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_judge_config.py:63: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return judge_trial.arm_trial(dt.datetime.utcnow(),
+
+tests/test_radar_judge_config.py::test_a_bad_flag_fails_startup_but_never_a_board_request
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_judge_config.py:344: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    assert llm_sentiment._over_ceiling_gauge(dt.datetime.utcnow(), 0) == 0
+
+tests/test_radar_judge_trial.py::test_recovery_without_a_trial_refuses
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\judge_trial.py:493: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = now or dt.datetime.utcnow()
+
+tests/test_radar_judge_trial.py::test_the_write_side_refuses_a_post_outside_the_retained_interval
+tests/test_radar_judge_trial.py::test_the_write_side_refuses_a_post_outside_the_retained_interval
+tests/test_radar_trial_writes.py::test_the_pass_takes_its_tone_policy_from_the_backend
+tests/test_radar_trial_writes.py::test_the_trial_row_stays_locked_while_the_verdicts_are_written
+tests/test_radar_trial_writes.py::test_a_mention_older_than_the_retained_interval_is_never_picked
+tests/test_radar_trial_writes.py::test_the_first_judgment_clock_is_the_reading_taken_under_the_lock
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\judge_trial.py:828: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    floor = rebuildable_from(now or dt.datetime.utcnow())
+
+tests/test_radar_llm_sentiment.py::test_run_pass_judges_pending_and_books_spend
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_llm_sentiment.py:140: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    spent_before = (db.session.query(RadarLlmSpend).get(
+
+tests/test_radar_llm_sentiment.py::test_run_pass_judges_pending_and_books_spend
+tests/test_radar_llm_sentiment.py::test_one_failed_batch_leaves_its_mentions_retryable
+tests/test_radar_llm_sentiment.py::test_a_duplicated_item_number_keeps_only_one_answer
+tests/test_radar_trial_writes.py::test_the_pass_takes_its_tone_policy_from_the_backend
+tests/test_radar_trial_writes.py::test_the_encoder_will_not_judge_without_an_armed_trial
+tests/test_radar_trial_writes.py::test_answers_that_outlive_their_trial_are_discarded
+tests/test_radar_trial_writes.py::test_a_stop_from_another_process_is_seen_before_anything_is_written
+tests/test_radar_trial_writes.py::test_the_trial_row_stays_locked_while_the_verdicts_are_written
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\llm_sentiment.py:820: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = now or clock()
+
+tests/test_radar_llm_sentiment.py: 4 warnings
+tests/test_radar_sentiment_v2.py: 49 warnings
+tests/test_radar_trial_writes.py: 49 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\llm_sentiment.py:494: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_radar_llm_sentiment.py: 4 warnings
+tests/test_radar_sentiment_v2.py: 4 warnings
+tests/test_radar_trial_writes.py: 4 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\llm_sentiment.py:934: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_radar_llm_sentiment.py::test_run_pass_judges_pending_and_books_spend
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_llm_sentiment.py:152: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    spent = db.session.query(RadarLlmSpend).get(
+
+tests/test_radar_llm_sentiment.py::test_run_pass_with_an_empty_gate_makes_no_call_and_books_nothing
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_llm_sentiment.py:237: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    spent_before = db.session.query(RadarLlmSpend).get(
+
+tests/test_radar_llm_sentiment.py::test_run_pass_with_an_empty_gate_makes_no_call_and_books_nothing
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_llm_sentiment.py:245: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    spent = db.session.query(RadarLlmSpend).get(
+
+tests/test_radar_market_data.py: 25 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\market_data.py:113: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    generation = RadarMappingGeneration.query.get(generation_id)
+
+tests/test_radar_market_data.py: 36 warnings
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\market_data.py:322: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    cursor = RadarMarketDataCursor.query.get(
+
+tests/test_radar_market_data.py::test_a_normal_cycle_commits_cursor_events_quote_and_cycle_together
+tests/test_radar_market_data.py::test_rerunning_the_same_files_writes_nothing_new
+tests/test_radar_market_data.py::test_an_expired_backlog_file_is_skipped_not_wedged
+tests/test_radar_market_data.py::test_a_pass_of_only_expired_files_advances_past_them
+tests/test_radar_market_data.py::test_shadow_mode_never_writes_live_rows
+tests/test_radar_market_data.py::test_a_cycle_downloads_only_the_newest_files_and_skips_the_backlog
+tests/test_radar_market_data.py::test_a_429_backs_the_channel_off_and_the_next_cycle_makes_no_request
+tests/test_radar_market_data.py::test_a_pre_quota_cycle_row_counts_as_one_attempt
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\market_data.py:171: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    cursor = RadarMarketDataCursor.query.get(
+
+tests/test_radar_market_data.py::test_native_close_prefers_the_official_marker
+tests/test_radar_market_data.py::test_native_close_prefers_the_official_marker
+tests/test_radar_market_data.py::test_native_close_falls_back_to_the_final_session_trade
+tests/test_radar_market_data.py::test_an_incomplete_session_is_not_materialized
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\market_data.py:569: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    generation = RadarMappingGeneration.query.get(generation_id)
+
+tests/test_radar_market_data.py::test_a_cycle_downloads_only_the_newest_files_and_skips_the_backlog
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_market_data.py:1066: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    cursor = RadarMarketDataCursor.query.get(('deutsche_boerse_delayed', 'XGAT', 'posttrade'))
+
+tests/test_radar_sentiment_v2.py::test_shadow_mode_meters_but_never_calls
+tests/test_radar_sentiment_v2.py::test_demand_is_counted_once_across_passes
+tests/test_radar_sentiment_v2.py::test_demand_is_counted_once_across_passes
+tests/test_radar_sentiment_v2.py::test_the_ceiling_caps_on_attempted_and_priority_wins
+tests/test_radar_sentiment_v2.py::test_a_failed_sonnet_call_meters_attempted_but_not_served
+tests/test_radar_sentiment_v2.py::test_sonnet_result_overwrites_and_carries_the_preamble
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\llm_sentiment.py:973: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = now or dt.datetime.utcnow()
+
+tests/test_radar_sentiment_v2.py::test_cost_projection_uses_measured_history_when_present
+tests/test_radar_sentiment_v2.py::test_rejudge_judges_through_an_explicitly_constructed_haiku
+tests/test_radar_sentiment_v2.py::test_a_dry_run_constructs_no_judge_at_all
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\scripts\rejudge_radar_sentiment.py:69: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    since = dt.datetime.utcnow() - dt.timedelta(days=days)
+
+tests/test_radar_trial_writes.py::test_the_pass_takes_its_tone_policy_from_the_backend
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:532: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    judge_trial.arm_trial(dt.datetime.utcnow(), artifact_sha256='a' * 64,
+
+tests/test_radar_trial_writes.py::test_the_pass_takes_its_tone_policy_from_the_backend
+tests/test_radar_trial_writes.py::test_the_encoder_will_not_judge_without_an_armed_trial
+tests/test_radar_trial_writes.py::test_answers_that_outlive_their_trial_are_discarded
+tests/test_radar_trial_writes.py::test_a_stop_from_another_process_is_seen_before_anything_is_written
+tests/test_radar_trial_writes.py::test_the_trial_row_stays_locked_while_the_verdicts_are_written
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\llm_sentiment.py:823: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    armed = trial.guard_encoder_trial(clock()) if trial is not None else None
+
+tests/test_radar_trial_writes.py::test_the_pass_takes_its_tone_policy_from_the_backend
+tests/test_radar_trial_writes.py::test_answers_that_outlive_their_trial_are_discarded
+tests/test_radar_trial_writes.py::test_a_stop_from_another_process_is_seen_before_anything_is_written
+tests/test_radar_trial_writes.py::test_the_trial_row_stays_locked_while_the_verdicts_are_written
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\llm_sentiment.py:848: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    before_batch=((lambda: trial.guard_encoder_trial(clock()))
+
+tests/test_radar_trial_writes.py::test_the_pass_takes_its_tone_policy_from_the_backend
+tests/test_radar_trial_writes.py::test_answers_that_outlive_their_trial_are_discarded
+tests/test_radar_trial_writes.py::test_a_stop_from_another_process_is_seen_before_anything_is_written
+tests/test_radar_trial_writes.py::test_the_trial_row_stays_locked_while_the_verdicts_are_written
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\features\radar\judge_trial.py:808: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    when = clock()
+
+tests/test_radar_trial_writes.py::test_answers_that_outlive_their_trial_are_discarded
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:800: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    judge_trial.arm_trial(dt.datetime.utcnow(), artifact_sha256='a' * 64,
+
+tests/test_radar_trial_writes.py::test_a_stop_from_another_process_is_seen_before_anything_is_written
+tests/test_radar_trial_writes.py::test_the_trial_row_stays_locked_while_the_verdicts_are_written
+tests/test_radar_trial_writes.py::test_a_batch_after_the_deadline_is_not_even_sent
+tests/test_radar_trial_writes.py::test_answers_judged_before_the_deadline_are_not_written_after_it
+tests/test_radar_trial_writes.py::test_a_mention_older_than_the_retained_interval_is_never_picked
+tests/test_radar_trial_writes.py::test_the_boundary_asks_the_clock_after_the_lock_is_held
+tests/test_radar_trial_writes.py::test_the_first_judgment_clock_is_the_reading_taken_under_the_lock
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:848: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    row = judge_trial.arm_trial(overrides.pop('now', dt.datetime.utcnow()),
+
+tests/test_radar_trial_writes.py::test_a_batch_after_the_deadline_is_not_even_sent
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:970: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS) \
+
+tests/test_radar_trial_writes.py::test_a_batch_after_the_deadline_is_not_even_sent
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:979: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    when=dt.datetime.utcnow() - dt.timedelta(hours=2))
+
+tests/test_radar_trial_writes.py::test_a_batch_after_the_deadline_is_not_even_sent
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:981: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+
+tests/test_radar_trial_writes.py::test_answers_judged_before_the_deadline_are_not_written_after_it
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:1021: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS) \
+
+tests/test_radar_trial_writes.py::test_answers_judged_before_the_deadline_are_not_written_after_it
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:1028: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+
+tests/test_radar_trial_writes.py::test_a_mention_older_than_the_retained_interval_is_never_picked
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:1057: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_radar_trial_writes.py::test_the_boundary_asks_the_clock_after_the_lock_is_held
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:1107: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(days=judge_trial.TRIAL_DEADLINE_DAYS) \
+
+tests/test_radar_trial_writes.py::test_the_boundary_asks_the_clock_after_the_lock_is_held
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:1114: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+
+tests/test_radar_trial_writes.py::test_the_first_judgment_clock_is_the_reading_taken_under_the_lock
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:1144: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    when=dt.datetime.utcnow() - dt.timedelta(hours=1))
+
+tests/test_radar_trial_writes.py::test_the_first_judgment_clock_is_the_reading_taken_under_the_lock
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_radar_trial_writes.py:1145: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    before = dt.datetime.utcnow().replace(microsecond=0)
+
+tests/test_scripts.py::test_delete_user_refuses_a_user_with_a_logged_session
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_scripts.py:106: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started_at=dt.datetime.utcnow(),
+
+tests/test_scripts.py::TestPendingPushes::test_a_finished_sessions_pending_push_is_retired_not_fired
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_scripts.py:224: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    started = dt.datetime.utcnow() - dt.timedelta(hours=3)
+
+tests/test_scripts.py::TestPendingPushes::test_a_finished_sessions_pending_push_is_retired_not_fired
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_scripts.py:232: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    fire_at=dt.datetime.utcnow() - dt.timedelta(minutes=5))
+
+tests/test_scripts.py::TestPendingPushes::test_a_finished_sessions_pending_push_is_retired_not_fired
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\run_gym_notifier.py:20: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    PendingPush.fire_at <= dt.datetime.utcnow(),
+
+tests/test_scripts.py::TestWeeklyDigest::test_sums_the_week_in_german
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_scripts.py:288: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = dt.datetime.utcnow()
+
+tests/test_scripts.py::TestWeeklyDigest::test_an_empty_week_sends_nothing
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\tests\test_scripts.py:335: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    assert _weekly_digest_for(user_id, dt.datetime.utcnow()) is None
+
+tests/test_train_radar_sentiment.py::test_artifact_metadata_carries_the_contract
+tests/test_train_radar_sentiment.py::test_promotion_is_atomic_and_rollback_is_the_old_pointer
+tests/test_train_radar_sentiment.py::test_promotion_is_atomic_and_rollback_is_the_old_pointer
+tests/test_train_radar_sentiment.py::test_the_scorer_is_ticker_aware_through_the_target_mask
+tests/test_train_radar_sentiment.py::test_cold_start_and_stale_artifacts_fall_back_to_the_lexicon
+tests/test_train_radar_sentiment.py::test_the_artifact_records_its_training_cutoff
+tests/test_train_radar_sentiment.py::test_promote_command_gates_an_existing_artifact
+tests/test_train_radar_sentiment.py::test_a_missing_key_artifact_is_refused_at_load
+  C:\Users\michi\Desktop\CodingStuff-worktrees\radar-perf3\personal_apps\scripts\train_radar_sentiment.py:389: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    'trained_at': dt.datetime.utcnow().isoformat(),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_diagnose_extractor_feedback.py::test_the_full_run_is_read_only_and_recommends_nothing_yet
+FAILED tests/test_radar_activity.py::test_the_migration_adds_and_removes_only_its_own_two_tables
+FAILED tests/test_radar_trial_writes.py::test_a_lexicon_tone_carries_no_model_name
+FAILED tests/test_radar_yahoo.py::test_daily_closes_use_the_split_only_close_series_not_adjclose
+FAILED tests/test_radar_yahoo.py::test_daily_closes_survive_a_split_shaped_series
+FAILED tests/test_radar_yahoo.py::test_daily_closes_deduplicate_by_date_and_sort_oldest_first
+6 failed, 2956 passed, 5 skipped, 2138 warnings in 496.63s (0:08:16)

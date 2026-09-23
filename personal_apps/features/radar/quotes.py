@@ -24,16 +24,30 @@ from models import RadarInstrument, RadarQuote
 
 from .config import MIN_CLOSES_FOR_SIGMA, SESSION_HOURS, STALE_QUOTE_POLLS
 from .market_calendars import session_state
-from .markets import QuoteView, select_quote
+from .markets import CURRENCY, MARKET, QuoteView, select_quote
 from .prices import Quote
 
 
 def record_quotes(quotes, now, *, is_shadow=False, commit=True):
     """Store a snapshot per quote. Returns how many were written.
 
-    ``commit=False`` only stages rows, so the German collector can commit
-    quotes, cursor, trade events, and cycle metrics in one transaction.
+    ``commit=False`` only stages rows for a caller that commits them together
+    with its own writes. Only US dollar prints are written: the archived
+    non-US rows in this table have no active writer, and none may be added.
     """
+    for quote in quotes.values():
+        if quote.market != MARKET or quote.currency != CURRENCY:
+            raise ValueError(
+                f'only US USD quotes are stored, not '
+                f'{quote.market}/{quote.currency}')
+        # A snapshot without a venue belongs to no instrument. Storing one
+        # under a stand-in MIC produces a row every reader filters past once
+        # the real mapping arrives, so an unmapped identity is refused here
+        # rather than recorded under a venue nobody verified.
+        if quote.mic is None:
+            raise ValueError(
+                f'{quote.ticker} has no MIC; an unmapped identity is not '
+                f'quoted')
     written = 0
     for quote in quotes.values():
         db.session.add(RadarQuote(
@@ -52,19 +66,39 @@ def record_quotes(quotes, now, *, is_shadow=False, commit=True):
 
 
 def _instrument_identity(instrument):
-    """Return ``(ticker, market, mic, result_key)`` for old and new callers."""
+    """Return ``(ticker, market, mic, result_key)`` for old and new callers.
+
+    Every identity is a US one; anything else is a caller bug.
+    """
     if isinstance(instrument, str):
-        return instrument, 'us', None, instrument
+        return instrument, MARKET, None, instrument
     if isinstance(instrument, tuple):
         ticker, market, *rest = instrument
-        return ticker, market, rest[0] if rest else None, (ticker, market)
-    return (instrument.ticker, instrument.market, instrument.mic,
-            (instrument.ticker, instrument.market))
+        identity = ticker, market, rest[0] if rest else None, (ticker, market)
+    else:
+        identity = (instrument.ticker, instrument.market, instrument.mic,
+                    (instrument.ticker, instrument.market))
+    _require_us(identity[1])
+    return identity
 
 
-def _stored_quote(row, instrument, market):
-    """Adapt one persisted snapshot to the immutable presentation contract."""
-    is_us = market == 'us'
+def _require_us(market):
+    if market != MARKET:
+        raise ValueError(f'unknown market: {market}')
+
+
+def _stored_quote(row, instrument):
+    """Adapt one persisted US snapshot to the immutable presentation contract.
+
+    The instrument is required and supplies the whole identity. It used to be
+    optional, and a missing one produced `XNAS`: a MIC no listing resolves to,
+    on a row whose real venue nobody had verified. Legacy `(NULL, NULL)` rows
+    stay readable -- they are selected for a mapped instrument and read under
+    that instrument's actual MIC.
+    """
+    if instrument is None:
+        raise ValueError(f'{row.ticker} has no mapped US instrument; a stored '
+                         f'row carries no venue identity of its own')
     # The transitional snapshot table predates a provider-quality column.  A
     # print from an earlier UTC date is therefore an EOD retention, not a
     # delayed intraday quote merely because the poll that kept it ran recently.
@@ -72,14 +106,11 @@ def _stored_quote(row, instrument, market):
         'eod' if row.quote_ts is not None and
         row.quote_ts.date() < row.fetched_at.date() else 'live')
     return Quote(
-        ticker=row.ticker, market=market,
-        venue=(instrument.venue if instrument else ('US' if is_us else 'Xetra')),
-        mic=(instrument.mic if instrument else
-             (row.mic or ('XNAS' if is_us else 'XETR'))),
-        provider_symbol=(instrument.provider_symbol if instrument else
-                         (row.provider_symbol or row.ticker)),
-        currency=(instrument.currency if instrument else
-                  (row.currency or ('USD' if is_us else 'EUR'))),
+        ticker=row.ticker, market=MARKET,
+        venue=instrument.venue,
+        mic=instrument.mic,
+        provider_symbol=instrument.provider_symbol,
+        currency=instrument.currency,
         price=row.price, previous_close=row.prev_close,
         regular_close=getattr(row, 'regular_close', None), quote_ts=row.quote_ts,
         volume=row.volume, provider_delay=provider_delay,
@@ -93,14 +124,16 @@ def _stored_quote(row, instrument, market):
 
 
 def quote_views_for(tickers, requested_market, now):
-    """Return one selected, market-honest ``QuoteView`` per ticker.
+    """Return one selected, market-honest US ``QuoteView`` per ticker.
 
-    The requested market and the fallback market are queried as separate
-    instruments, so frozen-tape eligibility and calendar session remain facts
-    of the selected row rather than a board-wide assumption.
+    Only a verified, mapped US primary instrument is read, so frozen-tape
+    eligibility and calendar session remain facts of the selected row.
+    Archived non-US instruments and quotes are never loaded, and a ticker
+    with no mapped US primary is unavailable even when rows are stored under
+    its symbol: without an instrument nothing verifies which venue, currency
+    or provider symbol those rows belong to.
     """
-    if requested_market not in {'us', 'de'}:
-        raise ValueError(f'unknown market: {requested_market}')
+    _require_us(requested_market)
     tickers = list(tickers)
     if not tickers:
         return {}
@@ -109,82 +142,61 @@ def quote_views_for(tickers, requested_market, now):
                    .filter(RadarInstrument.ticker.in_(tickers),
                            RadarInstrument.is_primary.is_(True),
                            RadarInstrument.mapping_status == 'mapped',
-                           RadarInstrument.market.in_(('us', 'de')))
-                   .order_by(RadarInstrument.ticker, RadarInstrument.market,
+                           RadarInstrument.market == MARKET)
+                   .order_by(RadarInstrument.ticker,
                              RadarInstrument.mic).all())
-    primary = {(row.ticker, row.market): row for row in instruments}
+    primary = {row.ticker: row for row in instruments}
 
-    by_market = {
-        'us': [primary.get((ticker, 'us')) or (ticker, 'us', None)
-               for ticker in tickers],
-        'de': [primary[(ticker, 'de')] for ticker in tickers
-               if (ticker, 'de') in primary],
-    }
-    statuses = {}
-    for market, candidates in by_market.items():
-        if candidates:
-            statuses[market] = statuses_for(
-                candidates, now,
-                session=session_state(
-                    market, now.replace(tzinfo=dt.timezone.utc)))
+    candidates = [primary[ticker] for ticker in tickers if ticker in primary]
+    statuses = statuses_for(
+        candidates, now,
+        session=session_state(MARKET, now.replace(tzinfo=dt.timezone.utc))
+    ) if candidates else {}
 
     views = {}
     for ticker in tickers:
+        instrument = primary.get(ticker)
         snapshots = {}
-        tape_statuses = {}
-        for market in ('us', 'de'):
-            status, row = statuses.get(market, {}).get((ticker, market),
-                                                        ('unknown', None))
-            if row is None:
-                continue
-            snapshots[market] = _stored_quote(
-                row, primary.get((ticker, market)), market)
-            tape_statuses[market] = status
-
-        # A verified German primary mapping makes the US fallback dishonest:
-        # a silent feed shows its retained stale quote or unavailable, never
-        # a USD price dressed as Germany (spec §4.2).
-        allow_us_fallback = (requested_market != 'de' or
-                             (ticker, 'de') not in primary)
-        provisional = select_quote(ticker, requested_market, snapshots, now,
-                                   allow_us_fallback=allow_us_fallback)
-        tape_status = tape_statuses.get(provisional.market, 'unknown')
-        views[ticker] = select_quote(
-            ticker, requested_market, snapshots, now, tape_status=tape_status,
-            allow_us_fallback=allow_us_fallback)
+        status = 'unknown'
+        if instrument is not None:
+            status, row = statuses.get((ticker, MARKET), ('unknown', None))
+            if row is not None:
+                snapshots[MARKET] = _stored_quote(row, instrument)
+        views[ticker] = select_quote(ticker, MARKET, snapshots, now,
+                                     tape_status=status)
     return views
 
 
 def _quote_matches(ticker, market, mic):
+    """The US rows of one instrument; archived non-US rows never match."""
+    _require_us(market)
     # Shadow rows are measurement-only; no live read may see one.
     clauses = [RadarQuote.ticker == ticker,
                RadarQuote.is_shadow.is_(False)]
     # During the expand/write overlap, `(NULL, NULL)` is the legacy US
     # identity.  A requested primary MIC must include that pair; filtering
     # only `market IS NULL` and then requiring the MIC loses old snapshots.
-    if market == 'us' and mic is not None:
+    legacy = sa.and_(RadarQuote.market.is_(None), RadarQuote.mic.is_(None))
+    if mic is not None:
         clauses.append(sa.or_(
-            sa.and_(RadarQuote.market == 'us', RadarQuote.mic == mic),
-            sa.and_(RadarQuote.market.is_(None), RadarQuote.mic.is_(None))))
+            sa.and_(RadarQuote.market == MARKET, RadarQuote.mic == mic),
+            legacy))
     else:
-        market_clause = RadarQuote.market == market
-        if market == 'us':
-            market_clause = sa.or_(
-                market_clause,
-                sa.and_(RadarQuote.market.is_(None), RadarQuote.mic.is_(None)))
-        clauses.append(market_clause)
-        if mic is not None:
-            clauses.append(RadarQuote.mic == mic)
+        clauses.append(sa.or_(RadarQuote.market == MARKET, legacy))
     return clauses
 
 
-def _stored_identity_matches(stored_market, stored_mic, market, mic):
+def _us_rows():
+    """US and legacy-US rows: the only ones a batched read may rank."""
+    return sa.or_(RadarQuote.market == MARKET, RadarQuote.market.is_(None))
+
+
+def _stored_identity_matches(stored_market, stored_mic, mic):
     """Whether an already-selected row belongs to the requested instrument."""
-    if stored_market != market:
-        if not (market == 'us' and stored_market is None and stored_mic is None):
-            return False
-    return mic is None or stored_mic == mic or (
-        market == 'us' and stored_market is None and stored_mic is None)
+    legacy = stored_market is None and stored_mic is None
+    if stored_market != MARKET and not legacy:
+        return False
+    return mic is None or stored_mic == mic or legacy
 
 
 def price_status(ticker, now, polls=STALE_QUOTE_POLLS, session=None,
@@ -275,17 +287,13 @@ def statuses_for(instruments, now, polls=STALE_QUOTE_POLLS, session=None):
 
     identities = [_instrument_identity(instrument) for instrument in instruments]
     tickers = {ticker for ticker, _, _, _ in identities}
-    markets = {market for _, market, _, _ in identities}
 
-    market_clause = RadarQuote.market.in_(markets)
-    if 'us' in markets:
-        market_clause = sa.or_(market_clause, RadarQuote.market.is_(None))
     numbered = sa.select(
         RadarQuote,
         sa.func.row_number().over(
             partition_by=(RadarQuote.ticker, RadarQuote.market, RadarQuote.mic),
             order_by=RadarQuote.fetched_at.desc()).label('rn'),
-    ).where(RadarQuote.ticker.in_(tickers), market_clause,
+    ).where(RadarQuote.ticker.in_(tickers), _us_rows(),
             RadarQuote.is_shadow.is_(False),
             RadarQuote.fetched_at <= now).subquery()
 
@@ -300,12 +308,12 @@ def statuses_for(instruments, now, polls=STALE_QUOTE_POLLS, session=None):
         recent[(quote.ticker, quote.market, quote.mic)].append(quote)
 
     result = {}
-    for ticker, market, mic, key in identities:
+    for ticker, _market, mic, key in identities:
         matching = []
         for (stored_ticker, stored_market, stored_mic), rows_for_identity in recent.items():
             if (stored_ticker != ticker or
                     not _stored_identity_matches(
-                        stored_market, stored_mic, market, mic)):
+                        stored_market, stored_mic, mic)):
                 continue
             matching.extend(rows_for_identity)
         matching.sort(key=lambda row: row.fetched_at, reverse=True)
@@ -382,17 +390,13 @@ def moves_for(instruments, hours, now):
 
     identities = [_instrument_identity(instrument) for instrument in instruments]
     tickers = {ticker for ticker, _, _, _ in identities}
-    markets = {market for _, market, _, _ in identities}
 
     since = now - dt.timedelta(hours=hours)
-    market_clause = RadarQuote.market.in_(markets)
-    if 'us' in markets:
-        market_clause = sa.or_(market_clause, RadarQuote.market.is_(None))
     rows = (db.session.query(RadarQuote.ticker, RadarQuote.market,
                              RadarQuote.mic, RadarQuote.fetched_at,
                              RadarQuote.price)
             .filter(RadarQuote.ticker.in_(tickers),
-                    market_clause,
+                    _us_rows(),
                     RadarQuote.is_shadow.is_(False),
                     _trade_basis_clause(),
                     RadarQuote.fetched_at >= since,
@@ -405,14 +409,14 @@ def moves_for(instruments, hours, now):
         prices[(ticker, market, mic)].append((fetched_at, price))
 
     result = {}
-    for ticker, market, mic, key in identities:
+    for ticker, _market, mic, key in identities:
         matching = []
         for (stored_ticker, stored_market, stored_mic), values in prices.items():
             if (stored_ticker != ticker or
                     not _stored_identity_matches(
-                        stored_market, stored_mic, market, mic)):
+                        stored_market, stored_mic, mic)):
                 continue
-            priority = int(stored_market == market and
+            priority = int(stored_market == MARKET and
                            (mic is None or stored_mic == mic))
             matching.extend((when, priority, price) for when, price in values)
         # Mixed-version overlap can hold legacy NULL and primary-MIC rows at

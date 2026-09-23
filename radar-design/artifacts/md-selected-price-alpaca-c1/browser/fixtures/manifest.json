@@ -1,0 +1,219 @@
+{
+  "synthetic_envelopes": true,
+  "live_provider_requests": 0,
+  "generator": "fixtures.py (real normalize_alpaca + price_chart_reader over FakeStore)",
+  "saved_arrays_sha256": "44a27c917c7a14dccab775ecd0121ad06b11e3305d63495a48ebfeab22815aac",
+  "ft_closes_from": "radar-design/artifacts/md-selected-price-personal-preview/1D-raw.json",
+  "states": {
+    "sparse_1d": {
+      "ticker": "FT",
+      "span": "1D",
+      "answered_at": "2026-09-16T00:34:00Z",
+      "description": "1D ready, Alpaca consolidated SIP: FT's 64 actual reported regular minutes plus its 20:00:00Z closing bar as a separate after-hours segment",
+      "file": "price-sparse_1d.json",
+      "sessions_label": "Tue 15 Sep",
+      "partial": false,
+      "acquisition": "ready",
+      "price_source": "alpaca_sip",
+      "price_kind": "bar_close",
+      "observations": 65,
+      "expected_intervals": 960,
+      "segments": [
+        {
+          "key": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+          "points": 64
+        },
+        {
+          "key": "afterhours:2026-09-15|alpaca_sip:provider_bar_close:raw",
+          "points": 1
+        }
+      ],
+      "multi_point_segments": 1,
+      "single_point_segments": 1,
+      "slots": 64,
+      "unknown_slots": 20,
+      "partial_slots": 0,
+      "zero_slots": 0,
+      "warnings": 1
+    },
+    "dense_1d": {
+      "ticker": "AAPL",
+      "span": "1D",
+      "answered_at": "2026-09-15T13:50:21Z",
+      "description": "1D ready, current session so far: dense AAPL minutes across pre-market and the regular open, a truncated bucket and a Reddit overlap",
+      "file": "price-dense_1d.json",
+      "sessions_label": "Tue 15 Sep",
+      "partial": true,
+      "acquisition": "ready",
+      "price_source": "alpaca_sip",
+      "price_kind": "bar_close",
+      "observations": 350,
+      "expected_intervals": 350,
+      "segments": [
+        {
+          "key": "premarket:2026-09-15|alpaca_sip:provider_bar_close:raw",
+          "points": 330
+        },
+        {
+          "key": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+          "points": 20
+        }
+      ],
+      "multi_point_segments": 2,
+      "single_point_segments": 0,
+      "slots": 24,
+      "unknown_slots": 1,
+      "partial_slots": 23,
+      "zero_slots": 0,
+      "warnings": 3
+    },
+    "week_1w": {
+      "ticker": "AAPL",
+      "span": "1W",
+      "answered_at": "2026-09-15T13:50:19Z",
+      "description": "1W ready, Alpaca five-minute bars over five modeled regular sessions: one filled segment per session, nothing drawn across a night",
+      "file": "price-week_1w.json",
+      "sessions_label": "Wed 9 Sep \u2013 Tue 15 Sep",
+      "partial": true,
+      "acquisition": "ready",
+      "price_source": "alpaca_sip",
+      "price_kind": "bar_close",
+      "observations": 316,
+      "expected_intervals": 316,
+      "segments": [
+        {
+          "key": "regular:2026-09-09|alpaca_sip:provider_bar_close:raw",
+          "points": 78
+        },
+        {
+          "key": "regular:2026-09-10|alpaca_sip:provider_bar_close:raw",
+          "points": 78
+        },
+        {
+          "key": "regular:2026-09-11|alpaca_sip:provider_bar_close:raw",
+          "points": 78
+        },
+        {
+          "key": "regular:2026-09-14|alpaca_sip:provider_bar_close:raw",
+          "points": 78
+        },
+        {
+          "key": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+          "points": 4
+        }
+      ],
+      "multi_point_segments": 5,
+      "single_point_segments": 0,
+      "slots": 145,
+      "unknown_slots": 0,
+      "partial_slots": 2,
+      "zero_slots": 0,
+      "warnings": 2
+    },
+    "fallback_1d": {
+      "ticker": "MSFT",
+      "span": "1D",
+      "answered_at": "2026-09-15T15:12:00Z",
+      "description": "1D Alpaca unavailable (delayed data does not reach this window yet): stored Finnhub quotes of the same XNGS instrument as the coherent fallback, with a 90-minute gap",
+      "file": "price-fallback_1d.json",
+      "sessions_label": "Tue 15 Sep",
+      "partial": true,
+      "acquisition": "unavailable",
+      "price_source": "finnhub",
+      "price_kind": "stored_quote",
+      "observations": 69,
+      "expected_intervals": null,
+      "segments": [
+        {
+          "key": "premarket:2026-09-15|finnhub:trade:unknown|0",
+          "points": 36
+        },
+        {
+          "key": "premarket:2026-09-15|finnhub:trade:unknown|1",
+          "points": 12
+        },
+        {
+          "key": "regular:2026-09-15|finnhub:trade:unknown|2",
+          "points": 21
+        }
+      ],
+      "multi_point_segments": 3,
+      "single_point_segments": 0,
+      "slots": 29,
+      "unknown_slots": 0,
+      "partial_slots": 1,
+      "zero_slots": 0,
+      "warnings": 1
+    },
+    "unavailable_1w": {
+      "ticker": "NVDA",
+      "span": "1W",
+      "answered_at": "2026-09-15T15:12:00Z",
+      "description": "1W provider refused the credentials (backoff 60 s) and nothing is stored in the window: price null with its reason; a day and a half of unknown chatter",
+      "file": "price-unavailable_1w.json",
+      "sessions_label": "Wed 9 Sep \u2013 Tue 15 Sep",
+      "partial": true,
+      "acquisition": "backoff",
+      "price_source": null,
+      "price_kind": null,
+      "observations": null,
+      "expected_intervals": null,
+      "segments": [],
+      "multi_point_segments": 0,
+      "single_point_segments": 0,
+      "slots": 146,
+      "unknown_slots": 35,
+      "partial_slots": 3,
+      "zero_slots": 0,
+      "warnings": 2
+    },
+    "chatter_gaps": {
+      "ticker": "FT",
+      "span": "1D",
+      "answered_at": "2026-09-16T00:34:00Z",
+      "description": "The same FT session with two hours of unknown chatter, a missing bucket, a truncated bucket, a source-configuration change and a Reddit overlap",
+      "file": "price-chatter_gaps.json",
+      "sessions_label": "Tue 15 Sep",
+      "partial": false,
+      "acquisition": "ready",
+      "price_source": "alpaca_sip",
+      "price_kind": "bar_close",
+      "observations": 65,
+      "expected_intervals": 960,
+      "segments": [
+        {
+          "key": "regular:2026-09-15|alpaca_sip:provider_bar_close:raw",
+          "points": 64
+        },
+        {
+          "key": "afterhours:2026-09-15|alpaca_sip:provider_bar_close:raw",
+          "points": 1
+        }
+      ],
+      "multi_point_segments": 1,
+      "single_point_segments": 1,
+      "slots": 64,
+      "unknown_slots": 9,
+      "partial_slots": 55,
+      "zero_slots": 1,
+      "warnings": 3
+    }
+  },
+  "files": {
+    "price-sparse_1d.json": "f3b3d94e4041839adc06d6c96c839d1c7ad647eff18dedd9769dc057a3a8ebe2",
+    "price-dense_1d.json": "ec0148aee67c2181a5092e0c01acc956bbc9bdbbb0a532214aced263ee0d4f16",
+    "price-week_1w.json": "c120306030bd5e0e80fe9ba38fcd50757cbd5c344c25aebfcb4f618f6714153c",
+    "price-fallback_1d.json": "9509457b86db0fdb9a8884cad23113bae118e1961b7f471c2a4f6020f4183e73",
+    "price-unavailable_1w.json": "a7f06c364ecce51b85cd53c0c0433301c66437ff286ba8b3792a0ae259b19510",
+    "price-chatter_gaps.json": "dd2e835584560aaa5c165aaa5354560afcff7f237bb84974c11c117363eb8bc0",
+    "detail-FT-1D.json": "53eeef591a9b84379d1c151a136dc095dbe5b32fe7ed3a6e6fb3c4eb9e1adbdc",
+    "detail-FT-1W.json": "451d7a2647c0f00892dfb953dd9c0782b0ae613c309300e8c0dc895c1482b1ae",
+    "detail-AAPL-1D.json": "255389499ebf90ac2a29a34ab348cdf97aa71eb1f0f24a708508c528815315fe",
+    "detail-AAPL-1W.json": "b2fe1637172d0fed7fe3be7d729df0bde07e16e99857002954e10adf80466b1b",
+    "detail-MSFT-1D.json": "d2d84834950195e037546991a93b359d17720dfdf396ff3020fb76570d5247e6",
+    "detail-MSFT-1W.json": "7bfa1b5ddae95d4c4bbd3ab3b34bb4a58dad1651b90fe7e8f36abd014e916482",
+    "detail-NVDA-1D.json": "647fde12ebd03fccb852cbbd70368d48363c7d3fb70c5d4a12f4d1f92c39bfdf",
+    "detail-NVDA-1W.json": "fddc0b28cfff8ab29a78a5d3e92556b478443ef79343c054596a731995c79ce0",
+    "board.json": "1989a5e2e0ee8887fa93356b719961e39246c4abbed729ac2856f9d885e99f34"
+  }
+}

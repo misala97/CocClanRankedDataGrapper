@@ -1,0 +1,23 @@
+# Direct run of the TEST-ONLY probe_child wrapper around the PRODUCTION fetch child, on the host
+# (venv python, -E -s -B, env={}, cwd = scratch/personal_apps, loopback fixture server; stderr captured)
+# 2026-09-15T21:24Z, /root/sp-preflight-scratch-daadf38-20260915 (removed afterwards)
+
+rc 1
+stdout b'{"kind":"ok","bars":[[1788960600,100.0],[1788960900,100.5],[1788961200,null]],"off_grid":0,"outside":0,"nulls":1,"received_at":1789507484.1277094,"status":200}'
+stderr Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/root/sp-preflight-scratch-daadf38-20260915/personal_apps/tests/selected_price_unit/probe_child.py", line 46, in <module>
+    sys.exit(main())
+  File "/root/sp-preflight-scratch-daadf38-20260915/personal_apps/tests/selected_price_unit/probe_child.py", line 35, in main
+    and 'RADAR_SP_HOOK' in getattr(sys.modules['sitecustomize'], '__doc__', ''),
+TypeError: argument of type 'NoneType' is not iterable
+marker None
+
+# Reading: price_chart_fetch.main() (the PRODUCTION child program) completed and wrote a valid
+# {"kind":"ok",...} result over stdout for the exact 1W epoch request form. The exit code 1 comes from
+# the TEST-ONLY probe_child wrapper AFTER main() returned: on this Ubuntu 24.04 python3.12 venv a
+# system `sitecustomize` module is present in sys.modules even under -E -s and its __doc__ is None,
+# so `'RADAR_SP_HOOK' in None` raises TypeError. Production code has no such line. Consequence:
+# tests/selected_price_unit/test_launcher_isolation.py would fail on this host as written (test-harness
+# defect, Linux-only). Not patched here.

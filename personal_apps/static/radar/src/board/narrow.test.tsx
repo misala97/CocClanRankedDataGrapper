@@ -7,6 +7,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { envelope } from '../fixtures'
 import { BoardPage } from './BoardPage'
 import type { BoardPayload, Detail, MarketQuote, Row } from '../types'
 
@@ -16,7 +17,7 @@ function quote(): MarketQuote {
     regular_move: 0.012, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     tape_status: 'ok', score_eligible: true, score_term: 'divergence',
-    is_fallback: false, source: 'legacy', price_basis: 'trade',
+    source: 'legacy', price_basis: 'trade',
     bid: null, ask: null,
   }
 }
@@ -40,6 +41,7 @@ function row(over: Partial<Row> = {}): Row {
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
+    ...envelope(),
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
     market_venue: 'US markets', next_boundary_label: 'closes',
@@ -69,7 +71,7 @@ function detail(ticker = 'AAA'): Detail {
       from: '2025-08-23T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
-      sessions: [], currency: null, basis_venue: null, converted_from: null,
+      sessions: [], currency: null, basis_venue: null,
       priced_from: 'daily',
       normal_per_slot: null, watched_from: '2026-08-18',
     },

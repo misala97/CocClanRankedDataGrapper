@@ -10,7 +10,6 @@ function quote(over: Partial<MarketQuote> = {}): MarketQuote {
     market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 0.31,
     regular_move: 0.182, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
-    is_fallback: false,
     ...over,
     tape_status: over.tape_status ?? 'ok',
     score_eligible: over.score_eligible ?? true,
@@ -139,14 +138,14 @@ describe('a ticker row', () => {
        shortened `?t=` silently drops the reader back into the default US
        board, with different filters and score window. */
     const selection: Selection = {
-      market: 'de', sources: ['bluesky', 'reddit'], segments: ['micro'],
+      sources: ['bluesky', 'reddit'], segments: ['micro'],
       minVenues: 2, sort: null, dir: 'desc' as const, window: 24,
     }
     render(<TickerRow session="regular" row={row()} selected={false}
                       selection={selection} onSelect={() => {}} />)
 
     expect(screen.getByRole('link', { name: /HOWL/ })).toHaveAttribute(
-      'href', '?sources=bluesky%2Creddit&window=24&segment=micro&market=de&venues=2&t=HOWL')
+      'href', '?sources=bluesky%2Creddit&window=24&segment=micro&venues=2&t=HOWL')
   })
 
   it('marks the selected row for assistive tech, not only in colour', () => {
@@ -156,20 +155,14 @@ describe('a ticker row', () => {
       .toHaveAttribute('aria-current', 'true')
   })
 
-  it('marks a deviant US fallback, and stays quiet when the header already said it', () => {
-    /* The badge essay ("US fallback · NYSE · USD") died with the chart-row.
-       A fallback row on a mostly-live board says so in two words; on the
-       all-fallback German board the header says it once and the row adds
-       nothing (quoteSuppress, from universalQuoteFacts). */
-    const { rerender } = render(
+  it('never marks a row as priced from another listing', () => {
+    /* Radar prices US listings only: there is no fallback listing for a row
+       to own up to, and the old two-word fact is gone with it. */
+    const { container } = render(
       <TickerRow session="regular" selected={false} onSelect={() => {}}
-                 row={row({ quote: quote({ is_fallback: true }) })} />)
-    expect(screen.getByText(/US price/)).toBeVisible()
-
-    rerender(<TickerRow session="regular" selected={false} onSelect={() => {}}
-                        quoteSuppress={['fallback']}
-                        row={row({ quote: quote({ is_fallback: true }) })} />)
+                 row={row({ quote: quote() })} />)
     expect(screen.queryByText(/US price/)).toBeNull()
+    expect(container.textContent).not.toMatch(/fallback/i)
   })
 
   it('warns about stale, EOD, and unavailable quotes in a human unit', () => {
@@ -218,12 +211,11 @@ describe('a ticker row', () => {
   })
 
   it('explains ranking from the row\'s own session', () => {
-    /* A US fallback can be closed while Germany's board is still regular.
-       The board header remains useful context, but it cannot explain this
-       individual row's chatter-only score. */
+    /* A row's quote can be closed (a halted or EOD print) while the board
+       session is still regular. The board header remains useful context,
+       but it cannot explain this individual row's chatter-only score. */
     render(<TickerRow session="regular" selected={false} onSelect={() => {}}
-                      row={row({ quote: quote({ is_fallback: true,
-                                                 session: 'closed',
+                      row={row({ quote: quote({ session: 'closed',
                                                  score_eligible: false,
                                                  score_term: 'chatter' }) })} />)
 

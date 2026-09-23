@@ -1,0 +1,44 @@
+## env reads
+.\tests\test_radar_board_namespace.py:154:    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'active')
+.\tests\test_radar_daemon.py:754:        monkeypatch.delenv('RADAR_DE_PRICE_MODE', raising=False)
+.\tests\test_radar_daemon.py:756:        monkeypatch.setenv('RADAR_DE_PRICE_MODE', stale_mode)
+.\tests\test_radar_daemon.py:814:    monkeypatch.setenv('RADAR_DE_PRICE_MODE', 'nonsense')
+## market_calendars
+__init__.py
+us.py
+## prices
+__init__.py
+alpaca.py
+finnhub.py
+massive.py
+twelvedata.py
+yahoo.py
+## retired modules present?
+ls: cannot access 'features/radar/fx.py': No such file or directory
+ls: cannot access 'features/radar/reference_universe.py': No such file or directory
+ls: cannot access 'features/radar/instruments.py': No such file or directory
+ls: cannot access 'tests/fixtures/radar_market_data': No such file or directory
+## bundle strings
+Germany: 0
+Xetra: 0
+XETR: 0
+Tradegate: 0
+ECB: 0
+€: 0
+EUR: 0
+deutsche_boerse: 0
+fallback listing: 0
+US fallback: 0
+converted to: 0
+## job ids
+988:                      id='radar_cycle', args=[scheduler, session_fetchers],
+994:                          seconds=_reddit_job_seconds(), id='radar_reddit',
+1007:                      id='radar_scoring', max_instances=1, coalesce=True,
+1016:                      id='radar_us_quotes', max_instances=1, coalesce=True)
+1019:                      minute=30, id='radar_us_grouped_closes',
+1022:                      hours=SIGMA_INTERVAL_HOURS, id='radar_volatility',
+1030:                      hours=PROFILE_INTERVAL_HOURS, id='radar_profiles',
+1037:                      minutes=HISTORY_INTERVAL_MINUTES, id='radar_history',
+1042:                      id='radar_prune')
+1053:                      id='radar_board_observations', max_instances=1,
+1064:                      id='radar_sentiment', max_instances=1, coalesce=True,

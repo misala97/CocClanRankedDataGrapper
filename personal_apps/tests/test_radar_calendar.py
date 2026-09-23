@@ -3,7 +3,7 @@
 
 The DST cases are the point of this suite: the EU and US switch on different
 dates, so for about three weeks each spring the US open lands an hour earlier
-in Berlin than usual. Anything that reasoned in German local time would
+in Berlin than usual. Anything that reasoned in Berlin local time would
 mis-tier ingest for exactly those weeks (spec 4.4).
 """
 import datetime as dt
@@ -39,18 +39,6 @@ def test_registry_preserves_us_dst_and_early_close():
         _utc(2026, 11, 27, 18),
         _utc(2026, 11, 28, 1),
     )),
-    ('de', _utc(2026, 8, 28, 12), (
-        _utc(2026, 8, 28, 6),
-        _utc(2026, 8, 28, 7),
-        _utc(2026, 8, 28, 15, 30),
-        _utc(2026, 8, 28, 20),
-    )),
-    ('de', _utc(2026, 1, 7, 12), (
-        _utc(2026, 1, 7, 7),
-        _utc(2026, 1, 7, 8),
-        _utc(2026, 1, 7, 16, 30),
-        _utc(2026, 1, 7, 21),
-    )),
 ])
 def test_registry_session_bounds_are_aware_utc(market, instant, expected):
     bounds = session_bounds(market, instant)
@@ -67,12 +55,39 @@ def test_registry_session_bounds_are_aware_utc(market, instant, expected):
 
 def test_registry_rejects_naive_bounds_input():
     with pytest.raises(ValueError):
-        session_bounds('de', dt.datetime(2026, 8, 28, 12))
+        session_bounds('us', dt.datetime(2026, 8, 28, 12))
 
 
 def test_registry_rejects_unknown_market_with_exact_message():
     with pytest.raises(ValueError, match=r'^unknown market: moon$'):
         session_state('moon', _utc(2026, 8, 28, 12))
+
+
+@pytest.mark.parametrize('mic', [None, 'XETR', 'XGAT'])
+def test_the_registry_has_no_german_calendar(mic):
+    """Radar is US-only: no German clock is reachable, with or without a
+    venue code."""
+    with pytest.raises(ValueError, match=r'^unknown market: de$'):
+        session_state('de', _utc(2026, 8, 28, 12), mic=mic)
+    with pytest.raises(ValueError, match=r'^unknown market: de$'):
+        session_bounds('de', _utc(2026, 8, 28, 12), mic=mic)
+
+
+@pytest.mark.parametrize('mic', [None, 'XNAS', 'XNYS', 'ARCX'])
+def test_us_callers_may_name_their_venue(mic):
+    """Every US caller passes its quote's MIC; the US calendar serves all."""
+    instant = _utc(2026, 8, 28, 14)
+    assert session_state('us', instant, mic=mic) == 'regular'
+    assert session_bounds('us', instant, mic=mic) == session_bounds('us', instant)
+
+
+def test_only_the_us_calendar_module_remains():
+    import pathlib
+
+    import features.radar.market_calendars as registry
+    names = sorted(path.name for path in
+                   pathlib.Path(registry.__file__).parent.glob('*.py'))
+    assert names == ['__init__.py', 'us.py']
 
 
 def test_legacy_wrapper_matches_us_registry():

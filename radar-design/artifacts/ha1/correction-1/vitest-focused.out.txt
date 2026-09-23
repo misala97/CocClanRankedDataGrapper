@@ -1,0 +1,9 @@
+﻿
+ RUN  v4.1.10 C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore/personal_apps
+
+
+ Test Files  10 passed (10)
+      Tests  228 passed (228)
+   Start at  11:40:56
+   Duration  16.85s (transform 3.28s, setup 3.39s, import 7.84s, tests 30.79s, environment 15.55s)
+

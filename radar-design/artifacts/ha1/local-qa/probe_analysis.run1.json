@@ -1,0 +1,386 @@
+{
+  "generated_at": "2026-09-15T11:40:01.536982+00:00",
+  "target": "127.0.0.1:3461/radar_ha1_localqa",
+  "synthetic": true,
+  "symbols": {
+    "Z": "ZQZ5B2FB1",
+    "T": "ZQT5B2FB1",
+    "M": "ZQM5B2FB1",
+    "S": "ZQS5B2FB1"
+  },
+  "hardware": {
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 167 Stepping 1, GenuineIntel",
+    "python": "3.12.6"
+  },
+  "fingerprint_start": {
+    "digest": "9629c0076d207dc86840ba5be98905660421dc425073f43984ea63934ba80ed2",
+    "files": 154
+  },
+  "fixtures": {
+    "zero": {
+      "cold_ms": 7.35,
+      "warm_ms": [
+        4.78,
+        4.35,
+        4.3,
+        3.7,
+        4.33,
+        4.23,
+        4.0,
+        3.76,
+        3.41,
+        3.75,
+        4.71,
+        4.21,
+        4.07,
+        3.89,
+        3.86,
+        4.73,
+        4.17,
+        3.81,
+        3.84,
+        3.62
+      ],
+      "warm_median_ms": 4.07,
+      "warm_p95_ms": 4.73,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "response_bytes": 3838,
+      "max_data_statements": 4,
+      "reader_elapsed_ms": [
+        2.69,
+        3.01,
+        2.33,
+        2.92,
+        2.3
+      ],
+      "reader_elapsed_max_ms": 3.01,
+      "reader_alloc_bytes": 32769,
+      "reader_alloc_runs_bytes": [
+        32769,
+        22331,
+        22104
+      ],
+      "bucket_rows": 0,
+      "distinct_sources": 0,
+      "reads": [
+        {
+          "table": "radar_ticker_universe",
+          "rows": 1,
+          "timeout_s": 2.0,
+          "sources": null
+        },
+        {
+          "table": "radar_instruments",
+          "rows": 1,
+          "timeout_s": 2.0,
+          "sources": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "rows": 0,
+          "timeout_s": 2.0,
+          "sources": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "rows": 0,
+          "timeout_s": 2.0,
+          "sources": 0
+        }
+      ],
+      "bucket_rows_seeded": 0,
+      "plans": [
+        {
+          "statement": "company_by_id",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_ticker_universe",
+              "type": "const",
+              "possible_keys": "PRIMARY",
+              "key": "PRIMARY",
+              "key_len": "4",
+              "ref": "const",
+              "rows": "1",
+              "Extra": ""
+            }
+          ]
+        },
+        {
+          "statement": "instrument_by_id",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_instruments",
+              "type": "const",
+              "possible_keys": "PRIMARY",
+              "key": "PRIMARY",
+              "key_len": "8",
+              "ref": "const",
+              "rows": "1",
+              "Extra": ""
+            }
+          ]
+        },
+        {
+          "statement": "daily_closes",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_daily_closes",
+              "type": "range",
+              "possible_keys": "uq_radar_daily_close_market",
+              "key": "uq_radar_daily_close_market",
+              "key_len": "84",
+              "ref": null,
+              "rows": "1",
+              "Extra": "Using index condition; Using where"
+            }
+          ]
+        },
+        {
+          "statement": "bucket_sources",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_bucket_sources",
+              "type": "range",
+              "possible_keys": "PRIMARY,ix_radar_bucket_sources_start",
+              "key": "PRIMARY",
+              "key_len": "58",
+              "ref": null,
+              "rows": "1",
+              "Extra": "Using where"
+            }
+          ]
+        }
+      ],
+      "failures": []
+    },
+    "typical": {
+      "cold_ms": 37.41,
+      "warm_ms": [
+        41.01,
+        31.43,
+        32.01,
+        35.01,
+        33.46,
+        33.32,
+        32.2,
+        33.63,
+        33.08,
+        34.4,
+        36.06,
+        31.94,
+        32.13,
+        31.13,
+        33.47,
+        31.22,
+        32.04,
+        33.53,
+        32.96,
+        32.4
+      ],
+      "warm_median_ms": 33.08,
+      "warm_p95_ms": 36.06,
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ],
+      "response_bytes": 9358,
+      "max_data_statements": 4,
+      "reader_elapsed_ms": [
+        29.83,
+        32.82,
+        29.86,
+        29.79,
+        31.16
+      ],
+      "reader_elapsed_max_ms": 32.82,
+      "reader_alloc_bytes": 1276848,
+      "reader_alloc_runs_bytes": [
+        1276848,
+        724436,
+        723800
+      ],
+      "bucket_rows": 2016,
+      "distinct_sources": 3,
+      "reads": [
+        {
+          "table": "radar_ticker_universe",
+          "rows": 1,
+          "timeout_s": 2.0,
+          "sources": null
+        },
+        {
+          "table": "radar_instruments",
+          "rows": 1,
+          "timeout_s": 2.0,
+          "sources": null
+        },
+        {
+          "table": "radar_daily_closes",
+          "rows": 4,
+          "timeout_s": 2.0,
+          "sources": null
+        },
+        {
+          "table": "radar_bucket_sources",
+          "rows": 2016,
+          "timeout_s": 2.0,
+          "sources": 3
+        }
+      ],
+      "bucket_rows_seeded": 2016,
+      "plans": [
+        {
+          "statement": "company_by_id",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_ticker_universe",
+              "type": "const",
+              "possible_keys": "PRIMARY",
+              "key": "PRIMARY",
+              "key_len": "4",
+              "ref": "const",
+              "rows": "1",
+              "Extra": ""
+            }
+          ]
+        },
+        {
+          "statement": "instrument_by_id",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_instruments",
+              "type": "const",
+              "possible_keys": "PRIMARY",
+              "key": "PRIMARY",
+              "key_len": "8",
+              "ref": "const",
+              "rows": "1",
+              "Extra": ""
+            }
+          ]
+        },
+        {
+          "statement": "daily_closes",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_daily_closes",
+              "type": "range",
+              "possible_keys": "uq_radar_daily_close_market",
+              "key": "uq_radar_daily_close_market",
+              "key_len": "84",
+              "ref": null,
+              "rows": "4",
+              "Extra": "Using index condition; Using where"
+            }
+          ]
+        },
+        {
+          "statement": "bucket_sources",
+          "plan": [
+            {
+              "id": 1,
+              "select_type": "SIMPLE",
+              "table": "radar_bucket_sources",
+              "type": "range",
+              "possible_keys": "PRIMARY,ix_radar_bucket_sources_start",
+              "key": "PRIMARY",
+              "key_len": "58",
+              "ref": null,
+              "rows": "4000",
+              "Extra": "Using where"
+            }
+          ]
+        }
+      ],
+      "failures": []
+    }
+  },
+  "failures": [
+    "original failure: ContractError: the store did not answer within the bounded time"
+  ],
+  "engine": "mysql (10, 11, 14)",
+  "dialect": {
+    "initialized": true,
+    "server_version_info": [
+      10,
+      11,
+      14
+    ],
+    "timeout_dialect": "mariadb:set_statement",
+    "failure": null
+  },
+  "original_failure": "ContractError: the store did not answer within the bounded time",
+  "cleanup": {
+    "status": "complete",
+    "error": null,
+    "remaining": {},
+    "planned_symbols": [
+      "ZQZ5B2FB1",
+      "ZQT5B2FB1",
+      "ZQM5B2FB1",
+      "ZQS5B2FB1"
+    ],
+    "planned_usernames": []
+  },
+  "fingerprint_end": {
+    "digest": "9629c0076d207dc86840ba5be98905660421dc425073f43984ea63934ba80ed2",
+    "files": 154
+  },
+  "finished_at": "2026-09-15T11:40:48.067930+00:00"
+}

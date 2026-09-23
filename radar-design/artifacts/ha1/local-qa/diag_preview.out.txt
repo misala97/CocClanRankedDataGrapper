@@ -1,0 +1,49 @@
+﻿{
+  "port": 5041,
+  "fingerprint": "9629c0076d207dc86840ba5be98905660421dc425073f43984ea63934ba80ed2",
+  "injected_ui_only": true,
+  "filter_only": {
+    "search": "?market=de&window=24",
+    "hash": ""
+  },
+  "skip_link": {
+    "active_after_load": "body",
+    "tab_after_blur": "skip",
+    "active_after_reload": "body",
+    "tab_after_reload_no_interaction": "skip",
+    "after_enter": "main",
+    "route_unchanged": true
+  },
+  "loading_release_before_unroute": {
+    "held_routes": 1,
+    "status_text": "Reading ZQTF3401F, Tue 8 Sep to Mon 14 Sep\u2026",
+    "days_visible_after_release": true
+  },
+  "timeout": {
+    "held_routes": 1,
+    "main": "Explore \u00b7 ZQOF3401FUS primary \u00b7 USDRetrospective \u2014 current retained records may include later corrections.ZQZQOF3401FPinned by ID: company 28 \u00b7 instrument 49Find another companyFrom (UTC day)To (UTC day)Show these days1 to 7 completed UTC days, written YYYY-MM-DD; the default is the last seven.The analysis did not answer in time.RetryFind a company"
+  },
+  "network_abort": {
+    "alert": true,
+    "main": "Explore \u00b7 ZQGF3401FUS primary \u00b7 USDRetrospective \u2014 current retained records may include later corrections.ZQZQGF3401FPinned by ID: company 34 \u00b7 instrument 55Find another companyFrom (UTC day)To (UTC day)Show these days1 to 7 completed UTC days, written YYYY-MM-DD; the default is the last seven.This analysis could not be loaded.Could not reach the analysis.RetryFind a company",
+    "retry_recovered": true
+  },
+  "session_expiry": {
+    "responses": [
+      {
+        "url": "http://127.0.0.1:5041/radar/api/analysis/company/27?instrument_id=48&from=2026-09-08&to=2026-09-08",
+        "status": 302,
+        "type": "text/html; charset=utf-8"
+      },
+      {
+        "url": "http://127.0.0.1:5041/login",
+        "status": 200,
+        "type": "text/html; charset=utf-8"
+      }
+    ],
+    "url": "http://127.0.0.1:5041/radar/?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=us&analysis_from=2026-09-08&analysis_to=2026-09-08#analysis/ZQTF3401F/27/48",
+    "main": "Session expired.Reload the page to sign in again. Nothing here is up to date.",
+    "body_has_session_expired": true,
+    "days_visible": false
+  }
+}

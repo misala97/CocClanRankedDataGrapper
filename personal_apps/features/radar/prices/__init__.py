@@ -21,8 +21,7 @@ class CurrencyMismatch(ValueError):
 
 PRICE_BASES = frozenset({'trade', 'midpoint', 'close'})
 QUOTE_SOURCES = frozenset({
-    'legacy', 'finnhub', 'twelvedata',
-    'deutsche_boerse_delayed', 'yahoo_chart',
+    'legacy', 'finnhub', 'twelvedata', 'yahoo_chart',
 })
 # massive_grouped is a daily-close source and NEVER an intraday quote
 # source; the sets stay separate so a future call site cannot accidentally
@@ -63,7 +62,12 @@ class Quote:
     ticker: str
     market: str
     venue: str
-    mic: str
+    #: The listing MIC, or None from a provider that cannot name one. It has
+    #: no default: `XNAS` is Nasdaq's *operating* MIC and no listing resolves
+    #: to it, so a defaulted row was indistinguishable from a genuinely
+    #: Nasdaq one while belonging to no instrument at all. `record_quotes`
+    #: refuses to store a snapshot whose MIC is None.
+    mic: str | None
     provider_symbol: str
     currency: str
     price: decimal.Decimal
@@ -83,7 +87,7 @@ class Quote:
                  prev_close: decimal.Decimal | None = None,
                  quote_ts: dt.datetime | None = None,
                  volume: int | None = None, *, market: str = 'us',
-                 venue: str = 'US', mic: str = 'XNAS',
+                 venue: str = 'US', mic: str | None,
                  provider_symbol: str | None = None, currency: str = 'USD',
                  previous_close: decimal.Decimal | None = None,
                  regular_close: decimal.Decimal | None = None,

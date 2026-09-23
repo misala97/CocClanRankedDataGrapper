@@ -1,0 +1,1006 @@
+{
+  "port": 5041,
+  "fingerprint": "6588be5e8dabf471befda62addc380d0775703948a5e7d22a9d96f55a2e50886",
+  "synthetic": true,
+  "contexts": {
+    "320": {
+      "mode": "viewport emulation (DPR 1)",
+      "metrics": {
+        "inner": 320,
+        "outer": 320,
+        "dpr": 1,
+        "vv": 1
+      },
+      "css_width": 320,
+      "checks": 23,
+      "at_rest": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "submit_box": {
+        "x": 34,
+        "y": 576.890625,
+        "width": 252,
+        "height": 44
+      },
+      "small_targets": [],
+      "layout": {
+        "from": [
+          34,
+          444.890625,
+          252
+        ],
+        "to": [
+          34,
+          522.890625,
+          252
+        ],
+        "button": [
+          34,
+          576.890625,
+          252
+        ],
+        "stacked": true
+      },
+      "shots": [
+        "320-rest.png",
+        "320-focus.png",
+        "320-malformed.png"
+      ],
+      "focused": {
+        "analysis_from": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        },
+        "analysis_to": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "while_editing": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "after_refresh": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "malformed": {
+        "value": "2026-9-8x",
+        "aria_invalid": "true",
+        "describedby": "rh-an-rangeproblem",
+        "notice": "Dates must be written YYYY-MM-DD and be real calendar days. Asked for \u201c2026-9-8x\u201d to \u201c2026-09-14\u201d.",
+        "notice_role": "alert",
+        "address": "http://127.0.0.1:5041/radar/?market=us&analysis_from=2026-09-08&analysis_to=2026-09-14#analysis/ZQTB8732A/133/219",
+        "requests": [],
+        "clip": {
+          "name": "analysis_from",
+          "value": "2026-9-8x",
+          "text": 82.8,
+          "content": 228,
+          "clientWidth": 250,
+          "scrollWidth": 250,
+          "width": 252,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "malformed_address_from": [
+        "2026-09-08"
+      ]
+    },
+    "390": {
+      "mode": "viewport emulation (DPR 1)",
+      "metrics": {
+        "inner": 390,
+        "outer": 390,
+        "dpr": 1,
+        "vv": 1
+      },
+      "css_width": 390,
+      "checks": 23,
+      "at_rest": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "submit_box": {
+        "x": 34,
+        "y": 528.890625,
+        "width": 322,
+        "height": 44
+      },
+      "small_targets": [],
+      "layout": {
+        "from": [
+          34,
+          396.890625,
+          322
+        ],
+        "to": [
+          34,
+          474.890625,
+          322
+        ],
+        "button": [
+          34,
+          528.890625,
+          322
+        ],
+        "stacked": true
+      },
+      "shots": [
+        "390-rest.png",
+        "390-focus.png",
+        "390-malformed.png"
+      ],
+      "focused": {
+        "analysis_from": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        },
+        "analysis_to": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "while_editing": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "after_refresh": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "malformed": {
+        "value": "2026-9-8x",
+        "aria_invalid": "true",
+        "describedby": "rh-an-rangeproblem",
+        "notice": "Dates must be written YYYY-MM-DD and be real calendar days. Asked for \u201c2026-9-8x\u201d to \u201c2026-09-14\u201d.",
+        "notice_role": "alert",
+        "address": "http://127.0.0.1:5041/radar/?market=us&analysis_from=2026-09-08&analysis_to=2026-09-14#analysis/ZQTB8732A/133/219",
+        "requests": [],
+        "clip": {
+          "name": "analysis_from",
+          "value": "2026-9-8x",
+          "text": 82.8,
+          "content": 298,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "width": 322,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "malformed_address_from": [
+        "2026-09-08"
+      ]
+    },
+    "768": {
+      "mode": "viewport emulation (DPR 1)",
+      "metrics": {
+        "inner": 768,
+        "outer": 768,
+        "dpr": 1,
+        "vv": 1
+      },
+      "css_width": 768,
+      "checks": 23,
+      "at_rest": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "submit_box": {
+        "x": 540,
+        "y": 318.390625,
+        "width": 128.625,
+        "height": 44
+      },
+      "small_targets": [],
+      "layout": {
+        "from": [
+          34,
+          318.390625,
+          239
+        ],
+        "to": [
+          287,
+          318.390625,
+          239
+        ],
+        "button": [
+          540,
+          318.390625,
+          128.625
+        ],
+        "stacked": false
+      },
+      "shots": [
+        "768-rest.png",
+        "768-focus.png",
+        "768-malformed.png"
+      ],
+      "focused": {
+        "analysis_from": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        },
+        "analysis_to": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "while_editing": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "after_refresh": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "malformed": {
+        "value": "2026-9-8x",
+        "aria_invalid": "true",
+        "describedby": "rh-an-rangeproblem",
+        "notice": "Dates must be written YYYY-MM-DD and be real calendar days. Asked for \u201c2026-9-8x\u201d to \u201c2026-09-14\u201d.",
+        "notice_role": "alert",
+        "address": "http://127.0.0.1:5041/radar/?market=us&analysis_from=2026-09-08&analysis_to=2026-09-14#analysis/ZQTB8732A/133/219",
+        "requests": [],
+        "clip": {
+          "name": "analysis_from",
+          "value": "2026-9-8x",
+          "text": 82.8,
+          "content": 215,
+          "clientWidth": 237,
+          "scrollWidth": 237,
+          "width": 239,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "malformed_address_from": [
+        "2026-09-08"
+      ]
+    },
+    "1440": {
+      "mode": "desktop viewport",
+      "metrics": {
+        "inner": 1440,
+        "outer": 1440,
+        "dpr": 1,
+        "vv": 1
+      },
+      "css_width": 1440,
+      "checks": 23,
+      "at_rest": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 76.6,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 74,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "submit_box": {
+        "x": 1267.375,
+        "y": 323.390625,
+        "width": 128.625,
+        "height": 44
+      },
+      "small_targets": [],
+      "layout": {
+        "from": [
+          849.375,
+          323.390625,
+          195
+        ],
+        "to": [
+          1058.375,
+          323.390625,
+          195
+        ],
+        "button": [
+          1267.375,
+          323.390625,
+          128.625
+        ],
+        "stacked": false
+      },
+      "shots": [
+        "1440-rest.png",
+        "1440-focus.png",
+        "1440-malformed.png"
+      ],
+      "focused": {
+        "analysis_from": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 76.6,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        },
+        "analysis_to": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 74,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "while_editing": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 74,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 74,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "after_refresh": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 74,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 74,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "malformed": {
+        "value": "2026-9-8x",
+        "aria_invalid": "true",
+        "describedby": "rh-an-rangeproblem",
+        "notice": "Dates must be written YYYY-MM-DD and be real calendar days. Asked for \u201c2026-9-8x\u201d to \u201c2026-09-14\u201d.",
+        "notice_role": "alert",
+        "address": "http://127.0.0.1:5041/radar/?market=us&analysis_from=2026-09-08&analysis_to=2026-09-14#analysis/ZQTB8732A/133/219",
+        "requests": [],
+        "clip": {
+          "name": "analysis_from",
+          "value": "2026-9-8x",
+          "text": 67.3,
+          "content": 171,
+          "clientWidth": 193,
+          "scrollWidth": 193,
+          "width": 195,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "malformed_address_from": [
+        "2026-09-08"
+      ]
+    },
+    "zoom200-real-320css": {
+      "mode": "REAL browser zoom 200% (Chromium default_zoom_level preference, headed)",
+      "window_device_px": 640,
+      "metrics": {
+        "inner": 320,
+        "outer": 640,
+        "dpr": 2,
+        "vv": 1
+      },
+      "checks": 24,
+      "css_width": 312,
+      "at_rest": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "submit_box": {
+        "x": 34,
+        "y": 594.8984375,
+        "width": 244.5,
+        "height": 44
+      },
+      "small_targets": [],
+      "layout": {
+        "from": [
+          34,
+          462.8984375,
+          244.5
+        ],
+        "to": [
+          34,
+          540.8984375,
+          244.5
+        ],
+        "button": [
+          34,
+          594.8984375,
+          244.5
+        ],
+        "stacked": true
+      },
+      "shots": [
+        "zoom200-real-320css-rest.png",
+        "zoom200-real-320css-focus.png",
+        "zoom200-real-320css-malformed.png"
+      ],
+      "focused": {
+        "analysis_from": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        },
+        "analysis_to": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "while_editing": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "after_refresh": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "malformed": {
+        "value": "2026-9-8x",
+        "aria_invalid": "true",
+        "describedby": "rh-an-rangeproblem",
+        "notice": "Dates must be written YYYY-MM-DD and be real calendar days. Asked for \u201c2026-9-8x\u201d to \u201c2026-09-14\u201d.",
+        "notice_role": "alert",
+        "address": "http://127.0.0.1:5041/radar/?market=us&analysis_from=2026-09-08&analysis_to=2026-09-14#analysis/ZQTB8732A/133/219",
+        "requests": [],
+        "clip": {
+          "name": "analysis_from",
+          "value": "2026-9-8x",
+          "text": 82.8,
+          "content": 221,
+          "clientWidth": 243,
+          "scrollWidth": 243,
+          "width": 245,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "malformed_address_from": [
+        "2026-09-08"
+      ]
+    },
+    "zoom200-real-390css": {
+      "mode": "REAL browser zoom 200% (Chromium default_zoom_level preference, headed)",
+      "window_device_px": 780,
+      "metrics": {
+        "inner": 390,
+        "outer": 780,
+        "dpr": 2,
+        "vv": 1
+      },
+      "checks": 24,
+      "css_width": 382,
+      "at_rest": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "submit_box": {
+        "x": 34,
+        "y": 528.8984375,
+        "width": 314.5,
+        "height": 44
+      },
+      "small_targets": [],
+      "layout": {
+        "from": [
+          34,
+          396.8984375,
+          314.5
+        ],
+        "to": [
+          34,
+          474.8984375,
+          314.5
+        ],
+        "button": [
+          34,
+          528.8984375,
+          314.5
+        ],
+        "stacked": true
+      },
+      "shots": [
+        "zoom200-real-390css-rest.png",
+        "zoom200-real-390css-focus.png",
+        "zoom200-real-390css-malformed.png"
+      ],
+      "focused": {
+        "analysis_from": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_from",
+          "value": "2026-09-08",
+          "text": 94.3,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        },
+        "analysis_to": {
+          "active": true,
+          "scrollLeft": 0,
+          "selectionEnd": 10,
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "while_editing": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "after_refresh": [
+        {
+          "name": "analysis_from",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        },
+        {
+          "name": "analysis_to",
+          "value": "2026-09-14",
+          "text": 91.1,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        }
+      ],
+      "malformed": {
+        "value": "2026-9-8x",
+        "aria_invalid": "true",
+        "describedby": "rh-an-rangeproblem",
+        "notice": "Dates must be written YYYY-MM-DD and be real calendar days. Asked for \u201c2026-9-8x\u201d to \u201c2026-09-14\u201d.",
+        "notice_role": "alert",
+        "address": "http://127.0.0.1:5041/radar/?market=us&analysis_from=2026-09-08&analysis_to=2026-09-14#analysis/ZQTB8732A/133/219",
+        "requests": [],
+        "clip": {
+          "name": "analysis_from",
+          "value": "2026-9-8x",
+          "text": 82.8,
+          "content": 291,
+          "clientWidth": 313,
+          "scrollWidth": 313,
+          "width": 315,
+          "height": 44,
+          "clipped": false
+        }
+      },
+      "malformed_address_from": [
+        "2026-09-08"
+      ]
+    }
+  },
+  "failures": []
+}

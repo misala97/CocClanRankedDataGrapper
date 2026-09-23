@@ -1,0 +1,255 @@
+{
+ "recorded_at_utc": "2026-09-15T21:23:38.444401+00:00",
+ "host": "ubuntu",
+ "parent": {
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "sys_executable": "/root/coc-stats/venv/bin/python",
+  "sys_prefix": "/root/coc-stats/venv",
+  "base_prefix": "/usr",
+  "platform": "linux",
+  "pid": 220122,
+  "app_root": "/root/sp-preflight-scratch-daadf38-20260915/personal_apps",
+  "child_env_allowlist_posix": [],
+  "child_environment": {},
+  "interpreter_flags": [
+   "-E",
+   "-s",
+   "-B"
+  ]
+ },
+ "copied_file_hashes": {
+  "personal_apps/features/radar/config.py": {
+   "sha256_lf": "4fcaef1f046ba68095169caf4159bf4b4f5e2be542ed248b70f04fa574fe3b8a",
+   "matches_accepted": true
+  },
+  "personal_apps/features/radar/price_chart_acquisition.py": {
+   "sha256_lf": "7d41461ee7bb5bc0be98bc451a824c075751874281bb1ee04ef9fd2570c88e6d",
+   "matches_accepted": true
+  },
+  "personal_apps/features/radar/price_chart_contract.py": {
+   "sha256_lf": "4e0204f0c52a0437c61f1ac280d3e3b24fade70e757f282c6d4fd52d2c019662",
+   "matches_accepted": true
+  },
+  "personal_apps/features/radar/price_chart_fetch.py": {
+   "sha256_lf": "2e1f3caf8cedf1a1d66eb6643068a3c16d350bb92bd16320e2e8219a3344f7fd",
+   "matches_accepted": true
+  },
+  "personal_apps/features/radar/price_chart_reader.py": {
+   "sha256_lf": "764d1af6af2c091447e46458cfcce996fbafbea69e40155940d1574b576f7960",
+   "matches_accepted": true
+  },
+  "personal_apps/features/radar/prices/yahoo.py": {
+   "sha256_lf": "d982e83e03e6f58c470c2f539fe156b39640871fabae2fc4d9933bc41da4a4ea",
+   "matches_accepted": true
+  },
+  "personal_apps/tests/selected_price_unit/__init__.py": {
+   "sha256_lf": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "matches_accepted": true
+  },
+  "personal_apps/tests/selected_price_unit/child_targets.py": {
+   "sha256_lf": "8b51a252cfa443bca5e37edee1bd3b4dc1bc43b3a1aae50ff40e0f09b5094ad9",
+   "matches_accepted": true
+  },
+  "personal_apps/tests/selected_price_unit/probe_child.py": {
+   "sha256_lf": "4ba0b0f4facc238a0899def6fc3bba9385cfb1b90d0ea5f2c26238cdf08b3d66",
+   "matches_accepted": true
+  }
+ },
+ "copied_all_match": true,
+ "minimal_env_import": {
+  "returncode": 0,
+  "stdout": {
+   "sys_executable": "/root/coc-stats/venv/bin/python",
+   "sys_prefix": "/root/coc-stats/venv",
+   "env_keys": [
+    "LC_CTYPE"
+   ],
+   "flags": {
+    "E": 1,
+    "s": 1,
+    "B": 1
+   },
+   "heavy_loaded": [],
+   "requests": "2.34.2",
+   "certifi_exists": true,
+   "cwd": "/root/sp-preflight-scratch-daadf38-20260915/personal_apps"
+  },
+  "stderr_tail": ""
+ },
+ "real_fetch_child_loopback": {
+  "first_state": "pending",
+  "admission_seconds": 0.0006,
+  "idle": true,
+  "second_state": "backoff",
+  "bars": null,
+  "counters": {
+   "success": 0,
+   "empty": 0,
+   "invalid": 1,
+   "identity_mismatch": 0,
+   "timeout": 0,
+   "throttle": 0,
+   "unsupported": 0,
+   "upstream_error": 0,
+   "served_stale": 0,
+   "fallback": 0,
+   "busy": 0,
+   "cleanup_failed": 0
+  },
+  "latency": {
+   "count": 1,
+   "sum_seconds": 0.288,
+   "max_seconds": 0.288
+  },
+  "loopback_requests": [
+   {
+    "path": "/v8/finance/chart/AAPL?interval=5m&period1=1788960600&period2=1789502400&includePrePost=false",
+    "header_names": [
+     "Accept",
+     "Accept-Encoding",
+     "Connection",
+     "Host",
+     "User-Agent"
+    ]
+   }
+  ],
+  "child_record": []
+ },
+ "lifecycle": [
+  {
+   "behaviour": "normal",
+   "admitted_state": "pending",
+   "idle_within_30s": true,
+   "elapsed_seconds": 0.267,
+   "latency_max_seconds": 0.26,
+   "counters": {
+    "success": 1
+   },
+   "quarantined": false,
+   "cache_keys": 1,
+   "child_pid": 220130,
+   "returncode": 0,
+   "os_alive_after": false,
+   "reader_alive_after": false,
+   "stdin_closed": true,
+   "stdout_closed": true,
+   "cleaned": true
+  },
+  {
+   "behaviour": "hanging",
+   "admitted_state": "pending",
+   "idle_within_30s": true,
+   "elapsed_seconds": 6.219,
+   "latency_max_seconds": 6.205,
+   "counters": {
+    "timeout": 1
+   },
+   "quarantined": false,
+   "cache_keys": 0,
+   "child_pid": 220133,
+   "returncode": -15,
+   "os_alive_after": false,
+   "reader_alive_after": false,
+   "stdin_closed": true,
+   "stdout_closed": true,
+   "cleaned": true
+  },
+  {
+   "behaviour": "oversized",
+   "admitted_state": "pending",
+   "idle_within_30s": true,
+   "elapsed_seconds": 0.385,
+   "latency_max_seconds": 0.379,
+   "counters": {
+    "invalid": 1
+   },
+   "quarantined": false,
+   "cache_keys": 0,
+   "child_pid": 220136,
+   "returncode": -15,
+   "os_alive_after": false,
+   "reader_alive_after": false,
+   "stdin_closed": true,
+   "stdout_closed": true,
+   "cleaned": true
+  },
+  {
+   "behaviour": "early_exit",
+   "admitted_state": "pending",
+   "idle_within_30s": true,
+   "elapsed_seconds": 0.183,
+   "latency_max_seconds": 0.175,
+   "counters": {
+    "invalid": 1
+   },
+   "quarantined": false,
+   "cache_keys": 0,
+   "child_pid": 220139,
+   "returncode": 3,
+   "os_alive_after": false,
+   "reader_alive_after": false,
+   "stdin_closed": true,
+   "stdout_closed": true,
+   "cleaned": true
+  },
+  {
+   "behaviour": "garbage",
+   "admitted_state": "pending",
+   "idle_within_30s": true,
+   "elapsed_seconds": 0.223,
+   "latency_max_seconds": 0.222,
+   "counters": {
+    "invalid": 1
+   },
+   "quarantined": false,
+   "cache_keys": 0,
+   "child_pid": 220142,
+   "returncode": 0,
+   "os_alive_after": false,
+   "reader_alive_after": false,
+   "stdin_closed": true,
+   "stdout_closed": true,
+   "cleaned": true
+  },
+  {
+   "behaviour": "nonzero",
+   "admitted_state": "pending",
+   "idle_within_30s": true,
+   "elapsed_seconds": 0.223,
+   "latency_max_seconds": 0.212,
+   "counters": {
+    "invalid": 1
+   },
+   "quarantined": false,
+   "cache_keys": 0,
+   "child_pid": 220145,
+   "returncode": 5,
+   "os_alive_after": false,
+   "reader_alive_after": false,
+   "stdin_closed": true,
+   "stdout_closed": true,
+   "cleaned": true
+  },
+  {
+   "behaviour": "stderr_flood",
+   "admitted_state": "pending",
+   "idle_within_30s": true,
+   "elapsed_seconds": 0.223,
+   "latency_max_seconds": 0.22,
+   "counters": {
+    "success": 1
+   },
+   "quarantined": false,
+   "cache_keys": 1,
+   "child_pid": 220148,
+   "returncode": 0,
+   "os_alive_after": false,
+   "reader_alive_after": false,
+   "stdin_closed": true,
+   "stdout_closed": true,
+   "cleaned": true
+  }
+ ],
+ "leftover_processes": [],
+ "scratch_dir": "/root/sp-preflight-scratch-daadf38-20260915"
+}

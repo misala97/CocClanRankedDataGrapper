@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BoardUnavailable, fetchBoard } from './api'
 import { BoardPage } from './board/BoardPage'
+import { envelope } from './fixtures'
 import { Boundary } from './Broken'
 import { parsePayload } from './embedded'
 import { Identity } from './detail/Identity'
@@ -24,7 +25,6 @@ function quote(over: Partial<MarketQuote> = {}): MarketQuote {
     market: 'us', venue: 'Nasdaq', mic: 'XNAS', currency: 'USD', price: 10,
     regular_move: 0.012, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
-    is_fallback: false,
     ...over,
     tape_status: over.tape_status ?? 'ok',
     score_eligible: over.score_eligible ?? true,
@@ -55,6 +55,7 @@ function row(over: Partial<Row> = {}): Row {
 
 function payload(over: Partial<BoardPayload> = {}): BoardPayload {
   return {
+    ...envelope(),
     generated_at: '2026-08-22T19:00:00Z',
     market: 'us', display_timezone: 'Europe/Berlin',
     market_venue: 'US markets', next_boundary_label: 'closes',
@@ -86,7 +87,7 @@ function detail(ticker = 'AAA'): Detail {
       closes: Array.from({ length: 365 }, (_, i) => 100 + i),
       chatter: Array.from({ length: 365 }, (_, i) => (i < 360 ? null : i)),
       sessions: [],
-      currency: null, basis_venue: null, converted_from: null,
+      currency: null, basis_venue: null,
       priced_from: 'daily',
       normal_per_slot: null,
       watched_from: '2026-08-18',
@@ -149,12 +150,13 @@ describe('the embedded payload', () => {
     expect(parsePayload('{"rows":[]}')).not.toBeNull()
   })
 
-  it('falls back to US for a legacy embedded payload with an invalid market', () => {
-    /* An invalid API query is rejected server-side. The already-embedded page
-       cannot ask the server to correct itself, so it takes the same safe US
-       default instead of emitting a third market into client state. */
-    expect(parsePayload('{"rows":[],"market":"elsewhere"}')?.market)
-      .toBe('us')
+  it('refuses an embedded payload for any market but the US one', () => {
+    /* The server only builds US boards and refuses any other market. A
+       payload that names another is not a board this page can show, and
+       relabelling it as US would present another market's prices as
+       dollars -- so it is refused, and the entry renders words instead. */
+    expect(parsePayload('{"rows":[],"market":"elsewhere"}')).toBeNull()
+    expect(parsePayload('{"rows":[],"market":"us"}')?.market).toBe('us')
   })
 })
 
@@ -544,28 +546,29 @@ describe('a post nobody sized', () => {
 })
 
 describe('how old the board is', () => {
-  it('always says when the board was updated, in Berlin time', () => {
-    vi.setSystemTime(new Date('2026-08-22T19:05:00Z'))
-    render(<BoardPage initial={payload()} />)
+  // The corner used to print the build time as a clock and turn amber after
+  // fifteen minutes. That was right for an island that only ever fetched when
+  // a control moved; a shared board can be older than this tab is, so the
+  // corner states the AGE -- which is what every one of these states is
+  // about -- and what is being done about it.
+  it('always says how long ago the board was calculated', () => {
+    render(<BoardPage initial={payload({ age_seconds: 180 })} />)
 
-    expect(screen.getByText('21:00 CEST').closest('.age'))
-      .toHaveTextContent('updated 21:00 CEST')
-    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
-    vi.useRealTimers()
+    expect(document.querySelector('.age'))
+      .toHaveTextContent('Calculated 3m ago')
+    expect(screen.queryByText(/updated/)).toBeNull()
   })
 
-  it('says so once a tab has been left open', async () => {
-    // The island fetches on a control change and never on a clock, so a board
-    // from before lunch looks exactly like a live one.
-    vi.setSystemTime(new Date('2026-08-22T22:00:00Z'))
-    render(<BoardPage initial={payload()} />)
+  it('stops printing an age that has stopped being true', async () => {
+    // A board from before lunch used to look exactly like a live one. Past
+    // its hard expiry it is not merely old: its rows describe a rolling
+    // window that moved hours ago, so the page says so and goes to get one
+    // that describes this window.
+    render(<BoardPage initial={payload({ age_seconds: 10_800 })} />)
 
-    expect(await screen.findByText(/3h old/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument()
-    // Stale states the age INSTEAD of the build stamp -- the age is the
-    // actionable number, and the masthead corner does not fit both.
-    expect(screen.queryByText(/updated/)).toBeNull()
-    vi.useRealTimers()
+    expect(document.querySelector('.age')).toHaveTextContent(/Expired/)
+    await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls
+      .some((call) => String(call[0]).includes('/api/board'))).toBe(true))
   })
 })
 
@@ -589,12 +592,11 @@ describe('mobile continuity', () => {
   it('keeps the chart basis note outside the horizontally panning plot', async () => {
     const converted = detail()
     converted.identity.quote = quote({
-      market: 'de', venue: 'Tradegate BSX', mic: 'XGAT', currency: 'EUR',
+      market: 'us', venue: 'NASDAQ', mic: 'XNAS', currency: 'USD',
     })
     converted.chart = {
       ...converted.chart,
-      currency: 'EUR', basis_venue: 'Nasdaq Global Market',
-      converted_from: 'USD',
+      currency: 'USD', basis_venue: 'NYSE',
     }
     vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
       ok: true,
@@ -604,8 +606,7 @@ describe('mobile continuity', () => {
     })))
 
     render(<BoardPage initial={payload()} />)
-    const note = await screen.findByText(
-      'Nasdaq Global Market closes, converted to EUR at the ECB daily rate')
+    const note = await screen.findByText('NYSE closes · quoted at NASDAQ')
     const scroller = document.querySelector('.chartwrap')!
 
     expect(scroller).not.toContainElement(note)

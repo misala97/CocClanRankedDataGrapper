@@ -73,8 +73,9 @@ function legendFor(chart: DetailChart): { price: string; chatter: string } {
  *  generated dashboard reaches for, and it makes a section heading and a
  *  column header look like the same kind of thing.
  */
-export function DetailPane({ ticker, selection, windowHours, hasRows,
-                            baselineDays, fallBack, watching, onToggleWatch }: {
+export function DetailPane({ ticker, selection, windowHours, listing,
+                            readerPicked, baselineDays, fallBack, watching,
+                            onToggleWatch }: {
   ticker: string | null
   selection: Selection
   windowHours: number
@@ -82,9 +83,15 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
    *  the chart opens on. From the board payload, because the span has to be
    *  chosen before the panel's own request goes out. */
   baselineDays: number | null
-  /** Whether the list beside this has anything in it. An empty panel next to
-   *  an empty board must not invite a selection there is nothing to make. */
-  hasRows: boolean
+  /** What the list beside this has: rows to pick from, a board that was built
+   *  and came back empty, or no board yet. An empty panel next to an empty
+   *  board must not invite a selection there is nothing to make -- and next to
+   *  a board nobody has built yet it must not report an emptiness nobody has
+   *  measured. */
+  listing: 'rows' | 'empty' | 'unbuilt'
+  /** Whether the reader chose the ticker on screen, or the page did (see
+   *  BoardPage). Focus follows only their choice. */
+  readerPicked: boolean
   /** Another ticker on the board that is worth trying, and how to get to it.
    *  Named rather than described: "the top of the board" was the label until
    *  the escape had to stop pointing at the top row (see BoardPage), and a
@@ -125,19 +132,18 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
   // hundred pixels in is its own accessibility problem.
   const focused = useRef<string | null>(ticker)
   const request = ticker === null ? null
-    : `${ticker}|${selection.market}|${selection.sources.join(',')}|${selection.window}|${span}`
+    : `${ticker}|${selection.sources.join(',')}|${selection.window}|${span}`
   const fresh = loaded !== null && loaded.request === request
-  // Stale-while-revalidate, but only within one ticker and market: a span,
+  // Stale-while-revalidate, but only within one ticker: a span,
   // source or window change keeps the previous chart on screen, dimmed,
   // instead of blanking the whole panel into "Loading" -- which is what a
   // span click did for the full length of the fetch (measured at 7s on 1W
   // before coverage.py; the blank was most of "the chart does not load").
-  // A different ticker or market still gets the loading state: showing
+  // A different ticker still gets the loading state: showing
   // MRNA's chart under NVDA's name would be worse than a blank.
   const detail = fresh ? loaded.detail
     : loaded !== null
         && loaded.detail.identity.ticker === ticker
-        && loaded.detail.market === selection.market
       ? loaded.detail : null
   const revalidating = !fresh && detail !== null
 
@@ -145,12 +151,21 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     if (!detail || detail.identity.ticker !== ticker) return
     if (focused.current === ticker) return
     focused.current = ticker
+    // For a ticker the READER chose, and no other. Seeding the ref with the
+    // opening ticker above was the whole of this rule while no page could
+    // open without rows; a page that opens on a waiting shell has none to
+    // seed with, so when the board arrived and the top row was picked FOR the
+    // reader the panel took focus -- 4,219px of scroll away from the list
+    // they were watching, at 390x844 (browser check, run 3). The ref is still
+    // written, so the reader's next pick is a different ticker and moves
+    // focus normally.
+    if (!readerPicked) return
     // Not `preventScroll`. On desktop the panel is already in view so this
     // does nothing; below 900px the panel sits ~1500px down the document and
     // scrolling to it is exactly what was missing -- tapping a row used to
     // change nothing on screen at all.
     landing.current?.focus()
-  }, [detail, ticker])
+  }, [detail, ticker, readerPicked])
 
   useEffect(() => {
     if (!drawn || !chartScroller.current) return
@@ -174,9 +189,9 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
         // for is not something to sit in a spinner over. The guard below
         // renders "Loading" for any mismatch, and a mismatch that is the
         // server's rather than a race would have loaded forever.
-        if (next.identity.ticker !== ticker || next.market !== selection.market) {
-          setFailed(`The board answered about ${next.identity.ticker} on ${next.market}, `
-            + `not ${ticker} on ${selection.market}.`)
+        if (next.identity.ticker !== ticker) {
+          setFailed(`The board answered about ${next.identity.ticker}, `
+            + `not ${ticker}.`)
           return
         }
         setLoaded({ detail: next, request: activeRequest })
@@ -191,17 +206,22 @@ export function DetailPane({ ticker, selection, windowHours, hasRows,
     return () => controller.abort()
     // `selection` is a fresh object each render in the parent; the fields it
     // holds are what actually change the request.
-  }, [ticker, span, attempt, request, selection.market, selection.sources.join(','), selection.window])
+  }, [ticker, span, attempt, request, selection.sources.join(','), selection.window])
 
   if (!ticker) {
     return (
       <main className="detail empty">
         <p role="status">
           {/* Inviting a selection from a list with nothing in it was the
-              wording the empty board actually shipped with. */}
-          {hasRows
+              wording the empty board actually shipped with. A board nobody
+              has built yet is neither: reporting it as nothing to look at is
+              an emptiness nobody has measured, which is the one thing the
+              pending states exist to stop the surface saying. */}
+          {listing === 'rows'
             ? 'Select a ticker to see what it has been doing.'
-            : 'Nothing on the board to look at.'}
+            : listing === 'empty'
+              ? 'Nothing on the board to look at.'
+              : 'The board is still being calculated.'}
         </p>
       </main>
     )

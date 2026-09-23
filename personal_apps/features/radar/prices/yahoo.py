@@ -2,10 +2,10 @@
 """The one module that knows Yahoo's chart JSON.
 
 Yahoo is unofficial and unsupported: no key, no contract, and endpoints
-that change without notice. Market-data v2 therefore keeps it to three
-bounded roles -- the German Xetra history backfill, the deep US history
-tail, and a flag-gated US quote fallback that is not a planned activation
-[A2] -- and this adapter is built around refusal: identity mismatch,
+that change without notice. Market-data v2 therefore keeps it to bounded
+US roles -- the deep US history tail, the flag-gated selected-price source,
+and a flag-gated US quote fallback that is not a planned activation [A2] --
+and this adapter is built around refusal: identity mismatch,
 missing timestamps, auth walls, and malformed parallel arrays all make an
 instrument absent for the cycle. No cookie scraping, no browser
 automation, no escalating retries; a 401/403/429 opens an exponential
@@ -15,9 +15,12 @@ Only the per-symbol /v8/finance/chart endpoint is used. The batch quote
 endpoint requires authorization Yahoo does not grant and is deliberately
 not depended on.
 """
+import collections
 import concurrent.futures
 import datetime as dt
 import decimal
+import http.cookiejar
+import json
 import threading
 import time
 import urllib.parse
@@ -27,6 +30,12 @@ import requests
 from . import PriceUnavailable, Quote
 
 API_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+
+#: What one bounded request answered (`fetch_chart_bounded`). `problem` is
+#: None, 'timeout', 'network', 'redirect', 'oversized' or 'invalid_body';
+#: `payload` is the parsed body of a 200 with no problem, else None.
+BoundedChart = collections.namedtuple(
+    'BoundedChart', 'status retry_after payload problem')
 
 # Exchange metadata allowlists per MIC: every MIC the universe migration
 # seeds, and nothing else. Unknown MICs or mismatched metadata reject the
@@ -41,7 +50,6 @@ _EXCHANGE_ALLOWLIST = {
     'XASE': {'ASE', 'AMX'},
     'BATS': {'BTS', 'CBT'},
     'IEXG': {'IEX'},
-    'XETR': {'GER', 'XETRA', 'EBS'},
 }
 
 _BACKOFF_STEPS = (60, 120, 240, 480, 960, 1800)
@@ -51,13 +59,25 @@ _CACHE_TTL_SECONDS = 60
 class YahooHttp:
     """Bounded transport: one session, cache, and auth-aware backoff."""
 
-    def __init__(self, timeout=(3.05, 15)):
+    def __init__(self, timeout=(3.05, 15), *, cache=True, max_body_bytes=None):
+        """`cache=True, max_body_bytes=None` is the transport every existing
+        caller has always had. The selected-price fetch child alone passes
+        `cache=False` and a body bound: it lives for one request, so a cache
+        would be unbounded work for nothing, and it must not pick up proxy or
+        netrc credentials from the environment."""
         self._session = requests.Session()
         self._timeout = timeout
         self._lock = threading.Lock()
         self._cache = {}
+        self._cache_enabled = cache
+        self._max_body_bytes = max_body_bytes
         self._backoff_index = -1
         self._backoff_until = 0.0
+        if max_body_bytes is not None:
+            self._session.trust_env = False
+            # No cookie or crumb is ever stored or sent back.
+            self._session.cookies.set_policy(
+                http.cookiejar.DefaultCookiePolicy(allowed_domains=[]))
 
     def get_chart(self, symbol, *, interval, period1, period2,
                   include_prepost):
@@ -68,7 +88,7 @@ class YahooHttp:
                 raise PriceUnavailable(
                     'yahoo backoff active for %d more seconds'
                     % int(self._backoff_until - now))
-            cached = self._cache.get(key)
+            cached = self._cache.get(key) if self._cache_enabled else None
             if cached is not None and now - cached[0] < _CACHE_TTL_SECONDS:
                 return cached[1]
 
@@ -100,8 +120,61 @@ class YahooHttp:
             # A successful request resets the ladder.
             self._backoff_index = -1
             self._backoff_until = 0.0
-            self._cache[key] = (time.monotonic(), payload)
+            if self._cache_enabled:
+                self._cache[key] = (time.monotonic(), payload)
         return payload
+
+    def fetch_chart_bounded(self, symbol, *, interval, period1, period2,
+                            include_prepost):
+        """One request for a short-lived caller: no cache, no retry, no
+        redirect followed, and the body read in chunks and abandoned the
+        moment it passes `max_body_bytes`. Status and Retry-After come back
+        rather than being folded into an exception, because the caller owns
+        the backoff decision. Never raises for a transport failure, and never
+        returns an exception text: request exceptions can carry the URL.
+        """
+        if self._max_body_bytes is None:
+            raise RuntimeError('fetch_chart_bounded needs a max_body_bytes bound')
+        params = {
+            'interval': interval, 'period1': period1, 'period2': period2,
+            'includePrePost': 'true' if include_prepost else 'false',
+        }
+        try:
+            response = self._session.get(
+                API_BASE + urllib.parse.quote(symbol), params=params,
+                timeout=self._timeout, stream=True, allow_redirects=False,
+                headers={'User-Agent': 'Mozilla/5.0',
+                         'Accept': 'application/json'})
+        except requests.Timeout:
+            return BoundedChart(None, None, None, 'timeout')
+        except requests.RequestException:
+            return BoundedChart(None, None, None, 'network')
+        with response:
+            status = response.status_code
+            retry_after = response.headers.get('Retry-After')
+            if response.is_redirect or 300 <= status < 400:
+                return BoundedChart(status, retry_after, None, 'redirect')
+            declared = response.headers.get('Content-Length', '')
+            if declared.isdigit() and int(declared) > self._max_body_bytes:
+                return BoundedChart(status, retry_after, None, 'oversized')
+            chunks, size = [], 0
+            try:
+                for chunk in response.iter_content(64 * 1024):
+                    size += len(chunk)
+                    if size > self._max_body_bytes:
+                        return BoundedChart(status, retry_after, None, 'oversized')
+                    chunks.append(chunk)
+            except requests.Timeout:
+                return BoundedChart(status, retry_after, None, 'timeout')
+            except requests.RequestException:
+                return BoundedChart(status, retry_after, None, 'network')
+        if status != 200:
+            return BoundedChart(status, retry_after, None, None)
+        try:
+            payload = json.loads(b''.join(chunks))
+        except ValueError:
+            return BoundedChart(status, retry_after, None, 'invalid_body')
+        return BoundedChart(status, retry_after, payload, None)
 
 
 def _decimal(value):
@@ -281,8 +354,7 @@ class YahooProvider:
             return []
         meta = result.get('meta')
         if mic_code is not None:
-            currency = 'EUR' if mic_code == 'XETR' else 'USD'
-            if not _identity_ok(meta, symbol, currency, mic_code):
+            if not _identity_ok(meta, symbol, 'USD', mic_code):
                 return []
         elif not isinstance(meta, dict) or meta.get('symbol') != symbol:
             # Compatibility callers may omit the MIC, but an exact symbol

@@ -109,7 +109,7 @@ export function Search({ rows, watching, onPick, onToggleWatch }: {
     <div className="search" ref={root}
          onBlur={(event) => {
            // Focus moving within the search (input <-> a match's buttons) keeps
-           // the list; focus leaving it -- a row, the market switch, Tab out --
+           // the list; focus leaving it -- a row, a tab, Tab out --
            // closes it. The buttons' mousedown is prevented, so a click never
            // blurs the input in the first place.
            if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false)

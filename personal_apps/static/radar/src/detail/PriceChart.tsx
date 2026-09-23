@@ -1,6 +1,7 @@
 import { count, money } from '../format'
 import type { DetailChart, PanelSpan } from '../types'
 import { ChartHover } from './ChartHover'
+import { ChatterHistogram } from './ChatterHistogram'
 import { SessionBands, sessionNames } from './SessionBands'
 
 const W = 912
@@ -55,20 +56,26 @@ export function ChartBasisNote({ chart, quoteVenue }: {
   chart: DetailChart
   quoteVenue?: string | null
 }) {
-  const currency = chart.currency ?? 'USD'
   /* The basis is stated in text NEXT TO the chart, never in a tooltip: a
-   * converted or foreign-venue line must not read as native (spec §1/§3). */
+   * line drawn from a sibling US venue must say so (spec §1/§3). */
   const basisNote = !chart.basis_venue || chart.basis_venue === quoteVenue
     ? null
-    : chart.converted_from
-      ? `${chart.basis_venue} closes, converted to ${currency} at the ECB daily rate`
-      : `${chart.basis_venue} closes${quoteVenue ? ` · quoted at ${quoteVenue}` : ''}`
+    : `${chart.basis_venue} closes${quoteVenue ? ` · quoted at ${quoteVenue}` : ''}`
 
   return basisNote ? <p className="history-proxy-note">{basisNote}</p> : null
 }
 
-export function PriceChart({ chart }: { chart: DetailChart }) {
-  const currency = chart.currency ?? 'USD'
+export function PriceChart({ chart, chatterMode = 'area' }: {
+  chart: DetailChart
+  chatterMode?: 'area' | 'sentiment-bars'
+}) {
+  if (chatterMode === 'sentiment-bars') {
+    return <><PricePlot chart={chart} showChatter={false} /><ChatterHistogram chart={chart} /></>
+  }
+  return <PricePlot chart={chart} showChatter />
+}
+
+function PricePlot({ chart, showChatter }: { chart: DetailChart; showChatter: boolean }) {
   const priced = chart.closes.filter((v) => v !== null).length >= 2
 
   const { paths, gaps, low, high, lastX, lastY } = pricePaths(chart, priced)
@@ -99,7 +106,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
   // time. One clip on one group keeps that affordable at the long spans.
   return (
     <svg className="pxchart" viewBox={`0 0 ${W} ${H}`} role="img"
-         aria-label={`price over ${chart.span} with chatter beneath${
+         aria-label={`price over ${chart.span}${showChatter ? ' with chatter beneath' : ''}${
            sessionContext ? `; extended sessions: ${sessionContext}` : ''}`}>
       <SessionBands chart={chart} plotTop={TOP} plotBottom={FLOOR}
                     plotRight={PLOT_R} />
@@ -117,8 +124,8 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
           <>
             {/* One format for both: `$202` above `$46.33` is two different
                 kinds of number stacked in one gutter. The larger end decides. */}
-            <Gutter y={priceY(high, low, high)} label={money(high, high, currency)} />
-            <Gutter y={priceY(low, low, high)} label={money(low, high, currency)} />
+            <Gutter y={priceY(high, low, high)} label={money(high, high)} />
+            <Gutter y={priceY(low, low, high)} label={money(low, high)} />
           </>
         ) : (
           // One sentence instead of an empty upper band. Muted, not amber: a
@@ -128,7 +135,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
           </text>
         )}
 
-        {watchIndex > 0 && (
+        {showChatter && watchIndex > 0 && (
           <>
             <line x1="0" y1={FLOOR} x2={watchX} y2={FLOOR}
                   stroke="var(--rule)"
@@ -149,7 +156,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
             over `33/h` into one unreadable block (seen live twice). Only
             where something was counted: a number over an empty lane would
             label a measurement nobody took. */}
-        {observed > 0 && peakIndex >= 0 && (
+        {showChatter && observed > 0 && peakIndex >= 0 && (
           <text className="ax peak" fill="var(--mark)"
                 x={Math.min(peakIndex * slot + slot / 2, PLOT_R - 4)}
                 y={Math.max(chatterY(observed, peak, band) - 6, 12)}
@@ -169,10 +176,10 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
       </g>
 
       <g className="plot">
-        {chatter.areas.map((d, index) => (
+        {showChatter && chatter.areas.map((d, index) => (
           <path key={`a${index}`} d={d} fill="var(--mark-soft)" />
         ))}
-        {chatter.lines.map((d, index) => (
+        {showChatter && chatter.lines.map((d, index) => (
           <path key={`l${index}`} d={d} fill="none" stroke="var(--mark)"
                 strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"
                 vectorEffect="non-scaling-stroke" />
@@ -180,13 +187,13 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
         {/* The ticker's own normal, dashed through the talk exactly as the
             rows draw it -- only over the stretch that was observed, because
             left of the boundary there is nothing to measure against. */}
-        {yNormal !== null && observed > 0 && (
+        {showChatter && yNormal !== null && observed > 0 && (
           <line x1={watchX} y1={yNormal} x2={PLOT_R} y2={yNormal}
                 stroke="var(--dim)" strokeWidth="1" strokeDasharray="3 4"
                 opacity="0.55" vectorEffect="non-scaling-stroke" />
         )}
 
-        {watchIndex > 0 && (
+        {showChatter && watchIndex > 0 && (
           <line className="watch-edge" x1={watchX} y1={TOP} x2={watchX}
                 y2={FLOOR} stroke="var(--mark)" strokeWidth="1"
                 strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
@@ -213,7 +220,7 @@ export function PriceChart({ chart }: { chart: DetailChart }) {
       </g>
       {/* The chart answering the cursor: a hairline on the nearest slot and its
           three facts in words. Last, so it sits over everything it reads. */}
-      <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} currency={currency} />
+      <ChartHover chart={chart} geometry={{ priced, low, high, peak, band }} />
     </svg>
   )
 }
@@ -432,7 +439,16 @@ export function priceY(value: number, low: number, high: number): number {
 }
 
 /** Direction across the whole visible span, which is the only thing green and
- *  red are allowed to mean on this surface. */
+ *  red are allowed to mean on this surface.
+ *
+ *  Exported because the hub states this in words beside its chart: there the
+ *  stroke is cyan for series identity, so the direction has to be said rather
+ *  than drawn. One implementation, so the sentence and the line can never
+ *  disagree about which way the span went. */
+export function roseOverSpan(closes: (number | null)[]): boolean {
+  return rose(closes)
+}
+
 function rose(closes: (number | null)[]): boolean {
   const real = closes.filter((v): v is number => v !== null)
   return real.length < 2 || real[real.length - 1]! >= real[0]!
