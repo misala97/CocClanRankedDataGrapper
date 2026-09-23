@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beinstrecker (Maschine) · Gym Tracker</title>
+    
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    
+    <meta name="theme-color" content="#F3EAF7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#241132" media="(prefers-color-scheme: dark)">
+    
+    <link rel="preload" href="../../../static/gym/fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin="">
+    <link rel="stylesheet" href="../../../static/gym/figtree.css">
+    <link rel="stylesheet" href="../../../static/gym/gym.css">
+    
+    
+    
+    
+    
+    
+    
+<style>
+/* V3 mock only -- the app's tokens, nothing else. */
+/* The real sheet is a showModal() dialog in the top layer; a static page has
+   none, so the mock stacks it over the app's highest bar instead. */
+.v3-shade { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: calc(var(--z-bar) + 10); }
+.v3-sheet { position: fixed; inset: auto 0 0; margin: 0 auto; z-index: calc(var(--z-bar) + 11);
+  max-block-size: calc(100% - 40px); overflow-y: auto; display: block; opacity: 1; transform: none; }
+.v3-row { padding-block: var(--sp-3); }
+.v3-row + .v3-row { border-top: 1px solid var(--edge); }
+.v3-row__head { display: flex; align-items: baseline; gap: var(--sp-2); margin-block-end: var(--sp-2); }
+.v3-row__name { flex: 1; margin: 0; font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
+.v3-src { font-size: var(--t-meta); color: var(--dim); }
+.v3-src--own { color: var(--ink); font-weight: var(--w-semi); }
+.v3-row__line { margin: 0 0 var(--sp-2); font-size: var(--t-meta); color: var(--dim); line-height: 1.45; }
+.v3-pills { flex-wrap: nowrap; padding-bottom: 0; }
+.v3-pills .pill { flex: 1 1 0; min-inline-size: 0; padding-inline: 0; justify-content: center;
+  flex-direction: column; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.v3-pills .pill small { font-size: var(--t-micro); font-weight: var(--w-semi); margin-block-start: 2px; }
+.v3-pills--ask { flex-wrap: wrap; margin-block-start: var(--sp-3); }
+.v3-pills--ask .pill { flex: 0 0 auto; padding-inline: var(--sp-4); }
+.v3-ask { color: var(--ink); }
+.v3-ask .live__seed-lbl { margin-block-end: 2px; }
+.v3-btn { inline-size: 100%; }
+.v3-mine .row { inline-size: 100%; background: none; border: 0; padding-inline: 0; font: inherit;
+  color: inherit; text-align: start; cursor: pointer; }
+.v3-mine .row + .row { border-top: 1px solid var(--edge); }
+.v3-mine .row__main { flex: 1; min-inline-size: 0; }
+.v3-mine__note { margin: var(--sp-3) 0 0; font-size: var(--t-meta); color: var(--dim); line-height: 1.45; }
+.v3-std { margin: var(--sp-3) var(--sp-4) 0; padding-inline: var(--sp-4); border-radius: var(--r-control);
+  background: var(--chassis); box-shadow: inset 0 0 0 1px var(--edge); }
+.v3-std .sheet-row { inline-size: calc(100% + var(--sp-4) * 2); }
+.v3-val { flex: none; font-size: var(--t-body); font-weight: var(--w-bold); color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.v3-chev { flex: none; color: var(--dim); }
+.v3-bigfield { margin-block: var(--sp-4) var(--sp-1); }
+.v3-sorts { margin-inline: 0; }
+.v3-noticed { box-shadow: inset 0 0 0 1px var(--edge-hi); }
+.v3-noticed .next-time__lbl { color: var(--dim); }
+</style></head>
+
+<body class="">
+
+
+<a class="skip-link" href="#gym-main">Zum Inhalt springen</a>
+
+
+
+
+
+<nav class="topbar" aria-label="Hauptnavigation (Desktop)">
+    <span class="topbar__brand">Gym Tracker</span>
+    <div class="topbar__nav">
+        
+        
+        <a href="/gym" class="topbar__link">Start</a>
+        
+        
+        <a href="/gym/uebungen" class="topbar__link">Übungen</a>
+        
+        
+        <a href="/gym/verlauf" class="topbar__link">Verlauf</a>
+        
+        
+        <a href="/gym/statistik" class="topbar__link">Statistik</a>
+        
+        <a href="/account" class="topbar__link">Konto</a>
+        <a href="/admin/users" class="topbar__link">Benutzer</a>
+        <a href="/logout" class="topbar__link">Abmelden</a>
+    </div>
+</nav>
+
+
+
+
+
+
+
+
+    
+        
+    
+
+    
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+<main id="gym-main" tabindex="-1">
+
+
+
+
+
+<div id="gym-root"><div class="exdetail"><header class="session-top"><a href="/gym/uebungen" class="session-top__back" aria-label="Zurück zu den Übungen"><svg class="icon icon-back" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 3.2L5.2 8l4.8 4.8"></path></svg></a><span class="session-top__name stack"><h1 class="exdetail__name" style="view-transition-name: ex;">Beinstrecker (Maschine)</h1><span class="exdetail__sub">Beine · Zuletzt 23.09.2026 · Pos. 1</span></span></header><div class="exdetail__main"><div class="prs"><span class="pr"><span class="pr__val">48,0<small>kg</small></span><span class="label">Bestes Gewicht</span><span class="pr__sub">12 Wdh. · Pos. 1 · 23.09.2026</span></span><span class="pr"><span class="pr__val">67,2<small>kg</small></span><span class="label">Bestes e1RM</span><span class="pr__sub">48,0 kg × 12 · Pos. 1 · 23.09.2026</span></span></div><section class="sec sec--chart" aria-labelledby="sec-chart"><div class="sec__head"><h2 class="label" id="sec-chart">Verlauf e1RM</h2><span class="sec__sp"></span><span class="label">Pos. 1 · 1 Einheit</span></div><div class="chart"><div class="chart__y" aria-hidden="true"><span class="label" style="top: 7.812%;">69,7</span><span class="label" style="top: 50%;">67,2</span><span class="label" style="top: 92.188%;">64,7</span></div><svg viewBox="0 0 320 128" role="img" aria-label="Verlauf des e1RM über 1 Einheiten, 23.09.2026 bis 23.09.2026. Zwischen 67,2 und 67,2 Kilogramm. Die Tabelle darunter enthält dieselben Werte."><g stroke="var(--edge)" stroke-width="1"><line x1="0" y1="10" x2="320" y2="10"></line><line x1="0" y1="64" x2="320" y2="64"></line><line x1="0" y1="118" x2="320" y2="118"></line></g><g class="chart__ink"><g opacity="1"><circle cx="10" cy="64" r="6" class="chart__pr" stroke="var(--done)" stroke-width="1.5" fill="var(--record)" style="--at: 0.031;"></circle></g></g><g aria-hidden="true" class="chart__hits"></g></svg><p class="chart__read"><span class="chart__hint">Punkt antippen für Details</span></p><div class="chart__axis"><span class="label">23.09.</span></div><div class="chart__legend"><span class="key"><span class="key__dot" style="background: var(--done);"></span>e1RM</span><span class="key"><span class="key__dot" style="background: var(--record); box-shadow: 0 0 0 1.5px var(--done);"></span>Rekord</span></div></div></section></div><div class="exdetail__log"><section class="sec sec--log" aria-labelledby="sec-log"><div class="sec__head"><h2 class="label" id="sec-log">Einheiten</h2><span class="sec__sp"></span><span class="label">Pos. 1</span></div><a class="row row--top is-record" href="/gym/session/27671"><span class="row__main stack"><span class="dateline"><span class="dateline__d">23.09.2026</span><span class="vtag vtag--record">Rekord</span></span><span class="row__meta">Pos. 1 · 48,0 × 12</span></span><span class="row__trail row__trail--stack"><span class="vol">576<small>kg</small></span><span class="e1rm">e1RM 67,2</span></span></a><p class="exdetail__note">Deload-Einheiten bleiben in der Liste — sie sind das Protokoll. Sie halten keine Rekorde und zählen nicht gegen die Stagnation.</p></section></div><section class="sec sec--maint" aria-label="Deine Einstellungen"><button type="button" class="finished__correct"><svg class="icon icon-edit" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11.3 2.2a1.6 1.6 0 0 1 2.3 2.3l-7.4 7.4-3 .7.7-3z"></path><path d="M10.2 3.3l2.3 2.3"></path></svg>Schrittweite und Pause einstellen</button></section></div></div>
+
+</main>
+
+
+
+
+
+
+
+<div class="nav-footer">
+    <a href="/account" class="label">Konto</a>
+    <a href="/admin/users" class="label">Benutzer</a>
+    <a href="/logout" class="label">Abmelden</a>
+</div><nav class="tabbar" aria-label="Hauptnavigation (Mobil)">
+    
+    
+    <a href="/gym" class="tabbar__tab">
+        
+<svg class="icon icon-home" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <path d="M2.4 7.6L8 2.6l5.6 5z"></path>
+  <path d="M3.8 7.2v6.2h8.4V7.2"></path>
+</svg>
+        <span>Start</span>
+    </a>
+    
+    <a href="/gym/uebungen" class="tabbar__tab">
+        
+<svg class="icon icon-dumbbell" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <path d="M2.4 5.6v4.8M4.8 4v8M11.2 4v8M13.6 5.6v4.8"></path>
+  <path d="M4.8 8h6.4"></path>
+</svg>
+        <span>Übungen</span>
+    </a>
+    
+    <a href="/gym/verlauf" class="tabbar__tab">
+        
+<svg class="icon icon-history" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <circle cx="8" cy="8" r="5.6"></circle>
+  <path d="M8 4.6V8l2.3 1.4"></path>
+</svg>
+        <span>Verlauf</span>
+    </a>
+    
+</nav><div class="v3-shade"></div><dialog class="sheet v3-sheet" open aria-labelledby="v3-title"><div class="sheet__head"><h2 class="sheet__title" id="v3-title">Deine Einstellungen</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"><p class="sheet__note">Nur für dich. Jeder Tipp ist sofort gespeichert.</p><section class="v3-row"><div class="v3-row__head"><h3 class="v3-row__name">Pause nach jedem Satz</h3><span class="v3-src">Wie die Liste</span></div><div class="pills v3-pills" role="group" aria-label="Pause"><button type="button" class="pill" aria-pressed="false"><span>1:00</span></button><button type="button" class="pill is-on" aria-pressed="true"><span>1:30</span><small>Liste</small></button><button type="button" class="pill" aria-pressed="false"><span>2:00</span></button><button type="button" class="pill" aria-pressed="false"><span>2:30</span></button><button type="button" class="pill" aria-pressed="false"><span>3:00</span></button><button type="button" class="pill" aria-pressed="false"><span>Andere</span></button></div></section><section class="v3-row"><div class="v3-row__head"><h3 class="v3-row__name">Schritt bei + und − (kg)</h3><span class="v3-src">Wie die Liste</span></div><div class="pills v3-pills" role="group" aria-label="Schritt"><button type="button" class="pill" aria-pressed="false"><span>2,5</span></button><button type="button" class="pill is-on" aria-pressed="true"><span>5</span><small>Liste</small></button><button type="button" class="pill" aria-pressed="false"><span>7</span></button><button type="button" class="pill" aria-pressed="false"><span>8</span></button><button type="button" class="pill" aria-pressed="false"><span>10</span></button><button type="button" class="pill" aria-pressed="false"><span>Andere</span></button></div></section><section class="v3-row"><div class="v3-row__head"><h3 class="v3-row__name">Stufen am Gerät</h3><span class="v3-src">Wie die Liste</span></div><p class="v3-row__line">Gleichmäßig, im Schritt von oben: 5, 10, 15 …</p><button type="button" class="btn btn--ghost v3-btn">Das Gerät hat andere Stufen</button></section></div></dialog></body></html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1:05 Pause · V3 Pause · Gym Tracker</title>
+    
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    
+    <meta name="theme-color" content="#F3EAF7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#241132" media="(prefers-color-scheme: dark)">
+    
+    <link rel="preload" href="../../../static/gym/fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin="">
+    <link rel="stylesheet" href="../../../static/gym/figtree.css">
+    <link rel="stylesheet" href="../../../static/gym/gym.css">
+    
+    
+    
+    
+    
+    
+    
+<style>
+/* V3 mock only -- the app's tokens, nothing else. */
+/* The real sheet is a showModal() dialog in the top layer; a static page has
+   none, so the mock stacks it over the app's highest bar instead. */
+.v3-shade { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: calc(var(--z-bar) + 10); }
+.v3-sheet { position: fixed; inset: auto 0 0; margin: 0 auto; z-index: calc(var(--z-bar) + 11);
+  max-block-size: calc(100% - 40px); overflow-y: auto; display: block; opacity: 1; transform: none; }
+.v3-row { padding-block: var(--sp-3); }
+.v3-row + .v3-row { border-top: 1px solid var(--edge); }
+.v3-row__head { display: flex; align-items: baseline; gap: var(--sp-2); margin-block-end: var(--sp-2); }
+.v3-row__name { flex: 1; margin: 0; font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
+.v3-src { font-size: var(--t-meta); color: var(--dim); }
+.v3-src--own { color: var(--ink); font-weight: var(--w-semi); }
+.v3-row__line { margin: 0 0 var(--sp-2); font-size: var(--t-meta); color: var(--dim); line-height: 1.45; }
+.v3-pills { flex-wrap: nowrap; padding-bottom: 0; }
+.v3-pills .pill { flex: 1 1 0; min-inline-size: 0; padding-inline: 0; justify-content: center;
+  flex-direction: column; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.v3-pills .pill small { font-size: var(--t-micro); font-weight: var(--w-semi); margin-block-start: 2px; }
+.v3-pills--ask { flex-wrap: wrap; margin-block-start: var(--sp-3); }
+.v3-pills--ask .pill { flex: 0 0 auto; padding-inline: var(--sp-4); }
+.v3-ask { color: var(--ink); }
+.v3-ask .live__seed-lbl { margin-block-end: 2px; }
+.v3-btn { inline-size: 100%; }
+.v3-mine .row { inline-size: 100%; background: none; border: 0; padding-inline: 0; font: inherit;
+  color: inherit; text-align: start; cursor: pointer; }
+.v3-mine .row + .row { border-top: 1px solid var(--edge); }
+.v3-mine .row__main { flex: 1; min-inline-size: 0; }
+.v3-mine__note { margin: var(--sp-3) 0 0; font-size: var(--t-meta); color: var(--dim); line-height: 1.45; }
+.v3-std { margin: var(--sp-3) var(--sp-4) 0; padding-inline: var(--sp-4); border-radius: var(--r-control);
+  background: var(--chassis); box-shadow: inset 0 0 0 1px var(--edge); }
+.v3-std .sheet-row { inline-size: calc(100% + var(--sp-4) * 2); }
+.v3-val { flex: none; font-size: var(--t-body); font-weight: var(--w-bold); color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.v3-chev { flex: none; color: var(--dim); }
+.v3-bigfield { margin-block: var(--sp-4) var(--sp-1); }
+.v3-sorts { margin-inline: 0; }
+.v3-noticed { box-shadow: inset 0 0 0 1px var(--edge-hi); }
+.v3-noticed .next-time__lbl { color: var(--dim); }
+</style></head>
+
+<body class="is-focus">
+
+
+<a class="skip-link" href="#gym-main">Zum Inhalt springen</a>
+
+
+
+
+
+<nav class="topbar" aria-label="Hauptnavigation (Desktop)">
+    <span class="topbar__brand">Gym Tracker</span>
+    <div class="topbar__nav">
+        
+        
+        <a href="/gym" class="topbar__link">Start</a>
+        
+        
+        <a href="/gym/uebungen" class="topbar__link">Übungen</a>
+        
+        
+        <a href="/gym/verlauf" class="topbar__link">Verlauf</a>
+        
+        
+        <a href="/gym/statistik" class="topbar__link">Statistik</a>
+        
+        <a href="/account" class="topbar__link">Konto</a>
+        <a href="/admin/users" class="topbar__link">Benutzer</a>
+        <a href="/logout" class="topbar__link">Abmelden</a>
+    </div>
+</nav>
+
+
+
+
+
+
+
+
+
+
+<main id="gym-main" tabindex="-1">
+
+
+
+
+
+<div class="session-view" id="gym-root"><header class="session-top"><a href="/gym" class="session-top__back" aria-label="Zurück zum Start"><svg class="icon icon-back" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 3.2L5.2 8l4.8 4.8"></path></svg></a><h1 class="session-top__name" style="view-transition-name: session;">V3 Pause</h1><span class="session-top__clock" id="session-clock">00:14:07</span><button type="button" class="session-top__more" aria-label="Workout-Optionen"><svg class="icon icon-more" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.4" r="1.15" fill="currentColor" stroke="none"></circle><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"></circle><circle cx="8" cy="12.6" r="1.15" fill="currentColor" stroke="none"></circle></svg></button></header><p class="sr-only" id="rest-announce" aria-live="polite"><span></span></p><div class="rail" aria-hidden="true"><span class="rail__seg is-now" data-se-id="52099"><span class="rail__fill" style="--p: 0.6667;"></span></span><span class="rail__seg" data-se-id="52100"></span></div><div class="rail__cap"><span class="label">Übung 1 von 2</span><span class="label">Noch 4 Sätze</span></div><section class="live" data-se-id="52099"><div class="live__head"><span class="live__kick">Jetzt</span><button type="button" class="live__more" aria-label="Butterfly (Maschine) — Optionen"><svg class="icon icon-more" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.4" r="1.15" fill="currentColor" stroke="none"></circle><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"></circle><circle cx="8" cy="12.6" r="1.15" fill="currentColor" stroke="none"></circle></svg></button></div><h2 class="live__name">Butterfly (Maschine)</h2><p class="live__stall"><span class="live__stall-lbl">Stagniert</span> 4 Workouts ohne neuen e1RM-PR — auf 71,5 kg gehen, notfalls 2 Wdh. weniger.</p><p class="live__seed"><span class="live__seed-lbl">Vorgabe</span> vom 22.09., damals später im Workout (Position 4).</p><div class="sets"><div class="set-form"><button type="button" class="set is-done" aria-label="Satz 1 erledigt, 77,0 kg mal 9 — antippen zum Zurücksetzen">77,0 × 9</button></div><div class="set-form"><button type="button" class="set is-done" aria-label="Satz 2 erledigt, 77,0 kg mal 8 — antippen zum Zurücksetzen">77,0 × 8</button></div><div class="set-form"><button type="button" class="set is-now" aria-label="Satz 3, geplant 69,0 kg mal 8 — antippen zum Auswählen">69,0 × 8</button></div></div><div class="pair"><div class="field-num"><button type="button" class="field-num__val" aria-label="Gewicht eingeben">69,0</button><span class="field-num__lbl">kg</span><span class="field-num__keys"><button type="button" class="field-num__key" aria-label="Gewicht verringern">−</button><button type="button" class="field-num__key" aria-label="Gewicht erhöhen">+</button></span></div><div class="field-num"><button type="button" class="field-num__val" aria-label="Wiederholungen eingeben">8</button><span class="field-num__lbl">Wdh.</span><span class="field-num__keys"><button type="button" class="field-num__key" aria-label="Wiederholungen verringern">−</button><button type="button" class="field-num__key" aria-label="Wiederholungen erhöhen">+</button></span></div></div><button type="button" class="go is-resting" id="set-confirm"><span class="go__lbl"><svg class="icon icon-check" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.4 8.4l3.2 3.2 6-6.6"></path></svg>Satz geschafft</span><span class="go__clock" aria-hidden="true"><span class="go__clock-lbl">Pause</span>1:05</span><span class="go__band" aria-hidden="true"><span class="go__charge" style="transform: scaleX(0.568793);"></span></span></button></section><h2 class="sr-only">Diese Einheit</h2><div class="grew"><span class="grew__num">1.309</span><span class="grew__unit">kg bewegt</span><span class="grew__sp"></span><span class="grew__side"><b>2</b> Sätze · <b id="session-duration">00:14:07</b></span></div><div class="ticks" role="img" aria-label="2 von 6 Sätzen erledigt"><span class="tick is-on"></span><span class="tick is-on"></span><span class="tick is-hot"></span><span class="tick"></span><span class="tick"></span><span class="tick"></span></div><div class="queue" id="queue"><h2 class="sr-only">Übungen</h2><div class="row queue__row is-now" data-se-id="52099"><button type="button" class="drag-handle" tabindex="-1" aria-label="Butterfly (Maschine) verschieben">⠿</button><span class="row__lead queue__lead"><span class="queue__now" aria-hidden="true"></span></span><button type="button" class="row__main" aria-current="step"><span class="row__name">Butterfly (Maschine)</span></button><span class="row__trail queue__load">2/3</span></div><div class="row queue__row" data-se-id="52100"><button type="button" class="drag-handle" tabindex="-1" aria-label="Latzug (Kabel) verschieben">⠿</button><span class="row__lead queue__lead">2</span><button type="button" class="row__main"><span class="row__name">Latzug (Kabel)</span></button><span class="row__trail queue__load">3 × 80,0</span></div><div class="row queue__add"><span class="row__lead queue__lead" aria-hidden="true"><svg class="icon icon-plus" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3.4v9.2M3.4 8h9.2"></path></svg></span><button type="button" class="row__main"><span class="row__name">Übung hinzufügen</span></button></div></div><div class="session-foot"><button type="button" class="btn btn--ghost btn--block">Workout beenden</button></div><dialog class="sheet" id="sheet-session" aria-labelledby="sheet-session-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-session-title">Workout</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-deload" aria-labelledby="sheet-deload-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-deload-title">Deload</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-add-exercise" aria-labelledby="sheet-add-exercise-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-add-exercise-title">Übung hinzufügen</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-template" aria-labelledby="sheet-template-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-template-title">Als Routine speichern</h2><button type="button" class="sheet__close">Abbrechen</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-finish" aria-labelledby="sheet-finish-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-finish-title">Workout beenden</h2><button type="button" class="sheet__close">Abbrechen</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-ex-52100" aria-labelledby="sheet-ex-52100-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-ex-52100-title">Latzug (Kabel)</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog></div>
+
+</main>
+
+
+
+
+
+
+
+<div class="nav-footer">
+    <a href="/account" class="label">Konto</a>
+    <a href="/admin/users" class="label">Benutzer</a>
+    <a href="/logout" class="label">Abmelden</a>
+</div><nav class="tabbar" aria-label="Hauptnavigation (Mobil)">
+    
+    
+    <a href="/gym" class="tabbar__tab">
+        
+<svg class="icon icon-home" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <path d="M2.4 7.6L8 2.6l5.6 5z"></path>
+  <path d="M3.8 7.2v6.2h8.4V7.2"></path>
+</svg>
+        <span>Start</span>
+    </a>
+    
+    <a href="/gym/uebungen" class="tabbar__tab">
+        
+<svg class="icon icon-dumbbell" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <path d="M2.4 5.6v4.8M4.8 4v8M11.2 4v8M13.6 5.6v4.8"></path>
+  <path d="M4.8 8h6.4"></path>
+</svg>
+        <span>Übungen</span>
+    </a>
+    
+    <a href="/gym/verlauf" class="tabbar__tab">
+        
+<svg class="icon icon-history" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <circle cx="8" cy="8" r="5.6"></circle>
+  <path d="M8 4.6V8l2.3 1.4"></path>
+</svg>
+        <span>Verlauf</span>
+    </a>
+    
+</nav><div class="v3-shade"></div><dialog class="sheet v3-sheet" id="sheet-ex-52099" aria-labelledby="sheet-ex-52099-title" open=""><div class="sheet__head"><h2 class="sheet__title" id="sheet-ex-52099-title">Butterfly (Maschine)</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"><div class="sheet__group"><div class="sheet__group-head"><span class="label">Pause heute</span></div><div class="pills v3-pills" role="group" aria-label="Pause heute"><button type="button" class="pill" aria-pressed="false"><span>1:30</span></button><button type="button" class="pill" aria-pressed="false"><span>2:00</span></button><button type="button" class="pill is-on" aria-pressed="true"><span>2:30</span><small>deine</small></button><button type="button" class="pill" aria-pressed="false"><span>3:00</span></button><button type="button" class="pill" aria-pressed="false"><span>3:30</span></button><button type="button" class="pill" aria-pressed="false"><span>Andere</span></button></div><p class="sheet__note">Eine andere Zeit gilt nur für dieses Workout.</p><button type="button" class="sheet-row"><span class="sheet-row__lead"><svg class="icon icon-edit" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.3 2.2a1.6 1.6 0 0 1 2.3 2.3l-7.4 7.4-3 .7.7-3z"/><path d="M10.2 3.3l2.3 2.3"/></svg></span><span class="sheet-row__main"><span class="sheet-row__name">Deine Einstellungen</span><span class="sheet-row__meta">Pause 2:30 · Schritt 2,5 kg — gelten immer</span></span><svg class="icon icon-forward v3-chev" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.2l4.8 4.8L6 12.8"/></svg></button></div><div class="sheet__group"><div class="sheet__group-head"><span class="label">Heute</span></div><label class="sheet__row"><input class="check" type="checkbox" style=""><span class="check__text">Schmerz / Zwicken</span></label><div class="field"><label class="label" for="ex-notes-52099">Notiz</label><input id="ex-notes-52099" class="input" placeholder="—" type="text" value="" style=""></div></div><div class="sheet__group"><div class="sheet__group-head"><span class="label">Sätze</span></div><div class="sset"><span class="label">1</span><input step="0.5" min="0" class="input input--num" aria-label="Satz 1, Gewicht in kg" type="number" value="77" style=""><span class="sset__unit">kg</span><span class="sset__unit">×</span><input min="1" class="input input--num" aria-label="Satz 1, Wiederholungen" type="number" value="9" style=""><span class="sset__acts"><button type="button" class="icon-btn" aria-label="Satz 1 speichern" disabled=""><svg class="icon icon-save" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3.2h7.4L13 5.8v7h-10z"></path><path d="M5.4 3.2v3.4h5.2V3.2"></path><path d="M5.4 12.8V9.4h5.2v3.4"></path></svg></button><button type="button" class="icon-btn" aria-label="Satz 1 löschen">✕</button></span></div><div class="sset"><span class="label">2</span><input step="0.5" min="0" class="input input--num" aria-label="Satz 2, Gewicht in kg" type="number" value="77" style=""><span class="sset__unit">kg</span><span class="sset__unit">×</span><input min="1" class="input input--num" aria-label="Satz 2, Wiederholungen" type="number" value="8" style=""><span class="sset__acts"><button type="button" class="icon-btn" aria-label="Satz 2 speichern" disabled=""><svg class="icon icon-save" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3.2h7.4L13 5.8v7h-10z"></path><path d="M5.4 3.2v3.4h5.2V3.2"></path><path d="M5.4 12.8V9.4h5.2v3.4"></path></svg></button><button type="button" class="icon-btn" aria-label="Satz 2 löschen">✕</button></span></div><div class="sset"><span class="label">3</span><input step="0.5" min="0" class="input input--num" aria-label="Satz 3, Gewicht in kg" type="number" value="69" style=""><span class="sset__unit">kg</span><span class="sset__unit">×</span><input min="1" class="input input--num" aria-label="Satz 3, Wiederholungen" type="number" value="8" style=""><span class="sset__acts"><button type="button" class="icon-btn" aria-label="Satz 3 speichern" disabled=""><svg class="icon icon-save" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 3.2h7.4L13 5.8v7h-10z"></path><path d="M5.4 3.2v3.4h5.2V3.2"></path><path d="M5.4 12.8V9.4h5.2v3.4"></path></svg></button><button type="button" class="icon-btn" aria-label="Satz 3 löschen">✕</button></span></div><div class="sset"><span class="label" aria-hidden="true">+</span><input step="0.5" min="0" class="input input--num" required="" aria-label="Neuer Satz, Gewicht in kg" type="number" value="69" style=""><span class="sset__unit">kg</span><span class="sset__unit">×</span><input min="1" class="input input--num" required="" aria-label="Neuer Satz, Wiederholungen" type="number" value="8" style=""><span class="sset__acts"><button type="button" class="btn btn--ghost btn--sm" aria-label="Satz anhängen">Anhängen</button></span></div></div><div class="sheet__group"><button type="button" class="sheet-row"><span class="sheet-row__lead"><svg class="icon icon-chart" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.5 13.5h11"></path><path d="M4.5 13.5v-4"></path><path d="M8 13.5v-8"></path><path d="M11.5 13.5v-5.5"></path></svg></span><span class="sheet-row__main"><span class="sheet-row__name">Fortschritt anzeigen</span><span class="sheet-row__meta">Verlauf und Rekorde dieser Übung.</span></span></button><button type="button" class="sheet-row"><span class="sheet-row__lead"><svg class="icon icon-skip" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.2 3.6l6 4.4-6 4.4z"></path><path d="M12.2 3.6v8.8"></path></svg></span><span class="sheet-row__main"><span class="sheet-row__name">Übung überspringen</span><span class="sheet-row__meta">Offene Sätze entfallen, erledigte bleiben.</span></span></button><details><summary class="sheet-row"><span class="sheet-row__lead"><svg class="icon icon-swap" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 5.6h9.2l-2.2-2.2"></path><path d="M13.4 10.4H4.2l2.2 2.2"></path></svg></span><span class="sheet-row__main"><span class="sheet-row__name">Übung ersetzen</span><span class="sheet-row__meta">Nur für heute — die Routine bleibt.</span></span></summary><div class="sheet__pane"><div class="field grow"><label class="label" for="replace-select-52099">Ersatzübung</label><select id="replace-select-52099" class="select"><option value="18045">Bankdrücken (Kurzhantel)</option><option value="18041">Bankdrücken (Langhantel)</option><option value="18061">Bankdrücken (Maschine, Scheiben)</option><option value="18051">Bankdrücken (Multipresse)</option><option value="18057">Brustpresse (Maschine)</option><option value="18060">Brustpresse (Maschine, Scheiben)</option><option value="18058">Brustpresse (Maschine, schräg)</option><option value="18054">Fliegende (Kabel)</option><option value="18055">Fliegende (Kabel, von oben)</option><option value="18056">Fliegende (Kabel, von unten)</option><option value="18048">Fliegende (Kurzhantel)</option><option value="18049">Fliegende (Kurzhantel, schräg)</option><option value="18044">Floor Press (Langhantel)</option><option value="18047">Negativbankdrücken (Kurzhantel)</option><option value="18043">Negativbankdrücken (Langhantel)</option><option value="18063">Negativbankdrücken (Maschine, Scheiben)</option><option value="18053">Negativbankdrücken (Multipresse)</option><option value="18046">Schrägbankdrücken (Kurzhantel)</option><option value="18042">Schrägbankdrücken (Langhantel)</option><option value="18062">Schrägbankdrücken (Maschine, Scheiben)</option><option value="18052">Schrägbankdrücken (Multipresse)</option><option value="18050">Überzüge (Kurzhantel)</option></select></div><button type="button" class="btn btn--live btn--sm">Ersetzen</button></div></details><button type="button" class="sheet-row sheet-row--danger"><span class="sheet-row__lead"><svg class="icon icon-trash" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.2 4.4h11.6"></path><path d="M5.4 4.4V3.1a1.2 1.2 0 0 1 1.2-1.2h2.8a1.2 1.2 0 0 1 1.2 1.2v1.3"></path><path d="M12.5 4.4l-.6 8.7a1.3 1.3 0 0 1-1.3 1.2H5.4a1.3 1.3 0 0 1-1.3-1.2l-.6-8.7"></path></svg></span><span class="sheet-row__main"><span class="sheet-row__name">Übung entfernen</span><span class="sheet-row__meta">Aus diesem Workout, samt Sätzen.</span></span></button></div></div></dialog></body></html>
