@@ -1,4 +1,4 @@
-# HANDOFF — gym first-run workflows + global exercise list (current state, 2026-09-23, after V2)
+# HANDOFF — gym first-run workflows + global exercise list (current state, 2026-09-23, after V3)
 
 Plan + ledger (binding): `docs/superpowers/plans/2026-09-23-gym-first-run-workflows.md`.
 Read its task table, the "Owner rulings on the L1 review" block and the ledger before
@@ -28,16 +28,16 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
    schema `personal_apps_gymbak_20260923`; re-copy if gym rows change before the upgrade.
 2. Radar: `.worktrees/radar-selected-price-charts` has an untracked `3f82a7e5b5dc` on
    `b7e3f9c1a2d4`. Before it ships, its `down_revision` must be main's head at that
-   moment: `e2c7a9f41b86` today, `c5a1d8e3f207` once G3 + V2 are merged, or
+   moment: `e2c7a9f41b86` today, `fc72f159a49f` once G3 + V2 + V3 are merged, or
    `flask db upgrade` stops on two heads. The note at the top of that worktree's
-   `HANDOFF.md` says so (updated after V2).
+   `HANDOFF.md` says so (updated after V3).
 3. Main checkout: 18 `radar-design/*.md` show as modified. They are the local copies that
    sat untracked before main tracked the folder; main's versions are newer (diff
    +389/-4348). Not ours; the owner decides. Byte copies of all 85 formerly untracked
    files: `C:\Users\michi\Desktop\CodingStuff-untracked-backup-2026-09-23`, and stash
    c3d92e8 ("85 untracked files main now tracks ...").
 
-## Done in code, NOT shipped: G3, V1, V2 (dev_personal only, pushed)
+## Done in code, NOT shipped: G3, V1, V2, V3 (dev_personal only, pushed)
 - G3, 39bc25c: joining a partner is one tap. `matching.py`, the `SharedSessionExercise`
   model and `follower_exercise_for` are gone; follower rows take the leader row's
   exercise id; the confirm page is one card with an optional routine picker. Migration
@@ -60,48 +60,62 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
   Rollback: with the V2 checkout still in place run `flask db downgrade 4b8e2d6f1a93`
   (writes 20 x 8 into every NULL, restores NOT NULL), then reset the checkout to a
   pre-V2 commit, rebuild, restart.
-- Ledger entries "G3 done in code", "V1 done in code", "V2 done in code" have the checks.
+- V3, ecbe9e0 (mockups 6803626): "Deine Pause" on Übungen sets one rest for all
+  exercises (own rests stay exceptions, linked); "Deine Einstellungen" (exercise page and
+  workout) is pills per setting with the fallback value marked, every tap saved; the
+  workout's exercise sheet has "Pause heute" (today only) and the settings one level
+  down; the per-workout step route is gone. Workouts and routines no longer copy a rest:
+  rows follow the setting until the finish writes the rest in force. Migration
+  `fc72f159a49f` (down `c5a1d8e3f207`) creates `gym_lifter_settings` (additive).
+  Rollback: with the V3 checkout still in place run `flask db downgrade c5a1d8e3f207`
+  FIRST (writes each rest for all onto the exercises that relied on it, drops the
+  table), then reset the checkout to a pre-V3 commit, rebuild, restart. Pre-V3 code
+  reads a NULL workout rest as the exercise's rest, so live rows stay right.
+- Ledger entries "G3/V1/V2/V3 done in code" have the checks.
 - Shipping = one merge of dev_personal into main (main is b439e44), push,
-  `update_coc.sh`. It carries a prod table drop (G3) and a column change with a data
-  rewrite (V2), so it needs Michi's explicit OK. Don't nag. Afterwards alembic heads on
-  main = [c5a1d8e3f207].
+  `update_coc.sh`. It carries a prod table drop (G3), a column change with a data
+  rewrite (V2) and a new table (V3), so it needs Michi's explicit OK. Don't nag.
+  Afterwards alembic heads on main = [fc72f159a49f].
 
 ## Next work
-- V3: personal settings UI (G1 cut the form to step/rest/bar/stack). Mockup round first:
-  real HTML on the real CSS, 390x844, 3 lanes, one screen per turn, via the impeccable
-  skill.
+- Nothing open in the plan's task table. Waiting on Michi's OK to ship G3 + V1-V3.
+- Flagged for Michi (V3 decision, mine): routines no longer hold their own rest; the
+  lifter's setting applies in every workout. Today's routine rows all equal the setting.
 - Possible V1 follow-up (not asked for): the exercise sheet's swap select could put
   the same movement's variants first.
-- Optional: an independent review of G1-V2 (subagent), only if Michi names the size.
+- Optional: an independent review of G1-V3 (subagent), only if Michi names the size.
 
 ## Workspace
 - Checkout `C:\Users\michi\Desktop\CodingStuff`, branch `dev_personal` (no worktree).
   HEAD is the commit that last updated this file; main is b439e44.
 - Dirty but NOT ours; leave alone: `personal_apps/scripts/discover_telegram_sources.py`,
   `personal_apps/telegram_candidates.json`, the 18 `radar-design/*.md`, many untracked
-  files (`.research/`, scratchpad probes, `brag-output/`, the V2 mock lanes b/c ...).
+  files (`.research/`, scratchpad probes, `brag-output/`, the V2 mock lanes b/c, the V3
+  lane B mocks and PNG boards, `scripts/measure_*` + their tests ...).
 
 ## Tools / tests
 - Harness (session scratchpad):
   `C:\Users\michi\AppData\Local\Temp\claude\C--Users-michi-Desktop-CodingStuff\acbf7aa7-35c4-4fcf-8a0f-df0174b324ef\scratchpad\`
   - `g1env.py` points the app at `personal_apps_g1` (import before `app`); `G1_DB`
     picks another DB, `G1_APP_DIR` another checkout's code (the .env stays the main one).
-  - The scratch DB `personal_apps_g1` is at `c5a1d8e3f207` (V2) and clean.
+  - The scratch DB `personal_apps_g1` is at `fc72f159a49f` (V3) and clean.
   - `make_scratch_db.py [name]` copies the dev DB; `run_g1_migration.py` migrates it;
-    `run_g3_migration.py` / `run_v2_migration.py` = those migrations both ways.
-  - `run_g1_tests.py [args]`: no path argument = every `tests/test_gym*.py` (718 now).
+    `run_g3_migration.py` / `run_v2_migration.py` / `run_v3_migration.py` = those
+    migrations both ways.
+  - `run_g1_tests.py [args]`: no path argument = every `tests/test_gym*.py` (736 now).
   - `t3rest.sh -W ignore::DeprecationWarning` = full gym suite, compact (`--tb=no`).
   - Browser checks: `v1_check.py` (add sheet), `v2_check.py` (first-time live screen),
-    `g3_check.py` (confirm page) serve the app in-process on the scratch DB and clear
-    their own leftovers by name. `heads_check.py` = alembic heads + which `app` loads;
-    `collide_check.py` = untracked files a ref would overwrite.
+    `v3_verify.py` (settings sheets, Deine Pause; restores u1's settings; boards via
+    `v3_montage.py`), `g3_check.py` (confirm page) serve the app in-process on the
+    scratch DB and clear their own leftovers by name. `heads_check.py` = alembic heads
+    + which `app` loads; `collide_check.py` = untracked files a ref would overwrite.
   - `mock_privacy_check.py FILES` before committing mock HTML built from real pages:
     usernames, CSRF, VAPID, session ids, emails (prints kinds only).
   - A direct POST from a browser check needs the page's `meta[name=csrf-token]` sent
     as the `csrf_token` form field.
   - Headless capture hangs on a FOLLOWER's live session page (it polls sync.json and
     never fires `load`): use `wait_until='commit'` and check text. Solo pages capture.
-- Frontend, from `personal_apps`: `npx vitest run` (512), `npx tsc --noEmit`,
+- Frontend, from `personal_apps`: `npx vitest run` (539), `npx tsc --noEmit`,
   `npm run build`.
 - Do NOT run `npm run build` while the pytest suite runs: rewriting the vite manifest
   races template rendering (one spurious failure seen, ledger T4).

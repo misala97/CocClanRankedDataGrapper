@@ -59,7 +59,7 @@ stack and secondary groups -- the two creation paths disagree.
 | G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | done in code — 39bc25c on dev_personal, UNMERGED; migration 4b8e2d6f1a93 drops `gym_shared_session_exercises` on prod, ships only with the owner's OK |
 | V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | done in code, 84dda2b (unmerged) — lane D from the mockup round (owner: "Build it like that") |
 | V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | done in code, 4cd8bf2 (unmerged) — lane A "Du tippst" (owner: "Ja A siehr am besten aus"); migration c5a1d8e3f207 blanks open placeholder sets on prod, ships only with the owner's OK |
-| V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | open — G1 T4 cut the form to the four personal fields; the redesign remains |
+| V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | done in code, ecbe9e0 (unmerged) — lane C "Einmal für alle" (owner: "yes go with c"); migration fc72f159a49f adds `gym_lifter_settings` (additive), ships with the next merge, only with the owner's OK |
 
 Direction change (owner, 2026-09-23 mid-round): "One list of preconfigured read only
 exercises for every user" -- replaces per-user exercise rows (per-user since 2026-08-02).
@@ -241,3 +241,44 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   typing, sets 2/3 take 40 x 10 on screen and in the DB, note gone after set 1, queue
   "neu", u1's refs, "+" lands on the 20 kg bar, no overflow, controls >= 44px, no
   console errors. NOT shipped: the migration rewrites open sets on prod.
+- 2026-09-23 — V3 mockup round: lanes A "Ein Blatt" (one settings sheet per exercise:
+  pills per setting, the list's value marked, "Andere" for a stepper, every tap saves;
+  the workout's sheet gets "Pause heute" with the settings one level down), B "Fragt
+  nach" (the workout asks "immer so?" when a lifter steps off a setting), C "Einmal für
+  alle" (A plus one rest for all exercises, own rests as exceptions). The stored
+  settings backed C: u1's 12 own rests were 10 x 2:30 and 2 x 3:00, one rest plus two
+  exceptions. Owner: "yes go with c". A + C committed in 6803626
+  (`personal_apps/scratchpad/puls/v3_settings/` a1-a3, c1-c3, `cmp_a.html`,
+  `cmp_c.html`; lane B left untracked).
+- 2026-09-23 — V3 done in code, ecbe9e0 (dev_personal, unmerged). Server: new
+  `LifterSettings` (`gym_lifter_settings`: user_id PK, rest_seconds), migration
+  fc72f159a49f (down c5a1d8e3f207; its downgrade writes each rest for all onto every
+  exercise the lifter touched that has no own rest and a different list rest, so no
+  effective rest changes, then drops the table). Rest in force: "Pause heute"
+  (`SessionExercise.rest_seconds`), else the exercise's own, else the rest for all,
+  else the list's (`exercises.resolve`). `set_rest_for_all`: switching ON clears own
+  rests equal to the new value; stepping or switching off touches no exception.
+  "Eine für alle" starts at the most common own rest (ties: the longer), else 2:00;
+  range 0:15-10:00. Routes: POST `/gym/rest`, GET `/gym/exercises/<id>/settings.json`,
+  `/gym/exercises/<id>/update` answers JSON to the islands (a field left out keeps its
+  value); `/gym/session-exercise/<id>/increment` removed. Decisions (mine): workouts
+  no longer copy a rest at start (routine, add, partner mirror) -- a row stores NULL,
+  follows the setting, and the finish (and the stale auto-finish) writes the rest in
+  force (`settle_rests`); "Pause heute" equal to the setting stores NULL; routines no
+  longer hold a rest (`te.rest_seconds` neither read nor written, column kept; the
+  probe found 28 routine rows, all equal to the setting, so nothing changes today).
+  Client: `settings/` (values, api, Nudge, Choice, SettingsBody, RestSheet,
+  useSaveQueue -- writes one at a time, only the last answer redraws, a failure puts
+  the last answer back with the reason), `DialogSheet`, EditSheet (was a form + reload),
+  the detail page opens on `#einstellungen`, ExerciseSheet "Pause heute" + a row to
+  `LiveSettingsSheet` (reads settings.json on open, invalidates the session after each
+  save), `optimistic.setRest`, the "Deine Pause" row on Übungen. Checks: tsc clean,
+  vitest 539 passed, build clean, gym pytest 736 passed (scratch DB, now at
+  fc72f159a49f), `test_vite_assets` 19 passed; migration up/down/up on the scratch DB
+  (19 touched, 1 took 150 s, 12 kept their own). Browser check `v3_verify.py` (in-process
+  server, scratch DB, 390x844, light + dark): no overflow, pills 53x44, two +15 nudges
+  sent as one write (210), "Eine für alle" posted 150 and took in 10 of 12 own rests,
+  back returns to the exercise sheet, `#einstellungen` opens the sheet and drops the
+  hash, no console errors; u1's settings restored. Fixed from that pass: decimal stops
+  read "2,5 · 5 · 7,5" (commas were ambiguous), the Übungen row breaks between
+  phrases. NOT shipped (additive migration; ships with G3 + V1 + V2 on the owner's OK).
