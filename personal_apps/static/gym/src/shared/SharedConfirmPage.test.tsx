@@ -7,6 +7,8 @@ import type { SharedConfirmPayload } from './types'
 const base: SharedConfirmPayload = {
   shared_id: 7,
   leader_name: 'Michi',
+  session_name: 'Push Day',
+  started_at: null,
   refusal: null,
   discards_active: false,
   proposals: [
@@ -32,15 +34,56 @@ describe('SharedConfirmPage', () => {
       .toBeInTheDocument()
   })
 
-  it('preselects an exact match and offers every candidate anyway', () => {
+  it('preselects an exact match and offers every candidate anyway', async () => {
     // Exact matches are already resolved and say so; only the ambiguous ones
     // carry a real decision, because asking seven times per shared workout
     // would make the common path the annoying one.
     mount()
     const exact = screen.getByLabelText('Bankdrücken')
     expect(exact).toHaveValue('55')
+    await userEvent.setup().click(screen.getByRole('button', { name: /Zuordnung ändern/ }))
     expect(screen.getAllByRole('option').map((o) => o.textContent))
       .toContain('Bankdrücken (Kurzhantel)')
+  })
+
+  it('names the workout being joined and how long it has run', () => {
+    const twelveMinutesAgo = new Date(Date.now() - 12 * 60_000).toISOString().slice(0, 19)
+    mount({ started_at: twelveMinutesAgo })
+    expect(screen.getByText('Michi trainiert seit 12 min')).toBeInTheDocument()
+    expect(screen.getByText('Push Day')).toBeInTheDocument()
+    expect(screen.getByText('Bankdrücken · Butterfly')).toBeInTheDocument()
+  })
+
+  it('calls a freeform workout just that', () => {
+    mount({ session_name: null })
+    expect(screen.getByText('Workout')).toBeInTheDocument()
+  })
+
+  it('asks only about the exercise with no same-named one of yours', () => {
+    const { container } = mount()
+    const card = container.querySelector('.lead')!
+    expect(card).toHaveTextContent('Eine Übung heißt bei dir anders — welche ist es?')
+    expect(card).toContainElement(screen.getByLabelText('Butterfly'))
+    expect(card).not.toContainElement(screen.getByLabelText('Bankdrücken'))
+    expect(card).toHaveTextContent('Die andere gibt es bei dir.')
+  })
+
+  it('confirms a fully matched workout in one line, above the button', () => {
+    mount({ proposals: [base.proposals[0]!] })
+    expect(screen.queryByText(/heißt bei dir anders/)).not.toBeInTheDocument()
+    expect(screen.getByText('Die Übung gibt es bei dir.')).toBeInTheDocument()
+  })
+
+  it('keeps the matched selects in the accept form while they are folded away', async () => {
+    mount()
+    const exact = screen.getByLabelText('Bankdrücken') as HTMLSelectElement
+    expect(exact.form).toBe(screen.getByRole('button', { name: 'Mitmachen' }).closest('form'))
+    expect(exact.closest('[hidden]')).not.toBeNull()
+    const toggle = screen.getByRole('button', { name: /Zuordnung ändern/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.setup().click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(exact.closest('[hidden]')).toBeNull()
   })
 
   it('falls back to creating a new exercise when nothing matched', () => {

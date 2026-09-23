@@ -1064,6 +1064,10 @@ class ConfirmTemplate(_Model):
 class SharedConfirmPayload(_Model):
     shared_id: int
     leader_name: str
+    #: The workout being joined, as the invite card on Start names it -- its
+    #: name (None for a freeform one) and when the leader started it.
+    session_name: str | None
+    started_at: datetime | None
     #: Why this invite cannot be accepted, or None. Present means the form is
     #: replaced by the reason -- there is nothing to confirm.
     refusal: str | None

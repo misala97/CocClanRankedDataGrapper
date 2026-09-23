@@ -184,9 +184,12 @@ def gym_shared_confirm(shared_id):
                              .all())
         ]
 
+    leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
     payload = SharedConfirmPayload(
         shared_id=shared.id,
         leader_name=_username(shared.leader_user_id),
+        session_name=leader_session.name if leader_session else None,
+        started_at=leader_session.started_at if leader_session else None,
         refusal=refusal,
         discards_active=refusal is None and _discardable_active() is not None,
         proposals=proposals,

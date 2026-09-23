@@ -31,7 +31,7 @@ mockups-before-code rule: direction round first, code after the pick.
 | U9 | "Bereit" note names the next weight | done |
 | U10 | QueryClient created once (useState) | done |
 | V1 | First-run Start — mockup round, then build | done (lane C) |
-| V2 | Shared-confirm: collapse exact matches — mockup round, then build | open |
+| V2 | Shared-confirm: collapse exact matches — mockup round, then build | done (lane C) |
 
 ## Ledger
 
@@ -66,3 +66,24 @@ mockups-before-code rule: direction round first, code after the pick.
   vitest 471 passed; tsc clean; build ok. Driven at 390x844 as user 4: empty -> Workout
   starten (no sheet) -> running card, no checklist -> first exercise + set + finish ->
   "1 von 3", save form -> back on Start with the routine as the lead. User 4 restored empty.
+- 2026-09-23 — V2 direction round rendered: `personal_apps/scratchpad/puls/shared_confirm/07_confirm_{a,b,c}_{exact,mixed}.html`
+  (real confirm shell; baseline = the real island fed a payload built like gym_shared_confirm for
+  user 3 following user 1's HBF Push, via route interception, no invite rows written). Lanes:
+  A exact matches collapse into one "gefunden" row, unmatched ones ask in cyan cards; B every
+  exercise a receipt row, unmatched rows expand with a select; C the invite is one lead card
+  (Mitmachen at y=207 when all match), unmatched selects inside it. Recommended C. Awaiting
+  the pick. A/C headers need the leader session's name + start time in SharedConfirmPayload.
+- 2026-09-24 — V2 built as lane C (Michi: "go with c"). `SharedConfirmPayload` gains
+  `session_name` + `started_at`. The page is one lead card: who/what/how long, the leader's
+  exercise list, unmatched exercises asking in the attention hue, one Erledigt line for the
+  rest + the routine it books under, Mitmachen. Matched selects and the routine picker sit in
+  a folded "Zuordnung ändern" panel, still posting with the accept form via `form=`.
+  Found while verifying: `.field.grow` in the panel's column flex took 9rem per field (dropped
+  `grow`). Tests: vitest 476, tsc clean, gym pytest 674 + the reseed flake below, sharing 82/82.
+  Driven with two throwaway users at 390x844 (+dark, 1280): Start invite -> card, Mitmachen at
+  y=209 when all match; Ablehnen removes the invite; with two renamed exercises, mapping one
+  and leaving one new joined a session with the mapping, one new exercise, booked under the
+  follower's HBF Push. Users removed.
+- 2026-09-24 — test_gym_reorder_reseed's two `days_ago == 5` asserts were flaky: MySQL 8
+  rounds DATETIME fractional seconds UP (probe: .900000 read back as the next second), so a
+  fast run measured 4 days 23:59:59. They now round to whole days (separate test commit).

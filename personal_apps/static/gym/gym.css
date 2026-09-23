@@ -2970,6 +2970,51 @@ summary.sheet-row::-webkit-details-marker { display: none; }
   font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
 }
 
+/* ---- joining a partner: the invite is one lifted card ----
+   The same plane and live button as Start's invite card, so the tap that
+   led here and the tap that confirms read as one gesture. A leader exercise
+   with no same-named one of yours asks in the ATTENTION hue inside the card;
+   everything already matched is one Erledigt line, its selects one tap away
+   under "Zuordnung ändern". */
+.confirm .lead__due, .confirm .lead__name { display: block; }
+.confirm__ask {
+  margin-top: var(--sp-4); font-size: var(--t-sm); font-weight: var(--w-semi);
+  line-height: 1.45; color: var(--stall-ink); text-wrap: pretty;
+}
+.confirm .confirm__field {
+  margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--edge);
+}
+.confirm .confirm__field .label { color: var(--ink); font-weight: var(--w-bold); }
+.confirm__ok {
+  display: flex; align-items: flex-start; gap: var(--sp-2); margin-top: var(--sp-4);
+  font-size: var(--t-sm); line-height: 1.45; color: var(--dim);
+}
+.confirm__ok b { color: var(--ink); font-weight: var(--w-bold); }
+.confirm__tick {
+  flex: none; inline-size: 22px; block-size: 22px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--done); color: var(--on-done);
+}
+.confirm__tick svg { inline-size: 13px; block-size: 13px; stroke-width: 2.2; }
+.confirm__note { margin-top: var(--sp-3); font-size: var(--t-meta); line-height: 1.5; color: var(--dim); }
+.confirm__refusal { margin-top: var(--sp-3); font-size: var(--t-sm); line-height: 1.5; color: var(--dim); }
+.confirm__back { margin-top: var(--sp-4); }
+.confirm__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.confirm__more {
+  display: inline-flex; align-items: center; gap: 2px; min-block-size: var(--tap);
+  font-size: var(--t-sm); font-weight: var(--w-semi); color: var(--dim);
+}
+.confirm__chev { transition: transform var(--dur-2) var(--ease-out); }
+.confirm__more[aria-expanded="true"] .confirm__chev { transform: rotate(90deg); }
+.confirm__panel { display: flex; flex-direction: column; gap: var(--sp-4); margin-top: var(--sp-2); }
+/* An author display beats the UA's [hidden] rule; the closed panel must
+   still be in the DOM (its selects post with the form), just not shown. */
+.confirm__panel[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .confirm__chev { transition: none; } }
+@media (min-width: 900px) { .sec.confirm-sec { max-inline-size: 36rem; margin-inline: auto; } }
+
 /* ---- first run: a real sequence, so the numbers carry the order ----
    One step at a time is Jetzt: the lifted plane, the orange dot, the live
    button. Done steps turn Erledigt (rose, a check); the rest stay Offen

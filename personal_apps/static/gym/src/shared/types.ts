@@ -21,6 +21,10 @@ export interface ConfirmTemplate {
 export interface SharedConfirmPayload {
   shared_id: number
   leader_name: string
+  /** The workout being joined: its name (null for a freeform one) and when
+   *  the leader started it. */
+  session_name: string | null
+  started_at: string | null
   /** Why this invite cannot be accepted, or null. */
   refusal: string | null
   /** Accepting throws away the lifter's own running workout -- only ever an

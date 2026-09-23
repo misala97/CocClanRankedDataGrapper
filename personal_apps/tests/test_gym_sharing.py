@@ -1521,6 +1521,9 @@ def test_a_partner_whose_own_workout_is_empty_can_join(leader_with_partner):
         partner.get(f'/gym/shared/{shared_id}/confirm').get_data(as_text=True))
     assert payload['refusal'] is None
     assert payload['discards_active'] is True
+    # The card names the workout being joined and how long it has run.
+    assert payload['session_name'] == 'pytest invite workout'
+    assert payload['started_at'] is not None
 
     partner.post(f'/gym/shared/{shared_id}/accept')
     with flask_app.app_context():
