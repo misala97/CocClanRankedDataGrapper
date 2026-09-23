@@ -1,11 +1,12 @@
 """The exercise library: one preconfigured list, the same for every lifter.
 
-Data only, and nothing reads it yet. This is L1 of
-docs/superpowers/plans/2026-09-23-gym-first-run-workflows.md: the list is
-under the owner's review, and G1 decides how it reaches the database (one
-read-only row per entry, per-user settings on top). A first-time user should
-find their exercise already set up -- every entry answers the questions the
-nine-field form used to ask.
+Static data, grown by editing this file: the app offers no "create exercise"
+(owner, 2026-09-23 -- two lifters, one gym). Nothing reads it yet. G1 of
+docs/superpowers/plans/2026-09-23-gym-first-run-workflows.md decides how it
+reaches the database: one read-only row per entry, with per-user settings on
+top whose defaults are the values here. A first-time user finds their
+exercise already set up -- every entry answers the questions the nine-field
+form used to ask.
 
 Every name reads `Bewegung (Gerät[, Variante, ...])`, e.g.
 `Bankdrücken (Langhantel)` or `Latzug (Kabel, eng)`. The Gerät decides how
@@ -14,6 +15,10 @@ its Gerät's defaults. tests/test_gym_library.py holds the mechanical rules;
 the judgement calls are these:
 
 - `key` is stable. Once seeded it never changes: a rename changes the name.
+- Entries sharing a Bewegung are variants of one movement, each with its own
+  history: `Scottcurls (Maschine)` and `Scottcurls (Maschine, Scheiben)` are
+  two machines. A second machine of the same kind at the gym is one more
+  variant word here.
 - `unilateral` means the logged number is ONE side's load -- one dumbbell,
   one stack of a crossover, one horn of an iso-lateral machine -- and volume
   doubles (stats.set_volume). The name does not decide it, "Maschine" least
@@ -22,18 +27,20 @@ the judgement calls are these:
   is a weight stack, `(Maschine, Scheiben)` is plate-loaded. Plate-loaded
   pressing and pulling machines are iso-lateral, so their number is per side;
   sleds (leg press, hack squat) are not.
-- `increment` and `bar` are the list's defaults, not every gym's truth: an
-  8 kg stack, 2.5 kg dumbbell steps or a 7 kg SZ bar are why G1 has to decide
-  on per-user settings.
+- `increment`, `bar` and `rest` are defaults a lifter can override (G1): an
+  8 kg stack, 2.5 kg dumbbell steps or a 7 kg SZ bar are gym facts no list
+  can know.
 - `bar` is dead weight already inside the logged number, as on
   models.Exercise.bar_weight. The Multipresse, T-Bar, Landmine and leg-press
   sled carry none: counterbalanced, resting on the floor or never counted,
   their number is the plates.
-- `aka` feeds search: the English name(s) and the German spellings people
-  type. An alias never repeats another entry's name or alias.
-- 'bodyweight' is not an EQUIPMENT_TYPES value. The app logs kg x reps and
-  has no answer yet for "bodyweight plus 10 kg"; those entries wait for the
-  owner's call, and SEEDABLE leaves them out.
+- `aka` feeds search, which finds an exercise by its English name as well as
+  its German one: "chest fly" and "butterfly" both find the pec deck, and
+  every name the lifters used before the list still finds its entry.
+  matches() is that contract. An alias never repeats another entry's name or
+  alias.
+- No bodyweight exercises: the app logs kg x reps, and the owner dropped
+  them for now (2026-09-23).
 """
 import re
 from dataclasses import dataclass
@@ -54,7 +61,6 @@ _GERAET = {
     'Kettlebell':    ('dumbbell', None, 4.0, False),
     'Kabel':         ('stack', None, 5.0, False),
     'Maschine':      ('stack', None, 5.0, False),
-    'Körpergewicht': ('bodyweight', None, 2.5, False),
 }
 GERAETE = tuple(_GERAET)
 ONE_SIDE_VARIANTS = ('einarmig', 'einbeinig')
@@ -85,8 +91,41 @@ class Entry:
     aka: tuple
 
     @property
+    def movement(self):
+        return parse_name(self.name)[0]
+
+    @property
     def geraet(self):
         return parse_name(self.name)[1]
+
+    @property
+    def search_text(self):
+        return fold(' '.join((self.name, *self.aka)))
+
+
+def fold(text):
+    """The search form of a name or a query: casefolded, ä/ae -> a (likewise
+    ö and ü, and ß -> ss), punctuation to spaces. Typing "Bankdruecken",
+    "bankdrucken" or "T Bar" finds what the list spells otherwise."""
+    text = text.casefold()
+    for pair, vowel in (('ae', 'a'), ('oe', 'o'), ('ue', 'u')):
+        text = text.replace(pair, vowel)
+    text = text.translate(_FOLD)
+    return ' '.join(text.split())
+
+
+_FOLD = str.maketrans({'ä': 'a', 'ö': 'o', 'ü': 'u', '-': ' ', ',': ' ',
+                       '(': ' ', ')': ' ', '°': ' ', "'": ' '})
+
+
+def matches(entry, query):
+    """True when every word of `query` occurs in the entry's name or aliases.
+
+    Words may come from different aliases and in any order, and a fragment
+    counts ("lat raise" finds Lateral Raise). The add sheet's search must
+    keep this contract when it moves to the client."""
+    haystack = entry.search_text
+    return all(word in haystack for word in fold(query).split())
 
 
 def _e(key, name, group, secondary=(), *, rest=ISOLATION, uni=None, aka=()):
@@ -112,7 +151,7 @@ LIBRARY = (
     _e('barbell_floor_press', 'Floor Press (Langhantel)', 'Brust', ('Trizeps',),
        rest=COMPOUND, aka=('Bodendrücken',)),
     _e('dumbbell_bench_press', 'Bankdrücken (Kurzhantel)', 'Brust', ('Trizeps', 'Schultern'),
-       rest=COMPOUND, aka=('Dumbbell Bench Press', 'Kurzhanteldrücken', 'KH Bankdrücken')),
+       rest=COMPOUND, aka=('Dumbbell Bench Press', 'Bench Press (Dumbbell)', 'Kurzhanteldrücken', 'KH Bankdrücken')),
     _e('dumbbell_incline_bench_press', 'Schrägbankdrücken (Kurzhantel)', 'Brust', ('Schultern', 'Trizeps'),
        rest=COMPOUND, aka=('Incline Dumbbell Press', 'KH Schrägbankdrücken')),
     _e('dumbbell_decline_bench_press', 'Negativbankdrücken (Kurzhantel)', 'Brust', ('Trizeps',),
@@ -144,15 +183,12 @@ LIBRARY = (
     _e('plate_chest_press', 'Brustpresse (Maschine, Scheiben)', 'Brust', ('Trizeps', 'Schultern'),
        rest=COMPOUND, uni=True, aka=('Iso-Lateral Chest Press', 'Chest Press (Plate Loaded)')),
     _e('plate_bench_press', 'Bankdrücken (Maschine, Scheiben)', 'Brust', ('Trizeps', 'Schultern'),
-       rest=COMPOUND, uni=True, aka=('Iso-Lateral Bench Press', 'Lying Chest Press', 'Brustpresse liegend')),
+       rest=COMPOUND, uni=True, aka=('Iso-Lateral Bench Press', 'Lying Chest Press', 'Chest Press (Machine, Lying)',
+            'Brustpresse liegend')),
     _e('plate_incline_chest_press', 'Schrägbankdrücken (Maschine, Scheiben)', 'Brust', ('Schultern', 'Trizeps'),
        rest=COMPOUND, uni=True, aka=('Iso-Lateral Incline Press',)),
     _e('plate_decline_chest_press', 'Negativbankdrücken (Maschine, Scheiben)', 'Brust', ('Trizeps',),
        rest=COMPOUND, uni=True, aka=('Iso-Lateral Decline Press',)),
-    _e('push_up', 'Liegestütze (Körpergewicht)', 'Brust', ('Trizeps', 'Schultern'),
-       aka=('Push-ups', 'Liegestützen')),
-    _e('dip', 'Dips (Körpergewicht)', 'Brust', ('Trizeps', 'Schultern'),
-       rest=COMPOUND, aka=('Chest Dips', 'Barrenstütz')),
 
     # -- Rücken -------------------------------------------------------------
     _e('barbell_deadlift', 'Kreuzheben (Langhantel)', 'Rücken', ('Beine', 'Gesäß', 'Unterarme'),
@@ -182,11 +218,11 @@ LIBRARY = (
     _e('trap_bar_shrug', 'Shrugs (Trap-Bar)', 'Rücken', ('Unterarme',),
        aka=('Trap Bar Shrug',)),
     _e('tbar_row', 'Rudern (T-Bar, stehend)', 'Rücken', ('Bizeps', 'Schultern'),
-       rest=COMPOUND, aka=('T-Bar Row', 'T-Bar-Rudern')),
+       rest=COMPOUND, aka=('T-Bar Row', 'T Bar Row (Standing)', 'T-Bar-Rudern')),
     _e('tbar_row_chest_supported', 'Rudern (T-Bar, liegend)', 'Rücken', ('Bizeps', 'Schultern'),
-       rest=COMPOUND, aka=('Chest Supported T-Bar Row', 'T-Bar-Rudern liegend')),
+       rest=COMPOUND, aka=('Chest Supported T-Bar Row', 'T Bar Row (Lying)', 'T-Bar-Rudern liegend')),
     _e('cable_lat_pulldown', 'Latzug (Kabel)', 'Rücken', ('Bizeps',),
-       rest=COMPOUND, aka=('Lat Pulldown', 'Latziehen', 'Latzug breit')),
+       rest=COMPOUND, aka=('Lat Pulldown', 'Lat Pulldown (Kabelzug)', 'Latziehen', 'Latzug breit')),
     _e('cable_lat_pulldown_close', 'Latzug (Kabel, eng)', 'Rücken', ('Bizeps',),
        rest=COMPOUND, aka=('Close Grip Lat Pulldown', 'Latzug V-Griff')),
     _e('cable_lat_pulldown_underhand', 'Latzug (Kabel, Untergriff)', 'Rücken', ('Bizeps',),
@@ -208,19 +244,12 @@ LIBRARY = (
     _e('machine_back_extension', 'Rückenstrecker (Maschine)', 'Rücken', ('Gesäß',),
        aka=('Back Extension (Machine)', 'Lower Back Machine')),
     _e('plate_lat_pulldown', 'Latzug (Maschine, Scheiben)', 'Rücken', ('Bizeps',),
-       rest=COMPOUND, uni=True, aka=('Iso-Lateral Lat Pulldown', 'Lat Pulldown (Plate Loaded)')),
+       rest=COMPOUND, uni=True, aka=('Iso-Lateral Lat Pulldown', 'Lat Pulldown (Plate Loaded)',
+            'Lat Pulldown (Single Arm)')),
     _e('plate_row', 'Rudern (Maschine, Scheiben)', 'Rücken', ('Bizeps', 'Schultern'),
        rest=COMPOUND, uni=True, aka=('Iso-Lateral Row', 'Low Row')),
     _e('plate_high_row', 'High Row (Maschine, Scheiben)', 'Rücken', ('Bizeps',),
        rest=COMPOUND, uni=True, aka=('Iso-Lateral High Row', 'Rudern von oben')),
-    _e('pull_up', 'Klimmzüge (Körpergewicht)', 'Rücken', ('Bizeps',),
-       rest=COMPOUND, aka=('Pull-ups', 'Klimmzug')),
-    _e('chin_up', 'Klimmzüge (Körpergewicht, Untergriff)', 'Rücken', ('Bizeps',),
-       rest=COMPOUND, aka=('Chin-ups',)),
-    _e('inverted_row', 'Rudern (Körpergewicht)', 'Rücken', ('Bizeps',),
-       aka=('Inverted Row', 'Australian Pull-ups')),
-    _e('hyperextension', 'Hyperextensions (Körpergewicht)', 'Rücken', ('Gesäß', 'Beine'),
-       aka=('Back Extension', 'Rückenstrecken')),
 
     # -- Schultern ----------------------------------------------------------
     _e('barbell_overhead_press', 'Schulterdrücken (Langhantel, stehend)', 'Schultern', ('Trizeps',),
@@ -252,7 +281,7 @@ LIBRARY = (
     _e('cable_front_raise', 'Frontheben (Kabel)', 'Schultern',
        aka=('Cable Front Raise',)),
     _e('cable_front_raise_one_arm', 'Frontheben (Kabel, einarmig)', 'Schultern',
-       aka=('Single Arm Cable Front Raise',)),
+       aka=('Single Arm Cable Front Raise', 'Front Raises (Cable, One Arm)')),
     _e('cable_face_pull', 'Face Pulls (Kabel)', 'Schultern', ('Rücken',),
        aka=('Face Pull',)),
     _e('cable_rear_delt_fly', 'Reverse Butterfly (Kabel)', 'Schultern', ('Rücken',),
@@ -280,9 +309,9 @@ LIBRARY = (
     _e('ez_preacher_curl', 'Scottcurls (SZ-Stange)', 'Bizeps',
        aka=('Preacher Curl', 'Preacher Curl (EZ Bar)', 'Scott-Curls')),
     _e('dumbbell_curl', 'Bizepscurls (Kurzhantel)', 'Bizeps', ('Unterarme',),
-       aka=('Dumbbell Curl', 'Biceps Curl', 'Kurzhantelcurls')),
+       aka=('Dumbbell Curl', 'Biceps Curl', 'Biceps Curl (Rotating)', 'Kurzhantelcurls')),
     _e('dumbbell_hammer_curl', 'Hammercurls (Kurzhantel)', 'Bizeps', ('Unterarme',),
-       aka=('Hammer Curl',)),
+       aka=('Hammer Curl', 'Hammer Curl (Dumbbell)')),
     _e('dumbbell_concentration_curl', 'Konzentrationscurls (Kurzhantel)', 'Bizeps',
        aka=('Concentration Curl',)),
     _e('dumbbell_incline_curl', 'Schrägbankcurls (Kurzhantel)', 'Bizeps',
@@ -290,7 +319,7 @@ LIBRARY = (
     _e('dumbbell_preacher_curl', 'Scottcurls (Kurzhantel)', 'Bizeps',
        aka=('Dumbbell Preacher Curl',)),
     _e('cable_curl', 'Bizepscurls (Kabel)', 'Bizeps', ('Unterarme',),
-       aka=('Cable Curl', 'Kabelcurls')),
+       aka=('Cable Curl', 'Kabelcurls', 'Bizeps SZ Kabel')),
     _e('cable_curl_one_arm', 'Bizepscurls (Kabel, einarmig)', 'Bizeps',
        aka=('Single Arm Cable Curl',)),
     _e('cable_hammer_curl', 'Hammercurls (Kabel, Seil)', 'Bizeps', ('Unterarme',),
@@ -298,9 +327,10 @@ LIBRARY = (
     _e('cable_bayesian_curl', 'Bayesian Curls (Kabel)', 'Bizeps',
        uni=True, aka=('Bayesian Curl',)),
     _e('machine_preacher_curl', 'Scottcurls (Maschine)', 'Bizeps',
-       aka=('Preacher Curl (Machine)', 'Bizepsmaschine', 'Bizeps-Curl-Maschine')),
+       aka=('Preacher Curl (Machine)', 'Preacher Curl (Bilateral)', 'Bizepsmaschine',
+            'Bizeps-Curl-Maschine')),
     _e('plate_preacher_curl', 'Scottcurls (Maschine, Scheiben)', 'Bizeps',
-       uni=True, aka=('Preacher Curl (Plate Loaded)', 'Iso-Lateral Preacher Curl')),
+       uni=True, aka=('Preacher Curl (Machine, Plate Loaded)', 'Iso-Lateral Preacher Curl')),
 
     # -- Trizeps ------------------------------------------------------------
     _e('barbell_close_grip_bench_press', 'Bankdrücken (Langhantel, eng)', 'Trizeps', ('Brust', 'Schultern'),
@@ -318,7 +348,8 @@ LIBRARY = (
     _e('dumbbell_triceps_kickback', 'Trizeps-Kickbacks (Kurzhantel)', 'Trizeps',
        aka=('Triceps Kickback',)),
     _e('cable_pushdown', 'Trizepsdrücken (Kabel, Stange)', 'Trizeps',
-       aka=('Triceps Pushdown', 'Pushdown', 'Trizepsdrücken am Kabel', 'Trizepsdrücken V-Griff')),
+       aka=('Triceps Pushdown', 'Triceps Pushdown (Cable, EZ Bar)', 'Pushdown',
+            'Trizepsdrücken am Kabel', 'Trizepsdrücken V-Griff')),
     _e('cable_pushdown_rope', 'Trizepsdrücken (Kabel, Seil)', 'Trizeps',
        aka=('Rope Pushdown',)),
     _e('cable_pushdown_reverse', 'Trizepsdrücken (Kabel, Untergriff)', 'Trizeps',
@@ -333,8 +364,6 @@ LIBRARY = (
        rest=COMPOUND, aka=('Dip Machine', 'Seated Dip')),
     _e('machine_triceps_extension', 'Trizepsstrecken (Maschine)', 'Trizeps',
        aka=('Triceps Extension (Machine)', 'Trizepsmaschine')),
-    _e('bench_dip', 'Bankdips (Körpergewicht)', 'Trizeps', ('Brust',),
-       aka=('Bench Dips',)),
 
     # -- Beine --------------------------------------------------------------
     _e('barbell_squat', 'Kniebeugen (Langhantel)', 'Beine', ('Gesäß', 'Rücken'),
@@ -393,12 +422,6 @@ LIBRARY = (
        rest=COMPOUND, uni=False, aka=('Pendel-Kniebeuge',)),
     _e('plate_belt_squat', 'Belt Squat (Maschine, Scheiben)', 'Beine', ('Gesäß',),
        rest=COMPOUND, uni=False, aka=('Gürtelkniebeuge',)),
-    _e('bodyweight_squat', 'Kniebeugen (Körpergewicht)', 'Beine', ('Gesäß',),
-       aka=('Air Squat', 'Bodyweight Squat')),
-    _e('bodyweight_lunge', 'Ausfallschritte (Körpergewicht)', 'Beine', ('Gesäß',),
-       aka=('Bodyweight Lunge',)),
-    _e('nordic_curl', 'Nordic Curls (Körpergewicht)', 'Beine',
-       aka=('Nordic Hamstring Curl',)),
 
     # -- Gesäß --------------------------------------------------------------
     _e('barbell_hip_thrust', 'Hip Thrust (Langhantel)', 'Gesäß', ('Beine',),
@@ -449,16 +472,6 @@ LIBRARY = (
        rest=CORE, uni=True, aka=('Pallof',)),
     _e('dumbbell_side_bend', 'Seitbeugen (Kurzhantel)', 'Bauch',
        rest=CORE, aka=('Side Bend',)),
-    _e('crunch', 'Crunches (Körpergewicht)', 'Bauch',
-       rest=CORE, aka=('Crunch',)),
-    _e('hanging_leg_raise', 'Beinheben (Körpergewicht, hängend)', 'Bauch',
-       rest=CORE, aka=('Hanging Leg Raise',)),
-    _e('captains_chair_knee_raise', 'Knieheben (Körpergewicht, Dip-Station)', 'Bauch',
-       rest=CORE, aka=("Captain's Chair", 'Knee Raise')),
-    _e('decline_sit_up', 'Sit-ups (Körpergewicht, Negativbank)', 'Bauch',
-       rest=CORE, aka=('Decline Sit-up',)),
-    _e('ab_wheel', 'Bauchroller (Körpergewicht)', 'Bauch', ('Schultern',),
-       rest=CORE, aka=('Ab Wheel', 'Ab Roller')),
 
     # -- Unterarme ----------------------------------------------------------
     _e('barbell_wrist_curl', 'Handgelenkcurls (Langhantel)', 'Unterarme',
@@ -470,6 +483,3 @@ LIBRARY = (
 )
 
 BY_KEY = {entry.key: entry for entry in LIBRARY}
-
-# What the app can log today. Bodyweight entries wait on the owner's call.
-SEEDABLE = tuple(entry for entry in LIBRARY if entry.equipment != 'bodyweight')

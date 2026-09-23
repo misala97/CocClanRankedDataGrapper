@@ -53,17 +53,32 @@ stack and secondary groups -- the two creation paths disagree.
 | F6 | Detail edit link + Einseitig label | folded into G (the edit form becomes personal settings) |
 | F7 | Start muscle chart for ungrouped sets | folded into G (every list exercise has a group) |
 | F8 | Invite-accept 'new' branch copies equipment facts | folded into G (no follower copies at all) |
-| L1 | THE list: complete exercise library as data (German names, config per entry, EN aliases) + prod mapping + review page | draft done — awaiting owner review + 5 decisions (see ledger) |
-| G1 | Spec: one global read-only exercise list for every user; per-user settings (increment, rest, uneven stack stops); custom exercises yes/no; stats scoped by user | open (after L1 review) |
+| L1 | THE list: complete exercise library as data (German names, config per entry, EN aliases) + prod mapping + review page | done — owner-approved with edits (rulings below) |
+| G1 | Spec: `library.py` becomes the one read-only exercise list for both lifters; NO custom exercises; per-user overrides of step/rest/stack stops/bar defaulting to the list; stats scoped by user | open — NEXT |
 | G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | open |
 | G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | open |
-| V1 | Add sheet = pick from the list (search + groups), no create-first — mockup round, then build | open (after G1) |
+| V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | open (after G1) |
 | V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | open |
 | V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | open (after G1) |
 
 Direction change (owner, 2026-09-23 mid-round): "One list of preconfigured read only
 exercises for every user" -- replaces per-user exercise rows (per-user since 2026-08-02).
 Shared sessions then log the same exercise id on both sides. Order: L1 -> review -> G1.
+
+Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
+1. No custom exercises. Two lifters, one gym: the list is static and grows in code.
+2. Per-user settings yes (step, rest, uneven stack stops, bar), with sensible defaults
+   from the list. Migrated values that differ from the list become personal settings.
+3. German names for everyone; English names stay searchable ("chest fly" and
+   "butterfly" both work) -- `library.matches` is the contract.
+4. Bodyweight dropped for now.
+5. One entry per kind of machine: the "(Good)"/"Hauptbahnhof" labels go. Think about
+   variants: "we have 2 preacher curls and we only do one mainly" -> the picker groups
+   the variants of one movement and puts the one you mainly do first.
+6. Front Raises = cable, one-handed. Military Press = standing, Langhantel. One cable
+   curl entry; the attachment does not matter.
+7. List content is fine for now; a broader list (~800, e.g. free-exercise-db) may be
+   downloaded and adjusted later -- not now.
 
 ## Ledger
 
@@ -92,3 +107,9 @@ Shared sessions then log the same exercise id on both sides. Order: L1 -> review
   German names? (4) bodyweight type now/later/never? (5) one entry per loading, so the
   "(Good)"/"Hauptbahnhof" labels go? Rest defaults 180/150/90/60 vs the owner's 150
   everywhere -- per-user rest is what (2) decides.
+- 2026-09-23 — L1 approved (rulings above). Applied: 15 bodyweight entries and the
+  Körpergewicht Gerät removed (158 entries, SEEDABLE gone); `fold()`/`matches()` added
+  as the search contract (all words, any order, fragments, ae/ä/a, hyphens); the
+  lifters' English names added as aliases minus gym markers; `library_mapping` OPEN
+  resolved (mapping unchanged, now approved; GYM_MARKERS lists the dropped words).
+  Tests: `test_gym_library.py` 15 passed (+ matching 11).

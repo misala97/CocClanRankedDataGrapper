@@ -1,14 +1,14 @@
-"""The exercise library (L1) is data under review. These tests hold its
-mechanical rules; the judgement calls are in features/gym/library.py's
-docstring. No ORM and no database -- plain tuples, like test_gym_matching."""
+"""The exercise library (L1) is static data. These tests hold its mechanical
+rules and the search contract; the judgement calls are in
+features/gym/library.py's docstring. No ORM and no database -- plain tuples,
+like test_gym_matching."""
 import re
 from collections import Counter
 
 import pytest
 
 from features.gym import library
-from features.gym.library_mapping import OPEN, PRODUCTION_2026_09
-from features.gym.matching import normalise
+from features.gym.library_mapping import GYM_MARKERS, PRODUCTION_2026_09
 from models import EQUIPMENT_TYPES, MUSCLE_GROUPS
 
 TRAINED_GROUPS = tuple(g for g in MUSCLE_GROUPS if g not in ('Cardio', 'Sonstiges'))
@@ -18,18 +18,21 @@ def _dupes(values):
     return sorted(v for v, n in Counter(values).items() if n > 1)
 
 
+def _found(query):
+    return {e.key for e in library.LIBRARY if library.matches(e, query)}
+
+
 def test_keys_are_unique_slugs():
     keys = [e.key for e in library.LIBRARY]
     assert _dupes(keys) == []
     assert [k for k in keys if not re.fullmatch(r'[a-z][a-z0-9_]*', k)] == []
 
 
-def test_names_are_unique_and_read_bewegung_geraet_variante():
-    assert _dupes(normalise(e.name) for e in library.LIBRARY) == []
+def test_names_read_bewegung_geraet_variante():
     for entry in library.LIBRARY:
         move, geraet, variants = library.parse_name(entry.name)
         assert geraet in library.GERAETE, entry.name
-        assert move == move.strip() and all(variants), entry.name
+        assert move == move.strip() == entry.movement and all(variants), entry.name
 
 
 def test_a_name_off_the_pattern_is_refused():
@@ -47,16 +50,13 @@ def test_groups_come_from_the_app():
 
 
 def test_every_trained_group_has_a_real_choice():
-    counts = Counter(e.group for e in library.SEEDABLE)
+    counts = Counter(e.group for e in library.LIBRARY)
     assert {g: counts[g] for g in TRAINED_GROUPS if counts[g] < 3} == {}
 
 
 def test_the_geraet_decides_the_loading():
     for entry in library.LIBRARY:
         _, geraet, variants = library.parse_name(entry.name)
-        if geraet == 'Körpergewicht':
-            assert entry.equipment == 'bodyweight', entry.name
-            continue
         assert entry.equipment in EQUIPMENT_TYPES, entry.name
         if geraet == 'Maschine':
             plates = 'Scheiben' in variants
@@ -84,19 +84,33 @@ def test_defaults_are_usable():
         assert entry.rest in library.REST_TIERS, entry.name
 
 
-def test_a_search_term_never_points_at_two_exercises():
+def test_a_name_or_alias_never_belongs_to_two_exercises():
     owner = {}
     for entry in library.LIBRARY:
         for text in (entry.name, *entry.aka):
-            term = normalise(text)
+            term = library.fold(text)
             assert owner.setdefault(term, entry.key) == entry.key, (
                 f'{text!r} names both {owner[term]} and {entry.key}')
 
 
-def test_only_bodyweight_waits_for_the_owners_call():
-    left_out = {e.key for e in library.LIBRARY} - {e.key for e in library.SEEDABLE}
-    assert left_out == {e.key for e in library.LIBRARY if e.equipment == 'bodyweight'}
-    assert all(e.equipment in EQUIPMENT_TYPES for e in library.SEEDABLE)
+def test_english_and_german_names_both_find_an_exercise():
+    """Owner, 2026-09-23: "chest fly and butterfly should both work"."""
+    for query in ('butterfly', 'Chest Fly', 'chest fly machine', 'pec deck'):
+        assert 'machine_fly' in _found(query), query
+
+
+def test_spelling_without_umlauts_or_hyphens_still_finds():
+    assert 'dumbbell_bench_press' in _found('bankdruecken kurzhantel')
+    assert 'dumbbell_bench_press' in _found('Bankdrucken KH')
+    assert 'dumbbell_pullover' in _found('ueberzuege')
+    assert 'tbar_row' in _found('t bar row')
+    assert 'cable_external_rotation' in _found('aussenrotation')
+
+
+def test_a_query_narrows_instead_of_widening():
+    assert _found('lat raise') >= {'dumbbell_lateral_raise', 'machine_lateral_raise'}
+    assert {k for k in _found('lat raise') if 'pulldown' in k} == set()
+    assert _found('zzz') == set()
 
 
 def test_every_production_exercise_has_its_own_entry():
@@ -104,4 +118,12 @@ def test_every_production_exercise_has_its_own_entry():
     assert [k for k in targets if k not in library.BY_KEY] == []
     # Two production exercises on one entry would merge two histories.
     assert _dupes(targets) == []
-    assert set(OPEN) <= set(PRODUCTION_2026_09)
+
+
+def test_every_old_name_still_finds_its_exercise():
+    """The history moves to the German names; the lifters keep searching
+    with the English ones they typed for months."""
+    for old, key in PRODUCTION_2026_09.items():
+        query = ' '.join(w for w in library.fold(old).split()
+                         if w not in {library.fold(m) for m in GYM_MARKERS})
+        assert key in _found(query), old
