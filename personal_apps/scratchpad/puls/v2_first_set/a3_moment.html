@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V2 Leer · Gym Tracker</title>
+    
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    
+    <meta name="theme-color" content="#F3EAF7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#241132" media="(prefers-color-scheme: dark)">
+    
+    <link rel="preload" href="../../../static/gym/fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin="">
+    <link rel="stylesheet" href="../../../static/gym/figtree.css">
+    <link rel="stylesheet" href="../../../static/gym/gym.css">
+    
+    
+    
+    
+    
+    
+    
+<style>
+/* V2 mock only -- the app's tokens, nothing else. */
+.set.v2-plain { font-weight: var(--w-semi); }
+.v2-refs { display: block; margin-top: var(--sp-2); color: var(--dim); }
+.v2-refs b { font-weight: var(--w-semi); color: var(--ink); }
+.v2-slot::before { content: ''; display: block; inline-size: 76px; block-size: 40px;
+  border: 2px dashed var(--edge-hi); border-radius: var(--r-inset); }
+.v2-focus { box-shadow: inset 0 0 0 2px var(--live); }
+.v2-focus .field-num__entry { display: inline-flex; justify-content: center; align-items: center; }
+.v2-caret::after { content: ''; inline-size: 2px; block-size: 0.8em; background: var(--live);
+  margin-inline-start: 3px; }
+.v2-grid { margin-top: var(--sp-4); }
+.v2-grid__lbl { display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim); }
+.v2-grid__row { display: flex; gap: 7px; overflow: hidden; margin-top: var(--sp-2);
+  margin-inline: calc(var(--sp-4) * -1); padding-inline: var(--sp-4);
+  mask-image: linear-gradient(to right, #000 82%, transparent); }
+.v2-grid__row--mid { mask-image: linear-gradient(to right, transparent, #000 12%, #000 82%, transparent); }
+.v2-grid__chip { flex: 0 0 auto; min-inline-size: 58px; min-block-size: 52px; padding-inline: var(--sp-3);
+  border-radius: var(--r-inset); background: var(--raised); color: var(--ink);
+  font-size: var(--t-body); font-weight: var(--w-bold); font-variant-numeric: tabular-nums;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+.v2-grid__chip small { font-size: var(--t-micro); font-weight: var(--w-med); color: var(--dim); }
+.v2-grid__chip.is-on { background: var(--live); color: var(--on-live); }
+.v2-rate__row { display: flex; gap: 7px; margin-top: var(--sp-2); }
+.v2-rate__btn { flex: 1; min-block-size: 56px; border-radius: var(--r-inset); background: var(--raised);
+  color: var(--ink); font-size: var(--t-sm); font-weight: var(--w-bold);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.v2-rate__btn small { font-size: var(--t-micro); font-weight: var(--w-med); color: var(--dim); }
+.v2-rate__btn.is-mid { box-shadow: inset 0 0 0 2px var(--live); }
+.v2-kb { position: fixed; inset-inline: 0; inset-block-end: 0; z-index: 9; padding: 8px 6px 20px;
+  background: #D2D5DB; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  font-family: system-ui, sans-serif; }
+.v2-kb__k { block-size: 50px; border-radius: 6px; background: #fff; color: #111; font-size: 24px;
+  display: grid; place-items: center; box-shadow: 0 1px 0 #898A8D; }
+.v2-kb__fn { background: #ABB0BA; font-size: 20px; }
+.v2-kb__go { grid-row: span 3; background: #2F6DE1; color: #fff; font-size: 16px; font-weight: 600; }
+body.v2-has-kb { padding-block-end: 250px; }
+</style></head>
+
+<body class="v2-has-kb is-focus">
+
+
+<a class="skip-link" href="#gym-main">Zum Inhalt springen</a>
+
+
+
+
+
+<nav class="topbar" aria-label="Hauptnavigation (Desktop)">
+    <span class="topbar__brand">Gym Tracker</span>
+    <div class="topbar__nav">
+        
+        
+        <a href="/gym" class="topbar__link">Start</a>
+        
+        
+        <a href="/gym/uebungen" class="topbar__link">Übungen</a>
+        
+        
+        <a href="/gym/verlauf" class="topbar__link">Verlauf</a>
+        
+        
+        <a href="/gym/statistik" class="topbar__link">Statistik</a>
+        
+        <a href="/account" class="topbar__link">Konto</a>
+        
+        <a href="/logout" class="topbar__link">Abmelden</a>
+    </div>
+</nav>
+
+
+
+
+
+
+
+
+
+
+<main id="gym-main" tabindex="-1">
+
+
+
+
+
+<div class="session-view" id="gym-root"><header class="session-top"><a href="/gym" class="session-top__back" aria-label="Zurück zum Start"><svg class="icon icon-back" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 3.2L5.2 8l4.8 4.8"></path></svg></a><h1 class="session-top__name" style="view-transition-name: session;">V2 Leer</h1><span class="session-top__clock" id="session-clock">00:06:02</span><button type="button" class="session-top__more" aria-label="Workout-Optionen"><svg class="icon icon-more" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.4" r="1.15" fill="currentColor" stroke="none"></circle><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"></circle><circle cx="8" cy="12.6" r="1.15" fill="currentColor" stroke="none"></circle></svg></button></header><p class="sr-only" id="rest-announce" aria-live="polite"><span></span></p><div class="rail" aria-hidden="true"><span class="rail__seg is-now" data-se-id="48999"><span class="rail__fill" style="--p: 0.0000;"></span></span><span class="rail__seg" data-se-id="49000"></span></div><div class="rail__cap"><span class="label">Übung 1 von 2</span><span class="label">Noch 6 Sätze</span></div><section class="live" data-se-id="48999"><div class="live__head"><span class="live__kick">Jetzt</span><button type="button" class="live__more" aria-label="Beinstrecker (Maschine) — Optionen"><svg class="icon icon-more" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="3.4" r="1.15" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="8" cy="12.6" r="1.15" fill="currentColor" stroke="none"/></svg></button></div><h2 class="live__name">Beinstrecker (Maschine)</h2><p class="live__seed"><span class="live__seed-lbl">Erstes Mal</span> Tipp ein, womit du anfängst — die nächsten Sätze übernehmen es.</p><div class="sets"><div class="set-form"><button type="button" class="set v2-plain is-now">Satz 1</button></div><div class="set-form"><button type="button" class="set v2-plain">Satz 2</button></div><div class="set-form"><button type="button" class="set v2-plain">Satz 3</button></div></div><div class="pair"><div class="field-num v2-focus"><span class="field-num__entry v2-caret">40</span><span class="field-num__lbl">kg</span><span class="field-num__keys"><button type="button" class="field-num__key">−</button><button type="button" class="field-num__key">+</button></span></div><div class="field-num v2-blank"><button type="button" class="field-num__val v2-slot" aria-label="Wdh. eingeben"></button><span class="field-num__lbl">Wdh.</span><span class="field-num__keys"><button type="button" class="field-num__key">−</button><button type="button" class="field-num__key">+</button></span></div></div><button type="button" class="go" id="set-confirm"><span class="go__lbl">Wdh. eintippen</span></button></section><h2 class="sr-only">Diese Einheit</h2><div class="grew"><span class="grew__num">0</span><span class="grew__unit">kg bewegt</span><span class="grew__sp"></span><span class="grew__side"><b>0</b> Sätze · <b id="session-duration">00:06:02</b></span></div><div class="ticks" role="img" aria-label="0 von 6 Sätzen erledigt"><span class="tick is-hot"></span><span class="tick"></span><span class="tick"></span><span class="tick"></span><span class="tick"></span><span class="tick"></span></div><div class="queue" id="queue"><h2 class="sr-only">Übungen</h2><div class="row queue__row is-now" data-se-id="48999"><button type="button" class="drag-handle" tabindex="-1" aria-label="Beinstrecker (Maschine) verschieben">⠿</button><span class="row__lead queue__lead"><span class="queue__now" aria-hidden="true"></span></span><button type="button" class="row__main" aria-current="step"><span class="row__name">Beinstrecker (Maschine)</span></button><span class="row__trail queue__load">0/3</span></div><div class="row queue__row" data-se-id="49000"><button type="button" class="drag-handle" tabindex="-1" aria-label="Beinbeuger (Maschine, sitzend) verschieben">⠿</button><span class="row__lead queue__lead">2</span><button type="button" class="row__main"><span class="row__name">Beinbeuger (Maschine, sitzend)</span></button><span class="row__trail queue__load">neu</span></div><div class="row queue__add"><span class="row__lead queue__lead" aria-hidden="true"><svg class="icon icon-plus" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3.4v9.2M3.4 8h9.2"></path></svg></span><button type="button" class="row__main"><span class="row__name">Übung hinzufügen</span></button></div></div><div class="session-foot"><button type="button" class="btn btn--ghost btn--block">Workout beenden</button></div><dialog class="sheet" id="sheet-session" aria-labelledby="sheet-session-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-session-title">Workout</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-deload" aria-labelledby="sheet-deload-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-deload-title">Deload</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-add-exercise" aria-labelledby="sheet-add-exercise-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-add-exercise-title">Übung hinzufügen</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-template" aria-labelledby="sheet-template-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-template-title">Als Routine speichern</h2><button type="button" class="sheet__close">Abbrechen</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-finish" aria-labelledby="sheet-finish-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-finish-title">Workout beenden</h2><button type="button" class="sheet__close">Abbrechen</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-ex-48999" aria-labelledby="sheet-ex-48999-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-ex-48999-title">Beinstrecker (Maschine)</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog><dialog class="sheet" id="sheet-ex-49000" aria-labelledby="sheet-ex-49000-title"><div class="sheet__head"><h2 class="sheet__title" id="sheet-ex-49000-title">Beinbeuger (Maschine, sitzend)</h2><button type="button" class="sheet__close">Fertig</button></div><div class="sheet__body"></div></dialog></div>
+
+</main>
+
+
+
+
+
+
+
+<div class="nav-footer">
+    <a href="/account" class="label">Konto</a>
+    
+    <a href="/logout" class="label">Abmelden</a>
+</div><nav class="tabbar" aria-label="Hauptnavigation (Mobil)">
+    
+    
+    <a href="/gym" class="tabbar__tab">
+        
+<svg class="icon icon-home" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <path d="M2.4 7.6L8 2.6l5.6 5z"></path>
+  <path d="M3.8 7.2v6.2h8.4V7.2"></path>
+</svg>
+        <span>Start</span>
+    </a>
+    
+    <a href="/gym/uebungen" class="tabbar__tab">
+        
+<svg class="icon icon-dumbbell" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <path d="M2.4 5.6v4.8M4.8 4v8M11.2 4v8M13.6 5.6v4.8"></path>
+  <path d="M4.8 8h6.4"></path>
+</svg>
+        <span>Übungen</span>
+    </a>
+    
+    <a href="/gym/verlauf" class="tabbar__tab">
+        
+<svg class="icon icon-history" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+  <circle cx="8" cy="8" r="5.6"></circle>
+  <path d="M8 4.6V8l2.3 1.4"></path>
+</svg>
+        <span>Verlauf</span>
+    </a>
+    
+</nav><div class="v2-kb" aria-hidden="true"><span class="v2-kb__k">1</span><span class="v2-kb__k">2</span><span class="v2-kb__k">3</span><span class="v2-kb__k v2-kb__fn">⌫</span><span class="v2-kb__k">4</span><span class="v2-kb__k">5</span><span class="v2-kb__k">6</span><span class="v2-kb__k v2-kb__go">Weiter</span><span class="v2-kb__k">7</span><span class="v2-kb__k">8</span><span class="v2-kb__k">9</span><span class="v2-kb__k">,</span><span class="v2-kb__k">0</span><span class="v2-kb__k v2-kb__fn"></span></div></body></html>
