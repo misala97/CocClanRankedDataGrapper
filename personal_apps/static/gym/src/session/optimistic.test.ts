@@ -53,6 +53,29 @@ describe('optimistic toggleSet', () => {
     expect(perSide.session_volume).toBe(bilateral.session_volume * 2)
   })
 
+  it('fills the blanks after a logged set, as the server does', () => {
+    // workout._fill_blanks_after: a blank is a plan waiting for its number,
+    // and the set just lifted gives it one. Without this the next set
+    // flashed blank for the length of the request.
+    const blankPlan = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) => (se.id !== live.id ? se : {
+        ...se,
+        sets: se.sets.map((s) => ({ ...s, completed: false, weight: null, reps: null })),
+      })),
+    }
+    const [first, ...rest] = blankPlan.visible_exercises.find((se) => se.id === live.id)!.sets
+    const next = toggleSet(blankPlan, first!.id, true, 40, 10)
+    const sets = next.visible_exercises.find((se) => se.id === live.id)!.sets
+    expect(sets.map((s) => [s.weight, s.reps, s.completed])).toEqual([
+      [40, 10, true], ...rest.map(() => [40, 10, false])])
+
+    // Putting it back open takes nothing back: those numbers are the plan now.
+    const undone = toggleSet(next, first!.id, false, 40, 10)
+    expect(undone.visible_exercises.find((se) => se.id === live.id)!.sets
+      .slice(1).map((s) => s.weight)).toEqual(rest.map(() => 40))
+  })
+
   it('leaves the total alone, because ticking a set does not create one', () => {
     const next = toggleSet(payload, openSet.id, true, openSet.weight, openSet.reps)
     expect(next.sets_total).toBe(payload.sets_total)

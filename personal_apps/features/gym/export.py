@@ -44,6 +44,9 @@ def weight_convention(equipment, is_unilateral):
 def set_payload(session_set):
     return {
         'position': session_set.position,
+        # null on an open set planned blank: an exercise with no history is
+        # planned with no numbers until the lifter types the first set. Never
+        # null on a completed set.
         'weight': session_set.weight,
         'reps': session_set.reps,
         'completed': session_set.completed,

@@ -18,7 +18,9 @@ function loadSummary(se: LiveExercise, isLive: boolean): string {
   if (isLive) return `${done}/${total}`
   if (total > 0 && done === total) return `${done}/${total}`
   if (total > 0) {
-    return `${total} × ${kg1(se.sets[0]!.weight)}`
+    // A blank plan has no weight to show yet: the lifter has never done it.
+    const first = se.sets[0]!.weight
+    return first === null ? 'neu' : `${total} × ${kg1(first)}`
   }
   return '—'
 }

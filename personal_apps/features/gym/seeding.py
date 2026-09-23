@@ -179,8 +179,8 @@ def _last_full_performance(exercise_id, position=None, user_id=None, exclude_ses
 
 def _seeded_sets(session_, exercise_id, position, user_id=None):
     """Pending sets for `exercise_id` in `position` -- pre-filled from history
-    when there is any (honouring the session's deload), and a plain default plan
-    when there is none.
+    when there is any (honouring the session's deload), and a blank plan (sets
+    with no numbers yet) when there is none.
 
     `user_id` is whose history to read, not whose session this is (`session_`
     already carries that): the two agree at every call site except
@@ -204,17 +204,15 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
     seeded = _last_full_performance(exercise_id, position=position, user_id=user_id,
                                     exclude_session_id=session_.id)
     if not seeded:
-        # No history: a plain default plan, NOT a deload-scaled one. A deload is
-        # a percentage of a real working weight, and there isn't one here --
-        # scaling an invented number would dress a placeholder up as a
-        # prescription. base_weight stays None for the same reason: there is no
-        # working weight for gym_toggle_deload to restore this to. Marked
-        # is_default_seeded so gym_toggle_deload can tell these apart from a
-        # real set that happens to sit at the same weight, regardless of
-        # which order add-exercise and the deload toggle happen in.
+        # No history: a blank plan -- the set count, no numbers. Any number
+        # here would be invented, and an invented number reads as advice (the
+        # 20 kg x 8 placeholder this replaced was wrong for almost every
+        # exercise). The lifter types the first set; _propagate_default_correction
+        # carries it to the rest. Never deload-scaled either: a deload is a
+        # percentage of a real working weight, and there isn't one here.
+        # Marked is_default_seeded, which both of those read.
         return [
-            SessionSet(position=j, weight=stats.DEFAULT_PLAN_WEIGHT,
-                       reps=stats.DEFAULT_PLAN_REPS, completed=False,
+            SessionSet(position=j, weight=None, reps=None, completed=False,
                        is_default_seeded=True)
             for j in range(1, stats.DEFAULT_PLAN_SETS + 1)
         ]

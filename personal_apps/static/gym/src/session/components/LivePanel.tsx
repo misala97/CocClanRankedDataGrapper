@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { SeedSource, SessionDetailPayload } from '../types'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import type { SeedSource, SessionDetailPayload, VariantRef } from '../types'
 import { useSheets } from '../stores'
 import { useRestTick } from '../useRestTick'
 import { useRecordTakeover } from '../useRecordTakeover'
@@ -7,7 +7,7 @@ import { Icon } from '../../components/Icon'
 import { kg1, shortDate } from '../../format'
 import { RecordTakeover } from './RecordTakeover'
 import { SetRow } from './SetRow'
-import { Stepper } from './Stepper'
+import { Stepper, type StepperHandle } from './Stepper'
 
 /** The sentence after "Vorgabe". Day and month only: every basis but the
  *  layoff is inside seeding's four-week window, where a year is noise. No
@@ -29,6 +29,23 @@ function seedSourceText(source: SeedSource, position: number): string {
     return `vom ${day}, damals später im Workout (Position ${source.position}).`
   }
   return `vom ${day}, gleiche Position im Workout.`
+}
+
+/** "Kurzhantel 26,0 kg je Seite × 10 · Maschine, Scheiben 27,5 kg × 10" --
+ *  the lifter's other variants of a movement met for the first time. */
+function VariantRefs({ refs }: { refs: VariantRef[] }) {
+  return (
+    <span className="live__refs">
+      {'Deine anderen Varianten, zuletzt: '}
+      {refs.map((ref, i) => (
+        <Fragment key={ref.label}>
+          {i > 0 && ' · '}
+          <b>{ref.label}</b>
+          {` ${kg1(ref.weight)} kg${ref.per_side ? ' je Seite' : ''} × ${ref.reps}`}
+        </Fragment>
+      ))}
+    </span>
+  )
 }
 
 /** Length of the go-ready keyframes in gym.css. The class comes off after it,
@@ -76,15 +93,27 @@ export function LivePanel({
   // Appending after everything is logged starts from the set you just did, not
   // from the session's opening suggestion: the reason you are adding one is
   // that the last one went well enough to want another.
+  //
+  // An open set binds to exactly what it holds. A blank one (an exercise with
+  // no history) stays blank -- borrowing a number from elsewhere would be the
+  // invented prefill the blank plan exists to end.
   const lastDone = live && live.sets.length > 0 ? live.sets[live.sets.length - 1]! : null
   const suggestion = live ? payload.suggestions[String(live.id)] ?? null : null
-  const seedWeight = nextSet?.weight ?? lastDone?.weight
-    ?? suggestion?.weight ?? payload.default_plan_weight
-  const seedReps = nextSet?.reps ?? lastDone?.reps
-    ?? suggestion?.reps ?? payload.default_plan_reps
+  const seedWeight = nextSet !== null
+    ? nextSet.weight
+    : lastDone?.weight ?? suggestion?.weight ?? null
+  const seedReps = nextSet !== null
+    ? nextSet.reps
+    : lastDone?.reps ?? suggestion?.reps ?? null
 
-  const [weight, setWeight] = useState(seedWeight)
-  const [reps, setReps] = useState(seedReps)
+  const [weight, setWeight] = useState<number | null>(seedWeight)
+  const [reps, setReps] = useState<number | null>(seedReps)
+  // What is being typed right now, before the entry closes: the go button
+  // names the next step from it ("Wdh. eintippen" while the kg is typed).
+  const [draftWeight, setDraftWeight] = useState<number | null>(null)
+  const [draftReps, setDraftReps] = useState<number | null>(null)
+  const kgField = useRef<StepperHandle>(null)
+  const repsField = useRef<StepperHandle>(null)
 
   // The server is authoritative about what comes next; re-seed whenever it
   // says the pending set changed. WHICH set is up decides that, not only what
@@ -183,6 +212,7 @@ export function LivePanel({
   const stall = payload.stagnation_counts[String(live.id)]
   const stallNext = payload.stall_next_weight[String(live.id)]
   const source = payload.seed_sources[String(live.id)] ?? null
+  const firstTime = payload.first_time[String(live.id)]
   const ready = payload.ready_for_more
   const perSide = live.is_unilateral ? ' je Seite' : ''
   const records = live.sets.filter(
@@ -245,6 +275,17 @@ export function LivePanel({
           {` ${seedSourceText(source, live.position)}`}
         </p>
       )}
+      {/* The other half of the same slot: no history, so no Vorgabe -- the
+          plan is blank and the lifter types the first set. The other
+          variants' numbers are a reference, never a prefill: a dumbbell's
+          kilos are not a barbell's. */}
+      {firstTime !== undefined && (
+        <p className="live__seed">
+          <span className="live__seed-lbl">Erstes Mal</span>
+          {' Tipp ein, womit du anfängst — die nächsten Sätze übernehmen es.'}
+          {firstTime.length > 0 && <VariantRefs refs={firstTime} />}
+        </p>
+      )}
 
       {live.sets.length > 0 && (
         <div className="sets">
@@ -290,10 +331,21 @@ export function LivePanel({
       )}
 
       <div className="pair">
-        <Stepper label={`kg${perSide}`} value={weight} step={payload.live_increment}
-          decimals={1} ariaLabel="Gewicht eingeben" onChange={setWeight} />
-        <Stepper label="Wdh." value={reps} step={1} decimals={0}
-          ariaLabel="Wiederholungen eingeben" onChange={setReps} />
+        {/* "Weiter" on the keypad walks from a typed kg straight into the
+            reps while those are still blank -- the whole first set without
+            reaching for the screen between the two numbers. */}
+        <Stepper ref={kgField} label={`kg${perSide}`} value={weight}
+          step={payload.live_increment} decimals={1}
+          floor={payload.live_floor ?? payload.live_increment}
+          ariaLabel="Gewicht eingeben"
+          enterHint={reps === null ? 'next' : 'done'}
+          onEnter={reps === null ? () => repsField.current?.open() : undefined}
+          onDraft={setDraftWeight} onChange={setWeight} />
+        <Stepper ref={repsField} label="Wdh." value={reps} step={1} decimals={0} min={1}
+          ariaLabel="Wiederholungen eingeben"
+          enterHint={weight === null ? 'next' : 'done'}
+          onEnter={weight === null ? () => kgField.current?.open() : undefined}
+          onDraft={setDraftReps} onChange={setReps} />
       </div>
 
       {/* The rest does not take this slot -- it runs THROUGH it. The button is
@@ -310,13 +362,24 @@ export function LivePanel({
           nobody did. Any set write in flight holds it now. No visual disabled
           treatment: the window is a few hundred ms, and styling a flash would
           be noise. */}
+      {/* While a number is missing the button asks for it rather than
+          logging: it opens the entry, keypad up, and says which number it
+          wants -- a draft being typed counts, so the label has moved on by
+          the time the thumb does. A tap cannot log a set without both. */}
       <button type="button"
         className={`go${rest.running ? ' is-resting' : ''}${ringing ? ' is-ready' : ''}`}
         id="set-confirm" disabled={confirmBusy}
-        onClick={() => onConfirm(weight, reps, nextSet?.id ?? null)}>
+        onClick={() => {
+          if (weight === null) kgField.current?.open()
+          else if (reps === null) repsField.current?.open()
+          else onConfirm(weight, reps, nextSet?.id ?? null)
+        }}>
         <span className="go__lbl">
-          <Icon name="check" />
-          Satz geschafft
+          {weight === null && draftWeight === null
+            ? 'Gewicht eintippen'
+            : reps === null && draftReps === null
+              ? 'Wdh. eintippen'
+              : <><Icon name="check" />Satz geschafft</>}
         </span>
         {rest.running && (
           <>

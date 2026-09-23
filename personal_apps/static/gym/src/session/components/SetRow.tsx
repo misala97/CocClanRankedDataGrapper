@@ -18,7 +18,8 @@ interface Props {
  * One set chip: outline = offen, filled rose = erledigt, gold = ein Rekord,
  * outlined warm = the one you are about to do.
  *
- * Every chip shows the same weight-times-reps. A filled chip is the result it
+ * Every chip with numbers shows the same weight-times-reps (a blank planned
+ * set is named instead, see below). A filled chip is the result it
  * was logged at, an outlined chip is the plan it is prefilled for -- without
  * the plan the lifter at the machine had to remember last week's numbers just
  * to decide whether to add weight, which is the one thing a tracker exists to
@@ -27,6 +28,21 @@ interface Props {
 export function SetRow({
   set, ordinal, isRecord, isNext, isUnilateral, busy = false, onToggle,
 }: Props) {
+  // A planned set still waiting for its numbers (an exercise with no history)
+  // is named, not numbered: an invented "20,0 × 8" read as advice. Only ever
+  // an open set -- a logged one always has both.
+  if (set.weight === null || set.reps === null) {
+    const missing = set.weight === null && set.reps === null
+      ? 'Zahlen' : set.weight === null ? 'Gewicht' : 'Wdh.'
+    return (
+      <button type="button" className={`set is-blank${isNext ? ' is-now' : ''}`}
+        aria-label={`Satz ${ordinal}, noch ohne ${missing} — antippen zum Auswählen`}
+        disabled={busy} onClick={() => onToggle(set.id, true)}>
+        {`Satz ${ordinal}`}
+      </button>
+    )
+  }
+
   const weight = kg1(set.weight)
   const perSide = isUnilateral ? ' je Seite' : ''
   const amount = `${weight} kg${perSide} mal ${set.reps}`

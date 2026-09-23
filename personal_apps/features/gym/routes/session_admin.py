@@ -88,7 +88,7 @@ def gym_toggle_deload(session_id):
                 session_exercise.exercise.is_unilateral,
             )
             for s in session_exercise.sets:
-                if s.is_default_seeded:
+                if s.is_default_seeded or s.weight is None or s.reps is None:
                     # An invented default-plan set (_seeded_sets, no history)
                     # has no real working weight to take a percentage of --
                     # scaling it would present a fabricated prescription as a
@@ -101,6 +101,10 @@ def gym_toggle_deload(session_id):
                     # filled) while "deload switched on afterwards" scaled it
                     # anyway. is_default_seeded makes the set itself say so,
                     # so both orders behave the same.
+                    #
+                    # A blank (a plan still waiting for its number, see
+                    # _seeded_sets) is the same case even where an edit to a
+                    # sibling has cleared its flag: nothing to scale.
                     continue
                 if on:
                     # Capture the baseline the first time only. Re-applying the

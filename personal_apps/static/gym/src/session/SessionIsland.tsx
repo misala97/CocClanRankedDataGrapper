@@ -96,7 +96,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   }, [setSubscribed])
 
   const toggleSet = useSessionMutation(sessionId,
-    (setId: number, completed: boolean, weight: number, reps: number) =>
+    (setId: number, completed: boolean, weight: number | null, reps: number | null) =>
       api.toggleSet(setId, completed, weight, reps),
     optimistic.toggleSet)
   const addSet = useSessionMutation(sessionId,

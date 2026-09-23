@@ -542,7 +542,8 @@ def _live_data(session_):
         # are about to lift. Above it, the lifter has already acted -- or the
         # evidence is older than what the prefill found, and the nudge would
         # argue with the chips underneath it.
-        planned_top = max((s.weight for s in live_se.sets), default=None)
+        planned_top = max((s.weight for s in live_se.sets if s.weight is not None),
+                          default=None)
         if ready_for_more and planned_top is not None and planned_top > ready_for_more['weight']:
             ready_for_more = None
         # The note used to stop at the evidence ("2 Sätze auf 40 kg mit 10+
@@ -556,6 +557,15 @@ def _live_data(session_):
     # session's lifter, not the request's: the same rule as their setups.
     usage_now = dt.datetime.utcnow()
     usage = exercise_usage(session_.user_id, usage_now)
+    # The exercises this lifter meets for the first time: no history to plan
+    # from -- so _seeded_sets planned them blank -- and nothing of them logged
+    # in this workout yet either. The live screen marks these "Erstes Mal".
+    logged_here = {se.exercise_id for se in session_.exercises
+                   if any(s.completed for s in se.sets)}
+    first_time = _first_time_refs(
+        [se for se in visible_exercises
+         if picks[se.id][0] is None and se.exercise_id not in logged_here],
+        exercises, usage)
 
     # One tick per set in the whole workout, in order, so the strip reads as
     # the session filling up rather than as a chart. 'now' is the single set
@@ -619,6 +629,7 @@ def _live_data(session_):
         live_increment=stats.resolve_increment(
             setups[live_se.exercise_id].weight_increment, live_se.exercise.is_unilateral,
         ) if live_se else stats.resolve_increment(None, False),
+        live_floor=_weight_floor(setups[live_se.exercise_id], live_se.exercise) if live_se else None,
         live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
         tick_states=tick_states,
         sets_done=sets_done,
@@ -649,8 +660,7 @@ def _live_data(session_):
         # Passed in rather than hardcoded in the template, so the badge's
         # copy cannot drift from the rule that decides it.
         min_full_reps=stats.DELOAD_REPS,
-        default_plan_weight=stats.DEFAULT_PLAN_WEIGHT,
-        default_plan_reps=stats.DEFAULT_PLAN_REPS,
+        first_time=first_time,
         exercises=exercises,
         usage=usage,
         usage_now=usage_now,
@@ -741,6 +751,7 @@ def _session_payload(session_):
         'live_id': data['live_id'],
         'live_index': data['live_index'],
         'live_increment': data['live_increment'],
+        'live_floor': data['live_floor'],
         'tick_states': data['tick_states'],
         'sets_done': data['sets_done'],
         'sets_total': data['sets_total'],
@@ -756,8 +767,7 @@ def _session_payload(session_):
         'record_details': {str(k): v for k, v in data['record_details'].items()},
         'ready_for_more': data['ready_for_more'],
         'min_full_reps': data['min_full_reps'],
-        'default_plan_weight': data['default_plan_weight'],
-        'default_plan_reps': data['default_plan_reps'],
+        'first_time': {str(k): v for k, v in data['first_time'].items()},
         'exercises': [_catalogue_entry(e, data['usage'].get(e.id), data['usage_now'])
                       for e in data['exercises']],
         'list_groups': list(LIST_GROUPS),
@@ -790,6 +800,60 @@ def _catalogue_entry(exercise, used, now):
         'rank': used.rank if used else None,
         'common': used.common if used else False,
     }
+
+
+def _first_time_refs(rows, exercises, usage):
+    """{SessionExercise.id: [VariantRef dicts]} for `rows`, the exercises the
+    lifter meets for the first time. Each gets up to two of the lifter's other
+    variants of the same movement, most-done first (usage rank), with the top
+    set of the latest workout that had them. A deload's numbers are
+    deliberately light, so those workouts do not count; a variant done only in
+    a deload gives way to the next one.
+
+    Information only -- another variant's numbers are not this one's, so the
+    screen shows them and never plans with them."""
+    if not rows:
+        return {}
+    by_movement = {}
+    for exercise in exercises:
+        by_movement.setdefault(BY_KEY[exercise.library_key].movement, []).append(exercise)
+    done = {}
+    for se in rows:
+        entry = BY_KEY.get(se.exercise.library_key)
+        variants = by_movement.get(entry.movement, []) if entry else []
+        done[se.id] = sorted((e for e in variants if e.id != se.exercise_id and e.id in usage),
+                             key=lambda e: usage[e.id].rank)
+    latest = {}
+    wanted = sorted({e.id for variants in done.values() for e in variants})
+    if wanted:
+        # Oldest first, so the last row kept per exercise is its latest.
+        for row in load_performed(exercise_ids=wanted):
+            if not row.is_deload:
+                latest[row.exercise_id] = row
+    refs = {}
+    for se_id, variants in done.items():
+        refs[se_id] = []
+        for exercise in variants:
+            row = latest.get(exercise.id)
+            if row is None:
+                continue
+            weight, reps = max(row.sets)
+            refs[se_id].append({'label': BY_KEY[exercise.library_key].label,
+                                'weight': weight, 'reps': reps,
+                                'per_side': exercise.is_unilateral})
+            if len(refs[se_id]) == 2:
+                break
+    return refs
+
+
+def _weight_floor(setup, exercise):
+    """Where a blank kg stepper's "+" lands: the empty bar where the lift has
+    one, the lightest stop of a known stack, else one step up from nothing."""
+    if setup.bar_weight:
+        return setup.bar_weight
+    if setup.stack_kg:
+        return min(setup.stack_kg)
+    return stats.resolve_increment(setup.weight_increment, exercise.is_unilateral)
 
 
 def _mutation_response(session_, endpoint, **values):
@@ -1368,11 +1432,12 @@ def gym_delete_set(set_id):
 
 
 def _propagate_default_correction(set_, weight, reps):
-    """A hand-typed correction to a set that was still sitting on the
-    invented default plan (3 sets at DEFAULT_PLAN_WEIGHT x DEFAULT_PLAN_REPS,
-    see seeding._seeded_sets) carries forward to any LATER set of the same
-    SessionExercise that is itself still untouched -- `completed` is False
-    and `is_default_seeded` is still True.
+    """Numbers typed into a set that was still sitting on the blank plan
+    seeding._seeded_sets makes for an exercise with no history carry forward
+    to any LATER set of the same SessionExercise that is itself still
+    untouched -- `completed` is False and `is_default_seeded` is still True.
+    (The plan was 3 x 20 kg x 8 before migration c5a1d8e3f207 blanked it, and
+    this carried a correction of that placeholder the same way.)
 
     This is deliberately narrower than "always carry a weight change
     forward": the owner was asked and explicitly rejected that, because it
@@ -1388,9 +1453,8 @@ def _propagate_default_correction(set_, weight, reps):
     already a real choice" guards apply to them too.
 
     `weight`/`reps` are passed in as None when that particular field did not
-    change on `set_` -- e.g. correcting only the weight (the default reps of
-    8 already being right) must not stomp a sibling's reps with the same
-    unchanged 8 it already has.
+    change on `set_` -- a field that did not change says nothing new, and must
+    not stomp a number the sibling already has.
 
     The propagated-to sibling has its OWN is_default_seeded cleared too: the
     correction is now the plan, not a guess. Leaving it set would mean a
@@ -1411,6 +1475,30 @@ def _propagate_default_correction(set_, weight, reps):
         if reps is not None:
             sibling.reps = reps
         sibling.is_default_seeded = False
+
+
+def _fill_blanks_after(set_):
+    """A logged set's numbers fill every blank of the still-open sets after
+    it. A blank is never a choice -- it is a plan waiting for its number -- so
+    taking the one just lifted overrides nothing, unlike carrying changes
+    forward in general (rejected by the owner, see
+    _propagate_default_correction).
+
+    That carry needs `set_` still flagged is_default_seeded, which an earlier
+    edit can have cleared: a weight typed into the exercise sheet before the
+    first set was logged carries the weight and clears the flags, and the reps
+    logged later then had nowhere to go. This catches what it leaves blank.
+    A filled sibling's flag goes too, for the same reason the carry clears it:
+    the number is the plan now, not a guess."""
+    for sibling in set_.session_exercise.sets:
+        if sibling.position <= set_.position or sibling.completed:
+            continue
+        if sibling.weight is None or sibling.reps is None:
+            if sibling.weight is None:
+                sibling.weight = set_.weight
+            if sibling.reps is None:
+                sibling.reps = set_.reps
+            sibling.is_default_seeded = False
 
 
 def _apply_typed_weight_reps(set_):
@@ -1492,6 +1580,13 @@ def gym_toggle_set_complete(set_id):
     wanted = request.form.get('completed')
     was_completed = set_.completed
     set_.completed = (wanted == '1') if wanted in ('0', '1') else (not set_.completed)
+    if set_.completed and (set_.weight is None or set_.reps is None):
+        # A set with a blank cannot be logged: there is no lift for it to say.
+        # The live screen never asks -- its button asks for the missing
+        # number first -- so this is a stale page or a replay. It gets the set
+        # back open with whatever number it did carry, the same quiet refusal
+        # gym_add_set gives a set without both numbers.
+        set_.completed = False
     # The stamp follows the flag in both directions. Leaving it behind on an
     # un-complete would make the next tick measure the wrong interval.
     set_.completed_at = dt.datetime.utcnow() if set_.completed else None
@@ -1507,6 +1602,10 @@ def gym_toggle_set_complete(set_id):
         # reasoning.
         _propagate_default_correction(
             set_, set_.weight if weight_changed else None, set_.reps if reps_changed else None)
+    if set_.completed and not was_completed and session_.finished_at is None:
+        # Live only, like gym_update_set's carry: a finished workout's open
+        # sets were never lifted and stay as they were.
+        _fill_blanks_after(set_)
 
     if set_.completed and was_completed:
         # already logged, and the caller asked for logged: a duplicate request.

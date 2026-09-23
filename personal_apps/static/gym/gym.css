@@ -1850,6 +1850,11 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
+/* "Erstes Mal": the lifter's other variants of the movement, a line of its
+   own under the instruction. The variant names carry the ink -- they are what
+   the eye scans for. */
+.live__refs { display: block; margin-top: var(--sp-2); }
+.live__refs b { font-weight: var(--w-semi); color: var(--ink); }
 
 /* ---- set chips ---- */
 /* Wraps, because a row that only ever compressed hit 35px per chip at eight
@@ -1874,6 +1879,9 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 .set.is-done { background: var(--done); color: var(--on-done); }
 .set.is-record { background: var(--record); color: var(--on-record); }
 .set.is-now { background: transparent; box-shadow: inset 0 0 0 2px var(--live); color: var(--live-ink); }
+/* A planned set still waiting for its numbers reads "Satz 2": a word, not a
+   load, so one weight lighter than the numerals beside it. */
+.set.is-blank { font-weight: var(--w-semi); }
 /* The tap itself, before the network answers. A chip is a submit button whose
    result arrives one round trip later, and on gym wifi that round trip is
    visible -- so the press has to be answered locally or the screen reads as
@@ -1936,6 +1944,19 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   display: grid; place-items: center; box-shadow: 0 1px 0 var(--edge);
 }
 .field-num__key:active { transform: scale(0.96); }
+/* "−" on a blank: there is nothing to take one step off. */
+.field-num__key:disabled { opacity: .45; cursor: default; }
+.field-num__key:disabled:active { transform: none; }
+/* The entry being typed into gets the live ring, the same one the next set's
+   chip wears: this is where the number lands. */
+.field-num.is-editing { box-shadow: inset 0 0 0 2px var(--live); }
+/* No number yet: an empty slot the size of one, dashed so it reads as a place
+   to put something -- a dash or a zero here read as a value. The readout stays
+   the button that opens the entry. */
+.field-num.is-blank .field-num__val::before {
+  content: ''; display: block; inline-size: 76px; block-size: 40px;
+  border: 2px dashed var(--edge-hi); border-radius: var(--r-inset);
+}
 
 /* ---- confirm, and the rest that runs through it ---- */
 .go {

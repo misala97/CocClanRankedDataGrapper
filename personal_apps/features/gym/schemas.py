@@ -222,8 +222,10 @@ class SessionMeta(_Model):
 
 class LiveSet(_Model):
     id: int
-    weight: float
-    reps: int
+    # None = not decided yet: an exercise with no history is planned blank
+    # (seeding._seeded_sets). Never None on a completed set.
+    weight: float | None
+    reps: int | None
     completed: bool
     # Non-NULL exactly when this set's weight is deload-scaled. It is what
     # `deload_applied` is derived from -- the session's is_deload flag is not,
@@ -332,6 +334,17 @@ class ReadyForMore(_Model):
     next_weight: float | None
 
 
+class VariantRef(_Model):
+    """Another variant of a movement, as the lifter last did it: the top set
+    of the latest workout (not a deload) that had it. `label` is the variant
+    part of the name (library.Entry.label), `per_side` says the weight is one
+    side's."""
+    label: str
+    weight: float
+    reps: int
+    per_side: bool
+
+
 class PartnerStatus(_Model):
     username: str
     accepted: bool
@@ -351,6 +364,10 @@ class SessionDetailPayload(_Model):
     # 1-based position of the live exercise in visible_exercises; 0 when none.
     live_index: int
     live_increment: float
+    # Where the live exercise's kg stepper lands when "+" is tapped on a blank
+    # weight: the empty bar, the lightest stop of a known stack, else one
+    # step. None when nothing is live.
+    live_floor: float | None
 
     # One entry per set in the whole workout, in order: 'done', 'now' or
     # 'open'. Sets belonging to a skipped exercise are omitted entirely.
@@ -385,8 +402,13 @@ class SessionDetailPayload(_Model):
     ready_for_more: ReadyForMore | None
 
     min_full_reps: int
-    default_plan_weight: float
-    default_plan_reps: int
+    # Keyed by SessionExercise.id like suggestions: the exercises the lifter
+    # meets for the first time -- no history, nothing logged in this workout
+    # yet. Each lists up to two of the lifter's other variants of the same
+    # movement with their last numbers, most-done first; information only,
+    # another variant's numbers are not this one's. Empty list when there are
+    # none; absent key when the exercise is not a first time.
+    first_time: dict[str, list[VariantRef]]
 
     exercises: list[CatalogueExercise]
     # The add sheet's sections in the list's own order (library.LIST_GROUPS).

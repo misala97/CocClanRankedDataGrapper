@@ -32,7 +32,9 @@ function retally(payload: SessionDetailPayload): SessionDetailPayload {
       if (s.completed) {
         done += 1
         ticks.push('done')
-        volume += s.weight * s.reps * (se.is_unilateral ? 2 : 1)
+        // A completed set always has its numbers; the ?? only satisfies the
+        // type, which a blank planned set shares.
+        volume += (s.weight ?? 0) * (s.reps ?? 0) * (se.is_unilateral ? 2 : 1)
       } else {
         ticks.push('open')
       }
@@ -71,16 +73,29 @@ export function toggleSet(
   payload: SessionDetailPayload,
   setId: number,
   completed: boolean,
-  weight: number,
-  reps: number,
+  weight: number | null,
+  reps: number | null,
 ): SessionDetailPayload {
   return retally({
     ...payload,
-    visible_exercises: payload.visible_exercises.map((se) => ({
-      ...se,
-      sets: se.sets.map((s) =>
-        s.id === setId ? { ...s, completed, weight, reps } : s),
-    })),
+    visible_exercises: payload.visible_exercises.map((se) => {
+      const at = se.sets.findIndex((s) => s.id === setId)
+      if (at === -1) return se
+      // Logging a set fills the blanks of the open sets after it -- the
+      // server does the same (workout._fill_blanks_after). Without it here
+      // the next set flashed blank for the length of the request.
+      const fills = completed && !se.sets[at]!.completed
+      return {
+        ...se,
+        sets: se.sets.map((s, i) => {
+          if (i === at) return { ...s, completed, weight, reps }
+          if (fills && i > at && !s.completed && (s.weight === null || s.reps === null)) {
+            return { ...s, weight: s.weight ?? weight, reps: s.reps ?? reps }
+          }
+          return s
+        }),
+      }
+    }),
   })
 }
 

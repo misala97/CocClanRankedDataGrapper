@@ -33,7 +33,7 @@ describe('LivePanel', () => {
     const next = live.sets.find((s) => !s.completed)!
     render(<LivePanel payload={payload} {...handlers()} />)
     expect(screen.getByLabelText('Gewicht eingeben'))
-      .toHaveTextContent(kg1(next.weight))
+      .toHaveTextContent(kg1(next.weight!))
     expect(screen.getByLabelText('Wiederholungen eingeben'))
       .toHaveTextContent(String(next.reps))
   })
@@ -47,7 +47,7 @@ describe('LivePanel', () => {
     await user.click(screen.getByText('Satz geschafft'))
     const next = live.sets.find((s) => !s.completed)!
     expect(h.onConfirm).toHaveBeenCalledWith(
-      next.weight + payload.live_increment, next.reps, next.id)
+      next.weight! + payload.live_increment, next.reps, next.id)
   })
 
   it('binds the steppers to an open chip instead of logging it', async () => {
@@ -61,7 +61,7 @@ describe('LivePanel', () => {
 
     await user.click(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(later) + 1}, geplant`)))
     expect(h.onToggleSet).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent(kg1(later.weight))
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent(kg1(later.weight!))
     expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent(String(later.reps))
 
     await user.click(screen.getByText('Satz geschafft'))
@@ -138,7 +138,7 @@ describe('LivePanel', () => {
     const { rerender } = render(<LivePanel payload={payload} {...handlers()} />)
     await user.click(screen.getByLabelText('Wiederholungen erhöhen'))
     expect(screen.getByLabelText('Wiederholungen eingeben'))
-      .toHaveTextContent(String(next.reps + 1))
+      .toHaveTextContent(String(next.reps! + 1))
 
     const switched: SessionDetailPayload = {
       ...payload,
@@ -165,7 +165,7 @@ describe('LivePanel', () => {
 
     rerender(<LivePanel payload={{ ...payload, sets_done: payload.sets_done }} {...handlers()} />)
     expect(screen.getByLabelText('Gewicht eingeben'))
-      .toHaveTextContent(kg1(next.weight + payload.live_increment))
+      .toHaveTextContent(kg1(next.weight! + payload.live_increment))
   })
 
   it('says where the plan came from', () => {
@@ -246,7 +246,7 @@ describe('LivePanel', () => {
     render(<LivePanel payload={allDone} {...handlers()} />)
     const last = live.sets[live.sets.length - 1]!
     expect(screen.getByLabelText('Gewicht eingeben'))
-      .toHaveTextContent(kg1(last.weight))
+      .toHaveTextContent(kg1(last.weight!))
     expect(screen.getByText(/Alle Sätze erledigt/)).toBeInTheDocument()
   })
 
@@ -319,7 +319,7 @@ describe('LivePanel', () => {
     // the stepper renders its value as text, kg1-formatted.
     const next = live.sets.find((s) => !s.completed)!
     expect(screen.getByLabelText('Gewicht eingeben'))
-      .toHaveTextContent(kg1(next.weight))
+      .toHaveTextContent(kg1(next.weight!))
   })
 
   it('falls back to the generic nudge when the stack is topped out', () => {
@@ -467,5 +467,110 @@ describe('SessionTotals', () => {
     render(<SessionTotals volume={0} setsDone={2}
       startedAt={payload.session.started_at} />)
     expect(screen.getByText(/Sätze ·/)).toBeInTheDocument()
+  })
+})
+
+/** The live exercise met for the first time: planned blank (V2), with the
+ *  lifter's other variants of the movement as a reference. */
+const firstTime = (refs: SessionDetailPayload['first_time'][string] = [
+  { label: 'Kurzhantel', weight: 26, reps: 10, per_side: true },
+  { label: 'Maschine, Scheiben', weight: 27.5, reps: 10, per_side: false },
+]): SessionDetailPayload => ({
+  ...payload,
+  visible_exercises: payload.visible_exercises.map((se) => (se.id !== live.id ? se : {
+    ...se, is_unilateral: false,
+    sets: se.sets.map((s) => ({ ...s, completed: false, weight: null, reps: null })),
+  })),
+  suggestions: { ...payload.suggestions, [String(live.id)]: null },
+  seed_sources: { ...payload.seed_sources, [String(live.id)]: null },
+  stagnation_counts: {}, stall_next_weight: {}, ready_for_more: null,
+  record_set_ids: [], record_details: {},
+  first_time: { [String(live.id)]: refs },
+  live_floor: 20,
+})
+
+describe('LivePanel, first time', () => {
+  it('says so, names the other variants, and plans blank sets', () => {
+    render(<LivePanel payload={firstTime()} {...handlers()} />)
+    const note = screen.getByText('Erstes Mal').closest('p')!
+    expect(note).toHaveTextContent('Tipp ein, womit du anfängst — die nächsten Sätze übernehmen es.')
+    expect(note).toHaveTextContent(
+      'Deine anderen Varianten, zuletzt: Kurzhantel 26,0 kg je Seite × 10 · Maschine, Scheiben 27,5 kg × 10')
+    expect(screen.getByRole('button', { name: /^Satz 1, noch ohne Zahlen/ })).toHaveTextContent('Satz 1')
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent(/^$/)
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent(/^$/)
+  })
+
+  it('leaves the references out when there are none', () => {
+    render(<LivePanel payload={firstTime([])} {...handlers()} />)
+    expect(screen.getByText('Erstes Mal')).toBeInTheDocument()
+    expect(screen.queryByText(/Deine anderen Varianten/)).toBeNull()
+  })
+
+  it('asks for the weight, then the reps, then logs the set', async () => {
+    const user = userEvent.setup()
+    const h = handlers()
+    const data = firstTime()
+    const first = data.visible_exercises.find((se) => se.id === live.id)!.sets[0]!
+    render(<LivePanel payload={data} {...h} />)
+
+    await user.click(screen.getByRole('button', { name: 'Gewicht eintippen' }))
+    const kg = screen.getByRole('textbox', { name: 'Gewicht eingeben' })
+    expect(kg).toHaveFocus()
+    expect(kg).toHaveAttribute('enterkeyhint', 'next')
+    // The label moves on while the number is still being typed.
+    await user.type(kg, '40')
+    expect(screen.getByRole('button', { name: 'Wdh. eintippen' })).toBeInTheDocument()
+
+    // "Weiter" on the keypad walks straight into the reps.
+    await user.keyboard('{Enter}')
+    const reps = screen.getByRole('textbox', { name: 'Wiederholungen eingeben' })
+    expect(reps).toHaveFocus()
+    await user.type(reps, '10{Enter}')
+
+    await user.click(screen.getByText('Satz geschafft'))
+    expect(h.onConfirm).toHaveBeenCalledWith(40, 10, first.id)
+  })
+
+  it('moves on from a typed weight when the button is tapped instead of Weiter', async () => {
+    const user = userEvent.setup()
+    const h = handlers()
+    render(<LivePanel payload={firstTime()} {...h} />)
+
+    await user.click(screen.getByRole('button', { name: 'Gewicht eintippen' }))
+    await user.type(screen.getByRole('textbox', { name: 'Gewicht eingeben' }), '40')
+    await user.click(screen.getByRole('button', { name: 'Wdh. eintippen' }))
+
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent('40,0')
+    expect(screen.getByRole('textbox', { name: 'Wiederholungen eingeben' })).toHaveFocus()
+    expect(h.onConfirm).not.toHaveBeenCalled()
+  })
+
+  it('steps a blank weight up to the empty bar', async () => {
+    const user = userEvent.setup()
+    render(<LivePanel payload={firstTime()} {...handlers()} />)
+
+    await user.click(screen.getByLabelText('Gewicht erhöhen'))
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent('20,0')
+    expect(screen.getByRole('button', { name: 'Wdh. eintippen' })).toBeInTheDocument()
+  })
+
+  it('takes the next set from what the server filled in, no blank flash', () => {
+    // After set 1 the server (and the optimistic write before it) fills the
+    // blanks with set 1's numbers: the steppers bind to them as a plan.
+    const data = firstTime()
+    const filled: SessionDetailPayload = {
+      ...data,
+      first_time: {},
+      visible_exercises: data.visible_exercises.map((se) => (se.id !== live.id ? se : {
+        ...se,
+        sets: se.sets.map((s, i) => ({ ...s, weight: 40, reps: 10, completed: i === 0 })),
+      })),
+    }
+    render(<LivePanel payload={filled} {...handlers()} />)
+    expect(screen.queryByText('Erstes Mal')).toBeNull()
+    expect(screen.getByLabelText('Gewicht eingeben')).toHaveTextContent('40,0')
+    expect(screen.getByLabelText('Wiederholungen eingeben')).toHaveTextContent('10')
+    expect(screen.getByText('Satz geschafft')).toBeInTheDocument()
   })
 })

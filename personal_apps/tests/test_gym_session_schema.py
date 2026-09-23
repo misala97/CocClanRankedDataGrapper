@@ -37,7 +37,7 @@ def _minimal():
                 'base_weight': None,
             }],
         }],
-        'live_id': 10, 'live_index': 1, 'live_increment': 2.5,
+        'live_id': 10, 'live_index': 1, 'live_increment': 2.5, 'live_floor': 20.0,
         'tick_states': ['now'], 'sets_done': 0, 'sets_total': 1, 'sets_open': 1,
         'session_volume': 0.0, 'resting': False, 'rest_total_seconds': 0,
         'suggestions': {'10': {'weight': 60.0, 'reps': 8}},
@@ -46,7 +46,7 @@ def _minimal():
         'stagnation_counts': {}, 'stall_next_weight': {}, 'record_set_ids': [],
         'record_details': {},
         'ready_for_more': None, 'min_full_reps': 5,
-        'default_plan_weight': 20.0, 'default_plan_reps': 8,
+        'first_time': {},
         'exercises': [{'id': 5, 'name': 'Bankdrücken (Langhantel)', 'muscle_group': 'Brust',
                        'search': 'bankdrucken langhantel bench press',
                        'movement': 'Bankdrücken', 'label': 'Langhantel',
@@ -63,6 +63,21 @@ def test_accepts_a_fresh_session():
     payload = SessionDetailPayload.model_validate(_minimal())
     assert payload.live_id == 10
     assert payload.visible_exercises[0].sets[0].reps == 8
+
+
+def test_a_planned_set_may_wait_blank_for_its_numbers():
+    """An exercise with no history is planned with no numbers (V2), and a
+    first time lists the lifter's other variants of the movement."""
+    data = _minimal()
+    data['visible_exercises'][0]['sets'][0].update(weight=None, reps=None)
+    data['first_time'] = {'10': [{'label': 'Kurzhantel', 'weight': 26.0, 'reps': 10,
+                                  'per_side': True}]}
+    data['live_floor'] = None
+    payload = SessionDetailPayload.model_validate(data)
+    assert payload.visible_exercises[0].sets[0].weight is None
+    dumped = payload.model_dump(mode='json')
+    assert dumped['first_time']['10'][0] == {'label': 'Kurzhantel', 'weight': 26.0,
+                                             'reps': 10, 'per_side': True}
 
 
 def test_accepts_a_session_with_nothing_live():

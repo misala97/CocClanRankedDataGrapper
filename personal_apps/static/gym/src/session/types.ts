@@ -25,8 +25,11 @@ export interface SessionMeta {
 
 export interface LiveSet {
   id: number
-  weight: number
-  reps: number
+  /** Null = not decided yet: an exercise with no history is planned with no
+   *  numbers until the lifter types the first set. Never null on a completed
+   *  set -- the server refuses to log one. */
+  weight: number | null
+  reps: number | null
   completed: boolean
   /** Non-null exactly when this set's weight is deload-scaled. `deload_applied`
    *  is derived from it -- the session's is_deload flag is not, because a
@@ -128,6 +131,16 @@ export interface ReadyForMore {
   next_weight: number | null
 }
 
+/** Another variant of a movement as the lifter last did it: the top set of
+ *  the latest workout that had it, deloads aside. `label` is the variant part
+ *  of the name ("Kurzhantel"), `per_side` says the weight is one side's. */
+export interface VariantRef {
+  label: string
+  weight: number
+  reps: number
+  per_side: boolean
+}
+
 export interface Partner {
   id: number
   username: string
@@ -152,6 +165,10 @@ export interface SessionDetailPayload {
   /** 1-based position of the live exercise; 0 when there is none. */
   live_index: number
   live_increment: number
+  /** Where the live kg stepper's "+" lands from a blank weight: the empty
+   *  bar, the lightest stop of a known stack, else one step. Null when
+   *  nothing is live. */
+  live_floor: number | null
 
   tick_states: TickState[]
   sets_done: number
@@ -183,8 +200,12 @@ export interface SessionDetailPayload {
   ready_for_more: ReadyForMore | null
 
   min_full_reps: number
-  default_plan_weight: number
-  default_plan_reps: number
+  /** Keyed by SessionExercise.id like suggestions: the exercises met for the
+   *  first time -- no history, nothing logged in this workout yet. Each lists
+   *  up to two of the lifter's other variants of the movement with their last
+   *  numbers, most-done first. Information only: another variant's numbers
+   *  are not this one's. Absent key = not a first time. */
+  first_time: Record<string, VariantRef[]>
 
   exercises: CatalogueExercise[]
   /** The add sheet's sections in the list's own order, Brust first. */

@@ -288,7 +288,7 @@ def reconcile_follower(shared):
     gym_add_session_exercise) -- an exercise the leader adds mid-workout used
     to arrive on the follower's side as an empty slot, which is exactly the
     shape that made the first confirmed set complete the exercise and skip
-    ahead (see stats.DEFAULT_PLAN_* / gym_add_session_exercise). This runs
+    ahead (see stats.DEFAULT_PLAN_SETS / gym_add_session_exercise). This runs
     inside the LEADER's request, where current_user_id() names the leader, so
     the history lookup is passed shared.follower_user_id explicitly rather
     than left to default. The exercise row is the leader's own too (one
@@ -343,7 +343,7 @@ def reconcile_follower(shared):
                 # mid-workout used to arrive here with none at all, which
                 # reproduced this feature's headline bug on the follower's
                 # side too: the first confirmed set both created and
-                # completed the plan (see stats.DEFAULT_PLAN_* and
+                # completed the plan (see stats.DEFAULT_PLAN_SETS and
                 # gym_add_session_exercise). user_id is passed explicitly --
                 # see the docstring above -- rather than left to default to
                 # current_user_id(), which inside this request names the

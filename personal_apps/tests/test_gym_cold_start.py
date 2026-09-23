@@ -49,13 +49,12 @@ def virgin_session():
             db.session.commit()
 
 
-def test_an_exercise_with_no_history_arrives_with_a_default_plan(client, virgin_session):
+def test_an_exercise_with_no_history_arrives_with_a_blank_plan(client, virgin_session):
     """It used to arrive with nothing at all, which is what made the first
     logged set also the last: with no planned sets, one completed set meant
-    every set was completed."""
-    from extensions import db
+    every set was completed. Then with 3 x 20 kg x 8, a placeholder wrong for
+    almost every exercise. Now the three sets wait with no numbers (V2)."""
     from models import SessionExercise
-    from features.gym import stats
     live_id, exercise_id = virgin_session
 
     response = client.post(f'/gym/session/{live_id}/exercises/add',
@@ -64,10 +63,11 @@ def test_an_exercise_with_no_history_arrives_with_a_default_plan(client, virgin_
 
     with flask_app.app_context():
         se = SessionExercise.query.filter_by(session_id=live_id).one()
-        assert [(s.position, s.weight, s.reps, s.completed) for s in se.sets] == [
-            (1, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False),
-            (2, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False),
-            (3, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False),
+        assert [(s.position, s.weight, s.reps, s.completed, s.is_default_seeded)
+                for s in se.sets] == [
+            (1, None, None, False, True),
+            (2, None, None, False, True),
+            (3, None, None, False, True),
         ]
 
 
@@ -144,8 +144,8 @@ def test_logging_one_set_does_not_advance_past_a_default_planned_exercise(client
 
 
 def test_a_deload_does_not_scale_an_invented_default(client, virgin_session):
-    """There is no working weight to take a percentage of. Scaling the default
-    would present a fabricated prescription as a real one.
+    """There is no working weight to take a percentage of. Scaling the plan
+    would present a fabricated prescription as a real one -- it stays blank.
 
     This covers only the ORDER that was already safe: is_deload is set
     directly on the model before the exercise is ever added, so
@@ -154,7 +154,6 @@ def test_a_deload_does_not_scale_an_invented_default(client, virgin_session):
     """
     from extensions import db
     from models import SessionExercise, WorkoutSession
-    from features.gym import stats
     live_id, exercise_id = virgin_session
 
     with flask_app.app_context():
@@ -168,9 +167,9 @@ def test_a_deload_does_not_scale_an_invented_default(client, virgin_session):
 
     with flask_app.app_context():
         se = SessionExercise.query.filter_by(session_id=live_id).one()
-        assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}
+        assert {s.weight for s in se.sets} == {None}
         assert {s.base_weight for s in se.sets} == {None}
-        assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+        assert {s.reps for s in se.sets} == {None}
 
 
 def test_a_deload_toggled_on_after_adding_does_not_scale_an_invented_default(client, virgin_session):
@@ -188,7 +187,6 @@ def test_a_deload_toggled_on_after_adding_does_not_scale_an_invented_default(cli
     """
     from extensions import db
     from models import SessionExercise
-    from features.gym import stats
     live_id, exercise_id = virgin_session
 
     client.post(f'/gym/session/{live_id}/exercises/add',
@@ -199,10 +197,10 @@ def test_a_deload_toggled_on_after_adding_does_not_scale_an_invented_default(cli
 
     with flask_app.app_context():
         se = SessionExercise.query.filter_by(session_id=live_id).one()
-        assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}, (
-            'deload toggled on after adding scaled an invented default')
+        assert {s.weight for s in se.sets} == {None}, (
+            'deload toggled on after adding gave the blank plan a number')
         assert {s.base_weight for s in se.sets} == {None}
-        assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+        assert {s.reps for s in se.sets} == {None}
         assert {s.base_reps for s in se.sets} == {None}
         assert all(s.is_default_seeded for s in se.sets)
 
@@ -211,11 +209,42 @@ def test_a_deload_toggled_on_after_adding_does_not_scale_an_invented_default(cli
 
     with flask_app.app_context():
         se = SessionExercise.query.filter_by(session_id=live_id).one()
-        assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}, (
+        assert {s.weight for s in se.sets} == {None}, (
             'toggling the deload back off moved a set nothing ever scaled')
         assert {s.base_weight for s in se.sets} == {None}
-        assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+        assert {s.reps for s in se.sets} == {None}
         assert {s.base_reps for s in se.sets} == {None}
+
+
+def test_a_deload_leaves_a_blank_alone_even_without_its_flag(client, virgin_session):
+    """An edit to a sibling can clear a blank set's is_default_seeded (the
+    carry clears the flag of every set it reaches, and a reps-only carry
+    leaves the weight blank). A blank is still nothing to scale -- the
+    deload must skip it rather than take a percentage of None."""
+    from extensions import db
+    from models import SessionExercise
+    live_id, exercise_id = virgin_session
+
+    client.post(f'/gym/session/{live_id}/exercises/add',
+                data={'exercise_id': str(exercise_id)})
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        first_id = sorted(se.sets, key=lambda s: s.position)[0].id
+
+    # Reps only, through the sheet: carried to sets 2/3 with their flags
+    # cleared, weights still blank.
+    client.post(f'/gym/set/{first_id}/update', data={'reps': '10'})
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        rest = [s for s in se.sets if s.position > 1]
+        assert [(s.weight, s.reps, s.is_default_seeded) for s in rest] == [
+            (None, 10, False), (None, 10, False)], 'fixture assumption broken'
+
+    response = client.post(f'/gym/session/{live_id}/deload', data={'on': '1', 'pct': '70'})
+    assert response.status_code in (302, 303)
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id).one()
+        assert [(s.weight, s.base_weight) for s in se.sets] == [(None, None)] * 3
 
 
 def test_un_skipping_a_no_history_exercise_restores_the_default_plan(client, virgin_session):
@@ -243,7 +272,7 @@ def test_un_skipping_a_no_history_exercise_restores_the_default_plan(client, vir
         assert len(se.sets) == stats.DEFAULT_PLAN_SETS
 
 
-def test_the_first_run_of_a_new_template_gets_the_default_plan(client, virgin_session):
+def test_the_first_run_of_a_new_template_gets_the_blank_plan(client, virgin_session):
     """Half the reason this work exists. A template stores an ordered list of
     exercises and no numbers at all, so on the day it is created every exercise
     in it has no history -- gym_start seeds through the same helper and used to
@@ -283,7 +312,7 @@ def test_the_first_run_of_a_new_template_gets_the_default_plan(client, virgin_se
             started_id = started.id
             se = SessionExercise.query.filter_by(session_id=started_id).one()
             assert [(s.weight, s.reps, s.completed) for s in se.sets] == [
-                (stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False)
+                (None, None, False)
             ] * stats.DEFAULT_PLAN_SETS
     finally:
         with flask_app.app_context():
@@ -383,9 +412,9 @@ def test_history_still_wins_over_the_default(client, virgin_session):
 
 def test_correcting_set_one_of_a_default_plan_carries_to_the_still_pending_defaults(client, virgin_session):
     """The payoff this whole task exists for: type the real working weight
-    once, on set 1, and sets 2/3 -- still sitting untouched on the invented
-    20,0kg x 8 default -- pick it up too, instead of making the lifter retype
-    it on every set of a brand-new exercise."""
+    once, on set 1, and sets 2/3 -- still sitting untouched on the blank
+    plan -- pick it up too, instead of making the lifter retype it on every
+    set of a brand-new exercise."""
     from extensions import db
     from models import SessionExercise
     live_id, exercise_id = virgin_session
@@ -407,8 +436,9 @@ def test_correcting_set_one_of_a_default_plan_carries_to_the_still_pending_defau
 
 
 def test_correcting_a_history_seeded_set_does_not_propagate(client, virgin_session):
-    """The owner's explicit condition: propagation is ONLY for the invented
-    20,0kg placeholder. An exercise seeded from real prior performance is a
+    """The owner's explicit condition: propagation is ONLY for the plan an
+    exercise with no history gets (the 20,0kg placeholder then, blank since
+    V2). An exercise seeded from real prior performance is a
     normal templated workout, where a mid-exercise weight change (a drop set,
     a ramp-up) is usually deliberate and must not spread to later sets."""
     from extensions import db
@@ -499,16 +529,17 @@ def test_a_completed_set_is_never_rewritten_by_propagation(client, virgin_sessio
     the set being corrected -- completed work is never rewritten regardless
     of position or flag state.
 
-    Set 3 is confirmed done out of order first (a lifter can tap any open
-    chip) at the untouched default value -- weight/reps unchanged means
-    gym_toggle_set_complete's own "changed by hand" branch never fires, so
-    set 3 stays is_default_seeded=True while completed=True. That is the one
-    state combination that would slip past a propagation guard checking only
-    is_default_seeded and not completed -- so this is the test that actually
-    exercises the `completed` filter, not just the `is_default_seeded` one."""
+    Set 3 was confirmed done out of order first, at the old 20 kg x 8
+    placeholder unchanged -- the "changed by hand" branch never fired, so it
+    stayed is_default_seeded=True while completed=True. Blank plans cannot
+    get there any more (a first number is always a change), but those sets
+    are in the database: the blanking migration leaves completed sets alone.
+    It is the one state combination that would slip past a propagation guard
+    checking only is_default_seeded and not completed -- so this is the test
+    that actually exercises the `completed` filter, not just the
+    `is_default_seeded` one. Built directly, as the old code left it."""
     from extensions import db
-    from models import SessionExercise
-    from features.gym import stats
+    from models import SessionExercise, SessionSet
     live_id, exercise_id = virgin_session
 
     client.post(f'/gym/session/{live_id}/exercises/add',
@@ -516,31 +547,22 @@ def test_a_completed_set_is_never_rewritten_by_propagation(client, virgin_sessio
     with flask_app.app_context():
         se = SessionExercise.query.filter_by(session_id=live_id).one()
         ordered = sorted(se.sets, key=lambda s: s.position)
-        first_id, third_id = ordered[0].id, ordered[2].id
-
-    # Set 3 logged out of order first, at the untouched default -- stays
-    # is_default_seeded=True.
-    client.post(f'/gym/set/{third_id}/toggle_complete',
-                data={'completed': '1',
-                      'weight': str(stats.DEFAULT_PLAN_WEIGHT),
-                      'reps': str(stats.DEFAULT_PLAN_REPS)})
-    with flask_app.app_context():
-        from models import SessionSet
+        first_id, second_id, third_id = [s.id for s in ordered]
         third = db.session.get(SessionSet, third_id)
-        assert (third.completed, third.is_default_seeded) == (True, True), \
-            'fixture assumption broken: confirming the unchanged default must not clear is_default_seeded'
+        third.weight, third.reps, third.completed = 20.0, 8, True
+        db.session.commit()
 
-    # Set 1 corrected and confirmed -- propagation reaches set 2 (still
-    # pending, still default) but must skip set 3: it is already completed.
+    # Set 1 typed and confirmed -- the carry reaches set 2 (still pending,
+    # still untouched) but must skip set 3: it is already completed.
     client.post(f'/gym/set/{first_id}/toggle_complete',
                 data={'completed': '1', 'weight': '82.5', 'reps': '8'})
 
     with flask_app.app_context():
-        from models import SessionSet
+        second = db.session.get(SessionSet, second_id)
         third = db.session.get(SessionSet, third_id)
-        assert (third.weight, third.reps, third.completed) == (
-            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, True), \
-            'a completed set was rewritten by a later propagation'
+        assert (second.weight, second.reps) == (82.5, 8)
+        assert (third.weight, third.reps, third.completed, third.is_default_seeded) == (
+            20.0, 8, True, True), 'a completed set was rewritten by a later propagation'
 
 
 def test_a_propagated_correction_becomes_the_real_plan_not_a_new_placeholder(client, virgin_session):
@@ -579,10 +601,11 @@ def test_correcting_set_two_does_not_propagate_backwards_to_set_one(client, virg
     BACKWARDS too -- sailed through the whole suite untouched. Correct set 2
     instead, and assert set 1, still pending and still on the untouched
     default, is left alone (while forward propagation to set 3 still works,
-    so this isn't just a weaker version of the forward test)."""
+    so this isn't just a weaker version of the forward test). Holds for
+    _fill_blanks_after too: set 1 is blank, and a later set's numbers must
+    not fill it."""
     from extensions import db
     from models import SessionExercise, SessionSet
-    from features.gym import stats
     live_id, exercise_id = virgin_session
 
     client.post(f'/gym/session/{live_id}/exercises/add',
@@ -599,7 +622,7 @@ def test_correcting_set_two_does_not_propagate_backwards_to_set_one(client, virg
         first = db.session.get(SessionSet, first_id)
         third = db.session.get(SessionSet, third_id)
         assert (first.weight, first.reps, first.completed, first.is_default_seeded) == (
-            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True), \
+            None, None, False, True), \
             'an earlier pending default set must not be propagated to backwards'
         assert (third.weight, third.reps, third.is_default_seeded) == (82.5, 8, False), \
             'forward propagation from set 2 to set 3 must still work'
@@ -612,15 +635,18 @@ def test_retyping_an_already_hand_edited_set_does_not_re_propagate(client, virgi
 
     Hand-edit set 2 once (a deliberate drop set, not yet confirmed): its own
     is_default_seeded clears, same as any hand-edit, and it is not completed
-    so no propagation fires. Set 3 is untouched, still sitting on the plain
-    default. Retype set 2 a SECOND time, to a different weight, and complete
-    it -- without the was_default_seeded guard this reads as merely
-    `completed and weight_changed` and fires propagation again, even though
-    set 2 was no longer an untouched default at the moment this second edit
-    arrived, and would incorrectly stamp set 3 with set 2's new number."""
+    so no propagation fires. Set 3 gets a rep count typed through the sheet
+    -- a typed rep count leaves the flag standing, so set 3 is still an
+    untouched plan with its weight blank. Retype set 2 a SECOND time, new
+    weight AND reps, and complete it -- without the was_default_seeded guard
+    this reads as merely `completed and changed` and fires propagation again,
+    even though set 2 was no longer an untouched default at the moment this
+    second edit arrived, and would stamp set 3's typed reps with set 2's.
+
+    Set 3's blank weight does take set 2's: filling a blank overrides
+    nothing (_fill_blanks_after). Only its typed reps must survive."""
     from extensions import db
     from models import SessionExercise, SessionSet
-    from features.gym import stats
     live_id, exercise_id = virgin_session
 
     client.post(f'/gym/session/{live_id}/exercises/add',
@@ -633,19 +659,22 @@ def test_retyping_an_already_hand_edited_set_does_not_re_propagate(client, virgi
     # First correction: a deliberate drop set on set 2, not yet confirmed.
     client.post(f'/gym/set/{second_id}/toggle_complete',
                 data={'completed': '0', 'weight': '40.0', 'reps': '12'})
+    client.post(f'/gym/set/{third_id}/update', data={'reps': '10'})
     with flask_app.app_context():
         second = db.session.get(SessionSet, second_id)
+        third = db.session.get(SessionSet, third_id)
         assert second.is_default_seeded is False, \
             'fixture assumption broken: a changed weight must clear is_default_seeded'
+        assert (third.weight, third.reps, third.is_default_seeded) == (None, 10, True), \
+            'fixture assumption broken: typed reps alone must leave the flag'
 
-    # Second correction: retype set 2 to a different weight and confirm it.
+    # Second correction: retype set 2, weight and reps, and confirm it.
     client.post(f'/gym/set/{second_id}/toggle_complete',
-                data={'completed': '1', 'weight': '45.0', 'reps': '12'})
+                data={'completed': '1', 'weight': '45.0', 'reps': '15'})
 
     with flask_app.app_context():
         third = db.session.get(SessionSet, third_id)
-        assert (third.weight, third.reps, third.completed, third.is_default_seeded) == (
-            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True), \
+        assert (third.weight, third.reps, third.completed) == (45.0, 10, False), \
             'a retype of an already hand-edited set must not re-propagate to a later default sibling'
 
 
@@ -693,17 +722,17 @@ def test_correcting_via_gym_update_set_also_propagates(client, virgin_session):
 def test_gym_update_set_does_not_propagate_on_a_finished_session(client, virgin_session):
     """F2 (polish): gym_update_set had no liveness guard, and the finished
     session's quiet "Sätze & Notizen" disclosure (session_finished.html)
-    posts to this same route. Confirm set 1 at the untouched default
-    (weight/reps unchanged, so is_default_seeded survives -- same
-    unchanged-value pattern as test_a_completed_set_is_never_rewritten_by_propagation
-    above), finish the session, then correct set 1's weight from the
-    finished page. Sets 2 and 3 were NEVER PERFORMED -- rewriting them
-    inside an already-closed historical record is wrong even though most
-    consumers filter on `completed`, because the JSON export does not. Only
-    set 1, the one actually edited, may change."""
+    posts to this same route. Set 1 was confirmed at the old 20 kg x 8
+    placeholder unchanged, so is_default_seeded survived on it (built
+    directly, as the old code left it -- see
+    test_a_completed_set_is_never_rewritten_by_propagation above); the
+    session is finished, then set 1's weight is corrected from the finished
+    page. Sets 2 and 3 were NEVER PERFORMED -- rewriting them inside an
+    already-closed historical record is wrong even though most consumers
+    filter on `completed`, because the JSON export does not. Only set 1, the
+    one actually edited, may change."""
     from extensions import db
     from models import SessionExercise, SessionSet, WorkoutSession
-    from features.gym import stats
     live_id, exercise_id = virgin_session
 
     client.post(f'/gym/session/{live_id}/exercises/add',
@@ -712,20 +741,8 @@ def test_gym_update_set_does_not_propagate_on_a_finished_session(client, virgin_
         se = SessionExercise.query.filter_by(session_id=live_id).one()
         ordered = sorted(se.sets, key=lambda s: s.position)
         first_id, second_id, third_id = [s.id for s in ordered]
-
-    # Confirm set 1 at the untouched default -- unchanged value, so
-    # gym_toggle_set_complete's own "changed by hand" branch never fires and
-    # is_default_seeded survives.
-    client.post(f'/gym/set/{first_id}/toggle_complete',
-                data={'completed': '1',
-                      'weight': str(stats.DEFAULT_PLAN_WEIGHT),
-                      'reps': str(stats.DEFAULT_PLAN_REPS)})
-    with flask_app.app_context():
         first = db.session.get(SessionSet, first_id)
-        assert (first.completed, first.is_default_seeded) == (True, True), \
-            'fixture assumption broken: confirming the unchanged default must not clear is_default_seeded'
-
-    with flask_app.app_context():
+        first.weight, first.reps, first.completed = 20.0, 8, True
         session_ = db.session.get(WorkoutSession, live_id)
         session_.finished_at = dt.datetime.utcnow()
         db.session.commit()
@@ -740,11 +757,9 @@ def test_gym_update_set_does_not_propagate_on_a_finished_session(client, virgin_
         third = db.session.get(SessionSet, third_id)
         assert (first.weight, first.reps) == (82.5, 8), \
             'correcting a finished set must still apply to the set actually edited'
-        assert (second.weight, second.reps, second.is_default_seeded) == (
-            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, True), \
+        assert (second.weight, second.reps, second.is_default_seeded) == (None, None, True), \
             'a never-performed sibling must not be rewritten on a finished session'
-        assert (third.weight, third.reps, third.is_default_seeded) == (
-            stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, True), \
+        assert (third.weight, third.reps, third.is_default_seeded) == (None, None, True), \
             'a never-performed sibling must not be rewritten on a finished session'
 
 
@@ -752,7 +767,7 @@ def test_gym_update_set_does_not_propagate_on_a_finished_session(client, virgin_
 # (2026-09-23); its refusal is pinned in test_gym_exercise_ownership.py.
 
 
-def test_replacing_an_exercise_with_no_history_seeds_a_default_plan(client, virgin_session):
+def test_replacing_an_exercise_with_no_history_seeds_a_blank_plan(client, virgin_session):
     """F2 regression: gym_replace_session_exercise created the substitute
     SessionExercise without ever calling _seeded_sets, the only remaining
     route that produced the zero-sets shape _live_context treats as "live
@@ -790,9 +805,9 @@ def test_replacing_an_exercise_with_no_history_seeds_a_default_plan(client, virg
                 session_id=live_id, exercise_id=substitute_exercise_id).one()
             assert [(s.position, s.weight, s.reps, s.completed, s.is_default_seeded)
                     for s in substitute.sets] == [
-                (1, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True),
-                (2, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True),
-                (3, stats.DEFAULT_PLAN_WEIGHT, stats.DEFAULT_PLAN_REPS, False, True),
+                (1, None, None, False, True),
+                (2, None, None, False, True),
+                (3, None, None, False, True),
             ]
             assert substitute.replaces_id == original_id
 
@@ -810,3 +825,211 @@ def test_replacing_an_exercise_with_no_history_seeds_a_default_plan(client, virg
             if doomed is not None:
                 db.session.delete(doomed)
                 db.session.commit()
+
+
+# V2 (docs/superpowers/plans/2026-09-23-gym-first-run-workflows.md): the plan
+# for an exercise with no history waits blank, the lifter types the first set.
+
+
+def _add_and_ids(client, live_id, exercise_id):
+    """Add the exercise through the route: its SessionExercise id, and its set
+    ids in position order."""
+    from models import SessionExercise
+    client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
+    with flask_app.app_context():
+        se = SessionExercise.query.filter_by(session_id=live_id, exercise_id=exercise_id).one()
+        return se.id, [s.id for s in sorted(se.sets, key=lambda s: s.position)]
+
+
+def test_a_blank_set_cannot_be_logged(client, virgin_session):
+    """There is no lift for a set without its numbers to say. The live screen
+    never asks -- its button asks for the missing number first -- so this is a
+    stale page or a replay: the set stays open, keeps whatever number it did
+    carry, starts no rest, and fills nothing after it."""
+    from extensions import db
+    from models import SessionSet, WorkoutSession
+    live_id, exercise_id = virgin_session
+    _se_id, (first_id, second_id, _third_id) = _add_and_ids(client, live_id, exercise_id)
+
+    client.post(f'/gym/set/{first_id}/toggle_complete', data={'completed': '1'})
+    client.post(f'/gym/set/{first_id}/toggle_complete', data={'completed': '1', 'weight': '60'})
+
+    with flask_app.app_context():
+        first = db.session.get(SessionSet, first_id)
+        assert (first.weight, first.reps, first.completed, first.completed_at) == (
+            60.0, None, False, None)
+        assert db.session.get(WorkoutSession, live_id).resting_set_id is None
+        second = db.session.get(SessionSet, second_id)
+        assert (second.weight, second.reps, second.completed) == (None, None, False)
+
+
+def test_the_first_numbers_fill_the_plan_even_at_the_old_placeholder(client, virgin_session):
+    """20 kg x 8 used to be the placeholder, so typing exactly that was no
+    change and carried nowhere -- the lifter retyped it on every set. A blank
+    has no such number: whatever is typed first carries."""
+    from extensions import db
+    from models import SessionSet
+    live_id, exercise_id = virgin_session
+    _se_id, set_ids = _add_and_ids(client, live_id, exercise_id)
+
+    client.post(f'/gym/set/{set_ids[0]}/toggle_complete',
+                data={'completed': '1', 'weight': '20.0', 'reps': '8'})
+
+    with flask_app.app_context():
+        sets = [db.session.get(SessionSet, set_id) for set_id in set_ids]
+        assert [(s.weight, s.reps, s.completed) for s in sets] == [
+            (20.0, 8, True), (20.0, 8, False), (20.0, 8, False)]
+
+
+def test_reps_logged_after_a_sheet_typed_weight_still_reach_the_blanks(client, virgin_session):
+    """A weight typed into the exercise sheet before the first set is logged
+    carries the weight and clears every flag -- so the carry cannot move the
+    reps logged afterwards. _fill_blanks_after does: sets 2/3 end up with the
+    logged set's numbers, not a weight and a blank."""
+    from extensions import db
+    from models import SessionSet
+    live_id, exercise_id = virgin_session
+    _se_id, (first_id, second_id, third_id) = _add_and_ids(client, live_id, exercise_id)
+
+    client.post(f'/gym/set/{first_id}/update', data={'weight': '60'})
+    with flask_app.app_context():
+        second = db.session.get(SessionSet, second_id)
+        assert (second.weight, second.reps, second.is_default_seeded) == (60.0, None, False), \
+            'fixture assumption broken'
+
+    client.post(f'/gym/set/{first_id}/toggle_complete',
+                data={'completed': '1', 'weight': '60', 'reps': '10'})
+
+    with flask_app.app_context():
+        for set_id in (second_id, third_id):
+            s = db.session.get(SessionSet, set_id)
+            assert (s.weight, s.reps, s.completed, s.is_default_seeded) == (60.0, 10, False, False)
+
+
+def test_a_finished_workouts_open_blanks_stay_blank(client, virgin_session):
+    """Filling blanks is for the plan ahead of a live lifter. A set logged
+    into a finished workout from anywhere but the live screen (which is
+    refused outright) leaves the never-lifted sets after it as they were --
+    the rule gym_update_set's carry keeps too."""
+    from extensions import db
+    from models import SessionSet, WorkoutSession
+    live_id, exercise_id = virgin_session
+    _se_id, (first_id, second_id, _third_id) = _add_and_ids(client, live_id, exercise_id)
+    # Typed in the sheet while live: the weight carries to sets 2/3 and every
+    # flag clears, so only _fill_blanks_after could still reach their reps.
+    client.post(f'/gym/set/{first_id}/update', data={'weight': '60'})
+    with flask_app.app_context():
+        db.session.get(WorkoutSession, live_id).finished_at = dt.datetime.utcnow()
+        db.session.commit()
+
+    client.post(f'/gym/set/{first_id}/toggle_complete', data={'completed': '1', 'reps': '10'})
+
+    with flask_app.app_context():
+        first = db.session.get(SessionSet, first_id)
+        assert (first.weight, first.reps, first.completed) == (60.0, 10, True)
+        second = db.session.get(SessionSet, second_id)
+        assert (second.weight, second.reps) == (60.0, None)
+
+
+def test_the_payload_marks_a_first_time_until_a_set_lands(client, virgin_session):
+    """first_time names the exercises the lifter meets for the first time --
+    the live screen's "Erstes Mal" note. This one is a throwaway row off the
+    list, so it has no variants to name; once a set of it is logged it is no
+    longer a first time. live_floor is where a blank kg stepper's "+" lands:
+    with no bar and no stack, one step."""
+    from features.gym import stats
+    live_id, exercise_id = virgin_session
+    se_id, set_ids = _add_and_ids(client, live_id, exercise_id)
+
+    payload = client.get(f'/gym/session/{live_id}/detail.json').get_json()
+    assert payload['first_time'] == {str(se_id): []}
+    assert payload['live_floor'] == stats.DEFAULT_INCREMENT
+    assert [(s['weight'], s['reps']) for s in payload['visible_exercises'][0]['sets']] == [
+        (None, None)] * 3
+
+    client.post(f'/gym/set/{set_ids[0]}/toggle_complete',
+                data={'completed': '1', 'weight': '60', 'reps': '10'})
+    payload = client.get(f'/gym/session/{live_id}/detail.json').get_json()
+    assert payload['first_time'] == {}
+
+
+@pytest.fixture()
+def fresh_lifter(client):
+    """A lifter of their own, logged in on `client`: a history this suite
+    controls completely, which the admin's dev-database record is not."""
+    from werkzeug.security import generate_password_hash
+    from extensions import db
+    from models import AppUser, ExerciseSettings, PendingPush, WorkoutSession
+    with flask_app.app_context():
+        user = AppUser(username='pytest first time lifter',
+                       password_hash=generate_password_hash('x'), is_admin=False)
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
+    with client.session_transaction() as flask_session:
+        flask_session['user_id'] = user_id
+    yield user_id
+    with flask_app.app_context():
+        for session_ in WorkoutSession.query.filter_by(user_id=user_id).all():
+            session_.resting_set_id = None
+            PendingPush.query.filter_by(session_id=session_.id).delete()
+            db.session.commit()
+            db.session.delete(session_)
+            db.session.commit()
+        ExerciseSettings.query.filter_by(user_id=user_id).delete()
+        db.session.delete(db.session.get(AppUser, user_id))
+        db.session.commit()
+
+
+def test_a_first_time_names_the_lifters_other_variants(client, fresh_lifter):
+    """The "Erstes Mal" note's references: up to two other variants of the
+    movement the lifter has done, most-done first, each with the top set of
+    the latest workout that had it. A deload's numbers are deliberately
+    light, so a deload workout does not count -- and a variant done only in
+    deloads gives way to the next one, though it ranks first. live_floor is
+    the empty bar of a barbell lift."""
+    from extensions import db
+    from conftest import list_exercise
+    from models import SessionExercise, SessionSet, WorkoutSession
+    now = dt.datetime.utcnow()
+    with flask_app.app_context():
+        rows = {key: list_exercise(key) for key in (
+            'barbell_bench_press', 'dumbbell_bench_press', 'plate_bench_press',
+            'smith_bench_press')}
+        ids = {key: row.id for key, row in rows.items()}
+        per_side = {key: row.is_unilateral for key, row in rows.items()}
+
+        def workout(days_ago, deload, lifts):
+            session_ = WorkoutSession(
+                name='pytest first time history', user_id=fresh_lifter,
+                started_at=now - dt.timedelta(days=days_ago),
+                finished_at=now - dt.timedelta(days=days_ago) + dt.timedelta(minutes=50),
+                is_deload=deload, deload_pct=70 if deload else None)
+            for position, (key, sets) in enumerate(lifts, start=1):
+                row = SessionExercise(exercise_id=ids[key], position=position)
+                row.sets = [SessionSet(position=j, weight=weight, reps=reps, completed=True)
+                            for j, (weight, reps) in enumerate(sets, start=1)]
+                session_.exercises.append(row)
+            db.session.add(session_)
+
+        # Usage ranks: Multipresse 1 (two recent deloads), Maschine 2, Kurzhantel 3.
+        workout(1, True, [('smith_bench_press', [(30.0, 8)]), ('plate_bench_press', [(40.0, 8)])])
+        workout(2, True, [('smith_bench_press', [(30.0, 8)])])
+        workout(5, False, [('dumbbell_bench_press', [(26.0, 10), (26.0, 9)])])
+        workout(10, False, [('plate_bench_press', [(27.5, 10), (25.0, 12)])])
+        workout(20, False, [('dumbbell_bench_press', [(24.0, 10)])])
+        live = WorkoutSession(name='pytest first time live', user_id=fresh_lifter, started_at=now)
+        db.session.add(live)
+        db.session.commit()
+        live_id = live.id
+
+    se_id, _set_ids = _add_and_ids(client, live_id, ids['barbell_bench_press'])
+    payload = client.get(f'/gym/session/{live_id}/detail.json').get_json()
+
+    assert payload['first_time'] == {str(se_id): [
+        {'label': 'Maschine, Scheiben', 'weight': 27.5, 'reps': 10,
+         'per_side': per_side['plate_bench_press']},
+        {'label': 'Kurzhantel', 'weight': 26.0, 'reps': 10,
+         'per_side': per_side['dumbbell_bench_press']},
+    ]}
+    assert payload['live_floor'] == 20.0

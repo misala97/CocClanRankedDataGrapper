@@ -1,6 +1,4 @@
 {
-  "default_plan_reps": 8,
-  "default_plan_weight": 20.0,
   "deload_applied": false,
   "deload_default_pct": 70,
   "deload_pcts": [
@@ -2064,6 +2062,7 @@
       "workouts": 0
     }
   ],
+  "first_time": {},
   "has_completed_set": true,
   "list_groups": [
     "Brust",
@@ -2077,6 +2076,7 @@
     "Bauch",
     "Unterarme"
   ],
+  "live_floor": 2.0,
   "live_id": 10,
   "live_increment": 2.0,
   "live_index": 1,
@@ -2142,7 +2142,7 @@
     "notes": null,
     "rest_ends_at": null,
     "resting_set_id": null,
-    "started_at": "2026-09-23T12:57:57",
+    "started_at": "2026-09-23T14:05:19",
     "structure_version": 0,
     "template_id": null,
     "template_name": null

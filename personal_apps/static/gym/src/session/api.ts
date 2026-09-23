@@ -31,9 +31,10 @@ export const api = {
   /** States the state it wants rather than asking for a flip, which is what
    *  makes gym_toggle_set_complete idempotent -- a second tap is a no-op
    *  rather than an un-log. */
-  toggleSet: (setId: number, completed: boolean, weight: number, reps: number) =>
+  toggleSet: (setId: number, completed: boolean, weight: number | null, reps: number | null) =>
+    // A blank goes as an empty field, which the server reads as "leave it".
     post(`/gym/set/${setId}/toggle_complete`,
-      { completed: completed ? '1' : '0', weight, reps }),
+      { completed: completed ? '1' : '0', weight: weight ?? '', reps: reps ?? '' }),
 
   /** gym_add_set creates the set already completed and starts its rest, which
    *  is what "Satz geschafft" means everywhere else on this screen. It cannot

@@ -98,18 +98,18 @@ NO_GROUP_LABEL = 'Ohne Muskelgruppe'
 # side at a time.
 DEFAULT_INCREMENT = 2.5
 
-# What an exercise with no history at all plans for. A template stores only an
-# ordered list of exercises -- no set count, no weight, no reps -- so the first
-# run of a NEW template hits this too, not just a freestyle workout. Before
-# these existed such an exercise arrived with no sets, and the live screen (which
-# assumes a plan throughout) called it finished the moment one set was logged.
+# How many sets an exercise with no history at all plans for. A template stores
+# only an ordered list of exercises -- no set count, no weight, no reps -- so the
+# first run of a NEW template hits this too, not just a freestyle workout.
+# Before this existed such an exercise arrived with no sets, and the live screen
+# (which assumes a plan throughout) called it finished the moment one set was
+# logged.
 #
-# Three sets is the shape almost every plan starts at. The weight is a
-# placeholder and is expected to be wrong -- it is cheap to correct because the
-# steppers' readout can be typed into (see session_detail.html).
+# Three sets is the shape almost every plan starts at. The sets carry no
+# numbers: a 20 kg x 8 placeholder used to fill them, which was wrong for
+# almost every exercise and looked like advice. The lifter types the first set
+# and the rest take it (workout._propagate_default_correction).
 DEFAULT_PLAN_SETS = 3
-DEFAULT_PLAN_REPS = 8
-DEFAULT_PLAN_WEIGHT = 20.0
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,27 @@ describe('SetRow', () => {
     expect(screen.getByRole('button')).toHaveTextContent('62,5 × 8')
   })
 
+  it('names a set still waiting for its numbers instead of inventing some', async () => {
+    // A blank plan (an exercise with no history) reads "Satz 2", and tapping
+    // it picks it like any open chip -- the steppers decide the numbers.
+    const user = userEvent.setup()
+    const onToggle = vi.fn()
+    render(<SetRow {...props} ordinal={2} isNext onToggle={onToggle}
+      set={aSet({ weight: null, reps: null })} />)
+    const chip = screen.getByRole('button', { name: /^Satz 2, noch ohne Zahlen/ })
+    expect(chip).toHaveTextContent(/^Satz 2$/)
+    expect(chip.className).toBe('set is-blank is-now')
+
+    await user.click(chip)
+    expect(onToggle).toHaveBeenCalledWith(100, true)
+  })
+
+  it('says which number a half-blank set still lacks', () => {
+    render(<SetRow {...props} set={aSet({ weight: 40, reps: null })} />)
+    expect(screen.getByRole('button', { name: /^Satz 1, noch ohne Wdh\./ }))
+      .toHaveTextContent(/^Satz 1$/)
+  })
+
   it('is plain when open, filled when done, gold when a record', () => {
     const { rerender } = render(<SetRow {...props} set={aSet()} />)
     expect(screen.getByRole('button').className).toBe('set')

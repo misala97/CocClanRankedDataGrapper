@@ -369,8 +369,12 @@ class SessionSet(db.Model):
     id                  = db.Column(db.Integer, primary_key=True, autoincrement=True)
     session_exercise_id = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id'), nullable=False)
     position            = db.Column(db.Integer, nullable=False, default=0)
-    weight              = db.Column(db.Float, nullable=False)
-    reps                = db.Column(db.Integer, nullable=False)
+    # NULL = not decided yet: a set planned for an exercise with no history
+    # (_seeded_sets) waits blank for the lifter to type its numbers. Only ever
+    # on a set that is not completed -- gym_toggle_set_complete refuses to log
+    # a set with a blank, and nothing writes NULL over a number.
+    weight              = db.Column(db.Float, nullable=True)
+    reps                = db.Column(db.Integer, nullable=True)
     completed           = db.Column(db.Boolean, nullable=False, default=False)  # False for sets pre-filled from a template/history and not yet actually performed this session
     # When this set actually landed. The rest between two sets is the gap
     # between their stamps, which is the only way the app can compare the rest
@@ -415,9 +419,10 @@ class SessionSet(db.Model):
     # a deload prescribes a weight AND a rep count, and toggling it back off
     # has to return both.
     base_reps           = db.Column(db.Integer, nullable=True)
-    # True for exactly the sets _seeded_sets invents when an exercise has no
-    # history at all (stats.DEFAULT_PLAN_WEIGHT/REPS) -- never for a set
-    # seeded from real history, and never for one a lifter actually logged.
+    # True for exactly the sets _seeded_sets plans when an exercise has no
+    # history at all (blank since c5a1d8e3f207, a 20 kg x 8 placeholder
+    # before) -- never for a set seeded from real history, and never for one
+    # a lifter actually logged.
     #
     # gym_toggle_deload reads this to refuse to scale these sets: a deload is
     # a percentage of a real working weight, and there isn't one here, so
@@ -425,7 +430,8 @@ class SessionSet(db.Model):
     # invariant used to depend on `weight` never happening to already equal
     # the default, and on the toggle always running before the exercise was
     # added -- both false in general, so it needed its own column rather than
-    # being inferred).
+    # being inferred). _propagate_default_correction reads it too: the first
+    # numbers typed into such a plan carry to its later sets.
     #
     # Cleared the same moment base_weight/base_reps are, and for the same
     # reason: a hand-typed weight is ground truth from now on, so the number

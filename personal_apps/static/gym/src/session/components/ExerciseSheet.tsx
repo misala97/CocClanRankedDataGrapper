@@ -256,8 +256,9 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
   onSave(setId: number, weight: number, reps: number): void
   onDelete(setId: number, ordinal: number): void
 }) {
-  const [weight, setWeight] = useState(String(set.weight))
-  const [reps, setReps] = useState(String(set.reps))
+  // A blank planned set starts with empty fields, not the text "null".
+  const [weight, setWeight] = useState(set.weight === null ? '' : String(set.weight))
+  const [reps, setReps] = useState(set.reps === null ? '' : String(set.reps))
   // A cleared field used to save as 0 -- Number('') is 0 -- and overwrite the
   // real numbers. Invalid or unchanged, there is nothing to save.
   const parsed = parseSetInput(weight, reps)
@@ -292,11 +293,14 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
   )
 }
 
-/** What the add row starts from: the last set of this exercise, else the
- *  session's suggestion, else nothing. */
+/** What the add row starts from: the last set of this exercise that has its
+ *  numbers (a blank plan has none yet), else the session's suggestion, else
+ *  nothing. */
 function addSeed(exercise: LiveExercise, suggestion: Suggestion | null) {
-  const last = exercise.sets[exercise.sets.length - 1]
-  if (last !== undefined) return { weight: last.weight, reps: last.reps }
+  for (let i = exercise.sets.length - 1; i >= 0; i -= 1) {
+    const { weight, reps } = exercise.sets[i]!
+    if (weight !== null && reps !== null) return { weight, reps }
+  }
   return suggestion
 }
 

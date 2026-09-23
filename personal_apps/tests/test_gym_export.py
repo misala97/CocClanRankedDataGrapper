@@ -271,6 +271,14 @@ def test_unfinished_set_exports_a_null_timestamp():
     assert payload['finished_at'] is None
 
 
+def test_a_blank_planned_set_exports_null_numbers():
+    """An exercise with no history is planned with no numbers until the
+    lifter types the first set (V2). An open set can therefore carry nulls;
+    the export says so rather than inventing a number the lifter never saw."""
+    payload = export.set_payload(_set(weight=None, reps=None, completed=False, completed_at=None))
+    assert (payload['weight'], payload['reps'], payload['completed']) == (None, None, False)
+
+
 def test_a_completed_pre_migration_set_also_exports_a_null_timestamp():
     """completed_at was added in migration d1f6b83c25e9. Every set ticked
     before that migration ran carries completed=True, completed_at=None --

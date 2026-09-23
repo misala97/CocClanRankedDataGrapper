@@ -184,13 +184,13 @@ def test_an_added_exercise_appears_on_the_followers_side(linked_pair):
         assert carried.exercise_id == squat.id, 'the follower got a copy, not the one row'
 
 
-def test_a_mid_workout_addition_seeds_the_followers_default_plan(linked_pair):
+def test_a_mid_workout_addition_seeds_the_followers_blank_plan(linked_pair):
     """F4 (gym cold-start review): an exercise the leader adds mid-workout
     must not arrive on the follower's side as an empty slot -- that
     reproduces this feature's headline bug for the follower too, one
     confirmed set both creating and completing the plan. Neither side has
     ever performed this exercise, so the follower's mirrored row must get the
-    same no-history default plan _seeded_sets hands every other empty slot."""
+    same no-history blank plan _seeded_sets hands every other empty slot."""
     from extensions import db
     from features.gym import sharing, stats
     from models import Exercise, SessionExercise, SharedSession, WorkoutSession
@@ -215,12 +215,12 @@ def test_a_mid_workout_addition_seeds_the_followers_default_plan(linked_pair):
         assert len(se.sets) == stats.DEFAULT_PLAN_SETS, (
             f'mid-workout addition arrived on the follower with {len(se.sets)} sets, '
             'not seeded like every other path that creates a SessionExercise')
-        assert {s.weight for s in se.sets} == {stats.DEFAULT_PLAN_WEIGHT}
-        assert {s.reps for s in se.sets} == {stats.DEFAULT_PLAN_REPS}
+        assert {s.weight for s in se.sets} == {None}
+        assert {s.reps for s in se.sets} == {None}
         assert {s.base_weight for s in se.sets} == {None}
         assert all(s.is_default_seeded for s in se.sets), (
             'default-seeded follower sets must carry the marker too, or a later '
-            'deload on the follower\'s side could scale an invented number (F1)')
+            'deload on the follower\'s side could treat the plan as a real one (F1)')
 
 
 def test_a_mid_workout_addition_seeds_from_the_followers_own_history_not_the_leaders(linked_pair):

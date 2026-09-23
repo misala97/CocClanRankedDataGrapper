@@ -102,6 +102,22 @@ describe('Queue', () => {
     expect(live).toHaveTextContent(`${doneCount}/${liveSe.sets.length}`)
   })
 
+  it('says "neu" for a row planned blank, not a weight it never had', () => {
+    // An exercise with no history waits with no numbers (V2); "3 × 20,0" was
+    // the placeholder talking.
+    const other = exercises.find((se) => se.id !== liveId)!
+    const blank: LiveExercise = {
+      ...other, skipped: false,
+      sets: [1, 2, 3].map((n) => ({
+        id: 900 + n, weight: null, reps: null, completed: false, base_weight: null,
+      })),
+    }
+    const { container } = render(<Queue liveId={liveId} onReorder={noop}
+      exercises={exercises.map((se) => (se.id === other.id ? blank : se))} />)
+    const row = container.querySelector(`[data-se-id="${other.id}"]`)!
+    expect(row.querySelector('.queue__load')).toHaveTextContent(/^neu$/)
+  })
+
   it('opens that exercise own sheet from its row', async () => {
     // One interaction for every exercise instead of a menu on each.
     const user = userEvent.setup()
