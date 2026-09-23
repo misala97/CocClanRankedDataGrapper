@@ -5,10 +5,15 @@ import { useSaveState } from '../stores'
 import { parseSetInput } from '../../setInput'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
+import { Choice } from '../../settings/Choice'
+import { REST_MAX, REST_MIN, REST_NUDGE, clock, kg, restChoices } from '../../settings/values'
 
 export interface ExerciseSheetActions {
-  onRestChange(seconds: number | null): void
-  onIncrementChange(kg: number | null): void
+  /** "Pause heute". The setting's own value is sent as itself; the server
+   *  stores it as nothing, so the row follows the setting again. */
+  onRestChange(seconds: number): void
+  /** One level down: "Deine Einstellungen", which hold for every workout. */
+  onOpenSettings(): void
   onMetaSave(meta: { pain: boolean; notes: string }): void
   onSetUpdate(setId: number, weight: number, reps: number): void
   onSetDelete(setId: number): void
@@ -38,14 +43,15 @@ interface Props extends ExerciseSheetActions {
  * can do to it. This replaced a menu on every row and an expanded panel per
  * exercise -- the row itself is the affordance.
  *
- * The groups are not cosmetic. Rest belongs to this session, the increment
- * belongs to the exercise and outlives the workout, and a twinge or a note
- * belongs to today. Identical styling with no caption would make those
- * opposite lifetimes invisible, which is why each carries its own note.
+ * The groups are not cosmetic. "Pause heute" belongs to this workout, the
+ * lifter's settings outlive it, and a twinge or a note belongs to today.
+ * Side by side, two rest fields read as one; so today's rest is here, with
+ * the setting's value marked in its row, and the settings are one level
+ * down, in a sheet that says they hold for every workout.
  */
 export function ExerciseSheet({
   exercise, catalogue, suggestion, canMakeLive,
-  onRestChange, onIncrementChange, onMetaSave, onSetUpdate, onSetDelete,
+  onRestChange, onOpenSettings, onMetaSave, onSetUpdate, onSetDelete,
   onAddSet, onToggleSkip, onReplace, onRemove, onShowProgress,
   onMakeLive,
 }: Props) {
@@ -83,38 +89,38 @@ export function ExerciseSheet({
 
   return (
     <Sheet id={`sheet-ex-${exercise.id}`} title={exercise.name}>
-      {/* One group, one caption naming both lifetimes: the rest is this
-          session's, the increment is the exercise's and outlives the workout.
-          Both save on blur, as before. */}
+      {/* Today's rest, from the one in force: the setting's value is marked
+          ("deine" or "Liste") and one tap away, and every tap saves. */}
       <div className="sheet__group">
         <div className="sheet__group-head">
-          <span className="label">Einstellungen</span>
+          <span className="label">Pause heute</span>
         </div>
-        <div className="sheet__save-row">
-          <div className="field">
-            <label className="label" htmlFor={`rest-${exercise.id}`}>Pause (Sekunden)</label>
-            <input type="number" id={`rest-${exercise.id}`} min="0"
-              className="input input--num"
-              defaultValue={exercise.rest_seconds ?? ''}
-              onBlur={(e) => onRestChange(
-                e.target.value === '' ? null : Number(e.target.value))} />
-          </div>
-          <div className="field">
-            <label className="label" htmlFor={`increment-${exercise.id}`}>Schrittweite (kg)</label>
-            <input type="number" id={`increment-${exercise.id}`} step="0.25" min="0"
-              className="input input--num" placeholder="2,5"
-              defaultValue={exercise.increment}
-              onBlur={(e) => onIncrementChange(
-                e.target.value === '' ? null : Number(e.target.value))} />
-          </div>
-        </div>
-        <p className="sheet__note">Pause gilt für dieses Workout, Schrittweite für die Übung.</p>
+        <Choice label="Pause heute" values={restChoices(exercise.rest_setting, 2)}
+          on={exercise.rest_seconds ?? exercise.rest_setting} mark={exercise.rest_setting}
+          markWord={exercise.rest_setting_mine ? 'deine' : 'Liste'} format={clock}
+          onPick={(seconds) => onRestChange(seconds)}
+          nudge={{
+            step: REST_NUDGE, min: REST_MIN, max: REST_MAX,
+            label: 'nach jedem Satz', keyNoun: '15 Sekunden',
+          }} />
+        <p className="sheet__note">Eine andere Zeit gilt nur für dieses Workout.</p>
+        <button type="button" className="sheet-row" onClick={onOpenSettings}>
+          <span className="sheet-row__lead"><Icon name="edit" /></span>
+          <span className="sheet-row__main">
+            <span className="sheet-row__name">Deine Einstellungen</span>
+            <span className="sheet-row__meta">
+              {(exercise.rest_setting === null ? '' : `Pause ${clock(exercise.rest_setting)} · `)
+                + `Schritt ${kg(exercise.increment)} kg — gelten immer`}
+            </span>
+          </span>
+          <span className="sheet-row__chev"><Icon name="forward" /></span>
+        </button>
       </div>
 
-      {/* The opposite lifetime to the increment above: a twinge and a note
+      {/* The opposite lifetime to the settings above: a twinge and a note
           belong to this workout, not to the machine.
 
-          Both save by themselves, like the settings above. The flag used to
+          Both save by themselves, like the rest above. The flag used to
           wait for a Speichern button beside the note, so ticking it and
           closing the sheet kept the tick on screen and saved nothing. */}
       <div className="sheet__group">

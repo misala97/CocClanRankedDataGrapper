@@ -259,6 +259,21 @@ class ExerciseSettings(db.Model):
     bar_weight           = db.Column(db.Float, nullable=True)
 
 
+class LifterSettings(db.Model):
+    """What one lifter set for all of their exercises at once: today the
+    rest after each set ("Deine Pause", V3).
+
+    NULL -- or no row -- means "by kind of exercise", the list's rest for
+    each. An exercise's own rest in gym_exercise_settings is then only an
+    exception to this one; exercises.setups() resolves the three, and
+    exercises.set_rest_for_all() is the one writer.
+    """
+    __tablename__ = 'gym_lifter_settings'
+    user_id      = db.Column(db.Integer, db.ForeignKey('app_user.id'), primary_key=True,
+                             autoincrement=False)
+    rest_seconds = db.Column(db.Integer, nullable=True)
+
+
 class WorkoutTemplate(db.Model):
     __tablename__ = 'gym_workout_templates'
     id      = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -280,7 +295,12 @@ class TemplateExercise(db.Model):
     template_id  = db.Column(db.Integer, db.ForeignKey('gym_workout_templates.id'), nullable=False)
     exercise_id  = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
     position     = db.Column(db.Integer, nullable=False, default=0)
-    rest_seconds = db.Column(db.Integer, nullable=True)  # captured from the session's SessionExercise.rest_seconds when saved/updated
+    # Neither written nor read since V3 (2026-09-23): a routine holds no rest --
+    # the lifter's setting decides (exercises.setups). It used to capture the
+    # session's rest on save, which no screen ever set, and that copy then
+    # outvoted every later change of the setting. Old rows keep what they
+    # captured, so a rollback reads what it always read.
+    rest_seconds = db.Column(db.Integer, nullable=True)
 
     template = db.relationship('WorkoutTemplate', back_populates='exercises')
     exercise = db.relationship('Exercise')
@@ -332,7 +352,7 @@ class SessionExercise(db.Model):
     session_id   = db.Column(db.Integer, db.ForeignKey('gym_workout_sessions.id'), nullable=False)
     exercise_id  = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
     position     = db.Column(db.Integer, nullable=False, default=0)
-    rest_seconds = db.Column(db.Integer, nullable=True)  # rest time for this exercise in this workout; seeded from the lifter's rest for the exercise (exercises.setups), editable per session
+    rest_seconds = db.Column(db.Integer, nullable=True)  # this workout's own rest ("Pause heute"); NULL follows the lifter's setting (exercises.setups), read at each set, until the finish writes the rest in force (exercises.settle_rests). Rows from before V3 were seeded with the setting instead.
     replaces_id  = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True, unique=True)  # set when this row is a mid-workout substitute for another exercise in the same slot; unique so at most one substitute can ever point at a given original
     skipped      = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())  # True when this exercise is intentionally not being done this session; the row (and any already-completed sets) is kept as-is so a later "save/update as template" still includes it
     # The leader's SessionExercise this row mirrors, when this session is the

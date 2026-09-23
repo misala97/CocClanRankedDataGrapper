@@ -21,7 +21,7 @@ from models import (
     AppUser, WorkoutSession, PendingPush, SharedSession, STALE_SESSION_TIMEOUT,
 )
 from features.gym import stats
-from features.gym.exercises import list_values
+from features.gym.exercises import list_values, settle_rests
 from features.gym.scope import my_sessions
 from .. import sharing
 from ._blueprint import gym_bp
@@ -171,7 +171,9 @@ def _to_stack_steps(raw):
 def _exercise_meta(exercise, setup):
     """An exercise as one lifter sees it (schemas.ExerciseMeta): the list's
     facts, that lifter's effective settings (`setup`), and the list's own
-    values, which a blank field in the settings form falls back to."""
+    values, which a blank field in the settings form falls back to. `own`
+    names the settings that are the lifter's own value -- for the rest an
+    exception to `rest_for_all`, where they set one."""
     return {
         'id': exercise.id,
         'name': exercise.name,
@@ -184,6 +186,8 @@ def _exercise_meta(exercise, setup):
         'stack_kg': setup.stack_kg,
         'secondary_muscle_groups': exercise.secondary_muscle_groups,
         'list_defaults': list_values(exercise),
+        'own': sorted(setup.changed),
+        'rest_for_all': setup.rest_for_all,
     }
 
 
@@ -201,6 +205,7 @@ def _get_active_session():
         session_.finished_at = session_.started_at + STALE_SESSION_TIMEOUT
         session_.rest_ends_at = None
         session_.resting_set_id = None
+        settle_rests(session_)
         _cancel_pending_push(session_)
         # This is a second, differently-spelled site that stamps finished_at
         # (started_at + timeout, not utcnow()) -- the brief's suggested grep

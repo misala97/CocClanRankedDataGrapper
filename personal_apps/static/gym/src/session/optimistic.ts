@@ -178,3 +178,21 @@ export function setExerciseMeta(
         : se),
   }
 }
+
+/** "Pause heute". The setting's own value is stored as nothing -- the row
+ *  follows the setting again -- which is the server's rule too
+ *  (gym_update_session_exercise_rest). The rest already running keeps the
+ *  length it started with; that stays the server's to say. */
+export function setRest(
+  payload: SessionDetailPayload,
+  sessionExerciseId: number,
+  seconds: number,
+): SessionDetailPayload {
+  return {
+    ...payload,
+    visible_exercises: payload.visible_exercises.map((se) =>
+      se.id === sessionExerciseId
+        ? { ...se, rest_seconds: seconds === se.rest_setting ? null : seconds }
+        : se),
+  }
+}

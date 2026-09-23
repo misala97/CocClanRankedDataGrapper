@@ -632,32 +632,38 @@ def test_live_stepper_uses_the_lists_increment_without_a_setting(client, scratch
     assert embedded_payload(html)['live_increment'] == 5.0
 
 
-def test_session_sheet_writes_the_lifters_increment(client, scratch_increment_exercise):
+JSON = {'Accept': 'application/json'}
+
+
+def test_settings_sheet_writes_the_lifters_increment(client, scratch_increment_exercise):
+    """The workout's "Deine Einstellungen" sheet (V3) writes the step through
+    the exercise's own settings route, answered as JSON -- the route the
+    workout's own step field used to have is gone with the field."""
     from extensions import db
     from models import Exercise, SessionExercise
     _, session_exercise_id, exercise_id = scratch_increment_exercise
 
-    response = client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
-                           data={'weight_increment': '9'})
-    assert response.status_code == 302
+    response = client.post(f'/gym/exercises/{exercise_id}/update',
+                           data={'weight_increment': '9'}, headers=JSON)
+    assert response.status_code == 200
+    assert response.get_json()['weight_increment'] == 9.0
 
     assert _admin_step(exercise_id) == 9.0
     with flask_app.app_context():
         # The list's value stays: the step is this lifter's setting, not a
         # change to the row everyone uses.
         assert db.session.get(Exercise, exercise_id).list_increment is None
-        # The session row is untouched: this field is per exercise, forever,
-        # unlike the rest time sitting directly above it in the same sheet.
+        # The session row is untouched: the step is the exercise's, forever.
         assert db.session.get(SessionExercise, session_exercise_id).rest_seconds is None
 
 
-def test_session_sheet_clears_the_increment_back_to_the_default(client, scratch_increment_exercise):
-    _, session_exercise_id, exercise_id = scratch_increment_exercise
+def test_settings_sheet_clears_the_increment_back_to_the_default(client, scratch_increment_exercise):
+    _, _, exercise_id = scratch_increment_exercise
 
-    client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
-                data={'weight_increment': '9'})
-    client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
-                data={'weight_increment': ''})
+    client.post(f'/gym/exercises/{exercise_id}/update', data={'weight_increment': '9'},
+                headers=JSON)
+    client.post(f'/gym/exercises/{exercise_id}/update', data={'weight_increment': ''},
+                headers=JSON)
 
     assert _admin_step(exercise_id) is None
 

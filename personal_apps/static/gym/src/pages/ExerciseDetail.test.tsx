@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ExerciseDetailPage } from './ExerciseDetail'
-import type { ExerciseDetailPayload, SessionRow } from '../types'
+import type { ExerciseDetailPayload, ExerciseMeta, SessionRow } from '../types'
 
 function payload(over: Partial<ExerciseDetailPayload> = {}): ExerciseDetailPayload {
   return {
@@ -13,6 +13,7 @@ function payload(over: Partial<ExerciseDetailPayload> = {}): ExerciseDetailPaylo
       list_defaults: {
         default_rest_seconds: 90, weight_increment: 2.5, bar_weight: 20, stack_kg: null,
       },
+      own: [], rest_for_all: null,
     },
     table: [], series: [], available_positions: [], selected_position: null,
     selected_position_is_default: false, selected_position_reason: null,
@@ -25,12 +26,13 @@ function payload(over: Partial<ExerciseDetailPayload> = {}): ExerciseDetailPaylo
 }
 
 /** A stack the lifter set up: their own step, rest and stops over the list's. */
-const stackExercise = {
+const stackExercise: ExerciseMeta = {
   ...payload().exercise, name: 'Latzug (Kabel)', muscle_group: 'Rücken', equipment: 'stack',
   weight_increment: 5, default_rest_seconds: 120, bar_weight: null, stack_kg: [5, 13, 21],
   list_defaults: {
     default_rest_seconds: 90, weight_increment: 2.5, bar_weight: null, stack_kg: null,
   },
+  own: ['default_rest_seconds', 'stack_kg', 'weight_increment'],
 }
 
 function row(over: Partial<SessionRow> = {}): SessionRow {
@@ -150,53 +152,140 @@ describe('ExerciseDetailPage', () => {
 
     const dialog = document.querySelector('dialog')!
     expect(dialog.open).toBe(false)
-    await user.click(screen.getByText(/Schrittweite und Pause einstellen/))
+    await user.click(screen.getByText(/Pause und Schritt einstellen/))
     expect(dialog.open).toBe(true)
+    expect(within(dialog).getByRole('heading', { name: 'Deine Einstellungen' })).toBeInTheDocument()
   })
 
-  it('edits only the lifter\'s own four settings, the list\'s values as placeholders', () => {
-    render(<ExerciseDetailPage payload={payload({ exercise: stackExercise })} />)
-
-    const form = document.querySelector('dialog form')!
-    const names = [...form.querySelectorAll('input:not([type=hidden]), select, textarea')]
-      .map((field) => field.getAttribute('name'))
-    expect(names.sort()).toEqual(
-      ['bar_weight', 'default_rest_seconds', 'stack_kg', 'weight_increment'])
-
-    // Prefilled with what is in use for this lifter; a blank field is the
-    // list's value, which is what the placeholder shows.
-    const step = screen.getByLabelText('Schrittweite (kg)')
-    expect(step).toHaveValue(5)
-    expect(step).toHaveAttribute('placeholder', '2,5')
-    const rest = screen.getByLabelText('Pause (Sek.)')
-    expect(rest).toHaveValue(120)
-    expect(rest).toHaveAttribute('placeholder', '90')
-    expect(screen.getByLabelText(/Stack-Stufen/)).toHaveValue('5, 13, 21')
-  })
-
-  it('shows what the list decides as text, not as fields', () => {
+  it('opens on the settings when "Deine Pause" links an exception here', () => {
+    // The hash is dropped once used: a reload lands on the page itself.
+    window.history.replaceState(null, '', '/gym/exercises/1#einstellungen')
     render(<ExerciseDetailPage payload={payload()} />)
-    const dialog = document.querySelector('dialog')!
-    expect(dialog).toHaveTextContent('Bankdrücken')
-    expect(dialog).toHaveTextContent('Brust · Langhantel')
-    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Muskelgruppe')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Art')).not.toBeInTheDocument()
+    expect(document.querySelector('dialog')!.open).toBe(true)
+    expect(window.location.hash).toBe('')
+  })
+})
+
+describe('Deine Einstellungen', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  /** The sheet open on `exercise`, with the server answering `answer`. */
+  function sheet(exercise: ExerciseMeta, answer?: (fields: FormData) => ExerciseMeta | Error) {
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const fields = init.body as FormData
+      const reply = answer?.(fields) ?? exercise
+      if (reply instanceof Error) throw reply
+      return { ok: true, status: 200, json: async () => reply } as Response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    window.history.replaceState(null, '', '/gym/exercises/1#einstellungen')
+    render(<ExerciseDetailPage payload={payload({ exercise })} />)
+    return { fetchMock, dialog: within(document.querySelector('dialog')!) }
+  }
+
+  const setting = (name: string) =>
+    within(screen.getByRole('heading', { name }).closest('section')!)
+
+  it('says where each value comes from, and marks what it falls back to', () => {
+    sheet(stackExercise)
+    const rest = setting('Pause nach jedem Satz')
+    expect(rest.getByText('Von dir')).toBeInTheDocument()
+    expect(rest.getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['1:00', '1:30Liste', '2:00', '2:30', '3:00', 'Andere'])
+    expect(rest.getByRole('button', { name: '2:00' })).toHaveAttribute('aria-pressed', 'true')
+
+    const step = setting('Schritt bei + und − (kg)')
+    expect(step.getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['2,5Liste', '5', '7', '8', '10', 'Andere'])
+    expect(step.getByRole('button', { name: '5' })).toHaveAttribute('aria-pressed', 'true')
+
+    const stops = setting('Stufen am Gerät')
+    expect(stops.getByText('5, 13, 21')).toBeInTheDocument()
+    expect(stops.getByRole('button', { name: 'Wieder gleichmäßig' })).toBeInTheDocument()
   })
 
-  it('asks for stack stops only on a stack', () => {
-    const { unmount } = render(<ExerciseDetailPage payload={payload()} />)
-    expect(screen.queryByLabelText(/Stack-Stufen/)).not.toBeInTheDocument()
-    unmount()
-
-    render(<ExerciseDetailPage payload={payload({ exercise: stackExercise })} />)
-    expect(screen.getByLabelText(/Stack-Stufen/)).toBeInTheDocument()
+  it('asks for a bar only where the list knows one, and stops only on a stack', () => {
+    sheet(payload().exercise)
+    const bar = setting('Stangengewicht (kg)')
+    expect(bar.getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Ohne', '10', '15', '20Liste', '25', 'Andere'])
+    expect(screen.queryByRole('heading', { name: 'Stufen am Gerät' })).toBeNull()
   })
 
-  it('keeps the settings form a native POST to the update route', () => {
-    render(<ExerciseDetailPage payload={payload()} />)
-    const form = screen.getByLabelText('Schrittweite (kg)').closest('form')!
-    expect(form).toHaveAttribute('method', 'post')
-    expect(form).toHaveAttribute('action', '/gym/exercises/1/update')
+  it('never asks a stack for a bar', () => {
+    sheet(stackExercise)
+    expect(screen.queryByRole('heading', { name: 'Stangengewicht (kg)' })).toBeNull()
+  })
+
+  it('saves a tap at once, one field, and shows it as the lifter\'s', async () => {
+    const user = userEvent.setup()
+    const { fetchMock } = sheet(payload().exercise, (fields) => ({
+      ...payload().exercise, default_rest_seconds: Number(fields.get('default_rest_seconds')),
+      own: ['default_rest_seconds'],
+    }))
+    const rest = setting('Pause nach jedem Satz')
+    expect(rest.getByText('Wie die Liste')).toBeInTheDocument()
+
+    await user.click(rest.getByRole('button', { name: '3:00' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/gym/exercises/1/update')
+    expect([...(init.body as FormData).entries()]).toEqual([['default_rest_seconds', '180']])
+    expect(rest.getByRole('button', { name: '3:00' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await rest.findByText('Von dir')).toBeInTheDocument()
+  })
+
+  it("goes back to the list's value in one tap", async () => {
+    const user = userEvent.setup()
+    const { fetchMock } = sheet(stackExercise, () => ({
+      ...stackExercise, default_rest_seconds: 90,
+      own: stackExercise.own.filter((f) => f !== 'default_rest_seconds'),
+    }))
+    const rest = setting('Pause nach jedem Satz')
+    await user.click(rest.getByRole('button', { name: '1:30 Liste' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect([...(fetchMock.mock.calls[0]![1].body as FormData).entries()])
+      .toEqual([['default_rest_seconds', '90']])
+    expect(rest.getByText('Wie die Liste')).toBeInTheDocument()
+  })
+
+  it('puts the value back and says why when a save fails', async () => {
+    const user = userEvent.setup()
+    sheet(payload().exercise, () => new TypeError('Failed to fetch'))
+    const rest = setting('Pause nach jedem Satz')
+    await user.click(rest.getByRole('button', { name: '3:00' }))
+    expect(await screen.findByRole('alert'))
+      .toHaveTextContent('Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.')
+    expect(rest.getByRole('button', { name: '1:30 Liste' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('falls back to the rest for all, and calls an own rest an exception', () => {
+    sheet({ ...payload().exercise, default_rest_seconds: 180, rest_for_all: 150,
+      own: ['default_rest_seconds'] })
+    expect(screen.getByText('Nur für dich. Ohne Ausnahme gilt deine Pause, 2:30.'))
+      .toBeInTheDocument()
+    const rest = setting('Pause nach jedem Satz')
+    expect(rest.getByText('Ausnahme')).toBeInTheDocument()
+    expect(rest.getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['2:00', '2:30deine', '3:00', '3:30', '4:00', 'Andere'])
+  })
+
+  it('takes a machine\'s own stops typed once, and only a list of them', async () => {
+    const user = userEvent.setup()
+    const even = { ...stackExercise, stack_kg: null,
+      own: stackExercise.own.filter((f) => f !== 'stack_kg') }
+    const { fetchMock } = sheet(even)
+    const stops = setting('Stufen am Gerät')
+    expect(stops.getByText('Gleichmäßig, im Schritt von oben: 5, 10, 15 …')).toBeInTheDocument()
+
+    await user.click(stops.getByRole('button', { name: 'Das Gerät hat andere Stufen' }))
+    const field = stops.getByLabelText(/Jede Stufe in kg/)
+    await user.type(field, '12')
+    expect(stops.getByRole('button', { name: 'Übernehmen' })).toBeDisabled()
+    await user.type(field, ', 5; 19')
+    await user.click(stops.getByRole('button', { name: 'Übernehmen' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect([...(fetchMock.mock.calls[0]![1].body as FormData).entries()])
+      .toEqual([['stack_kg', '5, 12, 19']])
   })
 })

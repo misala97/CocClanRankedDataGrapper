@@ -15,6 +15,13 @@ holds a lifter's own value only while it differs, so a later change to the
 list still reaches everyone who never changed it. `Setup` is the result:
 what one lifter's copy of an exercise effectively is.
 
+The rest has one more level (V3, "Deine Pause"): a lifter may set one rest
+for all of their exercises (LifterSettings). It sits between the two -- the
+exercise's own rest, else the rest for all, else the list's -- and an
+exercise's own rest is then an exception to it: submitting the rest for all
+stores nothing, and switching the rest for all on absorbs the own rests
+equal to it (set_rest_for_all).
+
 The user for a Setup always comes from the data being built -- the
 session's or the routine's owner -- never from the request: the leader's
 request reconciles the follower's rows, and those take the follower's rest.
@@ -31,10 +38,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
-from models import (Exercise, ExerciseSettings, SessionExercise, SessionSet, TemplateExercise,
-                    WorkoutSession, WorkoutTemplate)
+from models import (Exercise, ExerciseSettings, LifterSettings, SessionExercise, SessionSet,
+                    TemplateExercise, WorkoutSession, WorkoutTemplate)
 
-from .library import BY_KEY, LIBRARY, fold
+from .library import BY_KEY, LIBRARY, REST_TIERS, fold
 
 log = logging.getLogger(__name__)
 
@@ -110,39 +117,49 @@ class Setup:
     bar_weight: float | None
     # The fields where the lifter's own value is in use.
     changed: frozenset = frozenset()
+    # The lifter's rest for all their exercises, where they set one: what an
+    # exercise without its own rest takes before the list's.
+    rest_for_all: int | None = None
 
 
 def list_values(exercise):
     return {field: getattr(exercise, attr) for field, attr in LIST_ATTR.items()}
 
 
-def resolve(list_values, stored):
-    """The lifter's value where one is stored, the list's everywhere else.
-    `stored` is a settings row's values (or None for no row)."""
+def resolve(list_values, stored, rest_for_all=None):
+    """The lifter's value where one is stored, the list's everywhere else --
+    except the rest, where the lifter's rest for all their exercises comes
+    between the two. `stored` is a settings row's values (or None for no
+    row)."""
     stored = stored or {}
     values, changed = {}, set()
     for field in PERSONAL_FIELDS:
         own = stored.get(field)
-        if own is None or own == []:
-            values[field] = list_values.get(field)
-        else:
+        if own is not None and own != []:
             values[field] = own
             changed.add(field)
-    return Setup(**values, changed=frozenset(changed))
+        elif field == 'default_rest_seconds' and rest_for_all is not None:
+            values[field] = rest_for_all
+        else:
+            values[field] = list_values.get(field)
+    return Setup(**values, changed=frozenset(changed), rest_for_all=rest_for_all)
 
 
-def to_store(list_values, submitted, equipment):
+def to_store(list_values, submitted, equipment, rest_for_all=None):
     """What a settings row holds for the values a lifter submitted.
 
     `submitted` maps each field the form sent to its parsed value, None for a
-    blank. A blank or the list's own value stores None ("the list's value").
-    A bar of 0 means nothing sits inside the number, which is only worth
-    storing where the list has a bar to switch off. Stack stops mean
-    something on a stack only, ascending.
+    blank. A blank or the value the field falls back to stores None: the
+    list's, or for the rest the lifter's rest for all where they set one --
+    so an own rest is exactly an exception to it. A bar of 0 means nothing
+    sits inside the number, which is only worth storing where the list has a
+    bar to switch off. Stack stops mean something on a stack only, ascending.
     """
     stored = {}
     for field, value in submitted.items():
         base = list_values.get(field)
+        if field == 'default_rest_seconds' and rest_for_all is not None:
+            base = rest_for_all
         if field == 'stack_kg':
             value = sorted(value) if value and equipment == 'stack' else None
             if value is not None and base and value == sorted(base):
@@ -321,15 +338,25 @@ def _stored(row):
     return {field: getattr(row, field) for field in PERSONAL_FIELDS}
 
 
+def rest_for_all(user_id):
+    """The lifter's rest for all their exercises, or None: by kind of
+    exercise, the list's rest for each."""
+    if user_id is None:
+        return None
+    row = db.session.get(LifterSettings, user_id)
+    return row.rest_seconds if row is not None else None
+
+
 def setups(user_id, exercises):
-    """{exercise_id: Setup} for one lifter, in one query."""
+    """{exercise_id: Setup} for one lifter, in two queries."""
     exercises = [exercise for exercise in exercises if exercise is not None]
     ids = {exercise.id for exercise in exercises}
-    stored = {}
+    stored, everyone = {}, None
     if ids and user_id is not None:
         stored = {row.exercise_id: _stored(row) for row in ExerciseSettings.query.filter(
             ExerciseSettings.user_id == user_id, ExerciseSettings.exercise_id.in_(ids))}
-    return {exercise.id: resolve(list_values(exercise), stored.get(exercise.id))
+        everyone = rest_for_all(user_id)
+    return {exercise.id: resolve(list_values(exercise), stored.get(exercise.id), everyone)
             for exercise in exercises}
 
 
@@ -340,11 +367,12 @@ def setup(user_id, exercise):
 def save_setup(user_id, exercise, submitted):
     """Store what a lifter submitted for an exercise (see to_store); fields
     not in `submitted` keep their stored value. The caller commits."""
-    values = to_store(list_values(exercise), submitted, exercise.equipment)
+    everyone = rest_for_all(user_id)
+    values = to_store(list_values(exercise), submitted, exercise.equipment, everyone)
     row = ExerciseSettings.query.filter_by(user_id=user_id, exercise_id=exercise.id).first()
     if row is None:
         if all(value is None for value in values.values()):
-            return resolve(list_values(exercise), None)
+            return resolve(list_values(exercise), None, everyone)
         row = ExerciseSettings(user_id=user_id, exercise_id=exercise.id)
         db.session.add(row)
     for field, value in values.items():
@@ -352,5 +380,86 @@ def save_setup(user_id, exercise, submitted):
     stored = _stored(row)
     if all(value is None for value in stored.values()):
         db.session.delete(row)
-        return resolve(list_values(exercise), None)
-    return resolve(list_values(exercise), stored)
+        return resolve(list_values(exercise), None, everyone)
+    return resolve(list_values(exercise), stored, everyone)
+
+
+# The rest for all is set in 15-second steps between these; an exercise's own
+# rest in the same range (the settings form refuses nothing, but a stepper
+# needs ends).
+REST_MIN_SECONDS, REST_MAX_SECONDS = 15, 600
+# Where "Eine für alle" starts when the lifter has no rest of their own yet.
+REST_FOR_ALL_START = 120
+
+
+def set_rest_for_all(user_id, seconds):
+    """Set a lifter's rest for all their exercises; None goes back to "by
+    kind of exercise" (the list's rest for each). The caller commits.
+
+    Switching it on absorbs: every exercise rest of theirs equal to it is
+    dropped, so twelve single rests, ten of them 2:30, become 2:30 for all
+    and two exceptions -- which a later change of the rest for all then
+    moves together. Changing it, or switching it off, touches no exercise:
+    the stepper walks through values, and an exception it passed over must
+    still be one when it stops.
+    """
+    row = db.session.get(LifterSettings, user_id)
+    switching_on = seconds is not None and (row is None or row.rest_seconds is None)
+    if seconds is None:
+        if row is not None:
+            db.session.delete(row)
+        return
+    if row is None:
+        row = LifterSettings(user_id=user_id)
+        db.session.add(row)
+    row.rest_seconds = seconds
+    if not switching_on:
+        return
+    for settings in ExerciseSettings.query.filter_by(user_id=user_id,
+                                                     default_rest_seconds=seconds).all():
+        settings.default_rest_seconds = None
+        if all(value is None for value in _stored(settings).values()):
+            db.session.delete(settings)
+
+
+def rest_overview(user_id):
+    """"Deine Pause" as the Übungen page shows it: the rest for all (None:
+    by kind of exercise), every exercise with a rest of its own -- the
+    exceptions -- by name, where "Eine für alle" starts (the rest for all,
+    else the lifter's most common own rest, the longer on a tie, else
+    REST_FOR_ALL_START) and the list's range, which "by kind" means."""
+    everyone = rest_for_all(user_id)
+    own = (db.session.query(Exercise.id, Exercise.name, ExerciseSettings.default_rest_seconds)
+           .join(ExerciseSettings, ExerciseSettings.exercise_id == Exercise.id)
+           .filter(ExerciseSettings.user_id == user_id,
+                   ExerciseSettings.default_rest_seconds.isnot(None))
+           .order_by(Exercise.name).all())
+    counts = {}
+    for _, _, seconds in own:
+        counts[seconds] = counts.get(seconds, 0) + 1
+    start = everyone
+    if start is None:
+        start = max(counts, key=lambda s: (counts[s], s)) if counts else REST_FOR_ALL_START
+    return {
+        'rest_for_all': everyone,
+        'exceptions': [{'exercise_id': exercise_id, 'name': name, 'rest_seconds': seconds}
+                       for exercise_id, name, seconds in own],
+        'start_seconds': start,
+        'list_min_seconds': min(REST_TIERS),
+        'list_max_seconds': max(REST_TIERS),
+        'min_seconds': REST_MIN_SECONDS,
+        'max_seconds': REST_MAX_SECONDS,
+    }
+
+
+def settle_rests(session_):
+    """Write the rest in force into every row of a finishing workout that
+    followed the lifter's setting (rest_seconds NULL): the setting may
+    change tomorrow, and the history ("Pause geplant" against the time
+    taken) must keep the rest that applied. The caller commits."""
+    rows = [se for se in session_.exercises if se.rest_seconds is None]
+    if not rows:
+        return
+    resolved = setups(session_.user_id, [se.exercise for se in rows])
+    for se in rows:
+        se.rest_seconds = resolved[se.exercise_id].default_rest_seconds

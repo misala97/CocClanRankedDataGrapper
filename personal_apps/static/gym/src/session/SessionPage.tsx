@@ -18,6 +18,7 @@ import { DeloadSheet } from './components/DeloadSheet'
 import { AddExerciseSheet } from './components/AddExerciseSheet'
 import { TemplateSheet } from './components/TemplateSheet'
 import { ExerciseSheet, type ExerciseSheetActions } from './components/ExerciseSheet'
+import { LiveSettingsSheet } from './components/LiveSettingsSheet'
 
 /**
  * Every write the screen can perform. Supplied by the entry in 2c-iii, which
@@ -147,6 +148,9 @@ export function SessionPage({
         onFinish={actions.onFinish}
         onDiscard={actions.onDiscard} />
 
+      {payload.visible_exercises.map((se) => (
+        <LiveSettingsSheet key={se.id} exercise={se} sessionId={payload.session.id} />
+      ))}
       {payload.visible_exercises.map((se) => (
         <ExerciseSheet key={se.id} exercise={se}
           catalogue={payload.exercises}

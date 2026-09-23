@@ -179,6 +179,7 @@ def test_an_exercise_someone_else_logged_joins_her_session_with_her_values(
     """Any row can join any session, since none is owned -- but what it
     brings is the session owner's: her rest, and a plan seeded from her
     (empty) history, never his 60 kg."""
+    from features.gym.exercises import setup as exercise_setup
     from models import SessionExercise
 
     session_id = _stranger_session(two_lifters)
@@ -187,7 +188,11 @@ def test_an_exercise_someone_else_logged_joins_her_session_with_her_values(
     assert response.status_code in (302, 303)
     with flask_app.app_context():
         row = SessionExercise.query.filter_by(session_id=session_id).one()
-        assert row.rest_seconds == 120, 'took the owner\'s rest setting'
+        # The row holds no rest of its own (V3): it follows the session
+        # owner's setting at each set -- hers is the list's 120, never his 200.
+        assert row.rest_seconds is None
+        assert exercise_setup(row.session.user_id, row.exercise).default_rest_seconds == 120, \
+            'took the owner\'s rest setting'
         assert row.sets and all(s.is_default_seeded for s in row.sets), \
             'seeded from somebody else\'s history'
         assert all(s.weight != 60.0 for s in row.sets)

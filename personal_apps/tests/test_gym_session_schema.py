@@ -30,7 +30,8 @@ def _minimal():
             'id': 10, 'exercise_id': 5, 'name': 'Bankdrücken',
             'muscle_group': 'Brust', 'position': 1, 'skipped': False,
             'mirrored': False,
-            'is_unilateral': False, 'rest_seconds': 90, 'increment': 2.5,
+            'is_unilateral': False, 'rest_seconds': 90, 'rest_setting': 150,
+            'rest_setting_mine': True, 'increment': 2.5,
             'notes': None, 'pain': False,
             'sets': [{
                 'id': 100, 'weight': 60.0, 'reps': 8, 'completed': False,

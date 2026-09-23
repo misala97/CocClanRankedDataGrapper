@@ -1,9 +1,12 @@
-import { useEffect, useMemo } from 'react'
-import type { CatalogueEntry, CataloguePayload, SortMode } from './types'
+import { useEffect, useMemo, useState } from 'react'
+import type { CatalogueEntry, CataloguePayload, RestOverview, SortMode } from './types'
 import { fold, recency, sincePr } from './format'
 import { kg1 } from '../format'
 import { useCatalogueUi } from './store'
 import { morphFrom } from '../vt'
+import { Icon } from '../components/Icon'
+import { RestSheet, exceptionCount, listRange } from '../settings/RestSheet'
+import { clock } from '../settings/values'
 
 const SORTS: { mode: SortMode; label: string }[] = [
   { mode: 'muscle', label: 'Muskelgruppe' },
@@ -62,12 +65,39 @@ function ExerciseRow({ entry, group }: {
   )
 }
 
+/** "Deine Pause", above the exercises it applies to: what it is now, and the
+ *  sheet that changes it. */
+function RestRow({ rest, onOpen }: { rest: RestOverview; onOpen(): void }) {
+  const forAll = rest.rest_for_all
+  return (
+    <div className="uebungen-rest">
+      <button type="button" className="sheet-row" onClick={onOpen}>
+        <span className="sheet-row__lead"><Icon name="timer" /></span>
+        <span className="sheet-row__main">
+          <span className="sheet-row__name">Deine Pause</span>
+          {/* Two phrases that each stay whole: a narrow row breaks between
+              them, never inside "12 eigene". */}
+          <span className="sheet-row__meta">
+            <span>{forAll !== null ? 'Für alle Übungen' : 'Je nach Übungsart'}</span>
+            {rest.exceptions.length > 0 && <>{' · '}<span>{exceptionCount(rest)}</span></>}
+          </span>
+        </span>
+        <span className="sheet-row__val">{forAll !== null ? clock(forAll) : listRange(rest)}</span>
+        <span className="sheet-row__chev"><Icon name="forward" /></span>
+      </button>
+    </div>
+  )
+}
+
 /**
  * The lifter's own exercises -- the ones they logged, keep in a routine or set
  * up -- out of the one list. Nothing is created here: an exercise arrives
  * from the add sheet in a workout, and this page is where it is found again.
  */
 export function CataloguePage({ payload }: { payload: CataloguePayload }) {
+  // The sheet's answers, so the row says what was just set.
+  const [rest, setRest] = useState(payload.rest)
+  const [restOpen, setRestOpen] = useState(false)
   const query = useCatalogueUi((s) => s.query)
   const setQuery = useCatalogueUi((s) => s.setQuery)
   const sort = useCatalogueUi((s) => s.sort)
@@ -123,6 +153,10 @@ export function CataloguePage({ payload }: { payload: CataloguePayload }) {
 
       {total > 0 ? (
         <>
+          <RestRow rest={rest} onOpen={() => setRestOpen(true)} />
+          <RestSheet overview={rest} open={restOpen} onClose={() => setRestOpen(false)}
+            onSaved={setRest} />
+
           <div className="searchbar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               strokeLinecap="round" aria-hidden="true">

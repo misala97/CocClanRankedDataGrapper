@@ -2024,11 +2024,13 @@ def test_the_follower_finishing_ends_the_link_and_leaves_the_leader_live(joined_
 def test_rest_seconds_does_not_propagate(linked_pair):
     """Among the seven things the spec says must never propagate, set count
     and weight/reps already had negative tests; rest_seconds did not. A newly
-    mirrored row seeds rest_seconds from the FOLLOWER's own setting -- never
-    the leader's per-session override, and, since both now use one row, never
-    the leader's own setting on it either."""
+    mirrored row takes no rest from the leader: it holds none of its own
+    (V3) and so runs on the FOLLOWER's own setting -- never the leader's
+    per-session override, and, since both now use one row, never the
+    leader's own setting on it either."""
     from extensions import db
     from features.gym import sharing
+    from features.gym.exercises import setup as exercise_setup
     from models import Exercise, ExerciseSettings, SessionExercise, SharedSession, WorkoutSession
 
     with flask_app.app_context():
@@ -2052,9 +2054,10 @@ def test_rest_seconds_does_not_propagate(linked_pair):
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
         new_row = next(se for se in follower_session.exercises if se.position == 2)
         assert new_row.exercise_id == curl.id
-        assert new_row.rest_seconds == 45, (
-            "a newly mirrored row must seed rest_seconds from the FOLLOWER's own setting "
-            f'(got {new_row.rest_seconds})')
+        assert new_row.rest_seconds is None, (
+            f'a newly mirrored row must not carry a rest (got {new_row.rest_seconds})')
+        assert exercise_setup(follower_session.user_id, curl).default_rest_seconds == 45, (
+            "the mirrored row's rest in force must be the FOLLOWER's own setting")
 
 
 def test_is_deload_and_deload_pct_do_not_propagate(linked_pair):

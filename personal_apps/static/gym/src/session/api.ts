@@ -60,13 +60,10 @@ export const api = {
   replaceExercise: (sessionExerciseId: number, exerciseId: number) =>
     post(`/gym/session-exercise/${sessionExerciseId}/replace`, { exercise_id: exerciseId }),
 
-  setRest: (sessionExerciseId: number, seconds: number | null) =>
-    post(`/gym/session-exercise/${sessionExerciseId}/rest`,
-      { rest_seconds: seconds === null ? '' : seconds }),
-
-  setIncrement: (sessionExerciseId: number, kg: number | null) =>
-    post(`/gym/session-exercise/${sessionExerciseId}/increment`,
-      { weight_increment: kg === null ? '' : kg }),
+  /** "Pause heute". The step and the rest that always apply are the
+   *  lifter's settings, saved by ../settings/api. */
+  setRest: (sessionExerciseId: number, seconds: number) =>
+    post(`/gym/session-exercise/${sessionExerciseId}/rest`, { rest_seconds: seconds }),
 
   setExerciseMeta: (sessionExerciseId: number, meta: { pain: boolean; notes: string }) =>
     post(`/gym/session-exercises/${sessionExerciseId}/meta`,

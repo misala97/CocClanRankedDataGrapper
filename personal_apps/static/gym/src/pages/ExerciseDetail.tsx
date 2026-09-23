@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { ExerciseDetailPayload } from '../types'
 import { getJson } from '../api'
@@ -8,7 +8,10 @@ import { ExerciseHeader } from '../components/ExerciseHeader'
 import { RecordsBand } from '../components/RecordsBand'
 import { ExerciseChart } from '../components/ExerciseChart'
 import { SessionLog } from '../components/SessionLog'
-import { EditSheet, type EditSheetHandle } from '../components/EditSheet'
+import { EditSheet } from '../components/EditSheet'
+
+/** "Deine Pause" links an exception here: the page opens on the settings. */
+const SETTINGS_HASH = '#einstellungen'
 
 interface Props {
   payload: ExerciseDetailPayload
@@ -36,7 +39,15 @@ export function ExerciseDetailPage({ payload }: Props) {
   useEffect(() => { setP(payload) }, [payload])
   const id = p.exercise.id
   const count = p.table.length
-  const editSheet = useRef<EditSheetHandle>(null)
+  const [editing, setEditing] = useState(false)
+
+  // Arrived from an exception under "Deine Pause": open on the settings, and
+  // drop the hash so a reload or the back button lands on the page itself.
+  useEffect(() => {
+    if (window.location.hash !== SETTINGS_HASH) return
+    setEditing(true)
+    history.replaceState(history.state, '', window.location.pathname + window.location.search)
+  }, [])
 
   const fetchPosition = (positionParam: string) =>
     getJson<ExerciseDetailPayload>(
@@ -176,14 +187,15 @@ export function ExerciseDetailPage({ payload }: Props) {
 
         <section className="sec sec--maint" aria-label="Deine Einstellungen">
           <button type="button" className="finished__correct"
-            onClick={() => editSheet.current?.open()}>
+            onClick={() => setEditing(true)}>
             <Icon name="edit" />
-            Schrittweite und Pause einstellen
+            Pause und Schritt einstellen
           </button>
         </section>
       </div>
 
-      <EditSheet ref={editSheet} exercise={p.exercise} equipmentLabels={p.equipment_labels} />
+      <EditSheet exercise={p.exercise} open={editing} onClose={() => setEditing(false)}
+        onSaved={(exercise) => setP((current) => ({ ...current, exercise }))} />
     </>
   )
 }

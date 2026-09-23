@@ -11,6 +11,9 @@ export interface ListDefaults {
   stack_kg: number[] | null
 }
 
+/** The four settings a lifter can make their own. */
+export type SettingField = keyof ListDefaults
+
 /** The exercise as this lifter sees it. Name, groups, equipment and one side
  *  are the list's; rest, step, bar and stack are the lifter's effective
  *  values, over `list_defaults`. */
@@ -26,6 +29,34 @@ export interface ExerciseMeta {
   stack_kg: number[] | null
   secondary_muscle_groups: string[] | null
   list_defaults: ListDefaults
+  /** The settings that are the lifter's own value -- for the rest an
+   *  exception to `rest_for_all`, where they set one. */
+  own: SettingField[]
+  /** The lifter's rest for all their exercises ("Deine Pause"), or null: by
+   *  kind of exercise, the list's rest. */
+  rest_for_all: number | null
+}
+
+/** An exercise with a rest of its own, under "Deine Pause". */
+export interface RestException {
+  exercise_id: number
+  name: string
+  rest_seconds: number
+}
+
+/** "Deine Pause" (exercises.rest_overview). */
+export interface RestOverview {
+  /** Null: by kind of exercise, the list's rest for each. */
+  rest_for_all: number | null
+  exceptions: RestException[]
+  /** Where "Eine für alle" starts from "Je nach Übungsart". */
+  start_seconds: number
+  /** The list's range, which "Je nach Übungsart" means. */
+  list_min_seconds: number
+  list_max_seconds: number
+  /** The stepper's ends. */
+  min_seconds: number
+  max_seconds: number
 }
 
 export interface SessionRow {
@@ -146,6 +177,7 @@ export interface ExerciseDetailPayload {
   chart: ChartGeometry | null
   chip_class: string | null
   chip_label: string | null
-  /** Shown as text in the settings sheet: the equipment is the list's. */
+  /** Unread since the settings sheet stopped repeating the list's facts
+   *  (V3); kept so this stays a true mirror of the schema. */
   equipment_labels: Record<string, string>
 }

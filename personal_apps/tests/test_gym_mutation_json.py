@@ -73,7 +73,6 @@ def test_every_in_place_mutation_negotiates(client, live_session):
         (f"/gym/session-exercise/{ids['se']}/rest", {'rest_seconds': '90'}),
         (f"/gym/sessions/{ids['session']}/meta", {'notes': 'x'}),
         (f"/gym/session-exercises/{ids['se']}/meta", {'notes': 'x'}),
-        (f"/gym/session-exercise/{ids['se']}/increment", {'weight_increment': '2.5'}),
         (f"/gym/session-exercise/{ids['se']}/sets/add", {}),
         # Before skip: toggling skip re-seeds the exercise's sets, so the
         # fixture's open_set id stops resolving after it and every later case

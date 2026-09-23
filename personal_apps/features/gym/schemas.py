@@ -48,6 +48,35 @@ class ExerciseMeta(_Model):
     stack_kg: list[float] | None
     secondary_muscle_groups: list[str] | None
     list_defaults: ListDefaults
+    #: The settings that are the lifter's own value, by field name -- for the
+    #: rest an exception to `rest_for_all`, where they set one.
+    own: list[Literal['weight_increment', 'default_rest_seconds', 'stack_kg', 'bar_weight']]
+    #: The lifter's rest for all their exercises ("Deine Pause"), or None: by
+    #: kind of exercise, the list's rest.
+    rest_for_all: int | None
+
+
+class RestException(_Model):
+    """An exercise with a rest of its own, under "Deine Pause"."""
+    exercise_id: int
+    name: str
+    rest_seconds: int
+
+
+class RestOverview(_Model):
+    """"Deine Pause" (exercises.rest_overview): the lifter's rest for all
+    their exercises and what it comes with."""
+    #: None: by kind of exercise, the list's rest for each.
+    rest_for_all: int | None
+    exceptions: list[RestException]
+    #: Where "Eine für alle" starts from "Je nach Übungsart".
+    start_seconds: int
+    #: The list's range, which "Je nach Übungsart" means.
+    list_min_seconds: int
+    list_max_seconds: int
+    #: The stepper's ends.
+    min_seconds: int
+    max_seconds: int
 
 
 class SessionRow(_Model):
@@ -247,7 +276,14 @@ class LiveExercise(_Model):
     # the follower's screen offers skip and substitute for it, never remove.
     mirrored: bool
     is_unilateral: bool
+    #: This workout's own rest ("Pause heute"), or None: `rest_setting`.
     rest_seconds: int | None
+    #: The lifter's rest for the exercise, what always applies: its own,
+    #: else their rest for all, else the list's.
+    rest_setting: int | None
+    #: Whether `rest_setting` is the lifter's (own or for all) rather than
+    #: the list's -- the mark under it says "deine" or "Liste".
+    rest_setting_mine: bool
     increment: float
     notes: str | None
     # A boolean flag ("this hurt"), not free text -- NOT NULL with a False
@@ -467,6 +503,7 @@ class CataloguePayload(_Model):
     # every group starts open. Hardcoded shut, the page's default state
     # contained no information about the catalogue's size.
     open_by_default: bool
+    rest: RestOverview
 
 
 # ---------------------------------------------------------------------------

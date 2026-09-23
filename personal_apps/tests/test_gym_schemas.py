@@ -26,6 +26,7 @@ def _minimal():
             'secondary_muscle_groups': ['Trizeps'],
             'list_defaults': {'default_rest_seconds': 180, 'weight_increment': 2.5,
                               'bar_weight': 20.0, 'stack_kg': None},
+            'own': ['default_rest_seconds'], 'rest_for_all': None,
         },
         'table': [], 'series': [], 'available_positions': [],
         'selected_position': None, 'selected_position_is_default': False,

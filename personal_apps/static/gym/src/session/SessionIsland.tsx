@@ -130,9 +130,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     (seId: number, exerciseId: number) => api.replaceExercise(seId, exerciseId))
 
   const setRest = useSessionMutation(sessionId,
-    (seId: number, seconds: number | null) => api.setRest(seId, seconds))
-  const setIncrement = useSessionMutation(sessionId,
-    (seId: number, kg: number | null) => api.setIncrement(seId, kg))
+    (seId: number, seconds: number) => api.setRest(seId, seconds), optimistic.setRest)
   const sessionMeta = useSessionMutation(sessionId,
     (meta: { bodyweightKg: number | null; notes: string }) =>
       api.setSessionMeta(sessionId, meta))
@@ -141,6 +139,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     (on: boolean, pct: number) => api.toggleDeload(sessionId, on, pct))
 
   const close = useSheets((s) => s.close)
+  const openSheet = useSheets((s) => s.open)
   const lock = useSaveState((s) => s.lock)
   const unlock = useSaveState((s) => s.unlock)
   const offerUndo = useUndo((s) => s.offer)
@@ -250,7 +249,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       `/gym/session/${sessionId}/save_as_template`, { template_name: name }),
     exerciseActions: (seId: number): ExerciseSheetActions => ({
       onRestChange: (seconds) => setRest.mutate([seId, seconds]),
-      onIncrementChange: (kg) => setIncrement.mutate([seId, kg]),
+      onOpenSettings: () => openSheet(`sheet-settings-${seId}`),
       // No close(): the flag saves on the tap and the note on blur, both
       // while the sheet stays open.
       onMetaSave: (meta) => exerciseMeta.mutate([seId, meta]),

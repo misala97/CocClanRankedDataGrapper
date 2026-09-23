@@ -24,8 +24,9 @@ from features.gym import stats
 from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
 from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
 from features.gym.exercises import (
-    exercise_or_404, library_exercises, save_setup, search_text, setup as exercise_setup,
-    setups as exercise_setups, touched_exercises, usage as exercise_usage,
+    exercise_or_404, library_exercises, search_text, settle_rests,
+    setup as exercise_setup, setups as exercise_setups, touched_exercises,
+    usage as exercise_usage,
 )
 from features.gym.scope import (
     current_user_id, my_sessions, my_templates,
@@ -49,8 +50,12 @@ from .history import load_performed, performed_from_session, _session_rest_entri
 
 def _template_exercises_from_session(session_):
     """Build ordered, deduped TemplateExercise rows from a session's current
-    exercises, carrying over each exercise's configured rest time so it's
-    not lost when (re)saving a template.
+    exercises.
+
+    No rest is carried over (V3): the rest is the lifter's setting, and a
+    routine holding a copy outvoted every later change of it -- "Eine für
+    alle" would never have reached a workout started from a routine. A
+    workout's own "Pause heute" is for that workout only.
 
     Mid-workout replacements (se.replaces_id is not None) are skipped here on
     purpose -- a substitute swapped in because the usual equipment wasn't
@@ -65,7 +70,7 @@ def _template_exercises_from_session(session_):
         if se.exercise_id in seen_exercise_ids:
             continue
         seen_exercise_ids.add(se.exercise_id)
-        result.append(TemplateExercise(exercise_id=se.exercise_id, position=position, rest_seconds=se.rest_seconds))
+        result.append(TemplateExercise(exercise_id=se.exercise_id, position=position))
         position += 1
     return result
 
@@ -356,13 +361,12 @@ def gym_start():
             # The row already carries the date; the name should say which
             # workout it was.
             session_.name = template.name
-        setups = exercise_setups(session_.user_id, [te.exercise for te in template.exercises])
         for i, te in enumerate(template.exercises, start=1):
-            session_exercise = SessionExercise(
-                exercise_id=te.exercise_id, position=i,
-                rest_seconds=(te.rest_seconds if te.rest_seconds is not None
-                              else setups[te.exercise_id].default_rest_seconds),
-            )
+            # No rest on the row: it follows the lifter's setting, read at
+            # each set, so "Deine Pause" changed mid-workout counts from the
+            # next set. The routine's own old copy is not read either
+            # (TemplateExercise.rest_seconds).
+            session_exercise = SessionExercise(exercise_id=te.exercise_id, position=i)
             session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
             session_.exercises.append(session_exercise)
 
@@ -705,6 +709,7 @@ def _session_payload(session_):
     row = data['session']
 
     def as_exercise(se):
+        setup = data['setups'][se.exercise_id]
         return {
             'id': se.id,
             'exercise_id': se.exercise_id,
@@ -719,10 +724,12 @@ def _session_payload(session_):
             'mirrored': data['session_is_shared'] and se.mirrors_id is not None,
             'is_unilateral': se.exercise.is_unilateral,
             'rest_seconds': se.rest_seconds,
+            'rest_setting': setup.default_rest_seconds,
+            'rest_setting_mine': ('default_rest_seconds' in setup.changed
+                                  or setup.rest_for_all is not None),
             # Resolved, never raw: the fallback lives in stats and a second
             # copy would drift the moment DEFAULT_INCREMENT moves.
-            'increment': stats.resolve_increment(
-                data['setups'][se.exercise_id].weight_increment, se.exercise.is_unilateral),
+            'increment': stats.resolve_increment(setup.weight_increment, se.exercise.is_unilateral),
             'notes': se.notes,
             'pain': se.pain,
             'sets': [{
@@ -1136,11 +1143,11 @@ def gym_add_session_exercise(session_id):
     if exercise_id:
         # Any row of the list. The id is attacker-chosen, but it no longer
         # carries anyone's history: _seeded_sets reads this session's owner's.
-        exercise = exercise_or_404(exercise_id)
+        exercise_or_404(exercise_id)
         next_position = max([se.position for se in session_.exercises], default=0) + 1
+        # No rest on the row: it follows the lifter's setting (see gym_start).
         session_exercise = SessionExercise(
             session_id=session_.id, exercise_id=exercise_id, position=next_position,
-            rest_seconds=exercise_setup(session_.user_id, exercise).default_rest_seconds,
         )
         # Seeded like every other path that puts an exercise into a session
         # (gym_start from a template, un-skip, reorder). This one used to
@@ -1218,11 +1225,18 @@ def gym_replace_session_exercise(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/rest', methods=['POST'])
 @login_required
 def gym_update_session_exercise_rest(session_exercise_id):
+    """This workout's own rest for the exercise ("Pause heute"). The
+    lifter's setting itself -- or a blank -- stores nothing: the row follows
+    the setting again, so a change to it still reaches this workout."""
     session_exercise = owned_session_exercise(session_exercise_id)
     refusal = _refuse_live_write_if_finished(session_exercise.session)
     if refusal is not None:
         return refusal
-    session_exercise.rest_seconds = _to_int(request.form.get('rest_seconds', ''))
+    seconds = _to_int(request.form.get('rest_seconds', ''))
+    if seconds is not None and seconds == exercise_setup(
+            session_exercise.session.user_id, session_exercise.exercise).default_rest_seconds:
+        seconds = None
+    session_exercise.rest_seconds = seconds
     session_id = session_exercise.session_id
     db.session.commit()
     return _mutation_response(
@@ -1262,30 +1276,6 @@ def gym_update_session_exercise_meta(session_exercise_id):
     db.session.commit()
     return _mutation_response(
         session_exercise.session, 'gym.session_detail', session_id=session_exercise.session_id)
-
-
-@gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/increment', methods=['POST'])
-@login_required
-def gym_update_exercise_increment(session_exercise_id):
-    """Set the lifter's step for this exercise from inside a running session.
-
-    Reached from the per-exercise sheet, beside the rest field -- but unlike
-    rest, which is genuinely per session, a loadable step is a property of the
-    equipment and so stays: it becomes the lifter's setting for the exercise
-    (a blank puts it back on the list's step). Keyed on the SessionExercise
-    regardless, because that is the id the sheet has and it keeps the
-    redirect back to the workout trivial.
-    """
-    session_exercise = owned_session_exercise(session_exercise_id)
-    refusal = _refuse_live_write_if_finished(session_exercise.session)
-    if refusal is not None:
-        return refusal
-    save_setup(session_exercise.session.user_id, session_exercise.exercise,
-               {'weight_increment': _to_increment(request.form.get('weight_increment', ''))})
-    session_id = session_exercise.session_id
-    db.session.commit()
-    return _mutation_response(
-        session_exercise.session, 'gym.session_detail', session_id=session_id)
 
 
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/sets/add', methods=['POST'])
@@ -1784,6 +1774,7 @@ def gym_finish_session(session_id):
     session_.finished_at = dt.datetime.utcnow()
     session_.rest_ends_at = None
     session_.resting_set_id = None
+    settle_rests(session_)
     # Finishing early (before a running rest timer naturally elapses) must
     # cancel its still-pending push -- otherwise the notifier daemon fires it
     # later for a workout that's already over.

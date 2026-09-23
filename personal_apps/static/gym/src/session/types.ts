@@ -51,7 +51,14 @@ export interface LiveExercise {
    *  exercise they added themselves, and for every row once the link ended. */
   mirrored: boolean
   is_unilateral: boolean
+  /** This workout's own rest ("Pause heute"), or null: `rest_setting`. */
   rest_seconds: number | null
+  /** The lifter's rest for the exercise, what always applies: its own, else
+   *  their rest for all, else the list's. */
+  rest_setting: number | null
+  /** Whether `rest_setting` is the lifter's (own or for all) -- the mark
+   *  under it says "deine" -- rather than the list's ("Liste"). */
+  rest_setting_mine: boolean
   increment: number
   notes: string | null
   /** A boolean flag ("this hurt"), not free text. NOT NULL with a false

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { deleteSet, reorderExercises, setExerciseMeta, toggleSet, toggleSkip, updateSet } from './optimistic'
+import {
+  deleteSet, reorderExercises, setExerciseMeta, setRest, toggleSet, toggleSkip, updateSet,
+} from './optimistic'
 import { payload } from './types.test-d'
 
 const live = payload.visible_exercises.find((se) => se.id === payload.live_id)!
@@ -145,8 +147,23 @@ describe('what deliberately has no optimistic path', () => {
     // untouched and the server's answer still replaces it wholesale.
     const module = await import('./optimistic')
     expect(Object.keys(module).sort()).toEqual(
-      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'toggleSet',
+      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'setRest', 'toggleSet',
         'toggleSkip', 'updateSet'])
+  })
+})
+
+describe('setRest', () => {
+  const se = payload.visible_exercises[0]!
+
+  it("stores today's own rest", () => {
+    const next = setRest(payload, se.id, 180)
+    expect(next.visible_exercises[0]!.rest_seconds).toBe(180)
+    expect(next.visible_exercises[1]).toBe(payload.visible_exercises[1])
+  })
+
+  it("stores the setting's own value as nothing, so the row follows the setting", () => {
+    const today = setRest(payload, se.id, 180)
+    expect(setRest(today, se.id, se.rest_setting!).visible_exercises[0]!.rest_seconds).toBeNull()
   })
 })
 

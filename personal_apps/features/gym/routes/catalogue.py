@@ -1,17 +1,17 @@
-"""The exercise catalogue: the list page, and a lifter's settings for one
-exercise.
+"""The exercise catalogue: the list page, and a lifter's settings -- for one
+exercise, and their rest for all of them.
 
 Since the one exercise list (2026-09-23) nobody creates, renames or deletes
 an exercise here. The page lists the lifter's own exercises -- the ones they
 logged, keep in a routine or set up (exercises.touched_exercises) -- and the
-only write is their step, rest, stack stops and bar."""
+only writes are their step, rest, stack stops and bar, and "Deine Pause"."""
 
 from features.gym import stats
-from features.gym.schemas import CataloguePayload
+from features.gym.schemas import CataloguePayload, ExerciseMeta, RestOverview
 import datetime as dt
 
 from flask import (
-    redirect, render_template, request, url_for,
+    abort, jsonify, redirect, render_template, request, url_for,
 )
 from extensions import (
     db,
@@ -23,14 +23,16 @@ from auth import (
     login_required,
 )
 from features.gym.exercises import (
-    exercise_or_404, save_setup, setups as exercise_setups, touched_exercises,
+    REST_MAX_SECONDS, REST_MIN_SECONDS, exercise_or_404, rest_overview, save_setup,
+    set_rest_for_all, setup as exercise_setup, setups as exercise_setups,
+    touched_exercises,
 )
 from features.gym.scope import (
     current_user_id,
 )
 from .helpers import (
     EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _exercise_meta,
-    _to_increment, _to_int, _to_stack_steps, _to_weight,
+    _to_increment, _to_int, _to_stack_steps, _to_weight, _wants_json,
 )
 from .history import (
     load_performed,
@@ -137,6 +139,7 @@ def _catalogue_payload():
             for name, entries in grouped
         ],
         'open_by_default': len(exercises) <= UEBUNGEN_FOLD_ABOVE,
+        'rest': rest_overview(user_id),
     })
     return payload
 
@@ -173,6 +176,43 @@ def gym_update_exercise(exercise_id):
     }
     submitted = {field: parse(request.form.get(field, ''))
                  for field, parse in parsers.items() if field in request.form}
-    save_setup(current_user_id(), exercise, submitted)
+    saved = save_setup(current_user_id(), exercise, submitted)
     db.session.commit()
+    if _wants_json():
+        # "Deine Einstellungen" saves every tap and redraws from the answer.
+        return jsonify(_settings_json(exercise, saved))
     return redirect(url_for('gym.exercise_detail', exercise_id=exercise.id))
+
+
+def _settings_json(exercise, setup):
+    return ExerciseMeta.model_validate(_exercise_meta(exercise, setup)).model_dump(mode='json')
+
+
+@gym_bp.route('/gym/exercises/<int:exercise_id>/settings.json')
+@login_required
+def gym_exercise_settings(exercise_id):
+    """The caller's settings for an exercise, for the sheet the workout
+    opens: its rows carry the rest in force, not the list's values."""
+    exercise = exercise_or_404(exercise_id)
+    return jsonify(_settings_json(exercise, exercise_setup(current_user_id(), exercise)))
+
+
+@gym_bp.route('/gym/rest', methods=['POST'])
+@login_required
+def gym_rest_for_all():
+    """Set the caller's rest for all their exercises ("Deine Pause"): whole
+    seconds within the stepper's ends, or blank for "Je nach Übungsart".
+    Anything else is refused -- a garbled number must not quietly switch
+    the rest for all off. Answers with the fresh overview."""
+    raw = request.form.get('rest_seconds', '').strip()
+    seconds = None
+    if raw:
+        seconds = _to_int(raw)
+        if seconds is None or not REST_MIN_SECONDS <= seconds <= REST_MAX_SECONDS:
+            abort(400)
+    user_id = current_user_id()
+    set_rest_for_all(user_id, seconds)
+    db.session.commit()
+    if _wants_json():
+        return jsonify(RestOverview.model_validate(rest_overview(user_id)).model_dump(mode='json'))
+    return redirect(url_for('gym.gym_uebungen'))

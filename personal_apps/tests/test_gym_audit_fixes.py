@@ -65,7 +65,6 @@ def test_every_live_route_refuses_a_finished_workout(client, live_session):
         (f"/gym/session-exercise/{ids['se']}/rest", {'rest_seconds': '90'}),
         (f"/gym/sessions/{ids['session']}/meta", {'notes': 'x'}),
         (f"/gym/session-exercises/{ids['se']}/meta", {'notes': 'x'}),
-        (f"/gym/session-exercise/{ids['se']}/increment", {'weight_increment': '2.5'}),
         (f"/gym/session-exercise/{ids['se']}/sets/add", {'weight': '60', 'reps': '8'}),
         (f"/gym/set/{ids['done_set']}/update", {'weight': '61', 'reps': '8'}),
         (f"/gym/set/{ids['done_set']}/delete", {}),

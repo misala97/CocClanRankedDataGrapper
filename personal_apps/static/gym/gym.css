@@ -2545,6 +2545,44 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 /* As a <summary>, the row keeps its grammar and drops the marker. */
 summary.sheet-row { cursor: pointer; list-style: none; }
 summary.sheet-row::-webkit-details-marker { display: none; }
+/* A row that leads somewhere with a figure: "Deine Pause  2:30 ›". */
+.sheet-row__val {
+  flex: none; font-size: var(--t-body); font-weight: var(--w-bold); color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sheet-row__chev { flex: none; display: grid; color: var(--dim); }
+
+/* ---- "Deine Einstellungen": one setting a row, its usual values as pills,
+   where the value comes from beside its name ---- */
+.setting { padding-block: var(--sp-3); }
+.setting + .setting { border-top: 1px solid var(--edge); }
+.setting__head { display: flex; align-items: baseline; gap: var(--sp-2); margin-block-end: var(--sp-2); }
+.setting__name { flex: 1; margin: 0; font-size: var(--t-body); font-weight: var(--w-semi); color: var(--ink); }
+.setting__src { font-size: var(--t-meta); color: var(--dim); }
+/* The lifter's own value reads in ink: the one thing the row says that the
+   list does not. */
+.setting__src--own { color: var(--ink); font-weight: var(--w-semi); }
+.setting__line { display: block; margin: 0 0 var(--sp-2); font-size: var(--t-meta); color: var(--dim); line-height: 1.45; }
+.setting__acts { display: flex; gap: var(--sp-2); }
+.setting__acts .btn { flex: 1; }
+.setting__edit .input { inline-size: 100%; margin-block-end: var(--sp-2); }
+/* The .flash--error ring, inside a sheet: a write that did not land. */
+.setting__error {
+  margin: var(--sp-2) 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 2px var(--live); color: var(--live-ink);
+  font-size: var(--t-meta); line-height: 1.45;
+}
+/* Five values and "Andere" across one line, each a full tap target: no
+   wrapping, so the marked value never lands on a second row. */
+.pills--fit { flex-wrap: nowrap; padding-bottom: 0; }
+.pills--fit .pill {
+  flex: 1 1 0; min-inline-size: 0; padding-inline: 0; justify-content: center;
+  flex-direction: column; line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.pills--fit .pill small { font-size: var(--t-micro); font-weight: var(--w-semi); margin-block-start: 2px; }
+/* The live kg stepper's look, for a setting you nudge. */
+.nudge { margin-block-start: var(--sp-3); }
+.sorts--sheet { margin-inline: 0; }
 .sheet__row { display: flex; align-items: center; gap: var(--sp-3); padding-block: var(--sp-2); }
 .sheet__row label { flex: 1; font-size: var(--t-sm); color: var(--dim); }
 .sheet__picks { display: flex; gap: var(--sp-2); }
@@ -3442,6 +3480,15 @@ summary.sheet-row::-webkit-details-marker { display: none; }
    ============================================================================ */
 
 .uebungen { padding-bottom: var(--sp-8); }
+/* "Deine Pause", above the exercises it applies to: one sheet row on a
+   quiet surface, so it reads as a setting and not as the first exercise. */
+.uebungen-rest {
+  margin: var(--sp-3) var(--sp-4) 0; padding-inline: var(--sp-4);
+  border-radius: var(--r-control); background: var(--chassis);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+.uebungen-rest .sheet-row { border-radius: var(--r-control); }
+.uebungen-rest .sheet-row__meta > span { white-space: nowrap; }
 
 /* Desktop: cap the measure like every sibling page, then use the width for two
    columns of groups rather than one column of rows with a metre of nothing

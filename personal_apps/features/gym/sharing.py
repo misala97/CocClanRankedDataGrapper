@@ -26,7 +26,6 @@ from sqlalchemy.exc import IntegrityError
 from extensions import db
 from models import PendingPush, SessionExercise, SharedSession, WorkoutSession
 
-from .exercises import setup as exercise_setup
 from .locking import lock_sessions
 from .seeding import _seeded_sets, reseed_for_slot
 
@@ -330,10 +329,8 @@ def reconcile_follower(shared):
                 session_id=follower.id,
                 exercise_id=leader_row.exercise_id,
                 position=leader_row.position,
-                # Rest follows the person, so this is the FOLLOWER's setting,
-                # never the leader's per-session override.
-                rest_seconds=exercise_setup(shared.follower_user_id,
-                                            leader_row.exercise).default_rest_seconds,
+                # No rest: the row follows the FOLLOWER's own setting (read at
+                # each set), never the leader's per-session override.
                 skipped=leader_row.skipped,
                 mirrors_id=leader_row.id,
             )

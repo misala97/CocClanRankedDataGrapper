@@ -1,7 +1,7 @@
 // Mirrors the catalogue models in features/gym/schemas.py.
-import type { ExerciseMeta } from '../types'
+import type { ExerciseMeta, RestOverview } from '../types'
 
-export type { ExerciseMeta }
+export type { ExerciseMeta, RestOverview }
 
 export interface CatalogueEntry {
   exercise: ExerciseMeta
@@ -25,6 +25,8 @@ export interface CatalogueGroup {
 export interface CataloguePayload {
   groups: CatalogueGroup[]
   open_by_default: boolean
+  /** "Deine Pause": the lifter's rest for all their exercises. */
+  rest: RestOverview
 }
 
 export type SortMode = 'muscle' | 'stall' | 'recent'

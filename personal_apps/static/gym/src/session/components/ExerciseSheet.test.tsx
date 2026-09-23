@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useUndo } from '../../undo'
@@ -26,7 +26,7 @@ const catalogue = [
 ]
 
 const actions = () => ({
-  onRestChange: vi.fn(), onIncrementChange: vi.fn(), onMetaSave: vi.fn(),
+  onRestChange: vi.fn(), onOpenSettings: vi.fn(), onMetaSave: vi.fn(),
   onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
   onToggleSkip: vi.fn(), onReplace: vi.fn(),
   onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
@@ -42,32 +42,75 @@ function open(props: Partial<Parameters<typeof ExerciseSheet>[0]> = {}) {
 }
 
 describe('ExerciseSheet', () => {
-  it('separates the two fields with opposite lifetimes', () => {
-    // Rest belongs to this session; the increment belongs to the exercise and
-    // outlives the workout. The caption names both lifetimes in one line, and
-    // the note-and-pain group carries its own head.
+  it("keeps today's rest apart from the settings that hold for every workout", () => {
+    // Two rest fields side by side read as one. Today's is here; the lifter's
+    // settings are one level down, and the row says they always apply.
     open()
-    expect(screen.getByText('Pause gilt für dieses Workout, Schrittweite für die Übung.'))
-      .toBeInTheDocument()
+    expect(screen.getByText('Pause heute')).toBeInTheDocument()
+    expect(screen.getByText('Eine andere Zeit gilt nur für dieses Workout.')).toBeInTheDocument()
+    expect(screen.getByText('Pause 2:30 · Schritt 2 kg — gelten immer')).toBeInTheDocument()
     expect(screen.getByText('Heute')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Pause (Sekunden)')).toBeNull()
+    expect(screen.queryByLabelText('Schrittweite (kg)')).toBeNull()
   })
 
-  it('saves the rest time on blur', async () => {
+  it('marks the rest in force and saves a pick on the tap', async () => {
+    // The fixture's first exercise has its own rest, 2:30, and none for
+    // today: the row centres on it, marked "deine".
     const user = userEvent.setup()
     const { actions: a } = open()
-    const field = screen.getByLabelText('Pause (Sekunden)')
-    await user.clear(field)
-    await user.type(field, '120')
-    await user.tab()
-    expect(a.onRestChange).toHaveBeenCalledWith(120)
+    const row = within(screen.getByRole('group', { name: 'Pause heute' }))
+    expect(row.getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['1:30', '2:00', '2:30deine', '3:00', '3:30', 'Andere'])
+    expect(row.getByRole('button', { name: '2:30 deine' })).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(row.getByRole('button', { name: '3:00' }))
+    expect(a.onRestChange).toHaveBeenCalledWith(180)
   })
 
-  it('clears the rest time back to the exercise default', async () => {
+  it('goes back to the setting in one tap', async () => {
+    const user = userEvent.setup()
+    const { actions: a } = open({ exercise: { ...exercise, rest_seconds: 180 } })
+    const row = within(screen.getByRole('group', { name: 'Pause heute' }))
+    expect(row.getByRole('button', { name: '3:00' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(row.getByRole('button', { name: '2:30 deine' }))
+    expect(a.onRestChange).toHaveBeenCalledWith(150)
+  })
+
+  it("marks the list's rest as the list's", () => {
+    open({ exercise: { ...exercise, rest_setting: 90, rest_setting_mine: false } })
+    const row = within(screen.getByRole('group', { name: 'Pause heute' }))
+    expect(row.getByRole('button', { name: '1:30 Liste' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('nudges another rest in 15 seconds and sends it once, when it settles', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      const { actions: a } = open()
+      await user.click(screen.getByRole('button', { name: 'Andere' }))
+      for (let i = 0; i < 3; i += 1) {
+        await user.click(screen.getByRole('button', { name: '15 Sekunden mehr' }))
+      }
+      // Off the row: "Andere" is the one lit, showing the value.
+      const row = within(screen.getByRole('group', { name: 'Pause heute' }))
+      expect(row.getByRole('button', { name: '3:15 Andere' }))
+        .toHaveAttribute('aria-pressed', 'true')
+      expect(a.onRestChange).not.toHaveBeenCalled()
+
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(a.onRestChange).toHaveBeenCalledTimes(1)
+      expect(a.onRestChange).toHaveBeenCalledWith(195)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens the settings one level down', async () => {
     const user = userEvent.setup()
     const { actions: a } = open()
-    await user.clear(screen.getByLabelText('Pause (Sekunden)'))
-    await user.tab()
-    expect(a.onRestChange).toHaveBeenCalledWith(null)
+    await user.click(screen.getByRole('button', { name: /Deine Einstellungen/ }))
+    expect(a.onOpenSettings).toHaveBeenCalled()
   })
 
   it('saves the twinge on the tap, with no button to forget', async () => {

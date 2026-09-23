@@ -21,7 +21,7 @@ const actions = (): SessionActions => ({
   onEnablePush: vi.fn(), onToggleDeload: vi.fn(), onAddExercise: vi.fn(),
   onSaveTemplate: vi.fn(),
   exerciseActions: () => ({
-    onRestChange: vi.fn(), onIncrementChange: vi.fn(), onMetaSave: vi.fn(),
+    onRestChange: vi.fn(), onOpenSettings: vi.fn(), onMetaSave: vi.fn(),
     onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
     onToggleSkip: vi.fn(), onReplace: vi.fn(),
     onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
