@@ -7,23 +7,20 @@ after the list changes (`python gym_exercise_art/make_prompts.py`, from
 
 ## How to do it
 
-For one-click copying, open `prompts.html` (next to this file) in your browser: every
-save path and prompt has a copy button, and the pictures you have saved show up on
-reload. Every prompt below comes with its own steps and save path. In short:
+`prompts.html` next to this file has the same prompts with copy buttons, and shows
+the pictures you have saved when you reload it.
 
-1. In ChatGPT, attach `reference.webp` (the approved Butterfly) from
-   `C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw`
-   and paste the prompt. ChatGPT cannot read files from your PC or save to it,
-   so the reference is attached by hand and the saving is yours.
-2. Check the picture before saving it: the right machine or equipment, both sides
+1. Copy one prompt and paste it. Each prompt names the reference picture (the
+   approved Butterfly) and ends with the file name and folder for the result, all
+   in `C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw`.
+   A tool that cannot open or save files on your PC needs `reference.webp`
+   attached by hand, and the picture saved by hand under that name.
+2. Check the picture before keeping it: the right machine or equipment, both sides
    even unless the prompt says one-sided, the orange on the right muscle, no text
-   anywhere. If something is off, tell ChatGPT what to fix, or regenerate.
-3. Right-click the picture, "Save image as...", and paste the save path shown
-   above the prompt into the file name box: the picture lands in the right folder
-   under the right name. PNG, WEBP and JPG all work; the ending may differ. Git
-   ignores this folder, so nothing gets committed by accident.
-4. Any order, over as many days as you like. Attach the reference every time,
-   also in the same chat, so the style stays the same.
+   anywhere. If something is off, say what to fix, or regenerate.
+3. PNG, WEBP and JPG all work: keep the name, the ending may differ. Git ignores
+   the folder, so nothing gets committed by accident.
+4. Any order, over as many days as you like.
 5. When all 67 are saved, tell Claude: the names get checked, the pictures
    shrunk to small web files, and the app work starts with a mockup round.
 
@@ -112,14 +109,11 @@ not quite the same distance from the chest; redo 08 if that bothers you.
 
 Shows Bankdrücken (Kurzhantel): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bankdruecken.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell bench press.
@@ -130,20 +124,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The bench is flat, a padded top on a sturdy frame; each dumbbell has the same heads on both ends, the handle in the palm.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named bankdruecken.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 02 · Schrägbankdrücken → `schraegbankdruecken.png`
 
 Shows Schrägbankdrücken (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schraegbankdruecken.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: incline barbell bench press.
@@ -154,20 +148,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The backrest is inclined and the seat flat; two uprights with bar hooks stand behind his head; the bar is straight and level, the same plates on both ends, moving above the upper chest, not the face.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named schraegbankdruecken.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 03 · Negativbankdrücken → `negativbankdruecken.png`
 
 Shows Negativbankdrücken (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\negativbankdruecken.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: decline barbell bench press.
@@ -178,20 +172,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The head end of the bench is the low end and carries the bar uprights; the bar is straight and level, the same plates on both ends, moving above the lower chest.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named negativbankdruecken.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 04 · Floor Press → `floor-press.png`
 
 Shows Floor Press (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\floor-press.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell floor press.
@@ -202,20 +196,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: There is no bench; at the bottom only the backs of the upper arms touch the floor; the bar is straight and level, the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named floor-press.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 05 · Fliegende → `fliegende.png`
 
 Shows Fliegende (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\fliegende.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell fly.
@@ -226,20 +220,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The arms move in a wide arc with the elbow bend unchanged; both dumbbells at the same height.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named fliegende.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 06 · Überzüge → `ueberzuege.png`
 
 Shows Überzüge (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\ueberzuege.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell pullover.
@@ -250,20 +244,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: One single dumbbell, held upright by both hands; the elbows stay almost straight; the dumbbell passes behind the head, never over the face.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named ueberzuege.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 07 · Brustpresse → `brustpresse.png`
 
 Shows Brustpresse (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\brustpresse.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: seated chest press machine.
@@ -274,20 +268,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The handles start beside the chest and move straight forward; the press arms connect to the weight stack, which has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named brustpresse.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 08 · Butterfly → `butterfly.png`
 
 Shows Butterfly (Maschine): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\butterfly.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: machine chest fly (pec deck).
@@ -298,20 +292,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: Each swing arm pivots on a vertical axis above his shoulder, the arms connect to the weight stack, the stack has a selector pin, the seat height puts the handles at chest level, and both handles are the same distance from the chest.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named butterfly.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 09 · Kreuzheben → `kreuzheben.png`
 
 Shows Kreuzheben (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\kreuzheben.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: conventional barbell deadlift.
@@ -322,20 +316,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The back is straight and flat, never rounded; the bar stays against the legs, above the middle of the feet; full-size plates, the same on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named kreuzheben.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 10 · Rack Pulls → `rack-pulls.png`
 
 Shows Rack Pulls (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rack-pulls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell rack pull.
@@ -346,20 +340,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The bar rests on two horizontal safety pins that pass through the rack's uprights at knee height; the back is flat; the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named rack-pulls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 11 · Rudern → `rudern.png`
 
 Shows Rudern (Maschine): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rudern.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: seated row machine.
@@ -370,20 +364,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The chest stays on the pad; the handles move straight back toward his torso; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named rudern.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 12 · Shrugs → `shrugs.png`
 
 Shows Shrugs (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\shrugs.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell shrug.
@@ -394,20 +388,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The elbows stay straight; the shoulders move straight up, not rolled; the bar hangs at the thighs with the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named shrugs.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 13 · Latzug → `latzug.png`
 
 Shows Latzug (Maschine, Scheiben): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\latzug.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: plate-loaded lat pulldown machine.
@@ -418,20 +412,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: Two separate lever arms, one per hand, each with a plate horn carrying weight plates; the handles come down in an arc from above and in front; both sides at the same height.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named latzug.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 14 · Rückenstrecker → `rueckenstrecker.png`
 
 Shows Rückenstrecker (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rueckenstrecker.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: lower back extension machine.
@@ -442,20 +436,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The pad sits across the upper back, not the neck; the legs stay still; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named rueckenstrecker.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 15 · High Row → `high-row.png`
 
 Shows High Row (Maschine, Scheiben): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\high-row.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: plate-loaded high row machine.
@@ -466,20 +460,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: Two separate lever arms, one per hand, each with a plate horn carrying weight plates; the pull goes down and back on a diagonal; both sides at the same height.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named high-row.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 16 · Schulterdrücken → `schulterdruecken.png`
 
 Shows Schulterdrücken (Langhantel, stehend): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schulterdruecken.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: standing barbell overhead press.
@@ -490,20 +484,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: He stands, no bench; the bar moves straight up over the middle of the feet, level, the same plates on both ends; wrists stacked above the elbows.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named schulterdruecken.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 17 · Aufrechtes Rudern → `aufrechtes-rudern.png`
 
 Shows Aufrechtes Rudern (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\aufrechtes-rudern.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell upright row.
@@ -514,20 +508,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The bar stays close to the body; the elbows are higher than the wrists; the bar is level with the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named aufrechtes-rudern.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 18 · Arnold Press → `arnold-press.png`
 
 Shows Arnold Press (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\arnold-press.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell Arnold press.
@@ -538,20 +532,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The backrest is upright; both dumbbells at the same height and the same turn.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named arnold-press.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 19 · Seitheben → `seitheben.png`
 
 Shows Seitheben (Maschine): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\seitheben.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: seated lateral raise machine.
@@ -562,20 +556,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: Each padded lever pivots level with his shoulder; the arms rise to the sides, not forward; both arms at the same height; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named seitheben.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 20 · Frontheben → `frontheben.png`
 
 Shows Frontheben (Kabel, einarmig): your Front Raises (cable, one arm).
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\frontheben.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: one-arm cable front raise.
@@ -586,20 +580,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: The cable runs in a straight line from the low pulley to the handle; only the right arm rises, forward, not to the side.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named frontheben.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 21 · Vorgebeugtes Seitheben → `vorgebeugtes-seitheben.png`
 
 Shows Vorgebeugtes Seitheben (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\vorgebeugtes-seitheben.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: bent-over dumbbell rear delt fly.
@@ -610,20 +604,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The back stays flat; the arms move out to the sides in an arc; both dumbbells at the same height.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named vorgebeugtes-seitheben.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 22 · Face Pulls → `face-pulls.png`
 
 Shows Face Pulls (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\face-pulls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: cable face pull.
@@ -634,20 +628,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The rope hangs from one cable at head height; the elbows are at shoulder height; the cable runs in a straight line from the pulley to the rope.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named face-pulls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 23 · Reverse Butterfly → `reverse-butterfly.png`
 
 Shows Reverse Butterfly (Maschine): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reverse-butterfly.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: reverse pec deck (rear delt machine).
@@ -658,20 +652,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: He faces the chest pad, the reverse of the chest fly; each swing arm pivots on a vertical axis in line with his shoulder; both arms at the same angle; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named reverse-butterfly.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 24 · Außenrotation → `aussenrotation.png`
 
 Shows Außenrotation (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\aussenrotation.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: cable external rotation.
@@ -682,20 +676,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: The elbow stays bent at 90 degrees and pinned to his side; the cable runs level from the pulley to the handle; only the forearm swings.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named aussenrotation.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 25 · Schulterpresse → `schulterpresse.png`
 
 Shows Schulterpresse (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schulterpresse.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: seated shoulder press machine.
@@ -706,20 +700,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The handles start at shoulder height and move up; both at the same height; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named schulterpresse.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 26 · Bizepscurls → `bizepscurls.png`
 
 Shows Bizepscurls (Kurzhantel): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bizepscurls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell biceps curl.
@@ -730,20 +724,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The upper arms stay vertical against the body; only the elbows bend; both dumbbells at the same height.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named bizepscurls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 27 · Scottcurls → `scottcurls.png`
 
 Shows Scottcurls (Maschine): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\scottcurls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: preacher curl machine.
@@ -754,20 +748,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The upper arms lie flat on the sloped pad; the lever's pivot lines up with his elbows; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named scottcurls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 28 · Hammercurls → `hammercurls.png`
 
 Shows Hammercurls (Kurzhantel): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\hammercurls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell hammer curl.
@@ -778,20 +772,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The palms face each other the whole way; the upper arms stay against the body; both dumbbells at the same height.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named hammercurls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 29 · Konzentrationscurls → `konzentrationscurls.png`
 
 Shows Konzentrationscurls (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\konzentrationscurls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell concentration curl.
@@ -802,20 +796,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: The right elbow stays against the inner thigh; only that forearm moves.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named konzentrationscurls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 30 · Schrägbankcurls → `schraegbankcurls.png`
 
 Shows Schrägbankcurls (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schraegbankcurls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: incline dumbbell curl.
@@ -826,20 +820,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The upper arms hang straight down behind the torso and stay still; only the elbows bend; both dumbbells at the same height.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named schraegbankcurls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 31 · Bayesian Curls → `bayesian-curls.png`
 
 Shows Bayesian Curls (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bayesian-curls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: Bayesian cable curl.
@@ -850,20 +844,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: The cable runs in a straight line from the low pulley behind him to the handle; the upper arm stays behind the torso; only the right forearm moves.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named bayesian-curls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 32 · French Press → `french-press.png`
 
 Shows French Press (SZ-Stange): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\french-press.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: EZ-bar skull crusher.
@@ -874,20 +868,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The upper arms stay vertical and still; only the elbows bend; the bar has the zigzag EZ shape with small plates.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named french-press.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 33 · Trizepsstrecken über Kopf → `trizepsstrecken-ueber-kopf.png`
 
 Shows Trizepsstrecken über Kopf (Kabel): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizepsstrecken-ueber-kopf.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: overhead cable triceps extension.
@@ -898,20 +892,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The upper arms stay beside the head, pointing forward; only the elbows open; the cable runs in a straight line from the pulley to the rope.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named trizepsstrecken-ueber-kopf.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 34 · Trizeps-Kickbacks → `trizeps-kickbacks.png`
 
 Shows Trizeps-Kickbacks (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizeps-kickbacks.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell triceps kickback.
@@ -922,20 +916,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: The right upper arm stays level against his side; only the elbow opens; the left hand and knee rest on the bench.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named trizeps-kickbacks.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 35 · Trizepsdrücken → `trizepsdruecken.png`
 
 Shows Trizepsdrücken (Kabel, Stange): the variant you log most.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizepsdruecken.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: cable triceps pushdown with a bar.
@@ -946,20 +940,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The cable runs straight up from the middle of the bar to the top pulley; the elbows stay at his sides; only the forearms move.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named trizepsdruecken.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 36 · Dips → `dips.png`
 
 Shows Dips (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\dips.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: seated dip machine.
@@ -970,20 +964,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The handles are at his sides and move down; both at the same height; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named dips.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 37 · Trizepsstrecken → `trizepsstrecken.png`
 
 Shows Trizepsstrecken (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizepsstrecken.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: triceps extension machine.
@@ -994,20 +988,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The upper arms lie on the pad; the lever's pivot lines up with his elbows; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named trizepsstrecken.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 38 · Kniebeugen → `kniebeugen.png`
 
 Shows Kniebeugen (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\kniebeugen.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell back squat.
@@ -1018,20 +1012,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The bar rests on the upper back, not the neck; the back stays straight; heels flat; the bar level with the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named kniebeugen.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 39 · Frontkniebeugen → `frontkniebeugen.png`
 
 Shows Frontkniebeugen (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\frontkniebeugen.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell front squat.
@@ -1042,20 +1036,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The bar rests on the front of the shoulders; the elbows stay high; heels flat; the bar level with the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named frontkniebeugen.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 40 · Ausfallschritte → `ausfallschritte.png`
 
 Shows Ausfallschritte (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\ausfallschritte.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell lunge.
@@ -1066,20 +1060,20 @@ The legs are in the split stance described; the arms mirror each other.
 Must be mechanically correct: The front knee stays over the front foot; the back knee points down; the bar rests on the upper back, level, the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named ausfallschritte.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 41 · Rumänisches Kreuzheben → `rumaenisches-kreuzheben.png`
 
 Shows Rumänisches Kreuzheben (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rumaenisches-kreuzheben.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell Romanian deadlift.
@@ -1090,20 +1084,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The back is flat, never rounded; the knee bend stays small and fixed; the bar stays close to the legs; the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named rumaenisches-kreuzheben.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 42 · Good Mornings → `good-mornings.png`
 
 Shows Good Mornings (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\good-mornings.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell good morning.
@@ -1114,20 +1108,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The bar stays on the upper back; the back is flat; the knee bend is small; the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named good-mornings.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 43 · Goblet Squat → `goblet-squat.png`
 
 Shows Goblet Squat (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\goblet-squat.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell goblet squat.
@@ -1138,20 +1132,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: One single dumbbell held upright at the chest; heels flat; knees over the toes.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named goblet-squat.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 44 · Bulgarische Kniebeugen → `bulgarische-kniebeugen.png`
 
 Shows Bulgarische Kniebeugen (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bulgarische-kniebeugen.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell Bulgarian split squat.
@@ -1162,20 +1156,20 @@ The legs are in the split stance described; the arms mirror each other.
 Must be mechanically correct: Only the top of the rear foot rests on the bench; the front foot is flat and far enough forward that the knee stays above it; both dumbbells hang straight down.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named bulgarische-kniebeugen.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 45 · Step-ups → `step-ups.png`
 
 Shows Step-ups (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\step-ups.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell step-up.
@@ -1186,20 +1180,20 @@ The legs are in the split stance described; the arms mirror each other.
 Must be mechanically correct: The whole right foot is on the box, which is about knee height; both dumbbells hang straight down.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named step-ups.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 46 · Beinstrecker → `beinstrecker.png`
 
 Shows Beinstrecker (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\beinstrecker.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: leg extension machine.
@@ -1210,20 +1204,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The roller sits on the front of the lower shins, above the ankles; the lever's pivot lines up with his knees; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named beinstrecker.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 47 · Beinbeuger → `beinbeuger.png`
 
 Shows Beinbeuger (Maschine, liegend): the lying variant, the clearest picture of the movement.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\beinbeuger.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: lying leg curl machine.
@@ -1234,20 +1228,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The roller sits on the back of the lower legs, above the heels; the lever's pivot lines up with his knees; the hips stay down on the bench; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named beinbeuger.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 48 · Beinpresse → `beinpresse.png`
 
 Shows Beinpresse (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\beinpresse.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: seated leg press machine.
@@ -1258,20 +1252,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: Both feet flat on the footplate; the knees in line with the feet; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named beinpresse.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 49 · Adduktoren → `adduktoren.png`
 
 Shows Adduktoren (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\adduktoren.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: hip adductor machine.
@@ -1282,20 +1276,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The pads press on the inside of the knees; both legs move the same amount; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named adduktoren.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 50 · Hackenschmidt → `hackenschmidt.png`
 
 Shows Hackenschmidt (Maschine, Scheiben): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\hackenschmidt.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: plate-loaded hack squat machine.
@@ -1306,20 +1300,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The sled with back and shoulder pads slides on two diagonal rails; weight plates sit on the sled's horns on both sides; feet flat on the angled platform.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named hackenschmidt.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 51 · Pendulum Squat → `pendulum-squat.png`
 
 Shows Pendulum Squat (Maschine, Scheiben): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\pendulum-squat.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: plate-loaded pendulum squat machine.
@@ -1330,20 +1324,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The back and shoulder pads hang from one long lever that pivots at the top rear of the frame; the plates are loaded on that lever; feet flat on the platform.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named pendulum-squat.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 52 · Belt Squat → `belt-squat.png`
 
 Shows Belt Squat (Maschine, Scheiben): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\belt-squat.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: plate-loaded belt squat machine.
@@ -1354,20 +1348,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The load hangs from the hip belt, nothing on his shoulders; the strap runs straight down to the lever, whose plate horn carries weight plates.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named belt-squat.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 53 · Hip Thrust → `hip-thrust.png`
 
 Shows Hip Thrust (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\hip-thrust.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell hip thrust.
@@ -1378,20 +1372,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: Only the upper back touches the bench; the bar sits on the hip crease with a pad; the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named hip-thrust.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 54 · Glute Bridge → `glute-bridge.png`
 
 Shows Glute Bridge (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\glute-bridge.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell glute bridge.
@@ -1402,20 +1396,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The shoulders stay on the floor, no bench; the bar sits on the hip crease with a pad; the same plates on both ends.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named glute-bridge.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 55 · Glute-Kickbacks → `glute-kickbacks.png`
 
 Shows Glute-Kickbacks (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\glute-kickbacks.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: cable glute kickback.
@@ -1426,20 +1420,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: The cable runs in a straight line from the low pulley to the ankle strap; the back stays flat; only the right leg moves.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named glute-kickbacks.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 56 · Abduktoren → `abduktoren.png`
 
 Shows Abduktoren (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\abduktoren.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: hip abductor machine.
@@ -1450,20 +1444,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The pads press on the outside of the knees; both legs move the same amount; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named abduktoren.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 57 · Abduktion → `abduktion.png`
 
 Shows Abduktion (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\abduktion.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: standing cable hip abduction.
@@ -1474,20 +1468,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: The cable runs in a straight line from the low pulley to the ankle strap; the torso stays upright; only the right leg moves, sideways.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named abduktion.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 58 · Pull-Through → `pull-through.png`
 
 Shows Pull-Through (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\pull-through.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: cable pull-through.
@@ -1498,20 +1492,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The cable runs from the low pulley behind him between his legs to the rope in his hands; the back is flat; the arms stay straight.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named pull-through.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 59 · Swings → `swings.png`
 
 Shows Swings (Kettlebell): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\swings.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: kettlebell swing.
@@ -1522,20 +1516,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: One kettlebell held by its handle with both hands; the arms stay straight; the drive comes from the hips, not a squat.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named swings.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 60 · Wadenheben → `wadenheben.png`
 
 Shows Wadenheben (Maschine, stehend): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\wadenheben.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: standing calf raise machine.
@@ -1546,20 +1540,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: Only the balls of the feet are on the block; the knees stay straight; the shoulder pads connect to the weight stack, which has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named wadenheben.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 61 · Crunches → `crunches.png`
 
 Shows Crunches (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\crunches.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: kneeling cable crunch.
@@ -1570,20 +1564,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The hips stay still and high over the knees; the movement is the spine curling; the cable runs from the top pulley to the rope at his head.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named crunches.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 62 · Rumpfrotation → `rumpfrotation.png`
 
 Shows Rumpfrotation (Maschine): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rumpfrotation.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: torso rotation machine.
@@ -1594,20 +1588,20 @@ The torso turns to one side as described.
 Must be mechanically correct: The lower body stays locked in place; only the torso turns; the weight stack has a selector pin.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named rumpfrotation.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 63 · Holzhacker → `holzhacker.png`
 
 Shows Holzhacker (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\holzhacker.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: cable woodchopper.
@@ -1618,20 +1612,20 @@ The torso turns to one side as described.
 Must be mechanically correct: Both hands on one handle; the cable runs in a straight line from the high pulley to the hands; the back foot pivots with the turn.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named holzhacker.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 64 · Pallof Press → `pallof-press.png`
 
 Shows Pallof Press (Kabel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\pallof-press.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: cable Pallof press.
@@ -1641,20 +1635,20 @@ Highlight in #C2410C: the abs and the obliques.
 Must be mechanically correct: The cable runs level from the pulley to his hands; the torso stays square to the front, not turned; both hands on one handle.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named pallof-press.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 65 · Seitbeugen → `seitbeugen.png`
 
 Shows Seitbeugen (Kurzhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\seitbeugen.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: dumbbell side bend.
@@ -1665,20 +1659,20 @@ One-sided exercise: only the working side moves as described; the other side sta
 Must be mechanically correct: One dumbbell only; the torso bends straight to the side, not forward; the hips stay still.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named seitbeugen.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 66 · Handgelenkcurls → `handgelenkcurls.png`
 
 Shows Handgelenkcurls (Langhantel): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\handgelenkcurls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: barbell wrist curl.
@@ -1689,20 +1683,20 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The forearms stay flat on the thighs; only the wrists move; the bar is light with small plates.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named handgelenkcurls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```
 
 ### 67 · Reverse Curls → `reverse-curls.png`
 
 Shows Reverse Curls (SZ-Stange): the list's first variant.
 
-Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
-
 ```text
-C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reverse-curls.png
-```
+Reference image for the style (open it and match it exactly):
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reference.webp
 
-```text
-Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
+Draw a new illustration exactly in the style of the reference image: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
 
 Exercise: EZ-bar reverse curl.
@@ -1713,4 +1707,7 @@ Both sides of the body move together, mirror-symmetric.
 Must be mechanically correct: The grip is overhand, palms down; the upper arms stay against the body; the bar has the zigzag EZ shape with small plates.
 Natural proportions, hands with five fingers, grips closed around handles and bars.
 No text, no numbers, no labels, no logos, no watermark, no arrows, no gym background, no mirrors, no other people.
+
+Save the finished image as a PNG named reverse-curls.png (only the file name, never drawn into the picture) in this folder:
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw
 ```

@@ -7,9 +7,10 @@ dev DB's copy of their logs, 2026-09-23) or, where they log none, the list's fir
 movement added to features/gym/library.py gets its prompt before its picture.
 
 Run from personal_apps:  python gym_exercise_art/make_prompts.py
-It rewrites PROMPTS.md and prompts.html (the same prompts with copy buttons; it
-finds the saved pictures itself on every reload) and prints which pictures raw/
-still lacks.
+It rewrites PROMPTS.md and prompts.html (the same prompts with copy buttons; the
+page finds the saved pictures itself on every reload) and prints which pictures
+raw/ still lacks. Each prompt is one block to paste: it names the reference
+picture on disk and ends with the file name and folder to save the result in.
 """
 import json
 import os
@@ -24,8 +25,8 @@ from features.gym.library import BY_KEY, LIBRARY  # noqa: E402
 PICTURE_TYPES = ('.png', '.webp', '.jpg', '.jpeg')
 
 STYLE = (
-    'Use the attached reference image for the style and draw a new illustration exactly like '
-    'it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, '
+    'Draw a new illustration exactly in the style of the reference image: the same flat vector '
+    'look, outlines and soft shading, the same lifter (short dark hair, '
     'white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 '
     'background, square 1:1, the whole person and all equipment in frame with generous margin.\n'
     'Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in '
@@ -734,23 +735,20 @@ after the list changes (`python gym_exercise_art/make_prompts.py`, from
 
 ## How to do it
 
-For one-click copying, open `prompts.html` (next to this file) in your browser: every
-save path and prompt has a copy button, and the pictures you have saved show up on
-reload. Every prompt below comes with its own steps and save path. In short:
+`prompts.html` next to this file has the same prompts with copy buttons, and shows
+the pictures you have saved when you reload it.
 
-1. In ChatGPT, attach `reference.webp` (the approved Butterfly) from
-   `{raw}`
-   and paste the prompt. ChatGPT cannot read files from your PC or save to it,
-   so the reference is attached by hand and the saving is yours.
-2. Check the picture before saving it: the right machine or equipment, both sides
+1. Copy one prompt and paste it. Each prompt names the reference picture (the
+   approved Butterfly) and ends with the file name and folder for the result, all
+   in `{raw}`.
+   A tool that cannot open or save files on your PC needs `reference.webp`
+   attached by hand, and the picture saved by hand under that name.
+2. Check the picture before keeping it: the right machine or equipment, both sides
    even unless the prompt says one-sided, the orange on the right muscle, no text
-   anywhere. If something is off, tell ChatGPT what to fix, or regenerate.
-3. Right-click the picture, "Save image as...", and paste the save path shown
-   above the prompt into the file name box: the picture lands in the right folder
-   under the right name. PNG, WEBP and JPG all work; the ending may differ. Git
-   ignores this folder, so nothing gets committed by accident.
-4. Any order, over as many days as you like. Attach the reference every time,
-   also in the same chat, so the style stays the same.
+   anywhere. If something is off, say what to fix, or regenerate.
+3. PNG, WEBP and JPG all work: keep the name, the ending may differ. Git ignores
+   the folder, so nothing gets committed by accident.
+4. Any order, over as many days as you like.
 5. When all {count} are saved, tell Claude: the names get checked, the pictures
    shrunk to small web files, and the app work starts with a mockup round.
 
@@ -797,6 +795,7 @@ ol { margin: 0 0 16px; padding-left: 1.3em; }
 .head h2 { margin: 0; font-size: 1.05rem; }
 .num { color: var(--dim); font-variant-numeric: tabular-nums; }
 .shows { margin: 2px 0 0; color: var(--dim); font-size: .9rem; }
+.file { font: 13px ui-monospace, Consolas, monospace; }
 .thumb { display: none; width: 64px; height: 64px; border-radius: 8px; object-fit: cover; }
 .saved .thumb { display: block; }
 .state { margin-left: auto; color: var(--dim); font-size: .85rem; white-space: nowrap; }
@@ -805,7 +804,7 @@ ol { margin: 0 0 16px; padding-left: 1.3em; }
 .row pre { flex: 1; min-width: 0; margin: 0; padding: 8px 10px; background: var(--code);
            border-radius: 8px; font: 13px/1.45 ui-monospace, Consolas, monospace;
            white-space: pre-wrap; overflow-wrap: anywhere; }
-.row .prompt { max-height: 8.8em; overflow: auto; }
+.row .prompt { max-height: 10.2em; overflow: auto; }
 .copy { flex: none; min-width: 112px; min-height: 40px; padding: 0 12px; border: 0;
         border-radius: 8px; background: var(--go); color: var(--on-go); font: inherit;
         font-weight: 600; cursor: pointer; }
@@ -820,16 +819,18 @@ ol { margin: 0 0 16px; padding-left: 1.3em; }
   <h1>Gym exercise pictures</h1>
   <p class="lede">__COUNT__ movements &middot; <span id="saved">0</span> saved. Reload after saving.</p>
   <ol>
-    <li>In ChatGPT, attach the reference picture and paste the prompt.</li>
-    <li>Check it: the right equipment, both sides even unless one-sided, the orange on the
-        right muscle, no text anywhere.</li>
-    <li>Right-click the picture, "Save image as...", paste the save path into the file name box.</li>
+    <li>Copy a prompt and paste it: it names the reference picture and ends with the file name
+        and folder for the result.</li>
+    <li>Check the picture: the right equipment, both sides even unless one-sided, the orange on
+        the right muscle, no text anywhere.</li>
+    <li>A tool that cannot open or save files on your PC needs the reference attached by hand,
+        and the picture saved by hand under the name at the end of the prompt.</li>
   </ol>
-  <p class="lede">The boxes show each exercise's own lines; Copy prompt copies the whole prompt,
-    the shared style part included.</p>
+  <p class="lede">Each box shows the exercise's own lines and where the picture goes; Copy prompt
+    copies the whole prompt, with the reference, the shared style and the rules.</p>
   <section class="card" id="reference">
     <div class="head"><img class="thumb" alt="" style="display:block" src="raw/reference.webp">
-      <div><h2>Reference picture</h2><p class="shows">Attach it with every prompt.</p></div></div>
+      <div><h2>Reference picture</h2><p class="shows">Every prompt points to it.</p></div></div>
     <div class="row"><pre>__REF__</pre><button class="copy" type="button">Copy path</button></div>
   </section>
   <div class="bar"><label><input type="checkbox" id="hide"> Hide saved</label></div>
@@ -917,18 +918,22 @@ for (const item of ITEMS) {
   thumb.alt = '';
   const title = document.createElement('div');
   const h2 = document.createElement('h2');
-  h2.innerHTML = `<span class="num">${item.n}</span> `;
-  h2.append(item.move);
+  const num = document.createElement('span');
+  num.className = 'num';
+  num.textContent = item.n + ' ';
+  h2.append(num, item.move);
   const shows = document.createElement('p');
   shows.className = 'shows';
-  shows.textContent = 'Shows ' + item.shows;
+  const file = document.createElement('span');
+  file.className = 'file';
+  file.textContent = item.slug + '.png';
+  shows.append('Shows ' + item.shows + ' \\u00b7 saved as ', file);
   title.append(h2, shows);
   const state = document.createElement('span');
   state.className = 'state';
   state.textContent = 'to do';
   head.append(thumb, title, state);
-  card.append(head, row(item.path, 'Copy path'),
-              row(item.brief, 'Copy prompt', 'prompt', item.prompt));
+  card.append(head, row(item.brief, 'Copy prompt', 'prompt', item.prompt));
   list.append(card);
   findSaved(item, card, thumb, state);
 }
@@ -959,13 +964,24 @@ def slug(movement):
     return re.sub(r'[^a-z0-9]+', '-', text).strip('-')
 
 
-def prompt(s):
-    lines = [STYLE, '', f'Exercise: {s["english"]}.', f'Scene: {s["what"]}',
+def exercise_lines(s):
+    lines = [f'Exercise: {s["english"]}.', f'Scene: {s["what"]}',
              f'View: {s["view"]}', f'Highlight in #C2410C: {s["muscle"]}.']
     if SIDES[s['sides']]:
         lines.append(SIDES[s['sides']])
-    lines += [f'Must be mechanically correct: {s["check"]}', RULES]
+    lines.append(f'Must be mechanically correct: {s["check"]}')
     return '\n'.join(lines)
+
+
+def save_lines(name):
+    return (f'Save the finished image as a PNG named {name}.png (only the file name, never '
+            f'drawn into the picture) in this folder:\n{RAW}')
+
+
+def prompt(s, name):
+    reference = ('Reference image for the style (open it and match it exactly):\n'
+                 + os.path.join(RAW, 'reference.webp'))
+    return '\n\n'.join([reference, STYLE, exercise_lines(s) + '\n' + RULES, save_lines(name)])
 
 
 def saved(name):
@@ -993,19 +1009,18 @@ def main():
         s = SCENES[movement]
         out += ['', f'### {number:02} · {movement} → `{files[movement]}.png`', '',
                 f'Shows {BY_KEY[s["key"]].name}: {s["why"]}.', '',
-                'Attach `reference.webp` from the raw folder, paste the prompt, then save the '
-                'picture as:', '',
-                '```text', os.path.join(RAW, files[movement] + '.png'), '```', '',
-                '```text', prompt(s), '```']
+                '```text', prompt(s, files[movement]), '```']
     with open(os.path.join(HERE, 'PROMPTS.md'), 'w', encoding='utf-8', newline='\n') as handle:
         handle.write('\n'.join(out) + '\n')
 
-    items = [dict(n=f'{number:02}', move=movement, slug=files[movement],
-                  shows=f'{BY_KEY[SCENES[movement]["key"]].name}: {SCENES[movement]["why"]}',
-                  path=os.path.join(RAW, files[movement] + '.png'), prompt=prompt(SCENES[movement]))
-             for number, movement in enumerate(movements, 1)]
-    for item in items:
-        item['brief'] = item['prompt'].split('\n\n', 1)[1]  # the exercise's own lines
+    items = []
+    for number, movement in enumerate(movements, 1):
+        s = SCENES[movement]
+        # the box shows what differs per exercise; the button copies the whole prompt
+        items.append(dict(n=f'{number:02}', move=movement, slug=files[movement],
+                          shows=f'{BY_KEY[s["key"]].name}: {s["why"]}',
+                          prompt=prompt(s, files[movement]),
+                          brief=exercise_lines(s) + '\n\n' + save_lines(files[movement])))
     data = json.dumps(items, ensure_ascii=False, indent=1).replace('</', '<\\/')
     page = (PAGE.replace('__COUNT__', str(len(movements)))
             .replace('__REF__', os.path.join(RAW, 'reference.webp'))
