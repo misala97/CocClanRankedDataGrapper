@@ -53,7 +53,7 @@ stack and secondary groups -- the two creation paths disagree.
 | F6 | Detail edit link + Einseitig label | folded into G (the edit form becomes personal settings) |
 | F7 | Start muscle chart for ungrouped sets | folded into G (every list exercise has a group) |
 | F8 | Invite-accept 'new' branch copies equipment facts | folded into G (no follower copies at all) |
-| L1 | THE list: complete exercise library as data (German names, config per entry, EN aliases incl. every current prod name) + review page | open — owner: "first find and create a list with a lot of exercises" |
+| L1 | THE list: complete exercise library as data (German names, config per entry, EN aliases) + prod mapping + review page | draft done — awaiting owner review + 5 decisions (see ledger) |
 | G1 | Spec: one global read-only exercise list for every user; per-user settings (increment, rest, uneven stack stops); custom exercises yes/no; stats scoped by user | open (after L1 review) |
 | G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | open |
 | G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | open |
@@ -80,3 +80,15 @@ Shared sessions then log the same exercise id on both sides. Order: L1 -> review
   390x844 as user 4: focus lands in the field, create -> field empty + "✓ Bankdrücken
   ist drin.", 1st tap on the row arms (1 row in workout), 2nd adds (2 rows); countdown
   gap to the label 44px at 390, 29 at 360, 9 at 320. User 4 restored empty.
+- 2026-09-23 — L1 draft: `features/gym/library.py` (173 entries: 158 loggable, 15
+  bodyweight held out of SEEDABLE), `features/gym/library_mapping.py` (the 21 prod names
+  -> keys, 3 OPEN calls), `tests/test_gym_library.py` (12, DB-free). Curated from domain
+  knowledge for a German commercial gym, no external dataset downloaded. The Gerät in
+  the name decides loading/bar/step; `(Maschine)` = stack, `(Maschine, Scheiben)` =
+  plate-loaded and must state per side. Aliases are generic EN/DE search terms; prod
+  names live only in the mapping. Review page (scratchpad `lib_review.py` renders it from
+  the module) sent to the owner. Decisions asked: (1) private exercises as a fallback?
+  (2) per-user step/rest/stack stops/bar on top of the list? (3) history takes the
+  German names? (4) bodyweight type now/later/never? (5) one entry per loading, so the
+  "(Good)"/"Hauptbahnhof" labels go? Rest defaults 180/150/90/60 vs the owner's 150
+  everywhere -- per-user rest is what (2) decides.
