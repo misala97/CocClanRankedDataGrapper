@@ -744,11 +744,20 @@ def _source(payload, name):
     return payload['seed_sources'][str(row['id'])]
 
 
+def _days_ago(iso):
+    """Whole days since `iso`, to the nearest day. MySQL rounds a DATETIME's
+    fractional seconds UP, so a workout stored "5 days ago" can read back up
+    to half a second later -- and a fast run then measured 4 days 23:59:59,
+    which `.days` floors to 4."""
+    delta = dt.datetime.utcnow() - dt.datetime.fromisoformat(iso)
+    return round(delta.total_seconds() / 86400)
+
+
 def test_the_payload_says_which_workout_a_plan_was_seeded_from(solo):
     source = _source(_payload(solo['leader'], solo['session']), RAISE)
     assert source['basis'] == 'slot'
     assert source['position'] == 3
-    days_ago = (dt.datetime.utcnow() - dt.datetime.fromisoformat(source['date'])).days
+    days_ago = _days_ago(source['date'])
     assert days_ago == 5
 
 
@@ -783,7 +792,7 @@ def test_the_workout_in_progress_is_never_its_own_history(solo):
                     completed='1', weight=60, reps=12)
 
     source = _source(payload, RAISE)
-    days_ago = (dt.datetime.utcnow() - dt.datetime.fromisoformat(source['date'])).days
+    days_ago = _days_ago(source['date'])
     assert days_ago == 5, 'the plan was seeded from the workout five days ago, not from today'
 
     from models import Exercise
