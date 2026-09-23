@@ -54,12 +54,12 @@ stack and secondary groups -- the two creation paths disagree.
 | F7 | Start muscle chart for ungrouped sets | folded into G (every list exercise has a group) |
 | F8 | Invite-accept 'new' branch copies equipment facts | folded into G (no follower copies at all) |
 | L1 | THE list: complete exercise library as data (German names, config per entry, EN aliases) + prod mapping + review page | done — owner-approved with edits (rulings below) |
-| G1 | Spec: `library.py` becomes the one read-only exercise list for both lifters; NO custom exercises; per-user overrides of step/rest/stack stops/bar defaulting to the list; stats scoped by user | open — NEXT |
-| G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | open |
-| G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | open |
-| V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | open (after G1) |
+| G1 | Spec: `library.py` becomes the one read-only exercise list for both lifters; NO custom exercises; per-user overrides of step/rest/stack stops/bar defaulting to the list; stats scoped by user | done — 80a833a spec, 3e81749 cf65778 9141915 (UNMERGED) |
+| G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | written + verified on dev copies, 812dad8 (UNMERGED; prod run needs the owner's explicit OK) |
+| G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | open — G1 made it work on shared ids; the machinery retires here |
+| V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | open — G1 T4 did the functional part (list-only, `matches` search, no create row); grouping + visual design remain |
 | V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | open |
-| V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | open (after G1) |
+| V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | open — G1 T4 cut the form to the four personal fields; the redesign remains |
 
 Direction change (owner, 2026-09-23 mid-round): "One list of preconfigured read only
 exercises for every user" -- replaces per-user exercise rows (per-user since 2026-08-02).
@@ -113,3 +113,41 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   lifters' English names added as aliases minus gym markers; `library_mapping` OPEN
   resolved (mapping unchanged, now approved; GYM_MARKERS lists the dropped words).
   Tests: `test_gym_library.py` 15 passed (+ matching 11).
+- 2026-09-23 — G1 spec + plan: `docs/superpowers/specs/2026-09-23-gym-global-exercise-list.md`
+  (80a833a), plan `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5).
+  Every DB test and run on the scratch copy `personal_apps_g1`; the shared dev DB untouched.
+- 2026-09-23 — G1 T1 (3e81749): `features/gym/exercises.py` pure core (`sync_plan`,
+  `Setup`, `resolve`, `to_store`), DB-free tests in `tests/test_gym_exercises.py`.
+- 2026-09-23 — G2 (812dad8): revision `e2c7a9f41b86` on main's head `b7e3f9c1a2d4`
+  (additive DDL, one DML transaction ending in invariant checks, guarded drops;
+  `downgrade()` refuses). `library_mapping.py` folded into the revision as the frozen
+  `PRODUCTION_2026_09`; helpers tested by path. On a fresh dev copy: 36 per-user rows ->
+  34 by mapping, 2 retired ('Probe Neu'), 25 settings rows, 158 list rows.
+- 2026-09-23 — G1 T3 (cf65778): backend on the global list -- `Exercise` global by
+  `library_key` with `list_*` values, `ExerciseSettings` holds only differences, every
+  read resolves through the session's/routine's lifter, create/rename/delete routes gone
+  (name-only add/replace = 400), shared sessions on the leader's ids (identity map),
+  `_GoneFromExercise` makes the old attribute names fail loudly. Gym suite on the
+  migrated scratch DB: 716 passed + 1 xfailed (the form/route pairing test, T4 scope);
+  pre-G1 baseline 688. `test_scripts` 7 passed.
+- 2026-09-23 — G1 T4 (9141915): UI without create paths. Add sheet searches the whole
+  list on the `matches` contract (`search` per row + TS `fold` in `src/search.ts`, cases
+  = Python's outputs), no create row, "Keine Übung in der Liste passt zu …". Replace
+  picks same group, else the whole list. Catalogue: no create sheet/"anlegen"; empty
+  bands/state point to "Übung hinzufügen" in a workout. Detail: no delete; settings
+  sheet = step/rest/bar/(stack) prefilled, list values as placeholders, identity as
+  text. Shared confirm: no `new`. Payloads lose can_delete/added_id/name_taken and the
+  create sheet's fields; dead CSS removed; pairing test un-xfailed. vitest 488 passed,
+  tsc + build clean, gym pytest 718 passed. One earlier run failed
+  `test_an_empty_account_gets_the_checklist` once: it overlapped `npm run build`
+  rewriting the vite manifest while `GET /gym` rendered; alone, in its file pair and
+  in a clean full rerun it passes.
+- 2026-09-23 — G1 T5: python-playwright at 390x844 on the scratch DB (serve_g1.py,
+  :5002), 23/23 checks as user 4 and u1: 158 rows in the add sheet, no create row,
+  "bench press" finds Bankdrücken (Langhantel); rest from the lifter's setting (u1 Latzug
+  180) else the list (u4 150, bench 180 both); detail saves step 8 as u4's own, blank
+  drops it (back to the list's 5); catalogue = touched only (u4 0 -> empty state, then
+  2; u1 20). Screenshots read back; sessions and settings the run made removed. Graph:
+  temp worktree at `dev_personal-main-sync` (1097afc) + `git merge dev_personal` -> clean,
+  alembic heads = [e2c7a9f41b86], a fresh dev copy upgraded b7e3f9c1a2d4 -> e2c7a9f41b86;
+  worktree and copy removed.

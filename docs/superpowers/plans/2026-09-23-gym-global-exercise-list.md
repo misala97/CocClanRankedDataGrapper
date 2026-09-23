@@ -116,7 +116,7 @@ Migration helpers (module-level in the revision file, pure):
 ## Tasks
 
 ### T1: exercises.py pure core
-- [ ] Write `tests/test_gym_exercises.py` DB-free cases:
+- [x] Write `tests/test_gym_exercises.py` DB-free cases:
   - `entry_values` of `barbell_bench_press` gives a bar of 20 and rest 180; `stack_kg` is
     None and `secondary_muscle_groups` is a list.
   - `sync_plan({})` inserts all 158 entries. `sync_plan` over its own inserts is empty.
@@ -134,16 +134,16 @@ Migration helpers (module-level in the revision file, pure):
     - `stack_kg` on a non-stack gives None;
     - a stack list gives a sorted list;
     - a rest equal to the list gives None.
-- [ ] Run: `python <scratch>/run_g1_tests.py tests/test_gym_exercises.py -q -p no:cacheprovider`
+- [x] Run: `python <scratch>/run_g1_tests.py tests/test_gym_exercises.py -q -p no:cacheprovider`
   and expect an ImportError.
-- [ ] Implement the pure part of `exercises.py`, with the module docstring from the spec.
-- [ ] Re-run and expect everything to pass. Then run `test_gym_library.py` and expect 15
+- [x] Implement the pure part of `exercises.py`, with the module docstring from the spec.
+- [x] Re-run and expect everything to pass. Then run `test_gym_library.py` and expect 15
   passed.
-- [ ] Commit: `feat(gym): the exercise list's core -- sync plan, a lifter's setup, what gets
+- [x] Commit: `feat(gym): the exercise list's core -- sync plan, a lifter's setup, what gets
   stored`.
 
 ### T2: the migration (G2) and its harness
-- [ ] Write `tests/test_gym_global_migration_helpers.py`: load the revision file by path
+- [x] Write `tests/test_gym_global_migration_helpers.py`: load the revision file by path
   (importlib).
   - Every value of the frozen `PRODUCTION_2026_09` is a `LIBRARY` key, and it holds 21
     names.
@@ -158,8 +158,8 @@ Migration helpers (module-level in the revision file, pure):
     - a stack on a non-stack target gives no key;
     - a bar of 0 or None vs a list None gives no key.
   - `winner` picks the most session rows, then the lowest id.
-- [ ] Run it and expect a failure (no file).
-- [ ] Write the revision. `revision='e2c7a9f41b86'`, `down_revision='b7e3f9c1a2d4'`. The
+- [x] Run it and expect a failure (no file).
+- [x] Write the revision. `revision='e2c7a9f41b86'`, `down_revision='b7e3f9c1a2d4'`. The
   three phases follow the spec's Migration section:
   - additive DDL, each step guarded;
   - DML in one transaction, skipped when no row has a `user_id`, ending in the invariant
@@ -167,9 +167,9 @@ Migration helpers (module-level in the revision file, pure):
   - guarded drops.
   - It prints its mapping summary. `downgrade()` raises RuntimeError("... restore from
     backup").
-- [ ] Remove `library_mapping.py`. Move its test out of `test_gym_library.py` into the
+- [x] Remove `library_mapping.py`. Move its test out of `test_gym_library.py` into the
   helpers test.
-- [ ] Write `<scratch>/run_g1_migration.py`. It runs `upgrade()` through
+- [x] Write `<scratch>/run_g1_migration.py`. It runs `upgrade()` through
   `MigrationContext.configure(conn)` and `Operations.context(ctx)` on the scratch DB, then
   sets `alembic_version` to `e2c7a9f41b86`. Assertions on the dev copy:
   - 0 rows with a `user_id`; every session and template exercise points at a global row;
@@ -179,23 +179,23 @@ Migration helpers (module-level in the revision file, pure):
   - rest settings of 150 wherever the list is not 150;
   - the 'Probe Neu' rows land on one retired row (key NULL) carrying 2 session rows;
   - a second `upgrade()` changes nothing (same counts, no error).
-- [ ] Run the helpers test and expect it to pass. Recreate the scratch DB, run the
+- [x] Run the helpers test and expect it to pass. Recreate the scratch DB, run the
   migration harness, and expect all assertions OK.
-- [ ] Commit: `feat(gym): G2 -- the migration that puts every lifter's history on the one
+- [x] Commit: `feat(gym): G2 -- the migration that puts every lifter's history on the one
   list`.
 
 ### T3: backend on the global list
-- [ ] `models.py`: Exercise and ExerciseSettings per the Interfaces section. Drop the
+- [x] `models.py`: Exercise and ExerciseSettings per the Interfaces section. Drop the
   relationships and `back_populates` on both sides, and fix the per-user comments.
-- [ ] `exercises.py` DB layer. `routes/__init__.py`: `gym_bp.before_request` calls
+- [x] `exercises.py` DB layer. `routes/__init__.py`: `gym_bp.before_request` calls
   `ensure_library`.
-- [ ] Add DB tests to `test_gym_exercises.py`:
+- [x] Add DB tests to `test_gym_exercises.py`:
   - `sync_library` is idempotent: the second run gives (0, 0);
   - `setups` for two users on one exercise give different increments;
   - `save_setup` stores only differences and deletes an all-NULL row;
   - `touched_exercises` holds a logged exercise and not an untouched list row;
   - `library_exercises` holds 158 rows and no retired row.
-- [ ] Read sites (spec "What changes where"):
+- [x] Read sites (spec "What changes where"):
   - `history.load_performed` / `_to_performed` / `_session_rest_entries`;
   - `seeding._seeded_sets` / `_seeded_suggestion`;
   - `workout.py`: `_schedule_rest`, `gym_start`, `_live_data`, `_session_payload`,
@@ -206,7 +206,7 @@ Migration helpers (module-level in the revision file, pure):
   - `catalogue._catalogue_payload`;
   - `exercise_detail._exercise_detail_payload`.
   - Each takes the user from the session or routine being built.
-- [ ] Write sites:
+- [x] Write sites:
   - remove `gym_add_exercise` and `gym_delete_exercise`;
   - `gym_update_exercise` becomes `save_setup`;
   - `gym_update_exercise_increment` becomes `save_setup`;
@@ -214,9 +214,9 @@ Migration helpers (module-level in the revision file, pure):
     name-only post is a 400;
   - `partners.gym_shared_confirm`/`gym_shared_accept` and `sharing.follower_exercise_for`
     use the identity.
-- [ ] `scope.py`, the scripts, and `schemas.py`, which gains `list_defaults` on
+- [x] `scope.py`, the scripts, and `schemas.py`, which gains `list_defaults` on
   ExerciseMeta. The payload fields the UI reads stay until T4.
-- [ ] Rewrite the tests to the global semantics.
+- [x] Rewrite the tests to the global semantics.
   - Fixtures build key-less rows (`Exercise(name=..., list_increment=...)`, no user) or use
     list rows. Per-user values come as `ExerciseSettings` rows.
   - Files: conftest, test_gym_sharing, test_gym_routes_smoke, test_gym_exercise_ownership
@@ -224,40 +224,40 @@ Migration helpers (module-level in the revision file, pure):
     test_gym_equipment, test_gym_ownership, test_gym_exercise_detail_json,
     test_gym_schemas, test_gym_mutation_json, test_gym_audit_fixes, test_gym_export,
     test_gym_seeding, test_gym_session_fields, test_gym_session_json.
-- [ ] `grep -rn "weight_increment\|default_rest_seconds\|bar_weight\|stack_kg" features/gym`
+- [x] `grep -rn "weight_increment\|default_rest_seconds\|bar_weight\|stack_kg" features/gym`
   must show only `exercises.py`, the settings model, the PerformedExercise fields, `stats`
   and the payload/schema names. `grep -rn "user_id" models.py` shows no Exercise hit.
   `grep -rn "my_exercises\|owned_exercise\|previous_name\|session_exercises\b" features
   scripts` is empty.
-- [ ] Run the gym suite on the migrated scratch DB and expect all to pass. Its size will
+- [x] Run the gym suite on the migrated scratch DB and expect all to pass. Its size will
   differ from 688 by exactly the removed and added tests; write the count in the ledger.
-- [ ] Commit: `feat(gym): G1 -- one exercise list for every lifter, and settings that are
+- [x] Commit: `feat(gym): G1 -- one exercise list for every lifter, and settings that are
   theirs`.
 
 ### T4: UI without create paths
-- [ ] Update the vitest tests first:
+- [x] Update the vitest tests first:
   - sheets.test: no "Anlegen:" row, and the placeholder is "Übung suchen";
   - ExerciseSheet.test: no "+ Neue Übung anlegen";
   - CataloguePage.test: no create sheet;
   - ExerciseDetail.test: no delete button, and EditSheet has 4 fields;
   - SharedConfirmPage.test: no `new` option.
-- [ ] Components per the spec's "UI in G1" section. Payload fields removed on both sides:
+- [x] Components per the spec's "UI in G1" section. Payload fields removed on both sides:
   `can_delete`, `added_id`, `name_taken`. `list_defaults` is typed and used as
   placeholders.
-- [ ] Run `npx vitest run`, `npx tsc --noEmit` and `npm run build` (in `personal_apps`),
+- [x] Run `npx vitest run`, `npx tsc --noEmit` and `npm run build` (in `personal_apps`),
   and expect all green.
-- [ ] Commit: `feat(gym): no more "anlegen" -- the add sheet, catalogue and detail page pick
+- [x] Commit: `feat(gym): no more "anlegen" -- the add sheet, catalogue and detail page pick
   from the list`.
 
 ### T5: verification and handoff
-- [ ] python-playwright at 390×844 against a server on the scratch DB
+- [x] python-playwright at 390×844 against a server on the scratch DB
   (`<scratch>/serve_g1.py`, port 5002) as u1 and as user 4:
   - the add sheet lists the list and has no create row;
   - adding "Bankdrücken (Langhantel)" gets rest 180 for user 4 and the setting for u1;
   - the detail page saves step 8, then blank restores the list value;
   - the catalogue shows touched exercises only.
   - Screenshots are read back.
-- [ ] Graph check: a temp worktree from `dev_personal-main-sync` merged with dev_personal.
+- [x] Graph check: a temp worktree from `dev_personal-main-sync` merged with dev_personal.
   `flask db heads` gives a single head, `e2c7a9f41b86`. `flask db upgrade` on a fresh
   scratch copy passes. Then remove the worktree.
-- [ ] Ledger entries (first-run plan), HANDOFF rewrite, and a memory update. Commit the docs.
+- [x] Ledger entries (first-run plan), HANDOFF rewrite, and a memory update. Commit the docs.
