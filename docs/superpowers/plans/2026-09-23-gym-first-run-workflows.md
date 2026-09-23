@@ -54,8 +54,8 @@ stack and secondary groups -- the two creation paths disagree.
 | F7 | Start muscle chart for ungrouped sets | folded into G (every list exercise has a group) |
 | F8 | Invite-accept 'new' branch copies equipment facts | folded into G (no follower copies at all) |
 | L1 | THE list: complete exercise library as data (German names, config per entry, EN aliases) + prod mapping + review page | done — owner-approved with edits (rulings below) |
-| G1 | Spec: `library.py` becomes the one read-only exercise list for both lifters; NO custom exercises; per-user overrides of step/rest/stack stops/bar defaulting to the list; stats scoped by user | done — 80a833a spec, 3e81749 cf65778 9141915 (UNMERGED) |
-| G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | written + verified on dev copies, 812dad8 (UNMERGED; prod run needs the owner's explicit OK) |
+| G1 | Spec: `library.py` becomes the one read-only exercise list for both lifters; NO custom exercises; per-user overrides of step/rest/stack stops/bar defaulting to the list; stats scoped by user | done — 80a833a spec, 3e81749 cf65778 9141915; shipped in b439e44, deployed 2026-09-23 |
+| G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | done — 812dad8; ran on prod 2026-09-23 (41 -> 41 by mapping, 0 retired) |
 | G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | open — G1 made it work on shared ids; the machinery retires here |
 | V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | open — G1 T4 did the functional part (list-only, `matches` search, no create row); grouping + visual design remain |
 | V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | open |
@@ -151,3 +151,18 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   temp worktree at `dev_personal-main-sync` (1097afc) + `git merge dev_personal` -> clean,
   alembic heads = [e2c7a9f41b86], a fresh dev copy upgraded b7e3f9c1a2d4 -> e2c7a9f41b86;
   worktree and copy removed.
+- 2026-09-23 — Release + deploy (owner: "merge this", then an explicit OK to push to
+  main and deploy; the nightly backup is the rollback, no gym activity since it).
+  b439e44 = 64f5eee + 1097afc, built in a temp worktree. Checks on that tree: alembic
+  heads [e2c7a9f41b86], tsc clean, vitest 488, build clean, gym pytest 718 passed on the
+  scratch DB. G2 reviewed for MariaDB 10.11 first: portable SQL only; the user_id FK and
+  every index holding user_id drop before the column. Pushed main 0f3a0e7..b439e44 and
+  dev_personal 22b3191..b439e44; `update_coc.sh` on the VPS: "release succeeded",
+  migration 41 per-user rows -> 41 by mapping, 0 retired, 32 settings rows, 158 list
+  rows; all services active, no errors in the web/notifier logs, `/gym` answers.
+  Main checkout fast-forwarded after stashing (c3d92e8) and copying the 85 untracked
+  files main now tracks, then restoring them byte for byte (18 `radar-design/*.md`
+  differ from main and show as modified). Temp worktree and helper branches removed.
+  Dev DB upgrade refused by the permission guard; gym tables copied to
+  `personal_apps_gymbak_20260923`. Radar carry noted in radar-selected-price-charts'
+  HANDOFF.
