@@ -6,6 +6,7 @@ import { fold } from '../../search'
 import { ExerciseSheet } from './ExerciseSheet'
 import { useSaveState, useSheets } from '../stores'
 import { payload } from '../types.test-d'
+import { listed } from '../__fixtures__/catalogue'
 import type { LiveExercise } from '../types'
 
 beforeEach(() => {
@@ -17,11 +18,11 @@ beforeEach(() => {
 
 const exercise = payload.visible_exercises[0]!
 const catalogue = [
-  { id: exercise.exercise_id, name: exercise.name, muscle_group: exercise.muscle_group,
-    search: fold(exercise.name) },
-  { id: 900, name: 'Andere Brustübung', muscle_group: exercise.muscle_group,
-    search: 'andere brustubung' },
-  { id: 901, name: 'Ganz andere Gruppe', muscle_group: 'Waden', search: 'ganz andere gruppe' },
+  listed(exercise.exercise_id, exercise.name,
+    { muscle_group: exercise.muscle_group, search: fold(exercise.name) }),
+  listed(900, 'Andere Brustübung',
+    { muscle_group: exercise.muscle_group, search: 'andere brustubung' }),
+  listed(901, 'Ganz andere Gruppe', { muscle_group: 'Waden', search: 'ganz andere gruppe' }),
 ]
 
 const actions = () => ({

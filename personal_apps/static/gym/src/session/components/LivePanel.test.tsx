@@ -73,7 +73,9 @@ describe('LivePanel', () => {
     const h = handlers()
     render(<LivePanel payload={payload} {...h} />)
     const done = live.sets.find((s) => s.completed)!
-    await user.click(screen.getByLabelText(new RegExp(`^Satz ${live.sets.indexOf(done) + 1} erledigt`)))
+    // A record is a done set too, and the regenerated fixture may hold one.
+    await user.click(screen.getByLabelText(
+      new RegExp(`^Satz ${live.sets.indexOf(done) + 1} (erledigt|— Rekord)`)))
     expect(h.onToggleSet).toHaveBeenCalledWith(done.id, false)
   })
 
@@ -167,7 +169,16 @@ describe('LivePanel', () => {
   })
 
   it('says where the plan came from', () => {
-    render(<LivePanel payload={payload} {...handlers()} />)
+    // Its own seed rather than the fixture's: the fixture is regenerated from
+    // a real history, and the pick it finds changes with that history.
+    const same: SessionDetailPayload = {
+      ...payload,
+      seed_sources: {
+        ...payload.seed_sources,
+        [String(live.id)]: { date: '2026-08-25T09:47:25', position: live.position, basis: 'slot' },
+      },
+    }
+    render(<LivePanel payload={same} {...handlers()} />)
     const line = screen.getByText('Vorgabe').closest('p')!
     expect(line).toHaveTextContent('Vorgabe vom 25.08., gleiche Position im Workout.')
   })

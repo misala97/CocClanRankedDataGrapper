@@ -31,7 +31,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
-from models import (Exercise, ExerciseSettings, SessionExercise, TemplateExercise,
+from models import (Exercise, ExerciseSettings, SessionExercise, SessionSet, TemplateExercise,
                     WorkoutSession, WorkoutTemplate)
 
 from .library import BY_KEY, LIBRARY, fold
@@ -227,6 +227,75 @@ def touched_exercises(user_id):
     return (Exercise.query
             .filter(or_(Exercise.id.in_(logged), Exercise.id.in_(kept), Exercise.id.in_(set_up)))
             .order_by(Exercise.name).all())
+
+
+# -- what a lifter actually does ------------------------------------------------
+
+# How fast an old workout stops counting towards the exercise you mainly do:
+# one six weeks ago weighs half of one today.
+USAGE_HALF_LIFE_DAYS = 42
+# The add sheet's "Deine": done in at least two workouts -- once is a try, not
+# a habit -- and still weighing 15% of your most-done exercise, so what you
+# moved on from sinks out by itself. Beside a weekly regular that is about two
+# workouts in the last three weeks. Relative, not absolute: after a break
+# every weight has shrunk alike, and your usual exercises are exactly what you
+# come back to.
+COMMON_MIN_WORKOUTS = 2
+COMMON_MIN_SHARE = 0.15
+
+
+@dataclass(frozen=True)
+class Usage:
+    """One lifter's record with one exercise."""
+    workouts: int       # finished workouts with a completed set of it
+    last_done: object   # the latest of them, naive UTC
+    rank: int           # 1 = what they do most, recent weeks weighing more
+    common: bool        # listed under "Deine" in the add sheet
+
+
+def usage(user_id, now):
+    """{exercise_id: Usage} for every list exercise the lifter has done: in a
+    finished workout of theirs, with at least one completed set. A workout
+    counts once however often the exercise was in it.
+
+    Only what the picker offers (library_exercises) is ranked: a row that has
+    left the list can't be added again, and a big old habit on one would
+    still set the bar for what counts as common."""
+    rows = (db.session.query(SessionExercise.exercise_id, WorkoutSession.id,
+                             WorkoutSession.started_at)
+            .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+            .join(SessionSet, SessionSet.session_exercise_id == SessionExercise.id)
+            .join(Exercise, SessionExercise.exercise_id == Exercise.id)
+            .filter(WorkoutSession.user_id == user_id,
+                    WorkoutSession.finished_at.isnot(None),
+                    Exercise.library_key.in_([entry.key for entry in LIBRARY]),
+                    SessionSet.completed == True)  # noqa: E712
+            .distinct()
+            .all())
+    done = {}
+    for exercise_id, session_id, started_at in rows:
+        done.setdefault(exercise_id, {})[session_id] = started_at
+    weight = {
+        exercise_id: sum(0.5 ** (max((now - started).total_seconds(), 0) / 86400
+                                 / USAGE_HALF_LIFE_DAYS)
+                         for started in sessions.values())
+        for exercise_id, sessions in done.items()
+    }
+    # Ties go to more workouts, then the more recent; the id only keeps the
+    # order stable.
+    ranked = sorted(sorted(done), reverse=True,
+                    key=lambda i: (weight[i], len(done[i]), max(done[i].values())))
+    top = weight[ranked[0]] if ranked else 0.0
+    return {
+        exercise_id: Usage(
+            workouts=len(done[exercise_id]),
+            last_done=max(done[exercise_id].values()),
+            rank=place,
+            common=(len(done[exercise_id]) >= COMMON_MIN_WORKOUTS
+                    and weight[exercise_id] >= COMMON_MIN_SHARE * top),
+        )
+        for place, exercise_id in enumerate(ranked, start=1)
+    }
 
 
 def search_text(exercise):

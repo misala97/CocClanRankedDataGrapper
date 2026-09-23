@@ -39,6 +39,23 @@ def test_names_read_bewegung_geraet_variante():
         assert move == move.strip() == entry.movement and all(variants), entry.name
 
 
+def test_movement_and_label_put_the_name_back_together():
+    """The add sheet shows one movement once and each variant by its label, so
+    the two halves must be the whole name -- no word lost, none doubled."""
+    for entry in library.LIBRARY:
+        assert f'{entry.movement} ({entry.label})' == entry.name
+
+
+def test_a_movement_is_listed_in_one_section_in_the_lists_order():
+    assert set(library.MOVEMENT_GROUP) == {e.movement for e in library.LIBRARY}
+    firsts = {}
+    for entry in library.LIBRARY:
+        firsts.setdefault(entry.movement, entry.group)
+    assert library.MOVEMENT_GROUP == firsts
+    assert library.LIST_GROUPS[0] == library.LIBRARY[0].group
+    assert set(library.LIST_GROUPS) == set(library.MOVEMENT_GROUP.values())
+
+
 def test_a_name_off_the_pattern_is_refused():
     for name in ('Bankdrücken', 'Bankdrücken (Langhantel', 'Rudern, eng (Kabel)', 'Latzug (Kabel) eng'):
         with pytest.raises(ValueError):

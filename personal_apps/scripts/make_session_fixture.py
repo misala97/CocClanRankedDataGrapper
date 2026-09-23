@@ -140,6 +140,13 @@ def _stabilise(payload):
         }
     if payload['session'].get('resting_set_id') in set_map:
         payload['session']['resting_set_id'] = set_map[payload['session']['resting_set_id']]
+    # Other lifters' account names are theirs, not test data: the fixture is
+    # committed, and the partner picker only needs someone to pick.
+    names = {p['username']: f'Partner {i}' for i, p in enumerate(payload['partners'], start=1)}
+    payload['partners'] = [{'id': 1000 + i, 'username': f'Partner {i}'}
+                           for i, _ in enumerate(payload['partners'], start=1)]
+    payload['partner_status'] = [{**s, 'username': names.get(s['username'], 'Partner')}
+                                 for s in payload['partner_status']]
     return payload
 
 

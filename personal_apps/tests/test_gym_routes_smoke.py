@@ -1061,21 +1061,34 @@ def test_the_add_exercise_sheet_is_one_searchable_list(client, scratch_session):
     and tapping a row posts exercise_id. Since the one list (2026-09-23) it
     has no create row either: a name the list lacks is not an exercise.
     """
-    from features.gym.library import BY_KEY, fold
+    from features.gym.library import BY_KEY, LIBRARY, LIST_GROUPS, MOVEMENT_GROUP, fold
 
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
 
     # The sheet is a React component; that it is ONE list is pinned by
     # AddExerciseSheet in static/gym/src/session/components/sheets.test.tsx.
     # What the server owes it is the list to search, and what to search it by.
-    catalogue = embedded_payload(html)['exercises']
+    payload = embedded_payload(html)
+    catalogue = payload['exercises']
     assert catalogue, 'no catalogue for the add sheet to search'
-    assert set(catalogue[0]) == {'id', 'name', 'muscle_group', 'search'}
+    assert set(catalogue[0]) == {'id', 'name', 'muscle_group', 'search', 'movement', 'label',
+                                 'movement_group', 'workouts', 'days_ago', 'rank', 'common'}
 
     # The German name is what shows; the English one must still find it.
     bench = next(row for row in catalogue
                  if row['name'] == BY_KEY['barbell_bench_press'].name)
     assert fold('Bench Press') in bench['search']
+    assert (bench['movement'], bench['label'], bench['movement_group']) == \
+        ('Bankdrücken', 'Langhantel', 'Brust')
+
+    # A variant that works another muscle first is still listed with its
+    # movement: the sheet's sections are movements' groups, in the list's order.
+    assert payload['list_groups'] == list(LIST_GROUPS)
+    split = next((e for e in LIBRARY if e.group != MOVEMENT_GROUP[e.movement]), None)
+    if split is not None:
+        row = next(row for row in catalogue if row['name'] == split.name)
+        assert row['muscle_group'] == split.group
+        assert row['movement_group'] == MOVEMENT_GROUP[split.movement]
 
 
 def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scratch_session):

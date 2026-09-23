@@ -21,10 +21,11 @@ from models import (
 )
 from auth import login_required
 from features.gym import stats
+from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
 from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
 from features.gym.exercises import (
     exercise_or_404, library_exercises, save_setup, search_text, setup as exercise_setup,
-    setups as exercise_setups, touched_exercises,
+    setups as exercise_setups, touched_exercises, usage as exercise_usage,
 )
 from features.gym.scope import (
     current_user_id, my_sessions, my_templates,
@@ -551,6 +552,10 @@ def _live_data(session_):
             ready_for_more = {**ready_for_more,
                               'next_weight': step_up(live_se.exercise, ready_for_more['weight'])}
     exercises = library_exercises()
+    # What the owner of this session does -- the add sheet leads with it. The
+    # session's lifter, not the request's: the same rule as their setups.
+    usage_now = dt.datetime.utcnow()
+    usage = exercise_usage(session_.user_id, usage_now)
 
     # One tick per set in the whole workout, in order, so the strip reads as
     # the session filling up rather than as a chart. 'now' is the single set
@@ -647,6 +652,8 @@ def _live_data(session_):
         default_plan_weight=stats.DEFAULT_PLAN_WEIGHT,
         default_plan_reps=stats.DEFAULT_PLAN_REPS,
         exercises=exercises,
+        usage=usage,
+        usage_now=usage_now,
         muscle_groups=MUSCLE_GROUPS,
         vapid_public_key=current_app.config.get('VAPID_PUBLIC_KEY'),
         # Scoped to the caller: PushSubscription.endpoint is a global table
@@ -751,11 +758,9 @@ def _session_payload(session_):
         'min_full_reps': data['min_full_reps'],
         'default_plan_weight': data['default_plan_weight'],
         'default_plan_reps': data['default_plan_reps'],
-        'exercises': [
-            {'id': e.id, 'name': e.name, 'muscle_group': e.muscle_group,
-             'search': search_text(e)}
-            for e in data['exercises']
-        ],
+        'exercises': [_catalogue_entry(e, data['usage'].get(e.id), data['usage_now'])
+                      for e in data['exercises']],
+        'list_groups': list(LIST_GROUPS),
         'muscle_groups': list(data['muscle_groups']),
         'vapid_public_key': data['vapid_public_key'],
         'has_completed_set': data['has_completed_set'],
@@ -768,6 +773,23 @@ def _session_payload(session_):
         'partner_status': data['partner_status'],
         'session_is_shared': data['session_is_shared'],
     })
+
+
+def _catalogue_entry(exercise, used, now):
+    """One row of the add sheet's list: the exercise, the movement it is a
+    variant of, and what this lifter has done with it (`used`, an
+    exercises.Usage, or None for never)."""
+    entry = BY_KEY[exercise.library_key]
+    return {
+        'id': exercise.id, 'name': exercise.name, 'muscle_group': exercise.muscle_group,
+        'search': search_text(exercise),
+        'movement': entry.movement, 'label': entry.label,
+        'movement_group': MOVEMENT_GROUP[entry.movement],
+        'workouts': used.workouts if used else 0,
+        'days_ago': stats.calendar_days_between(used.last_done, now) if used else None,
+        'rank': used.rank if used else None,
+        'common': used.common if used else False,
+    }
 
 
 def _mutation_response(session_, endpoint, **values):

@@ -15,6 +15,8 @@ import type { ReactNode } from 'react'
  */
 const PATHS = {
   back: <path d="M10 3.2L5.2 8l4.8 4.8" />,
+  forward: <path d="M6 3.2l4.8 4.8L6 12.8" />,
+  search: <><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2l3.2 3.2" /></>,
   edit: (
     <>
       <path d="M11.3 2.2a1.6 1.6 0 0 1 2.3 2.3l-7.4 7.4-3 .7.7-3z" />

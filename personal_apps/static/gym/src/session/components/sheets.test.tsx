@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeloadSheet } from './DeloadSheet'
@@ -6,6 +6,7 @@ import { TemplateSheet } from './TemplateSheet'
 import { AddExerciseSheet } from './AddExerciseSheet'
 import { useSheets } from '../stores'
 import { payload } from '../types.test-d'
+import { listed } from '../__fixtures__/catalogue'
 
 beforeEach(() => {
   useSheets.setState(useSheets.getInitialState(), true)
@@ -91,22 +92,149 @@ describe('TemplateSheet', () => {
 })
 
 describe('AddExerciseSheet', () => {
-  // `search` as the server sends it (exercises.search_text): the folded name
-  // and aliases.
+  // As the server sends them: `search` is the folded name and aliases.
   const catalogue = [
-    { id: 1, name: 'Bankdrücken', muscle_group: 'Brust', search: 'bankdrucken bench press' },
-    { id: 2, name: 'Klimmzug', muscle_group: 'Rücken', search: 'klimmzug pull up' },
+    listed(1, 'Bankdrücken (Langhantel)', { search: 'bankdrucken langhantel bench press' }),
+    listed(2, 'Latzug (Kabel)', { muscle_group: 'Rücken', search: 'latzug kabel lat pulldown' }),
   ]
-  const props = { catalogue, inSession: [], onAdd: vi.fn() }
+  const props = { catalogue, groups: ['Brust', 'Rücken'], inSession: [], onAdd: vi.fn() }
+
+  // One lifter's history: two preacher-curl machines, one of them mainly
+  // (owner: "we have 2 preacher curls and we only do one mainly"), a row
+  // machine done a lot, a second one done twice long ago, a curl tried once.
+  const history = [
+    listed(10, 'Scottcurls (Maschine)',
+      { muscle_group: 'Bizeps', workouts: 12, days_ago: 1, rank: 2, common: true }),
+    listed(11, 'Scottcurls (Maschine, Scheiben)',
+      { muscle_group: 'Bizeps', workouts: 9, days_ago: 33, rank: 3, common: true }),
+    listed(12, 'Scottcurls (SZ-Stange)', { muscle_group: 'Bizeps' }),
+    listed(20, 'Rudern (Maschine)',
+      { muscle_group: 'Rücken', workouts: 23, days_ago: 1, rank: 1, common: true }),
+    listed(21, 'Rudern (T-Bar, liegend)',
+      { muscle_group: 'Rücken', workouts: 2, days_ago: 70, rank: 5 }),
+    listed(22, 'Rudern (Kabel)', { muscle_group: 'Rücken' }),
+    listed(30, 'Bizepscurls (Kurzhantel)',
+      { muscle_group: 'Bizeps', workouts: 1, days_ago: 4, rank: 4 }),
+    listed(31, 'Bankdrücken (Langhantel)'),
+  ]
+  const lived = { ...props, catalogue: history, groups: ['Brust', 'Rücken', 'Bizeps'] }
+
+  /** The exercise or movement each row names, in order. */
+  const names = (root: ParentNode) => Array.from(root.querySelectorAll('.sheet-row__name'))
+    .map((name) => name.childNodes[0]?.textContent)
+  const section = (name: string) => screen.getByRole('region', { name: new RegExp(`^${name}`) })
+
+  it('leads with what you do often, one movement’s machines together, the main one first', () => {
+    render(<AddExerciseSheet {...lived} />)
+    open('sheet-add-exercise')
+
+    const deine = section('Deine')
+    expect(names(deine)).toEqual(
+      ['Rudern (Maschine)', 'Scottcurls (Maschine)', 'Scottcurls (Maschine, Scheiben)'])
+    expect(within(deine).getByText('23×')).toBeInTheDocument()
+    expect(within(deine).getAllByText('Gestern')).toHaveLength(2)
+    // Done, but not often: down in the full list, not up here.
+    expect(within(deine).queryByText('Rudern (T-Bar, liegend)')).not.toBeInTheDocument()
+    expect(within(deine).queryByText('Bizepscurls (Kurzhantel)')).not.toBeInTheDocument()
+  })
+
+  it('lists every movement once below it, by muscle in the list’s order, A-Z', () => {
+    render(<AddExerciseSheet {...lived} />)
+    open('sheet-add-exercise')
+
+    expect(screen.getByText('Alle Übungen')).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 4 })
+      .map((head) => head.querySelector('.label')!.textContent)).toEqual(['Brust', 'Rücken', 'Bizeps'])
+    const bizeps = section('Bizeps')
+    expect(names(bizeps)).toEqual(['Bizepscurls', 'Scottcurls'])
+    // The variants you do, with how often; one Gerät is its own row.
+    expect(within(bizeps).getByText('Maschine 12× · Maschine, Scheiben 9×')).toBeInTheDocument()
+    expect(within(bizeps).getByText('Kurzhantel 1×')).toBeInTheDocument()
+    expect(within(section('Rücken')).getByText('Maschine 23× · T-Bar, liegend 2×')).toBeInTheDocument()
+  })
+
+  it('adds a one-Gerät movement straight from the list, keyboard down', async () => {
+    const user = userEvent.setup()
+    const onAdd = vi.fn()
+    render(<AddExerciseSheet {...lived} onAdd={onAdd} />)
+    open('sheet-add-exercise')
+
+    await user.click(within(section('Brust')).getByText('Bankdrücken'))
+    expect(onAdd).toHaveBeenCalledWith(31)
+    expect(screen.getByLabelText('Übung suchen')).not.toHaveFocus()
+  })
+
+  it('opens a movement’s machines one level deeper, yours first, the main one marked', async () => {
+    const user = userEvent.setup()
+    const onAdd = vi.fn()
+    const { container } = render(<AddExerciseSheet {...lived} onAdd={onAdd} />)
+    open('sheet-add-exercise')
+
+    await user.click(within(section('Bizeps')).getByText('Scottcurls'))
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Scottcurls')
+    expect(screen.queryByLabelText('Übung suchen')).not.toBeInTheDocument()
+    expect(names(container)).toEqual(['Maschine', 'Maschine, Scheiben', 'SZ-Stange'])
+    expect(screen.getAllByText('meistens')).toHaveLength(1)
+    expect(screen.getByText('Gestern · 12 Workouts')).toBeInTheDocument()
+    expect(screen.getByText('vor 5 Wochen · 9 Workouts')).toBeInTheDocument()
+    expect(screen.getByText('Weitere Geräte')).toBeInTheDocument()
+    expect(screen.getByText('Noch nie gemacht')).toBeInTheDocument()
+    // The reader moves with the sheet.
+    expect(screen.getByLabelText('Zurück')).toHaveFocus()
+
+    await user.click(screen.getByText('SZ-Stange'))
+    expect(onAdd).toHaveBeenCalledWith(12)
+
+    await user.click(screen.getByLabelText('Zurück'))
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Übung hinzufügen')
+    expect(container.querySelector('[data-movement="Scottcurls"]')).toHaveFocus()
+  })
+
+  it('marks "meistens" only where there was a choice', async () => {
+    const user = userEvent.setup()
+    render(<AddExerciseSheet {...lived} catalogue={history.filter((e) => e.id !== 11)} />)
+    open('sheet-add-exercise')
+    await user.click(within(section('Bizeps')).getByText('Scottcurls'))
+    // One machine of yours is trivially the main one: nothing to say.
+    expect(screen.queryByText('meistens')).not.toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('Zurück'))
+    await user.click(within(section('Rücken')).getByText('Rudern'))
+    expect(names(screen.getByRole('dialog'))).toEqual(['Maschine', 'T-Bar, liegend', 'Kabel'])
+    expect(screen.getAllByText('meistens')).toHaveLength(1)
+  })
+
+  it('finds exact exercises, yours first and the rest quieter', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<AddExerciseSheet {...lived} />)
+    open('sheet-add-exercise')
+
+    await user.type(screen.getByLabelText('Übung suchen'), 'curls')
+    const rows = Array.from(container.querySelectorAll('.exadd__row'))
+    expect(names(container)).toEqual(['Scottcurls (Maschine)', 'Scottcurls (Maschine, Scheiben)',
+      'Scottcurls (SZ-Stange)', 'Bizepscurls (Kurzhantel)'])
+    expect(rows[0]).not.toHaveClass('exadd__row--other')
+    expect(rows[2]).toHaveClass('exadd__row--other')
+  })
+
+  it('on a first run says the top fills up, and shows the whole list', () => {
+    render(<AddExerciseSheet {...props} />)
+    open('sheet-add-exercise')
+    expect(screen.getByText('Was du oft machst, rückt hier nach oben.')).toBeInTheDocument()
+    expect(screen.queryByText('Deine')).not.toBeInTheDocument()
+    expect(screen.queryByText('Alle Übungen')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 3 })
+      .map((head) => head.querySelector('.label')!.textContent)).toEqual(['Brust', 'Rücken'])
+  })
 
   it('filters the list as you type, without a round trip', async () => {
     const user = userEvent.setup()
     render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
 
-    await user.type(screen.getByLabelText('Übung suchen'), 'klimm')
-    expect(screen.getByText('Klimmzug')).toBeInTheDocument()
-    expect(screen.queryByText('Bankdrücken')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Übung suchen'), 'lat')
+    expect(screen.getByText('Latzug (Kabel)')).toBeInTheDocument()
+    expect(screen.queryByText(/Bankdrücken/)).not.toBeInTheDocument()
   })
 
   it('finds a German name by an English one, and without the umlaut', async () => {
@@ -118,12 +246,12 @@ describe('AddExerciseSheet', () => {
     const field = screen.getByLabelText('Übung suchen')
 
     await user.type(field, 'Bench Press')
-    expect(screen.getByText('Bankdrücken')).toBeInTheDocument()
-    expect(screen.queryByText('Klimmzug')).not.toBeInTheDocument()
+    expect(screen.getByText('Bankdrücken (Langhantel)')).toBeInTheDocument()
+    expect(screen.queryByText(/Latzug/)).not.toBeInTheDocument()
 
     await user.clear(field)
     await user.type(field, 'bankdruecken')
-    expect(screen.getByText('Bankdrücken')).toBeInTheDocument()
+    expect(screen.getByText('Bankdrücken (Langhantel)')).toBeInTheDocument()
   })
 
   it('offers nothing to create, and says when the list has no match', async () => {
@@ -139,34 +267,36 @@ describe('AddExerciseSheet', () => {
     expect(screen.getByText(/Keine Übung in der Liste/)).toBeInTheDocument()
   })
 
-  it('counts what is already in the session from the payload', () => {
+  it('marks what is already in the session, from the payload', () => {
     // Derived from the session's real contents rather than tallied
-    // client-side, so the count cannot drift from the workout.
-    render(<AddExerciseSheet {...props}
-      inSession={payload.visible_exercises}
-      catalogue={[{ id: payload.visible_exercises[0]!.exercise_id,
-                    name: 'Schon drin', muscle_group: null, search: 'schon drin' }]} />)
+    // client-side, so the mark cannot drift from the workout.
+    const first = payload.visible_exercises[0]!
+    const { rerender } = render(<AddExerciseSheet {...props} inSession={[first]}
+      catalogue={[listed(first.exercise_id, 'Schon drin (Maschine)')]} />)
     open('sheet-add-exercise')
-    expect(screen.getByText('1× drin')).toBeInTheDocument()
+    expect(screen.getByText('drin')).toBeInTheDocument()
+
+    rerender(<AddExerciseSheet {...props} inSession={[first, { ...first, id: 999 }]}
+      catalogue={[listed(first.exercise_id, 'Schon drin (Maschine)')]} />)
+    expect(screen.getByText('2× drin')).toBeInTheDocument()
   })
 
   it('keeps the query when the sheet is closed and reopened', async () => {
     const user = userEvent.setup()
     render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
-    await user.type(screen.getByLabelText('Übung suchen'), 'klimm')
+    await user.type(screen.getByLabelText('Übung suchen'), 'lat')
 
     act(() => { useSheets.getState().close() })
     open('sheet-add-exercise')
-    expect(screen.getByLabelText('Übung suchen')).toHaveValue('klimm')
+    expect(screen.getByLabelText('Übung suchen')).toHaveValue('lat')
   })
 
   it('marks the row it is adding and refuses a second tap on it', async () => {
     // Adding an exercise has no optimistic path -- it waits for the server,
     // which recomputes which exercise is live -- and the sheet stays open, so
     // without this a slow add looks like a tap that did nothing. Tapping again
-    // adds the exercise twice. .exadd__row.is-busy was written for exactly
-    // this and nothing ever applied it.
+    // adds the exercise twice.
     const user = userEvent.setup()
     const onAdd = vi.fn()
     const { container } = render(
@@ -181,10 +311,26 @@ describe('AddExerciseSheet', () => {
     expect(onAdd).not.toHaveBeenCalled()
   })
 
-  it('opens with the cursor in the search field, not on Fertig', () => {
+  it('keeps focus on the row while it adds, not on the page behind', async () => {
+    const user = userEvent.setup()
+    const onAdd = vi.fn()
+    const { rerender } = render(<AddExerciseSheet {...props} onAdd={onAdd} />)
+    open('sheet-add-exercise')
+
+    const row = screen.getByText('Bankdrücken').closest('button')!
+    await user.click(row)
+    expect(onAdd).toHaveBeenCalledWith(1)
+    rerender(<AddExerciseSheet {...props} onAdd={onAdd} busyExerciseId={1} />)
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    expect(row).toHaveFocus()
+  })
+
+  it('opens without taking focus, so no keyboard jumps up over the list', () => {
     render(<AddExerciseSheet {...props} />)
     open('sheet-add-exercise')
-    expect(screen.getByLabelText('Übung suchen')).toHaveFocus()
+    const field = screen.getByLabelText('Übung suchen')
+    expect(field).not.toHaveFocus()
+    expect(field).not.toHaveAttribute('data-autofocus')
   })
 
   it('asks before adding a second copy of an exercise already in the workout', async () => {
@@ -192,7 +338,7 @@ describe('AddExerciseSheet', () => {
     // and tapping it -- the natural "that one" -- added it twice.
     const user = userEvent.setup()
     const onAdd = vi.fn()
-    const inWorkout = [{ ...payload.visible_exercises[0]!, exercise_id: 1, name: 'Bankdrücken' }]
+    const inWorkout = [{ ...payload.visible_exercises[0]!, exercise_id: 1, name: 'Bankdrücken (Langhantel)' }]
     render(<AddExerciseSheet {...props} onAdd={onAdd} inSession={inWorkout} />)
     open('sheet-add-exercise')
 
@@ -211,17 +357,18 @@ describe('AddExerciseSheet', () => {
     open('sheet-add-exercise')
     const field = screen.getByLabelText('Übung suchen')
     await user.type(field, 'bank')
-    await user.click(screen.getByText('Bankdrücken'))
+    await user.click(screen.getByText('Bankdrücken (Langhantel)'))
 
-    // Still waiting on the server: the query stays for a retry.
+    // Still waiting on the server: the query stays for a retry, and the
+    // cursor stays where the next name is typed.
     expect(onAdd).toHaveBeenCalledWith(1)
     expect(field).toHaveValue('bank')
     expect(field).toHaveFocus()
 
-    const landed = [{ ...payload.visible_exercises[0]!, exercise_id: 1, name: 'Bankdrücken' }]
+    const landed = [{ ...payload.visible_exercises[0]!, exercise_id: 1, name: 'Bankdrücken (Langhantel)' }]
     rerender(<AddExerciseSheet {...props} onAdd={onAdd} inSession={landed} />)
     expect(field).toHaveValue('')
-    expect(screen.getByRole('status')).toHaveTextContent('✓ Bankdrücken ist drin.')
+    expect(screen.getByRole('status')).toHaveTextContent('✓ Bankdrücken (Langhantel) ist drin.')
   })
 
   it('adds without closing, so six exercises is not six round trips', async () => {

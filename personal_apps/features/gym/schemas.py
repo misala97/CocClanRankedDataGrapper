@@ -264,6 +264,22 @@ class CatalogueExercise(_Model):
     #: an entry when every word of the folded query occurs in it -- the
     #: library.matches contract, so English and umlaut-free typing work.
     search: str
+    #: The movement it is a variant of and what sets it apart from the other
+    #: variants: `Bankdrücken` and `Kurzhantel` of `Bankdrücken (Kurzhantel)`.
+    movement: str
+    label: str
+    #: The section the sheet lists the movement under (library.MOVEMENT_GROUP),
+    #: the same for all of its variants.
+    movement_group: str
+    #: This lifter's finished workouts with a completed set of it; 0 = never.
+    workouts: int
+    #: Calendar days since the last of them; None = never.
+    days_ago: int | None
+    #: 1 = what this lifter does most, recent weeks weighing more (exercises.
+    #: usage); None = never done.
+    rank: int | None
+    #: Listed under "Deine" at the top of the sheet.
+    common: bool
 
 
 class Suggestion(_Model):
@@ -373,6 +389,8 @@ class SessionDetailPayload(_Model):
     default_plan_reps: int
 
     exercises: list[CatalogueExercise]
+    # The add sheet's sections in the list's own order (library.LIST_GROUPS).
+    list_groups: list[str]
     muscle_groups: list[str]
     # None whenever VAPID_PUBLIC_KEY is unset in .env, which is the normal
     # state on a fresh checkout.

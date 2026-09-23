@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { Icon } from '../../components/Icon'
 import { useSheets } from '../stores'
 
 interface Props {
@@ -7,6 +8,9 @@ interface Props {
   /** Label on the dismiss control. "Fertig" for sheets you act inside,
    *  "Abbrechen" for ones that are a single decision. */
   closeLabel?: string
+  /** A sheet that has gone one level deeper: a back control before the title,
+   *  with the id `${id}-back` so the sheet can hand it focus. */
+  onBack?: () => void
   /** Keeps the body mounted while the sheet is closed. Only for a sheet whose
    *  contents are a DRAFT the lifter must get back -- the new-exercise form is
    *  closed by a name collision and reopened to fix the name. Never for one
@@ -37,7 +41,7 @@ interface Props {
  * current state" true rather than merely intended.
  */
 export function Sheet({
-  id, title, closeLabel = 'Fertig', keepMounted = false, children,
+  id, title, closeLabel = 'Fertig', onBack, keepMounted = false, children,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
   const openId = useSheets((s) => s.openId)
@@ -69,6 +73,12 @@ export function Sheet({
       onClose={() => { if (useSheets.getState().openId === id) close() }}
     >
       <div className="sheet__head">
+        {onBack && (
+          <button type="button" className="icon-btn sheet__back" id={`${id}-back`}
+            aria-label="Zurück" onClick={onBack}>
+            <Icon name="back" />
+          </button>
+        )}
         <h2 className="sheet__title" id={`${id}-title`}>{title}</h2>
         <button type="button" className="sheet__close" onClick={close}>
           {closeLabel}

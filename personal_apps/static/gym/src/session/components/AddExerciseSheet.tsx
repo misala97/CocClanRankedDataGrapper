@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CatalogueExercise, LiveExercise } from '../types'
 import { useSheets } from '../stores'
-import { matches } from '../../search'
+import { recency } from '../../catalogue/format'
+import { Icon } from '../../components/Icon'
+import { found, mine, movementMeta, sections, workouts, yoursFirst } from '../picker'
 import { Sheet } from './Sheet'
 
 interface Props {
   /** The whole exercise list -- everyone picks from the same one. */
   catalogue: CatalogueExercise[]
-  /** The session's current contents, for the "schon drin" counts. Derived from
-   *  the payload rather than tallied client-side, so the count is the real
+  /** The list's muscle groups in its own order: the full list's sections. */
+  groups: string[]
+  /** The session's current contents, for the "drin" marks. Derived from the
+   *  payload rather than tallied client-side, so the mark is the real
    *  contents and cannot drift. */
   inSession: LiveExercise[]
   onAdd(exerciseId: number): void
@@ -27,34 +31,48 @@ interface Pending {
   before: number
 }
 
+const ID = 'sheet-add-exercise'
+
 /**
- * One field over the one exercise list.
+ * The one exercise list, yours first (owner, V1: "my common ones first and
+ * the rest in a properly ordered list by movement").
+ *
+ * Three views in one sheet. Opened, it leads with "Deine" -- what you do
+ * often, one movement's variants as a block, the one you mainly do on top --
+ * and below it every movement once, by muscle, A-Z. A movement with several
+ * Geräte opens them one level deeper, yours first. Typing turns the sheet
+ * into search results, exact exercises, yours first. The ordering itself is
+ * ../picker.
+ *
+ * Nothing takes focus on open: the common case is one tap on something you
+ * always do, and a keyboard that jumps up over the list hides it.
  *
  * The search keeps library.matches' contract: every word of the query has to
  * occur in the exercise's name or aliases, so "Bench Press" and "bankdruecken"
- * still find Bankdrücken (Langhantel) -- the names the lifters typed before the
- * list are its aliases. Nothing is created here: an exercise that is not on
- * the list is not in the app.
+ * still find Bankdrücken (Langhantel). Nothing is created here: an exercise
+ * that is not on the list is not in the app.
  *
- * The sheet stays open. It used to close and full-page-render on every add,
- * so building a six-exercise workout was six round trips.
- *
- * Staying open is only half of it: the query used to stay too, so after an
- * add the one row left under the thumb was that exercise itself -- and
- * tapping it, the natural way to say "that one", added a second copy. The
- * field now empties once the add has landed, and a row that is already in the
- * workout asks before it adds another.
+ * The sheet stays open after an add, so building a workout is not a round
+ * trip per exercise. A search empties once its add has landed -- otherwise
+ * the one row left under the thumb was that exercise itself, and tapping it,
+ * the natural way to say "that one", added a second copy -- and a row already
+ * in the workout asks before it adds another.
  */
 export function AddExerciseSheet({
-  catalogue, inSession, onAdd, busyExerciseId = null,
+  catalogue, groups, inSession, onAdd, busyExerciseId = null,
 }: Props) {
   const query = useSheets((s) => s.addQuery)
   const setQuery = useSheets((s) => s.setAddQuery)
-  const isOpen = useSheets((s) => s.openId === 'sheet-add-exercise')
+  const isOpen = useSheets((s) => s.openId === ID)
   const field = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<Pending | null>(null)
   const [added, setAdded] = useState<string | null>(null)
   const [armedId, setArmedId] = useState<number | null>(null)
+  // One level deeper: the movement whose Geräte are showing, and where the
+  // list was scrolled when it opened, so Zurück lands back on the same row.
+  const [movement, setMovement] = useState<string | null>(null)
+  const listScroll = useRef(0)
+  const cameFrom = useRef<string | null>(null)
 
   const countIn = (exerciseId: number) =>
     inSession.filter((se) => se.exercise_id === exerciseId).length
@@ -71,39 +89,199 @@ export function AddExerciseSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inSession, pending])
 
-  // The confirmation belongs to this visit to the sheet.
+  // The confirmation and the level belong to this visit to the sheet.
   useEffect(() => {
     if (!isOpen) {
       setAdded(null)
       setArmedId(null)
+      setMovement(null)
+      cameFrom.current = null
     }
   }, [isOpen])
+
+  // A change of level moves the reader with it: deeper starts at the top with
+  // focus on Zurück, and the way back restores the scroll and the focus to
+  // the movement it came from -- a screen reader would otherwise be left on a
+  // control that no longer exists.
+  useLayoutEffect(() => {
+    const dialog = document.getElementById(ID)
+    if (dialog === null) return
+    if (movement !== null) {
+      dialog.scrollTop = 0
+      document.getElementById(`${ID}-back`)?.focus()
+    } else if (cameFrom.current !== null) {
+      dialog.scrollTop = listScroll.current
+      const rows = dialog.querySelectorAll<HTMLElement>('[data-movement]')
+      Array.from(rows).find((row) => row.dataset.movement === cameFrom.current)?.focus()
+      cameFrom.current = null
+    }
+  }, [movement])
+
+  const openMovement = (name: string) => {
+    listScroll.current = document.getElementById(ID)?.scrollTop ?? 0
+    cameFrom.current = name
+    setArmedId(null)
+    setMovement(name)
+  }
 
   const add = (exercise: CatalogueExercise) => {
     setPending({ name: exercise.name, exerciseId: exercise.id, before: countIn(exercise.id) })
     setAdded(null)
     setArmedId(null)
     onAdd(exercise.id)
-    // The tapped row may be about to vanish; the cursor goes back where the
-    // next name is typed, which also keeps a phone's keyboard up for it.
-    field.current?.focus()
+    // A search is typed: its row is about to vanish, and the cursor goes back
+    // where the next name goes. A tap from the list keeps the keyboard down.
+    if (query.trim() !== '') field.current?.focus()
   }
 
-  // Filtering is client-side over a list the server already sent -- hundreds
-  // of rows, not thousands -- and a round trip per keystroke on gym wifi would
-  // be worse than useless.
-  const hits = catalogue.filter((e) => matches(e.search, query))
+  const searching = query.trim() !== ''
+  // Client-side over the list the server already sent -- 158 rows -- because
+  // a round trip per keystroke on gym wifi would be worse than useless.
+  const hits = useMemo(() => (searching ? found(catalogue, query) : []), [catalogue, query, searching])
+  const common = useMemo(() => mine(catalogue), [catalogue])
+  const listed = useMemo(() => sections(catalogue, groups), [catalogue, groups])
+
+  /** A row that adds: one tap, or two when the exercise is already in. */
+  const row = (exercise: CatalogueExercise, name: ReactNode, meta: string | null,
+    trail: ReactNode, other = false) => {
+    const already = countIn(exercise.id)
+    const armed = armedId === exercise.id
+    const busy = busyExerciseId === exercise.id
+    return (
+      <button type="button" key={exercise.id}
+        className={['sheet-row', 'exadd__row', other ? 'exadd__row--other' : '',
+          busy ? 'is-busy' : '', armed ? 'is-armed' : '']
+          .filter(Boolean).join(' ')}
+        // Not `disabled`: that blurs the row just tapped and drops focus onto
+        // the page behind the sheet, and a list tap no longer refocuses the
+        // field -- a screen reader would lose its place on every add.
+        aria-disabled={busy || undefined}
+        onClick={() => {
+          if (busy) return
+          // Already in the workout: the first tap asks, the second adds.
+          // Doing an exercise twice is legitimate; doing it twice by accident
+          // was the easiest mistake on this sheet.
+          if (already > 0 && !armed) {
+            setArmedId(exercise.id)
+            return
+          }
+          add(exercise)
+        }}>
+        <span className="sheet-row__main">
+          <span className="sheet-row__name">
+            {name}
+            {already > 0 && (
+              <span className="exadd__in">{already === 1 ? 'drin' : `${already}× drin`}</span>
+            )}
+          </span>
+          {armed ? (
+            <span className="sheet-row__meta exadd__ask">Nochmal hinzufügen?</span>
+          ) : meta !== null && (
+            <span className="sheet-row__meta exadd__meta">{meta}</span>
+          )}
+        </span>
+        {trail}
+      </button>
+    )
+  }
+
+  const times = (exercise: CatalogueExercise) =>
+    exercise.workouts > 0 ? <span className="exadd__n">{`${exercise.workouts}×`}</span> : null
+  const plus = <span className="exadd__plus"><Icon name="plus" /></span>
+  /** Yours: when last and how often; the rest just its name, quieter. */
+  const exact = (exercise: CatalogueExercise) => (exercise.rank !== null
+    ? row(exercise, exercise.name, recency(exercise.days_ago), times(exercise))
+    : row(exercise, exercise.name, null, null, true))
+
+  let body: ReactNode
+  if (movement !== null) {
+    const rows = yoursFirst(catalogue.filter((exercise) => exercise.movement === movement))
+    const done = rows.filter((exercise) => exercise.rank !== null)
+    const rest = rows.filter((exercise) => exercise.rank === null)
+    body = (
+      <>
+        {done.length > 0 && <GroupHead label="Deine" />}
+        {done.map((exercise, i) => row(exercise,
+          <>
+            {exercise.label}
+            {/* Only a real choice has a "mainly": one variant is trivially it. */}
+            {i === 0 && done.length > 1 && <span className="chip exadd__most">meistens</span>}
+          </>,
+          `${recency(exercise.days_ago)} · ${workouts(exercise.workouts)}`, plus))}
+        {rest.length > 0 && <GroupHead label={done.length > 0 ? 'Weitere Geräte' : 'Geräte'} />}
+        {rest.map((exercise) => row(exercise, exercise.label, recency(null), plus))}
+      </>
+    )
+  } else if (searching) {
+    body = (
+      <>
+        {hits.map((cluster) => (
+          <div className="exadd__cluster" key={cluster.movement}>{cluster.rows.map(exact)}</div>
+        ))}
+        {hits.length === 0 && (
+          <p className="exadd__empty" id="exadd-empty">
+            {`Keine Übung in der Liste passt zu „${query.trim()}“.`}
+          </p>
+        )}
+      </>
+    )
+  } else {
+    const deep = common.length > 0
+    body = (
+      <>
+        {deep ? (
+          <section className="exadd__group" aria-labelledby="exadd-mine">
+            <GroupHead id="exadd-mine" label="Deine"
+              count={`${common.reduce((n, cluster) => n + cluster.rows.length, 0)} Übungen, häufigste oben`} />
+            {common.map((cluster) => (
+              <div className="exadd__cluster" key={cluster.movement}>{cluster.rows.map(exact)}</div>
+            ))}
+          </section>
+        ) : (
+          <p className="exadd__intro">Was du oft machst, rückt hier nach oben.</p>
+        )}
+        {deep && <h3 className="exadd__all">Alle Übungen <span>nach Muskel, A–Z</span></h3>}
+        {listed.map((section, i) => (
+          <section className="exadd__group" key={section.group} aria-labelledby={`exadd-g${i}`}>
+            <GroupHead id={`exadd-g${i}`} label={section.group} level={deep ? 4 : 3}
+              count={`${section.movements.length} Bewegungen`} />
+            {section.movements.map(({ movement: name, rows }) => (rows.length === 1
+              ? row(rows[0]!, name, movementMeta(rows), plus)
+              : (
+                <button type="button" key={name} className="sheet-row exadd__move"
+                  data-movement={name} onClick={() => openMovement(name)}>
+                  <span className="sheet-row__main">
+                    <span className="sheet-row__name">{name}</span>
+                    <span className="sheet-row__meta exadd__meta">{movementMeta(rows)}</span>
+                  </span>
+                  <span className="exadd__trail">
+                    <span className="exadd__trail-n">
+                      {rows.length}<span className="sr-only"> Geräte</span>
+                    </span>
+                    <Icon name="forward" />
+                  </span>
+                </button>
+              )))}
+          </section>
+        ))}
+      </>
+    )
+  }
 
   return (
-    <Sheet id="sheet-add-exercise" title="Übung hinzufügen">
-      {/* data-autofocus: typing is this sheet's only job, and showModal()
-          otherwise hands focus to "Fertig", the first control in the dialog. */}
-      <input
-        type="search" id="exadd-search" className="input" autoComplete="off"
-        placeholder="Übung suchen" ref={field} data-autofocus
-        aria-label="Übung suchen" aria-controls="exadd-list"
-        value={query} onChange={(e) => { setQuery(e.target.value); setArmedId(null) }}
-      />
+    <Sheet id={ID} title={movement ?? 'Übung hinzufügen'}
+      onBack={movement !== null ? () => { setArmedId(null); setMovement(null) } : undefined}>
+      {movement === null && (
+        <div className="exadd__field">
+          <Icon name="search" />
+          <input
+            type="search" id="exadd-search" className="input" autoComplete="off"
+            placeholder="Übung oder Gerät suchen" ref={field}
+            aria-label="Übung suchen" aria-controls="exadd-list"
+            value={query} onChange={(e) => { setQuery(e.target.value); setArmedId(null) }}
+          />
+        </div>
+      )}
       {/* Rendered empty rather than not at all: a live region has to exist
           before its text changes for a screen reader to hear the change. */}
       <p className="exadd__status" role="status">
@@ -111,44 +289,21 @@ export function AddExerciseSheet({
           ? `${pending.name} wird hinzugefügt …`
           : added !== null ? `✓ ${added} ist drin.` : ''}
       </p>
-      <div className="exadd" id="exadd-list">
-        {hits.map((e) => {
-          const already = countIn(e.id)
-          const armed = armedId === e.id
-          return (
-            <button type="button" key={e.id}
-              className={['exadd__row', busyExerciseId === e.id ? 'is-busy' : '',
-                armed ? 'is-armed' : ''].filter(Boolean).join(' ')}
-              disabled={busyExerciseId === e.id}
-              onClick={() => {
-                // Already in the workout: the first tap asks, the second adds.
-                // Doing an exercise twice is legitimate; doing it twice by
-                // accident was the easiest mistake on this sheet.
-                if (already > 0 && !armed) {
-                  setArmedId(e.id)
-                  return
-                }
-                add(e)
-              }}>
-              <span className="exadd__name">{e.name}</span>
-              {e.muscle_group !== null && !armed && (
-                <span className="exadd__group">{e.muscle_group}</span>
-              )}
-              {armed ? (
-                <span className="exadd__in">Nochmal hinzufügen?</span>
-              ) : already > 0 && (
-                <span className="exadd__in">{`${already}× drin`}</span>
-              )}
-            </button>
-          )
-        })}
-
-        {hits.length === 0 && query.trim() !== '' && (
-          <p className="exadd__empty" id="exadd-empty">
-            {`Keine Übung in der Liste passt zu „${query.trim()}“.`}
-          </p>
-        )}
-      </div>
+      <div className="exadd" id="exadd-list">{body}</div>
     </Sheet>
+  )
+}
+
+/** A group's caption. It stays under the title bar while its rows scroll by,
+ *  so deep in the list you still know which muscle you are in. */
+function GroupHead({ id, label, count, level = 3 }: {
+  id?: string, label: string, count?: string, level?: 3 | 4
+}) {
+  const Tag = level === 4 ? 'h4' : 'h3'
+  return (
+    <Tag className="sheet__group-head exadd__head" id={id}>
+      <span className="label">{label}</span>
+      {count !== undefined && <>{' '}<span className="exadd__count">{count}</span></>}
+    </Tag>
   )
 }

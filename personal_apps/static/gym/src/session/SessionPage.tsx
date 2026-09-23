@@ -133,7 +133,7 @@ export function SessionPage({
         hasCompletedSet={payload.has_completed_set}
         onToggle={actions.onToggleDeload} />
 
-      <AddExerciseSheet catalogue={payload.exercises}
+      <AddExerciseSheet catalogue={payload.exercises} groups={payload.list_groups}
         inSession={payload.visible_exercises}
         busyExerciseId={busyExerciseId}
         onAdd={actions.onAddExercise} />

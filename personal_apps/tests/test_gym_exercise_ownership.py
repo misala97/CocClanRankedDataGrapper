@@ -128,6 +128,9 @@ def test_a_new_account_is_offered_the_whole_list(stranger_client, two_lifters):
     offered = {entry['name'] for entry in payload['exercises']}
     assert offered == {entry.name for entry in LIBRARY}
     assert 'pytest owned lift' not in offered, 'a row outside the list was offered'
+    # Nothing is theirs yet: the sheet opens on the whole list, not on "Deine".
+    assert {(e['workouts'], e['days_ago'], e['rank'], e['common'])
+            for e in payload['exercises']} == {(0, None, None, False)}
 
 
 def test_a_new_accounts_catalogue_holds_only_their_own_exercises(stranger_client, two_lifters):

@@ -65,6 +65,22 @@ export interface CatalogueExercise {
   /** The folded name and aliases (exercises.search_text) -- what the add
    *  sheet matches a query against, see ../search. */
   search: string
+  /** The movement it is a variant of, and what sets it apart from the other
+   *  variants: "Bankdrücken" and "Kurzhantel" of "Bankdrücken (Kurzhantel)". */
+  movement: string
+  label: string
+  /** The section the add sheet lists the movement under -- the same for all
+   *  of its variants, so one movement never splits across two sections. */
+  movement_group: string
+  /** This lifter's finished workouts with a completed set of it; 0 = never. */
+  workouts: number
+  /** Calendar days since the last of them; null = never. */
+  days_ago: number | null
+  /** 1 = what this lifter does most, recent weeks weighing more; null =
+   *  never done. */
+  rank: number | null
+  /** Listed under "Deine" at the top of the add sheet. */
+  common: boolean
 }
 
 /** What the steppers pre-fill with. Null for an exercise with no history to
@@ -171,6 +187,8 @@ export interface SessionDetailPayload {
   default_plan_reps: number
 
   exercises: CatalogueExercise[]
+  /** The add sheet's sections in the list's own order, Brust first. */
+  list_groups: string[]
   muscle_groups: string[]
   /** Null whenever VAPID_PUBLIC_KEY is unset in .env. */
   vapid_public_key: string | null

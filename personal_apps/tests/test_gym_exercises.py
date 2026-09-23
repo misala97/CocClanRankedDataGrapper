@@ -214,6 +214,115 @@ def test_a_lifters_exercises_are_the_ones_they_touched(two_on_one_row):
         assert [e.id for e in exercises.touched_exercises(b)] == [fly.id]
 
 
+def _worked_out(user_id, days_ago, exercise_ids, *, completed=True, finished=True):
+    """A workout of `user_id` `days_ago` days back, one set of each exercise."""
+    from extensions import db
+    from models import SessionExercise, SessionSet, WorkoutSession
+    started = dt.datetime.utcnow() - dt.timedelta(days=days_ago)
+    session_ = WorkoutSession(name='pytest usage', user_id=user_id, started_at=started,
+                              finished_at=started + dt.timedelta(hours=1) if finished else None)
+    for position, exercise_id in enumerate(exercise_ids, start=1):
+        row = SessionExercise(exercise_id=exercise_id, position=position)
+        row.sets = [SessionSet(position=1, weight=50.0, reps=8, completed=completed)]
+        session_.exercises.append(row)
+    db.session.add(session_)
+    return session_
+
+
+def test_usage_counts_finished_workouts_with_a_completed_set(two_on_one_row):
+    """A workout counts once however often the exercise was in it; an open
+    workout and a set never completed are not something you did."""
+    from app import app as flask_app
+    from conftest import list_exercise
+    from extensions import db
+    a, b = two_on_one_row['a'], two_on_one_row['b']
+    with flask_app.app_context():
+        bench, fly = list_exercise('barbell_bench_press').id, list_exercise('machine_fly').id
+        latest = _worked_out(a, 1, [bench])
+        _worked_out(a, 3, [bench, bench])
+        _worked_out(a, 5, [fly], completed=False)
+        _worked_out(a, 0, [bench, fly], finished=False)
+        db.session.commit()
+        used = exercises.usage(a, dt.datetime.utcnow())
+        assert set(used) == {bench}
+        assert (used[bench].workouts, used[bench].last_done) == (2, latest.started_at)
+        assert exercises.usage(b, dt.datetime.utcnow()) == {}
+
+
+def test_recent_weeks_outrank_an_old_habit(two_on_one_row):
+    """Mostly done lately beats most done ever: the sheet leads with what you
+    do now, and a routine left behind a year ago drops out of "Deine"."""
+    from app import app as flask_app
+    from conftest import list_exercise
+    from extensions import db
+    a = two_on_one_row['a']
+    with flask_app.app_context():
+        old, new = list_exercise('barbell_bench_press').id, list_exercise('machine_fly').id
+        for days in range(330, 370, 7):
+            _worked_out(a, days, [old])
+        for days in (2, 9, 16):
+            _worked_out(a, days, [new])
+        db.session.commit()
+        used = exercises.usage(a, dt.datetime.utcnow())
+        assert (used[new].rank, used[old].rank) == (1, 2)
+        assert used[old].workouts > used[new].workouts
+        assert (used[new].common, used[old].common) == (True, False)
+
+
+def test_one_workout_is_a_try_not_a_habit(two_on_one_row):
+    from app import app as flask_app
+    from conftest import list_exercise
+    from extensions import db
+    a = two_on_one_row['a']
+    with flask_app.app_context():
+        bench, fly = list_exercise('barbell_bench_press').id, list_exercise('machine_fly').id
+        _worked_out(a, 1, [bench, fly])
+        _worked_out(a, 8, [bench])
+        db.session.commit()
+        used = exercises.usage(a, dt.datetime.utcnow())
+        assert (used[bench].common, used[fly].common) == (True, False)
+        assert used[fly].rank == 2
+
+
+def test_after_a_break_the_usual_exercises_are_still_yours(two_on_one_row):
+    """"Deine" is relative to your own most-done exercise: four months off
+    shrinks every weight alike, and what you come back to is your routine."""
+    from app import app as flask_app
+    from conftest import list_exercise
+    from extensions import db
+    a = two_on_one_row['a']
+    with flask_app.app_context():
+        bench, fly = list_exercise('barbell_bench_press').id, list_exercise('machine_fly').id
+        tried = list_exercise('dumbbell_fly').id
+        for days in range(120, 190, 7):
+            _worked_out(a, days, [bench, fly])
+        _worked_out(a, 300, [tried])
+        _worked_out(a, 310, [tried])
+        db.session.commit()
+        used = exercises.usage(a, dt.datetime.utcnow())
+        assert (used[bench].common, used[fly].common, used[tried].common) == (True, True, False)
+
+
+def test_a_retired_row_is_neither_ranked_nor_the_bar(two_on_one_row):
+    """The key-less row is done in every workout -- it would be the top
+    weight -- but the picker can't offer it, so the list rows are measured
+    against each other."""
+    from app import app as flask_app
+    from conftest import list_exercise
+    from extensions import db
+    a, retired = two_on_one_row['a'], two_on_one_row['exercise']
+    with flask_app.app_context():
+        bench = list_exercise('barbell_bench_press').id
+        for days in range(1, 60, 3):
+            _worked_out(a, days, [retired])
+        _worked_out(a, 50, [bench])
+        _worked_out(a, 57, [bench])
+        db.session.commit()
+        used = exercises.usage(a, dt.datetime.utcnow())
+        assert set(used) == {bench}
+        assert (used[bench].rank, used[bench].common) == (1, True)
+
+
 def test_the_picker_offers_the_list_and_nothing_retired():
     """Retired is a NULL key or one today's list no longer has."""
     from app import app as flask_app

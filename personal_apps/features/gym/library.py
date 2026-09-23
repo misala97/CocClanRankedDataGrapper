@@ -99,6 +99,13 @@ class Entry:
         return parse_name(self.name)[1]
 
     @property
+    def label(self):
+        """What sets it apart from the other variants of its movement: the
+        inside of the brackets, `Kabel, einarmig`."""
+        _, geraet, variants = parse_name(self.name)
+        return ', '.join((geraet, *variants))
+
+    @property
     def search_text(self):
         return fold(' '.join((self.name, *self.aka)))
 
@@ -483,3 +490,13 @@ LIBRARY = (
 )
 
 BY_KEY = {entry.key: entry for entry in LIBRARY}
+
+# The group the add sheet lists a movement under: its first entry's. A variant
+# can work something else first -- `Bankdrücken (Langhantel, eng)` is a
+# triceps lift -- but it is looked for beside the rest of Bankdrücken, so one
+# movement's variants never split across two sections.
+MOVEMENT_GROUP = {}
+for _entry in LIBRARY:
+    MOVEMENT_GROUP.setdefault(_entry.movement, _entry.group)
+# Those groups in the list's own order, Brust first: the sheet's sections.
+LIST_GROUPS = tuple(dict.fromkeys(MOVEMENT_GROUP.values()))
