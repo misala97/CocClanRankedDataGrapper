@@ -24,6 +24,8 @@ def _minimal():
             'weight_increment': 2.5, 'equipment': 'barbell',
             'bar_weight': 20.0, 'stack_kg': None,
             'secondary_muscle_groups': ['Trizeps'],
+            'list_defaults': {'default_rest_seconds': 180, 'weight_increment': 2.5,
+                              'bar_weight': 20.0, 'stack_kg': None},
         },
         'table': [], 'series': [], 'available_positions': [],
         'selected_position': None, 'selected_position_is_default': False,
@@ -110,13 +112,13 @@ def test_matches_real_chart_geometry():
     from app import app as flask_app
     from features.gym.routes import _chart_geometry
     from features.gym import stats
-    from features.gym.scope import my_exercises
+    from features.gym.exercises import touched_exercises
     from features.gym.routes import load_performed
     from conftest import acting_as, _admin_id
 
     with acting_as(_admin_id()):
         geometry = None
-        for exercise in my_exercises().all():
+        for exercise in touched_exercises(_admin_id()):
             rows = load_performed(exercise_ids=[exercise.id], include_active=True)
             progress = stats.exercise_progress(rows, position=None)
             candidate = _chart_geometry(progress['series'], progress.get('pr_e1rm'))

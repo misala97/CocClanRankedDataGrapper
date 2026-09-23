@@ -25,8 +25,7 @@ from . import exercise_detail  # noqa: F401
 from . import push_routes      # noqa: F401
 
 from .helpers import (         # noqa: F401
-    _to_float, _to_increment, _to_int, _clean_muscle_group,
-    _clean_equipment, _to_stack_steps, _clean_secondary_groups,
+    _to_float, _to_increment, _to_int, _to_stack_steps,
     _get_active_session, _cancel_pending_push, _username,
 )
 from .history import (         # noqa: F401
@@ -43,6 +42,14 @@ from .exercise_detail import (                                         # noqa: F
 # sharing.py needs it too and cannot import a module that registers routes.
 # Three tests import it from `features.gym.routes`, so the path has to survive.
 from ..seeding import _last_full_performance                           # noqa: F401
+
+@gym_bp.before_request
+def _exercise_rows_follow_the_list():
+    """library.py is the exercise list; its rows catch up once per process,
+    so an entry added in code is there on the first request after a deploy."""
+    from ..exercises import ensure_library
+    ensure_library()
+
 
 @gym_bp.before_request
 def _require_csrf_on_writes():

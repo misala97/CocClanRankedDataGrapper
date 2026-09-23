@@ -18,8 +18,9 @@ from models import (
 from auth import (
     login_required,
 )
+from features.gym.exercises import setups as exercise_setups
 from features.gym.scope import (
-    my_sessions,
+    current_user_id, my_sessions,
 )
 from .helpers import (
     DAYPART_NAMES, MONTH_NAMES, WEEKDAY_NAMES, WEEKDAY_SHORT,
@@ -333,16 +334,22 @@ def gym_statistik():
     # (see the comment there): this walks se.sets and se.exercise per row,
     # lazily, for every finished session in the whole history -- 1 + S query
     # became 1 + S + 2*S*E, thousands of queries at real-world scale.
+    # One settings lookup for the lot, for the same reason: every session is
+    # the caller's own.
     habit_gaps = []
-    for session_ in (
+    finished = (
         my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None))
         .options(
             joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
             joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
         )
-    ):
-        habit_gaps.extend(stats.rest_gaps(_session_rest_entries(session_)))
+        .all()
+    )
+    setups = exercise_setups(current_user_id(),
+                             {se.exercise for s in finished for se in s.exercises})
+    for session_ in finished:
+        habit_gaps.extend(stats.rest_gaps(_session_rest_entries(session_, setups)))
     rest_habit = stats.rest_medians(habit_gaps)
 
     payload = StatistikPayload(
@@ -413,7 +420,9 @@ def gym_export():
         .all()
     ) if session_ids else []
 
-    payload = export.build_payload(sessions, session_ids, dt.datetime.utcnow())
+    setups = exercise_setups(current_user_id(),
+                             {se.exercise for s in sessions for se in s.exercises})
+    payload = export.build_payload(sessions, session_ids, dt.datetime.utcnow(), setups)
 
     resp = jsonify(payload)
     filename = f"gym-export-{len(sessions)}-workouts.json"

@@ -27,7 +27,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / 'tests')
 from app import app as flask_app                       # noqa: E402
 from conftest import _admin_id                          # noqa: E402
 from features.gym.routes import _exercise_detail_payload  # noqa: E402
-from features.gym.scope import my_exercises, owned_exercise  # noqa: E402
+from features.gym.exercises import touched_exercises     # noqa: E402
 from flask import session as flask_session              # noqa: E402
 
 DEST = (pathlib.Path(__file__).resolve().parent.parent
@@ -70,13 +70,13 @@ def main():
         with flask_app.test_request_context():
             flask_session['user_id'] = user_id
             single = multi = None
-            for exercise in my_exercises().all():
-                default = _exercise_detail_payload(owned_exercise(exercise.id), None)
+            for exercise in touched_exercises(user_id):
+                default = _exercise_detail_payload(exercise, None)
                 if not (default.chart and default.chart.series and len(default.table) >= 3):
                     continue
                 if single is None:
                     single = (exercise.id, default)
-                every = _exercise_detail_payload(owned_exercise(exercise.id), 'all')
+                every = _exercise_detail_payload(exercise, 'all')
                 if every.chart and len(every.chart.series) > 1 and multi is None:
                     multi = (exercise.id, every)
                 if single and multi:

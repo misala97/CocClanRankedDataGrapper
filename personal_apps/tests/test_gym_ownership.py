@@ -1,8 +1,8 @@
 """Ownership of gym data.
 
-Four hand-maintained tables (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES,
-CATALOGUE_ROUTES) drive the parametrized tests below, each exercising one
-route's ownership check. On their own the tables are just literals -- a new
+Hand-maintained tables (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES,
+SHARED_ROUTES, and EXERCISE_ROUTES for the exercise pages everyone may open)
+drive the parametrized tests below, each exercising one route's ownership check. On their own the tables are just literals -- a new
 id-taking route is simply absent from them until someone remembers to add it.
 test_every_id_taking_gym_route_is_covered_by_a_table closes that gap: it derives
 the actual set of id-taking gym routes from the app's own url_map and fails,
@@ -65,7 +65,7 @@ def two_users():
         db.session.add_all([owner, intruder])
         db.session.flush()
 
-        exercise = Exercise(name='pytest ownership lift', muscle_group='Brust', user_id=owner.id)
+        exercise = Exercise(name='pytest ownership lift', muscle_group='Brust')
         db.session.add(exercise)
         db.session.flush()
 
@@ -165,6 +165,7 @@ SESSION_ROUTES = [
     ('POST', '/gym/session/{}/save_as_template',   'session_id'),
     ('POST', '/gym/session/{}/invite',             'session_id'),
     ('GET',  '/gym/session/{}/sync.json',          'session_id'),
+    ('GET',  '/gym/session/{}/detail.json',        'session_id'),
     ('POST', '/gym/sessions/{}/meta',              'session_id'),
 ]
 
@@ -315,33 +316,33 @@ def test_a_stranger_gets_404_on_someone_elses_template(
     assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
 
 
-# Was CATALOGUE_ADMIN_ROUTES, asserting 403 on a shared row an admin curated.
-# The catalogue is owned per user now, so these are ordinary owned routes and
-# a stranger gets 404 like everywhere else -- including the two GETs, which
-# used to render a shared page with the owner's history filtered out of it.
-CATALOGUE_ROUTES = [
-    ('GET',  '/gym/session/{}/detail.json',    'session_id'),
+# Every exercise row is everyone's since the one list (2026-09-23), so a
+# stranger opens these pages -- and must find nothing of the owner's on them,
+# and a save writes only the stranger's own settings. (Was CATALOGUE_ROUTES:
+# 403 while an admin curated one shared list, then 404 while each lifter
+# owned their rows.)
+EXERCISE_ROUTES = [
     ('GET',  '/gym/exercises/{}',               'exercise_id'),
     ('GET',  '/gym/exercises/{}/progress.json', 'exercise_id'),
     ('GET',  '/gym/exercises/{}/detail.json',   'exercise_id'),
     ('POST', '/gym/exercises/{}/update',        'exercise_id'),
-    ('POST', '/gym/exercises/{}/delete',        'exercise_id'),
 ]
 
 
-@pytest.mark.parametrize('method,url_template,id_key', CATALOGUE_ROUTES)
-def test_a_stranger_gets_404_on_someone_elses_exercise(
+@pytest.mark.parametrize('method,url_template,id_key', EXERCISE_ROUTES)
+def test_a_stranger_opens_an_exercise_and_finds_none_of_the_owners_numbers(
         intruder_client, two_users, method, url_template, id_key):
-    """Also checks the exercise survived: a 404 on /delete is only half the
-    guarantee if the row went away anyway."""
-    from extensions import db
-    from models import Exercise
+    from models import ExerciseSettings
     url = url_template.format(two_users[id_key])
-    response = intruder_client.open(url, method=method)
-    assert response.status_code == 404, f'{method} {url} returned {response.status_code}'
+    response = intruder_client.open(url, method=method, data={'weight_increment': '7'})
+    assert response.status_code in (200, 302), f'{method} {url} returned {response.status_code}'
+    body = response.get_data(as_text=True)
+    for rendering in FOREIGN_WEIGHTS:
+        assert rendering not in body, f'{url} leaked another user\'s weight as {rendering}'
     with flask_app.app_context():
-        assert db.session.get(Exercise, two_users['exercise_id']) is not None, \
-            f'the exercise did not survive the rejected {method} {url}'
+        writers = {row.user_id for row in ExerciseSettings.query.filter_by(
+            exercise_id=two_users['exercise_id'])}
+    assert writers <= {two_users['intruder_id']}, f'{method} {url} wrote the owner\'s settings'
 
 
 @pytest.fixture()
@@ -446,7 +447,7 @@ def test_every_id_taking_gym_route_is_covered_by_a_table():
     suite quietly staying green."""
     covered = {
         (method, url_template)
-        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, CATALOGUE_ROUTES, SHARED_ROUTES)
+        for table in (SESSION_ROUTES, DESCENDANT_ROUTES, TEMPLATE_ROUTES, EXERCISE_ROUTES, SHARED_ROUTES)
         for method, url_template, _id_key in table
     }
 

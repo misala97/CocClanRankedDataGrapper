@@ -109,8 +109,7 @@ def test_a_stalling_live_exercise_carries_its_prescription():
     try:
         with flask_app.app_context():
             exercise = Exercise(name='pytest live stall stack lift',
-                                user_id=_admin_id(),
-                                stack_kg=[5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0])
+                                list_stack_kg=[5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0])
             db.session.add(exercise)
             db.session.flush()
             made['exercise'] = exercise.id

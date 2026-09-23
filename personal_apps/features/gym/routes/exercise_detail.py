@@ -17,14 +17,17 @@ from models import (
 from auth import (
     login_required,
 )
+from features.gym.exercises import (
+    exercise_or_404, setup as exercise_setup,
+)
 from features.gym.scope import (
-    owned_exercise,
+    current_user_id,
 )
 from features.gym.schemas import (
     ExerciseDetailPayload,
 )
 from .helpers import (
-    EXERCISE_STATE_CHIP, _to_int,
+    EXERCISE_STATE_CHIP, _exercise_meta, _to_int,
 )
 from .history import (
     load_performed,
@@ -378,26 +381,15 @@ def _exercise_detail_payload(exercise, raw_position):
     data = stats.exercise_progress(rows, position=position)
     chip_class, chip_label = EXERCISE_STATE_CHIP.get(data['state'], (None, None))
     return ExerciseDetailPayload.model_validate({
-        'exercise': {
-            'id': exercise.id,
-            'name': exercise.name,
-            'muscle_group': exercise.muscle_group,
-            'is_unilateral': exercise.is_unilateral,
-            'default_rest_seconds': exercise.default_rest_seconds,
-            'weight_increment': exercise.weight_increment,
-            'equipment': exercise.equipment,
-            'bar_weight': exercise.bar_weight,
-            'stack_kg': exercise.stack_kg,
-            'secondary_muscle_groups': exercise.secondary_muscle_groups,
-        },
+        'exercise': _exercise_meta(exercise, exercise_setup(current_user_id(), exercise)),
         'selected_position_is_default': position_is_default,
         'selected_position_reason': default_reason,
         'chart': _chart_geometry(data['series'], data.get('pr_e1rm')),
         'chip_class': chip_class,
         'chip_label': chip_label,
-        # Only offer deletion when nothing depends on it -- same test the
-        # catalogue used before this moved off the list.
-        'can_delete': not exercise.session_exercises and not exercise.template_exercises,
+        # The list is read-only (2026-09-23); the field goes with the UI's
+        # delete button.
+        'can_delete': False,
         'muscle_groups': list(MUSCLE_GROUPS),
         'equipment_labels': dict(EQUIPMENT_LABELS),
         **data,
@@ -407,7 +399,7 @@ def _exercise_detail_payload(exercise, raw_position):
 @gym_bp.route('/gym/exercises/<int:exercise_id>')
 @login_required
 def exercise_detail(exercise_id):
-    exercise = owned_exercise(exercise_id)
+    exercise = exercise_or_404(exercise_id)
     payload = _exercise_detail_payload(exercise, request.args.get('position'))
     # mode='json' so datetimes are ISO strings the island can parse. `exercise`
     # is still passed separately because the shell's <title> block reads its
@@ -429,7 +421,7 @@ def gym_exercise_detail_json(exercise_id):
     requested slot is empty. This one honours the filter exactly, because the
     page's pills have to mean what they say.
     """
-    exercise = owned_exercise(exercise_id)
+    exercise = exercise_or_404(exercise_id)
     payload = _exercise_detail_payload(exercise, request.args.get('position'))
     return jsonify(payload.model_dump(mode='json'))
 
@@ -443,7 +435,7 @@ def gym_exercise_progress_json(exercise_id):
     back to all-time data if that exact slot has no history yet -- the
     modal should always show *something* useful rather than an empty state
     just because you haven't done this exercise in this position before."""
-    exercise = owned_exercise(exercise_id)
+    exercise = exercise_or_404(exercise_id)
     position = request.args.get('position', type=int)
     rows = load_performed(exercise_ids=[exercise.id], include_active=True)
     progress = stats.exercise_progress(rows, position=position)

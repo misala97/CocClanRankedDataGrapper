@@ -27,6 +27,12 @@ def test_keys_are_unique_slugs():
     assert [k for k in keys if not re.fullmatch(r'[a-z][a-z0-9_]*', k)] == []
 
 
+def test_names_are_unique():
+    # The add sheet shows nothing but the name, and analytics buckets a
+    # lifter's volume by it: two entries of one name would read as one.
+    assert _dupes([e.name for e in library.LIBRARY]) == []
+
+
 def test_names_read_bewegung_geraet_variante():
     for entry in library.LIBRARY:
         move, geraet, variants = library.parse_name(entry.name)

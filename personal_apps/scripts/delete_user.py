@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app  # noqa: E402  (needs the path insert above)
 from extensions import db  # noqa: E402
-from models import AppUser, Exercise, PushSubscription, WorkoutSession, WorkoutTemplate  # noqa: E402
+from models import AppUser, ExerciseSettings, PushSubscription, WorkoutSession, WorkoutTemplate  # noqa: E402
 
 
 def delete_user(username, commit):
@@ -39,36 +39,28 @@ def delete_user(username, commit):
 
     templates = WorkoutTemplate.query.filter_by(user_id=user.id).all()
     subscriptions = PushSubscription.query.filter_by(user_id=user.id).all()
-    # gym_exercises only gains user_id in migration c8e5f14a9b32, and this
-    # script has to run once BEFORE that migration -- clearing the way for it
-    # is the reason it exists -- as well as every time after. So it asks
-    # whether the column is there rather than assuming. Pre-migration there is
-    # no per-user catalogue to delete, and the count below correctly reads 0.
-    exercises = (Exercise.query.filter_by(user_id=user.id).all()
-                 if hasattr(Exercise, 'user_id') else [])
+    # Exercises are one list for everyone (2026-09-23); what a lifter owns of
+    # them is their settings rows.
+    settings = ExerciseSettings.query.filter_by(user_id=user.id).all()
 
     lines = [f'{username} (id {user.id})',
              f'  {len(templates)} template(s)',
              f'  {len(subscriptions)} push subscription(s)',
-             f'  {len(exercises)} exercise(s)',
+             f'  {len(settings)} exercise setting(s)',
              '  0 sessions']
     for line in lines:
         print(line)
 
     if commit:
-        # Templates first: their TemplateExercise rows cascade with them, and
-        # those rows are what reference the exercises below. Deleting an
-        # exercise while a template still points at it would hit the same
-        # class of foreign-key violation this ordering exists to avoid.
-        # Exercises next, since the catalogue became per-user: the user row
-        # cannot go while anything -- template, subscription, or now
-        # exercise -- still references it.
+        # The user row cannot go while anything -- template, subscription or
+        # exercise setting -- still references it. A template's
+        # TemplateExercise rows cascade with it.
         for template in templates:
             db.session.delete(template)
         for subscription in subscriptions:
             db.session.delete(subscription)
-        for exercise in exercises:
-            db.session.delete(exercise)
+        for row in settings:
+            db.session.delete(row)
         db.session.flush()
         db.session.delete(user)
         db.session.commit()

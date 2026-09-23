@@ -12,25 +12,33 @@ from conftest import _admin_id, acting_as
 
 
 def _an_exercise_id():
+    """The admin's first exercise with history of theirs."""
+    from app import app as flask_app
+    from features.gym.exercises import touched_exercises
+    with flask_app.app_context():
+        touched = sorted(touched_exercises(_admin_id()), key=lambda e: e.id)
+        assert touched, 'the dev database needs a gym exercise the admin has logged'
+        return touched[0].id
+
+
+def _every_exercise_id():
+    """Every row a lifter can open: the list, and anything retired."""
     from app import app as flask_app
     from models import Exercise
     with flask_app.app_context():
-        ex = (Exercise.query.filter_by(user_id=_admin_id())
-              .order_by(Exercise.id).first())
-        assert ex is not None, 'the dev database needs at least one gym exercise'
-        return ex.id
+        return [e.id for e in Exercise.query.order_by(Exercise.id).all()]
 
 
 def _an_exercise_with_history():
     """An exercise that actually has plotted sessions, so the position tests
     exercise the branch that matters rather than the empty one."""
     from app import app as flask_app
+    from features.gym.exercises import touched_exercises
     from features.gym.routes import _exercise_detail_payload
-    from features.gym.scope import my_exercises, owned_exercise
     with flask_app.app_context():
         with acting_as(_admin_id()):
-            for exercise in my_exercises().all():
-                payload = _exercise_detail_payload(owned_exercise(exercise.id), None)
+            for exercise in touched_exercises(_admin_id()):
+                payload = _exercise_detail_payload(exercise, None)
                 if len(payload.available_positions) > 1:
                     return exercise.id
     return None
@@ -72,13 +80,13 @@ def test_agrees_with_the_html_route_on_the_default_slot(client):
     """The whole reason the helper is shared. If these disagree, the page and
     any later refetch show different slots."""
     from app import app as flask_app
+    from features.gym.exercises import exercise_or_404
     from features.gym.routes import _exercise_detail_payload
-    from features.gym.scope import owned_exercise
 
     exercise_id = _an_exercise_id()
     with flask_app.app_context():
         with acting_as(_admin_id()):
-            direct = _exercise_detail_payload(owned_exercise(exercise_id), None)
+            direct = _exercise_detail_payload(exercise_or_404(exercise_id), None)
 
     from_endpoint = client.get(f'/gym/exercises/{exercise_id}/detail.json').get_json()
     assert from_endpoint['selected_position'] == direct.selected_position
@@ -123,19 +131,19 @@ def test_every_exercise_builds_a_valid_payload():
     sorts first is not a sample.
     """
     from app import app as flask_app
+    from features.gym.exercises import exercise_or_404
     from features.gym.routes import _exercise_detail_payload
-    from features.gym.scope import my_exercises, owned_exercise
 
     failures = []
+    exercise_ids = _every_exercise_id()
+    assert exercise_ids, 'the dev database needs gym exercises'
     with flask_app.app_context():
         with acting_as(_admin_id()):
-            exercise_ids = [e.id for e in my_exercises().all()]
-            assert exercise_ids, 'the dev database needs gym exercises'
             for exercise_id in exercise_ids:
                 for raw_position in (None, 'all'):
                     try:
                         _exercise_detail_payload(
-                            owned_exercise(exercise_id), raw_position)
+                            exercise_or_404(exercise_id), raw_position)
                     except Exception as exc:
                         failures.append(f'{exercise_id} ({raw_position!r}): {exc}')
 
@@ -144,15 +152,9 @@ def test_every_exercise_builds_a_valid_payload():
 
 def test_every_exercise_page_renders(client):
     """Same breadth for the HTML route, which shares the helper. A 500 on an
-    exercise with no history would otherwise reach the browser."""
-    from app import app as flask_app
-    from features.gym.scope import my_exercises
-
-    with flask_app.app_context():
-        with acting_as(_admin_id()):
-            exercise_ids = [e.id for e in my_exercises().all()]
-
+    exercise with no history -- most of the list, for most lifters -- would
+    otherwise reach the browser."""
     bad = [(i, client.get(f'/gym/exercises/{i}').status_code)
-           for i in exercise_ids]
+           for i in _every_exercise_id()]
     assert all(status == 200 for _, status in bad), \
         f'non-200 responses: {[p for p in bad if p[1] != 200]}'

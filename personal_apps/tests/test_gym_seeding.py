@@ -29,7 +29,7 @@ def history_builder():
 
     created = {'sessions': [], 'exercise': None}
     with flask_app.app_context():
-        exercise = Exercise(name='pytest seeding pick lift', user_id=_admin_id())
+        exercise = Exercise(name='pytest seeding pick lift')
         db.session.add(exercise)
         db.session.commit()
         created['exercise'] = exercise.id

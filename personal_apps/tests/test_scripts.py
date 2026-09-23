@@ -39,25 +39,21 @@ def test_delete_user_dry_run_writes_nothing(throwaway_user):
         assert db.session.get(AppUser, throwaway_user) is not None
 
 
-def test_delete_user_removes_the_account_its_templates_and_its_exercises(throwaway_user):
-    """Exercises became the fourth root a user owns, and gym_exercises.user_id
-    is NOT NULL with a foreign key and no cascade -- deleting the user while
-    they still own one used to fail with an unhandled IntegrityError. The
-    exercise here is also used by the template, which pins the fix's order:
-    templates (and their TemplateExercise rows, ORM-cascaded with them) must
-    go before the exercise they reference, or the exercise delete hits the
-    same class of foreign-key violation, this time against
-    gym_template_exercises."""
+def test_delete_user_removes_the_account_its_templates_and_its_settings(throwaway_user):
+    """Templates, push subscriptions and exercise settings each carry a
+    foreign key to the user with no cascade, so the account cannot go while
+    one remains -- an unhandled IntegrityError, back when the user owned
+    exercises too. The exercise itself is everyone's since the one list
+    (2026-09-23) and stays."""
     from extensions import db
-    from models import AppUser, Exercise, TemplateExercise, WorkoutTemplate
+    from models import AppUser, Exercise, ExerciseSettings, TemplateExercise, WorkoutTemplate
     from scripts.delete_user import delete_user
 
     template_id = None
     exercise_id = None
     try:
         with flask_app.app_context():
-            exercise = Exercise(name='pytest deletable exercise', muscle_group='Brust',
-                                user_id=throwaway_user)
+            exercise = Exercise(name='pytest deletable exercise', muscle_group='Brust')
             db.session.add(exercise)
             db.session.flush()
             template = WorkoutTemplate(name='pytest deletable template',
@@ -65,6 +61,8 @@ def test_delete_user_removes_the_account_its_templates_and_its_exercises(throwaw
             template.exercises.append(
                 TemplateExercise(exercise_id=exercise.id, position=1))
             db.session.add(template)
+            db.session.add(ExerciseSettings(user_id=throwaway_user, exercise_id=exercise.id,
+                                            weight_increment=9.0))
             db.session.commit()
             template_id = template.id
             exercise_id = exercise.id
@@ -75,7 +73,9 @@ def test_delete_user_removes_the_account_its_templates_and_its_exercises(throwaw
         with flask_app.app_context():
             assert db.session.get(AppUser, throwaway_user) is None
             assert WorkoutTemplate.query.filter_by(user_id=throwaway_user).count() == 0
-            assert db.session.get(Exercise, exercise_id) is None
+            assert ExerciseSettings.query.filter_by(user_id=throwaway_user).count() == 0
+            assert db.session.get(Exercise, exercise_id) is not None, \
+                'deleted an exercise every lifter uses'
     finally:
         with flask_app.app_context():
             if template_id is not None:
@@ -133,30 +133,25 @@ def test_delete_user_refuses_a_user_with_a_logged_session(throwaway_user):
                     db.session.commit()
 
 
-def test_copy_templates_forks_the_exercises_into_the_destination(throwaway_user):
-    """After the catalogue became per-user, copied template rows cannot point
-    at the source's exercises. Each one is recreated in the destination's own
-    catalogue -- once per distinct exercise, even when two templates share it,
-    and carrying the values that make a suggestion correct."""
+def test_copy_templates_names_the_same_exercises(throwaway_user):
+    """Since the one list a copied routine points at the very exercises the
+    original does -- no fork, no new rows, even when two routines share one
+    -- and the source's personal settings stay behind: they describe the
+    source's gym, not the destination's."""
     from extensions import db
-    from models import AppUser, Exercise, TemplateExercise, WorkoutTemplate
+    from models import AppUser, Exercise, ExerciseSettings, TemplateExercise, WorkoutTemplate
     from scripts.copy_templates import copy_templates
 
     made = []
     try:
         with flask_app.app_context():
             source_id = _admin_id()
-            shared = Exercise(name='pytest fork lift', muscle_group='Brust',
-                              weight_increment=9.0, is_unilateral=True,
-                              equipment='plate_loaded', bar_weight=20.0,
-                              stack_kg=[5, 13, 21],
-                              secondary_muscle_groups=['Trizeps'],
-                              user_id=source_id)
+            shared = Exercise(name='pytest fork lift', muscle_group='Brust', list_increment=2.5)
             db.session.add(shared)
             db.session.flush()
             made.append(('exercise', shared.id))
-            # Two templates referencing the SAME exercise -- a plain create
-            # would give the destination two copies of it.
+            db.session.add(ExerciseSettings(user_id=source_id, exercise_id=shared.id,
+                                            weight_increment=9.0))
             for name in ('pytest fork A', 'pytest fork B'):
                 template = WorkoutTemplate(name=name, user_id=source_id)
                 template.exercises.append(
@@ -165,33 +160,25 @@ def test_copy_templates_forks_the_exercises_into_the_destination(throwaway_user)
                 db.session.flush()
                 made.append(('template', template.id))
             db.session.commit()
+            before = Exercise.query.count()
 
             destination = db.session.get(AppUser, throwaway_user).username
             copy_templates(db.session.get(AppUser, source_id).username, destination,
                            commit=True)
 
         with flask_app.app_context():
-            copies = Exercise.query.filter_by(user_id=throwaway_user,
-                                              name='pytest fork lift').all()
-            assert len(copies) == 1, f'expected one forked exercise, got {len(copies)}'
-            assert copies[0].weight_increment == 9.0
-            assert copies[0].is_unilateral is True
-            assert copies[0].id != made[0][1], 'pointed at the source exercise'
-            assert copies[0].equipment == 'plate_loaded'
-            assert copies[0].bar_weight == 20.0
-            assert copies[0].stack_kg == [5, 13, 21]
-            assert copies[0].secondary_muscle_groups == ['Trizeps']
-
-            for template in WorkoutTemplate.query.filter_by(user_id=throwaway_user):
-                for te in template.exercises:
-                    assert te.exercise.user_id == throwaway_user, \
-                        'a copied template row points at another user exercise'
+            assert Exercise.query.count() == before, 'the copy created exercises'
+            copies = WorkoutTemplate.query.filter(
+                WorkoutTemplate.user_id == throwaway_user,
+                WorkoutTemplate.name.like('pytest fork %')).all()
+            assert [(te.exercise_id, te.rest_seconds) for t in copies for te in t.exercises] == \
+                [(made[0][1], 150)] * 2
+            assert ExerciseSettings.query.filter_by(user_id=throwaway_user).count() == 0, \
+                'the source\'s settings were copied'
     finally:
         with flask_app.app_context():
             for template in WorkoutTemplate.query.filter_by(user_id=throwaway_user):
                 db.session.delete(template)
-            for exercise in Exercise.query.filter_by(user_id=throwaway_user):
-                db.session.delete(exercise)
             db.session.commit()
             for kind, row_id in reversed(made):
                 model = {'exercise': Exercise, 'template': WorkoutTemplate}[kind]
@@ -260,7 +247,7 @@ class TestWeeklyDigest:
     def _make_week(user_id, now):
         from extensions import db
         from models import Exercise, SessionExercise, SessionSet, WorkoutSession
-        exercise = Exercise(name='ZZ digest lift', user_id=user_id)
+        exercise = Exercise(name='ZZ digest lift')
         db.session.add(exercise)
         db.session.flush()
         made = []

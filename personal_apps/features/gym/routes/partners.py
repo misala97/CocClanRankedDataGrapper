@@ -21,8 +21,9 @@ from models import (
 from auth import (
     login_required,
 )
+from features.gym.exercises import library_exercises
 from features.gym.scope import (
-    current_user_id, my_exercises, my_templates, owned_exercise, owned_session,
+    current_user_id, my_templates, owned_session,
 )
 from .helpers import (
     _delete_session_and_links, _get_active_session, _to_int, _username,
@@ -143,12 +144,13 @@ def _discardable_active():
 @gym_bp.route('/gym/shared/<int:shared_id>/confirm')
 @login_required
 def gym_shared_confirm(shared_id):
-    """Match the leader's exercises against your own catalogue, once, before
-    the workout starts.
+    """Show the leader's exercises, once, before the workout starts.
 
-    Confirmation belongs at the door rather than in the middle of a set --
-    which is also why an exercise the leader adds LATER resolves silently
-    (see sharing.follower_exercise_for).
+    Since the one exercise list (2026-09-23) each of them is already the
+    follower's too, so every proposal is an exact match and the page is the
+    one-tap confirm card; picking another list exercise stays possible until
+    G3 redesigns the page. An exercise the leader adds LATER resolves
+    silently (see sharing.follower_exercise_for).
     """
     shared = _invite_for_recipient(shared_id)
     refusal = _invite_refusal(shared)
@@ -164,12 +166,18 @@ def gym_shared_confirm(shared_id):
         for se in leader_rows:
             if se.exercise_id not in [row.id for row in leader_exercises]:
                 leader_exercises.append(se.exercise)
-        catalogue = [(row.id, row.name) for row in my_exercises().all()]
+        # The whole list, plus any leader exercise that has left it (a
+        # retired row can still sit in a live workout).
+        catalogue = {row.id: row.name for row in library_exercises()}
+        catalogue.update((exercise.id, exercise.name) for exercise in leader_exercises)
         proposals = [
-            dict(proposal, leader_exercise_id=exercise.id)
+            # The exact match is the leader's own row, not whichever row the
+            # name compares equal to first.
+            dict(proposal, leader_exercise_id=exercise.id, exact_id=exercise.id)
             for exercise, proposal in zip(
                 leader_exercises,
-                matching.propose_matches([e.name for e in leader_exercises], catalogue))
+                matching.propose_matches([e.name for e in leader_exercises],
+                                         catalogue.items()))
         ]
 
         # The follower's own routines. joinedload because each one's exercise
@@ -202,6 +210,35 @@ def gym_shared_confirm(shared_id):
                            payload_json=payload.model_dump(mode='json'))
 
 
+def _confirmed_matches(leader_session):
+    """{leader exercise id: the exercise the follower logs it as}, from the
+    confirm page's `match_<id>` answers.
+
+    Only exercises in the leader's workout count. `new` ("my own copy") is an
+    answer from before the one list, and the leader's row is that copy now.
+    Any other answer must be an exercise row -- a retired one included, since
+    it can sit in a live workout -- and anything else is a 400: a page that
+    posts it is broken, and guessing would log the lifter's sets somewhere
+    they never chose.
+    """
+    leader_ids = {se.exercise_id for se in leader_session.exercises}
+    matches = {}
+    for key, value in request.form.items():
+        if not key.startswith('match_'):
+            continue
+        leader_exercise_id = _to_int(key[len('match_'):])
+        if leader_exercise_id not in leader_ids:
+            continue
+        if value == 'new':
+            matches[leader_exercise_id] = leader_exercise_id
+            continue
+        chosen_id = _to_int(value)
+        if chosen_id is None or db.session.get(Exercise, chosen_id) is None:
+            abort(400)
+        matches[leader_exercise_id] = chosen_id
+    return matches
+
+
 @gym_bp.route('/gym/shared/<int:shared_id>/accept', methods=['POST'])
 @login_required
 def gym_shared_accept(shared_id):
@@ -228,13 +265,15 @@ def gym_shared_accept(shared_id):
         flash(refusal, 'error')
         return redirect(url_for('gym.gym_heute'))
 
+    leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
+    # Read before anything is discarded, so a bad answer costs nothing.
+    matches = _confirmed_matches(leader_session)
+
     # The confirm page said so above the button: an empty workout of your own
     # is dropped, not left running beside this one.
     abandoned = _discardable_active()
     if abandoned is not None:
         _delete_session_and_links(abandoned)
-
-    leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
 
     # The routine THIS lifter books the workout under, if they picked one on
     # the confirm page. Resolved through my_templates(), so a posted id that
@@ -251,9 +290,9 @@ def gym_shared_accept(shared_id):
         name=leader_session.name,
         started_at=dt.datetime.utcnow(),
         user_id=current_user_id(),
-        # The leader's routine is never inherited: it is named in a catalogue
-        # this lifter does not own, and claiming it would tell
-        # routine_memory() they had performed a routine that is not theirs.
+        # The leader's routine is never inherited: it is the leader's, and
+        # claiming it would tell routine_memory() this lifter had performed
+        # a routine that is not theirs.
         # One of their OWN routines is a different matter -- that is what the
         # confirm page's picker posts, and booking it there is the only way a
         # shared workout ever reaches their routine bookkeeping.
@@ -264,39 +303,7 @@ def gym_shared_accept(shared_id):
 
     # The confirmed matches, before any structure is built -- reconciliation
     # reads this map rather than guessing.
-    for key, value in request.form.items():
-        if not key.startswith('match_'):
-            continue
-        leader_exercise_id = _to_int(key[len('match_'):])
-        if not leader_exercise_id:
-            continue
-        leader_exercise = db.session.get(Exercise, leader_exercise_id)
-        if leader_exercise is None or leader_exercise.user_id != shared.leader_user_id:
-            continue
-        if value == 'new':
-            # Reuse an owned exercise of that name if one exists, same as
-            # gym_replace_session_exercise's new_name branch -- without this,
-            # overriding an auto-selected exact match back to "Neu anlegen"
-            # for a name already owned hits uq_gym_exercises_user_id_name.
-            chosen = my_exercises().filter_by(name=leader_exercise.name).first()
-            if chosen is None:
-                chosen = Exercise(
-                    name=leader_exercise.name,
-                    muscle_group=leader_exercise.muscle_group,
-                    default_rest_seconds=leader_exercise.default_rest_seconds,
-                    # A property of the movement, not the person -- see
-                    # sharing.follower_exercise_for's identical copy for why
-                    # this travels while weight_increment does not.
-                    is_unilateral=leader_exercise.is_unilateral,
-                    user_id=current_user_id(),
-                )
-                db.session.add(chosen)
-                db.session.flush()
-            chosen_id = chosen.id
-        else:
-            # Attacker-chosen: without owned_exercise a lifter could map their
-            # slot onto somebody else's row and log against its history.
-            chosen_id = owned_exercise(_to_int(value)).id
+    for leader_exercise_id, chosen_id in matches.items():
         db.session.add(SharedSessionExercise(
             shared_session_id=shared.id,
             leader_exercise_id=leader_exercise_id,

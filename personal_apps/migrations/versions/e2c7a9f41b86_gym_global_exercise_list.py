@@ -176,6 +176,19 @@ def winner(rows):
     return max(rows, key=lambda row: (row['n_se'], -row['id']))
 
 
+def fact_changes(row, target):
+    """The facts a row's history is read through that its list row states
+    differently: one side or both (stats.set_volume doubles a one-sided
+    number, so the whole history's volume doubles or halves) and the loading
+    (the export's weight convention). Printed per row for the deploy log."""
+    changes = []
+    if bool(row['is_unilateral']) != bool(target['is_unilateral']):
+        changes.append(f"is_unilateral {bool(row['is_unilateral'])} -> {bool(target['is_unilateral'])}")
+    if row['equipment'] != target['equipment']:
+        changes.append(f"equipment {row['equipment']} -> {target['equipment']}")
+    return changes
+
+
 # -- phases -------------------------------------------------------------------
 
 def _add_structures(bind):
@@ -256,6 +269,16 @@ def _move_rows(bind):
             target_of[row['id']] = retired
         how['retired'] += len(rows)
         print(f'  retired: {source["name"]!r} ({len(rows)} row(s)) -> #{new_id}')
+
+    # Old id -> new id for every row, into the deploy log: exports made
+    # before this carry the old ids and names, and after it the only other
+    # record of the mapping is the backup.
+    for row in old_rows:
+        target = target_of[row['id']]
+        changes = fact_changes(row, target)
+        print(f'  #{row["id"]} user {row["user_id"]} {row["name"]!r} ({row["n_se"]} logged)'
+              f' -> #{target["id"]} {target["library_key"] or "retired"}'
+              + (f'; {", ".join(changes)}' if changes else ''))
 
     by_owner = {}
     for row in old_rows:

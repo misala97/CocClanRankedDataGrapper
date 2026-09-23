@@ -21,8 +21,7 @@ def scratch_live_set():
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     ids = None
     with flask_app.app_context():
-        exercise = Exercise(name='pytest rest lift', muscle_group='Brust',
-                            user_id=_admin_id())
+        exercise = Exercise(name='pytest rest lift', muscle_group='Brust')
         db.session.add(exercise)
         db.session.flush()
         session_ = WorkoutSession(name='pytest rest session',
@@ -116,7 +115,7 @@ def finished_with_rest():
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     ids = None
     with flask_app.app_context():
-        exercise = Exercise(name='pytest rest readout lift', user_id=_admin_id())
+        exercise = Exercise(name='pytest rest readout lift')
         db.session.add(exercise)
         db.session.flush()
         started = dt.datetime.utcnow() - dt.timedelta(hours=1)
@@ -228,7 +227,7 @@ def two_close_sessions():
         db.session.flush()
         user_id = user.id
 
-        exercise = Exercise(name='pytest cross-session lift', user_id=user_id)
+        exercise = Exercise(name='pytest cross-session lift')
         db.session.add(exercise)
         db.session.flush()
 

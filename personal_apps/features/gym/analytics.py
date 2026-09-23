@@ -727,14 +727,14 @@ def effort_distribution(rows):
     there a group at zero IS the finding; here absence is just absence.
 
     Exercises are keyed by name rather than id, which is safe for two reasons
-    worth stating because neither is local: `rows` is already scoped to one
-    user by load_performed(), and the catalogue's uniqueness constraint is
-    (user_id, name) -- so within that one user's rows a name is unique and two
-    exercises can never collapse into one bucket; and _to_performed() resolves
-    the name through a live join, so every row carries the CURRENT name and a
-    rename moves an exercise's whole history rather than splitting it. If that
-    join were ever changed to snapshot the name at log time, this function
-    would start silently splitting renamed exercises in two.
+    worth stating because neither is local: no two rows carry one name -- the
+    list's names are unique (test_gym_library) and the migration to the one
+    list folded same-named leftovers into one retired row -- so two exercises
+    can never collapse into one bucket; and _to_performed() resolves the name
+    through a live join, so every row carries the CURRENT name and a renamed
+    list entry moves an exercise's whole history rather than splitting it. If
+    that join were ever changed to snapshot the name at log time, this
+    function would start silently splitting renamed exercises in two.
     """
     groups = defaultdict(lambda: [0.0, 0])
     exercises = defaultdict(lambda: [0.0, 0])

@@ -15,6 +15,7 @@ from models import (
 from auth import (
     login_required,
 )
+from features.gym.exercises import setups as exercise_setups
 from features.gym.scope import (
     current_user_id, my_sessions, my_templates, owned_session, owned_template,
 )
@@ -79,9 +80,11 @@ def gym_toggle_deload(session_id):
         s.completed for se in session_.exercises for s in se.sets
     )
     if not has_completed_set:
+        setups = exercise_setups(session_.user_id, [se.exercise for se in session_.exercises])
         for session_exercise in session_.exercises:
+            setup = setups[session_exercise.exercise_id]
             increment = stats.resolve_increment(
-                session_exercise.exercise.weight_increment,
+                setup.weight_increment,
                 session_exercise.exercise.is_unilateral,
             )
             for s in session_exercise.sets:
@@ -109,7 +112,7 @@ def gym_toggle_deload(session_id):
                         s.base_weight = s.weight
                     s.weight = stats.deload_weight(
                         s.base_weight, pct, increment,
-                        stack_kg=session_exercise.exercise.stack_kg)
+                        stack_kg=setup.stack_kg)
                     # Reps move with the weight, and for the same reason: a
                     # deload is a prescription, not a scaled-down copy of the
                     # last hard session. Captured first so switching the
@@ -219,8 +222,8 @@ def gym_save_as_template(session_id):
 @login_required
 def gym_rename_template(template_id):
     """Heute's small per-routine edit affordance. WorkoutTemplate.name carries
-    no unique constraint (unlike Exercise.name), so unlike gym_update_exercise
-    there is no collision case to reject -- any non-empty name is accepted."""
+    no unique constraint, so there is no collision case to reject -- any
+    non-empty name is accepted."""
     template = owned_template(template_id)
     new_name = request.form.get('name', '').strip()
     if new_name:

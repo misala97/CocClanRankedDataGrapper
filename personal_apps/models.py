@@ -168,36 +168,94 @@ EQUIPMENT_LABELS = {
 }
 
 
+class _GoneFromExercise:
+    """An Exercise's old name for one of a lifter's own values. Without this
+    a write to it would silently land in a plain Python attribute and answer
+    the next read -- a test did exactly that. Now reads and writes both fail,
+    naming where the value lives."""
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+    def __get__(self, obj, owner=None):
+        if obj is None:
+            return self
+        raise AttributeError(self._gone())
+
+    def __set__(self, obj, value):
+        raise AttributeError(self._gone())
+
+    def _gone(self):
+        return (f"Exercise.{self.name} is gone: the lifter's value comes from "
+                f"exercises.setups(), the list's from Exercise.list_*")
+
+
 class Exercise(db.Model):
+    """One entry of the exercise list, the same row for every lifter.
+
+    Global since 2026-09-23 (features/gym/exercises.py): one row per
+    features/gym/library.py entry, kept in step with it by sync_library(),
+    read-only to everyone. `library_key` is NULL only on a retired row --
+    one the migration kept for its history without a list entry to put it
+    on. There is deliberately no relationship back to sessions or routines:
+    an exercise id no longer says whose history it is, so any walk from here
+    into sets must go through a query that filters by the lifter.
+    """
     __tablename__ = 'gym_exercises'
-    # Owned per user since 2026-08-02: a third lifter joined who trains at the
-    # same gym but shares none of the same exercises, so one global list meant
-    # everyone's picker held everyone else's lifts. The cost is that the same
-    # machine can now carry a different weight_increment per user, and nothing
-    # reports the disagreement -- see the per-user-exercises design spec.
-    __table_args__ = (db.UniqueConstraint('user_id', 'name', name='uq_gym_exercises_user_id_name'),)
+    __table_args__ = (db.UniqueConstraint('library_key', name='uq_gym_exercises_library_key'),)
     id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id              = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False, index=True)
+    library_key          = db.Column(db.String(64), nullable=True)
     name                 = db.Column(db.String(150), nullable=False)
-    previous_name        = db.Column(db.String(150), nullable=True)  # set to the prior name on rename, so anything still referencing the old name (e.g. historical data, or a rename made by mistake) can still resolve to this exercise instead of creating a duplicate
     muscle_group         = db.Column(db.String(100), nullable=True)
-    default_rest_seconds = db.Column(db.Integer, nullable=True)
-    weight_increment     = db.Column(db.Float, nullable=True)  # smallest loadable jump on this equipment (dumbbells 2, a stack often 9); NULL means use stats.DEFAULT_INCREMENT
     is_unilateral        = db.Column(db.Boolean, nullable=False, default=False)  # logged weight/reps are per side (e.g. one-arm curls); volume must be doubled
     equipment            = db.Column(db.String(20), nullable=False, default='stack',
                                      server_default='stack')  # one of EQUIPMENT_TYPES
-    bar_weight           = db.Column(db.Float, nullable=True)   # dead weight (bar, carriage) already contained in the logged number
-    # The real stops of an uneven stack, ascending. NULL on everything that
-    # steps evenly -- weight_increment already answers those, and a list
-    # spelling out 5,10,15,... would be the same fact typed twice. Mutually
-    # exclusive with weight_increment in the export.
-    stack_kg             = db.Column(db.JSON, nullable=True)
     # Values from MUSCLE_GROUPS. NULL and [] mean the same thing; readers
     # normalise to [].
     secondary_muscle_groups = db.Column(db.JSON, nullable=True)
+    # The list's value for each of the four things a lifter can set for
+    # themselves (ExerciseSettings). Read them through exercises.setups(),
+    # never directly: a direct read answers with the list's value where the
+    # lifter's own was meant, which is why these attributes are not named
+    # like their columns.
+    #
+    # The smallest loadable jump on this equipment; NULL (retired rows only)
+    # means stats.DEFAULT_INCREMENT.
+    list_increment       = db.Column('weight_increment', db.Float, nullable=True)
+    list_rest_seconds    = db.Column('default_rest_seconds', db.Integer, nullable=True)
+    # The real stops of an uneven stack, ascending. NULL on everything that
+    # steps evenly -- the increment already answers those. The list itself
+    # never states any; they are a gym's fact, so a lifter's setting.
+    list_stack_kg        = db.Column('stack_kg', db.JSON(none_as_null=True), nullable=True)
+    # Dead weight (bar, carriage) already contained in the logged number.
+    list_bar_weight      = db.Column('bar_weight', db.Float, nullable=True)
 
-    session_exercises  = db.relationship('SessionExercise', back_populates='exercise', lazy=True)
-    template_exercises = db.relationship('TemplateExercise', back_populates='exercise', lazy=True)
+    weight_increment     = _GoneFromExercise()
+    default_rest_seconds = _GoneFromExercise()
+    stack_kg             = _GoneFromExercise()
+    bar_weight           = _GoneFromExercise()
+
+
+class ExerciseSettings(db.Model):
+    """What one lifter changed about one exercise of the list.
+
+    Each value is stored only while it differs from the list's (NULL means
+    "the list's value"), and a row with nothing left in it is deleted -- so
+    a later change to the list's default still reaches everyone who never
+    touched it. See exercises.to_store() for the rules, exercises.setups()
+    for the reading.
+    """
+    __tablename__ = 'gym_exercise_settings'
+    __table_args__ = (db.UniqueConstraint('user_id', 'exercise_id',
+                                          name='uq_gym_exercise_settings_user_exercise'),)
+    id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id              = db.Column(db.Integer, db.ForeignKey('app_user.id'), nullable=False)
+    exercise_id          = db.Column(db.Integer, db.ForeignKey('gym_exercises.id', ondelete='CASCADE'),
+                                     nullable=False)
+    weight_increment     = db.Column(db.Float, nullable=True)
+    default_rest_seconds = db.Column(db.Integer, nullable=True)
+    stack_kg             = db.Column(db.JSON(none_as_null=True), nullable=True)
+    bar_weight           = db.Column(db.Float, nullable=True)
 
 
 class WorkoutTemplate(db.Model):
@@ -224,7 +282,7 @@ class TemplateExercise(db.Model):
     rest_seconds = db.Column(db.Integer, nullable=True)  # captured from the session's SessionExercise.rest_seconds when saved/updated
 
     template = db.relationship('WorkoutTemplate', back_populates='exercises')
-    exercise = db.relationship('Exercise', back_populates='template_exercises')
+    exercise = db.relationship('Exercise')
 
 
 class WorkoutSession(db.Model):
@@ -273,15 +331,15 @@ class SessionExercise(db.Model):
     session_id   = db.Column(db.Integer, db.ForeignKey('gym_workout_sessions.id'), nullable=False)
     exercise_id  = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
     position     = db.Column(db.Integer, nullable=False, default=0)
-    rest_seconds = db.Column(db.Integer, nullable=True)  # rest time for this exercise in this workout; seeded from Exercise.default_rest_seconds, editable per session
+    rest_seconds = db.Column(db.Integer, nullable=True)  # rest time for this exercise in this workout; seeded from the lifter's rest for the exercise (exercises.setups), editable per session
     replaces_id  = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True, unique=True)  # set when this row is a mid-workout substitute for another exercise in the same slot; unique so at most one substitute can ever point at a given original
     skipped      = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())  # True when this exercise is intentionally not being done this session; the row (and any already-completed sets) is kept as-is so a later "save/update as template" still includes it
     # The leader's SessionExercise this row mirrors, when this session is the
     # follower half of a shared workout. Reconciliation keys on this rather
-    # than exercise_id: the two catalogues use different ids for the same
-    # lift, and one exercise can legitimately appear twice in a session (an
-    # original plus the substitute that replaced it). NULL on every ordinary
-    # session, which is almost all of them.
+    # than exercise_id: one exercise can legitimately appear twice in a
+    # session (an original plus the substitute that replaced it), and until
+    # 2026-09-23 the two lifters' ids for the same lift differed. NULL on
+    # every ordinary session, which is almost all of them.
     mirrors_id   = db.Column(db.Integer, db.ForeignKey('gym_session_exercises.id', ondelete='SET NULL'), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     # A twinge, flagged with one tap. Deliberately a boolean and not a
@@ -292,7 +350,7 @@ class SessionExercise(db.Model):
                       server_default=sa.false())
 
     session  = db.relationship('WorkoutSession', back_populates='exercises')
-    exercise = db.relationship('Exercise', back_populates='session_exercises')
+    exercise = db.relationship('Exercise')
     # self-referential: `replaces` points at the original exercise this substitutes for;
     # `replaced_by` (backref) points the other way, so the original can tell it's been superseded.
     # foreign_keys pinned to replaces_id: mirrors_id is a second self-referential FK on this
@@ -417,20 +475,18 @@ class SharedSession(db.Model):
 class SharedSessionExercise(db.Model):
     """One exercise, named twice.
 
-    Exercises became per-user on 2026-08-02, so "Bankdruecken" in two
-    catalogues is two rows with two ids. A structural change expressed in the
-    leader's ids means nothing against the follower's data without this.
+    Exercises were per-user from 2026-08-02 to 2026-09-23, so "Bankdruecken"
+    in two catalogues was two rows with two ids and a structural change in
+    the leader's ids meant nothing against the follower's data without this.
+    Since the one list, both columns hold the same id (G3 retires the table).
     """
     __tablename__ = 'gym_shared_session_exercises'
     id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
     shared_session_id    = db.Column(db.Integer, db.ForeignKey('gym_shared_sessions.id'), nullable=False, index=True)
-    # CASCADE on both: a spent link's map row is not a reason to keep a
-    # catalogue entry alive. An exercise can end up referenced ONLY by this
-    # map -- e.g. the follower confirms "new" for an exercise the leader
-    # removed in the meantime, so a catalogue entry and a mapping row are
-    # created but no SessionExercise ever is -- and gym_delete_exercise only
-    # checks session_exercises/template_exercises, so without CASCADE that
-    # exercise could never be deleted without an unhandled IntegrityError.
+    # CASCADE on both: a spent link's map row is not a reason to keep an
+    # exercise row alive. (Written when lifters could delete their own
+    # exercises; since the one list nothing deletes one, and the cascade
+    # stays as the harmless answer if anything ever does.)
     leader_exercise_id   = db.Column(db.Integer, db.ForeignKey('gym_exercises.id', ondelete='CASCADE'), nullable=False)
     follower_exercise_id = db.Column(db.Integer, db.ForeignKey('gym_exercises.id', ondelete='CASCADE'), nullable=False)
 

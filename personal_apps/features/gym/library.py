@@ -1,10 +1,10 @@
 """The exercise library: one preconfigured list, the same for every lifter.
 
 Static data, grown by editing this file: the app offers no "create exercise"
-(owner, 2026-09-23 -- two lifters, one gym). Nothing reads it yet. G1 of
-docs/superpowers/plans/2026-09-23-gym-first-run-workflows.md decides how it
-reaches the database: one read-only row per entry, with per-user settings on
-top whose defaults are the values here. A first-time user finds their
+(owner, 2026-09-23 -- two lifters, one gym). Each entry has one read-only row
+in gym_exercises, keyed by `key`, which exercises.ensure_library() keeps in
+step with this file; a lifter's own settings sit on top, and the values here
+are their defaults (features/gym/exercises.py). A first-time user finds their
 exercise already set up -- every entry answers the questions the nine-field
 form used to ask.
 
@@ -27,11 +27,11 @@ the judgement calls are these:
   is a weight stack, `(Maschine, Scheiben)` is plate-loaded. Plate-loaded
   pressing and pulling machines are iso-lateral, so their number is per side;
   sleds (leg press, hack squat) are not.
-- `increment`, `bar` and `rest` are defaults a lifter can override (G1): an
-  8 kg stack, 2.5 kg dumbbell steps or a 7 kg SZ bar are gym facts no list
-  can know.
+- `increment`, `bar` and `rest` are defaults a lifter can override: an 8 kg
+  stack, 2.5 kg dumbbell steps or a 7 kg SZ bar are gym facts no list can
+  know.
 - `bar` is dead weight already inside the logged number, as on
-  models.Exercise.bar_weight. The Multipresse, T-Bar, Landmine and leg-press
+  models.Exercise.list_bar_weight. The Multipresse, T-Bar, Landmine and leg-press
   sled carry none: counterbalanced, resting on the floor or never counted,
   their number is the plates.
 - `aka` feeds search, which finds an exercise by its English name as well as

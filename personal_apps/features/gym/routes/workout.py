@@ -10,21 +10,25 @@ Moved verbatim from the pre-split routes.py.
 """
 import datetime as dt
 
-from flask import current_app, jsonify, redirect, render_template, request, url_for
+from flask import abort, current_app, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, load_only
 
 from extensions import db
 from models import (
-    AppUser, Exercise, WorkoutTemplate, TemplateExercise, WorkoutSession,
+    AppUser, WorkoutTemplate, TemplateExercise, WorkoutSession,
     SessionExercise, SessionSet, PendingPush, SharedSession, MUSCLE_GROUPS,
 )
 from auth import login_required
 from features.gym import stats
 from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
+from features.gym.exercises import (
+    exercise_or_404, library_exercises, save_setup, search_text, setup as exercise_setup,
+    setups as exercise_setups, touched_exercises,
+)
 from features.gym.scope import (
-    current_user_id, my_exercises, my_sessions, my_templates,
-    owned_exercise, owned_session, owned_session_exercise, owned_set,
+    current_user_id, my_sessions, my_templates,
+    owned_session, owned_session_exercise, owned_set,
 )
 from .. import sharing
 from ..locking import lock_sessions
@@ -34,8 +38,8 @@ from ..seeding import (
 )
 from ._blueprint import gym_bp
 from .helpers import (
-    DEFAULT_REST_SECONDS, NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT,
-    _cancel_pending_push, _clean_muscle_group, _delete_session_and_links,
+    NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT,
+    _cancel_pending_push, _delete_session_and_links,
     _get_active_session, _refuse_live_write_if_finished,
     _to_increment, _to_int, _to_reps, _to_weight, _username, _wants_json,
 )
@@ -128,12 +132,12 @@ def _schedule_rest(session_set):
     session_exercise = session_set.session_exercise
     if session_exercise.session.finished_at is not None:
         return
+    session_ = session_exercise.session
     rest_seconds = session_exercise.rest_seconds
     if rest_seconds is None:
-        rest_seconds = session_exercise.exercise.default_rest_seconds
+        rest_seconds = exercise_setup(session_.user_id, session_exercise.exercise).default_rest_seconds
     if not rest_seconds:
         return
-    session_ = session_exercise.session
     rest_ends_at = dt.datetime.utcnow() + dt.timedelta(seconds=rest_seconds)
     session_.rest_ends_at = rest_ends_at
     session_.resting_set_id = session_set.id
@@ -197,8 +201,8 @@ def _heute_payload():
     # groups, and would sit at zero forever flagged "zu wenig".
     catalogue_groups = (
         {group for group in MUSCLE_GROUPS if group not in NON_MUSCLE_GROUPS}
-        | {row.muscle_group or stats.NO_GROUP_LABEL
-           for row in my_exercises().with_entities(Exercise.muscle_group).distinct()}
+        | {exercise.muscle_group or stats.NO_GROUP_LABEL
+           for exercise in touched_exercises(current_user_id())}
     )
 
     # The one bulk load this whole page runs on -- every completed set ever
@@ -351,10 +355,12 @@ def gym_start():
             # The row already carries the date; the name should say which
             # workout it was.
             session_.name = template.name
+        setups = exercise_setups(session_.user_id, [te.exercise for te in template.exercises])
         for i, te in enumerate(template.exercises, start=1):
             session_exercise = SessionExercise(
                 exercise_id=te.exercise_id, position=i,
-                rest_seconds=te.rest_seconds if te.rest_seconds is not None else te.exercise.default_rest_seconds,
+                rest_seconds=(te.rest_seconds if te.rest_seconds is not None
+                              else setups[te.exercise_id].default_rest_seconds),
             )
             session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
             session_.exercises.append(session_exercise)
@@ -459,6 +465,8 @@ def _live_data(session_):
                                              picked=picks[se.id])
                    for se in visible_exercises}
     seed_sources = {se.id: _seed_source(picks[se.id]) for se in visible_exercises}
+    # This lifter's step, rest and stack stops for every exercise in the session.
+    setups = exercise_setups(session_.user_id, [se.exercise for se in session_.exercises])
     history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
     by_exercise = {}
     for row in history:
@@ -507,9 +515,10 @@ def _live_data(session_):
         """One loadable step above `weight`, snapped onto the machine's real
         stops -- or None when topped out on a known stack, where snapping
         clamps back to the top stop and repeating that number is not advice."""
-        increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
+        setup = setups[exercise.id]
+        increment = stats.resolve_increment(setup.weight_increment, exercise.is_unilateral)
         heavier = stats.snap_to_stack(
-            stats._next_weight(weight, increment), exercise.stack_kg, 'up')
+            stats._next_weight(weight, increment), setup.stack_kg, 'up')
         return heavier if heavier > weight else None
 
     stall_next_weight = {}
@@ -541,7 +550,7 @@ def _live_data(session_):
         if ready_for_more:
             ready_for_more = {**ready_for_more,
                               'next_weight': step_up(live_se.exercise, ready_for_more['weight'])}
-    exercises = my_exercises().order_by(Exercise.name).all()
+    exercises = library_exercises()
 
     # One tick per set in the whole workout, in order, so the strip reads as
     # the session filling up rather than as a chart. 'now' is the single set
@@ -576,7 +585,8 @@ def _live_data(session_):
     if resting:
         for se in visible_exercises:
             if any(s.id == session_.resting_set_id for s in se.sets):
-                rest_total_seconds = se.rest_seconds or se.exercise.default_rest_seconds or 0
+                rest_total_seconds = (se.rest_seconds
+                                      or setups[se.exercise_id].default_rest_seconds or 0)
                 break
 
     # Everyone else with an account. Three people use this app; a picker is
@@ -602,7 +612,7 @@ def _live_data(session_):
         # Resolved here, not in Jinja: the template must never re-implement the
         # fallback, or the two copies drift the moment DEFAULT_INCREMENT moves.
         live_increment=stats.resolve_increment(
-            live_se.exercise.weight_increment, live_se.exercise.is_unilateral,
+            setups[live_se.exercise_id].weight_increment, live_se.exercise.is_unilateral,
         ) if live_se else stats.resolve_increment(None, False),
         live_index=(visible_exercises.index(live_se) + 1) if live_se else 0,
         tick_states=tick_states,
@@ -656,6 +666,7 @@ def _live_data(session_):
         partners=partners,
         partner_status=partner_status,
         session_is_shared=session_is_shared,
+        setups=setups,
     )
 
 
@@ -694,7 +705,7 @@ def _session_payload(session_):
             # Resolved, never raw: the fallback lives in stats and a second
             # copy would drift the moment DEFAULT_INCREMENT moves.
             'increment': stats.resolve_increment(
-                se.exercise.weight_increment, se.exercise.is_unilateral),
+                data['setups'][se.exercise_id].weight_increment, se.exercise.is_unilateral),
             'notes': se.notes,
             'pain': se.pain,
             'sets': [{
@@ -741,7 +752,8 @@ def _session_payload(session_):
         'default_plan_weight': data['default_plan_weight'],
         'default_plan_reps': data['default_plan_reps'],
         'exercises': [
-            {'id': e.id, 'name': e.name, 'muscle_group': e.muscle_group}
+            {'id': e.id, 'name': e.name, 'muscle_group': e.muscle_group,
+             'search': search_text(e)}
             for e in data['exercises']
         ],
         'muscle_groups': list(data['muscle_groups']),
@@ -1029,29 +1041,20 @@ def gym_add_session_exercise(session_id):
     lock_sessions([session_id])
 
     exercise_id = request.form.get('exercise_id', type=int)
-    new_name = request.form.get('new_exercise_name', '').strip()
-    if not exercise_id and new_name:
-        exercise = my_exercises().filter_by(name=new_name).first()
-        if not exercise:
-            exercise = Exercise(
-                name=new_name,
-                muscle_group=_clean_muscle_group(request.form.get('muscle_group', '')),
-                default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
-                user_id=current_user_id(),
-            )
-            db.session.add(exercise)
-            db.session.flush()
-        exercise_id = exercise.id
+    if not exercise_id and request.form.get('new_exercise_name', '').strip():
+        # The exercise list is read-only (2026-09-23): an exercise is picked,
+        # never typed into existence. A page from before that still posts a
+        # name; refusing is better than guessing which entry it meant.
+        abort(400)
 
     if exercise_id:
-        # exercise_id arrives from a submitted form, so it is attacker-chosen:
-        # without this check a lifter could graft another user's exercise --
-        # and its history, through _seeded_sets -- into their own session.
-        exercise = owned_exercise(exercise_id)
+        # Any row of the list. The id is attacker-chosen, but it no longer
+        # carries anyone's history: _seeded_sets reads this session's owner's.
+        exercise = exercise_or_404(exercise_id)
         next_position = max([se.position for se in session_.exercises], default=0) + 1
         session_exercise = SessionExercise(
             session_id=session_.id, exercise_id=exercise_id, position=next_position,
-            rest_seconds=exercise.default_rest_seconds if exercise else None,
+            rest_seconds=exercise_setup(session_.user_id, exercise).default_rest_seconds,
         )
         # Seeded like every other path that puts an exercise into a session
         # (gym_start from a template, un-skip, reorder). This one used to
@@ -1087,25 +1090,11 @@ def gym_replace_session_exercise(session_exercise_id):
         return refusal
 
     exercise_id = request.form.get('exercise_id', type=int)
-    new_name = request.form.get('new_exercise_name', '').strip()
-    if not exercise_id and new_name:
-        exercise = my_exercises().filter_by(name=new_name).first()
-        if not exercise:
-            exercise = Exercise(
-                name=new_name,
-                muscle_group=original.exercise.muscle_group,
-                default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
-                user_id=current_user_id(),
-            )
-            db.session.add(exercise)
-            db.session.flush()
-        exercise_id = exercise.id
+    if not exercise_id and request.form.get('new_exercise_name', '').strip():
+        abort(400)   # read-only list: see gym_add_session_exercise
 
     if exercise_id:
-        # Attacker-chosen whenever it came from the form rather than from the
-        # branch above that just created it. Re-checking the freshly created
-        # one costs a primary-key lookup and keeps this to a single rule.
-        owned_exercise(exercise_id)
+        exercise_or_404(exercise_id)
 
     if exercise_id and exercise_id != original.exercise_id and not original.replaced_by:
         substitute = SessionExercise(
@@ -1127,12 +1116,9 @@ def gym_replace_session_exercise(session_exercise_id):
             _seeded_sets(original.session, exercise_id, original.position))
         db.session.add(substitute)
 
-    # Always commit -- even when the replacement itself didn't happen (e.g.
-    # the guard above rejected it), a newly created Exercise from new_name
-    # above must still be kept, or the user's typed name silently vanishes
-    # with no feedback. A lost race against a concurrent replace of the same
-    # original is caught here (the unique constraint on replaces_id rejects
-    # the second insert) and treated as a no-op instead of a 500.
+    # A lost race against a concurrent replace of the same original is caught
+    # here (the unique constraint on replaces_id rejects the second insert)
+    # and treated as a no-op instead of a 500.
     try:
         db.session.commit()
     except IntegrityError:
@@ -1195,26 +1181,21 @@ def gym_update_session_exercise_meta(session_exercise_id):
 @gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/increment', methods=['POST'])
 @login_required
 def gym_update_exercise_increment(session_exercise_id):
-    """Write the EXERCISE's increment from inside a running session.
+    """Set the lifter's step for this exercise from inside a running session.
 
     Reached from the per-exercise sheet, beside the rest field -- but unlike
     rest, which is genuinely per session, a loadable step is a property of the
-    equipment and so lands on the Exercise itself and stays. Keyed on the
-    SessionExercise regardless, because that is the id the sheet has and it
-    keeps the redirect back to the workout trivial.
-
-    @login_required only -- there is no separate admin gate to sit behind.
-    owned_session_exercise already guarantees the session, and therefore the
-    exercise it points at, belongs to the caller: the catalogue is per user
-    now, so this is an ordinary write to a row the caller owns, no different
-    from the rename/recategorise in gym_update_exercise.
+    equipment and so stays: it becomes the lifter's setting for the exercise
+    (a blank puts it back on the list's step). Keyed on the SessionExercise
+    regardless, because that is the id the sheet has and it keeps the
+    redirect back to the workout trivial.
     """
     session_exercise = owned_session_exercise(session_exercise_id)
     refusal = _refuse_live_write_if_finished(session_exercise.session)
     if refusal is not None:
         return refusal
-    session_exercise.exercise.weight_increment = _to_increment(
-        request.form.get('weight_increment', ''))
+    save_setup(session_exercise.session.user_id, session_exercise.exercise,
+               {'weight_increment': _to_increment(request.form.get('weight_increment', ''))})
     session_id = session_exercise.session_id
     db.session.commit()
     return _mutation_response(

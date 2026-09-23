@@ -26,8 +26,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / 'tests')
 from app import app as flask_app                                   # noqa: E402
 from conftest import _admin_id                                     # noqa: E402
 from extensions import db                                          # noqa: E402
+from features.gym.exercises import touched_exercises               # noqa: E402
 from models import (                                               # noqa: E402
-    Exercise, PendingPush, SessionExercise, SessionSet, WorkoutSession,
+    PendingPush, SessionExercise, SessionSet, WorkoutSession,
 )
 
 DEST = (pathlib.Path(__file__).resolve().parent.parent
@@ -40,8 +41,7 @@ def main():
 
     with flask_app.app_context():
         user_id = _admin_id()
-        exercises = (Exercise.query.filter_by(user_id=user_id)
-                     .order_by(Exercise.id).limit(2).all())
+        exercises = sorted(touched_exercises(user_id), key=lambda e: e.id)[:2]
         if len(exercises) < 2:
             raise SystemExit('the dev database needs at least two exercises')
 

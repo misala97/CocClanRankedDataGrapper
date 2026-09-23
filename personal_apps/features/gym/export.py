@@ -58,9 +58,12 @@ def set_payload(session_set):
     }
 
 
-def exercise_payload(session_exercise):
+def exercise_payload(session_exercise, setup):
+    """`setup` is the session owner's exercises.Setup for this exercise: the
+    list's facts plus that lifter's step, stack and bar. The caller resolves
+    it, so this module stays free of queries."""
     exercise = session_exercise.exercise
-    stack_kg = exercise.stack_kg or None
+    stack_kg = setup.stack_kg or None
     return {
         'exercise_id': exercise.id,
         'exercise_name': exercise.name,
@@ -68,17 +71,17 @@ def exercise_payload(session_exercise):
         'secondary_muscle_groups': exercise.secondary_muscle_groups or [],
         'equipment': exercise.equipment,
         'weight_convention': weight_convention(exercise.equipment, exercise.is_unilateral),
-        'bar_weight': exercise.bar_weight,
+        'bar_weight': setup.bar_weight,
         # Mutually exclusive by contract: real stops are a complete answer,
         # and a step size beside them would be a second, coarser one. When
         # there is no stack, the *resolved* increment is sent rather than the
-        # raw column: weight_increment is NULL-means-default, and the app
-        # itself never shows a lifter a null step -- it prescribes
+        # raw value: a step is NULL-means-default, and the app itself never
+        # shows a lifter a null step -- it prescribes
         # stats.resolve_increment's fallback. Sending the raw NULL would tell
         # the coaching tool to guess a number the app already knows, and its
         # guess could disagree with what the app would actually offer next.
         'increment_kg': (None if stack_kg else
-                         stats.resolve_increment(exercise.weight_increment,
+                         stats.resolve_increment(setup.weight_increment,
                                                  exercise.is_unilateral)),
         'stack_kg': stack_kg,
         'position': session_exercise.position,
@@ -94,7 +97,8 @@ def exercise_payload(session_exercise):
     }
 
 
-def session_payload(session):
+def session_payload(session, setups):
+    """`setups` maps exercise id to the session owner's Setup."""
     return {
         'id': session.id,
         'name': session.name,
@@ -110,17 +114,21 @@ def session_payload(session):
         # contract sample pins '' for the exercise note specifically, not
         # for every absent scalar in the document.
         'notes': session.notes,
-        'exercises': [exercise_payload(se) for se in session.exercises],
+        'exercises': [exercise_payload(se, setups[se.exercise.id])
+                      for se in session.exercises],
     }
 
 
-def build_payload(sessions, requested_session_ids, exported_at):
+def build_payload(sessions, requested_session_ids, exported_at, setups):
     """`range` is derived from what actually came back, not from what was
     asked for. The route is id-picked -- Verlauf's 30/90-day presets are a
     client-side bulk-check and no date range ever reaches the server -- so
     a range echoing the request would be inventing one. requested_session_ids
     stays beside it as the only record of the gap between asked and
     delivered.
+
+    Every exported session is the requester's own, so one `setups` map
+    (exercise id to Setup) covers them all.
     """
     dates = sorted(s.started_at.date() for s in sessions)
     return {
@@ -131,5 +139,5 @@ def build_payload(sessions, requested_session_ids, exported_at):
             'to': dates[-1].isoformat() if dates else None,
         },
         'requested_session_ids': requested_session_ids,
-        'sessions': [session_payload(s) for s in sessions],
+        'sessions': [session_payload(s, setups) for s in sessions],
     }

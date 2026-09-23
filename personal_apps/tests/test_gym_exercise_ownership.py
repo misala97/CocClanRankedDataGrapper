@@ -1,8 +1,14 @@
-"""Per-user exercise catalogues.
+"""One exercise list for everyone; settings and history stay each lifter's.
 
-Runs against the real local development database. Every row created here is
-deleted in a finally.
+Exercises were per user from 2026-08-02 until the one list (2026-09-23).
+What these tests guarded then -- one lifter never inheriting another's
+increment or history through a shared row -- is still the rule, now on a
+row both of them use: the row is everyone's, the settings row and the
+sessions are not.
+
+Runs against a real database. Every row created here is deleted again.
 """
+import datetime as dt
 import json
 import re
 
@@ -12,316 +18,217 @@ from app import app as flask_app
 from conftest import _admin_id
 
 
-def test_the_exercise_table_carries_an_owner():
-    from models import Exercise
-    assert hasattr(Exercise, 'user_id'), 'Exercise has no user_id'
-    assert Exercise.__table__.c.user_id.nullable is False, 'Exercise.user_id must be NOT NULL'
+def test_an_exercise_belongs_to_nobody():
+    from models import Exercise, ExerciseSettings
+    assert not hasattr(Exercise, 'user_id'), 'Exercise has an owner again'
+    assert ExerciseSettings.__table__.c.user_id.nullable is False
 
 
-# REMOVED 2026-08-24: test_every_pre_existing_exercise_was_backfilled_to_the_admin.
-#
-# It asserted that no row is owned by anyone but the admin, which was true for
-# exactly as long as the app had one user. Since 2026-08-02 it has three, and
-# the assertion had been failing on every run since the second person logged
-# anything -- sixteen exercise rows by the time it was looked at.
-#
-# Not repairable, because it was never about an invariant: it pinned the
-# outcome of a one-time backfill migration, and a migration that has already
-# run cannot regress. What it was protecting is covered by things that are
-# still true -- test_the_three_roots_carry_an_owner asserts the NOT NULL, and
-# the route tables below assert that one user cannot reach another's rows.
-# The test immediately below asserts two users CAN own the same
-# exercise name. Both could not be right.
-
-def test_two_users_can_hold_an_exercise_with_the_same_name():
-    """The constraint swap: unique(name) globally would reject this outright."""
+def test_a_list_key_names_one_row():
+    from sqlalchemy.exc import IntegrityError
     from extensions import db
-    from models import AppUser, Exercise
-    from werkzeug.security import generate_password_hash
+    from models import Exercise
 
-    created = []
-    try:
-        with flask_app.app_context():
-            other = AppUser(username='pytest samename user',
-                            password_hash=generate_password_hash('irrelevant'),
-                            is_admin=False)
-            db.session.add(other)
-            db.session.flush()
-            mine = Exercise(name='pytest shared name lift', user_id=_admin_id())
-            theirs = Exercise(name='pytest shared name lift', user_id=other.id)
-            db.session.add_all([mine, theirs])
+    with flask_app.app_context():
+        db.session.add_all([Exercise(name='pytest dup a', library_key='pytest_dup_key'),
+                            Exercise(name='pytest dup b', library_key='pytest_dup_key')])
+        with pytest.raises(IntegrityError):
             db.session.commit()
-            created = [mine.id, theirs.id, other.id]
-            assert mine.id != theirs.id
-    finally:
-        with flask_app.app_context():
-            for exercise_id in created[:2]:
-                doomed = db.session.get(Exercise, exercise_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-            db.session.commit()
-            if len(created) == 3:
-                doomed_user = db.session.get(AppUser, created[2])
-                if doomed_user is not None:
-                    db.session.delete(doomed_user)
-                    db.session.commit()
+        db.session.rollback()
 
 
 @pytest.fixture()
 def two_lifters():
-    """An admin-owned exercise and a second account that owns nothing.
+    """A key-less exercise the admin has logged once (60 kg) and set a step
+    of 9 on, and a second account that has done nothing.
 
-    Yields {'owner_id', 'stranger_id', 'exercise_id'}.
+    Yields {'owner_id', 'stranger_id', 'exercise_id', 'owner_session_id'}.
     """
     from extensions import db
-    from models import AppUser, Exercise
+    from models import (AppUser, Exercise, ExerciseSettings, SessionExercise, SessionSet,
+                        WorkoutSession)
     from werkzeug.security import generate_password_hash
 
-    ids = {}
     with flask_app.app_context():
         stranger = AppUser(username='pytest catalogue stranger',
                            password_hash=generate_password_hash('irrelevant'),
                            is_admin=False)
         db.session.add(stranger)
-        db.session.flush()
         exercise = Exercise(name='pytest owned lift', muscle_group='Brust',
-                            weight_increment=9.0, user_id=_admin_id())
+                            list_increment=2.5, list_rest_seconds=120)
         db.session.add(exercise)
+        db.session.flush()
+        db.session.add(ExerciseSettings(user_id=_admin_id(), exercise_id=exercise.id,
+                                        weight_increment=9.0, default_rest_seconds=200))
+        now = dt.datetime.utcnow()
+        logged = WorkoutSession(name='pytest owned lift session', user_id=_admin_id(),
+                                started_at=now - dt.timedelta(days=2, hours=1),
+                                finished_at=now - dt.timedelta(days=2))
+        db.session.add(logged)
+        db.session.flush()
+        se = SessionExercise(session_id=logged.id, exercise_id=exercise.id, position=1)
+        se.sets = [SessionSet(position=1, weight=60.0, reps=8, completed=True)]
+        db.session.add(se)
         db.session.commit()
         ids = {'owner_id': _admin_id(), 'stranger_id': stranger.id,
-               'exercise_id': exercise.id}
+               'exercise_id': exercise.id, 'owner_session_id': logged.id}
     yield ids
     with flask_app.app_context():
+        for session_ in WorkoutSession.query.filter(WorkoutSession.user_id == ids['stranger_id']).all():
+            session_.resting_set_id = None
+            db.session.flush()
+            db.session.delete(session_)
+        doomed = db.session.get(WorkoutSession, ids['owner_session_id'])
+        if doomed is not None:
+            db.session.delete(doomed)
+        db.session.commit()
+        ExerciseSettings.query.filter_by(user_id=ids['stranger_id']).delete()
         doomed = db.session.get(Exercise, ids['exercise_id'])
         if doomed is not None:
             db.session.delete(doomed)
-            db.session.commit()
+        db.session.commit()
         doomed_user = db.session.get(AppUser, ids['stranger_id'])
         if doomed_user is not None:
             db.session.delete(doomed_user)
             db.session.commit()
 
 
+def _client_for(user_id):
+    flask_app.config['TESTING'] = True
+    test_client = flask_app.test_client()
+    with test_client.session_transaction() as flask_session:
+        flask_session['user_id'] = user_id
+    return test_client
+
+
 @pytest.fixture()
 def stranger_client(two_lifters):
-    flask_app.config['TESTING'] = True
-    with flask_app.test_client() as test_client:
-        with test_client.session_transaction() as flask_session:
-            flask_session['user_id'] = two_lifters['stranger_id']
-        yield test_client
+    return _client_for(two_lifters['stranger_id'])
 
 
-def test_a_new_accounts_exercise_list_is_empty(stranger_client, two_lifters):
-    """The whole point of the change: she opens the picker and sees nothing of
-    theirs, not thirty lifts she will never do."""
+def _stranger_session(two_lifters):
+    from extensions import db
+    from models import WorkoutSession
+    with flask_app.app_context():
+        session_ = WorkoutSession(name='pytest stranger session', started_at=dt.datetime.utcnow(),
+                                  user_id=two_lifters['stranger_id'])
+        db.session.add(session_)
+        db.session.commit()
+        return session_.id
+
+
+def test_a_new_account_is_offered_the_whole_list(stranger_client, two_lifters):
+    """First visit: every entry of the list, already set up -- the add sheet
+    is where a new lifter starts, and nothing in it is anyone's."""
+    from conftest import embedded_payload
+    from features.gym.library import LIBRARY
+
+    session_id = _stranger_session(two_lifters)
+    payload = embedded_payload(stranger_client.get(f'/gym/session/{session_id}').get_data(as_text=True))
+    offered = {entry['name'] for entry in payload['exercises']}
+    assert offered == {entry.name for entry in LIBRARY}
+    assert 'pytest owned lift' not in offered, 'a row outside the list was offered'
+
+
+def test_a_new_accounts_catalogue_holds_only_their_own_exercises(stranger_client, two_lifters):
     body = stranger_client.get('/gym/uebungen').get_data(as_text=True)
     assert 'pytest owned lift' not in body
 
 
-def test_the_owner_still_sees_their_own_exercise(two_lifters):
-    flask_app.config['TESTING'] = True
-    with flask_app.test_client() as owner_client:
-        with owner_client.session_transaction() as flask_session:
-            flask_session['user_id'] = two_lifters['owner_id']
-        body = owner_client.get('/gym/uebungen').get_data(as_text=True)
-    assert 'pytest owned lift' in body, 'scoping hid the owner from their own catalogue'
+def test_the_owner_sees_the_exercise_they_logged(two_lifters):
+    body = _client_for(two_lifters['owner_id']).get('/gym/uebungen').get_data(as_text=True)
+    assert 'pytest owned lift' in body, 'a logged exercise is missing from its lifter\'s catalogue'
 
 
-def test_adding_an_exercise_whose_name_another_user_has_creates_your_own(
+def test_one_lifters_settings_and_history_never_reach_another(stranger_client, two_lifters):
+    """Same id, two lifters: each sees their own step, rest and sessions."""
+    exercise_id = two_lifters['exercise_id']
+    hers = stranger_client.get(f'/gym/exercises/{exercise_id}/detail.json').get_json()
+    assert hers['exercise']['weight_increment'] == 2.5
+    assert hers['exercise']['default_rest_seconds'] == 120
+    assert hers['exercise']['list_defaults']['weight_increment'] == 2.5
+    assert hers['table'] == [], 'the owner\'s session shows in her history'
+
+    his = _client_for(two_lifters['owner_id']).get(
+        f'/gym/exercises/{exercise_id}/detail.json').get_json()
+    assert his['exercise']['weight_increment'] == 9.0
+    assert his['exercise']['default_rest_seconds'] == 200
+    assert his['exercise']['list_defaults']['weight_increment'] == 2.5
+    assert len(his['table']) == 1
+
+
+def test_adding_an_exercise_by_name_is_refused(stranger_client, two_lifters):
+    """The list is read-only: a name-only post from a stale page creates
+    nothing, and links to nothing."""
+    from models import Exercise, SessionExercise
+
+    session_id = _stranger_session(two_lifters)
+    response = stranger_client.post(f'/gym/session/{session_id}/exercises/add',
+                                    data={'new_exercise_name': 'pytest brand new lift'})
+    assert response.status_code == 400
+    with flask_app.app_context():
+        assert SessionExercise.query.filter_by(session_id=session_id).count() == 0
+        assert Exercise.query.filter_by(name='pytest brand new lift').count() == 0
+
+
+def test_an_exercise_someone_else_logged_joins_her_session_with_her_values(
         stranger_client, two_lifters):
-    """Unscoped, the name lookup finds the other user's row and the route
-    redirects with name_taken -- so she could never create her own 'Bankdruecken',
-    and any path that linked instead of created would hand her their increment
-    and put her sets in their history."""
-    from extensions import db
-    from models import Exercise
+    """Any row can join any session, since none is owned -- but what it
+    brings is the session owner's: her rest, and a plan seeded from her
+    (empty) history, never his 60 kg."""
+    from models import SessionExercise
 
-    response = stranger_client.post('/gym/exercises/add', data={
-        'name': 'pytest owned lift', 'muscle_group': 'Brust'})
+    session_id = _stranger_session(two_lifters)
+    response = stranger_client.post(f'/gym/session/{session_id}/exercises/add',
+                                    data={'exercise_id': str(two_lifters['exercise_id'])})
     assert response.status_code in (302, 303)
-
-    created_id = None
-    try:
-        with flask_app.app_context():
-            hers = Exercise.query.filter_by(name='pytest owned lift',
-                                            user_id=two_lifters['stranger_id']).first()
-            assert hers is not None, 'the name lookup matched another user and refused'
-            created_id = hers.id
-            assert hers.id != two_lifters['exercise_id'], 'linked to their row instead of creating'
-            assert hers.weight_increment is None, 'inherited their increment'
-    finally:
-        with flask_app.app_context():
-            if created_id is not None:
-                doomed = db.session.get(Exercise, created_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-                    db.session.commit()
+    with flask_app.app_context():
+        row = SessionExercise.query.filter_by(session_id=session_id).one()
+        assert row.rest_seconds == 120, 'took the owner\'s rest setting'
+        assert row.sets and all(s.is_default_seeded for s in row.sets), \
+            'seeded from somebody else\'s history'
+        assert all(s.weight != 60.0 for s in row.sets)
 
 
-def test_adding_a_session_exercise_by_name_does_not_link_to_another_users_exercise(
-        stranger_client, two_lifters):
-    """gym_add_session_exercise is find-or-create, not find-or-refuse like
-    gym_add_exercise above. Unscoped, the find half would have matched the
-    owner's 'pytest owned lift' and attached the stranger's session to that
-    row -- handing her their weight_increment and writing her sets into
-    their history."""
-    import datetime as dt
-
+def test_a_non_admin_saves_settings_of_their_own(stranger_client, two_lifters):
+    """The settings form needs no admin flag and no ownership: it writes the
+    caller's settings row. The owner's stays as it was, and a posted name
+    renames nothing."""
     from extensions import db
-    from models import Exercise, SessionExercise, WorkoutSession
+    from models import Exercise, ExerciseSettings
 
-    session_id = None
-    created_exercise_id = None
-    try:
-        with flask_app.app_context():
-            session_ = WorkoutSession(name='pytest find-or-create session',
-                                      started_at=dt.datetime.utcnow(),
-                                      user_id=two_lifters['stranger_id'])
-            db.session.add(session_)
-            db.session.commit()
-            session_id = session_.id
-
-        response = stranger_client.post(
-            f'/gym/session/{session_id}/exercises/add',
-            data={'new_exercise_name': 'pytest owned lift', 'muscle_group': 'Brust'})
-        assert response.status_code in (302, 303)
-
-        with flask_app.app_context():
-            session_exercise = SessionExercise.query.filter_by(session_id=session_id).first()
-            assert session_exercise is not None, 'the route did not attach an exercise to the session'
-            linked = db.session.get(Exercise, session_exercise.exercise_id)
-            assert linked.user_id == two_lifters['stranger_id'], \
-                'the name lookup matched another user\'s exercise and linked to it'
-            assert linked.id != two_lifters['exercise_id'], \
-                'session exercise points at the owner\'s row instead of her own'
-            created_exercise_id = linked.id
-            assert linked.weight_increment is None, 'inherited their increment'
-    finally:
-        with flask_app.app_context():
-            if session_id is not None:
-                doomed_session = db.session.get(WorkoutSession, session_id)
-                if doomed_session is not None:
-                    doomed_session.resting_set_id = None
-                    db.session.commit()
-                    db.session.delete(doomed_session)
-                    db.session.commit()
-            if created_exercise_id is not None:
-                doomed_exercise = db.session.get(Exercise, created_exercise_id)
-                if doomed_exercise is not None:
-                    db.session.delete(doomed_exercise)
-                    db.session.commit()
+    exercise_id = two_lifters['exercise_id']
+    response = stranger_client.post(f'/gym/exercises/{exercise_id}/update',
+                                    data={'name': 'pytest renamed lift', 'weight_increment': '5'})
+    assert response.status_code in (302, 303)
+    with flask_app.app_context():
+        mine = ExerciseSettings.query.filter_by(user_id=two_lifters['stranger_id'],
+                                                exercise_id=exercise_id).one()
+        theirs = ExerciseSettings.query.filter_by(user_id=two_lifters['owner_id'],
+                                                  exercise_id=exercise_id).one()
+        assert (mine.weight_increment, theirs.weight_increment) == (5.0, 9.0)
+        assert db.session.get(Exercise, exercise_id).name == 'pytest owned lift'
 
 
-def test_a_stranger_cannot_add_another_users_exercise_to_their_session(
-        stranger_client, two_lifters):
-    """Both mid-session paths take exercise_id straight from a submitted form.
-    Harmless while one catalogue was shared; an IDOR once exercises are owned."""
-    from extensions import db
-    from models import SessionExercise, WorkoutSession
-
-    session_id = None
-    try:
-        with flask_app.app_context():
-            theirs = WorkoutSession(name='pytest stranger session',
-                                    user_id=two_lifters['stranger_id'])
-            db.session.add(theirs)
-            db.session.commit()
-            session_id = theirs.id
-
-        response = stranger_client.post(f'/gym/session/{session_id}/exercises/add',
-                                        data={'exercise_id': str(two_lifters['exercise_id'])})
-        assert response.status_code == 404, f'returned {response.status_code}'
-
-        with flask_app.app_context():
-            assert SessionExercise.query.filter_by(session_id=session_id).count() == 0, \
-                'the rejected request added the exercise anyway'
-    finally:
-        with flask_app.app_context():
-            if session_id is not None:
-                doomed = db.session.get(WorkoutSession, session_id)
-                if doomed is not None:
-                    doomed.resting_set_id = None
-                    db.session.commit()
-                    db.session.delete(doomed)
-                    db.session.commit()
-
-
-def test_a_non_admin_can_rename_an_exercise_they_own(stranger_client, two_lifters):
-    """The whole point of ownership: gym_update_exercise checks ownership now,
-    not @admin_required -- a non-admin owner must be able to rename what is
-    hers without needing the admin flag the old gate demanded."""
+def test_the_delete_route_is_gone(stranger_client, two_lifters):
     from extensions import db
     from models import Exercise
 
-    exercise_id = None
-    try:
-        with flask_app.app_context():
-            exercise = Exercise(name='pytest stranger owned lift', muscle_group='Ruecken',
-                                user_id=two_lifters['stranger_id'])
-            db.session.add(exercise)
-            db.session.commit()
-            exercise_id = exercise.id
-
-        response = stranger_client.post(
-            f'/gym/exercises/{exercise_id}/update',
-            data={'name': 'pytest stranger renamed lift'})
-        assert response.status_code in (302, 303), \
-            f'a non-admin owner could not update their own exercise: {response.status_code}'
-
-        with flask_app.app_context():
-            renamed = db.session.get(Exercise, exercise_id)
-            assert renamed.name == 'pytest stranger renamed lift', \
-                'the rename did not take effect for a non-admin owner'
-    finally:
-        with flask_app.app_context():
-            if exercise_id is not None:
-                doomed = db.session.get(Exercise, exercise_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-                    db.session.commit()
+    response = stranger_client.post(f"/gym/exercises/{two_lifters['exercise_id']}/delete")
+    assert response.status_code == 404
+    with flask_app.app_context():
+        assert db.session.get(Exercise, two_lifters['exercise_id']) is not None
 
 
-def test_a_non_admin_owner_sees_the_edit_control_on_their_exercise_page(stranger_client, two_lifters):
-    """Pins the template fix: exercise_detail.html wrapped the manage section
-    and the edit dialog in {% if is_admin %}, so a non-admin owner who could
-    already rename via a direct POST (previous test) still had no button on
-    the page to do it from. Fails again if that gate is re-added."""
-    from extensions import db
-    from models import Exercise
-
-    exercise_id = None
-    try:
-        with flask_app.app_context():
-            exercise = Exercise(name='pytest stranger detail lift', muscle_group='Beine',
-                                user_id=two_lifters['stranger_id'])
-            db.session.add(exercise)
-            db.session.commit()
-            exercise_id = exercise.id
-
-        response = stranger_client.get(f'/gym/exercises/{exercise_id}')
-        assert response.status_code == 200, \
-            'a non-admin owner cannot open their own exercise page'
-        body = response.get_data(as_text=True)
-
-        # The page is a React island now, so the control's label is no longer
-        # in the server HTML -- ExerciseDetail.test.tsx covers that it renders.
-        # What the server still decides, and what the original {% if is_admin %}
-        # bug lived in, is whether this user is handed the exercise at all.
-        payload = json.loads(
-            re.search(r'<script type="application/json" id="gym-data">(.*?)</script>',
-                      body, re.S).group(1))
-        assert payload['exercise']['id'] == exercise_id, \
-            'a non-admin owner is not given their own exercise in the payload'
-
-        # And the gate cannot come back the way it did: nothing in the payload
-        # describes the viewer, so no component can branch on admin-ness
-        # without someone first adding a field here.
-        assert not any('admin' in key for key in payload), \
-            'the payload gained a viewer-role field -- an admin gate can now be re-added'
-    finally:
-        with flask_app.app_context():
-            if exercise_id is not None:
-                doomed = db.session.get(Exercise, exercise_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-                    db.session.commit()
+def test_a_non_admin_is_handed_the_exercise_page(stranger_client, two_lifters):
+    """The page payload describes the exercise, never the viewer: no field
+    a component could branch an admin gate on."""
+    exercise_id = two_lifters['exercise_id']
+    response = stranger_client.get(f'/gym/exercises/{exercise_id}')
+    assert response.status_code == 200
+    payload = json.loads(
+        re.search(r'<script type="application/json" id="gym-data">(.*?)</script>',
+                  response.get_data(as_text=True), re.S).group(1))
+    assert payload['exercise']['id'] == exercise_id
+    assert not any('admin' in key for key in payload), \
+        'the payload gained a viewer-role field -- an admin gate can now be re-added'

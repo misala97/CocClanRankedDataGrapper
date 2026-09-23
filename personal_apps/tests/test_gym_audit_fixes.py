@@ -70,7 +70,7 @@ def test_every_live_route_refuses_a_finished_workout(client, live_session):
         (f"/gym/set/{ids['done_set']}/update", {'weight': '61', 'reps': '8'}),
         (f"/gym/set/{ids['done_set']}/delete", {}),
         (f"/gym/session-exercise/{ids['se']}/skip", {}),
-        (f"/gym/session-exercise/{ids['se']}/replace", {'new_exercise_name': 'pytest audit swap'}),
+        (f"/gym/session-exercise/{ids['se']}/replace", {'exercise_id': str(ids['exercise'])}),
         (f"/gym/session/{ids['session']}/exercises/reorder", {'order': str(ids['se'])}),
         (f"/gym/session/{ids['session']}/rest/skip", {}),
         (f"/gym/session/{ids['session']}/deload", {'on': '1', 'pct': '60'}),
@@ -263,14 +263,18 @@ def newcomer():
             flask_session['user_id'] = user_id
         yield test_client, user_id
 
-    from models import Exercise, WorkoutSession, WorkoutTemplate
+    from models import Exercise, ExerciseSettings, WorkoutSession, WorkoutTemplate
     with flask_app.app_context():
-        for model in (WorkoutSession, WorkoutTemplate, Exercise):
+        for model in (WorkoutSession, WorkoutTemplate, ExerciseSettings):
             for row in model.query.filter_by(user_id=user_id).all():
                 db.session.delete(row)
             db.session.commit()
+        Exercise.query.filter_by(name=NEWCOMER_LIFT).delete()
         db.session.delete(db.session.get(AppUser, user_id))
         db.session.commit()
+
+
+NEWCOMER_LIFT = 'pytest newcomer squat'
 
 
 def _train(user_id, logged=True, minutes=42):
@@ -280,9 +284,9 @@ def _train(user_id, logged=True, minutes=42):
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     now = dt.datetime.utcnow()
     with flask_app.app_context():
-        exercise = Exercise.query.filter_by(user_id=user_id).first()
+        exercise = Exercise.query.filter_by(name=NEWCOMER_LIFT).first()
         if exercise is None:
-            exercise = Exercise(name='pytest newcomer squat', user_id=user_id)
+            exercise = Exercise(name=NEWCOMER_LIFT)
             db.session.add(exercise)
             db.session.flush()
         session_ = WorkoutSession(user_id=user_id, name='Beine',

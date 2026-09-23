@@ -18,6 +18,19 @@ def _admin_id():
         return admin.id
 
 
+def list_exercise(key='machine_fly'):
+    """A row of the one exercise list (features/gym/library.py), synced first
+    so a fresh database has it. Needs an app context. Tests that change a
+    list row's own values build a key-less row instead -- the list rows are
+    everyone's."""
+    from extensions import db
+    from features.gym.exercises import sync_library
+    from models import Exercise
+    with db.engine.begin() as connection:
+        sync_library(connection)
+    return Exercise.query.filter_by(library_key=key).one()
+
+
 @pytest.fixture()
 def client():
     """Logged in as the author. The gym suites act as the admin throughout."""
@@ -85,9 +98,7 @@ def live_session():
 
     with flask_app.app_context():
         user_id = _admin_id()
-        exercise = (Exercise.query.filter_by(user_id=user_id)
-                    .order_by(Exercise.id).first())
-        assert exercise is not None, 'the dev database needs an exercise'
+        exercise = list_exercise()
         session_ = WorkoutSession(user_id=user_id, started_at=dt.datetime.utcnow())
         db.session.add(session_)
         db.session.flush()
@@ -127,7 +138,7 @@ def temp_finished_session():
     from extensions import db
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Test Finished Session Fields', user_id=_admin_id())
+        exercise = Exercise(name='ZZ Test Finished Session Fields')
         db.session.add(exercise)
         db.session.flush()
         session = WorkoutSession(name='ZZ Test Finished Session', user_id=_admin_id(),

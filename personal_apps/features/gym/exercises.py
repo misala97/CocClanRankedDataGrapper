@@ -21,10 +21,22 @@ request reconciles the follower's rows, and those take the follower's rest.
 And because an exercise id no longer implies a user, every read from an
 exercise into sessions, sets or routines filters by the lifter reading.
 """
+import logging
 import math
+import threading
 from dataclasses import dataclass
 
-from .library import LIBRARY
+from flask import abort
+from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
+
+from extensions import db
+from models import (Exercise, ExerciseSettings, SessionExercise, TemplateExercise,
+                    WorkoutSession, WorkoutTemplate)
+
+from .library import BY_KEY, LIBRARY, fold
+
+log = logging.getLogger(__name__)
 
 PERSONAL_FIELDS = ('weight_increment', 'default_rest_seconds', 'stack_kg', 'bar_weight')
 
@@ -142,3 +154,134 @@ def to_store(list_values, submitted, equipment):
             value = None
         stored[field] = value
     return stored
+
+
+# -- the rows -----------------------------------------------------------------
+
+_synced = False
+_sync_lock = threading.Lock()
+
+
+def sync_library(connection):
+    """Make gym_exercises match library.py on `connection`; (inserted,
+    updated). Core statements only, so it can run on a connection of its
+    own and never commits a request's pending ORM work."""
+    table = Exercise.__table__
+    columns = [table.c[name] for name in entry_values(LIBRARY[0])]
+    stored = {row['library_key']: dict(row) for row in connection.execute(
+        select(*columns).where(table.c.library_key.isnot(None))).mappings()}
+    inserts, updates = sync_plan(stored)
+    if inserts:
+        connection.execute(table.insert(), inserts)
+    for key, values in updates:
+        for fact in ('is_unilateral', 'equipment'):
+            if fact in values:
+                # Every history on the row is re-read through it: a changed
+                # side doubles or halves all of its volume.
+                log.warning('exercise list: %s %s %r -> %r', key, fact,
+                            stored[key][fact], values[fact])
+        connection.execute(table.update().where(table.c.library_key == key).values(**values))
+    return len(inserts), len(updates)
+
+
+def ensure_library():
+    """sync_library() once per process, before the first gym request.
+
+    A list that grows in code needs no deploy step this way. With several
+    workers starting at once, the loser of a race on a new key gets an
+    IntegrityError from the unique library_key and simply syncs again.
+    """
+    global _synced
+    if _synced:
+        return
+    with _sync_lock:
+        if _synced:
+            return
+        for attempt in (1, 2):
+            try:
+                with db.engine.begin() as connection:
+                    sync_library(connection)
+                break
+            except IntegrityError:
+                if attempt == 2:
+                    raise
+        _synced = True
+
+
+def library_exercises():
+    """What the picker offers: every row whose key is in today's list."""
+    keys = [entry.key for entry in LIBRARY]
+    return Exercise.query.filter(Exercise.library_key.in_(keys)).order_by(Exercise.name).all()
+
+
+def touched_exercises(user_id):
+    """A lifter's own exercises: logged in one of their sessions, kept in one
+    of their routines, or set up in their settings."""
+    logged = (select(SessionExercise.exercise_id)
+              .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+              .where(WorkoutSession.user_id == user_id))
+    kept = (select(TemplateExercise.exercise_id)
+            .join(WorkoutTemplate, TemplateExercise.template_id == WorkoutTemplate.id)
+            .where(WorkoutTemplate.user_id == user_id))
+    set_up = select(ExerciseSettings.exercise_id).where(ExerciseSettings.user_id == user_id)
+    return (Exercise.query
+            .filter(or_(Exercise.id.in_(logged), Exercise.id.in_(kept), Exercise.id.in_(set_up)))
+            .order_by(Exercise.name).all())
+
+
+def search_text(exercise):
+    """What the add sheet searches (library.matches): the entry's folded name
+    and aliases -- which hold every name the lifters used before the list --
+    or, for a row that has left the list, its folded name."""
+    entry = BY_KEY.get(exercise.library_key)
+    return entry.search_text if entry else fold(exercise.name)
+
+
+def exercise_or_404(exercise_id):
+    """Any exercise row. No ownership check: the row is everyone's, and the
+    history hanging off it is scoped where it is read."""
+    row = db.session.get(Exercise, exercise_id)
+    if row is None:
+        abort(404)
+    return row
+
+
+# -- a lifter's settings -----------------------------------------------------
+
+def _stored(row):
+    return {field: getattr(row, field) for field in PERSONAL_FIELDS}
+
+
+def setups(user_id, exercises):
+    """{exercise_id: Setup} for one lifter, in one query."""
+    exercises = [exercise for exercise in exercises if exercise is not None]
+    ids = {exercise.id for exercise in exercises}
+    stored = {}
+    if ids and user_id is not None:
+        stored = {row.exercise_id: _stored(row) for row in ExerciseSettings.query.filter(
+            ExerciseSettings.user_id == user_id, ExerciseSettings.exercise_id.in_(ids))}
+    return {exercise.id: resolve(list_values(exercise), stored.get(exercise.id))
+            for exercise in exercises}
+
+
+def setup(user_id, exercise):
+    return setups(user_id, [exercise])[exercise.id]
+
+
+def save_setup(user_id, exercise, submitted):
+    """Store what a lifter submitted for an exercise (see to_store); fields
+    not in `submitted` keep their stored value. The caller commits."""
+    values = to_store(list_values(exercise), submitted, exercise.equipment)
+    row = ExerciseSettings.query.filter_by(user_id=user_id, exercise_id=exercise.id).first()
+    if row is None:
+        if all(value is None for value in values.values()):
+            return resolve(list_values(exercise), None)
+        row = ExerciseSettings(user_id=user_id, exercise_id=exercise.id)
+        db.session.add(row)
+    for field, value in values.items():
+        setattr(row, field, value)
+    stored = _stored(row)
+    if all(value is None for value in stored.values()):
+        db.session.delete(row)
+        return resolve(list_values(exercise), None)
+    return resolve(list_values(exercise), stored)

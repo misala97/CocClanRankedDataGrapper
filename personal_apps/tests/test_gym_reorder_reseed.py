@@ -1,7 +1,9 @@
 """What moving an exercise does to the plan underneath it -- alone, and on a
 training partner's side.
 
-Every lifter here owns the same four lifts with two fresh workouts of history.
+Both lifters train the same four exercises -- one set of rows, as on the one
+list -- with two fresh workouts of history each, so every plan here also shows
+that seeding reads the lifter's own history off a row both of them use.
 'raise' is the slot-sensitive one: it was done at slot 4 ten days ago (lighter)
 and at slot 3 five days ago (heavier), so seeding it at slot 3 hands out the
 heavier session and seeding it at slot 4 hands out the lighter one -- position
@@ -16,6 +18,9 @@ from app import app as flask_app
 
 PRESS, ROW, RAISE, CURL = ('pytest rs press', 'pytest rs row',
                            'pytest rs raise', 'pytest rs curl')
+# Nobody has history on these: what a lifter adds mid-workout.
+OWN, EXTRA, CABLE_ROW, FILLER = ('pytest rs own', 'pytest rs leader extra',
+                                 'pytest rs cable row', 'pytest rs filler')
 
 # (slot in the workout ten days ago, slot five days ago, sets then, sets now)
 LEADER_HISTORY = {
@@ -45,22 +50,29 @@ def _client_for(user_id):
     return test_client
 
 
-def _build_lifter(username, history):
-    """A user, their four lifts, two finished workouts and two routines.
+def _build_lifts():
+    """The exercises both lifters use, key-less. Returns {name: id}."""
+    from extensions import db
+    from models import Exercise
+
+    lifts = {name: Exercise(name=name, list_rest_seconds=0)
+             for name in (PRESS, ROW, RAISE, CURL, OWN, EXTRA, CABLE_ROW, FILLER)}
+    db.session.add_all(lifts.values())
+    db.session.flush()
+    return {name: row.id for name, row in lifts.items()}
+
+
+def _build_lifter(username, history, lifts):
+    """A user, two finished workouts and two routines on `lifts`.
     Returns (user_id, {'raise_third': template_id, 'raise_last': template_id})."""
     from extensions import db
-    from models import (AppUser, Exercise, SessionExercise, SessionSet,
+    from models import (AppUser, SessionExercise, SessionSet,
                         TemplateExercise, WorkoutSession, WorkoutTemplate)
     from werkzeug.security import generate_password_hash
 
     user = AppUser(username=username, password_hash=generate_password_hash('x'),
                    is_admin=False)
     db.session.add(user)
-    db.session.flush()
-    lifts = {}
-    for name in (PRESS, ROW, RAISE, CURL):
-        lifts[name] = Exercise(name=name, user_id=user.id, default_rest_seconds=0)
-        db.session.add(lifts[name])
     db.session.flush()
 
     now = dt.datetime.utcnow()
@@ -70,7 +82,7 @@ def _build_lifter(username, history):
                                  started_at=started,
                                  finished_at=started + dt.timedelta(hours=1))
         for name, spec in history.items():
-            row = SessionExercise(exercise_id=lifts[name].id, position=spec[which])
+            row = SessionExercise(exercise_id=lifts[name], position=spec[which])
             row.sets = [SessionSet(position=j, weight=w, reps=r, completed=True,
                                    completed_at=started)
                         for j, (w, r) in enumerate(spec[2 + which], start=1)]
@@ -81,7 +93,7 @@ def _build_lifter(username, history):
     for key, order in (('raise_third', (PRESS, ROW, RAISE, CURL)),
                        ('raise_last', (PRESS, ROW, CURL, RAISE))):
         template = WorkoutTemplate(name=f'pytest rs {key}', user_id=user.id)
-        template.exercises = [TemplateExercise(exercise_id=lifts[name].id, position=i)
+        template.exercises = [TemplateExercise(exercise_id=lifts[name], position=i)
                               for i, name in enumerate(order, start=1)]
         db.session.add(template)
         db.session.flush()
@@ -91,7 +103,7 @@ def _build_lifter(username, history):
 
 def _destroy_lifter(user_id):
     from extensions import db
-    from models import (AppUser, Exercise, PendingPush, SharedSession,
+    from models import (AppUser, ExerciseSettings, PendingPush, SharedSession,
                         SharedSessionExercise, WorkoutSession, WorkoutTemplate)
 
     for shared in SharedSession.query.filter(
@@ -108,9 +120,7 @@ def _destroy_lifter(user_id):
     db.session.commit()
     for row in WorkoutTemplate.query.filter_by(user_id=user_id).all():
         db.session.delete(row)
-    db.session.commit()
-    for row in Exercise.query.filter_by(user_id=user_id).all():
-        db.session.delete(row)
+    ExerciseSettings.query.filter_by(user_id=user_id).delete()
     db.session.commit()
     doomed = db.session.get(AppUser, user_id)
     if doomed is not None:
@@ -118,9 +128,20 @@ def _destroy_lifter(user_id):
     db.session.commit()
 
 
+def _destroy_lifts():
+    """Every key-less 'pytest rs' row -- run once no session uses them."""
+    from extensions import db
+    from models import Exercise
+
+    Exercise.query.filter(Exercise.library_key.is_(None),
+                          Exercise.name.like('pytest rs %')).delete(synchronize_session=False)
+    db.session.commit()
+
+
 @pytest.fixture()
 def lifters():
-    """{'leader', 'follower', 'leader_templates', 'follower_templates'} of ids."""
+    """{'leader', 'follower', 'leader_templates', 'follower_templates'} of ids,
+    and 'lifts': {name: exercise id}."""
     from extensions import db
     from models import AppUser
 
@@ -128,16 +149,19 @@ def lifters():
         # A crashed earlier run must not block this one on the unique username.
         for stale in AppUser.query.filter(AppUser.username.like('pytest rs %')).all():
             _destroy_lifter(stale.id)
-        leader, leader_templates = _build_lifter('pytest rs leader', LEADER_HISTORY)
-        follower, follower_templates = _build_lifter('pytest rs follower', FOLLOWER_HISTORY)
+        _destroy_lifts()
+        lifts = _build_lifts()
+        leader, leader_templates = _build_lifter('pytest rs leader', LEADER_HISTORY, lifts)
+        follower, follower_templates = _build_lifter('pytest rs follower', FOLLOWER_HISTORY, lifts)
         db.session.commit()
-        made = {'leader': leader, 'follower': follower,
+        made = {'leader': leader, 'follower': follower, 'lifts': lifts,
                 'leader_templates': leader_templates,
                 'follower_templates': follower_templates}
     yield made
     with flask_app.app_context():
         _destroy_lifter(made['leader'])
         _destroy_lifter(made['follower'])
+        _destroy_lifts()
 
 
 def _start(user_id, template_id):
@@ -330,9 +354,9 @@ def test_reorder_moves_the_whole_substitute_chain(solo):
     from extensions import db
     from models import Exercise
 
+    lifts = solo['lifts']
     with flask_app.app_context():
-        lifts = {e.name: e.id for e in Exercise.query.filter_by(user_id=solo['leader']).all()}
-        extra = Exercise(name='pytest rs pushdown', user_id=solo['leader'])
+        extra = Exercise(name='pytest rs pushdown')
         db.session.add(extra)
         db.session.commit()
         extra_id = extra.id
@@ -383,12 +407,9 @@ def test_removing_an_exercise_reseeds_the_rows_that_moved_up(lifters):
 
 
 def test_removing_a_substitute_leaves_its_original_in_the_same_slot(solo):
-    from models import Exercise
-
-    with flask_app.app_context():
-        curl_id = Exercise.query.filter_by(user_id=solo['leader'], name=CURL).first().id
     row_id = _row(solo['session'], ROW)['id']
-    _post(solo['leader'], f'/gym/session-exercise/{row_id}/replace', exercise_id=curl_id)
+    _post(solo['leader'], f'/gym/session-exercise/{row_id}/replace',
+          exercise_id=solo['lifts'][CURL])
     substitute = next(r for r in _rows(solo['session']) if r['replaces_id'] == row_id)
 
     _post(solo['leader'], f"/gym/session-exercise/{substitute['id']}/delete")
@@ -504,45 +525,38 @@ def test_a_follower_cannot_remove_a_shared_exercise_while_linked(pair):
 
 def test_a_follower_can_remove_an_exercise_they_added_themselves(pair):
     _post(pair['follower'], f"/gym/session/{pair['follower_session']}/exercises/add",
-          new_exercise_name='pytest rs own')
-    own_id = _row(pair['follower_session'], 'pytest rs own')['id']
+          exercise_id=pair['lifts'][OWN])
+    own_id = _row(pair['follower_session'], OWN)['id']
 
     _post(pair['follower'], f'/gym/session-exercise/{own_id}/delete')
 
-    assert 'pytest rs own' not in [r['name'] for r in _rows(pair['follower_session'])]
+    assert OWN not in [r['name'] for r in _rows(pair['follower_session'])]
 
 
 def test_the_followers_own_exercise_stays_after_the_shared_ones(pair):
     _post(pair['follower'], f"/gym/session/{pair['follower_session']}/exercises/add",
-          new_exercise_name='pytest rs own')
+          exercise_id=pair['lifts'][OWN])
 
     _post(pair['leader'], f"/gym/session/{pair['leader_session']}/exercises/add",
-          new_exercise_name='pytest rs leader extra')
+          exercise_id=pair['lifts'][EXTRA])
 
     rows = _rows(pair['follower_session'])
     assert [(r['name'], r['position']) for r in rows] == [
-        (PRESS, 1), (ROW, 2), (RAISE, 3), (CURL, 4),
-        ('pytest rs leader extra', 5), ('pytest rs own', 6)]
+        (PRESS, 1), (ROW, 2), (RAISE, 3), (CURL, 4), (EXTRA, 5), (OWN, 6)]
 
 
 def test_the_followers_substitute_moves_with_the_exercise_it_replaced(pair):
-    from models import Exercise
-
-    with flask_app.app_context():
-        curl_id = Exercise.query.filter_by(user_id=pair['follower'], name=CURL).first().id
-    # a second curl as the stand-in for row, so the substitute has a name of its own
     row_id = _row(pair['follower_session'], ROW)['id']
     _post(pair['follower'], f'/gym/session-exercise/{row_id}/replace',
-          new_exercise_name='pytest rs cable row')
+          exercise_id=pair['lifts'][CABLE_ROW])
 
     _reorder(pair['leader'], pair['leader_session'], [PRESS, RAISE, CURL, ROW])
 
     rows = {r['name']: r for r in _rows(pair['follower_session'])}
     assert rows[ROW]['position'] == 4
-    assert rows['pytest rs cable row']['position'] == 4, (
+    assert rows[CABLE_ROW]['position'] == 4, (
         'the substitute was left behind in the slot its original moved out of')
     assert sorted(r['position'] for r in rows.values()) == [1, 2, 3, 4, 4]
-    assert curl_id  # the follower's own curl is untouched by any of this
 
 
 def test_the_leader_removing_an_exercise_keeps_the_followers_logged_sets(pair):
@@ -660,19 +674,17 @@ def test_a_leaders_change_and_the_followers_own_add_do_not_share_a_slot(pair, mo
 
     statuses = []
 
-    def add(user_id, session_id, name):
+    def add(user_id, session_id, exercise_id):
         response = _client_for(user_id).post(
             f'/gym/session/{session_id}/exercises/add',
-            data={'new_exercise_name': name}, headers={'Accept': 'application/json'})
+            data={'exercise_id': exercise_id}, headers={'Accept': 'application/json'})
         statuses.append(response.status_code)
 
     threads = [
         threading.Thread(name='leader', target=add,
-                         args=(pair['leader'], pair['leader_session'],
-                               'pytest rs leader extra')),
+                         args=(pair['leader'], pair['leader_session'], pair['lifts'][EXTRA])),
         threading.Thread(name='follower', target=add,
-                         args=(pair['follower'], pair['follower_session'],
-                               'pytest rs own')),
+                         args=(pair['follower'], pair['follower_session'], pair['lifts'][OWN])),
     ]
     for thread in threads:
         thread.start()
@@ -682,7 +694,7 @@ def test_a_leaders_change_and_the_followers_own_add_do_not_share_a_slot(pair, mo
     assert statuses == [200, 200]
     rows = _rows(pair['follower_session'])
     assert sorted(r['name'] for r in rows) == sorted(
-        [PRESS, ROW, RAISE, CURL, 'pytest rs leader extra', 'pytest rs own'])
+        [PRESS, ROW, RAISE, CURL, EXTRA, OWN])
     assert [r['position'] for r in rows] == [1, 2, 3, 4, 5, 6]
 
 
@@ -773,10 +785,9 @@ def test_a_slot_later_than_any_history_says_it_fell_back_to_an_earlier_one(solo)
     condition that the screen says so: nothing was ever lifted this late in a
     workout, so the numbers come from a fresher slot and may run heavy."""
     _post(solo['leader'], f"/gym/session/{solo['session']}/exercises/add",
-          new_exercise_name='pytest rs filler')
+          exercise_id=solo['lifts'][FILLER])
 
-    payload = _reorder(solo['leader'], solo['session'],
-                       [PRESS, ROW, CURL, 'pytest rs filler', RAISE])
+    payload = _reorder(solo['leader'], solo['session'], [PRESS, ROW, CURL, FILLER, RAISE])
 
     source = _source(payload, RAISE)
     assert (source['basis'], source['position']) == ('earlier_slot', 3)
@@ -795,10 +806,8 @@ def test_the_workout_in_progress_is_never_its_own_history(solo):
     days_ago = _days_ago(source['date'])
     assert days_ago == 5, 'the plan was seeded from the workout five days ago, not from today'
 
-    from models import Exercise
-    with flask_app.app_context():
-        raise_id = Exercise.query.filter_by(user_id=solo['leader'], name=RAISE).first().id
-    _post(solo['leader'], f"/gym/session/{solo['session']}/exercises/add", exercise_id=raise_id)
+    _post(solo['leader'], f"/gym/session/{solo['session']}/exercises/add",
+          exercise_id=solo['lifts'][RAISE])
     second = [r for r in _rows(solo['session']) if r['name'] == RAISE][-1]
     assert second['position'] == 5
     assert second['sets'] == LEADER_RAISE_AT_3, 'seeded from today\'s own sets'
@@ -806,9 +815,9 @@ def test_the_workout_in_progress_is_never_its_own_history(solo):
 
 def test_an_exercise_without_history_has_no_source(solo):
     payload = _post(solo['leader'], f"/gym/session/{solo['session']}/exercises/add",
-                    new_exercise_name='pytest rs filler')
+                    exercise_id=solo['lifts'][FILLER])
 
-    assert _source(payload, 'pytest rs filler') is None
+    assert _source(payload, FILLER) is None
 
 
 def test_a_layoff_says_the_plan_is_the_last_workout_not_the_best(solo):
@@ -816,7 +825,7 @@ def test_a_layoff_says_the_plan_is_the_last_workout_not_the_best(solo):
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
 
     with flask_app.app_context():
-        lift = Exercise(name='pytest rs stale lift', user_id=solo['leader'])
+        lift = Exercise(name='pytest rs stale lift')
         db.session.add(lift)
         db.session.flush()
         long_ago = dt.datetime.utcnow() - dt.timedelta(days=60)
@@ -839,12 +848,12 @@ def test_a_layoff_says_the_plan_is_the_last_workout_not_the_best(solo):
 
 def test_the_payload_marks_which_rows_are_shared(pair):
     _post(pair['follower'], f"/gym/session/{pair['follower_session']}/exercises/add",
-          new_exercise_name='pytest rs own')
+          exercise_id=pair['lifts'][OWN])
 
     payload = _client_for(pair['follower']).get(
         f"/gym/session/{pair['follower_session']}/detail.json").get_json()
     flags = {e['name']: e['mirrored'] for e in payload['visible_exercises']}
-    assert flags == {PRESS: True, ROW: True, RAISE: True, CURL: True, 'pytest rs own': False}
+    assert flags == {PRESS: True, ROW: True, RAISE: True, CURL: True, OWN: False}
 
     leader_payload = _client_for(pair['leader']).get(
         f"/gym/session/{pair['leader_session']}/detail.json").get_json()

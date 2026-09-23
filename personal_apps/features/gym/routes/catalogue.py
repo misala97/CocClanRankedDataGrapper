@@ -1,27 +1,36 @@
-"""The exercise catalogue: the list page and exercise create / update /
-delete."""
+"""The exercise catalogue: the list page, and a lifter's settings for one
+exercise.
+
+Since the one exercise list (2026-09-23) nobody creates, renames or deletes
+an exercise here. The page lists the lifter's own exercises -- the ones they
+logged, keep in a routine or set up (exercises.touched_exercises) -- and the
+only write is their step, rest, stack stops and bar."""
 
 from features.gym import stats
 from features.gym.schemas import CataloguePayload
 import datetime as dt
 
 from flask import (
-    flash, jsonify, redirect, render_template, request, url_for,
+    redirect, render_template, request, url_for,
 )
 from extensions import (
     db,
 )
 from models import (
-    EQUIPMENT_LABELS, Exercise, MUSCLE_GROUPS,
+    EQUIPMENT_LABELS, MUSCLE_GROUPS,
 )
 from auth import (
     login_required,
 )
+from features.gym.exercises import (
+    exercise_or_404, save_setup, setups as exercise_setups, touched_exercises,
+)
 from features.gym.scope import (
-    current_user_id, my_exercises, owned_exercise,
+    current_user_id,
 )
 from .helpers import (
-    DEFAULT_REST_SECONDS, EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _clean_equipment, _clean_muscle_group, _clean_secondary_groups, _to_increment, _to_int, _to_stack_steps, _wants_json,
+    DEFAULT_REST_SECONDS, EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _exercise_meta,
+    _to_increment, _to_int, _to_stack_steps, _to_weight,
 )
 from .history import (
     load_performed,
@@ -44,12 +53,12 @@ def gym_uebungen():
 
 
 def _catalogue_payload(added_id=None, name_taken=False):
-    """The whole catalogue as a validated payload. Shared by the page render
-    and by gym_add_exercise's JSON answer, so a create made from the sheet
-    re-renders from exactly what a fresh load would show -- added/name_taken
-    are parameters here and query args on the page, same meaning."""
+    """The caller's catalogue as a validated payload: the exercises they have
+    logged, kept in a routine or set up, each with their settings."""
     now = dt.datetime.utcnow()
-    exercises = my_exercises().order_by(Exercise.name).all()
+    user_id = current_user_id()
+    exercises = touched_exercises(user_id)
+    setups = exercise_setups(user_id, exercises)
 
     # The one bulk load this whole page runs on -- every completed set ever
     # logged, across the whole catalogue. Every exercise's state/last-done/
@@ -122,24 +131,11 @@ def _catalogue_payload(added_id=None, name_taken=False):
         if group_name not in MUSCLE_GROUPS:      # NO_GROUP_LABEL and legacy values
             grouped.append((group_name, [entries_by_id[e.id] for e in group_exercises]))
 
-    def as_meta(exercise):
-        return {
-            'id': exercise.id,
-            'name': exercise.name,
-            'muscle_group': exercise.muscle_group,
-            'is_unilateral': exercise.is_unilateral,
-            'default_rest_seconds': exercise.default_rest_seconds,
-            'weight_increment': exercise.weight_increment,
-            'equipment': exercise.equipment,
-            'bar_weight': exercise.bar_weight,
-            'stack_kg': exercise.stack_kg,
-            'secondary_muscle_groups': exercise.secondary_muscle_groups,
-        }
-
     payload = CataloguePayload.model_validate({
         'groups': [
             {'name': name,
-             'entries': [{**entry, 'exercise': as_meta(entry['exercise'])}
+             'entries': [{**entry, 'exercise': _exercise_meta(entry['exercise'],
+                                                              setups[entry['exercise'].id])}
                          for entry in entries]}
             for name, entries in grouped
         ],
@@ -165,107 +161,28 @@ def _catalogue_payload(added_id=None, name_taken=False):
 # wrong for a short one, so it follows the length.
 UEBUNGEN_FOLD_ABOVE = 30
 
-
-@gym_bp.route('/gym/exercises/add', methods=['POST'])
-@login_required
-def gym_add_exercise():
-    # The write reports itself. A duplicate name was a silent no-op and a
-    # success landed the new exercise inside a collapsed band, so the only
-    # difference between "saved" and "discarded" was a digit beside the h1.
-    # gym_update_exercise already had the ?name_taken= convention; this is the
-    # same one.
-    name = request.form.get('name', '').strip()
-    if not name:
-        return redirect(url_for('gym.gym_uebungen'))
-    # No flash on either branch: the input is `required`, so an empty name does
-    # not reach here through the UI, and ?name_taken already renders a banner on
-    # the page that says this in context. A flash would say it twice.
-    if my_exercises().filter_by(name=name).first():
-        if _wants_json():
-            # A collision is a page state, not an exception: the same banner
-            # the redirect used to produce, minus the reload.
-            return jsonify(_catalogue_payload(name_taken=True).model_dump(mode='json'))
-        return redirect(url_for('gym.gym_uebungen', name_taken=1))
-
-    muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''))
-    equipment = _clean_equipment(request.form.get('equipment', ''))
-    exercise = Exercise(
-        name=name,
-        muscle_group=muscle_group,
-        default_rest_seconds=_to_int(request.form.get('default_rest_seconds', ''), DEFAULT_REST_SECONDS),
-        weight_increment=_to_increment(request.form.get('weight_increment', '')),
-        is_unilateral=request.form.get('is_unilateral') == 'on',
-        equipment=equipment,
-        bar_weight=_to_increment(request.form.get('bar_weight', '')),
-        # Stack steps only mean something for a stack machine -- the hidden
-        # Stack-Stufen input still submits its old value even when Art has
-        # been switched away from stack, and increment_kg/stack_kg are meant
-        # to be mutually exclusive (the export derives one from the other).
-        stack_kg=_to_stack_steps(request.form.get('stack_kg', '')) if equipment == 'stack' else None,
-        secondary_muscle_groups=_clean_secondary_groups(
-            request.form.getlist('secondary_muscle_groups'), muscle_group),
-        user_id=current_user_id(),
-    )
-    db.session.add(exercise)
-    db.session.commit()
-    if _wants_json():
-        return jsonify(_catalogue_payload(added_id=exercise.id).model_dump(mode='json'))
-    return redirect(url_for('gym.gym_uebungen', added=exercise.id))
-
-
 @gym_bp.route('/gym/exercises/<int:exercise_id>/update', methods=['POST'])
 @login_required
 def gym_update_exercise(exercise_id):
-    exercise = owned_exercise(exercise_id)
-    new_name = request.form.get('name', '').strip()
-    name_taken = False
-    if new_name and new_name != exercise.name:
-        if my_exercises().filter_by(name=new_name).first():
-            name_taken = True  # surfaced to the user below instead of silently skipping the rename
-        else:
-            # Remember the old name so anything still referencing it (e.g.
-            # historical data, or a rename made by mistake) can still
-            # resolve to this exercise instead of creating a duplicate.
-            exercise.previous_name = exercise.name
-            exercise.name = new_name
-    exercise.muscle_group = _clean_muscle_group(request.form.get('muscle_group', ''), current=exercise.muscle_group)
-    exercise.default_rest_seconds = _to_int(request.form.get('default_rest_seconds', ''))
-    exercise.weight_increment = _to_increment(request.form.get('weight_increment', ''))
-    exercise.is_unilateral = request.form.get('is_unilateral') == 'on'
-    exercise.equipment = _clean_equipment(request.form.get('equipment', ''),
-                                          current=exercise.equipment)
-    exercise.bar_weight = _to_increment(request.form.get('bar_weight', ''))
-    # Stack steps only mean something for a stack machine -- the hidden
-    # Stack-Stufen input still submits its old value even when Art has been
-    # switched away from stack, and increment_kg/stack_kg are meant to be
-    # mutually exclusive (the export derives one from the other).
-    exercise.stack_kg = (
-        _to_stack_steps(request.form.get('stack_kg', '')) if exercise.equipment == 'stack' else None
-    )
-    exercise.secondary_muscle_groups = _clean_secondary_groups(
-        request.form.getlist('secondary_muscle_groups'), exercise.muscle_group)
-    db.session.commit()
-    return redirect(url_for(
-        'gym.exercise_detail', exercise_id=exercise.id, name_taken=1 if name_taken else None,
-    ))
+    """Save the caller's settings for an exercise.
 
-
-@gym_bp.route('/gym/exercises/<int:exercise_id>/delete', methods=['POST'])
-@login_required
-def gym_delete_exercise(exercise_id):
-    exercise = owned_exercise(exercise_id)
-    if exercise.session_exercises or exercise.template_exercises:
-        # Silently refusing looked identical to deleting, so the row just
-        # stayed there with no reason given.
-        flash(f'„{exercise.name}“ steckt noch in einem Workout oder einer Routine '
-              f'und wurde nicht gelöscht.', 'error')
-        return redirect(url_for('gym.gym_uebungen'))
-    name = exercise.name
-    db.session.delete(exercise)
+    Only the four personal fields are read, and only those the form sent: a
+    field left out keeps its stored value, a blank one goes back to the
+    list's. Name, groups, equipment and one side belong to the list and are
+    ignored if posted.
+    """
+    exercise = exercise_or_404(exercise_id)
+    # Each field parsed; a blank parses to None, the list's value. The bar
+    # parses as a weight so that 0 -- "nothing inside the number" -- survives.
+    # Kept in the body: the form/route pairing test reads field names here.
+    parsers = {
+        'weight_increment': _to_increment,
+        'default_rest_seconds': _to_int,
+        'stack_kg': _to_stack_steps,
+        'bar_weight': _to_weight,
+    }
+    submitted = {field: parse(request.form.get(field, ''))
+                 for field, parse in parsers.items() if field in request.form}
+    save_setup(current_user_id(), exercise, submitted)
     db.session.commit()
-    # The detail island's delayed-commit undo posts this via fetch and
-    # navigates itself afterwards.
-    if _wants_json():
-        return jsonify({'deleted': True})
-    flash(f'Übung „{name}“ gelöscht.', 'success')
-    return redirect(url_for('gym.gym_uebungen'))
+    return redirect(url_for('gym.exercise_detail', exercise_id=exercise.id))

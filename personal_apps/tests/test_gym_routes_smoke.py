@@ -18,7 +18,7 @@ def _pending_set(payload):
     live = _live_exercise(payload)
     return next((s for s in live['sets'] if not s['completed']), None)
 
-from conftest import _admin_id, acting_as
+from conftest import _admin_id, acting_as, list_exercise
 from extensions import db
 from features.gym import stats
 from models import Exercise, SessionExercise, SessionSet, WorkoutSession
@@ -34,10 +34,9 @@ def scratch_session():
     real local development database.
     """
     from extensions import db
-    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    from models import SessionExercise, SessionSet, WorkoutSession
     with flask_app.app_context():
-        exercise = Exercise.query.first()
-        assert exercise is not None, 'the dev database needs at least one exercise'
+        exercise = list_exercise()
         session_ = WorkoutSession(name='pytest scratch', started_at=dt.datetime.utcnow(),
                                   user_id=_admin_id())
         session_exercise = SessionExercise(exercise_id=exercise.id, position=1)
@@ -107,20 +106,17 @@ def test_statistik_renders(client):
     assert client.get('/gym/statistik').status_code == 200
 
 
-# Scoped to the acting user since 2026-08-24. These walked every row in the
-# table and expected the admin to render each one, which was fine while the
-# database had a single user and has failed since 2026-08-02, when it stopped
-# having one: another account's exercise 404s, and that 404 is the ownership
-# check doing its job. So the suite was asserting that authorization does NOT
-# work. Cross-user denial is covered properly in test_gym_ownership.py and
-# test_gym_exercise_ownership.py; what belongs here is only whether every page
-# this user can reach still renders.
+# Every row is everyone's since the one list (2026-09-23), so every page is
+# reachable. The ones worth rendering are those with something on them -- the
+# admin's touched exercises -- plus one untouched list row for the empty page.
+# That no one else's history shows on a page is test_gym_exercise_ownership's.
 def test_exercise_detail_renders_for_every_exercise(client):
+    from features.gym.exercises import library_exercises, touched_exercises
     with flask_app.app_context():
-        from models import Exercise
-        ids = [row.id for row in
-               Exercise.query.filter_by(user_id=_admin_id()).all()]
-    assert ids, 'the dev database needs an exercise owned by the admin'
+        touched = touched_exercises(_admin_id())
+        ids = [row.id for row in touched]
+        ids.append(next(row.id for row in library_exercises() if row not in touched))
+    assert len(ids) > 1, 'the dev database needs an exercise the admin has done'
     for exercise_id in ids:
         response = client.get('/gym/exercises/{}'.format(exercise_id))
         assert response.status_code == 200, exercise_id
@@ -340,7 +336,7 @@ def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
     exercise_id = None
     try:
         with acting_as(_admin_id()):
-            exercise = Exercise(name='pytest seed lift', is_unilateral=False, user_id=_admin_id())
+            exercise = Exercise(name='pytest seed lift', is_unilateral=False)
             db.session.add(exercise)
             db.session.commit()
             exercise_id = exercise.id
@@ -396,7 +392,7 @@ def _seed_slot_history(rows):
     """
     from extensions import db
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
-    exercise = Exercise(name='pytest slot lift', is_unilateral=False, user_id=_admin_id())
+    exercise = Exercise(name='pytest slot lift', is_unilateral=False)
     db.session.add(exercise)
     db.session.flush()
     created = []
@@ -490,7 +486,7 @@ def _deload_reorder_fixture():
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     exercise_ids, history_ids = [], []
     for label, weight in (('a', 100.0), ('b', 50.0)):
-        exercise = Exercise(name='pytest reorder lift %s' % label, is_unilateral=False, user_id=_admin_id())
+        exercise = Exercise(name='pytest reorder lift %s' % label, is_unilateral=False)
         db.session.add(exercise)
         db.session.flush()
         exercise_ids.append(exercise.id)
@@ -569,7 +565,7 @@ def scratch_increment_exercise():
     from extensions import db
     from models import Exercise, SessionExercise, WorkoutSession
     with flask_app.app_context():
-        exercise = Exercise(name='pytest scratch increment lift', muscle_group='Brust', user_id=_admin_id())
+        exercise = Exercise(name='pytest scratch increment lift', muscle_group='Brust')
         db.session.add(exercise)
         db.session.flush()
         session_ = WorkoutSession(name='pytest scratch increment',
@@ -597,13 +593,22 @@ def test_live_stepper_falls_back_when_the_exercise_has_no_increment(client, scra
     assert embedded_payload(html)['live_increment'] == 2.5
 
 
-def test_live_stepper_uses_the_exercises_own_increment(client, scratch_increment_exercise):
+def _admin_step(exercise_id):
+    """The admin's stored step for an exercise, or None for no setting."""
+    from models import ExerciseSettings
+    with flask_app.app_context():
+        row = ExerciseSettings.query.filter_by(user_id=_admin_id(), exercise_id=exercise_id).first()
+        return row.weight_increment if row else None
+
+
+def test_live_stepper_uses_the_lifters_own_increment(client, scratch_increment_exercise):
     from extensions import db
-    from models import Exercise
+    from models import ExerciseSettings
     session_id, _, exercise_id = scratch_increment_exercise
 
     with flask_app.app_context():
-        db.session.get(Exercise, exercise_id).weight_increment = 9.0
+        db.session.add(ExerciseSettings(user_id=_admin_id(), exercise_id=exercise_id,
+                                        weight_increment=9.0))
         db.session.commit()
 
     html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
@@ -614,7 +619,20 @@ def test_live_stepper_uses_the_exercises_own_increment(client, scratch_increment
     assert embedded_payload(html)['live_increment'] != 2.5
 
 
-def test_session_sheet_writes_the_increment_to_the_exercise(client, scratch_increment_exercise):
+def test_live_stepper_uses_the_lists_increment_without_a_setting(client, scratch_increment_exercise):
+    from extensions import db
+    from models import Exercise
+    session_id, _, exercise_id = scratch_increment_exercise
+
+    with flask_app.app_context():
+        db.session.get(Exercise, exercise_id).list_increment = 5.0
+        db.session.commit()
+
+    html = client.get(f'/gym/session/{session_id}').get_data(as_text=True)
+    assert embedded_payload(html)['live_increment'] == 5.0
+
+
+def test_session_sheet_writes_the_lifters_increment(client, scratch_increment_exercise):
     from extensions import db
     from models import Exercise, SessionExercise
     _, session_exercise_id, exercise_id = scratch_increment_exercise
@@ -623,16 +641,17 @@ def test_session_sheet_writes_the_increment_to_the_exercise(client, scratch_incr
                            data={'weight_increment': '9'})
     assert response.status_code == 302
 
+    assert _admin_step(exercise_id) == 9.0
     with flask_app.app_context():
-        assert db.session.get(Exercise, exercise_id).weight_increment == 9.0
+        # The list's value stays: the step is this lifter's setting, not a
+        # change to the row everyone uses.
+        assert db.session.get(Exercise, exercise_id).list_increment is None
         # The session row is untouched: this field is per exercise, forever,
         # unlike the rest time sitting directly above it in the same sheet.
         assert db.session.get(SessionExercise, session_exercise_id).rest_seconds is None
 
 
 def test_session_sheet_clears_the_increment_back_to_the_default(client, scratch_increment_exercise):
-    from extensions import db
-    from models import Exercise
     _, session_exercise_id, exercise_id = scratch_increment_exercise
 
     client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
@@ -640,8 +659,7 @@ def test_session_sheet_clears_the_increment_back_to_the_default(client, scratch_
     client.post(f'/gym/session-exercise/{session_exercise_id}/increment',
                 data={'weight_increment': ''})
 
-    with flask_app.app_context():
-        assert db.session.get(Exercise, exercise_id).weight_increment is None
+    assert _admin_step(exercise_id) is None
 
 
 def test_to_increment_is_comma_tolerant():
@@ -657,47 +675,15 @@ def test_to_increment_rejects_non_positive_and_unparseable(raw):
     assert _to_increment(raw) is None
 
 
-def test_add_exercise_carries_the_increment_onto_the_new_row(client):
-    """gym_add_exercise is a write surface for weight_increment with no
-    other coverage -- a dropped/typo'd form field here would silently store
-    NULL and nothing would fail."""
-    from extensions import db
-    from models import Exercise
-
-    response = client.post('/gym/exercises/add', data={
-        'name': 'pytest add exercise increment',
-        'muscle_group': 'Brust',
-        'weight_increment': '5',
-    })
-    assert response.status_code in (302, 303)
-
-    exercise_id = None
-    try:
-        with flask_app.app_context():
-            exercise = Exercise.query.filter_by(name='pytest add exercise increment').first()
-            assert exercise is not None
-            exercise_id = exercise.id
-            assert exercise.weight_increment == 5.0
-            assert exercise.muscle_group == 'Brust'
-    finally:
-        if exercise_id is not None:
-            with flask_app.app_context():
-                doomed = db.session.get(Exercise, exercise_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-                    db.session.commit()
-
-
 def test_update_exercise_sets_and_clears_the_increment_without_losing_other_fields(client):
-    """gym_update_exercise writes weight_increment unconditionally, so this
-    also pins that name and muscle_group survive both writes -- the failure
-    mode this finding is about is a silent NULL on an unrelated field, not
-    just on the increment itself."""
+    """The settings form writes the step as the caller's setting, and a
+    blank puts it back on the list's. Name and group are the list's and
+    survive both writes, whatever the form posts for them."""
     from extensions import db
     from models import Exercise
 
     with flask_app.app_context():
-        exercise = Exercise(name='pytest update exercise increment', muscle_group='Rücken', user_id=_admin_id())
+        exercise = Exercise(name='pytest update exercise increment', muscle_group='Rücken')
         db.session.add(exercise)
         db.session.commit()
         exercise_id = exercise.id
@@ -709,21 +695,21 @@ def test_update_exercise_sets_and_clears_the_increment_without_losing_other_fiel
             'weight_increment': '5',
         })
         assert response.status_code in (302, 303)
+        assert _admin_step(exercise_id) == 5.0
         with flask_app.app_context():
             exercise = db.session.get(Exercise, exercise_id)
-            assert exercise.weight_increment == 5.0
             assert exercise.name == 'pytest update exercise increment'
             assert exercise.muscle_group == 'Rücken'
 
         response = client.post(f'/gym/exercises/{exercise_id}/update', data={
-            'name': 'pytest update exercise increment',
-            'muscle_group': 'Rücken',
+            'name': 'pytest renamed on the way',
+            'muscle_group': 'Brust',
             'weight_increment': '',
         })
         assert response.status_code in (302, 303)
+        assert _admin_step(exercise_id) is None
         with flask_app.app_context():
             exercise = db.session.get(Exercise, exercise_id)
-            assert exercise.weight_increment is None
             assert exercise.name == 'pytest update exercise increment'
             assert exercise.muscle_group == 'Rücken'
     finally:
@@ -747,7 +733,7 @@ def scratch_deload_session():
     from extensions import db
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     with flask_app.app_context():
-        exercise = Exercise(name='pytest deload suggest lift', muscle_group='Brust', user_id=_admin_id())
+        exercise = Exercise(name='pytest deload suggest lift', muscle_group='Brust')
         db.session.add(exercise)
         db.session.flush()
 
@@ -840,19 +826,29 @@ def test_adding_an_exercise_to_a_deload_session_seeds_scaled_sets(client, scratc
         assert [(s.weight, s.base_weight, s.reps) for s in se.sets] == [(70.0, 100.0, 10)]
 
 
+UNEVEN_STACK = [5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0]
+
+
+def _my_stack_stops(exercise_id):
+    """The admin's own stops on an exercise, as their settings row. Goes
+    with the exercise: the row cascades when the fixture deletes it."""
+    from models import ExerciseSettings
+    db.session.add(ExerciseSettings(user_id=_admin_id(), exercise_id=exercise_id,
+                                    stack_kg=UNEVEN_STACK))
+
+
 def test_deload_seeding_snaps_to_the_exercises_real_stack_stops(client, scratch_deload_session):
     """The route wiring, not just the pure function: stats.deload_weight()
-    correctly snapping to a stack is worthless if the exercise's own
-    stack_kg never reaches it. 100 kg at 70 % on the default 2.5 grid is
-    exactly 70.0 -- a value this stack does not have -- so this only passes
-    if _seeded_sets actually read exercise.stack_kg and passed it through.
+    correctly snapping to a stack is worthless if the lifter's own stops
+    never reach it. 100 kg at 70 % on the default 2.5 grid is exactly 70.0
+    -- a value this stack does not have -- so this only passes if
+    _seeded_sets actually reads the session owner's setup and passes its
+    stops through.
     """
-    from extensions import db
-    from models import Exercise, SessionExercise
+    from models import SessionExercise
     live_id, _, exercise_id = scratch_deload_session
     with flask_app.app_context():
-        exercise = db.session.get(Exercise, exercise_id)
-        exercise.stack_kg = [5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0]
+        _my_stack_stops(exercise_id)
         db.session.commit()
 
     client.post(f'/gym/session/{live_id}/exercises/add', data={'exercise_id': str(exercise_id)})
@@ -867,18 +863,17 @@ def test_seeded_suggestion_snaps_to_the_exercises_real_stack_stops(client, scrat
     covered above (_seeded_sets): an exercise attached to the session with no
     sets of its own yet -- the "live" slot, since it is the only exercise --
     reads its opening weight from _seeded_suggestion alone, which must also
-    read exercise.stack_kg. 100 kg at 70 % on the default 2.5 grid is exactly
+    read the stops -- here the list's own, where the neighbouring tests use
+    the lifter's setting. 100 kg at 70 % on the default 2.5 grid is exactly
     70.0 -- a value this stack does not have -- so this only passes if
-    _seeded_suggestion actually passes stack_kg through. The "zuletzt ..."
+    _seeded_suggestion actually passes the stops through. The "zuletzt ..."
     line (_session_live.html) and the hidden stepper input both read the same
     suggestion, so both are checked.
     """
-    from extensions import db
     from models import Exercise, SessionExercise
     live_id, _, exercise_id = scratch_deload_session
     with flask_app.app_context():
-        exercise = db.session.get(Exercise, exercise_id)
-        exercise.stack_kg = [5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0]
+        db.session.get(Exercise, exercise_id).list_stack_kg = UNEVEN_STACK
         se = SessionExercise(session_id=live_id, exercise_id=exercise_id, position=1)
         db.session.add(se)
         db.session.commit()
@@ -938,16 +933,14 @@ def test_toggling_a_deload_on_rewrites_reps_and_off_restores_them(client, scratc
 def test_deload_toggle_snaps_to_the_exercises_real_stack_stops(client, scratch_deload_session):
     """The toggle route's own deload_weight() call (gym_toggle_deload), not the
     seeding paths covered above: switching a deload on for a session that
-    already has sets logged at working weight must also read
-    exercise.stack_kg. 100 kg at 70 % on the default 2.5 grid is exactly
-    70.0 -- a value this stack does not have.
+    already has sets logged at working weight must also read the lifter's
+    stops. 100 kg at 70 % on the default 2.5 grid is exactly 70.0 -- a value
+    this stack does not have.
     """
-    from extensions import db
-    from models import Exercise, SessionExercise, SessionSet, WorkoutSession
+    from models import SessionExercise, SessionSet, WorkoutSession
     live_id, _, exercise_id = scratch_deload_session
     with flask_app.app_context():
-        exercise = db.session.get(Exercise, exercise_id)
-        exercise.stack_kg = [5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0]
+        _my_stack_stops(exercise_id)
         live = db.session.get(WorkoutSession, live_id)
         live.is_deload, live.deload_pct = False, None   # start plain, like the toggle test above
         se = SessionExercise(session_id=live_id, exercise_id=exercise_id, position=1)
@@ -979,8 +972,7 @@ def scratch_stagnant_stack_session():
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
     with flask_app.app_context():
         exercise = Exercise(name='pytest stagnant stack lift', muscle_group='Brust',
-                            user_id=_admin_id(),
-                            stack_kg=[5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0])
+                            list_stack_kg=[5.0, 12.0, 18.0, 29.0, 33.0, 61.0, 68.0, 92.0])
         db.session.add(exercise)
         db.session.flush()
 
@@ -1065,34 +1057,25 @@ def test_hand_typed_reps_drop_the_deload_baseline(client, scratch_deload_session
 def test_the_add_exercise_sheet_is_one_searchable_list(client, scratch_session):
     """The sheet used to be two panes -- a catalogue <select> in one, an
     invent-a-new-exercise form (with a muscle-group field) in the other, with
-    buttons to switch between them. It is one search field and one list now:
-    tapping a catalogue row posts exercise_id, and the row the search shows
-    when nothing matches (#exadd-create) posts new_exercise_name and nothing
-    else -- no muscle group, no separate pane to find first.
-
-    Pins the structural guarantee rather than the styling: the two-pane
-    machinery (add-pick-pane / add-new-pane / the "— Neue Übung —" switch) is
-    gone from THIS sheet, even though the per-exercise replace sheet still
-    uses the same sheet__pane / sheet__switch / sheet__back classes elsewhere
-    on the page.
+    buttons to switch between them. It is one search field and one list now,
+    and tapping a row posts exercise_id. Since the one list (2026-09-23) it
+    has no create row either: a name the list lacks is not an exercise.
     """
+    from features.gym.library import BY_KEY, fold
+
     html = client.get(f'/gym/session/{scratch_session}').get_data(as_text=True)
 
-    # The sheet is a React component now; that it is ONE list with the
-    # create path as what the list offers when nothing matches is pinned by
+    # The sheet is a React component; that it is ONE list is pinned by
     # AddExerciseSheet in static/gym/src/session/components/sheets.test.tsx.
-    # What the server still owes it is the catalogue to search.
+    # What the server owes it is the list to search, and what to search it by.
     catalogue = embedded_payload(html)['exercises']
     assert catalogue, 'no catalogue for the add sheet to search'
-    assert set(catalogue[0]) == {'id', 'name', 'muscle_group'}
+    assert set(catalogue[0]) == {'id', 'name', 'muscle_group', 'search'}
 
-    # The old pane split asked for a muscle group mid-workout and offered a
-    # catalogue <select>. The payload carries neither, because the sheet has
-    # nothing to fill them from any more. That the create row posts a typed
-    # name rather than a form field is AddExerciseSheet's half, in
-    # sheets.test.tsx.
-    assert 'muscle_groups' not in catalogue[0], \
-        'the catalogue row grew a muscle-group field to fill mid-workout'
+    # The German name is what shows; the English one must still find it.
+    bench = next(row for row in catalogue
+                 if row['name'] == BY_KEY['barbell_bench_press'].name)
+    assert fold('Bench Press') in bench['search']
 
 
 def test_a_finished_exercise_can_still_append_a_set_from_the_panel(client, scratch_session):
@@ -1166,7 +1149,7 @@ def test_the_finished_page_can_actually_save_a_freeform_workout_as_a_template():
     ex_id = sid = tpl_id = None
     try:
         with flask_app.app_context():
-            exercise = Exercise(name='pytest finished tpl lift', user_id=_admin_id())
+            exercise = Exercise(name='pytest finished tpl lift')
             db.session.add(exercise)
             db.session.flush()
             ex_id = exercise.id
@@ -1287,7 +1270,7 @@ def test_every_jinja_form_posts_fields_its_own_route_reads():
     redirect a success produces. Ten days of a button that looked like it worked.
 
     Checking that *some* route reads a field is not enough: `name` is read by
-    gym_add_exercise, so a global scan passes while the form is still broken.
+    gym_rename_template, so a global scan passes while the form is still broken.
     The pairing is what matters, so this resolves each form's own action to its
     route function and checks that function's body.
 
@@ -1321,6 +1304,8 @@ def test_every_jinja_form_posts_fields_its_own_route_reads():
     assert not problems, 'form/route field mismatch:\n  ' + '\n  '.join(problems)
 
 
+@pytest.mark.xfail(strict=True, reason='G1 T4 removes NewExerciseSheet and the identity '
+                                      'fields of EditSheet; drop this mark with them')
 def test_every_react_form_posts_fields_its_own_route_reads():
     """The TSX half of the pairing check above, and the stricter of the two.
 
@@ -1372,7 +1357,7 @@ def _finished_freeform_session(name):
     import datetime as dt
     from extensions import db
     from models import Exercise, SessionExercise, SessionSet, WorkoutSession
-    exercise = Exercise(name=f'{name} lift', user_id=_admin_id())
+    exercise = Exercise(name=f'{name} lift')
     db.session.add(exercise)
     db.session.flush()
     started = dt.datetime.utcnow() - dt.timedelta(hours=1)
@@ -1514,8 +1499,7 @@ def test_the_lead_routine_names_a_stall_inside_it():
             db.session.flush()
             made['user'] = user.id
 
-            exercise = Exercise(name='pytest briefing lift', muscle_group='Brust',
-                                user_id=user.id)
+            exercise = Exercise(name='pytest briefing lift', muscle_group='Brust')
             db.session.add(exercise)
             db.session.flush()
             made['exercise'] = exercise.id
@@ -1609,8 +1593,8 @@ def test_the_lead_routine_ignores_a_stall_it_does_not_contain():
             # it at watch[0] if the routine-membership filter in heute.html
             # were ever removed -- making its absence below a real check on
             # the filter, not just on stall_report's sort order.
-            in_routine = Exercise(name='pytest inroutine lift', user_id=user.id)
-            outsider = Exercise(name='pytest aaa outsider lift', user_id=user.id)
+            in_routine = Exercise(name='pytest inroutine lift')
+            outsider = Exercise(name='pytest aaa outsider lift')
             db.session.add_all([in_routine, outsider])
             db.session.flush()
             made['in_routine'], made['outsider'] = in_routine.id, outsider.id
@@ -1710,8 +1694,7 @@ def test_the_lead_routine_briefing_is_silent_when_nothing_stalls():
             db.session.flush()
             made['user'] = user.id
 
-            exercise = Exercise(name='pytest no-stall lift', muscle_group='Brust',
-                                user_id=user.id)
+            exercise = Exercise(name='pytest no-stall lift', muscle_group='Brust')
             db.session.add(exercise)
             db.session.flush()
             made['exercise'] = exercise.id
@@ -1780,7 +1763,7 @@ def test_an_open_chip_shows_the_weight_and_reps_it_is_planned_for(client):
     week to decide whether to add weight -- which is the thing a tracker
     exists to stop."""
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Chip Plan', user_id=_admin_id(),
+        exercise = Exercise(name='ZZ Chip Plan',
                             muscle_group='Rücken')
         db.session.add(exercise)
         db.session.flush()
@@ -1837,7 +1820,7 @@ def test_the_live_card_badges_an_exercise_that_went_easy_last_time(client):
     a ramp-up whose first chip is lighter than the evidence must still show
     the badge."""
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Ready Lift', user_id=_admin_id(),
+        exercise = Exercise(name='ZZ Ready Lift',
                             muscle_group='Rücken')
         db.session.add(exercise)
         db.session.flush()
@@ -1915,7 +1898,7 @@ def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
     live exercise carries one of each so a mutant that fixes only one
     branch still fails this test."""
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Ready Unilateral Lift', user_id=_admin_id(),
+        exercise = Exercise(name='ZZ Ready Unilateral Lift',
                             muscle_group='Rücken', is_unilateral=True)
         db.session.add(exercise)
         db.session.flush()
@@ -2000,7 +1983,7 @@ def test_the_ready_badge_never_claims_a_false_letztes_mal(client):
     it would quote -- the fix for the false claim is not better wording,
     it's silence."""
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Ready Divergence Lift', user_id=_admin_id(),
+        exercise = Exercise(name='ZZ Ready Divergence Lift',
                             muscle_group='Rücken')
         db.session.add(exercise)
         db.session.flush()
@@ -2095,7 +2078,7 @@ def test_the_ready_badge_says_zuletzt_in_diesem_slot_when_not_the_newest(client)
     a template that hardcodes 'Sätze' to a literal 2 instead of reading
     `ready_for_more.sets` would still pass a fixture with exactly two."""
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Ready Slot Wording Lift', user_id=_admin_id(),
+        exercise = Exercise(name='ZZ Ready Slot Wording Lift',
                             muscle_group='Rücken')
         db.session.add(exercise)
         db.session.flush()
@@ -2186,7 +2169,7 @@ def test_the_ready_badge_respects_the_live_exercises_own_slot(client):
     (35,0) so finding 1b's retirement rule cannot accidentally mask the
     bug by suppressing the wrongly-produced badge anyway."""
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Ready Slot Scoping Lift', user_id=_admin_id(),
+        exercise = Exercise(name='ZZ Ready Slot Scoping Lift',
                             muscle_group='Rücken')
         db.session.add(exercise)
         db.session.flush()

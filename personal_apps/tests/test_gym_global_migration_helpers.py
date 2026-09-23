@@ -119,6 +119,15 @@ def test_the_row_with_the_most_history_wins_then_the_oldest(rev):
     assert rev.winner([{'id': 4, 'n_se': 0}])['id'] == 4
 
 
+def test_a_changed_side_or_loading_is_reported(rev):
+    """One side or both decides every volume figure of the history, so the
+    deploy log names each row whose list entry reads it differently."""
+    target = _target('plate_lateral_raise')             # plate-loaded, one side
+    assert rev.fact_changes(_row(is_unilateral=True, equipment='plate_loaded'), target) == []
+    assert rev.fact_changes(_row(is_unilateral=0, equipment='stack'), target) == [
+        'is_unilateral False -> True', 'equipment stack -> plate_loaded']
+
+
 def test_a_downgrade_is_refused(rev):
     with pytest.raises(RuntimeError, match='backup'):
         rev.downgrade()

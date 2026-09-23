@@ -9,12 +9,10 @@ Every history lookup here takes an explicit `user_id`, defaulting to the
 caller's own id (current_user_id()) so every existing call site in routes.py
 is unchanged. sharing.reconcile_follower is the one caller that must pass it
 explicitly: reconciliation runs inside the LEADER's request, where
-current_user_id() names the wrong person, and the exercise_id it is paired
-with is already the FOLLOWER's own catalogue row -- silently defaulting to
-current_user_id() there would look up the leader's history (or, since the
-leader's WorkoutSessions never carry the follower's exercise_id, more likely
-find nothing and silently fall back to the default plan even when the
-follower has real history for that exercise).
+current_user_id() names the wrong person. Since the one exercise list
+(2026-09-23) both lifters log the same exercise_id, so defaulting there
+would not find nothing -- it would quietly seed the follower from the
+LEADER's history, which is worse.
 """
 import datetime as dt
 
@@ -23,7 +21,15 @@ from sqlalchemy.orm import contains_eager, selectinload
 from extensions import db
 from models import Exercise, SessionExercise, SessionSet, WorkoutSession
 from features.gym import stats
+from features.gym.exercises import setup as exercise_setup
 from features.gym.scope import current_user_id
+
+
+def _owner(session_, user_id):
+    """Whose step and stack stops a deload is scaled on: the session's lifter.
+    session_ always carries them; the fallbacks cover a session still being
+    built."""
+    return session_.user_id or user_id or current_user_id()
 
 
 def _session_exercise_e1rm(session_exercise):
@@ -221,15 +227,17 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
         ]
 
     exercise = db.session.get(Exercise, exercise_id)
+    setup = (exercise_setup(_owner(session_, user_id), exercise)
+             if exercise else None)
     increment = stats.resolve_increment(
-        exercise.weight_increment if exercise else None,
+        setup.weight_increment if setup else None,
         bool(exercise and exercise.is_unilateral),
     )
     return [
         SessionSet(
             position=j,
             weight=stats.deload_weight(prev['weight'], pct, increment,
-                                       stack_kg=exercise.stack_kg if exercise else None),
+                                       stack_kg=setup.stack_kg if setup else None),
             base_weight=prev['weight'],
             reps=stats.DELOAD_REPS,
             base_reps=prev['reps'],
@@ -320,6 +328,7 @@ def _seeded_suggestion(session_, exercise, position, user_id=None, picked=None):
     pct = session_.deload_pct if session_.is_deload else None
     if not pct:
         return last
-    increment = stats.resolve_increment(exercise.weight_increment, exercise.is_unilateral)
-    return {'weight': stats.deload_weight(last['weight'], pct, increment, stack_kg=exercise.stack_kg),
+    setup = exercise_setup(_owner(session_, user_id), exercise)
+    increment = stats.resolve_increment(setup.weight_increment, exercise.is_unilateral)
+    return {'weight': stats.deload_weight(last['weight'], pct, increment, stack_kg=setup.stack_kg),
             'reps': stats.DELOAD_REPS}

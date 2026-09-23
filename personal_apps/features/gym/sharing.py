@@ -1,8 +1,9 @@
 """Shared live sessions: the link's lifecycle, and the one cross-user write.
 
 Two people training together share structure and nothing else. Each owns an
-ordinary WorkoutSession; a SharedSession links them and SharedSessionExercise
-translates between their per-user catalogues.
+ordinary WorkoutSession; a SharedSession links them. SharedSessionExercise
+translated between their per-user catalogues until the one exercise list
+(2026-09-23); since then it maps each lift to itself, and G3 retires it.
 
 Propagation is a RECONCILIATION rather than a per-operation replay. After any
 structural change the leader's route calls propagate_structure(), which makes
@@ -25,8 +26,8 @@ from extensions import db
 from models import (Exercise, PendingPush, SessionExercise, SharedSession,
                     SharedSessionExercise, WorkoutSession)
 
+from .exercises import setup as exercise_setup
 from .locking import lock_sessions
-from .matching import normalise
 from .seeding import _seeded_sets, reseed_for_slot
 
 
@@ -42,18 +43,15 @@ def active_links_led_by(session_id):
 def follower_exercise_for(shared, leader_exercise_id):
     """The follower's exercise corresponding to one of the leader's.
 
-    Reuses the mapping if it exists, then an exact name match in the follower's
-    catalogue, and only then creates one. The created row is owned by the
-    FOLLOWER -- the name travels, the ownership never does.
+    Since 2026-09-23 there is one exercise list, so that is the leader's own
+    exercise: both lifters log onto the same row, each with their own
+    settings and history. A map row accepted before then may still name a
+    different id, and it is honoured. Otherwise the identity is recorded as
+    a map row, which keeps the rest of this module -- written when every
+    lifter had a catalogue of their own -- working unchanged.
 
-    This queries Exercise directly rather than through scope.my_exercises(),
-    because it runs inside the LEADER's request and needs the follower's
-    catalogue. That is the deliberate cross-user reach, and it is confined to
-    this function.
-
-    Guards its own link state rather than trusting the caller: this writes
-    across users (creates an Exercise owned by the follower, plus a mapping
-    row) on its own, so it must not do that for a link that was never
+    Guards its own link state rather than trusting the caller: the map row is
+    a write on the link, so it must not happen for a link that was never
     accepted or has since ended, even though its one caller today already
     checks this before calling in. `shared is None` is checked first for the
     same reason -- reconcile_follower checks it before calling in, but this
@@ -69,47 +67,16 @@ def follower_exercise_for(shared, leader_exercise_id):
     if mapped is not None:
         return mapped.follower_exercise_id
 
-    leader_exercise = db.session.get(Exercise, leader_exercise_id)
-    if leader_exercise is None:
+    if db.session.get(Exercise, leader_exercise_id) is None:
         return None
-
-    target = normalise(leader_exercise.name)
-    match = None
-    for candidate in Exercise.query.filter_by(user_id=shared.follower_user_id).all():
-        if normalise(candidate.name) == target:
-            match = candidate
-            break
-
-    if match is None:
-        match = Exercise(
-            name=leader_exercise.name,
-            muscle_group=leader_exercise.muscle_group,
-            default_rest_seconds=leader_exercise.default_rest_seconds,
-            # Unilaterality is a property of the MOVEMENT (a one-arm row is
-            # one-arm for anyone doing it), so it travels with the name --
-            # unlike weight_increment, which is genuinely per-person equipment
-            # and correctly stays behind. Dropping this left every volume
-            # figure for the follower's copy at half its real value.
-            is_unilateral=leader_exercise.is_unilateral,
-            # Equipment facts describe the machine, not the person, so they
-            # travel with the name too. weight_increment stays behind on
-            # purpose -- it is per-person and is never set here.
-            equipment=leader_exercise.equipment,
-            bar_weight=leader_exercise.bar_weight,
-            stack_kg=leader_exercise.stack_kg,
-            secondary_muscle_groups=leader_exercise.secondary_muscle_groups,
-            user_id=shared.follower_user_id,
-        )
-        db.session.add(match)
-        db.session.flush()
 
     db.session.add(SharedSessionExercise(
         shared_session_id=shared.id,
         leader_exercise_id=leader_exercise_id,
-        follower_exercise_id=match.id,
+        follower_exercise_id=leader_exercise_id,
     ))
     db.session.flush()
-    return match.id
+    return leader_exercise_id
 
 
 def remove_mirrors_of(session_exercise):
@@ -338,10 +305,10 @@ def reconcile_follower(shared):
     difference, so calling it twice is the same as calling it once, and it is
     correct after any structural operation rather than one per operation.
 
-    Rows are matched on SessionExercise.mirrors_id, never on exercise_id. The
-    two catalogues use different ids for the same lift, and one exercise can
-    legitimately appear twice in a session -- an original plus the substitute
-    that replaced it.
+    Rows are matched on SessionExercise.mirrors_id, never on exercise_id. A
+    link accepted before the one list (2026-09-23) can still map a lift to a
+    different id, and one exercise can legitimately appear twice in a
+    session -- an original plus the substitute that replaced it.
 
     Removing a leader row is NOT handled here -- see remove_mirrors_of(),
     which must run BEFORE db.session.delete() is called on the leader's row
@@ -363,9 +330,9 @@ def reconcile_follower(shared):
     ahead (see stats.DEFAULT_PLAN_* / gym_add_session_exercise). This runs
     inside the LEADER's request, where current_user_id() names the leader, so
     the history lookup is passed shared.follower_user_id explicitly rather
-    than left to default -- exercise_id here is already the FOLLOWER's own
-    catalogue row (follower_exercise_for's return value), so the two must
-    agree on whose history that row's seeding reads.
+    than left to default. The exercise row is usually the leader's own too
+    (one list), so the user id is the only thing that makes the seeding read
+    the FOLLOWER's history rather than the leader's.
     """
     if shared is None or shared.accepted_at is None or shared.ended_at is not None:
         return False
@@ -406,9 +373,11 @@ def reconcile_follower(shared):
                 session_id=follower.id,
                 exercise_id=follower_exercise_id,
                 position=leader_row.position,
-                # Rest follows the person, so this is the FOLLOWER's default,
+                # Rest follows the person, so this is the FOLLOWER's setting,
                 # never the leader's per-session override.
-                rest_seconds=follower_exercise.default_rest_seconds if follower_exercise else None,
+                rest_seconds=(exercise_setup(shared.follower_user_id,
+                                             follower_exercise).default_rest_seconds
+                              if follower_exercise else None),
                 skipped=leader_row.skipped,
                 mirrors_id=leader_row.id,
             )
@@ -535,8 +504,8 @@ def propagate_structure(session_, skip_changed=None):
     Guarded end to end: this runs entirely inside the LEADER's request, after
     the leader's own change already committed durably. A constraint violation
     originating in the FOLLOWER's data (Fix 1's replaces_id collision before
-    it was closed off, or a race on uq_gym_shared_session_exercises_link_leader
-    / uq_gym_exercises_user_id_name) must never turn into a 500 on someone
+    it was closed off, or a race on uq_gym_shared_session_exercises_link_leader)
+    must never turn into a 500 on someone
     else's request over a write the leader has no way to see or retry. The
     worst case here is the partner falling out of sync until the next
     structural change reconciles cleanly -- never a crash.

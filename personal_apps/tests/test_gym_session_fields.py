@@ -13,7 +13,7 @@ from conftest import _admin_id, embedded_payload
 @pytest.fixture()
 def temp_session():
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Test Session Fields', user_id=_admin_id())
+        exercise = Exercise(name='ZZ Test Session Fields')
         db.session.add(exercise)
         db.session.flush()
         session = WorkoutSession(name='ZZ Test Session', user_id=_admin_id(),

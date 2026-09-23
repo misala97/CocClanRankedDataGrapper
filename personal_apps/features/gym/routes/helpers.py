@@ -19,15 +19,16 @@ from flask import jsonify, redirect, request, url_for
 from extensions import db
 from models import (
     AppUser, WorkoutSession, PendingPush, SharedSession, SharedSessionExercise,
-    STALE_SESSION_TIMEOUT, MUSCLE_GROUPS, EQUIPMENT_TYPES,
+    STALE_SESSION_TIMEOUT,
 )
 from features.gym import stats
+from features.gym.exercises import list_values
 from features.gym.scope import my_sessions
 from .. import sharing
 from ._blueprint import gym_bp
 
 
-DEFAULT_REST_SECONDS = 180  # fallback for newly created exercises when no rest time is given
+DEFAULT_REST_SECONDS = 180  # the catalogue create sheet's rest placeholder (goes with it)
 
 # The UI is German regardless of the server's locale, so month names are stated
 # rather than taken from strftime('%B') -- which follows LC_TIME and would give
@@ -149,29 +150,6 @@ def _delete_session_and_links(session_):
     db.session.commit()
 
 
-def _clean_muscle_group(value, current=None):
-    """Restricts new values to MUSCLE_GROUPS, but if the submitted value is
-    just the exercise's existing value coming back unchanged (e.g. a legacy
-    free-text category from before this enum existed), preserve it instead
-    of silently nulling it out -- only an actual attempt to change it is
-    held to the fixed list."""
-    value = (value or '').strip()
-    if value in MUSCLE_GROUPS:
-        return value
-    if current and value == current:
-        return current
-    return None
-
-
-def _clean_equipment(raw, current='stack'):
-    """An unknown value keeps whatever the exercise already had. The form
-    only ever submits the three real values; anything else is a hand-rolled
-    request, and silently widening the column's vocabulary from one of those
-    would break the export's derivation table."""
-    value = (raw or '').strip()
-    return value if value in EQUIPMENT_TYPES else current
-
-
 def _to_stack_steps(raw):
     """The real stops of an uneven stack, typed as a list.
 
@@ -197,16 +175,23 @@ def _to_stack_steps(raw):
     return sorted(set(steps)) or None
 
 
-def _clean_secondary_groups(values, primary):
-    """Known groups only, in the order given, primary removed. None when
-    nothing is left -- the column treats NULL and [] the same and NULL is
-    the cheaper of the two to store."""
-    seen = []
-    for value in values or []:
-        value = (value or '').strip()
-        if value in MUSCLE_GROUPS and value != primary and value not in seen:
-            seen.append(value)
-    return seen or None
+def _exercise_meta(exercise, setup):
+    """An exercise as one lifter sees it (schemas.ExerciseMeta): the list's
+    facts, that lifter's effective settings (`setup`), and the list's own
+    values, which a blank field in the settings form falls back to."""
+    return {
+        'id': exercise.id,
+        'name': exercise.name,
+        'muscle_group': exercise.muscle_group,
+        'is_unilateral': exercise.is_unilateral,
+        'default_rest_seconds': setup.default_rest_seconds,
+        'weight_increment': setup.weight_increment,
+        'equipment': exercise.equipment,
+        'bar_weight': setup.bar_weight,
+        'stack_kg': setup.stack_kg,
+        'secondary_muscle_groups': exercise.secondary_muscle_groups,
+        'list_defaults': list_values(exercise),
+    }
 
 
 def _get_active_session():

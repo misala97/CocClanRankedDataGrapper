@@ -253,37 +253,14 @@ def test_a_form_post_rename_still_redirects_and_flashes(client, temp_template):
     assert 'Routine heißt jetzt' in html
 
 
-def test_creating_an_exercise_answers_with_the_fresh_catalogue(client):
-    """The sheet closes and the new row arrives highlighted -- added_id in the
-    payload, exactly what the ?added= redirect used to deliver."""
+def test_the_catalogue_no_longer_creates_an_exercise(client):
+    """The list is read-only (2026-09-23): the create route is gone, and a
+    stale page posting to it creates nothing."""
     from app import app as flask_app
-    from extensions import db
-    from features.gym.schemas import CataloguePayload
     from models import Exercise
 
-    exercise_id = None
-    try:
-        response = client.post('/gym/exercises/add',
-                               data={'name': 'ZZ json created lift'},
-                               headers={'Accept': 'application/json'})
-        assert response.status_code == 200
-        payload = CataloguePayload.model_validate(response.get_json())
-        names = [e.exercise.name for g in payload.groups for e in g.entries]
-        assert 'ZZ json created lift' in names
-        exercise_id = next(e.exercise.id for g in payload.groups for e in g.entries
-                           if e.exercise.name == 'ZZ json created lift')
-        assert payload.added_id == exercise_id
-        assert payload.name_taken is False
-
-        # The collision is a page state, not an exception: same 200, banner up.
-        collision = client.post('/gym/exercises/add',
-                                data={'name': 'ZZ json created lift'},
-                                headers={'Accept': 'application/json'})
-        assert collision.status_code == 200
-        assert CataloguePayload.model_validate(collision.get_json()).name_taken is True
-    finally:
-        with flask_app.app_context():
-            doomed = db.session.get(Exercise, exercise_id) if exercise_id else None
-            if doomed is not None:
-                db.session.delete(doomed)
-                db.session.commit()
+    response = client.post('/gym/exercises/add', data={'name': 'ZZ json created lift'},
+                           headers={'Accept': 'application/json'})
+    assert response.status_code == 404
+    with flask_app.app_context():
+        assert Exercise.query.filter_by(name='ZZ json created lift').count() == 0

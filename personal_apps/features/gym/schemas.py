@@ -24,9 +24,19 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 
+class ListDefaults(_Model):
+    """The list's own values for the four personal settings -- what a blank
+    field in the settings form stands for."""
+    default_rest_seconds: int | None
+    weight_increment: float | None
+    bar_weight: float | None
+    stack_kg: list[float] | None
+
+
 class ExerciseMeta(_Model):
-    """The editable identity of the exercise -- backs both the header and the
-    edit sheet."""
+    """The exercise as this lifter sees it -- backs both the header and the
+    settings sheet. Name, groups, equipment and one side are the list's;
+    rest, step, bar and stack are the lifter's effective values."""
     id: int
     name: str
     muscle_group: str | None
@@ -37,6 +47,7 @@ class ExerciseMeta(_Model):
     bar_weight: float | None
     stack_kg: list[float] | None
     secondary_muscle_groups: list[str] | None
+    list_defaults: ListDefaults
 
 
 class SessionRow(_Model):
@@ -251,6 +262,10 @@ class CatalogueExercise(_Model):
     id: int
     name: str
     muscle_group: str | None
+    #: The folded name and aliases (exercises.search_text). The sheet finds
+    #: an entry when every word of the folded query occurs in it -- the
+    #: library.matches contract, so English and umlaut-free typing work.
+    search: str
 
 
 class Suggestion(_Model):
@@ -1033,11 +1048,11 @@ class StatistikPayload(_Model):
 
 
 class MatchProposal(_Model):
-    """One of the leader's exercises, against your own catalogue.
+    """One of the leader's exercises, and what you log it as.
 
-    An exact match is already resolved and says so; only the genuinely
-    ambiguous ones carry a decision, because asking seven times per shared
-    workout would make the common path the annoying one.
+    Since the one list the exact match is always the leader's own row, so
+    every proposal arrives resolved; the candidates (the whole list) are
+    there for picking another, e.g. the machine version.
     """
     #: The leader's name for it, verbatim.
     name: str

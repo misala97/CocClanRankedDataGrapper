@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 
 from models import SessionExercise, WorkoutSession
 from features.gym import stats
+from features.gym.exercises import setup as exercise_setup, setups as exercise_setups
 from features.gym.scope import current_user_id
 
 
@@ -57,8 +58,11 @@ def load_performed(exercise_ids=None, since=None, include_active=False, exclude_
         query = query.filter(WorkoutSession.started_at >= since)
 
     exclude_ids = exclude_session_exercise_ids or ()
+    rows = query.order_by(WorkoutSession.started_at).all()
+    # Every row is the caller's own, so one lifter's settings cover them all.
+    setups = exercise_setups(current_user_id(), {se.exercise for se in rows})
     performed = []
-    for session_exercise in query.order_by(WorkoutSession.started_at).all():
+    for session_exercise in rows:
         if session_exercise.id in exclude_ids:
             continue
         completed = tuple(
@@ -66,19 +70,24 @@ def load_performed(exercise_ids=None, since=None, include_active=False, exclude_
         )
         if not completed:
             continue
-        performed.append(_to_performed(session_exercise, completed))
+        performed.append(_to_performed(session_exercise, completed,
+                                       setups[session_exercise.exercise_id]))
     return performed
 
 
-def _to_performed(session_exercise, completed_sets):
+def _to_performed(session_exercise, completed_sets, setup=None):
+    """`setup` is the session owner's Setup for the exercise; looked up here
+    when the caller did not batch it."""
     exercise = session_exercise.exercise
+    if setup is None:
+        setup = exercise_setup(session_exercise.session.user_id, exercise)
     return stats.PerformedExercise(
         exercise_id=session_exercise.exercise_id,
         name=exercise.name,
         muscle_group=exercise.muscle_group,
         is_unilateral=exercise.is_unilateral,
-        weight_increment=exercise.weight_increment,
-        stack_kg=tuple(exercise.stack_kg) if exercise.stack_kg else None,
+        weight_increment=setup.weight_increment,
+        stack_kg=tuple(setup.stack_kg) if setup.stack_kg else None,
         position=session_exercise.position,
         session_id=session_exercise.session_id,
         started_at=session_exercise.session.started_at,
@@ -90,7 +99,7 @@ def _to_performed(session_exercise, completed_sets):
     )
 
 
-def _session_rest_entries(session_):
+def _session_rest_entries(session_, setups=None):
     """(completed_at, planned_seconds) for every completed set in a session,
     in the shape stats.rest_gaps() expects. Planned time falls back to the
     exercise's default when the session didn't override it.
@@ -98,11 +107,15 @@ def _session_rest_entries(session_):
     Shared by session_detail's finished branch and gym_statistik's habit
     figure -- the planned-rest fallback chain is a business rule, and having
     it written out twice meant either copy could drift from the other with
-    nothing to catch it.
+    nothing to catch it. The fallback is the session owner's rest for the
+    exercise, not the list's: `setups` is theirs, looked up here when a
+    caller walking many sessions did not batch it.
     """
+    if setups is None:
+        setups = exercise_setups(session_.user_id, {se.exercise for se in session_.exercises})
     return [
         (s.completed_at, se.rest_seconds if se.rest_seconds is not None
-         else se.exercise.default_rest_seconds)
+         else setups[se.exercise_id].default_rest_seconds)
         for se in session_.exercises for s in se.sets
         if s.completed and s.completed_at is not None
     ]
@@ -115,6 +128,7 @@ def performed_from_session(session_):
     substitute that took over, and counting both would inflate the session's
     totals with an exercise the historical comparison was never scoped to.
     """
+    setups = exercise_setups(session_.user_id, {se.exercise for se in session_.exercises})
     performed = []
     for session_exercise in session_.exercises:
         if session_exercise.replaced_by:
@@ -124,5 +138,6 @@ def performed_from_session(session_):
         )
         if not completed:
             continue
-        performed.append(_to_performed(session_exercise, completed))
+        performed.append(_to_performed(session_exercise, completed,
+                                       setups[session_exercise.exercise_id]))
     return performed

@@ -24,8 +24,7 @@ def virgin_session():
     from extensions import db
     from models import Exercise, WorkoutSession
     with flask_app.app_context():
-        exercise = Exercise(name='pytest cold start lift', muscle_group='Brust',
-                            user_id=_admin_id())
+        exercise = Exercise(name='pytest cold start lift', muscle_group='Brust')
         db.session.add(exercise)
         db.session.flush()
 
@@ -94,7 +93,7 @@ def test_logging_one_set_does_not_advance_past_a_default_planned_exercise(client
 
     with flask_app.app_context():
         second = Exercise(name='pytest cold start advance guard',
-                          muscle_group='Rücken', user_id=_admin_id())
+                          muscle_group='Rücken')
         db.session.add(second)
         db.session.commit()
         second_id = second.id
@@ -313,7 +312,7 @@ def test_reordering_a_no_history_exercise_keeps_a_plan(client, virgin_session):
 
     with flask_app.app_context():
         second = Exercise(name='pytest cold start lift two',
-                          muscle_group='Rücken', user_id=_admin_id())
+                          muscle_group='Rücken')
         db.session.add(second)
         db.session.commit()
         second_id = second.id
@@ -749,33 +748,8 @@ def test_gym_update_set_does_not_propagate_on_a_finished_session(client, virgin_
             'a never-performed sibling must not be rewritten on a finished session'
 
 
-def test_creating_an_exercise_from_the_search_leaves_no_muscle_group(client, virgin_session):
-    """The search sheet's create path posts a name and nothing else -- the
-    muscle-group select is gone from it, because mid-workout is the worst moment
-    to ask and the field is optional and editable later in Übungen. Pinned
-    because the route still accepts a muscle_group it will now never receive."""
-    from extensions import db
-    from models import Exercise, SessionExercise
-    from features.gym import stats
-    live_id, _ = virgin_session
-
-    response = client.post(f'/gym/session/{live_id}/exercises/add',
-                           data={'new_exercise_name': 'pytest search created lift'})
-    assert response.status_code in (302, 303)
-
-    with flask_app.app_context():
-        created = Exercise.query.filter_by(name='pytest search created lift',
-                                           user_id=_admin_id()).one()
-        assert created.muscle_group is None
-        se = SessionExercise.query.filter_by(session_id=live_id).one()
-        assert se.exercise_id == created.id
-        # A brand-new exercise has no history by construction, so it must arrive
-        # with the default plan -- this is the exact first-time-user path.
-        assert len(se.sets) == stats.DEFAULT_PLAN_SETS
-        db.session.delete(se)
-        db.session.commit()
-        db.session.delete(created)
-        db.session.commit()
+# The search sheet's create path (a name-only post) is gone with the one list
+# (2026-09-23); its refusal is pinned in test_gym_exercise_ownership.py.
 
 
 def test_replacing_an_exercise_with_no_history_seeds_a_default_plan(client, virgin_session):
@@ -801,7 +775,7 @@ def test_replacing_an_exercise_with_no_history_seeds_a_default_plan(client, virg
         original_sets_before = [(s.position, s.weight, s.reps) for s in original.sets]
 
         substitute_exercise = Exercise(name='pytest replace no-history sub',
-                                       muscle_group='Brust', user_id=_admin_id())
+                                       muscle_group='Brust')
         db.session.add(substitute_exercise)
         db.session.commit()
         substitute_exercise_id = substitute_exercise.id

@@ -69,8 +69,8 @@ def test_a_shared_session_links_two_sessions_and_starts_pending():
 
 def test_a_session_exercise_can_mirror_another_users_row():
     """mirrors_id is how reconciliation knows which follower row corresponds to
-    which leader row -- exercise_id cannot serve, because the two catalogues
-    have different ids for the same lift."""
+    which leader row -- exercise_id cannot serve: one exercise can sit in a
+    workout twice, and a row the follower added themselves can use it too."""
     from extensions import db
     from models import SessionExercise, WorkoutSession
     from conftest import _admin_id
@@ -87,8 +87,10 @@ def test_a_session_exercise_can_mirror_another_users_row():
 def linked_pair():
     """An accepted link between two fresh lifters, each with a live session.
 
-    The leader owns 'pytest shared bench'; the follower owns a same-named
-    exercise of their own, already mapped. Yields a dict of ids.
+    Both do 'pytest shared bench' -- one row, as every exercise is one row
+    for everyone since the one list -- and the link's map holds it as
+    itself. Yields a dict of ids; 'leader_exercise' and 'follower_exercise'
+    are that one row, named for the side a test reads.
     """
     from extensions import db
     from models import (AppUser, Exercise, SessionExercise, SharedSession,
@@ -104,15 +106,14 @@ def linked_pair():
         db.session.add_all([leader, follower])
         db.session.flush()
 
-        leader_bench = Exercise(name='pytest shared bench', user_id=leader.id)
-        follower_bench = Exercise(name='pytest shared bench', user_id=follower.id)
-        db.session.add_all([leader_bench, follower_bench])
+        bench = Exercise(name='pytest shared bench')
+        db.session.add(bench)
         db.session.flush()
 
         now = dt.datetime.utcnow()
         leader_session = WorkoutSession(name='pytest shared workout',
                                         started_at=now, user_id=leader.id)
-        leader_row = SessionExercise(exercise_id=leader_bench.id, position=1)
+        leader_row = SessionExercise(exercise_id=bench.id, position=1)
         leader_session.exercises.append(leader_row)
         follower_session = WorkoutSession(name='pytest shared workout',
                                           started_at=now, user_id=follower.id)
@@ -120,7 +121,7 @@ def linked_pair():
         db.session.flush()
 
         follower_row = SessionExercise(session_id=follower_session.id,
-                                       exercise_id=follower_bench.id,
+                                       exercise_id=bench.id,
                                        position=1, mirrors_id=leader_row.id)
         db.session.add(follower_row)
 
@@ -132,12 +133,12 @@ def linked_pair():
         db.session.flush()
         db.session.add(SharedSessionExercise(
             shared_session_id=shared.id,
-            leader_exercise_id=leader_bench.id,
-            follower_exercise_id=follower_bench.id))
+            leader_exercise_id=bench.id,
+            follower_exercise_id=bench.id))
         db.session.commit()
 
         made = {'leader_user': leader.id, 'follower_user': follower.id,
-                'leader_exercise': leader_bench.id, 'follower_exercise': follower_bench.id,
+                'leader_exercise': bench.id, 'follower_exercise': bench.id,
                 'leader_session': leader_session.id, 'follower_session': follower_session.id,
                 'leader_row': leader_row.id, 'shared': shared.id}
     yield made
@@ -154,7 +155,8 @@ def linked_pair():
                 db.session.commit()
                 db.session.delete(doomed)
                 db.session.commit()
-        for row in Exercise.query.filter(Exercise.name.like('pytest shared%')).all():
+        for row in Exercise.query.filter(Exercise.library_key.is_(None),
+                                         Exercise.name.like('pytest shared%')).all():
             db.session.delete(row)
         db.session.commit()
         for key in ('leader_user', 'follower_user'):
@@ -171,7 +173,7 @@ def test_an_added_exercise_appears_on_the_followers_side(linked_pair):
 
     with flask_app.app_context():
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(
@@ -186,8 +188,11 @@ def test_an_added_exercise_appears_on_the_followers_side(linked_pair):
         assert 'pytest shared squat' in names, 'the added exercise did not carry across'
         carried = [se for se in follower_session.exercises
                    if se.exercise.name == 'pytest shared squat'][0]
-        assert carried.exercise.user_id == linked_pair['follower_user'], (
-            'the follower was linked to the LEADER\'s exercise row')
+        assert carried.exercise_id == squat.id, 'the follower got a copy, not the one row'
+        shared = db.session.get(SharedSession, linked_pair['shared'])
+        assert (squat.id, squat.id) in {(m.leader_exercise_id, m.follower_exercise_id)
+                                        for m in shared.exercise_map}, \
+            'the map did not record the exercise as itself'
 
 
 def test_a_mid_workout_addition_seeds_the_followers_default_plan(linked_pair):
@@ -203,7 +208,7 @@ def test_a_mid_workout_addition_seeds_the_followers_default_plan(linked_pair):
 
     with flask_app.app_context():
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared mid workout squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared mid workout squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(
@@ -232,81 +237,66 @@ def test_a_mid_workout_addition_seeds_the_followers_default_plan(linked_pair):
 def test_a_mid_workout_addition_seeds_from_the_followers_own_history_not_the_leaders(linked_pair):
     """Reconciliation runs inside the LEADER's request. Seeding a newly
     created follower row must not default to current_user_id() there -- that
-    would name the leader, and since the follower's own WorkoutSessions never
-    carry the leader's user_id, the lookup would silently match nothing and
-    always fall back to the default plan, even when the follower has real
-    history for the exact same movement.
+    would name the leader. Since the one list both histories sit on the same
+    exercise row, so that mistake would not even fall back to the default
+    plan: it would hand the follower the leader's numbers.
 
-    Set up entirely independent of the linked_pair fixture's own bench
-    mapping: the follower already owns 'pytest shared row lift' with real
-    completed history at a weight the default plan could never produce by
-    coincidence. The leader creates their OWN same-named exercise (a
-    different id, same as linked_pair's own leader/follower bench pair) and
-    adds it mid-workout -- follower_exercise_for matches it to the follower's
-    existing row by name, exactly as it would for a real partner who happens
-    to train the same lift.
+    Both lifters have history on 'pytest shared row lift' here, at weights
+    neither the other nor the default plan could produce by coincidence.
     """
     import datetime as dt
     from extensions import db
     from features.gym import sharing
     from models import Exercise, SessionExercise, SessionSet, SharedSession, WorkoutSession
 
-    made = {}
+    made = {'past_sessions': []}
     try:
         with flask_app.app_context():
-            follower_row_lift = Exercise(name='pytest shared row lift',
-                                         user_id=linked_pair['follower_user'])
-            db.session.add(follower_row_lift)
+            row_lift = Exercise(name='pytest shared row lift')
+            db.session.add(row_lift)
             db.session.flush()
-            made['follower_row_lift'] = follower_row_lift.id
 
-            past = WorkoutSession(
-                name='pytest shared row lift history',
-                started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
-                finished_at=dt.datetime.utcnow() - dt.timedelta(days=2),
-                user_id=linked_pair['follower_user'])
-            past_se = SessionExercise(exercise_id=follower_row_lift.id, position=1)
-            past_se.sets = [SessionSet(position=1, weight=55.0, reps=8, completed=True)]
-            past.exercises.append(past_se)
-            db.session.add(past)
+            for user_key, weight in (('follower_user', 55.0), ('leader_user', 90.0)):
+                past = WorkoutSession(
+                    name='pytest shared row lift history',
+                    started_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+                    finished_at=dt.datetime.utcnow() - dt.timedelta(days=2),
+                    user_id=linked_pair[user_key])
+                past_se = SessionExercise(exercise_id=row_lift.id, position=1)
+                past_se.sets = [SessionSet(position=1, weight=weight, reps=8, completed=True)]
+                past.exercises.append(past_se)
+                db.session.add(past)
+                db.session.flush()
+                made['past_sessions'].append(past.id)
             db.session.commit()
-            made['past_session'] = past.id
-
-            leader_row_lift = Exercise(name='pytest shared row lift',
-                                       user_id=linked_pair['leader_user'])
-            db.session.add(leader_row_lift)
-            db.session.flush()
 
             leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
             leader_session.exercises.append(
-                SessionExercise(exercise_id=leader_row_lift.id, position=2))
+                SessionExercise(exercise_id=row_lift.id, position=2))
             db.session.commit()
 
             sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
             db.session.commit()
 
             follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
-            added = [se for se in follower_session.exercises
-                     if se.exercise_id == follower_row_lift.id]
-            assert len(added) == 1, (
-                'follower_exercise_for did not match the follower\'s existing '
-                'same-named exercise')
+            added = [se for se in follower_session.exercises if se.exercise_id == row_lift.id]
+            assert len(added) == 1, 'the added exercise did not carry across'
             se = added[0]
             assert [(s.weight, s.reps) for s in se.sets] == [(55.0, 8)], (
                 "the follower's mid-workout addition did not seed from THEIR OWN "
                 f'history (got {[(s.weight, s.reps) for s in se.sets]})')
     finally:
         with flask_app.app_context():
-            if made.get('past_session'):
-                doomed = db.session.get(WorkoutSession, made['past_session'])
+            for session_id in made['past_sessions']:
+                doomed = db.session.get(WorkoutSession, session_id)
                 if doomed is not None:
                     doomed.resting_set_id = None
                     db.session.commit()
                     db.session.delete(doomed)
                     db.session.commit()
-            # leader_row_lift's mirrored follower SessionExercise cascades away
-            # with follower_session in linked_pair's own teardown; both Exercise
-            # rows are swept by that teardown's 'pytest shared%' name sweep.
+            # The mirrored follower row cascades away with follower_session in
+            # linked_pair's own teardown; the Exercise row goes with that
+            # teardown's 'pytest shared%' name sweep.
 
 
 def test_a_removed_exercise_disappears_from_the_followers_side(linked_pair):
@@ -374,7 +364,7 @@ def test_reorder_carries_across_translated(linked_pair):
 
     with flask_app.app_context():
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(
@@ -524,7 +514,7 @@ def test_reconciliation_refuses_a_link_that_was_never_accepted(linked_pair):
         shared = db.session.get(SharedSession, linked_pair['shared'])
         shared.accepted_at = None
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(SessionExercise(exercise_id=squat.id, position=2))
@@ -547,7 +537,7 @@ def test_reconciliation_refuses_an_ended_link(linked_pair):
         shared = db.session.get(SharedSession, linked_pair['shared'])
         shared.ended_at = dt.datetime.utcnow()
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(SessionExercise(exercise_id=squat.id, position=2))
@@ -583,7 +573,7 @@ def test_reconciliation_refuses_when_the_link_disagrees_with_the_session_owner(l
         shared = db.session.get(SharedSession, linked_pair['shared'])
         shared.leader_user_id = linked_pair['follower_user']
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(SessionExercise(exercise_id=squat.id, position=2))
@@ -612,7 +602,7 @@ def test_reconciliation_refuses_when_the_link_disagrees_with_the_follower(linked
         shared = db.session.get(SharedSession, linked_pair['shared'])
         shared.follower_user_id = linked_pair['leader_user']
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(SessionExercise(exercise_id=squat.id, position=2))
@@ -626,45 +616,50 @@ def test_reconciliation_refuses_when_the_link_disagrees_with_the_follower(linked
         assert len(list(follower_session.exercises)) == 1
 
 
-def test_a_missing_exercise_is_created_in_the_followers_catalogue(linked_pair):
-    """The third lifter shares no exercises at all. A mid-session addition
-    resolves silently -- confirmation is upfront, never mid-set."""
+def test_an_exercise_the_map_lacks_resolves_to_itself(linked_pair):
+    """A mid-session addition resolves silently -- confirmation is upfront,
+    never mid-set. Since the one list the answer is the leader's row itself,
+    no copy; the map learns it, so the next lookup reads it back."""
     from extensions import db
     from features.gym import sharing
-    from models import Exercise, SharedSession
+    from models import Exercise, SharedSession, SharedSessionExercise
 
     with flask_app.app_context():
         shared = db.session.get(SharedSession, linked_pair['shared'])
-        novel = Exercise(name='pytest shared novel lift',
-                         user_id=linked_pair['leader_user'])
+        novel = Exercise(name='pytest shared novel lift')
         db.session.add(novel)
         db.session.flush()
 
-        resolved_id = sharing.follower_exercise_for(shared, novel.id)
+        assert sharing.follower_exercise_for(shared, novel.id) == novel.id
+        db.session.commit()
+        assert sharing.follower_exercise_for(shared, novel.id) == novel.id
         db.session.commit()
 
-        created = db.session.get(Exercise, resolved_id)
-        assert created.user_id == linked_pair['follower_user'], (
-            'the created exercise must belong to the follower, never the leader')
-        assert created.id != novel.id
+        assert SharedSessionExercise.query.filter_by(
+            shared_session_id=shared.id, leader_exercise_id=novel.id).count() == 1
+        assert Exercise.query.filter_by(name='pytest shared novel lift').count() == 1, \
+            'a copy of the exercise was made'
 
 
-def test_an_exact_name_links_instead_of_duplicating(linked_pair):
-    """The follower already owns 'pytest shared bench'. Resolving it must reuse
-    that row, not leave them with two."""
+def test_a_confirmed_choice_wins_over_the_identity(linked_pair):
+    """The confirm page can map a leader exercise onto another row -- a
+    follower who does the machine version. That answer, not the leader's row,
+    is what a later lookup must return."""
     from extensions import db
     from features.gym import sharing
-    from models import Exercise, SharedSession
+    from models import Exercise, SharedSession, SharedSessionExercise
 
     with flask_app.app_context():
         shared = db.session.get(SharedSession, linked_pair['shared'])
-        resolved_id = sharing.follower_exercise_for(
-            shared, linked_pair['leader_exercise'])
+        machine = Exercise(name='pytest shared machine press')
+        db.session.add(machine)
+        db.session.flush()
+        SharedSessionExercise.query.filter_by(
+            shared_session_id=shared.id,
+            leader_exercise_id=linked_pair['leader_exercise']).one().follower_exercise_id = machine.id
         db.session.commit()
-        assert resolved_id == linked_pair['follower_exercise']
-        owned = Exercise.query.filter_by(user_id=linked_pair['follower_user'],
-                                         name='pytest shared bench').count()
-        assert owned == 1
+
+        assert sharing.follower_exercise_for(shared, linked_pair['leader_exercise']) == machine.id
 
 
 def test_a_change_bumps_the_followers_structure_version(linked_pair):
@@ -676,7 +671,7 @@ def test_a_change_bumps_the_followers_structure_version(linked_pair):
         before = db.session.get(
             WorkoutSession, linked_pair['follower_session']).structure_version
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
-        squat = Exercise(name='pytest shared squat', user_id=linked_pair['leader_user'])
+        squat = Exercise(name='pytest shared squat')
         db.session.add(squat)
         db.session.flush()
         leader_session.exercises.append(SessionExercise(exercise_id=squat.id, position=2))
@@ -943,8 +938,7 @@ def test_reconciling_one_link_leaves_a_second_links_mirror_alone(linked_pair):
         db.session.flush()
         made['second_leader'] = second_leader.id
 
-        second_leader_exercise = Exercise(name='pytest shared second leader row',
-                                          user_id=second_leader.id)
+        second_leader_exercise = Exercise(name='pytest shared second leader row')
         db.session.add(second_leader_exercise)
         db.session.flush()
         made['second_leader_exercise'] = second_leader_exercise.id
@@ -1031,7 +1025,7 @@ def leader_with_partner():
         db.session.add_all([leader, partner])
         db.session.flush()
 
-        bench = Exercise(name='pytest invite bench', user_id=leader.id)
+        bench = Exercise(name='pytest invite bench')
         db.session.add(bench)
         db.session.flush()
 
@@ -1063,19 +1057,21 @@ def leader_with_partner():
         # behind blocks the AppUser delete below on its foreign key. Sessions
         # pointing at one are already gone by now (WorkoutSession.template_id
         # would else block this the same way); this in turn must run before
-        # the Exercise loop below, since a TemplateExercise row's exercise_id
+        # the Exercise sweep below, since a TemplateExercise row's exercise_id
         # is NOT NULL with no delete cascade of its own -- only deleting its
         # template first (WorkoutTemplate.exercises is delete-orphan) clears
         # it before the exercise it points at goes away.
-        from models import WorkoutTemplate
+        from models import ExerciseSettings, WorkoutTemplate
         for user_id in (made['leader'], made['partner']):
             for row in WorkoutTemplate.query.filter_by(user_id=user_id).all():
                 db.session.delete(row)
+            ExerciseSettings.query.filter_by(user_id=user_id).delete()
         db.session.commit()
-        for user_id in (made['leader'], made['partner']):
-            for row in Exercise.query.filter_by(user_id=user_id).all():
-                db.session.delete(row)
-            db.session.commit()
+        # Every key-less row a test here made; nobody owns an exercise.
+        for row in Exercise.query.filter(Exercise.library_key.is_(None),
+                                         Exercise.name.like('pytest invite%')).all():
+            db.session.delete(row)
+        db.session.commit()
         for user_id in (made['leader'], made['partner']):
             doomed = db.session.get(AppUser, user_id)
             if doomed is not None:
@@ -1089,6 +1085,19 @@ def _client_for(user_id):
     with test_client.session_transaction() as flask_session:
         flask_session['user_id'] = user_id
     return test_client
+
+
+def _invite_lift(name):
+    """A key-less exercise to add mid-workout; leader_with_partner sweeps it.
+    Returns its id as the add form posts it."""
+    from extensions import db
+    from models import Exercise
+
+    with flask_app.app_context():
+        lift = Exercise(name=name)
+        db.session.add(lift)
+        db.session.commit()
+        return str(lift.id)
 
 
 def test_inviting_a_partner_creates_a_pending_link(leader_with_partner):
@@ -1208,9 +1217,10 @@ def test_accepting_creates_the_followers_session_with_the_same_structure(leader_
         shared_id = SharedSession.query.filter_by(
             leader_session_id=leader_with_partner['session']).first().id
 
+    exercise_id = leader_with_partner['exercise']
     partner_client = _client_for(leader_with_partner['partner'])
     partner_client.post(f'/gym/shared/{shared_id}/accept',
-                        data={f"match_{leader_with_partner['exercise']}": 'new'})
+                        data={f'match_{exercise_id}': str(exercise_id)})
 
     with flask_app.app_context():
         shared = db.session.get(SharedSession, shared_id)
@@ -1218,10 +1228,8 @@ def test_accepting_creates_the_followers_session_with_the_same_structure(leader_
         assert shared.follower_session_id is not None
         follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
         assert follower_session.user_id == leader_with_partner['partner']
-        assert [se.exercise.name for se in follower_session.exercises] == [
-            'pytest invite bench']
-        assert follower_session.exercises[0].exercise.user_id == (
-            leader_with_partner['partner']), 'the follower was linked to the leader\'s row'
+        assert [se.exercise_id for se in follower_session.exercises] == [exercise_id], \
+            'the follower got a copy, not the one row'
 
 
 def test_the_followers_session_carries_no_template_link(leader_with_partner):
@@ -1368,26 +1376,23 @@ def test_the_booked_session_counts_as_that_routines_last_performance(leader_with
 def test_confirm_offers_the_followers_own_routines(leader_with_partner):
     """The follower's routines, with the exercise ids the island compares
     against the selected matches. The LEADER's routines must never appear:
-    they are named in a catalogue this lifter does not own."""
+    they are the leader's, however alike."""
     from extensions import db
-    from models import (Exercise, SharedSession, TemplateExercise,
-                        WorkoutTemplate)
+    from models import SharedSession, TemplateExercise, WorkoutTemplate
 
     with flask_app.app_context():
-        own_bench = Exercise(name='pytest invite bench',
-                             user_id=leader_with_partner['partner'])
-        db.session.add(own_bench)
-        db.session.flush()
         mine = WorkoutTemplate(name='pytest partner push',
                                user_id=leader_with_partner['partner'])
         mine.exercises.append(
-            TemplateExercise(exercise_id=own_bench.id, position=1))
+            TemplateExercise(exercise_id=leader_with_partner['exercise'], position=1))
         theirs = WorkoutTemplate(name='pytest leader push',
                                  user_id=leader_with_partner['leader'])
+        theirs.exercises.append(
+            TemplateExercise(exercise_id=leader_with_partner['exercise'], position=1))
         db.session.add_all([mine, theirs])
         db.session.commit()
         expected = {'id': mine.id, 'name': 'pytest partner push',
-                    'exercise_ids': [own_bench.id]}
+                    'exercise_ids': [leader_with_partner['exercise']]}
 
     _client_for(leader_with_partner['leader']).post(
         f"/gym/session/{leader_with_partner['session']}/invite",
@@ -1417,8 +1422,7 @@ def test_accepting_seeds_from_the_leaders_current_structure(leader_with_partner)
         shared_id = SharedSession.query.filter_by(
             leader_session_id=leader_with_partner['session']).first().id
         session_ = db.session.get(WorkoutSession, leader_with_partner['session'])
-        late = Exercise(name='pytest invite late lift',
-                        user_id=leader_with_partner['leader'])
+        late = Exercise(name='pytest invite late lift')
         db.session.add(late)
         db.session.flush()
         session_.exercises.append(SessionExercise(exercise_id=late.id, position=2))
@@ -1471,8 +1475,7 @@ def _partner_with_own_workout(leader_with_partner, logged):
                              user_id=leader_with_partner['partner'])
         if logged:
             from models import Exercise
-            lift = Exercise(name='pytest invite own lift',
-                            user_id=leader_with_partner['partner'])
+            lift = Exercise(name='pytest invite own lift')
             db.session.add(lift)
             db.session.flush()
             se = SessionExercise(exercise_id=lift.id, position=1)
@@ -1631,18 +1634,17 @@ def test_only_the_recipient_can_open_or_accept_an_invite(leader_with_partner):
         assert db.session.get(SharedSession, shared_id).accepted_at is None
 
 
-def test_an_exact_name_is_reused_rather_than_duplicated_on_accept(leader_with_partner):
-    """The partner already owns 'pytest invite bench'. Accepting must link to
-    it, not leave them with two."""
+def test_a_chosen_row_is_what_the_follower_logs(leader_with_partner):
+    """The confirm page can map the leader's exercise onto another row -- a
+    partner who does the machine version. Their session gets that row."""
     from extensions import db
-    from models import Exercise, SharedSession
+    from models import Exercise, SharedSession, WorkoutSession
 
     with flask_app.app_context():
-        own_bench = Exercise(name='pytest invite bench',
-                             user_id=leader_with_partner['partner'])
-        db.session.add(own_bench)
+        machine = Exercise(name='pytest invite machine bench')
+        db.session.add(machine)
         db.session.commit()
-        own_bench_id = own_bench.id
+        machine_id = machine.id
 
     _client_for(leader_with_partner['leader']).post(
         f"/gym/session/{leader_with_partner['session']}/invite",
@@ -1653,80 +1655,50 @@ def test_an_exact_name_is_reused_rather_than_duplicated_on_accept(leader_with_pa
 
     _client_for(leader_with_partner['partner']).post(
         f'/gym/shared/{shared_id}/accept',
-        data={f"match_{leader_with_partner['exercise']}": str(own_bench_id)})
+        data={f"match_{leader_with_partner['exercise']}": str(machine_id)})
 
     with flask_app.app_context():
-        assert Exercise.query.filter_by(user_id=leader_with_partner['partner'],
-                                        name='pytest invite bench').count() == 1
+        shared = db.session.get(SharedSession, shared_id)
+        follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
+        assert [se.exercise_id for se in follower_session.exercises] == [machine_id]
 
 
-# --- The accept form's two security guards (review of 625cade) ---
+# --- The accept form's two guards (review of 625cade; reworked for the one list) ---
 
 
-def test_accept_rejects_a_match_value_naming_an_exercise_owned_by_a_third_party(leader_with_partner):
-    """The value branch calls owned_exercise(...), so a follower cannot map a
-    slot onto an exercise they do not own and log against its history."""
+def test_accept_refuses_an_answer_that_names_no_exercise(leader_with_partner):
+    """Any exercise row is a fair answer now that none is owned -- but a value
+    naming none comes from a broken page, and guessing would log the
+    partner's sets somewhere they never chose. A 400, and nothing changes:
+    no session, no accepted link, and the partner's own empty workout (which
+    an accept discards) is still there."""
     from extensions import db
-    from models import AppUser, Exercise, SharedSession
-    from werkzeug.security import generate_password_hash
+    from models import SharedSession, WorkoutSession
 
-    third_party_id = None
-    third_exercise_id = None
-    try:
-        with flask_app.app_context():
-            third_party = AppUser(username='pytest invite third party',
-                                  password_hash=generate_password_hash('c'), is_admin=False)
-            db.session.add(third_party)
-            db.session.flush()
-            third_party_id = third_party.id
-            third_exercise = Exercise(name='pytest invite third lift', user_id=third_party.id)
-            db.session.add(third_exercise)
-            db.session.commit()
-            third_exercise_id = third_exercise.id
-
-        _client_for(leader_with_partner['leader']).post(
-            f"/gym/session/{leader_with_partner['session']}/invite",
-            data={'partner_id': leader_with_partner['partner']})
-        with flask_app.app_context():
-            shared_id = SharedSession.query.filter_by(
-                leader_session_id=leader_with_partner['session']).first().id
-
+    shared_id, own_id = _partner_with_own_workout(leader_with_partner, logged=False)
+    for answer in ('garbage', '2147483000'):
         response = _client_for(leader_with_partner['partner']).post(
             f'/gym/shared/{shared_id}/accept',
-            data={f"match_{leader_with_partner['exercise']}": str(third_exercise_id)})
-        assert response.status_code == 404
+            data={f"match_{leader_with_partner['exercise']}": answer})
+        assert response.status_code == 400, answer
 
-        with flask_app.app_context():
-            shared = db.session.get(SharedSession, shared_id)
-            assert shared.accepted_at is None
-            assert shared.follower_session_id is None
-    finally:
-        with flask_app.app_context():
-            if third_exercise_id:
-                doomed = db.session.get(Exercise, third_exercise_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-                    db.session.commit()
-            if third_party_id:
-                doomed = db.session.get(AppUser, third_party_id)
-                if doomed is not None:
-                    db.session.delete(doomed)
-                    db.session.commit()
+    with flask_app.app_context():
+        shared = db.session.get(SharedSession, shared_id)
+        assert (shared.accepted_at, shared.follower_session_id) == (None, None)
+        assert db.session.get(WorkoutSession, own_id) is not None, \
+            'the partner\'s own workout was discarded before the answer was checked'
 
 
 def test_accept_skips_a_match_key_naming_an_exercise_the_leader_does_not_own(leader_with_partner):
-    """The key branch: any leader_exercise_id whose exercise turns out not to
-    really belong to the leader is skipped (`leader_exercise.user_id !=
-    shared.leader_user_id` -> continue) rather than treated as a legitimate
-    slot to fill. Posted alongside one legitimate key so the forged one's
-    absence is what distinguishes pass from fail, not the whole request
-    failing."""
+    """The key branch: a match key naming an exercise that is not in the
+    leader's workout is skipped rather than treated as a slot to fill.
+    Posted alongside one legitimate key so the forged one's absence is what
+    distinguishes pass from fail, not the whole request failing."""
     from extensions import db
     from models import Exercise, SharedSession, SharedSessionExercise
 
     with flask_app.app_context():
-        forged = Exercise(name='pytest invite forged lift',
-                          user_id=leader_with_partner['partner'])
+        forged = Exercise(name='pytest invite forged lift')
         db.session.add(forged)
         db.session.commit()
         forged_id = forged.id
@@ -1754,24 +1726,15 @@ def test_accept_skips_a_match_key_naming_an_exercise_the_leader_does_not_own(lea
             'a match key naming an exercise the leader does not own produced a row')
 
 
-# --- Fix 5: "Neu anlegen" must not 500 on a name the follower already owns ---
+# --- A stale "new" answer (a confirm page served before the one list) ---
 
 
-def test_accepting_with_new_reuses_an_owned_exercise_of_the_same_name(leader_with_partner):
-    """A follower who overrides an auto-selected exact match back to 'Neu
-    anlegen' for a name they already own must reuse the existing row, not hit
-    uq_gym_exercises_user_id_name as an unhandled IntegrityError 500 -- same
-    find-or-create pattern gym_replace_session_exercise's new_name branch
-    already uses."""
+def test_a_stale_new_answer_means_the_leaders_row(leader_with_partner):
+    """'Neu anlegen' -- my own copy -- was an answer until the one list. The
+    leader's row is that copy now: the partner's session gets it, and no
+    exercise is created."""
     from extensions import db
     from models import Exercise, SharedSession, WorkoutSession
-
-    with flask_app.app_context():
-        own_bench = Exercise(name='pytest invite bench',
-                             user_id=leader_with_partner['partner'])
-        db.session.add(own_bench)
-        db.session.commit()
-        own_bench_id = own_bench.id
 
     _client_for(leader_with_partner['leader']).post(
         f"/gym/session/{leader_with_partner['session']}/invite",
@@ -1779,21 +1742,19 @@ def test_accepting_with_new_reuses_an_owned_exercise_of_the_same_name(leader_wit
     with flask_app.app_context():
         shared_id = SharedSession.query.filter_by(
             leader_session_id=leader_with_partner['session']).first().id
+        before = Exercise.query.count()
 
     response = _client_for(leader_with_partner['partner']).post(
         f'/gym/shared/{shared_id}/accept',
         data={f"match_{leader_with_partner['exercise']}": 'new'})
-    assert response.status_code == 302, (
-        'accepting with "Neu anlegen" on an already-owned name must not 500')
+    assert response.status_code == 302
 
     with flask_app.app_context():
-        assert Exercise.query.filter_by(user_id=leader_with_partner['partner'],
-                                        name='pytest invite bench').count() == 1, (
-            'the duplicate-name guard left the follower with two exercises')
         shared = db.session.get(SharedSession, shared_id)
         follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
-        assert follower_session.exercises[0].exercise_id == own_bench_id, (
-            'the existing owned exercise was not reused')
+        assert [se.exercise_id for se in follower_session.exercises] == [
+            leader_with_partner['exercise']]
+        assert Exercise.query.count() == before, 'an exercise was created'
 
 
 # --- Wiring propagation into the routes (Task 6) ---
@@ -1813,9 +1774,9 @@ def joined_pair(leader_with_partner):
     with flask_app.app_context():
         shared_id = SharedSession.query.filter_by(
             leader_session_id=leader_with_partner['session']).first().id
+    exercise_id = leader_with_partner['exercise']
     _client_for(leader_with_partner['partner']).post(
-        f'/gym/shared/{shared_id}/accept',
-        data={f"match_{leader_with_partner['exercise']}": 'new'})
+        f'/gym/shared/{shared_id}/accept', data={f'match_{exercise_id}': str(exercise_id)})
     with flask_app.app_context():
         shared = db.session.get(SharedSession, shared_id)
         return dict(leader_with_partner, shared=shared_id,
@@ -1828,7 +1789,7 @@ def test_adding_an_exercise_propagates_through_the_route(joined_pair):
 
     _client_for(joined_pair['leader']).post(
         f"/gym/session/{joined_pair['session']}/exercises/add",
-        data={'new_exercise_name': 'pytest invite fly'})
+        data={'exercise_id': _invite_lift('pytest invite fly')})
 
     with flask_app.app_context():
         follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
@@ -1841,7 +1802,7 @@ def test_reordering_propagates_through_the_route(joined_pair):
 
     leader_client = _client_for(joined_pair['leader'])
     leader_client.post(f"/gym/session/{joined_pair['session']}/exercises/add",
-                       data={'new_exercise_name': 'pytest invite fly'})
+                       data={'exercise_id': _invite_lift('pytest invite fly')})
 
     with flask_app.app_context():
         leader_session = db.session.get(WorkoutSession, joined_pair['session'])
@@ -1932,7 +1893,7 @@ def test_nothing_propagates_after_the_link_ended(joined_pair):
     leader_client = _client_for(joined_pair['leader'])
     leader_client.post(f"/gym/session/{joined_pair['session']}/finish")
     leader_client.post(f"/gym/session/{joined_pair['session']}/exercises/add",
-                       data={'new_exercise_name': 'pytest invite ghost'})
+                       data={'exercise_id': _invite_lift('pytest invite ghost')})
 
     with flask_app.app_context():
         follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
@@ -2013,7 +1974,7 @@ def test_the_sync_version_rises_when_the_leader_changes_structure(joined_pair):
 
     _client_for(joined_pair['leader']).post(
         f"/gym/session/{joined_pair['session']}/exercises/add",
-        data={'new_exercise_name': 'pytest invite raise'})
+        data={'exercise_id': _invite_lift('pytest invite raise')})
 
     after = json.loads(partner_client.get(
         f"/gym/session/{joined_pair['follower_session']}/sync.json"
@@ -2076,7 +2037,7 @@ def test_a_leader_side_replace_propagates_with_the_substitute_translated(linked_
     with flask_app.app_context():
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
         leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
-        incline = Exercise(name='pytest shared incline', user_id=linked_pair['leader_user'])
+        incline = Exercise(name='pytest shared incline')
         db.session.add(incline)
         db.session.flush()
         substitute = SessionExercise(session_id=leader_session.id, exercise_id=incline.id,
@@ -2121,8 +2082,7 @@ def test_both_partners_swapping_the_same_exercise_does_not_500(linked_pair):
     with flask_app.app_context():
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
         follower_original = follower_session.exercises[0]
-        follower_sub_exercise = Exercise(name='pytest shared follower swap',
-                                         user_id=linked_pair['follower_user'])
+        follower_sub_exercise = Exercise(name='pytest shared follower swap')
         db.session.add(follower_sub_exercise)
         db.session.flush()
         follower_substitute = SessionExercise(
@@ -2135,8 +2095,7 @@ def test_both_partners_swapping_the_same_exercise_does_not_500(linked_pair):
 
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
         leader_row = db.session.get(SessionExercise, linked_pair['leader_row'])
-        leader_sub_exercise = Exercise(name='pytest shared leader swap',
-                                       user_id=linked_pair['leader_user'])
+        leader_sub_exercise = Exercise(name='pytest shared leader swap')
         db.session.add(leader_sub_exercise)
         db.session.flush()
         leader_substitute = SessionExercise(
@@ -2190,25 +2149,27 @@ def test_the_follower_finishing_ends_the_link_and_leaves_the_leader_live(joined_
 
 def test_rest_seconds_does_not_propagate(linked_pair):
     """Among the seven things the spec says must never propagate, set count
-    and weight/reps already had negative tests; rest_seconds did not.
-    Reconciliation already does the right thing -- a newly mirrored row seeds
-    rest_seconds from the FOLLOWER's own exercise default, never from the
-    leader's per-session override -- so this pins existing correct behaviour."""
+    and weight/reps already had negative tests; rest_seconds did not. A newly
+    mirrored row seeds rest_seconds from the FOLLOWER's own setting -- never
+    the leader's per-session override, and, since both now use one row, never
+    the leader's own setting on it either."""
     from extensions import db
     from features.gym import sharing
-    from models import Exercise, SessionExercise, SharedSession, WorkoutSession
+    from models import Exercise, ExerciseSettings, SessionExercise, SharedSession, WorkoutSession
 
     with flask_app.app_context():
-        leader_curl = Exercise(name='pytest shared curl', user_id=linked_pair['leader_user'],
-                               default_rest_seconds=200)
-        follower_curl = Exercise(name='pytest shared curl', user_id=linked_pair['follower_user'],
-                                 default_rest_seconds=45)
-        db.session.add_all([leader_curl, follower_curl])
+        curl = Exercise(name='pytest shared curl', list_rest_seconds=120)
+        db.session.add(curl)
         db.session.flush()
+        db.session.add_all([
+            ExerciseSettings(user_id=linked_pair['leader_user'], exercise_id=curl.id,
+                             default_rest_seconds=200),
+            ExerciseSettings(user_id=linked_pair['follower_user'], exercise_id=curl.id,
+                             default_rest_seconds=45)])
 
         leader_session = db.session.get(WorkoutSession, linked_pair['leader_session'])
         leader_session.exercises.append(
-            SessionExercise(exercise_id=leader_curl.id, position=2, rest_seconds=999))
+            SessionExercise(exercise_id=curl.id, position=2, rest_seconds=999))
         db.session.commit()
 
         sharing.reconcile_follower(db.session.get(SharedSession, linked_pair['shared']))
@@ -2216,12 +2177,10 @@ def test_rest_seconds_does_not_propagate(linked_pair):
 
         follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
         new_row = next(se for se in follower_session.exercises if se.position == 2)
-        assert new_row.exercise_id == follower_curl.id, (
-            'the exact name-match should reuse the existing follower exercise')
+        assert new_row.exercise_id == curl.id
         assert new_row.rest_seconds == 45, (
-            "a newly mirrored row must seed rest_seconds from the FOLLOWER's own default")
-        assert new_row.rest_seconds != 999, (
-            "the leader's per-session rest override propagated to the follower")
+            "a newly mirrored row must seed rest_seconds from the FOLLOWER's own setting "
+            f'(got {new_row.rest_seconds})')
 
 
 def test_is_deload_and_deload_pct_do_not_propagate(linked_pair):
@@ -2298,14 +2257,13 @@ def test_propagate_structure_survives_a_follower_side_integrity_error(joined_pai
 # --- Fix 3: an exercise referenced only by a spent link's map ---------------
 
 
-def test_deleting_an_exercise_referenced_only_by_a_shared_map_row_does_not_500(linked_pair):
-    """Reproduces the map-with-no-SessionExercise state directly: a
-    SharedSessionExercise row whose follower_exercise_id names an exercise no
-    SessionExercise ever pointed to (e.g. the leader removed their side of the
-    match between /confirm and /accept). gym_delete_exercise's in-use check
-    only looks at session_exercises/template_exercises, so before the
-    ondelete='CASCADE' migration this hit an unhandled IntegrityError instead
-    of the route's existing friendly refusal."""
+def test_a_map_row_goes_with_the_exercise_it_names(linked_pair):
+    """A SharedSessionExercise row whose follower_exercise_id names an
+    exercise no SessionExercise points to (the leader removed their side of
+    the match between /confirm and /accept). Before the ondelete='CASCADE'
+    migration deleting that exercise was an IntegrityError. The app deletes
+    no exercise since the one list, but a hand cleanup or a later migration
+    still may -- and every teardown in this suite does."""
     from extensions import db
     from models import Exercise, SharedSessionExercise
 
@@ -2313,8 +2271,8 @@ def test_deleting_an_exercise_referenced_only_by_a_shared_map_row_does_not_500(l
         # A leader exercise NOT already mapped by the linked_pair fixture --
         # uq_gym_shared_session_exercises_link_leader is (shared_session_id,
         # leader_exercise_id), and the fixture already maps leader_exercise.
-        vanished = Exercise(name='pytest shared vanished lift', user_id=linked_pair['leader_user'])
-        orphan = Exercise(name='pytest shared orphaned lift', user_id=linked_pair['follower_user'])
+        vanished = Exercise(name='pytest shared vanished lift')
+        orphan = Exercise(name='pytest shared orphaned lift')
         db.session.add_all([vanished, orphan])
         db.session.flush()
         db.session.add(SharedSessionExercise(
@@ -2323,18 +2281,10 @@ def test_deleting_an_exercise_referenced_only_by_a_shared_map_row_does_not_500(l
             follower_exercise_id=orphan.id))
         db.session.commit()
         orphan_id = orphan.id
-        # Not referenced by any SessionExercise or TemplateExercise -- only by
-        # the map row just added.
-        assert orphan.session_exercises == []
-        assert orphan.template_exercises == []
 
-    response = _client_for(linked_pair['follower_user']).post(
-        f'/gym/exercises/{orphan_id}/delete')
-    assert response.status_code == 302, 'the delete must not 500'
+        db.session.delete(orphan)
+        db.session.commit()
 
-    with flask_app.app_context():
-        assert db.session.get(Exercise, orphan_id) is None, (
-            'the exercise was not actually deleted')
         assert SharedSessionExercise.query.filter_by(follower_exercise_id=orphan_id).count() == 0, (
             "the spent map row must cascade away with the exercise it named")
 
@@ -2388,56 +2338,8 @@ def test_reinviting_a_still_pending_invite_gives_an_honest_message(leader_with_p
             leader_session_id=leader_with_partner['session']).count() == 1
 
 
-# --- Fix 7: is_unilateral must travel with the exercise's name -------------
-
-
-def test_follower_exercise_for_copies_is_unilateral(linked_pair):
-    from extensions import db
-    from features.gym import sharing
-    from models import Exercise, SharedSession
-
-    with flask_app.app_context():
-        shared = db.session.get(SharedSession, linked_pair['shared'])
-        one_arm_row = Exercise(name='pytest shared one arm row',
-                               user_id=linked_pair['leader_user'], is_unilateral=True)
-        db.session.add(one_arm_row)
-        db.session.flush()
-
-        resolved_id = sharing.follower_exercise_for(shared, one_arm_row.id)
-        db.session.commit()
-
-        created = db.session.get(Exercise, resolved_id)
-        assert created.is_unilateral is True, (
-            'unilaterality is a property of the movement and must travel with the name, '
-            'unlike weight_increment')
-
-
-def test_accepting_with_new_copies_is_unilateral(leader_with_partner):
-    from extensions import db
-    from models import Exercise, SharedSession, WorkoutSession
-
-    with flask_app.app_context():
-        bench = db.session.get(Exercise, leader_with_partner['exercise'])
-        bench.is_unilateral = True
-        db.session.commit()
-
-    _client_for(leader_with_partner['leader']).post(
-        f"/gym/session/{leader_with_partner['session']}/invite",
-        data={'partner_id': leader_with_partner['partner']})
-    with flask_app.app_context():
-        shared_id = SharedSession.query.filter_by(
-            leader_session_id=leader_with_partner['session']).first().id
-
-    _client_for(leader_with_partner['partner']).post(
-        f'/gym/shared/{shared_id}/accept',
-        data={f"match_{leader_with_partner['exercise']}": 'new'})
-
-    with flask_app.app_context():
-        shared = db.session.get(SharedSession, shared_id)
-        follower_session = db.session.get(WorkoutSession, shared.follower_session_id)
-        assert follower_session.exercises[0].exercise.is_unilateral is True, (
-            "a follower joining a workout with a unilateral lift must not silently "
-            "get a bilateral copy")
+# Fix 7 (is_unilateral travelling with a copied exercise) went with the copies:
+# since the one list both partners log on the same row.
 
 
 # --- Fix 6b: only the follower half of a live link should poll -------------

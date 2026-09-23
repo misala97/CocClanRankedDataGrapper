@@ -9,17 +9,28 @@ import pytest
 from app import app as flask_app
 from extensions import db
 from features.gym import export, stats
-from models import Exercise, WorkoutSession, SessionExercise, SessionSet
+from features.gym.exercises import Setup
+from models import Exercise, ExerciseSettings, WorkoutSession, SessionExercise, SessionSet
 from conftest import _admin_id
 
 
 def _exercise(**kwargs):
+    """The list's facts only: a read of a personal value off the exercise
+    instead of the lifter's Setup fails here with an AttributeError."""
     base = dict(id=12, name='Military Press', muscle_group='Schultern',
                 secondary_muscle_groups=['Trizeps'], equipment='plate_loaded',
-                is_unilateral=False, bar_weight=20.0, weight_increment=2.5,
-                stack_kg=None)
+                is_unilateral=False)
     base.update(kwargs)
     return SimpleNamespace(**base)
+
+
+def _setup(weight_increment=2.5, default_rest_seconds=150, stack_kg=None, bar_weight=20.0):
+    """The session owner's values for the exercise (exercises.Setup)."""
+    return Setup(weight_increment, default_rest_seconds, stack_kg, bar_weight)
+
+
+# exercise id -> Setup, for every fake session below (all use exercise 12).
+SETUPS = {12: _setup()}
 
 
 def _set(position=1, weight=35.0, reps=11, completed=True, completed_at=None):
@@ -56,9 +67,9 @@ def temp_finished_session():
     secondary_muscle_groups, pain, bodyweight_kg, completed_at, ...) fails
     this test with an AttributeError instead of shipping unnoticed."""
     with flask_app.app_context():
-        exercise = Exercise(name='ZZ Test Export Exercise', user_id=_admin_id(),
+        exercise = Exercise(name='ZZ Test Export Exercise',
                             muscle_group='Schultern', equipment='plate_loaded',
-                            bar_weight=20.0)
+                            list_bar_weight=20.0)
         db.session.add(exercise)
         db.session.flush()
         session = WorkoutSession(name='ZZ Test Export Session', user_id=_admin_id(),
@@ -103,7 +114,7 @@ def test_session_carries_every_contract_key():
     seven fields to the wrong source (e.g. template_name/bodyweight_kg/pain
     hardcoded, exercise_name emitting muscle_group) and every test in this
     file still passed because they only checked `set(payload)`."""
-    payload = export.session_payload(_session())
+    payload = export.session_payload(_session(), SETUPS)
     assert payload == {
         'id': 33,
         'name': 'HBF Push 06.08.2026',
@@ -141,12 +152,12 @@ def test_session_with_template_carries_its_name():
     """The only other fixture leaves `template` None, which can't catch
     `template_name` reading the wrong attribute off a real template."""
     template = SimpleNamespace(name='Push Day A')
-    payload = export.session_payload(_session(template=template))
+    payload = export.session_payload(_session(template=template), SETUPS)
     assert payload['template_name'] == 'Push Day A'
 
 
 def test_exercise_carries_every_contract_key():
-    payload = export.exercise_payload(_session_exercise())
+    payload = export.exercise_payload(_session_exercise(), _setup())
     assert payload == {
         'exercise_id': 12,
         'exercise_name': 'Military Press',
@@ -175,9 +186,9 @@ def test_unilateral_dumbbell_exercise_through_exercise_payload():
     3, into the increment fallback) is barely exercised through this
     function otherwise."""
     exercise = _exercise(id=41, name='Kurzhantel Seitheben', equipment='dumbbell',
-                         is_unilateral=True, bar_weight=None, weight_increment=None,
-                         stack_kg=None)
-    payload = export.exercise_payload(_session_exercise(exercise=exercise))
+                         is_unilateral=True)
+    payload = export.exercise_payload(_session_exercise(exercise=exercise),
+                                      _setup(weight_increment=None, bar_weight=None))
     assert payload == {
         'exercise_id': 41,
         'exercise_name': 'Kurzhantel Seitheben',
@@ -202,7 +213,7 @@ def test_unilateral_dumbbell_exercise_through_exercise_payload():
 
 def test_missing_secondary_groups_export_as_empty_list():
     payload = export.exercise_payload(
-        _session_exercise(exercise=_exercise(secondary_muscle_groups=None)))
+        _session_exercise(exercise=_exercise(secondary_muscle_groups=None)), _setup())
     assert payload['secondary_muscle_groups'] == []
 
 
@@ -210,15 +221,24 @@ def test_stack_steps_suppress_the_increment():
     """The contract makes the two mutually exclusive: where an exercise has
     real stops, the stops are the whole answer."""
     payload = export.exercise_payload(
-        _session_exercise(exercise=_exercise(stack_kg=[5, 13, 21], weight_increment=8)))
+        _session_exercise(), _setup(stack_kg=[5, 13, 21], weight_increment=8))
     assert payload['stack_kg'] == [5, 13, 21]
     assert payload['increment_kg'] is None
+
+
+def test_the_lifters_values_are_exported_not_the_lists():
+    """Step, stops and bar come from the session owner's Setup: two
+    partners on one exercise id export their own gym's numbers."""
+    payload = export.exercise_payload(_session_exercise(),
+                                      _setup(weight_increment=1.25, bar_weight=0.0))
+    assert payload['increment_kg'] == 1.25
+    assert payload['bar_weight'] == 0.0
 
 
 def test_increment_survives_without_stack_steps():
     """An explicit, non-zero increment is taken literally -- see
     stats.resolve_increment's docstring."""
-    payload = export.exercise_payload(_session_exercise())
+    payload = export.exercise_payload(_session_exercise(), _setup())
     assert payload['increment_kg'] == 2.5
     assert payload['stack_kg'] is None
 
@@ -228,13 +248,13 @@ def test_missing_increment_falls_back_to_the_apps_default():
     make the coaching tool guess a step the app already knows; sending the
     resolved fallback keeps the two in agreement."""
     payload = export.exercise_payload(
-        _session_exercise(exercise=_exercise(weight_increment=None, is_unilateral=False)))
+        _session_exercise(exercise=_exercise(is_unilateral=False)), _setup(weight_increment=None))
     assert payload['increment_kg'] == stats.DEFAULT_INCREMENT
 
 
 def test_missing_increment_falls_back_to_half_default_when_unilateral():
     payload = export.exercise_payload(
-        _session_exercise(exercise=_exercise(weight_increment=None, is_unilateral=True)))
+        _session_exercise(exercise=_exercise(is_unilateral=True)), _setup(weight_increment=None))
     assert payload['increment_kg'] == stats.DEFAULT_INCREMENT / 2
 
 
@@ -267,7 +287,7 @@ def test_replacement_names_survive():
     original = SimpleNamespace(exercise=_exercise(name='T Bar Row (Standing)'))
     substitute = SimpleNamespace(exercise=_exercise(name='T Bar Row (Lying)'))
     payload = export.exercise_payload(
-        _session_exercise(replaces=original, replaced_by=substitute))
+        _session_exercise(replaces=original, replaced_by=substitute), _setup())
     assert payload['replaces'] == 'T Bar Row (Standing)'
     assert payload['replaced_by'] == 'T Bar Row (Lying)'
 
@@ -276,24 +296,24 @@ def test_session_notes_is_null_when_absent():
     """Unlike the exercise note, an absent session note stays null -- the
     contract sample pins '' for the exercise note specifically, not for
     every absent scalar in the document."""
-    payload = export.session_payload(_session(notes=None))
+    payload = export.session_payload(_session(notes=None), SETUPS)
     assert payload['notes'] is None
 
 
 def test_session_notes_survives_when_present():
-    payload = export.session_payload(_session(notes='nach 8h Schicht'))
+    payload = export.session_payload(_session(notes='nach 8h Schicht'), SETUPS)
     assert payload['notes'] == 'nach 8h Schicht'
 
 
 def test_exercise_notes_is_empty_string_when_absent():
-    payload = export.exercise_payload(_session_exercise(notes=None))
+    payload = export.exercise_payload(_session_exercise(notes=None), _setup())
     assert payload['notes'] == ''
 
 
 def test_pain_and_skipped_are_both_coerced_to_bool():
     """Both columns are non-nullable booleans; the export must treat them
     the same way rather than coercing one and trusting the other."""
-    payload = export.exercise_payload(_session_exercise(pain=0, skipped=1))
+    payload = export.exercise_payload(_session_exercise(pain=0, skipped=1), _setup())
     assert payload['pain'] is False
     assert payload['skipped'] is True
 
@@ -305,7 +325,7 @@ def test_a_deload_session_with_a_skipped_noted_exercise():
     actually flips each of them and checks the flip survives."""
     se = _session_exercise(notes='linke Schulter zwickt', pain=True, skipped=True)
     payload = export.session_payload(
-        _session(is_deload=True, deload_pct=85, exercises=[se]))
+        _session(is_deload=True, deload_pct=85, exercises=[se]), SETUPS)
     assert payload['deload'] is True
     assert payload['deload_pct'] == 85
     assert payload['exercises'][0]['skipped'] is True
@@ -317,7 +337,7 @@ def test_range_derives_from_the_sessions_actually_exported():
     early = _session(id=31, started_at=dt.datetime(2026, 7, 24, 8, 0))
     late = _session(id=33, started_at=dt.datetime(2026, 8, 6, 9, 30))
     payload = export.build_payload([early, late], [31, 32, 33],
-                                   dt.datetime(2026, 8, 6, 18, 0))
+                                   dt.datetime(2026, 8, 6, 18, 0), SETUPS)
     assert payload['schema_version'] == 2
     assert payload['exported_at'] == '2026-08-06T18:00:00Z'
     assert payload['range'] == {'from': '2026-07-24', 'to': '2026-08-06'}
@@ -326,7 +346,7 @@ def test_range_derives_from_the_sessions_actually_exported():
 
 
 def test_empty_selection_still_carries_every_key():
-    payload = export.build_payload([], [], dt.datetime(2026, 8, 6, 18, 0))
+    payload = export.build_payload([], [], dt.datetime(2026, 8, 6, 18, 0), {})
     assert set(payload) == {'schema_version', 'exported_at', 'range',
                             'requested_session_ids', 'sessions'}
     assert payload['range'] == {'from': None, 'to': None}
@@ -370,10 +390,25 @@ def test_route_exports_a_real_finished_session(client, temp_finished_session):
     assert set(sets[0]) == {'position', 'weight', 'reps', 'completed', 'finished_at'}
 
 
+def test_route_exports_the_requesters_settings(client, temp_finished_session):
+    """The route resolves the caller's settings, once, for everything it
+    exports: here a step of 1.25 and no bar over the list's 20 kg bar."""
+    with flask_app.app_context():
+        session = db.session.get(WorkoutSession, temp_finished_session)
+        exercise_id = session.exercises[0].exercise_id
+        db.session.add(ExerciseSettings(user_id=_admin_id(), exercise_id=exercise_id,
+                                        weight_increment=1.25, bar_weight=0.0))
+        db.session.commit()
+    body = client.get(f'/gym/export?ids={temp_finished_session}').get_json()
+    exported = body['sessions'][0]['exercises'][0]
+    assert exported['increment_kg'] == 1.25
+    assert exported['bar_weight'] == 0.0
+
+
 def test_v1_field_name_is_gone():
     """`is_deload` became `deload`. Asserted against a payload that actually
     HAS a session -- against an empty export the same assertion passes no
     matter what the session shape is."""
-    payload = export.build_payload([_session()], [33], dt.datetime(2026, 8, 6, 18, 0))
+    payload = export.build_payload([_session()], [33], dt.datetime(2026, 8, 6, 18, 0), SETUPS)
     assert 'deload' in payload['sessions'][0]
     assert 'is_deload' not in payload['sessions'][0]

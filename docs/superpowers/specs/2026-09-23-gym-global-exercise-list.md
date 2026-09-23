@@ -23,8 +23,9 @@ Observable end state:
 ## Data model
 
 `gym_exercises` becomes global: one row per list entry.
-- New: `library_key` String(64), unique. It is NULL only on a *retired* row (see
-  Migration) — a row kept for history that has no list entry.
+- New: `library_key` String(64), unique. A *retired* row is one whose key is not in
+  today's `LIBRARY`: either NULL (a production row the migration could not map, see
+  Migration) or a key that has left the list. It keeps its history and is not offered.
 - Kept as list facts, read-only: `name`, `muscle_group`, `secondary_muscle_groups`,
   `equipment`, `is_unilateral`.
 - Kept as the list's defaults for the four personal values: DB columns `weight_increment`,
@@ -50,10 +51,12 @@ Rules for the stored values:
 - A value is stored only while it differs from the list. Saving the list's value, or a
   blank, stores NULL. A row whose four values are all NULL is deleted. That way a later
   change to the list's default still reaches everyone who never changed it.
-- `bar_weight`: 0 and NULL mean the same thing ("nothing inside the number"). 0 is stored
-  only when the list has a bar, to switch it off.
+- `bar_weight`: on a list row, 0 and NULL both mean "nothing inside the number". In a
+  settings row NULL means the list's value and 0.0 means "no bar", stored only when the
+  list has a bar, to switch it off. The settings form parses blank as None and "0" as 0.0.
 - `stack_kg` follows today's rules: ascending real stops, only for `equipment == 'stack'`.
-  While it is set it decides the steps, so the increment is not consulted.
+  The app still steps by the increment and snaps to the stops; only the export sends the
+  stops instead of a step.
 - The effective value is `settings.value if not NULL else exercise.list_value`. A retired
   row can still lack an increment; `stats.resolve_increment` keeps supplying the default,
   as it does today.
@@ -66,7 +69,8 @@ This module holds the exercise rows and each lifter's view of them.
   `gym_exercises`, keyed by `library_key`. It inserts missing entries and updates changed
   facts and defaults. It never deletes. A key that leaves the list keeps its row (history)
   and simply stops being offered. It runs on Core statements over its own connection, so it
-  never commits a request's pending ORM work.
+  never commits a request's pending ORM work. A changed one-side or loading is logged as a
+  warning: every history on that row is re-read through it.
 - `ensure_library()`: runs `sync_library` once per process, from a `before_request` on
   the gym blueprint. With several workers, the loser of a duplicate-key race catches the
   IntegrityError and syncs again. A list that grows in code therefore needs no deploy step.
@@ -84,9 +88,12 @@ This module holds the exercise rows and each lifter's view of them.
 - `save_setup(user_id, exercise, **values)`: stores only the differences, per the rules
   above.
 
-The user always comes from the data being built, never from the request. Examples: the
-session's `user_id` for a workout payload, and the follower's id when the leader's request
-reconciles the follower's rows. Scope rule: an exercise id no longer implies a user, so
+Whose settings: data owned by a session or routine resolves through its owner — the
+session's `user_id` for a workout payload, the follower's id when the leader's request
+reconciles the follower's rows. The reader's own pages and writes (catalogue, detail,
+settings save, `load_performed`) use the request user, the only user there is. Settings are
+looked up once per lifter per request and passed down, never per session or per exercise.
+Scope rule: an exercise id no longer implies a user, so
 every read from an exercise into sets, sessions or routines filters by the reading lifter.
 The inventory (2026-09-23) found every such query already joining `WorkoutSession.user_id`.
 Only the two delete checks walked the relationships, and both go.
@@ -94,12 +101,15 @@ Only the two delete checks walked the relationships, and both go.
 ## What changes where (backend)
 
 Personal values are resolved through `setups()`/`setup()` at every read site:
-- `history.load_performed`: one `setups()` for the loaded rows, handed to `_to_performed`
-  and `_session_rest_entries`. `PerformedExercise.weight_increment`/`stack_kg` therefore
-  carry the lifter's values, and stats, analytics (`increment_ladder`, stall advice) and
-  the catalogue inherit them.
-- `seeding._seeded_sets` (deload branch) and `_seeded_suggestion`: user-scoped already, via
-  their `user_id`.
+- `history.load_performed`: one `setups()` for the loaded rows, handed to `_to_performed`.
+  `PerformedExercise.weight_increment`/`stack_kg` therefore carry the lifter's values, and
+  stats, analytics (`increment_ladder`, stall advice) and the catalogue inherit them.
+- `history.performed_from_session` (the debrief's "Nächstes Mal") and
+  `_session_rest_entries`: the session owner's `setups()`. Statistik's rest habit walks
+  every finished session, so it makes one `setups()` first and hands it down.
+- `seeding._seeded_sets` (deload branch) and `_seeded_suggestion`: the session's owner
+  (`session_.user_id`, else the passed `user_id`, else the request user). The `user_id`
+  parameter is None at most call sites, so it cannot decide alone.
 - `workout.py`:
   - `_schedule_rest`, `gym_start`, `_live_data` (`step_up`, rest total, `live_increment`),
     `_session_payload.as_exercise` and `gym_add_session_exercise` all resolve through the
@@ -108,7 +118,9 @@ Personal values are resolved through `setups()`/`setup()` at every read site:
   - `catalogue_groups` becomes `touched_exercises()`.
 - `session_admin.gym_toggle_deload`.
 - `sharing.reconcile_follower` (rest): uses the follower's `Setup`.
-- `export.exercise_payload`: resolves for the session's user. The format is unchanged.
+- `export`: `gym_export` makes one `setups()` for the caller across the exported sessions
+  and passes it to `build_payload`, so the module still holds no queries. The format is
+  unchanged.
 - `catalogue._catalogue_payload`: lists `touched_exercises()`. `as_meta` sends the effective
   values plus the list's defaults (`list_defaults`) for the settings form.
 - `exercise_detail._exercise_detail_payload`: likewise; `can_delete` goes.
@@ -127,10 +139,14 @@ Shared workouts, the minimum G1 needs; G3 retires the machinery:
 - `sharing.follower_exercise_for` returns the leader's exercise id. It still records the
   identity map row, so `reconcile_follower` works unchanged, but it no longer creates or
   searches.
-- `partners.gym_shared_confirm` hands `propose_matches` the whole list. Every leader
-  exercise is then an exact match, so the one-tap confirm card from 4d6aa08 applies.
-  `gym_shared_accept`'s `'new'` value resolves to the leader's id; an unknown id is a
-  400. A retired row is still a valid id, since it can sit in a live workout.
+- `partners.gym_shared_confirm` hands `propose_matches` the list rows plus the rows in the
+  leader's session (a retired row can sit in a live workout), and each proposal's exact
+  match is the leader's own row. The one-tap confirm card from 4d6aa08 therefore applies.
+- `gym_shared_accept` reads the `match_<key>` answers before anything is discarded:
+  - a key counts only if it is an exercise id in the leader's session; others are ignored;
+  - the value `new` (an answer from before the list) resolves to the key itself;
+  - any other value must be an existing exercise row, a retired one included. Anything
+    else is a 400.
 
 Scripts:
 - `copy_templates.py`: the same exercise ids; no forks.
@@ -146,8 +162,11 @@ touches them.
 Functional removals only, no new visual design:
 - Add sheet (`AddExerciseSheet`):
   - No create row. The placeholder reads "Übung suchen".
-  - It lists the whole list, searched as today (name substring). The `matches` port, alias
-    search and variant grouping are V1.
+  - It lists the whole list, searched by the `library.matches` contract: each entry carries
+    `search` (its folded name and aliases, from the server), and it is found when every
+    word of the folded query occurs there. `fold` is ported to TS for the query only.
+    This is G1, not V1: G2 renames every production exercise to German, and the lifters'
+    own names ("Chest Fly", "bankdrucken") must keep finding them. Variant grouping is V1.
 - Live exercise sheet: "+ Neue Übung anlegen" / "Anlegen und ersetzen" go; replacing picks
   from the list.
 - Catalogue: no create sheet, and the "anlegen" affordances go from empty bands and the
@@ -163,13 +182,19 @@ Functional removals only, no new visual design:
 
 ## Migration (G2) — one alembic revision after main's head `b7e3f9c1a2d4`
 
+Before any alembic command: dev_personal lacks `b7e3f9c1a2d4` (only origin/main has it), so
+every `flask db` command on dev_personal fails until origin/main is merged in. At merge
+time `flask db heads` must show exactly one head. If another revision on `b7e3f9c1a2d4`
+reached main first (e.g. the radar worktree's untracked `3f82a7e5b5dc`), point
+`down_revision` at main's head before merging.
+
 It runs on MySQL 8 (local) and MariaDB (prod). DDL commits implicitly on both, so the
 revision is built to be re-runnable, not transactional:
 
-1. Additive DDL, each step skipped if already present: create `gym_exercise_settings`; add
-   `library_key` (nullable); make `user_id` nullable.
-2. Data, in ONE transaction with no DDL inside it. Skipped entirely when no row has a
-   `user_id`.
+1. Additive DDL, each step skipped if already done: create `gym_exercise_settings`; add
+   `library_key` (nullable); make `user_id` nullable while that column exists.
+2. Data, in ONE transaction with no DDL inside it. Skipped when the `user_id` column is
+   absent or no row has one.
    1. Insert every `LIBRARY` entry that is missing (key, facts, defaults, `user_id` NULL),
       with an explicit column list defined in the migration.
    2. Map each per-user row:
@@ -177,6 +202,10 @@ revision is built to be re-runnable, not transactional:
       - else, the one entry whose folded name or alias equals the folded name;
       - else, a retired row: one per distinct folded name, with the name, facts and values
         taken from the row with the most session rows.
+      - The upgrade prints every row's old id, owner and name → new id and key, into the
+        deploy log: exports from before carry the old ids and names. It flags each row
+        whose list entry changes its one-side (the history's volume doubles or halves) or
+        its loading.
    3. Settings: for each per-user row, every personal value that differs from its target's
       default becomes that user's setting on the target.
       - An old NULL is "no override". This also fixes u3's 1.25 step, since the list says
@@ -226,7 +255,7 @@ retired rows with their history intact, and the migration prints them.
 
 ## Out of scope
 
-- V1: picker grouping of variants, most-used first, and alias search in the client.
+- V1: picker grouping of variants, most-used first.
 - V2: first set without an invented plan.
 - V3: redesign of the settings UI.
 - G3: retiring `SharedSessionExercise`/`matching.py`, and the confirm page redesign.
