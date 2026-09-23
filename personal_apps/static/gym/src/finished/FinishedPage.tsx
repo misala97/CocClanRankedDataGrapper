@@ -382,12 +382,12 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         session.template_id !== null ? (
           templateDiff(payload) !== null && (
             <section className="prompt">
-              Vorlage <b>{session.template_name}</b> mit dieser Übungsliste und Reihenfolge aktualisieren?
+              Routine <b>{session.template_name}</b> mit dieser Übungsliste und Reihenfolge aktualisieren?
               <p className="prompt__diff">{templateDiff(payload)}</p>
               <form method="post" action={`/gym/session/${session.id}/update_template`}>
                 <CsrfField />
                 <button type="submit" className="btn btn--ghost btn--block">
-                  Vorlage aktualisieren
+                  Routine aktualisieren
                 </button>
               </form>
             </section>
@@ -397,7 +397,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
              routine on Start comes from a template and this is the one moment
              you know what you actually did. */
           <section className="prompt">
-            Dieses Workout als Vorlage speichern?
+            Dieses Workout als Routine speichern?
             <form method="post" action={`/gym/session/${session.id}/save_as_template`}>
               <CsrfField />
               {/* template_name, not name: that is what gym_save_as_template
@@ -406,10 +406,10 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                   and redirected having created nothing -- and the redirect is
                   the same one a success produces. */}
               <input type="text" name="template_name" className="input"
-                placeholder="Name der Vorlage" required
-                aria-label="Name der neuen Vorlage" />
+                placeholder="Name der Routine" required
+                aria-label="Name der neuen Routine" />
               <button type="submit" className="btn btn--ghost btn--block">
-                Als Vorlage speichern
+                Als Routine speichern
               </button>
             </form>
           </section>

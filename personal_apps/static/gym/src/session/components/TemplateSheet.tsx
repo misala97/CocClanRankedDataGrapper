@@ -15,13 +15,13 @@ export function TemplateSheet({ onSave }: Props) {
   const [name, setName] = useState('')
 
   return (
-    <Sheet id="sheet-template" title="Als Vorlage speichern" closeLabel="Abbrechen">
+    <Sheet id="sheet-template" title="Als Routine speichern" closeLabel="Abbrechen">
       <form
         className="save-template"
         onSubmit={(e) => { e.preventDefault(); onSave(name) }}
       >
         <div className="field grow">
-          <label className="label" htmlFor="template-name-input">Name der Vorlage</label>
+          <label className="label" htmlFor="template-name-input">Name der Routine</label>
           <input type="text" id="template-name-input" name="template_name"
             className="input" placeholder="z.B. Push Day" required
             value={name} onChange={(e) => setName(e.target.value)} />

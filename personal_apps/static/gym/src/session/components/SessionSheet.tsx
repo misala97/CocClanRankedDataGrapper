@@ -111,7 +111,7 @@ export function SessionSheet({
           onClick={() => openSheet('sheet-template')}>
           <span className="sheet-row__lead"><Icon name="save" /></span>
           <span className="sheet-row__main">
-            <span className="sheet-row__name">Als Vorlage speichern</span>
+            <span className="sheet-row__name">Als Routine speichern</span>
             <span className="sheet-row__meta">Diese Übungsliste als Routine für Start.</span>
           </span>
         </button>

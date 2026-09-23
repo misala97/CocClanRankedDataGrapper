@@ -169,7 +169,7 @@ export function LivePanel({
       <section className="live">
         <h2 className="live__name">Noch keine Übung</h2>
         <p className="live__empty">
-          Füge die erste Übung hinzu — oder starte das nächste Mal aus einer Vorlage.
+          Füge die erste Übung hinzu — sie bleibt danach in deiner Liste.
         </p>
         <button type="button" className="go"
           onClick={() => openSheet('sheet-add-exercise')}>
@@ -320,7 +320,11 @@ export function LivePanel({
         </span>
         {rest.running && (
           <>
+            {/* "Pause" is said: a bare 2:59 inside a button labelled "Satz
+                geschafft" read as anything but the rest. Stacked above the
+                time (gym.css), so it costs no width beside the label. */}
             <span className="go__clock" aria-hidden="true">
+              <span className="go__clock-lbl">Pause</span>
               {`${Math.floor(rest.remaining / 60)}:${String(rest.remaining % 60).padStart(2, '0')}`}
             </span>
             <span className="go__band" aria-hidden="true">

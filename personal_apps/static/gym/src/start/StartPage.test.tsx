@@ -255,7 +255,7 @@ describe('StartPage', () => {
 
   it('points at the catalogue when there are no templates yet', () => {
     mount({ routines: [] })
-    expect(screen.getByText(/Noch keine Vorlagen/)).toBeInTheDocument()
+    expect(screen.getByText(/Noch keine Routinen/)).toBeInTheDocument()
     // Starting without one is still a real path.
     expect(screen.getByRole('button', { name: /Freies Workout/ })).toBeInTheDocument()
   })
@@ -302,7 +302,7 @@ describe('editing a routine in place', () => {
     await user.click(screen.getByRole('button', { name: 'Löschen' }))
 
     // Gone from the page, said in the toast, nothing on the wire yet.
-    expect(screen.getByText(/Noch keine Vorlagen/)).toBeInTheDocument()
+    expect(screen.getByText(/Noch keine Routinen/)).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Routine „Push“ gelöscht.')
     expect(spy).not.toHaveBeenCalled()
 

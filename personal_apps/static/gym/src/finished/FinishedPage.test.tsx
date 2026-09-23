@@ -284,8 +284,8 @@ describe('FinishedPage', () => {
   describe('the template prompt', () => {
     it('offers to save a freeform workout as a template', () => {
       mount({ just_finished: true })
-      expect(screen.getByText('Dieses Workout als Vorlage speichern?')).toBeInTheDocument()
-      const input = screen.getByLabelText('Name der neuen Vorlage')
+      expect(screen.getByText('Dieses Workout als Routine speichern?')).toBeInTheDocument()
+      const input = screen.getByLabelText('Name der neuen Routine')
       // template_name, not name: gym_save_as_template reads the former, and
       // the route redirects identically whether it saved anything or not.
       expect(input).toHaveAttribute('name', 'template_name')
@@ -303,7 +303,7 @@ describe('FinishedPage', () => {
       })
       expect(screen.getByText(/mit dieser Übungsliste und Reihenfolge aktualisieren/))
         .toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Vorlage aktualisieren' }).closest('form'))
+      expect(screen.getByRole('button', { name: 'Routine aktualisieren' }).closest('form'))
         .toHaveAttribute('action', '/gym/session/42/update_template')
     })
 
@@ -346,9 +346,9 @@ describe('FinishedPage', () => {
 
     it('is absent on a later visit and on an empty workout', () => {
       mount()
-      expect(screen.queryByText(/als Vorlage speichern/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/als Routine speichern/)).not.toBeInTheDocument()
       mount({ just_finished: true, total_sets: 0, exercises: [], tick_states: [] })
-      expect(screen.queryByText(/als Vorlage speichern/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/als Routine speichern/)).not.toBeInTheDocument()
     })
   })
 
@@ -407,7 +407,7 @@ describe('saving without a reload', () => {
     expect(screen.getByText('2 × 65 kg')).toBeInTheDocument()
     // ...with the sheet still open and the visit's flag preserved.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByText('Dieses Workout als Vorlage speichern?')).toBeInTheDocument()
+    expect(screen.getByText('Dieses Workout als Routine speichern?')).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 

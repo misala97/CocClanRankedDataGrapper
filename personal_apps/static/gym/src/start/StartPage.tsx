@@ -537,7 +537,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
             <>
               <div className="sec__head"><h2 className="label" id="sec-routinen">Routinen</h2></div>
               <p className="empty">
-                Noch keine Vorlagen. Speichere ein Workout als Vorlage, um es hier zu sehen.
+                Noch keine Routinen. Speichere ein Workout als Routine, um es hier zu sehen.
               </p>
             </>
           )}
@@ -740,9 +740,9 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
               placeholder="z. B. Push Day" />
           </div>
           <div className="field grow">
-            <label className="label" htmlFor="start-template">Vorlage</label>
+            <label className="label" htmlFor="start-template">Routine</label>
             <select id="start-template" name="template_id" className="select">
-              <option value="">— Ohne Vorlage —</option>
+              <option value="">— Ohne Routine —</option>
               {payload.templates.map((t) => (
                 <option value={t.template_id} key={t.template_id}>{t.name}</option>
               ))}

@@ -204,7 +204,7 @@ export function ExerciseSheet({
             <span className="sheet-row__lead"><Icon name="swap" /></span>
             <span className="sheet-row__main">
               <span className="sheet-row__name">Übung ersetzen</span>
-              <span className="sheet-row__meta">Nur für heute — die Vorlage bleibt.</span>
+              <span className="sheet-row__meta">Nur für heute — die Routine bleibt.</span>
             </span>
           </summary>
 

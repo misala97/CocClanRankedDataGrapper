@@ -1987,6 +1987,11 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   font-size: var(--t-sm); font-weight: var(--w-bold);
   font-variant-numeric: tabular-nums;
 }
+/* The word sits ON the countdown, not beside it: beside, it needed 40px the
+   centred label does not leave on a 390px phone. Stacked it costs height the
+   64px button already has, and the clock block keeps the width of "2:59". */
+.go__clock { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.go__clock-lbl { font-size: var(--t-label); font-weight: var(--w-med); }
 
 
 /* The rest hitting zero is the cue to start the next set, and it arrives while
@@ -2678,6 +2683,13 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .exadd__row--new[hidden] { display: none; }
 .exadd__empty { font-size: var(--t-meta); color: var(--unlit); padding: var(--sp-3) 0; }
 .exadd__empty[hidden] { display: none; }
+/* Never display:none -- it is the sheet's live region, and a region that
+   leaves the accessibility tree while empty is not heard when it fills. */
+.exadd__status { margin: var(--sp-2) 0 0; font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--done-ink); }
+.exadd__status:empty { margin: 0; }
+/* "Nochmal hinzufügen?" asks in the attention hue, like every other question
+   the app puts to you. */
+.exadd__row.is-armed .exadd__in { color: var(--stall-ink); }
 
 .correct__name {
   margin: 0; font-family: var(--font-body); font-size: var(--t-sm);

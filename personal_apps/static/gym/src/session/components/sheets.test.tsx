@@ -78,7 +78,7 @@ describe('TemplateSheet', () => {
     render(<TemplateSheet onSave={onSave} />)
     open('sheet-template')
 
-    await user.type(screen.getByLabelText('Name der Vorlage'), 'Push Day')
+    await user.type(screen.getByLabelText('Name der Routine'), 'Push Day')
     await user.click(screen.getByText('Speichern'))
     expect(onSave).toHaveBeenCalledWith('Push Day')
   })
@@ -175,6 +175,48 @@ describe('AddExerciseSheet', () => {
     open('sheet-add-exercise')
     act(() => { useSheets.getState().setAddQuery('Nackenzieher') })
     expect(screen.getByText(/Anlegen:/).closest('button')).toHaveClass('is-busy')
+  })
+
+  it('opens with the cursor in the search field, not on Fertig', () => {
+    render(<AddExerciseSheet {...props} />)
+    open('sheet-add-exercise')
+    expect(screen.getByLabelText('Übung suchen oder anlegen')).toHaveFocus()
+  })
+
+  it('asks before adding a second copy of an exercise already in the workout', async () => {
+    // After "Anlegen: X" the one row left under the thumb was X itself, and
+    // tapping it -- the natural "that one" -- added it twice.
+    const user = userEvent.setup()
+    const onAdd = vi.fn()
+    const inWorkout = [{ ...payload.visible_exercises[0]!, exercise_id: 1, name: 'Bankdrücken' }]
+    render(<AddExerciseSheet {...props} onAdd={onAdd} inSession={inWorkout} />)
+    open('sheet-add-exercise')
+
+    await user.click(screen.getByText('Bankdrücken'))
+    expect(onAdd).not.toHaveBeenCalled()
+    expect(screen.getByText('Nochmal hinzufügen?')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Bankdrücken'))
+    expect(onAdd).toHaveBeenCalledWith(1)
+  })
+
+  it('empties the search and confirms once the add has landed, not before', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<AddExerciseSheet {...props} />)
+    open('sheet-add-exercise')
+    const field = screen.getByLabelText('Übung suchen oder anlegen')
+    await user.type(field, 'Nacken')
+    await user.click(screen.getByText(/Anlegen:/))
+
+    // Still waiting on the server: the name stays for a retry.
+    expect(props.onCreate).toHaveBeenCalledWith('Nacken')
+    expect(field).toHaveValue('Nacken')
+    expect(field).toHaveFocus()
+
+    const landed = [{ ...payload.visible_exercises[0]!, exercise_id: 9, name: 'Nacken' }]
+    rerender(<AddExerciseSheet {...props} inSession={landed} />)
+    expect(field).toHaveValue('')
+    expect(screen.getByRole('status')).toHaveTextContent('✓ Nacken ist drin.')
   })
 
   it('adds without closing, so six exercises is not six round trips', async () => {

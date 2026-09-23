@@ -47,7 +47,14 @@ export function Sheet({
   useEffect(() => {
     const node = dialog.current
     if (node === null) return
-    if (isOpen && !node.open) node.showModal()
+    if (isOpen && !node.open) {
+      node.showModal()
+      // showModal() focuses the first control, which is the dismiss button.
+      // A sheet whose job is one field names it instead. An attribute rather
+      // than React's autoFocus: that one focuses on mount, before showModal()
+      // runs, and the dialog's own focusing step then takes it away again.
+      node.querySelector<HTMLElement>('[data-autofocus]')?.focus()
+    }
     if (!isOpen && node.open) node.close()
   }, [isOpen])
 

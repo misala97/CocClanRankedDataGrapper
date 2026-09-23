@@ -1578,7 +1578,7 @@ def gym_update_set(set_id):
             set_, set_.weight if weight_changed else None, set_.reps if reps_changed else None)
 
     db.session.commit()
-    # request.args carried through: the debrief's "Vorlage aktualisieren" offer
+    # request.args carried through: the debrief's "Routine aktualisieren" offer
     # is gated on ?just_finished, and this redirect dropped it -- so correcting
     # one mistyped set silently destroyed the offer, permanently, with no other
     # route to it. gym_session_summary already does exactly this.
