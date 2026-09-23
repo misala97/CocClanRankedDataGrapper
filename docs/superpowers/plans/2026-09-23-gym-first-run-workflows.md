@@ -56,7 +56,7 @@ stack and secondary groups -- the two creation paths disagree.
 | L1 | THE list: complete exercise library as data (German names, config per entry, EN aliases) + prod mapping + review page | done — owner-approved with edits (rulings below) |
 | G1 | Spec: `library.py` becomes the one read-only exercise list for both lifters; NO custom exercises; per-user overrides of step/rest/stack stops/bar defaulting to the list; stats scoped by user | done — 80a833a spec, 3e81749 cf65778 9141915; shipped in b439e44, deployed 2026-09-23 |
 | G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | done — 812dad8; ran on prod 2026-09-23 (41 -> 41 by mapping, 0 retired) |
-| G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | open — G1 made it work on shared ids; the machinery retires here |
+| G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | done in code — 39bc25c on dev_personal, UNMERGED; migration 4b8e2d6f1a93 drops `gym_shared_session_exercises` on prod, ships only with the owner's OK |
 | V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | open — G1 T4 did the functional part (list-only, `matches` search, no create row); grouping + visual design remain |
 | V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | open |
 | V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | open — G1 T4 cut the form to the four personal fields; the redesign remains |
@@ -166,3 +166,23 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   Dev DB upgrade refused by the permission guard; gym tables copied to
   `personal_apps_gymbak_20260923`. Radar carry noted in radar-selected-price-charts'
   HANDOFF.
+- 2026-09-23 — G3 done in code, 39bc25c (dev_personal, unmerged). `matching.py` +
+  `test_gym_matching.py` deleted; `SharedSessionExercise` model and
+  `sharing.follower_exercise_for` removed; `reconcile_follower` gives a new follower row
+  the leader row's exercise id; accept reads no `match_` answers (a stale page's are
+  ignored) and writes no map rows; the confirm payload's `proposals` became `exercises`
+  (the leader's, in order, each once). Confirm page = one card ending in Mitmachen; the
+  optional routine picker stays (preselect rule unchanged), its disclosure reads
+  "Routine ändern" / "Routine wählen" and is absent without a covering routine; dead CSS
+  (`.confirm__ask`, `.confirm__tick`, the in-card field rules) removed. Migration
+  4b8e2d6f1a93 (down e2c7a9f41b86) drops `gym_shared_session_exercises`, guarded both
+  ways; downgrade recreates it empty with the old FK/unique/index names. On the scratch
+  DB: up, up (no-op), down (shape checked), down (no-op), up; counts unchanged; alembic
+  heads = [4b8e2d6f1a93]. tsc clean, vitest 481 passed, build clean, gym pytest 702
+  passed. Browser check (in-process server on the scratch DB, 390x844, u1 leader -> u4):
+  14/14 — card lists the three exercises, no select or `match_` field without a
+  routine, "Zählt als G3 Brust." + "Routine ändern" with one, Mitmachen lands on the
+  follower session logging the leader's ids in order under that routine. The live
+  session page never fires `load` and headless capture hangs on it (polls sync.json),
+  so that step checks text. Rows the runs made removed (checked). NOT shipped: the
+  migration drops a prod table, so push to main + deploy wait for the owner's OK.

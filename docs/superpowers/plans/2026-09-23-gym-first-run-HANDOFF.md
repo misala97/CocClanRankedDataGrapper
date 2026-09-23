@@ -1,4 +1,4 @@
-# HANDOFF — gym first-run workflows + global exercise list (current state, 2026-09-23)
+# HANDOFF — gym first-run workflows + global exercise list (current state, 2026-09-23, after G3)
 
 Plan + ledger (binding): `docs/superpowers/plans/2026-09-23-gym-first-run-workflows.md`.
 Read its task table, the "Owner rulings on the L1 review" block and the ledger before
@@ -36,10 +36,19 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
    files: `C:\Users\michi\Desktop\CodingStuff-untracked-backup-2026-09-23`, and stash
    c3d92e8 ("85 untracked files main now tracks ...").
 
+## G3: done in code, NOT shipped
+- 39bc25c on dev_personal (docs in the commit after it): joining a partner is one tap.
+  `matching.py`, the `SharedSessionExercise` model and `follower_exercise_for` are gone;
+  follower rows take the leader row's exercise id; the confirm page is one card with an
+  optional routine picker. Ledger entry "G3 done in code" has the checks.
+- Migration `4b8e2d6f1a93` (down `e2c7a9f41b86`) drops `gym_shared_session_exercises`.
+  On prod that is a table drop, so merging to main and deploying need the owner's
+  explicit OK. Tested both ways on the scratch DB; alembic heads = [4b8e2d6f1a93].
+- Shipping it: merge dev_personal into main (main is b439e44; dev_personal is ahead by
+  the docs commit 80c5dcf plus G3), push, `update_coc.sh`. The radar worktree's
+  `3f82a7e5b5dc` then needs `down_revision = '4b8e2d6f1a93'` instead (update its note).
+
 ## Next work
-- G3 (next): shared sessions already log the leader's ids, so retire `matching.py`, the
-  map table and the confirm page's picker -> joining a partner is one tap. Includes a
-  small migration; it ships only with the owner's OK.
 - V1: add-sheet picker that groups variants of one movement, the one you mainly do
   first (G1 did the functional list-only search). Mockup round first.
 - V2: first set of a never-done exercise, no invented plan. Mockup round first.
@@ -63,9 +72,13 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
   - `make_scratch_db.py [name]` copies the dev DB; `run_g1_migration.py` migrates it.
   - `run_g1_tests.py [args]`: no path argument = every `tests/test_gym*.py`.
   - `t3rest.sh -W ignore::DeprecationWarning` = full gym suite, compact (`--tb=no`).
-  - `serve_g1.py` (:5002) + `t5_check.py` = browser checks; `heads_check.py` = alembic
-    heads + which `app` loads; `collide_check.py` = untracked files a ref would overwrite.
-  - The scratch DB `personal_apps_g1` is migrated (`e2c7a9f41b86`) and clean.
+  - `serve_g1.py` (:5002) + `t5_check.py` = browser checks; `g3_check.py` serves the app
+    in-process instead (no separate server) and clears its own leftovers by name;
+    `heads_check.py` = alembic heads + which `app` loads; `collide_check.py` = untracked
+    files a ref would overwrite; `run_g3_migration.py` = G3 migration both ways.
+  - The scratch DB `personal_apps_g1` is at `4b8e2d6f1a93` (G3) and clean.
+  - Headless capture hangs on the live session page (it polls sync.json and never
+    fires `load`): navigate with `wait_until='commit'` and check text there.
 - Frontend, from `personal_apps`: `npx vitest run`, `npx tsc --noEmit`, `npm run build`.
 - Do NOT run `npm run build` while the pytest suite runs: rewriting the vite manifest
   races template rendering (one spurious failure seen, ledger T4).
@@ -86,8 +99,8 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
 
 ## Rules that bind
 - Never commit `.claude/skills/`. Commit only the files you touched, on `dev_personal`.
-- No push or merge to main without the owner's explicit OK. The owner deploys unless he
-  explicitly hands the deploy over.
+- No push or merge to main without the owner's explicit OK. The owner deploys unless the
+  deploy is explicitly handed over.
 - Production DB writes only with an explicit OK.
 - No downloads without asking.
 - No subagents or other quota spend unless Michi names the size.
