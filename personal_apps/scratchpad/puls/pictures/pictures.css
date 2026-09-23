@@ -1,0 +1,57 @@
+/* Pictures mock only -- the app's tokens, nothing else. */
+
+/* live.html shows both lanes from one page: ?lane=klein (default) or ?lane=gross,
+   and ?sheet=1 opens the exercise sheet over it */
+:root:not([data-lane="gross"]) .pic-stage { display: none; }
+:root[data-lane="gross"] .live__title .pic { display: none; }
+:root:not([data-sheet]) .v3-shade, :root:not([data-sheet]) .v3-sheet { display: none; }
+
+/* a picture tile: the art's own background is snapped to --raised, so the tile
+   and the picture read as one surface; the art has a wide margin, so small
+   tiles zoom past it */
+.pic { display: block; flex: none; overflow: hidden; padding: 0; border: 0;
+  border-radius: var(--r-inset); background: var(--raised); }
+.pic img { display: block; inline-size: 100%; block-size: 100%; object-fit: cover; transform: scale(1.15); }
+button.pic, .pic-stage { cursor: zoom-in; }
+.pic--live { inline-size: 72px; block-size: 72px; }
+.pic--row { inline-size: 52px; block-size: 52px; }
+.pic--queue { inline-size: 34px; block-size: 34px; border-radius: 9px; }
+.pic--none { display: grid; place-items: center; color: var(--unlit); }
+.pic--none .icon { inline-size: 42%; block-size: 42%; }
+
+/* lane klein: the tile sits beside the name, costs no height */
+.live__title { display: flex; align-items: center; gap: var(--sp-3); margin-top: 6px; }
+.live__title .live__name { margin-top: 0; }
+
+/* lane gross: a band on top of the card; contain, so standing and lying
+   exercises both fit whole */
+.pic-stage { display: block; inline-size: 100%; block-size: 176px; margin-block-end: var(--sp-3);
+  padding: 0; border: 0; overflow: hidden; border-radius: var(--r-control); background: var(--raised); }
+.pic-stage img { display: block; inline-size: 100%; block-size: 100%; object-fit: contain; transform: scale(1.12); }
+
+/* the exercise sheet opens with the picture at full width */
+.pic-full { aspect-ratio: 1; margin-block: var(--sp-1) var(--sp-2); overflow: hidden;
+  border-radius: var(--r-control); background: var(--raised); }
+.pic-full img { display: block; inline-size: 100%; block-size: 100%; object-fit: contain; }
+
+/* queue rows: the tile replaces the number column */
+.queue__row .row__lead, .queue__add .queue__lead { inline-size: 34px; display: inline-flex; justify-content: center; }
+
+/* list rows: the tile is a fixed column, the name takes the rest */
+.uebungen-row .row__main { flex: 1 1 0; }
+
+/* copied from the V3 mocks: a static page has no top layer, so the sheet is
+   stacked over the app's highest bar */
+.v3-shade { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: calc(var(--z-bar) + 10); }
+.v3-sheet { position: fixed; inset: auto 0 0; margin: 0 auto; z-index: calc(var(--z-bar) + 11);
+  max-block-size: calc(100% - 40px); overflow-y: auto; display: block; opacity: 1; transform: none; }
+.v3-pills { flex-wrap: nowrap; padding-bottom: 0; }
+.v3-pills .pill { flex: 1 1 0; min-inline-size: 0; padding-inline: 0; justify-content: center;
+  flex-direction: column; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.v3-pills .pill small { font-size: var(--t-micro); font-weight: var(--w-semi); margin-block-start: 2px; }
+.v3-std { margin: var(--sp-3) var(--sp-4) 0; padding-inline: var(--sp-4); border-radius: var(--r-control);
+  background: var(--chassis); box-shadow: inset 0 0 0 1px var(--edge); }
+.v3-std .sheet-row { inline-size: calc(100% + var(--sp-4) * 2); }
+.v3-val { flex: none; font-size: var(--t-body); font-weight: var(--w-bold); color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.v3-chev { flex: none; color: var(--dim); }
