@@ -7,7 +7,9 @@ after the list changes (`python gym_exercise_art/make_prompts.py`, from
 
 ## How to do it
 
-Every prompt below comes with its own steps and save path. In short:
+For one-click copying, open `prompts.html` (next to this file) in your browser: every
+save path and prompt has a copy button, and the pictures you have saved show up on
+reload. Every prompt below comes with its own steps and save path. In short:
 
 1. In ChatGPT, attach `reference.webp` (the approved Butterfly) from
    `C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw`

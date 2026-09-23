@@ -7,8 +7,11 @@ dev DB's copy of their logs, 2026-09-23) or, where they log none, the list's fir
 movement added to features/gym/library.py gets its prompt before its picture.
 
 Run from personal_apps:  python gym_exercise_art/make_prompts.py
-It rewrites PROMPTS.md and prints which pictures raw/ still lacks.
+It rewrites PROMPTS.md and prompts.html (the same prompts with copy buttons; it
+finds the saved pictures itself on every reload) and prints which pictures raw/
+still lacks.
 """
+import json
 import os
 import re
 import sys
@@ -731,7 +734,9 @@ after the list changes (`python gym_exercise_art/make_prompts.py`, from
 
 ## How to do it
 
-Every prompt below comes with its own steps and save path. In short:
+For one-click copying, open `prompts.html` (next to this file) in your browser: every
+save path and prompt has a copy button, and the pictures you have saved show up on
+reload. Every prompt below comes with its own steps and save path. In short:
 
 1. In ChatGPT, attach `reference.webp` (the approved Butterfly) from
    `{raw}`
@@ -760,6 +765,190 @@ not quite the same distance from the chest; redo 08 if that bothers you.
 
 | # | Movement | Save as | Picture shows | Saved |
 |---|---|---|---|---|
+"""
+
+
+PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gym exercise pictures</title>
+<style>
+:root { --bg: #F7F2FA; --card: #FFFFFF; --edge: #DACAE3; --ink: #291238; --dim: #634674;
+        --code: #EEE5F3; --go: #C2410C; --on-go: #FFF4EE; --done: #8B3A62; --on-done: #FFF0F6; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #170B20; --card: #22132F; --edge: #3B2A4A; --ink: #F8F1FB; --dim: #C5ACD2;
+          --code: #2D1C3C; --go: #D4551D; --on-go: #FFF4EE; --done: #B0558A; --on-done: #FFF0F6; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+       font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { margin: 0; font-size: 1.5rem; }
+.lede { margin: 2px 0 12px; color: var(--dim); }
+ol { margin: 0 0 16px; padding-left: 1.3em; }
+.bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 16px;
+       padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--edge); }
+.bar label { display: flex; align-items: center; gap: 8px; min-height: 40px; cursor: pointer; }
+.card { margin: 12px 0; padding: 14px 16px; background: var(--card); border: 1px solid var(--edge);
+        border-radius: 12px; }
+.head { display: flex; align-items: center; gap: 12px; }
+.head h2 { margin: 0; font-size: 1.05rem; }
+.num { color: var(--dim); font-variant-numeric: tabular-nums; }
+.shows { margin: 2px 0 0; color: var(--dim); font-size: .9rem; }
+.thumb { display: none; width: 64px; height: 64px; border-radius: 8px; object-fit: cover; }
+.saved .thumb { display: block; }
+.state { margin-left: auto; color: var(--dim); font-size: .85rem; white-space: nowrap; }
+.saved .state { color: var(--done); font-weight: 600; }
+.row { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; }
+.row pre { flex: 1; min-width: 0; margin: 0; padding: 8px 10px; background: var(--code);
+           border-radius: 8px; font: 13px/1.45 ui-monospace, Consolas, monospace;
+           white-space: pre-wrap; overflow-wrap: anywhere; }
+.row .prompt { max-height: 8.8em; overflow: auto; }
+.copy { flex: none; min-width: 112px; min-height: 40px; padding: 0 12px; border: 0;
+        border-radius: 8px; background: var(--go); color: var(--on-go); font: inherit;
+        font-weight: 600; cursor: pointer; }
+.copy.done { background: var(--done); color: var(--on-done); }
+.copy:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.hide-saved .card.saved { display: none; }
+@media (max-width: 560px) { .row { flex-direction: column; } .copy { width: 100%; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gym exercise pictures</h1>
+  <p class="lede">__COUNT__ movements &middot; <span id="saved">0</span> saved. Reload after saving.</p>
+  <ol>
+    <li>In ChatGPT, attach the reference picture and paste the prompt.</li>
+    <li>Check it: the right equipment, both sides even unless one-sided, the orange on the
+        right muscle, no text anywhere.</li>
+    <li>Right-click the picture, "Save image as...", paste the save path into the file name box.</li>
+  </ol>
+  <p class="lede">The boxes show each exercise's own lines; Copy prompt copies the whole prompt,
+    the shared style part included.</p>
+  <section class="card" id="reference">
+    <div class="head"><img class="thumb" alt="" style="display:block" src="raw/reference.webp">
+      <div><h2>Reference picture</h2><p class="shows">Attach it with every prompt.</p></div></div>
+    <div class="row"><pre>__REF__</pre><button class="copy" type="button">Copy path</button></div>
+  </section>
+  <div class="bar"><label><input type="checkbox" id="hide"> Hide saved</label></div>
+  <div id="list"></div>
+</main>
+<script>
+const ITEMS = __DATA__;
+const TYPES = ['png', 'webp', 'jpg', 'jpeg'];
+const list = document.getElementById('list');
+let saved = 0;
+
+// Clipboard API first, then the old execCommand route; if both fail, the text is
+// selected so Ctrl+C still works.
+function copyText(text, button, pre) {
+  const label = button.dataset.label || (button.dataset.label = button.textContent);
+  const show = (message, done) => {
+    button.textContent = message;
+    button.classList.toggle('done', Boolean(done));
+    clearTimeout(button.timer);
+    button.timer = setTimeout(() => {
+      button.textContent = label;
+      button.classList.remove('done');
+    }, 1600);
+  };
+  const fallback = () => {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (error) {}
+    area.remove();
+    if (copied) return show('Copied', true);
+    pre.textContent = text;
+    const range = document.createRange();
+    range.selectNodeContents(pre);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+    show('Press Ctrl+C');
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => show('Copied', true), fallback);
+  } else {
+    fallback();
+  }
+}
+
+function row(shown, label, cls, copied = shown) {
+  const wrap = document.createElement('div');
+  wrap.className = 'row';
+  const pre = document.createElement('pre');
+  if (cls) pre.className = cls;
+  pre.textContent = shown;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'copy';
+  button.textContent = label;
+  button.addEventListener('click', () => copyText(copied, button, pre));
+  wrap.append(pre, button);
+  return wrap;
+}
+
+function findSaved(item, card, thumb, state, index = 0) {
+  if (index >= TYPES.length) return;
+  const probe = new Image();
+  probe.onload = () => {
+    thumb.src = probe.src;
+    card.classList.add('saved');
+    state.textContent = 'saved';
+    document.getElementById('saved').textContent = ++saved;
+  };
+  probe.onerror = () => findSaved(item, card, thumb, state, index + 1);
+  probe.src = `raw/${item.slug}.${TYPES[index]}`;
+}
+
+for (const item of ITEMS) {
+  const card = document.createElement('section');
+  card.className = 'card';
+  const head = document.createElement('div');
+  head.className = 'head';
+  const thumb = document.createElement('img');
+  thumb.className = 'thumb';
+  thumb.alt = '';
+  const title = document.createElement('div');
+  const h2 = document.createElement('h2');
+  h2.innerHTML = `<span class="num">${item.n}</span> `;
+  h2.append(item.move);
+  const shows = document.createElement('p');
+  shows.className = 'shows';
+  shows.textContent = 'Shows ' + item.shows;
+  title.append(h2, shows);
+  const state = document.createElement('span');
+  state.className = 'state';
+  state.textContent = 'to do';
+  head.append(thumb, title, state);
+  card.append(head, row(item.path, 'Copy path'),
+              row(item.brief, 'Copy prompt', 'prompt', item.prompt));
+  list.append(card);
+  findSaved(item, card, thumb, state);
+}
+
+const reference = document.getElementById('reference');
+const referencePath = reference.querySelector('pre');
+reference.querySelector('.copy').addEventListener('click', (event) =>
+  copyText(referencePath.textContent, event.currentTarget, referencePath));
+
+const hide = document.getElementById('hide');
+try { hide.checked = localStorage.getItem('hide-saved') === '1'; } catch (error) {}
+const applyHide = () => document.body.classList.toggle('hide-saved', hide.checked);
+hide.addEventListener('change', () => {
+  applyHide();
+  try { localStorage.setItem('hide-saved', hide.checked ? '1' : '0'); } catch (error) {}
+});
+applyHide();
+</script>
+</body>
+</html>
 """
 
 
@@ -810,6 +999,19 @@ def main():
                 '```text', prompt(s), '```']
     with open(os.path.join(HERE, 'PROMPTS.md'), 'w', encoding='utf-8', newline='\n') as handle:
         handle.write('\n'.join(out) + '\n')
+
+    items = [dict(n=f'{number:02}', move=movement, slug=files[movement],
+                  shows=f'{BY_KEY[SCENES[movement]["key"]].name}: {SCENES[movement]["why"]}',
+                  path=os.path.join(RAW, files[movement] + '.png'), prompt=prompt(SCENES[movement]))
+             for number, movement in enumerate(movements, 1)]
+    for item in items:
+        item['brief'] = item['prompt'].split('\n\n', 1)[1]  # the exercise's own lines
+    data = json.dumps(items, ensure_ascii=False, indent=1).replace('</', '<\\/')
+    page = (PAGE.replace('__COUNT__', str(len(movements)))
+            .replace('__REF__', os.path.join(RAW, 'reference.webp'))
+            .replace('__DATA__', data))
+    with open(os.path.join(HERE, 'prompts.html'), 'w', encoding='utf-8', newline='\n') as handle:
+        handle.write(page)
 
     print(f'{len(have)} of {len(movements)} saved in raw/')
     missing = [files[movement] for movement in movements if movement not in have]
