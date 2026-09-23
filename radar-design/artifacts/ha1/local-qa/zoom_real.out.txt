@@ -1,0 +1,88 @@
+﻿{
+  "port": 5041,
+  "fingerprint": "63e5543d52eff593fa0f3186a41c055481eddd3d53650e488aa7cd394de7b182",
+  "zoom_level_pref": 3.8017840169239308,
+  "runs": {
+    "headless": {
+      "metrics": {
+        "inner": 1440,
+        "outer": 1440,
+        "dpr": 1,
+        "vv": 1,
+        "screen": 1440
+      },
+      "metrics_on_analysis": {
+        "inner": 1440,
+        "outer": 1440,
+        "dpr": 1
+      },
+      "no_overflow": true,
+      "day_selected": true,
+      "small_targets": [
+        {
+          "text": "Find another company",
+          "w": 159,
+          "h": 38
+        },
+        {
+          "text": "Tue 8 Sep",
+          "w": 57,
+          "h": 32
+        },
+        {
+          "text": "Wed 9 Sep",
+          "w": 62,
+          "h": 32
+        },
+        {
+          "text": "Thu 10 Sep",
+          "w": 66,
+          "h": 32
+        },
+        {
+          "text": "Fri 11 Sep",
+          "w": 58,
+          "h": 32
+        },
+        {
+          "text": "Sat 12 Sep",
+          "w": 62,
+          "h": 32
+        },
+        {
+          "text": "Sun 13 Sep",
+          "w": 66,
+          "h": 32
+        },
+        {
+          "text": "Mon 14 Sep",
+          "w": 69,
+          "h": 32
+        }
+      ],
+      "one_day_buttons": 1,
+      "real_zoom_evidence": false,
+      "pass": false
+    },
+    "headed": {
+      "metrics": {
+        "inner": 720,
+        "outer": 1440,
+        "dpr": 2,
+        "vv": 1,
+        "screen": 1920
+      },
+      "metrics_on_analysis": {
+        "inner": 720,
+        "outer": 1440,
+        "dpr": 2
+      },
+      "no_overflow": true,
+      "day_selected": true,
+      "small_targets": [],
+      "one_day_buttons": 1,
+      "real_zoom_evidence": true,
+      "pass": true
+    }
+  }
+}

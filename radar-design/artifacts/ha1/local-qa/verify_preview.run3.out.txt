@@ -1,0 +1,19 @@
+﻿[13:55:36] viewport 1440 started
+[13:56:12] board-quiet window 30/130 s, 0 board request(s) so far
+[13:56:42] board-quiet window 60/130 s, 0 board request(s) so far
+[13:57:12] board-quiet window 90/130 s, 0 board request(s) so far
+[13:57:42] board-quiet window 120/130 s, 0 board request(s) so far
+[13:57:52] board-quiet window 130/130 s, 0 board request(s) so far
+[13:59:07] viewport 1920 started
+[13:59:10] viewport 768 started
+[13:59:14] viewport 390 started
+[13:59:23] viewport 320 started
+network_error_retry: raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("main[aria-label=\"Analysis\"] [role=alert]") to be visible
+
+session_expiry: raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("text=Session expired.") to be visible
+
+timeout_error: no timeout notice

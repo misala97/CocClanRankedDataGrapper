@@ -1,0 +1,565 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import * as api from '../api'
+import { BoardUnavailable } from '../api'
+import * as analysisApi from './analysisApi'
+import { analysis as analysisPayload, resolved } from './analysisFixtures'
+import { payload, row } from '../fixtures'
+import { Hub } from './Hub'
+
+const initial = payload()
+
+function mount(props: Partial<Parameters<typeof Hub>[0]> = {}) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={client}>
+      <Hub initial={initial} isAdmin={false} {...props} />
+    </QueryClientProvider>,
+  )
+}
+
+/** Human chatter opens on the workspace. These tests are about the
+ *  comparison table, which is one press away and shares its rows, filters
+ *  and ordering with it -- so they ask for it rather than asserting the
+ *  workspace is not there. */
+async function toTable() {
+  await userEvent.click(screen.getByRole('button', { name: 'Table' }))
+}
+
+beforeEach(() => {
+  window.history.replaceState(null, '', '/radar/hub/')
+})
+
+afterEach(() => {
+  window.history.replaceState(null, '', '/radar/hub/')
+  // Each test's spies are its own. Without this a spy outlived its test, and
+  // the requests one test made were read back as another test's first.
+  vi.restoreAllMocks()
+})
+
+describe('the shell', () => {
+  it('opens on the overview', () => {
+    mount()
+    expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+    expect(screen.getByRole('link', { name: 'Overview' }))
+      .toHaveAttribute('aria-current', 'page')
+  })
+
+  it('offers only destinations this release renders', () => {
+    mount()
+    const nav = screen.getByRole('navigation', { name: 'Radar' })
+    const labels = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent)
+    expect(labels).toEqual(['Overview', 'Human Chatter', 'Analysis', 'Watching', 'Activity', 'Legacy Radar'])
+    // The prototype's other pages are roadmap, not disabled nav items.
+    for (const absent of ['News', 'Portfolio', 'Combined']) {
+      expect(screen.queryByRole('link', { name: new RegExp(absent, 'i') }))
+        .not.toBeInTheDocument()
+    }
+  })
+
+  it('shows Administration to an admin and to nobody else', () => {
+    const plain = mount()
+    expect(screen.queryByRole('link', { name: 'Administration' }))
+      .not.toBeInTheDocument()
+    plain.unmount()
+
+    mount({ isAdmin: true })
+    expect(screen.getByRole('link', { name: 'Administration' })).toBeVisible()
+  })
+
+  it('opens the page named in the address bar', () => {
+    window.history.replaceState(null, '', '/radar/hub/#watching')
+    mount()
+    expect(screen.getByRole('main')).toHaveAccessibleName('Watching')
+  })
+
+  it('opens a direct research link', () => {
+    window.history.replaceState(null, '', '/radar/hub/#research/AAA')
+    mount()
+    expect(screen.getByRole('main')).toHaveAccessibleName('AAA')
+  })
+
+  it('offers a way back from an address that does not exist', async () => {
+    window.history.replaceState(null, '', '/radar/hub/#portfolio')
+    mount()
+    expect(screen.getByText(/nothing at this address/i)).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: /overview/i }))
+    expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+  })
+
+  it('restores the page on Back', async () => {
+    mount()
+    await userEvent.click(screen.getByRole('link', { name: 'Activity' }))
+    expect(screen.getByRole('main')).toHaveAccessibleName('Activity')
+    expect(window.location.hash).toBe('#activity')
+
+    // jsdom dispatches popstate asynchronously, so this waits for the
+    // listener under test rather than for a render.
+    window.history.back()
+    await waitFor(() => {
+      expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+    })
+  })
+
+  it('carries the reader’s filters through every link', () => {
+    window.history.replaceState(null, '', '/radar/hub/?sources=bluesky&window=24#overview')
+    mount()
+    const link = screen.getByRole('link', { name: 'Human Chatter' })
+    expect(link.getAttribute('href')).toContain('sources=bluesky')
+    expect(link.getAttribute('href')).toContain('window=24')
+    expect(link.getAttribute('href')).not.toContain('market=')
+  })
+
+  it('leaves a modified click to the browser', () => {
+    mount()
+    const link = screen.getByRole('link', { name: 'Activity' })
+    // A ctrl-click is "open this in a new tab", which preventDefault would
+    // silently break -- and these are real hrefs precisely so it works.
+    // fireEvent, not userEvent: the modifier is the whole subject here, and
+    // it has to arrive on the click event the handler reads.
+    //
+    // The document listener is what makes this test safe to run beside
+    // others. It sees the event after the component's handler, so
+    // defaultPrevented is the component's own answer -- and then it stops the
+    // default itself, because letting a real href through makes jsdom attempt
+    // a navigation it cannot perform. That throws asynchronously, on a timer,
+    // long after this test has finished, and lands on whichever test happens
+    // to be running: the suite failed roughly one run in six, on a different
+    // test each time.
+    const prevented: boolean[] = []
+    const swallow = (event: MouseEvent) => {
+      prevented.push(event.defaultPrevented)
+      event.preventDefault()
+    }
+    document.addEventListener('click', swallow)
+    try {
+      fireEvent.click(link, { ctrlKey: true })
+    } finally {
+      document.removeEventListener('click', swallow)
+    }
+    expect(prevented).toEqual([false])
+    expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+  })
+
+  it('has a labelled, keyboard-reachable menu toggle', async () => {
+    const { container } = mount()
+    // Found through the DOM rather than by role: the toggle is display:none
+    // above 700px, this environment applies the stylesheet but not the media
+    // query, and an element hidden that way has no accessible name to query
+    // by. Its label and wiring are asserted directly instead; what is under
+    // test is the control, not the breakpoint.
+    const menu = container.querySelector<HTMLButtonElement>('.rh-menu')!
+    expect(menu.getAttribute('aria-label')).toBe('Navigation')
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
+    expect(menu).toHaveAttribute('aria-controls', 'rh-nav')
+    expect(container.querySelector('#rh-nav')).not.toBeNull()
+
+    menu.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(menu).toHaveAttribute('aria-expanded', 'true')
+    expect(container.querySelector('.rh-nav')).toHaveClass('open')
+  })
+
+  it('names the market context it is showing', () => {
+    const { container } = mount()
+    // In the top bar specifically: the page below it names the market too,
+    // and this is about the shell's own standing context line.
+    expect(container.querySelector('.rh-session')?.textContent)
+      .toMatch(/US markets/)
+  })
+
+  it('offers a skip link that moves focus and keeps the page', async () => {
+    mount()
+    const skip = screen.getByRole('link', { name: /skip to the page/i })
+    expect(skip).toHaveAttribute('href', '#rh-main')
+
+    // Clicking it used to set the hash to an element id, which the router
+    // read as a route name -- so the first control a keyboard reader met
+    // replaced the page with "there is nothing at this address".
+    await userEvent.click(skip)
+    expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+    expect(screen.queryByText(/nothing at this address/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('main')).toHaveFocus()
+  })
+
+  it('ignores an in-page anchor arriving as a hash change', () => {
+    mount()
+    window.location.hash = '#rh-main'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(screen.getByRole('main')).toHaveAccessibleName('Overview')
+  })
+
+  it('refuses the admin page to a reader who is not one', () => {
+    // The nav link is rendered for admins only, but a typed hash is not a
+    // link. The API enforces this too; saying so is the difference between a
+    // refusal and an empty page.
+    window.history.replaceState(null, '', '/radar/hub/#admin')
+    mount({ isAdmin: false })
+    expect(screen.getByText(/is for administrators/i)).toBeVisible()
+  })
+
+  it('lets an admin open the admin page', async () => {
+    vi.spyOn(api, 'fetchOps').mockResolvedValue({
+      generated_at: '2026-09-09T10:00:00Z',
+      spend: { today_usd: 0, month_usd: 1.25, unpriced_tokens: 0 },
+      sentiment: { pending: 0, p95_age_minutes: null,
+                   review: { demanded: 0, attempted: 0, served: 0, capped: 0,
+                             over_ceiling: 0 } },
+      market_data: {
+        quote_basis_24h: {},
+        grouped_closes: { latest_accepted_date: null, retryable_gaps: [],
+                          counts: null, error_code: null, http_status: null,
+                          backoff_until: null },
+        post_close_claims: {},
+      },
+      capture: { latest_observed_at: null },
+    })
+    window.history.replaceState(null, '', '/radar/hub/#admin')
+    mount({ isAdmin: true })
+    // The page itself, not merely the absence of the refusal -- which is also
+    // true while nothing has rendered.
+    expect(await screen.findByText(/model API spend/i)).toBeVisible()
+    expect(screen.queryByText(/is for administrators/i)).not.toBeInTheDocument()
+  })
+
+  it('writes one mark at a time, across pages as well as within one', async () => {
+    // The guard lives in the shell precisely so leaving Watching mid-write and
+    // pressing Watch on a company cannot put two writes in flight.
+    const p = payload({ rows: [row({ ticker: 'AAA' })] })
+    p.watching = ['AAA']
+    p.watch_rows = [row({ ticker: 'AAA' })]
+    const setWatch = vi.spyOn(api, 'setWatch')
+      .mockReturnValue(new Promise(() => {}))
+
+    window.history.replaceState(null, '', '/radar/hub/#watching')
+    mount({ initial: p })
+
+    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
+    expect(setWatch).toHaveBeenCalledTimes(1)
+
+    // Still in flight; the control is refused rather than queued.
+    await userEvent.click(screen.getByRole('button', { name: /removing/i }))
+    expect(setWatch).toHaveBeenCalledTimes(1)
+  })
+
+  it('frees the mark once a write the reader walked away from lands', async () => {
+    // Leaving the page resets the write's refusal, which detaches the write
+    // from the page -- and react-query then drops what the page asked to be
+    // told when it settled. The write settling is what frees the next mark.
+    const marked = (tickers: string[]) => {
+      const p = payload({ rows: [row({ ticker: 'AAA' }), row({ ticker: 'BBB' })] })
+      p.watching = tickers
+      p.watch_rows = tickers.map((ticker) => row({ ticker }))
+      return p
+    }
+    let land!: (watching: string[]) => void
+    vi.spyOn(api, 'setWatch')
+      .mockReturnValue(new Promise((resolve) => { land = resolve }))
+    vi.spyOn(api, 'fetchBoard').mockResolvedValue(marked(['BBB']))
+
+    window.history.replaceState(null, '', '/radar/hub/#watching')
+    mount({ initial: marked(['AAA', 'BBB']) })
+    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
+    await userEvent.click(screen.getByRole('link', { name: 'Human Chatter' }))
+
+    await act(async () => {
+      land(['BBB'])
+      await new Promise((resolve) => { setTimeout(resolve, 0) })
+    })
+    await userEvent.click(screen.getByRole('link', { name: 'Watching' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /stop watching BBB/i }))
+        .toBeEnabled()
+    })
+  })
+
+  it('never fetches a board of feeds the reader did not pick', async () => {
+    // The level Codex named: Filters reports a selection, the shell turns it
+    // into a request. With the defect, unchecking the only feed asked the
+    // server for the OTHER two -- so this asserts on the request, not on the
+    // callback.
+    const onlyReddit = payload({ sources: ['reddit'] })
+    const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(onlyReddit)
+
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: onlyReddit })
+
+    // In the rail every server-side filter is behind one disclosure; the
+    // feeds are the same checkboxes wired to the same reducer.
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
+    await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
+
+    for (const call of fetchBoard.mock.calls) {
+      expect(call[0]!.sources).toEqual(['reddit'])
+    }
+    expect(window.location.search).not.toContain('bluesky')
+    expect(window.location.search).not.toContain('fourchan')
+  })
+
+  it('does fetch when a feed selection really changes', async () => {
+    // The positive control: without it the test above passes against a hub
+    // whose checkboxes are wired to nothing at all.
+    const both = payload({ sources: ['bluesky', 'reddit'] })
+    const fetchBoard = vi.spyOn(api, 'fetchBoard')
+      .mockResolvedValue(payload({ sources: ['bluesky'] }))
+
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: both })
+
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
+    await userEvent.click(screen.getByRole('checkbox', { name: /reddit/i }))
+    await waitFor(() => expect(fetchBoard.mock.calls.some(
+      ([asked]) => asked?.sources.length === 1 && asked.sources[0] === 'bluesky',
+    )).toBe(true))
+  })
+
+  it('does not carry a failed mark to the next page', async () => {
+    const p = payload({ rows: [row({ ticker: 'AAA' })] })
+    p.watching = ['AAA']
+    p.watch_rows = [row({ ticker: 'AAA' })]
+    vi.spyOn(api, 'setWatch').mockRejectedValue(new BoardUnavailable('server'))
+
+    window.history.replaceState(null, '', '/radar/hub/#watching')
+    mount({ initial: p })
+    await userEvent.click(screen.getByRole('button', { name: /stop watching AAA/i }))
+    expect(await screen.findByText(/could not be saved/i)).toBeVisible()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Human Chatter' }))
+    await waitFor(() => {
+      expect(screen.queryByText(/could not be saved/i)).not.toBeInTheDocument()
+    })
+  })
+
+  it('closes the menu on Escape and returns focus to its toggle', async () => {
+    const { container } = mount()
+    const menu = container.querySelector<HTMLButtonElement>('.rh-menu')!
+    menu.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(menu).toHaveAttribute('aria-expanded', 'true')
+
+    await userEvent.keyboard('{Escape}')
+    expect(menu).toHaveAttribute('aria-expanded', 'false')
+    expect(menu).toHaveFocus()
+  })
+})
+
+describe('the reader’s ordering of the chatter list', () => {
+  const board = payload({ rows: [
+    row({ ticker: 'MID', authors: 5 }),
+    row({ ticker: 'TOP', authors: 10 }),
+    row({ ticker: 'LOW', authors: 2 }),
+  ] })
+
+  const listed = () =>
+    screen.getAllByTestId('rh-row-ticker').map((el) => el.textContent)
+
+  it('requests the chatter selection instead of seeding a legacy bootstrap',
+    async () => {
+      const chatter = payload({ sort: 'chatter', dir: 'desc' })
+      const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(chatter)
+      window.history.replaceState(null, '', '/radar/hub/#chatter')
+      mount({ initial: board })
+
+      await waitFor(() => expect(fetchBoard).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'chatter', dir: 'desc' }),
+        expect.anything(), expect.anything(),
+      ))
+    })
+
+  it('sorts without asking the server for anything', async () => {
+    // Sorting is a view over the rows already here. A request would be a
+    // different board, and could quietly change which companies are listed.
+    const fetchBoard = vi.spyOn(api, 'fetchBoard').mockResolvedValue(board)
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: board })
+    await toTable()
+    await screen.findByTestId('rh-sort-voices')
+    const before = fetchBoard.mock.calls.length
+
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+
+    expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+    expect(fetchBoard.mock.calls.length).toBe(before)
+    expect(window.location.search).not.toContain('sort')
+  })
+
+  it('still has the reader’s ordering after a company and Back', async () => {
+    vi.spyOn(api, 'fetchBoard').mockResolvedValue(board)
+    vi.spyOn(api, 'fetchDetail').mockRejectedValue(new BoardUnavailable('server'))
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: board })
+    await toTable()
+    await screen.findByTestId('rh-sort-voices')
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+    expect(listed()).toEqual(['TOP', 'MID', 'LOW'])
+
+    // Opening from the table hands the company to the workspace, which is
+    // where one is readable. Chatter stays mounted, but the table does not --
+    // and the ordering has to survive that either way.
+    await userEvent.click(screen.getByRole('button', { name: /^TOP/ }))
+    await waitFor(() => expect(window.location.hash).toBe('#chatter/TOP'))
+    window.history.back()
+    // Back lands on the entry the reader arrived on, which the workspace's
+    // opening selection REPLACED rather than pushed -- so it still names the
+    // first candidate of the unsorted response, not a bare `#chatter`. That
+    // is the point of the replace: one press of Back leaves the hub.
+    await waitFor(() => expect(window.location.hash).toBe('#chatter/MID'))
+
+    await toTable()
+    await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
+    expect(screen.getByRole('columnheader', { name: 'Voices' }))
+      .toHaveAttribute('aria-sort', 'descending')
+  })
+
+  it('keeps the ordering when a server filter changes the board', async () => {
+    const reordered = payload({ rows: [
+      row({ ticker: 'LOW', authors: 2 }),
+      row({ ticker: 'TOP', authors: 10 }),
+      row({ ticker: 'MID', authors: 5 }),
+    ] })
+    vi.spyOn(api, 'fetchBoard').mockResolvedValue(reordered)
+    window.history.replaceState(null, '', '/radar/hub/#chatter')
+    mount({ initial: board })
+    await toTable()
+    await screen.findByTestId('rh-sort-voices')
+    await userEvent.click(screen.getByTestId('rh-sort-voices'))
+
+    await userEvent.selectOptions(screen.getByLabelText(/window/i), '1')
+
+    // The new response arrives in a different order; the reader's sort is
+    // applied to it rather than to a stale copy of the old one.
+    await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
+  })
+
+  it('resets to whichever response is current, not the one that was sorted',
+    async () => {
+      const reordered = payload({ rows: [
+        row({ ticker: 'LOW', authors: 2 }),
+        row({ ticker: 'TOP', authors: 10 }),
+        row({ ticker: 'MID', authors: 5 }),
+      ] })
+      vi.spyOn(api, 'fetchBoard').mockResolvedValue(reordered)
+      window.history.replaceState(null, '', '/radar/hub/#chatter')
+      mount({ initial: board })
+      await toTable()
+      await screen.findByTestId('rh-sort-voices')
+      await userEvent.click(screen.getByTestId('rh-sort-voices'))
+      await userEvent.selectOptions(screen.getByLabelText(/window/i), '1')
+      await waitFor(() => expect(listed()).toEqual(['TOP', 'MID', 'LOW']))
+
+      await userEvent.click(screen.getByRole('button', { name: /unusual activity/i }))
+
+      expect(listed()).toEqual(['LOW', 'TOP', 'MID'])
+    })
+})
+
+describe('the Analysis destination (HA1, C12/C15)', () => {
+  it('is in the nav, opens empty and never asks the board for anything', async () => {
+    const boards = vi.spyOn(api, 'fetchBoard')
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      mount()
+      await userEvent.click(screen.getByRole('link', { name: 'Analysis' }))
+      expect(screen.getByRole('main')).toHaveAccessibleName('Analysis')
+      expect(window.location.hash).toBe('#analysis')
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Explore')
+      // The top bar names the explicit scope, not the board's market session.
+      expect(screen.getByRole('banner')).toHaveTextContent('US primary · USD · retrospective')
+      await vi.advanceTimersByTimeAsync(130_000)
+      expect(boards).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens a search hit on Analysis as an Analysis ticker link', async () => {
+    vi.spyOn(api, 'fetchSearch').mockResolvedValue([
+      { ticker: 'AAA', name: 'Aaa Corp', exchange: 'N', segment: 'large', watching: false },
+    ])
+    vi.spyOn(analysisApi, 'fetchAnalysisResolve').mockResolvedValue(resolved())
+    vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '', '/radar/hub/?sources=bluesky&window=24#overview')
+    mount()
+    await userEvent.click(screen.getByRole('link', { name: 'Analysis' }))
+    expect(window.location.hash).toBe('#analysis')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Find a company' }), 'AAA')
+    const option = await screen.findByRole('option', { name: /AAA/ })
+    await userEvent.click(within(option).getByRole('button'))
+    // Resolved and REPLACED with the canonical pinned link plus explicit
+    // dates; the board context stays in the query beside them.
+    await waitFor(() => expect(window.location.hash).toBe('#analysis/AAA/11/7'))
+    expect(window.location.search).toContain('analysis_from=')
+    expect(window.location.search).toContain('sources=bluesky')
+    expect(window.location.search).toContain('window=24')
+    await screen.findByRole('group', { name: 'Select a day' })
+    expect(screen.getByText(/US primary · USD · all retained sources/)).toBeInTheDocument()
+    // Back returns to the unresolved Analysis entry (the pin was a replace,
+    // not a push), then to the page the reader came from with its board
+    // context intact; the analysis keys are gone from the address.
+    window.history.back()
+    await waitFor(() => expect(window.location.hash).toBe('#analysis'))
+    window.history.back()
+    await waitFor(() => expect(screen.getByRole('main')).toHaveAccessibleName('Overview'))
+    expect(window.location.search).not.toContain('analysis_from')
+    expect(window.location.search).toContain('sources=bluesky')
+  })
+
+  it('restores a canonical link with explicit dates on refresh', async () => {
+    const read = vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '',
+      '/radar/hub/?market=us&analysis_from=2026-09-07&analysis_to=2026-09-13#analysis/AAA/11/7')
+    mount()
+    await screen.findByRole('group', { name: 'Select a day' })
+    expect(read).toHaveBeenCalledWith(11, 7, { from: '2026-09-07', to: '2026-09-13' }, expect.anything())
+  })
+
+  it('keeps malformed address dates through ticker resolution and never fetches a guessed window (P2-2)', async () => {
+    vi.spyOn(analysisApi, 'fetchAnalysisResolve').mockResolvedValue(resolved())
+    const read = vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '',
+      '/radar/hub/?market=us&analysis_from=2026-13-07&analysis_to=2026-09-13#analysis/AAA')
+    mount()
+    // Pinned by replace, with the address's own strings still in it.
+    await waitFor(() => expect(window.location.hash).toBe('#analysis/AAA/11/7'))
+    expect(window.location.search).toContain('analysis_from=2026-13-07')
+    expect(window.location.search).toContain('analysis_to=2026-09-13')
+    expect(await screen.findByText(/Asked for “2026-13-07” to “2026-09-13”/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/From \(UTC day\)/)).toHaveValue('2026-13-07')
+    expect(screen.getByText('No window to show.')).toBeInTheDocument()
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('shows malformed dates on a pinned link and fetches nothing', async () => {
+    const read = vi.spyOn(analysisApi, 'fetchAnalysis').mockResolvedValue(analysisPayload())
+    window.history.replaceState(null, '',
+      '/radar/hub/?analysis_from=2026-09-07&analysis_to=not-a-day#analysis/AAA/11/7')
+    mount()
+    expect(await screen.findByText(/Asked for “2026-09-07” to “not-a-day”/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/To \(UTC day\)/)).toHaveValue('not-a-day')
+    expect(window.location.search).toContain('analysis_to=not-a-day')
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  it('keeps legacy root bookmarks and invalid hashes exactly as before', () => {
+    window.history.replaceState(null, '', '/radar/?t=AAA#analysis/BBB')
+    mount()
+    // A real hub hash wins over the legacy t, Analysis included.
+    expect(screen.getByRole('main')).toHaveAccessibleName('Analysis')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Explore · BBB')
+  })
+
+  it('shows the signed-out state when an Analysis read reports an expired session', async () => {
+    vi.spyOn(analysisApi, 'fetchAnalysis').mockRejectedValue(new analysisApi.AnalysisUnavailable('session'))
+    window.history.replaceState(null, '', '/radar/hub/#analysis/AAA/11/7')
+    mount()
+    await screen.findByText('Session expired.')
+    expect(screen.queryByRole('group', { name: 'Select a day' })).not.toBeInTheDocument()
+  })
+})

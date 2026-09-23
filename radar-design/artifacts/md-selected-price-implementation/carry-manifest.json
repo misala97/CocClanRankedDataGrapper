@@ -1,0 +1,173 @@
+{
+  "assignment": "MD-SELECTED-PRICE-IMPLEMENT-1",
+  "recorded_at_utc": "2026-09-15T14:32:02+00:00",
+  "source": "C:\\Users\\michi\\Desktop\\CodingStuff\\.worktrees\\radar-ha1-us-daily-explore",
+  "source_head": "daadf3868caedcb5db858378e919cba68b735f8a",
+  "candidate": "C:\\Users\\michi\\Desktop\\CodingStuff\\.worktrees\\radar-selected-price-charts",
+  "note": "Snapshot taken after copy and before any candidate notice/ledger edits. Candidate HANDOFF.md and MD-SELECTED-PRICE-LEDGER.md are expected to differ later.",
+  "count": 23,
+  "all_match": true,
+  "files": [
+    {
+      "path": "HANDOFF.md",
+      "source_sha256": "97d8340e6566cf8cb454a1cc698e0aebc4f326cd129ef580c614a110b89575cc",
+      "candidate_sha256": "97d8340e6566cf8cb454a1cc698e0aebc4f326cd129ef580c614a110b89575cc",
+      "bytes": 61895,
+      "match": true
+    },
+    {
+      "path": "radar-design/HANDOFF.md",
+      "source_sha256": "df47714b62fd8b1f72b51100da276817c98cefb82b7f1e98c25ee390f88e776f",
+      "candidate_sha256": "df47714b62fd8b1f72b51100da276817c98cefb82b7f1e98c25ee390f88e776f",
+      "bytes": 98595,
+      "match": true
+    },
+    {
+      "path": "radar-design/WORKFLOW.md",
+      "source_sha256": "6526b11e806a03767c241020aedc54acf4857a3c487c27d17ea059da9c1ba028",
+      "candidate_sha256": "6526b11e806a03767c241020aedc54acf4857a3c487c27d17ea059da9c1ba028",
+      "bytes": 8449,
+      "match": true
+    },
+    {
+      "path": "radar-design/MASTERMIND-STATE.md",
+      "source_sha256": "7c6aeac38cfbc2fb204aafbfa82cc1b63c676fd3b0a4337effc8793ea838b3d9",
+      "candidate_sha256": "7c6aeac38cfbc2fb204aafbfa82cc1b63c676fd3b0a4337effc8793ea838b3d9",
+      "bytes": 31817,
+      "match": true
+    },
+    {
+      "path": "radar-design/ASSIGNMENTS.md",
+      "source_sha256": "78725c6b4ff110ad792a0e0f9b1079dad2f693a7a2201c971f061adf6de6d3cb",
+      "candidate_sha256": "78725c6b4ff110ad792a0e0f9b1079dad2f693a7a2201c971f061adf6de6d3cb",
+      "bytes": 27228,
+      "match": true
+    },
+    {
+      "path": "radar-design/ROADMAP.md",
+      "source_sha256": "16914347d37ed550f631bc3ecc713c91d2778899ba8da75a330dfd5b195bfdd8",
+      "candidate_sha256": "16914347d37ed550f631bc3ecc713c91d2778899ba8da75a330dfd5b195bfdd8",
+      "bytes": 57435,
+      "match": true
+    },
+    {
+      "path": "radar-design/MARKET-DATA-ROADMAP.md",
+      "source_sha256": "c5c999487dee2dd49e2d3661d5bd63035c366861a3c01c51a9933bf3dc916d01",
+      "candidate_sha256": "c5c999487dee2dd49e2d3661d5bd63035c366861a3c01c51a9933bf3dc916d01",
+      "bytes": 8189,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-01C-RULING.md",
+      "source_sha256": "b3a0faf7c1d6eb6d4dd327cda5e8d8b73ed8d2619bd11955338a182e2847a331",
+      "candidate_sha256": "b3a0faf7c1d6eb6d4dd327cda5e8d8b73ed8d2619bd11955338a182e2847a331",
+      "bytes": 4916,
+      "match": true
+    },
+    {
+      "path": "radar-design/HA1-US-DAILY-EXPLORE-RELEASE-CLOSURE.md",
+      "source_sha256": "3e0b0667f656c30a09821f911da8cb69b1dc3e68eb0230237833db95a8ac4cf7",
+      "candidate_sha256": "3e0b0667f656c30a09821f911da8cb69b1dc3e68eb0230237833db95a8ac4cf7",
+      "bytes": 2055,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-SELECTED-PRICE-BRIEF.md",
+      "source_sha256": "099f2fd5ef95e2714a918b8aea64f07216b9874a8be8e4deaa6b306f275444b1",
+      "candidate_sha256": "099f2fd5ef95e2714a918b8aea64f07216b9874a8be8e4deaa6b306f275444b1",
+      "bytes": 9680,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-SELECTED-PRICE-EVIDENCE-1-RETURN.md",
+      "source_sha256": "f34b3062b3552c18e4ac68a3253acf274389321600fd6f307f8a65b2fdebdd78",
+      "candidate_sha256": "f34b3062b3552c18e4ac68a3253acf274389321600fd6f307f8a65b2fdebdd78",
+      "bytes": 41261,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-SELECTED-PRICE-EVIDENCE-1-RULING.md",
+      "source_sha256": "8392623d51f188e6f7a03953236c047827c2da9356f0d1c6475fb93359a3b16d",
+      "candidate_sha256": "8392623d51f188e6f7a03953236c047827c2da9356f0d1c6475fb93359a3b16d",
+      "bytes": 9317,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-SELECTED-PRICE-SPEC.md",
+      "source_sha256": "f5ce74ceaa3d6062a00d7763d69e7ca8581f77244a6e387c13f8159fc1a2e9c6",
+      "candidate_sha256": "f5ce74ceaa3d6062a00d7763d69e7ca8581f77244a6e387c13f8159fc1a2e9c6",
+      "bytes": 21587,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-SELECTED-PRICE-PLAN.md",
+      "source_sha256": "b2057e85e3e648f1b818ca8cf5269ce564f33bee7f46ec1bdf92d67d371a221a",
+      "candidate_sha256": "b2057e85e3e648f1b818ca8cf5269ce564f33bee7f46ec1bdf92d67d371a221a",
+      "bytes": 18001,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-SELECTED-PRICE-IMPLEMENT-1-PROMPT.md",
+      "source_sha256": "24fce5ec96aba68e627fb7b3b0549432b0aeac70c73813d27ffccbbc8c04a3bb",
+      "candidate_sha256": "24fce5ec96aba68e627fb7b3b0549432b0aeac70c73813d27ffccbbc8c04a3bb",
+      "bytes": 6866,
+      "match": true
+    },
+    {
+      "path": "radar-design/MD-SELECTED-PRICE-LEDGER.md",
+      "source_sha256": "57e5584aa66cfcf2d4894eaaef10f1be8c0a205cfffd12490e81f43a52ba9859",
+      "candidate_sha256": "57e5584aa66cfcf2d4894eaaef10f1be8c0a205cfffd12490e81f43a52ba9859",
+      "bytes": 2229,
+      "match": true
+    },
+    {
+      "path": "docs/superpowers/specs/2026-09-10-radar-openterminal-comparison-REVIEW.md",
+      "source_sha256": "808a55642fe644af741a53c1352b8cc2c168bfaaa33ef8de41ce9fa48fe6de0c",
+      "candidate_sha256": "808a55642fe644af741a53c1352b8cc2c168bfaaa33ef8de41ce9fa48fe6de0c",
+      "bytes": 20992,
+      "match": true
+    },
+    {
+      "path": "radar-design/artifacts/md-selected-price/README.md",
+      "source_sha256": "fd0534bd78ebf33a2b48bd309c27b105424735107d376df88b295cc3d4ea8965",
+      "candidate_sha256": "fd0534bd78ebf33a2b48bd309c27b105424735107d376df88b295cc3d4ea8965",
+      "bytes": 1330,
+      "match": true
+    },
+    {
+      "path": "radar-design/artifacts/md-selected-price/probe_selected_price.py",
+      "source_sha256": "59e442c428fdf1c511f1baddbdfa54af7c707bfd22502def6340359481ec3e44",
+      "candidate_sha256": "59e442c428fdf1c511f1baddbdfa54af7c707bfd22502def6340359481ec3e44",
+      "bytes": 15194,
+      "match": true
+    },
+    {
+      "path": "radar-design/artifacts/md-selected-price/probe_supplement.py",
+      "source_sha256": "98634d8a056fd4a8c90d3fd0299f4c4b53b215dc22da2475aeb6ffbbcd8dbc1a",
+      "candidate_sha256": "98634d8a056fd4a8c90d3fd0299f4c4b53b215dc22da2475aeb6ffbbcd8dbc1a",
+      "bytes": 3356,
+      "match": true
+    },
+    {
+      "path": "radar-design/artifacts/md-selected-price/probe_summary.json",
+      "source_sha256": "d26ca50d71ba7bcd3c22b2d5033cf7571b8fcdf68f4aa3b7452dae17229c011c",
+      "candidate_sha256": "d26ca50d71ba7bcd3c22b2d5033cf7571b8fcdf68f4aa3b7452dae17229c011c",
+      "bytes": 91618,
+      "match": true
+    },
+    {
+      "path": "radar-design/artifacts/md-selected-price/probe_supplement.json",
+      "source_sha256": "537b87dc32cd571c006ec5c90ec3e4e296b527b2f1ff1e46c5c984ffd7f55950",
+      "candidate_sha256": "537b87dc32cd571c006ec5c90ec3e4e296b527b2f1ff1e46c5c984ffd7f55950",
+      "bytes": 4279,
+      "match": true
+    },
+    {
+      "path": "radar-design/artifacts/md-selected-price/probe_raw_points.json",
+      "source_sha256": "44a27c917c7a14dccab775ecd0121ad06b11e3305d63495a48ebfeab22815aac",
+      "candidate_sha256": "44a27c917c7a14dccab775ecd0121ad06b11e3305d63495a48ebfeab22815aac",
+      "bytes": 290937,
+      "match": true
+    }
+  ]
+}

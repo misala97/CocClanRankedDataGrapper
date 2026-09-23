@@ -1,0 +1,1184 @@
+{
+  "real-1440": {
+    "tableWidth": 1096,
+    "head": [
+      {
+        "label": "Company",
+        "width": 409
+      },
+      {
+        "label": "Attention",
+        "width": 115
+      },
+      {
+        "label": "Voices",
+        "width": 90
+      },
+      {
+        "label": "Feeds",
+        "width": 280
+      },
+      {
+        "label": "Tone",
+        "width": 110
+      },
+      {
+        "label": "Price / today",
+        "width": 92
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 98,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 98,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 97,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 490,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "fixture-1440": {
+    "tableWidth": 1096,
+    "head": [
+      {
+        "label": "Company",
+        "width": 265
+      },
+      {
+        "label": "Attention",
+        "width": 99
+      },
+      {
+        "label": "Voices",
+        "width": 65
+      },
+      {
+        "label": "Feeds",
+        "width": 489
+      },
+      {
+        "label": "Tone",
+        "width": 94
+      },
+      {
+        "label": "Price / today",
+        "width": 85
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 166,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 166,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 166,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 166,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 120,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 166,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 165,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 784,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "real-1920": {
+    "tableWidth": 1560,
+    "head": [
+      {
+        "label": "Company",
+        "width": 582
+      },
+      {
+        "label": "Attention",
+        "width": 164
+      },
+      {
+        "label": "Voices",
+        "width": 128
+      },
+      {
+        "label": "Feeds",
+        "width": 399
+      },
+      {
+        "label": "Tone",
+        "width": 156
+      },
+      {
+        "label": "Price / today",
+        "width": 131
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 98,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 98,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 97,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 490,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "fixture-1920": {
+    "tableWidth": 1560,
+    "head": [
+      {
+        "label": "Company",
+        "width": 313
+      },
+      {
+        "label": "Attention",
+        "width": 123
+      },
+      {
+        "label": "Voices",
+        "width": 69
+      },
+      {
+        "label": "Feeds",
+        "width": 855
+      },
+      {
+        "label": "Tone",
+        "width": 109
+      },
+      {
+        "label": "Price / today",
+        "width": 91
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 166,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 166,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 166,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 166,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 87,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 166,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 165,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 751,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "real-1024": {
+    "tableWidth": 726,
+    "head": [
+      {
+        "label": "Company",
+        "width": 277
+      },
+      {
+        "label": "Attention",
+        "width": 84
+      },
+      {
+        "label": "Voices",
+        "width": 68
+      },
+      {
+        "label": "Feeds",
+        "width": 147
+      },
+      {
+        "label": "Tone",
+        "width": 71
+      },
+      {
+        "label": "Price / today",
+        "width": 78
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 112,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 112,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 112,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 112,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 112,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 112,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 98,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 112,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 518,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "fixture-1024": {
+    "tableWidth": 726,
+    "head": [
+      {
+        "label": "Company",
+        "width": 227
+      },
+      {
+        "label": "Attention",
+        "width": 80
+      },
+      {
+        "label": "Voices",
+        "width": 61
+      },
+      {
+        "label": "Feeds",
+        "width": 196
+      },
+      {
+        "label": "Tone",
+        "width": 81
+      },
+      {
+        "label": "Price / today",
+        "width": 81
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 219,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 219,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 219,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 219,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 219,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 219,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 218,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 1095,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "real-768": {
+    "tableWidth": 530,
+    "head": [
+      {
+        "label": "Company",
+        "width": 210
+      },
+      {
+        "label": "Attention",
+        "width": 72
+      },
+      {
+        "label": "Voices",
+        "width": 59
+      },
+      {
+        "label": "Feeds",
+        "width": 60
+      },
+      {
+        "label": "Tone",
+        "width": 50
+      },
+      {
+        "label": "Price / today",
+        "width": 78
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 136,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 136,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 120,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 120,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 129,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 153,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 120,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 120,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 120,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 112,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 140,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 120,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 140,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 120,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 136,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 128,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 641,
+    "scrollsSideways": false,
+    "tableOverflows": true,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "fixture-768": {
+    "tableWidth": 563,
+    "head": [
+      {
+        "label": "Company",
+        "width": 210
+      },
+      {
+        "label": "Attention",
+        "width": 72
+      },
+      {
+        "label": "Voices",
+        "width": 59
+      },
+      {
+        "label": "Feeds",
+        "width": 68
+      },
+      {
+        "label": "Tone",
+        "width": 76
+      },
+      {
+        "label": "Price / today",
+        "width": 78
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 664,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 664,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 664,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 664,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 664,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 664,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 664,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 3320,
+    "scrollsSideways": true,
+    "tableOverflows": true,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "real-390": {
+    "tableWidth": 316,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Feeds",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price / today",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 222,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 223,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 209,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 209,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 223,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 1072,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "fixture-390": {
+    "tableWidth": 316,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Feeds",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price / today",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 396,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 383,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 405,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 405,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 284,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 383,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 405,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 1873,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "real-320": {
+    "tableWidth": 246,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Feeds",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price / today",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "SNDK",
+        "height": 238,
+        "marks": 2
+      },
+      {
+        "ticker": "NVDA",
+        "height": 224,
+        "marks": 2
+      },
+      {
+        "ticker": "SPY",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "RDDT",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "TTWO",
+        "height": 223,
+        "marks": 2
+      },
+      {
+        "ticker": "MU",
+        "height": 239,
+        "marks": 2
+      },
+      {
+        "ticker": "TSLA",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "META",
+        "height": 223,
+        "marks": 2
+      },
+      {
+        "ticker": "NBIS",
+        "height": 223,
+        "marks": 2
+      },
+      {
+        "ticker": "SOXL",
+        "height": 223,
+        "marks": 2
+      },
+      {
+        "ticker": "ABCL",
+        "height": 251,
+        "marks": 3
+      },
+      {
+        "ticker": "SLV",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "FWRG",
+        "height": 251,
+        "marks": 3
+      },
+      {
+        "ticker": "TLT",
+        "height": 209,
+        "marks": 2
+      },
+      {
+        "ticker": "GPRO",
+        "height": 224,
+        "marks": 2
+      },
+      {
+        "ticker": "IBKR",
+        "height": 223,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 1103,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  },
+  "fixture-320": {
+    "tableWidth": 246,
+    "head": [
+      {
+        "label": "Company",
+        "width": 0
+      },
+      {
+        "label": "Attention",
+        "width": 0
+      },
+      {
+        "label": "Voices",
+        "width": 0
+      },
+      {
+        "label": "Feeds",
+        "width": 0
+      },
+      {
+        "label": "Tone",
+        "width": 0
+      },
+      {
+        "label": "Price / today",
+        "width": 0
+      }
+    ],
+    "rows": [
+      {
+        "ticker": "KSTR",
+        "height": 446,
+        "marks": 0
+      },
+      {
+        "ticker": "NRLN",
+        "height": 432,
+        "marks": 0
+      },
+      {
+        "ticker": "ARDR",
+        "height": 455,
+        "marks": 2
+      },
+      {
+        "ticker": "ORBT",
+        "height": 455,
+        "marks": 1
+      },
+      {
+        "ticker": "QUIET",
+        "height": 334,
+        "marks": 0
+      },
+      {
+        "ticker": "OLDCACHE",
+        "height": 432,
+        "marks": 0
+      },
+      {
+        "ticker": "VELA",
+        "height": 455,
+        "marks": 1
+      }
+    ],
+    "toneBarWidth": null,
+    "toneBarHeight": null,
+    "fiveRows": 2122,
+    "scrollsSideways": false,
+    "tableOverflows": false,
+    "fonts": {
+      "value": "13px",
+      "sub": "11px",
+      "head": "11px"
+    }
+  }
+}

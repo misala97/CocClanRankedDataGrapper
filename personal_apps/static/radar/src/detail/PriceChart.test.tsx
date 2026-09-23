@@ -10,7 +10,7 @@ const chart = (over: Partial<DetailChart> = {}): DetailChart => ({
   closes: Array.from({ length: 365 }, (_, i) => 1 + i / 100),
   chatter: Array.from({ length: 365 }, (_, i) => (i < 362 ? null : i)),
   sessions: [],
-  currency: null, basis_venue: null, converted_from: null,
+  currency: null, basis_venue: null,
   priced_from: 'daily',
   normal_per_slot: null,
   watched_from: '2026-08-21',
@@ -138,7 +138,7 @@ describe('the axis on an intraday span', () => {
     closes: Array.from({ length: 96 }, (_, i) => 10 + i * 0.01),
     chatter: Array.from({ length: 96 }, () => 1),
     sessions: [],
-    currency: null, basis_venue: null, converted_from: null,
+    currency: null, basis_venue: null,
     priced_from: 'daily',
     normal_per_slot: null,
     watched_from: null,
@@ -175,7 +175,7 @@ describe('the axis on an intraday span', () => {
       from: '2026-01-01T00:00:00Z', span: '1Y', step_minutes: 1440,
       closes: Array.from({ length: 365 }, () => 5),
       chatter: Array.from({ length: 365 }, () => 1), sessions: [],
-      currency: null, basis_venue: null, converted_from: null,
+      currency: null, basis_venue: null,
       priced_from: 'daily',
       normal_per_slot: null, watched_from: null,
     }
@@ -250,33 +250,41 @@ describe('the axis on an intraday span', () => {
 
 
 describe('the chart basis label', () => {
-  it('states a converted basis beside the chart', () => {
+  it('states a sibling US venue beside the chart, and never a conversion', () => {
     render(<ChartBasisNote chart={chart({
-      closes: [1, 2, 3], currency: 'EUR',
-      basis_venue: 'Nasdaq Global Market', converted_from: 'USD',
-    })} />)
+      closes: [1, 2, 3], currency: 'USD', basis_venue: 'NYSE',
+    })} quoteVenue="NASDAQ" />)
 
-    expect(screen.getByText(
-      'Nasdaq Global Market closes, converted to EUR at the ECB daily rate',
-    )).toBeInTheDocument()
+    expect(screen.getByText('NYSE closes · quoted at NASDAQ')).toBeInTheDocument()
+    expect(screen.queryByText(/converted|ECB/)).toBeNull()
   })
 
   it('says nothing when the basis is the quote’s own venue', () => {
-    render(<ChartBasisNote chart={chart({
-      closes: [1, 2, 3], currency: 'EUR',
-      basis_venue: 'Tradegate BSX', converted_from: null,
-    })} quoteVenue="Tradegate BSX" />)
+    const { container } = render(<ChartBasisNote chart={chart({
+      closes: [1, 2, 3], currency: 'USD',
+      basis_venue: 'NASDAQ',
+    })} quoteVenue="NASDAQ" />)
 
-    expect(screen.queryByText(/converted/)).toBeNull()
+    expect(container.textContent).toBe('')
   })
 })
 
 describe('the axis currency', () => {
-  it('labels a German chart in euros and a US one in dollars', () => {
-    const { container: de } = render(<PriceChart chart={chart({ currency: 'EUR' })} />)
-    expect(de.textContent).toContain('€')
-    expect(de.textContent).not.toContain('$')
-    const { container: us } = render(<PriceChart chart={chart()} />)
+  it('labels the axis in dollars and never in euros', () => {
+    const { container: us } = render(<PriceChart chart={chart({ currency: 'USD' })} />)
     expect(us.textContent).toContain('$')
+    expect(us.textContent).not.toContain('€')
+    const { container: unnamed } = render(<PriceChart chart={chart()} />)
+    expect(unnamed.textContent).toContain('$')
+  })
+})
+
+
+describe('sentiment chart integration', () => {
+  it('retains the price path while replacing only the chatter area', () => {
+    const { container } = render(<PriceChart chart={chart()} chatterMode="sentiment-bars" />)
+    expect(container.querySelector('path.px')?.getAttribute('d')).toBeTruthy()
+    expect(container.querySelector('.chatter-histogram')).toBeTruthy()
+    expect(container.querySelectorAll('path[fill="var(--mark-soft)"]')).toHaveLength(0)
   })
 })

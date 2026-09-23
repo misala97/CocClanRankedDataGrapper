@@ -1,0 +1,1430 @@
+{
+  "database": {
+    "engine": "localhost:3306/personal_apps_radar_wt",
+    "server_database": "personal_apps_radar_wt",
+    "alembic": [
+      "b7e3f9c1a2d4"
+    ]
+  },
+  "refused_outbound": [],
+  "cases": {
+    "real-400-1200": {
+      "checks": {
+        "status 400": true,
+        "says unsupported market": true,
+        "no hub mounted": true
+      },
+      "details": {
+        "status 400": 400,
+        "says unsupported market": "Bad Request\n\nunsupported market: Radar shows US listings only. Remove the market parameter from the address to open the board."
+      }
+    },
+    "real-hub-1200": {
+      "checks": {
+        "status 200": true,
+        "top bar names US markets": true,
+        "page lead names US markets": true,
+        "window and size filters present": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "status 200": 200,
+        "top bar names US markets": "US markets \u00b7 afterhours",
+        "page lead names US markets": "US markets \u00b7 last 12 hours \u00b7 Calculated 1s ago\n\nHuman Chatter\n\nDiscussion ranked by how unusual it is against its baseli",
+        "no horizontal overflow": {
+          "scrollWidth": 1200,
+          "innerWidth": 1200
+        },
+        "no market select": [
+          "Sort by",
+          "WindowLast hourLast 4 hoursLast 12 hoursLast 24 hours",
+          "SizeAll companiesDiscoverLargeMidMicroRecent IPOFundsUnclassified",
+          "BreadthAny venueMore than one venue"
+        ],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar",
+          "A:Administration",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar",
+          "A:Administration",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity"
+        ]
+      }
+    },
+    "real-legacy-1200": {
+      "checks": {
+        "status 200": true,
+        "no empty slot beside the wordmark": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "status 200": 200,
+        "no empty slot beside the wordmark": {
+          "gap": 28,
+          "sameRow": true,
+          "second": "search"
+        },
+        "no horizontal overflow": {
+          "scrollWidth": 1200,
+          "innerWidth": 1200
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the tickers",
+          "A:Return to Radar hub",
+          "INPUT:Find a stock",
+          "BUTTON:All\n0",
+          "BUTTON:Discover\n0",
+          "BUTTON:Large\n0",
+          "BUTTON:IPO\n0",
+          "BUTTON:Funds\n0",
+          "BUTTON:Mid\n0",
+          "BUTTON:Micro\n0",
+          "BUTTON:Unknown\n0",
+          "BUTTON:Change window, sources and venues",
+          "BUTTON:Sort by ticker A to Z",
+          "BUTTON:Sort by mentions",
+          "BUTTON:Sort by divergence",
+          "BUTTON:Sort by ratio to normal",
+          "BUTTON:Sort by price move",
+          "BUTTON:Sort by lean",
+          "A:Skip to the tickers"
+        ]
+      }
+    },
+    "real-admin-1200": {
+      "checks": {
+        "US market-data facts shown": true,
+        "no retired collector panels": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "no horizontal overflow": {
+          "scrollWidth": 1200,
+          "innerWidth": 1200
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar",
+          "A:Administration"
+        ]
+      }
+    },
+    "real-1200": {
+      "checks": {
+        "no page errors": true
+      },
+      "details": {}
+    },
+    "real-400-390": {
+      "checks": {
+        "status 400": true,
+        "says unsupported market": true,
+        "no hub mounted": true
+      },
+      "details": {
+        "status 400": 400,
+        "says unsupported market": "Bad Request\n\nunsupported market: Radar shows US listings only. Remove the market parameter from the address to open the board."
+      }
+    },
+    "real-hub-390": {
+      "checks": {
+        "status 200": true,
+        "top bar names US markets": true,
+        "page lead names US markets": true,
+        "window and size filters present": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "status 200": 200,
+        "top bar names US markets": "US markets \u00b7 afterhours",
+        "page lead names US markets": "US markets \u00b7 last 12 hours \u00b7 Calculated 4s ago\n\nHuman Chatter\n\nDiscussion ranked by how unusual it is against its baseli",
+        "no horizontal overflow": {
+          "scrollWidth": 390,
+          "innerWidth": 390
+        },
+        "no market select": [
+          "Sort by",
+          "WindowLast hourLast 4 hoursLast 12 hoursLast 24 hours",
+          "SizeAll companiesDiscoverLargeMidMicroRecent IPOFundsUnclassified",
+          "BreadthAny venueMore than one venue"
+        ],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research"
+        ]
+      }
+    },
+    "real-legacy-390": {
+      "checks": {
+        "status 200": true,
+        "no empty slot beside the wordmark": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "status 200": 200,
+        "no empty slot beside the wordmark": {
+          "gap": -47,
+          "sameRow": false,
+          "second": "search"
+        },
+        "no horizontal overflow": {
+          "scrollWidth": 390,
+          "innerWidth": 390
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the tickers",
+          "A:Return to Radar hub",
+          "INPUT:Find a stock",
+          "BUTTON:All\n0",
+          "BUTTON:Discover\n0",
+          "BUTTON:Large\n0",
+          "BUTTON:IPO\n0",
+          "BUTTON:Funds\n0",
+          "BUTTON:Mid\n0",
+          "BUTTON:Micro\n0",
+          "BUTTON:Unknown\n0",
+          "BUTTON:Change window, sources and venues",
+          "A:Skip to the tickers",
+          "A:Return to Radar hub",
+          "INPUT:Find a stock",
+          "BUTTON:All\n0",
+          "BUTTON:Discover\n0",
+          "BUTTON:Large\n0",
+          "BUTTON:IPO\n0"
+        ]
+      }
+    },
+    "real-admin-390": {
+      "checks": {
+        "US market-data facts shown": true,
+        "no retired collector panels": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "no horizontal overflow": {
+          "scrollWidth": 390,
+          "innerWidth": 390
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "A:Skip to the page",
+          "BUTTON:Navigation"
+        ]
+      }
+    },
+    "real-390": {
+      "checks": {
+        "no page errors": true
+      },
+      "details": {}
+    },
+    "real-400-320": {
+      "checks": {
+        "status 400": true,
+        "says unsupported market": true,
+        "no hub mounted": true
+      },
+      "details": {
+        "status 400": 400,
+        "says unsupported market": "Bad Request\n\nunsupported market: Radar shows US listings only. Remove the market parameter from the address to open the board."
+      }
+    },
+    "real-hub-320": {
+      "checks": {
+        "status 200": true,
+        "top bar names US markets": true,
+        "page lead names US markets": true,
+        "window and size filters present": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "status 200": 200,
+        "top bar names US markets": "US markets \u00b7 afterhours",
+        "page lead names US markets": "US markets \u00b7 last 12 hours \u00b7 Calculated 8s ago\n\nHuman Chatter\n\nDiscussion ranked by how unusual it is against its baseli",
+        "no horizontal overflow": {
+          "scrollWidth": 320,
+          "innerWidth": 320
+        },
+        "no market select": [
+          "Sort by",
+          "WindowLast hourLast 4 hoursLast 12 hoursLast 24 hours",
+          "SizeAll companiesDiscoverLargeMidMicroRecent IPOFundsUnclassified",
+          "BreadthAny venueMore than one venue"
+        ],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 12 hours \u00b7 Discover \u00b7 Any v",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research"
+        ]
+      }
+    },
+    "real-legacy-320": {
+      "checks": {
+        "status 200": true,
+        "no empty slot beside the wordmark": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "status 200": 200,
+        "no empty slot beside the wordmark": {
+          "gap": -47,
+          "sameRow": false,
+          "second": "search"
+        },
+        "no horizontal overflow": {
+          "scrollWidth": 320,
+          "innerWidth": 320
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the tickers",
+          "A:Return to Radar hub",
+          "INPUT:Find a stock",
+          "BUTTON:All\n0",
+          "BUTTON:Discover\n0",
+          "BUTTON:Large\n0",
+          "BUTTON:IPO\n0",
+          "BUTTON:Funds\n0",
+          "BUTTON:Mid\n0",
+          "BUTTON:Micro\n0",
+          "BUTTON:Unknown\n0",
+          "BUTTON:Change window, sources and venues",
+          "A:Skip to the tickers",
+          "A:Return to Radar hub",
+          "INPUT:Find a stock",
+          "BUTTON:All\n0",
+          "BUTTON:Discover\n0",
+          "BUTTON:Large\n0",
+          "BUTTON:IPO\n0"
+        ]
+      }
+    },
+    "real-admin-320": {
+      "checks": {
+        "US market-data facts shown": true,
+        "no retired collector panels": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "no horizontal overflow": {
+          "scrollWidth": 320,
+          "innerWidth": 320
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "A:Skip to the page",
+          "BUTTON:Navigation"
+        ]
+      }
+    },
+    "real-320": {
+      "checks": {
+        "no page errors": true
+      },
+      "details": {}
+    },
+    "fixture-chatter-AAPL-1200": {
+      "checks": {
+        "prices in US dollars": true,
+        "selected price chart drawn": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true,
+        "board requests carry no market": true
+      },
+      "details": {
+        "prices in US dollars": [
+          "$330.46",
+          "$7.39"
+        ],
+        "no horizontal overflow": {
+          "scrollWidth": 1200,
+          "innerWidth": 1200
+        },
+        "no market select": [
+          "Sort by",
+          "WindowLast hourLast 4 hoursLast 12 hoursLast 24 hours",
+          "SizeAll companiesDiscoverLargeMidMicroRecent IPOFundsUnclassified",
+          "BreadthAny venueMore than one venue"
+        ],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "INPUT:",
+          "SELECT:Unusual activity\nCompany\nAttention\nVoice",
+          "BUTTON:Filters\nlast 4 hours \u00b7 All companies \u00b7 A",
+          "A:FT\nFranklin Universal Trust\n3.1\u00d7\nnormal ",
+          "A:AAPL\nApple Inc\n3.1\u00d7\nnormal \u00b7 12 voices\n$",
+          "A:MSFT\nMicrosoft Corp\n3.1\u00d7\nnormal \u00b7 12 voi",
+          "A:NVDA\nNVIDIA Corp\n3.1\u00d7\nnormal \u00b7 12 voices",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "BUTTON:Evidence",
+          "BUTTON:Bluesky \u00b7 Reddit \u2014 Which feeds counted f",
+          "BUTTON:9 directional / 19 total \u2014 How AAPL\u2019s to",
+          "BUTTON:Watch AAPL",
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar"
+        ],
+        "board requests carry no market": []
+      }
+    },
+    "fixture-research-AAPL-1200": {
+      "checks": {
+        "quote price is $330.46 style": true,
+        "provenance names the US venue and USD, no fallback": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "quote price is $330.46 style": "$330.46 +1.2% today",
+        "provenance names the US venue and USD, no fallback": "NASDAQ \u00b7 USD \u00b7 XNMS \u00b7 quoted 15 Sept 2026, 21:55 Berlin \u00b7 delayed",
+        "no horizontal overflow": {
+          "scrollWidth": 1200,
+          "innerWidth": 1200
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar",
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar"
+        ]
+      }
+    },
+    "fixture-overview-1200": {
+      "checks": {
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "no horizontal overflow": {
+          "scrollWidth": 1200,
+          "innerWidth": 1200
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust",
+          "BUTTON:AA\nAAPL\nApple Inc",
+          "BUTTON:MS\nMSFT\nMicrosoft Corp",
+          "A:Skip to the page",
+          "INPUT:Find a company",
+          "A:Future Radar design",
+          "A:Overview",
+          "A:Human Chatter",
+          "A:Analysis",
+          "A:Watching",
+          "A:Activity",
+          "A:Legacy Radar",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust"
+        ]
+      }
+    },
+    "fixture-1200": {
+      "checks": {
+        "no page errors": true
+      },
+      "details": {}
+    },
+    "fixture-chatter-AAPL-390": {
+      "checks": {
+        "prices in US dollars": true,
+        "selected price chart drawn": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true,
+        "board requests carry no market": true
+      },
+      "details": {
+        "prices in US dollars": [
+          "$330.46"
+        ],
+        "no horizontal overflow": {
+          "scrollWidth": 390,
+          "innerWidth": 390
+        },
+        "no market select": [
+          "Sort byUnusual activityCompanyAttentionVoicesSourcesTonePriceToday",
+          "WindowLast hourLast 4 hoursLast 12 hoursLast 24 hours",
+          "SizeAll companiesDiscoverLargeMidMicroRecent IPOFundsUnclassified",
+          "BreadthAny venueMore than one venue"
+        ],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "BUTTON:\u2190 Back to candidates",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "BUTTON:Evidence",
+          "BUTTON:Bluesky \u00b7 Reddit \u2014 Which feeds counted f",
+          "BUTTON:9 directional / 19 total \u2014 How AAPL\u2019s to",
+          "BUTTON:Watch AAPL",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "BUTTON:\u2190 Back to candidates",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "BUTTON:Evidence",
+          "BUTTON:Bluesky \u00b7 Reddit \u2014 Which feeds counted f",
+          "BUTTON:9 directional / 19 total \u2014 How AAPL\u2019s to",
+          "BUTTON:Watch AAPL",
+          "A:Skip to the page",
+          "BUTTON:Navigation"
+        ],
+        "board requests carry no market": []
+      }
+    },
+    "fixture-research-AAPL-390": {
+      "checks": {
+        "quote price is $330.46 style": true,
+        "provenance names the US venue and USD, no fallback": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "quote price is $330.46 style": "$330.46 +1.2% today",
+        "provenance names the US venue and USD, no fallback": "NASDAQ \u00b7 USD \u00b7 XNMS \u00b7 quoted 15 Sept 2026, 21:55 Berlin \u00b7 delayed",
+        "no horizontal overflow": {
+          "scrollWidth": 390,
+          "innerWidth": 390
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "INPUT:Find a company",
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)"
+        ]
+      }
+    },
+    "fixture-overview-390": {
+      "checks": {
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "no horizontal overflow": {
+          "scrollWidth": 390,
+          "innerWidth": 390
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust",
+          "BUTTON:AA\nAAPL\nApple Inc",
+          "BUTTON:MS\nMSFT\nMicrosoft Corp",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust",
+          "BUTTON:AA\nAAPL\nApple Inc",
+          "BUTTON:MS\nMSFT\nMicrosoft Corp",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust",
+          "BUTTON:AA\nAAPL\nApple Inc",
+          "BUTTON:MS\nMSFT\nMicrosoft Corp",
+          "A:Skip to the page"
+        ]
+      }
+    },
+    "fixture-390": {
+      "checks": {
+        "no page errors": true
+      },
+      "details": {}
+    },
+    "fixture-chatter-AAPL-320": {
+      "checks": {
+        "prices in US dollars": true,
+        "selected price chart drawn": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true,
+        "board requests carry no market": true
+      },
+      "details": {
+        "prices in US dollars": [
+          "$330.46"
+        ],
+        "no horizontal overflow": {
+          "scrollWidth": 320,
+          "innerWidth": 320
+        },
+        "no market select": [
+          "Sort byUnusual activityCompanyAttentionVoicesSourcesTonePriceToday",
+          "WindowLast hourLast 4 hoursLast 12 hoursLast 24 hours",
+          "SizeAll companiesDiscoverLargeMidMicroRecent IPOFundsUnclassified",
+          "BreadthAny venueMore than one venue"
+        ],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "BUTTON:\u2190 Back to candidates",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "BUTTON:Evidence",
+          "BUTTON:Bluesky \u00b7 Reddit \u2014 Which feeds counted f",
+          "BUTTON:9 directional / 19 total \u2014 How AAPL\u2019s to",
+          "BUTTON:Watch AAPL",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:Research",
+          "BUTTON:Table",
+          "BUTTON:\u2190 Back to candidates",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "BUTTON:Evidence",
+          "BUTTON:Bluesky \u00b7 Reddit \u2014 Which feeds counted f",
+          "BUTTON:9 directional / 19 total \u2014 How AAPL\u2019s to",
+          "BUTTON:Watch AAPL",
+          "A:Skip to the page",
+          "BUTTON:Navigation"
+        ],
+        "board requests carry no market": []
+      }
+    },
+    "fixture-research-AAPL-320": {
+      "checks": {
+        "quote price is $330.46 style": true,
+        "provenance names the US venue and USD, no fallback": true,
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "quote price is $330.46 style": "$330.46 +1.2% today",
+        "provenance names the US venue and USD, no fallback": "NASDAQ \u00b7 USD \u00b7 XNMS \u00b7 quoted 15 Sept 2026, 21:55 Berlin \u00b7 delayed",
+        "no horizontal overflow": {
+          "scrollWidth": 320,
+          "innerWidth": 320
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "INPUT:Find a company",
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:\u2190 Back to the list",
+          "BUTTON:Watch",
+          "BUTTON:1D",
+          "BUTTON:1W",
+          "BUTTON:1M",
+          "BUTTON:6M",
+          "BUTTON:1Y",
+          "BUTTON:3Y",
+          "DIV:Price and chatter intervals for AAPL. Us",
+          "SUMMARY:Data notes (3)"
+        ]
+      }
+    },
+    "fixture-overview-320": {
+      "checks": {
+        "no horizontal overflow": true,
+        "no retired-market or EUR copy": true,
+        "no market select": true,
+        "no Germany option": true,
+        "no market radio or switch": true,
+        "no hidden or market tab stop": true,
+        "no tab stop names a market": true
+      },
+      "details": {
+        "no horizontal overflow": {
+          "scrollWidth": 320,
+          "innerWidth": 320
+        },
+        "no market select": [],
+        "no market radio or switch": {
+          "radios": 0,
+          "switch": 0
+        },
+        "no tab stop names a market": [
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust",
+          "BUTTON:AA\nAAPL\nApple Inc",
+          "BUTTON:MS\nMSFT\nMicrosoft Corp",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust",
+          "BUTTON:AA\nAAPL\nApple Inc",
+          "BUTTON:MS\nMSFT\nMicrosoft Corp",
+          "A:Skip to the page",
+          "BUTTON:Navigation",
+          "INPUT:Find a company",
+          "BUTTON:All chatter \u2192",
+          "BUTTON:FT\nFT\nFranklin Universal Trust",
+          "BUTTON:AA\nAAPL\nApple Inc",
+          "BUTTON:MS\nMSFT\nMicrosoft Corp",
+          "A:Skip to the page"
+        ]
+      }
+    },
+    "fixture-320": {
+      "checks": {
+        "no page errors": true
+      },
+      "details": {}
+    },
+    "fixture": {
+      "checks": {
+        "detail requests carry no market": true,
+        "selected-price client still sends market=us (protected)": true,
+        "no unmocked API request": true
+      },
+      "details": {
+        "detail requests carry no market": [
+          {
+            "path": "/radar/api/ticker/AAPL",
+            "keys": [
+              "sources",
+              "span",
+              "tone",
+              "window"
+            ],
+            "market": null
+          },
+          {
+            "path": "/radar/api/ticker/AAPL",
+            "keys": [
+              "sources",
+              "span",
+              "tone",
+              "window"
+            ],
+            "market": null
+          },
+          {
+            "path": "/radar/api/ticker/AAPL",
+            "keys": [
+              "sources",
+              "span",
+              "tone",
+              "window"
+            ],
+            "market": null
+          },
+          {
+            "path": "/radar/api/ticker/AAPL",
+            "keys": [
+              "sources",
+              "span",
+              "tone",
+              "window"
+            ],
+            "market": null
+          },
+          {
+            "path": "/radar/api/ticker/AAPL",
+            "keys": [
+              "sources",
+              "span",
+              "tone",
+              "window"
+            ],
+            "market": null
+          }
+        ],
+        "selected-price client still sends market=us (protected)": [
+          {
+            "path": "/radar/api/ticker/AAPL/price-chart",
+            "keys": [
+              "market",
+              "sources",
+              "span"
+            ],
+            "market": [
+              "us"
+            ]
+          },
+          {
+            "path": "/radar/api/ticker/AAPL/price-chart",
+            "keys": [
+              "market",
+              "sources",
+              "span"
+            ],
+            "market": [
+              "us"
+            ]
+          },
+          {
+            "path": "/radar/api/ticker/AAPL/price-chart",
+            "keys": [
+              "market",
+              "sources",
+              "span"
+            ],
+            "market": [
+              "us"
+            ]
+          },
+          {
+            "path": "/radar/api/ticker/AAPL/price-chart",
+            "keys": [
+              "market",
+              "sources",
+              "span"
+            ],
+            "market": [
+              "us"
+            ]
+          },
+          {
+            "path": "/radar/api/ticker/AAPL/price-chart",
+            "keys": [
+              "market",
+              "sources",
+              "span"
+            ],
+            "market": [
+              "us"
+            ]
+          }
+        ],
+        "no unmocked API request": []
+      }
+    },
+    "process": {
+      "checks": {
+        "no outbound connection attempted": true
+      },
+      "details": {}
+    }
+  },
+  "failures": [],
+  "fixture_unmocked": [],
+  "request_queries": [
+    {
+      "path": "/radar/api/ticker/AAPL",
+      "keys": [
+        "sources",
+        "span",
+        "tone",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/board",
+      "keys": [
+        "dir",
+        "segment",
+        "sort",
+        "sources",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/ticker/AAPL/price-chart",
+      "keys": [
+        "market",
+        "sources",
+        "span"
+      ],
+      "market": [
+        "us"
+      ]
+    },
+    {
+      "path": "/radar/api/ticker/AAPL/price-chart",
+      "keys": [
+        "market",
+        "sources",
+        "span"
+      ],
+      "market": [
+        "us"
+      ]
+    },
+    {
+      "path": "/radar/api/ticker/AAPL",
+      "keys": [
+        "sources",
+        "span",
+        "tone",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/ticker/AAPL",
+      "keys": [
+        "sources",
+        "span",
+        "tone",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/board",
+      "keys": [
+        "dir",
+        "segment",
+        "sort",
+        "sources",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/ticker/AAPL/price-chart",
+      "keys": [
+        "market",
+        "sources",
+        "span"
+      ],
+      "market": [
+        "us"
+      ]
+    },
+    {
+      "path": "/radar/api/ticker/AAPL/price-chart",
+      "keys": [
+        "market",
+        "sources",
+        "span"
+      ],
+      "market": [
+        "us"
+      ]
+    },
+    {
+      "path": "/radar/api/ticker/AAPL",
+      "keys": [
+        "sources",
+        "span",
+        "tone",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/ticker/AAPL",
+      "keys": [
+        "sources",
+        "span",
+        "tone",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/board",
+      "keys": [
+        "dir",
+        "segment",
+        "sort",
+        "sources",
+        "window"
+      ],
+      "market": null
+    },
+    {
+      "path": "/radar/api/ticker/AAPL/price-chart",
+      "keys": [
+        "market",
+        "sources",
+        "span"
+      ],
+      "market": [
+        "us"
+      ]
+    },
+    {
+      "path": "/radar/api/ticker/AAPL/price-chart",
+      "keys": [
+        "market",
+        "sources",
+        "span"
+      ],
+      "market": [
+        "us"
+      ]
+    },
+    {
+      "path": "/radar/api/ticker/AAPL",
+      "keys": [
+        "sources",
+        "span",
+        "tone",
+        "window"
+      ],
+      "market": null
+    }
+  ],
+  "screenshots": [
+    "fixture-chatter-AAPL-1200-chart.png",
+    "fixture-chatter-AAPL-1200.png",
+    "fixture-chatter-AAPL-320-chart.png",
+    "fixture-chatter-AAPL-320.png",
+    "fixture-chatter-AAPL-390-chart.png",
+    "fixture-chatter-AAPL-390.png",
+    "fixture-overview-1200.png",
+    "fixture-overview-320.png",
+    "fixture-overview-390.png",
+    "fixture-research-AAPL-1200.png",
+    "fixture-research-AAPL-320.png",
+    "fixture-research-AAPL-390.png",
+    "real-400-1200.png",
+    "real-400-320.png",
+    "real-400-390.png",
+    "real-admin-1200.png",
+    "real-admin-320.png",
+    "real-admin-390.png",
+    "real-hub-1200.png",
+    "real-hub-320.png",
+    "real-hub-390.png",
+    "real-legacy-1200.png",
+    "real-legacy-320.png",
+    "real-legacy-390.png"
+  ]
+}

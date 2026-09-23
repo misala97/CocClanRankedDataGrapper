@@ -1,0 +1,54 @@
+﻿[13:43:31] viewport 1440 started
+[13:44:09] board-quiet window 30/130 s, 0 board request(s) so far
+[13:44:39] board-quiet window 60/130 s, 0 board request(s) so far
+[13:45:09] board-quiet window 90/130 s, 0 board request(s) so far
+[13:45:39] board-quiet window 120/130 s, 0 board request(s) so far
+[13:45:49] board-quiet window 130/130 s, 0 board request(s) so far
+[13:47:04] viewport 1920 started
+[13:47:08] viewport 768 started
+[13:47:11] viewport 390 started
+[13:47:20] viewport 320 started
+py : Exception in callback Connection.dispatch.<locals>._done_callback(<Task cancell..._page.py:294>>) at 
+C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_connection.py:470
+In Zeile:1 Zeichen:467
++ ... /local-qa'; py -3.12 -u scratchpad/ha1/verify_preview.py 5041 *> "$ou ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Exception in ca...nnection.py:470:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+handle: <Handle Connection.dispatch.<locals>._done_callback(<Task cancell..._page.py:294>>) at 
+C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_connection.py:470>
+Traceback (most recent call last):
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_connection.py", 
+line 471, in _done_callback
+    exc = future.exception()
+          ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_page.py", line 308, 
+in _on_route
+    handled = await route_handler.handle(route)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_helper.py", line 
+430, in handle
+    return await self._handle_internal(route)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\playwright\_impl\_helper.py", line 
+472, in _handle_internal
+    return await handled_future
+           ^^^^^^^^^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+c15_filter_only_bookmark: [1440] a company was invented for a filter-only link
+c15_filter_only_bookmark: [390] a company was invented for a filter-only link
+loading_state: raised Error: Route.continue_: Route is already handled!
+network_error_retry: raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("main[aria-label=\"Analysis\"] [role=alert]") to be visible
+
+session_expiry: raised TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("text=Session expired.") to be visible
+
+skip_link_and_tab_order: the first Tab stop is 'day'
+skip_link_and_tab_order: the skip link did not focus the page
+timeout_error: no timeout notice

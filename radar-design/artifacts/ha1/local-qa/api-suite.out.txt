@@ -1,0 +1,44 @@
+HA1 bound target: 127.0.0.1:3461/radar_ha1_localqa (mysql); no SQL executed by the gate
+HA1 test run over source fingerprint b64d71702b4f28ac74d070abf505372c44664551dd393487eada2ae4f447a6ac (154 files)
+....................F..........                                          [100%]
+================================== FAILURES ===================================
+____ test_the_statement_timeout_interrupts_and_leaves_one_connection_clean ____
+
+client = <FlaskClient <Flask 'app'>>, seeded = (26, 46)
+
+    def test_the_statement_timeout_interrupts_and_leaves_one_connection_clean(client, seeded):
+        """SLEEP and a CPU-bound SELECT through the production SqlStore under a
+        one-second limit, on ONE checked-out connection: an uncancelled statement
+        fails, and the connection's id and session max_statement_time must match
+        before and after. Anything but MariaDB fails rather than pretending.
+    
+        CORRECTION-2 (U5): the same probe also sends a CPU-bound statement under
+        the 0.250 s limit ReaderBudget computes, rendered as a fractional
+        `SET STATEMENT max_statement_time=0.NNN`, records requested/effective
+        limits, elapsed and overshoot, and proves a normal statement succeeds on
+        the same connection afterwards (ha1_harness.timeout_failures)."""
+        import ha1_fixtures as fx
+        company, instrument = seeded
+        with flask_app.app_context():
+            result = fx.timeout_probe(db.engine, 1.0)
+        failures = harness.timeout_failures(result, 1.0)
+>       assert not failures, (failures, result)
+E       AssertionError: (['timeout: the CPU-bound statement was not_interrupted, not interrupted with the timeout error the reader maps', "tim...maps"], {'connection_id_after': 7, 'connection_id_before': 7, 'dialect': 'mariadb:set_statement', 'limit_s': 1.0, ...})
+E       assert not ['timeout: the CPU-bound statement was not_interrupted, not interrupted with the timeout error the reader maps', "timeout: the sub-second CPU statement was 'not_interrupted', not interrupted with the timeout error the reader maps"]
+
+tests\test_radar_analysis_api.py:407: AssertionError
+============================== warnings summary ===============================
+..\..\..\..\..\AppData\Local\Programs\Python\Python312\Lib\site-packages\_pytest\config\__init__.py:1309
+  C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\_pytest\config\__init__.py:1309: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; anyio
+    self._mark_plugins_for_rewrite(hook, disable_autoload)
+
+tests/test_radar_analysis_api.py::test_an_ordinary_signed_in_user_reads_analysis_without_admin
+tests/test_radar_analysis_api.py::test_the_full_access_host_member_gate_refuses_a_non_admin_with_exactly_403
+tests/test_radar_analysis_api.py::test_a_non_admin_on_loopback_is_permitted
+  C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\sql\schema.py:3624: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    return util.wrap_callable(lambda ctx: fn(), fn)  # type: ignore
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_radar_analysis_api.py::test_the_statement_timeout_interrupts_and_leaves_one_connection_clean
+1 failed, 30 passed, 4 warnings in 6.88s

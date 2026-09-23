@@ -1,0 +1,2145 @@
+/* The hub's own visual system -- the B research desk.
+ *
+ * A navy canvas with layered surfaces above it, orange for the one thing the
+ * reader is acting on, cyan for price and orange for chatter wherever the two
+ * series appear together. Green and red are DATA: a move, a tone, a
+ * qualification. They are never the application's identity, which is what the
+ * previous pine-and-sage system spent them on.
+ *
+ * Everything is scoped under .rh. The old board at /radar/ keeps radar.css
+ * exactly as it is -- this route is opt-in and must be able to ship without
+ * touching the surface it may or may not replace.
+ *
+ * Contrast is measured against the ground each token actually sits on, not
+ * assumed. On the #091722 canvas, and then on the #112331 panel: secondary
+ * text 9.88 / 8.74, the quietest label 7.00 / 6.19, orange 8.85 / 7.82, cyan
+ * 8.96 / 7.93, positive 10.46 / 9.25, negative 6.61 / 5.84, amber 9.76 /
+ * 8.63, primary text 16.25 / 14.37. Nothing here is a low-contrast gray
+ * placeholder, and nothing rounds up: these are the computed figures.
+ */
+
+.rh {
+  /* Ground and the surfaces raised off it. `--white` keeps its name because
+     forty rules refer to it; it is the raised panel, and nothing on this
+     surface is white. */
+  --canvas: #091722;
+  --white: #112331;
+  --wash: #16293a;
+  --selected: #1a3042;
+  --line: #2b4355;
+  --line-soft: #1e3546;
+
+  --ink: #edf3fa;
+  --muted: #b1c1d3;
+  --dim: #8fa3b8;
+
+  /* The one action colour. Selection, the active destination, focus, the
+     primary button -- and nothing else, so it keeps meaning "this one". */
+  --accent: #ff9e48;
+  --accent-strong: #ffb673;
+  --accent-wash: rgba(255, 158, 72, 0.14);
+  --accent-line: rgba(255, 158, 72, 0.5);
+
+  /* Series identity. Cyan is price wherever price is drawn; orange is
+     chatter. They are read together on one canvas, so they may not be
+     neighbours on the wheel. */
+  --price: #28c8db;
+  --chatter: #ff9e48;
+  --chatter-soft: rgba(255, 158, 72, 0.3);
+
+  /* Data semantics, and only data. */
+  --green: #45dda0;
+  --red: #ff6b7c;
+  --amber: #f2b25c;
+  --amber-wash: rgba(242, 178, 92, 0.13);
+  --red-wash: rgba(255, 107, 124, 0.13);
+
+  --nav-ink: #edf3fa;
+  --nav-dim: #b1c1d3;
+  --radius: 10px;
+  /* The horizontal shell: a 64px identity bar over a 48px destination band.
+     There is no navigation rail any more and therefore no workspace margin
+     -- the width belongs to the three columns of the workspace. */
+  --top-h: 64px;
+  --band-h: 48px;
+
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+.rh *,
+.rh *::before,
+.rh *::after { box-sizing: border-box; }
+
+/* `:where()` costs no specificity, so every one of these lands at (0,1,0)
+   -- the weight of `.rh` alone -- and the component rules further down the
+   file win on source order. Written the obvious way, `.rh button` is (0,1,1)
+   and beat `.rh-textbutton`, `.rh-button` and `.rh-skip` outright: measured
+   on the running page, the skip link was 14px ink-white on orange (1.84:1)
+   instead of 12px near-black, and a secondary button had no border and no
+   background at all. The file already knew about one instance of this -- see
+   the note on `.rh-sortnote .rh-sortreset` -- and patched that one by hand. */
+.rh :where(button, input, select, textarea) { font: inherit; color: inherit; }
+
+.rh :where(button) { cursor: pointer; background: none; border: 0; }
+.rh :where(button, a, input, select, textarea) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.rh button:disabled { opacity: 0.55; cursor: not-allowed; }
+.rh :where(a) { color: inherit; text-decoration: none; }
+
+/* Never the browser's grey. `#757575` on the panel is 3.48:1, which is the
+   low-contrast placeholder the contract names specifically. */
+.rh ::placeholder { color: var(--dim); opacity: 1; }
+
+/* Orange, everywhere, on every ground this surface has: 8.85:1 on the canvas
+   and 7.82:1 on the raised panel, well past the 3:1 a focus indicator owes. */
+.rh :focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.rh h1, .rh h2, .rh h3, .rh p { margin: 0; }
+.rh h1 {
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+.rh h2 { font-size: 19px; line-height: 1.35; letter-spacing: -0.022em; font-weight: 600; }
+.rh h3 { font-size: 15px; line-height: 1.45; font-weight: 600; }
+.rh p { max-width: 72ch; text-wrap: pretty; }
+
+/* Every figure that a reader compares down a column. */
+.rh .num { font-variant-numeric: tabular-nums; }
+.rh .muted { color: var(--muted); }
+.rh .small { font-size: 12px; }
+.rh .positive { color: var(--green); }
+.rh .negative { color: var(--red); }
+.rh .warning { color: var(--amber); }
+.rh .nowrap { white-space: nowrap; }
+
+/* Available to a screen reader, absent from the layout. */
+.rh-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rh-skip {
+  position: fixed;
+  left: 16px;
+  top: -70px;
+  z-index: 60;
+  background: var(--accent);
+  color: #0a1620;
+  font-weight: 600;
+  padding: 12px 16px;
+  border-radius: 0 0 8px 8px;
+}
+.rh-skip:focus { top: 0; }
+
+/* --- navigation --------------------------------------------------------- */
+
+/* The identity bar: the mark, the global search, and what the market is
+   doing. 64px, and it does not scroll away -- the search is the one control
+   that has to be reachable from anywhere on a long candidate list. */
+.rh-top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: var(--top-h);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 20px;
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+}
+
+.rh-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: var(--ink);
+  flex: none;
+}
+.rh-brand svg { width: 24px; height: 24px; flex: none; color: var(--accent); }
+
+/* The search takes the middle and the context sits at the end of the bar,
+   which is B's arrangement and also the one that survives narrowing: the
+   context line drops before the search does. */
+.rh-topmid { flex: 1; display: flex; justify-content: center; min-width: 0; }
+
+.rh-session {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  flex: none;
+  white-space: nowrap;
+}
+.rh-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  display: inline-block;
+  flex: none;
+}
+.rh-dot.closed { background: var(--dim); }
+
+/* The destination band. Sticky under the identity bar so the reader can
+   always see which of the four they are in. */
+.rh-nav {
+  position: sticky;
+  top: var(--top-h);
+  z-index: 25;
+  min-height: var(--band-h);
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0 20px;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
+}
+
+.rh-navlink {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  min-height: var(--band-h);
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  /* Transparent rather than absent, so the active underline does not move
+     the label by two pixels when it appears. */
+  border-bottom: 2px solid transparent;
+  transition: color 140ms, border-color 140ms;
+}
+.rh-navlink:hover { color: var(--ink); }
+.rh-navlink[aria-current='page'] {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* Administration, and the contextual Research tab, sit at the far end. */
+.rh-navend { margin-left: auto; display: flex; align-items: stretch; gap: 4px; }
+
+/* The gallery link leaves the application. It sits in the identity bar in
+   the context line's register -- quieter than a destination, never
+   `aria-current` -- and drops with the venue name on a phone. */
+.rh-gallerylink {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.rh-gallerylink:hover { color: var(--ink); }
+.rh-gallerylink:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+@media (max-width: 640px) {
+  .rh-gallerylink { display: none; }
+}
+
+/* Research is not a destination anybody navigates TO -- it appears when a
+   company is open from outside the workspace, and it names that company. */
+.rh-navcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  min-height: var(--band-h);
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
+}
+.rh-navcrumb::before {
+  content: '';
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin-right: 6px;
+}
+
+.rh-menu { display: none; }
+
+.rh-main {
+  width: 100%;
+  max-width: 1780px;
+  padding: 26px 20px 52px;
+  margin: 0 auto;
+  outline: none;
+}
+
+.rh-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.rh-heading p { margin-top: 9px; color: var(--muted); }
+.rh-datestamp { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+
+/* --- surfaces ----------------------------------------------------------- */
+
+.rh-panel {
+  border: 1px solid var(--line);
+  background: var(--white);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.rh-pad { padding: 23px; }
+.rh-stack { display: flex; flex-direction: column; gap: 26px; min-width: 0; }
+.rh-twocol { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 26px; }
+.rh-sectionhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 19px;
+}
+
+.rh-button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 37px;
+  white-space: nowrap;
+  transition: background 160ms;
+}
+.rh-button:hover:not(:disabled) { background: var(--wash); }
+.rh-button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  /* Near-black on orange: 8.6:1, where white on orange would be 1.9:1. */
+  color: #0a1620;
+  font-weight: 600;
+}
+.rh-button.primary:hover:not(:disabled) { background: var(--accent-strong); }
+.rh-textbutton {
+  color: var(--accent);
+  font-size: 12px;
+  padding: 5px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.rh-textbutton:hover { text-decoration: underline; }
+
+.rh-badge {
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--wash);
+  color: var(--accent);
+  font-weight: 500;
+}
+.rh-badge.amber { color: var(--amber); background: var(--amber-wash); }
+.rh-badge.red { color: var(--red); background: var(--red-wash); }
+.rh-badge.neutral { color: var(--muted); background: var(--canvas); }
+
+.rh-notice {
+  padding: 14px 17px;
+  border: 1px solid var(--line);
+  background: var(--wash);
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.rh-notice.amber {
+  background: var(--amber-wash);
+  color: var(--amber);
+  border-color: rgba(242, 178, 92, 0.45);
+}
+.rh-notice.red {
+  background: var(--red-wash);
+  color: var(--red);
+  border-color: rgba(255, 107, 124, 0.45);
+}
+
+.rh-caption { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+/* --- tone ---------------------------------------------------------------- */
+
+/* A share of the DIRECTIONAL sample, a bar of the same proportion, and the
+   sample size under it.
+   ------------------------------------------------------------------------
+   An earlier comment here forbade both the percentage and the bar, on the
+   grounds that a single figure over board.py's three counts is noise wearing
+   a percentage sign. The objection was to the DENOMINATOR, and it was right
+   about that one: the residual holds balanced reads and unclassified ones
+   together, so a share computed over the total says more than it knows. The
+   correction keeps the objection and drops the ban -- the denominator is the
+   directional signals, and the sample line names it. See VC1 and
+   chatterPresentation.ts, which owns every rule. */
+.rh-tone { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.rh-tone strong { display: inline; font-weight: 600; }
+/* A reading that is not a share is a sentence, so it does not wear the figure
+   weight a percentage does. Written against `.rh-table strong` rather than
+   with !important, because that is the rule it has to outrank. */
+.rh-table strong.rh-tonequiet {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* --- filters ------------------------------------------------------------ */
+
+.rh-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.rh-sources {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 11px 9px;
+  margin: 0;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.rh-sources legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.rh-sources label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  min-height: 40px;
+}
+.rh-sources input { accent-color: var(--accent); }
+/* The feed that cannot be turned off. `.locked` rather than `:disabled`,
+   because the input is aria-disabled and still focusable -- see Filters.tsx. */
+.rh-sources label.locked { color: var(--muted); cursor: not-allowed; }
+/* Rendered only while a checkbox points at it. */
+.rh-sources-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rh-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rh-field input,
+.rh-field select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  padding: 9px 11px;
+  color: var(--ink);
+  font-size: 13px;
+  min-height: 40px;
+  min-width: 220px;
+}
+
+/* --- the ranked table --------------------------------------------------- */
+
+/* Scrolls inside its own labelled region. The document itself never scrolls
+   sideways -- a page that does hides the right-hand columns from anyone who
+   does not think to drag it. */
+.rh-tablewrap { overflow-x: auto; padding: 20px 23px 0; }
+.rh-tablewrap:focus-visible { outline-offset: -3px; }
+
+.rh-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.rh-table th[scope='col'] {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 0 12px 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.rh-table td,
+.rh-table th[scope='row'] {
+  padding: 15px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  vertical-align: top;
+  font-weight: 400;
+}
+.rh-table tbody tr:first-child td,
+.rh-table tbody tr:first-child th { border-top: 0; }
+.rh-table th:first-child,
+.rh-table td:first-child { padding-left: 0; }
+.rh-table th:last-child,
+.rh-table td:last-child { padding-right: 0; }
+.rh-table .right { text-align: right; }
+.rh-table strong { display: block; font-size: 13px; font-weight: 600; }
+
+.rh-sub { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.rh-company { min-width: 210px; }
+
+/* The whole company cell is the control. 44px tall at every width, because a
+   row is the primary thing a reader taps on this page. */
+.rh-open {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  padding: 2px 0;
+  min-height: 44px;
+  width: 100%;
+}
+.rh-open:hover .rh-ticker { color: var(--accent); text-decoration: underline; }
+.rh-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--wash);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+.rh-ticker { display: block; font-size: 13px; font-weight: 600; letter-spacing: 0.015em; }
+.rh-name { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.rh-clauses { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; }
+.rh-clause { font-size: 12px; color: var(--muted); }
+.rh-clause.ratio, .rh-clause.people, .rh-clause.venues { color: var(--ink); }
+.rh-clause.price-up { color: var(--green); }
+.rh-clause.price-down { color: var(--red); }
+.rh-clause.warn { color: var(--amber); }
+.rh-clause.new { color: var(--muted); font-style: italic; }
+
+.rh-marks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+
+/* Proportion as a bar, under a figure that already reads as words. Colour
+   never carries the meaning alone: the percentage above it is the reading.
+   Segments are flex-grown from unrounded ratios, so a 0.4% share draws 0.4%
+   of the track rather than the rounded label's width. */
+.rh-tonebar {
+  display: flex;
+  gap: 2px;
+  width: 104px;
+  max-width: 100%;
+  height: 6px;
+  margin: 6px 0 0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+/* A segment that exists is drawn wide enough to be seen. Measured at 1440
+   before this rule: a 0.5% bullish share rendered 0.52px and a 0.1% bearish
+   one 0.02px, so the bar read 0% and 100% under labels that deliberately say
+   `0.5%` and `>99.9%` -- the bar reintroducing exactly the rounding lie the
+   wording exists to prevent. 2px of a 104px track slightly OVER-states a rare
+   share, which is the honest direction to err: the percentage above it is the
+   reading, and this only has to say "present, and very small". A zero share
+   still draws no segment at all, because that difference is the point. */
+.rh-tonebar span { border-radius: 2px; min-width: 2px; }
+.rh-tonebar .bull { background: var(--green); }
+.rh-tonebar .flat { background: var(--line); }
+.rh-tonebar .bear { background: var(--red); }
+
+.rh-tablefoot {
+  margin: 0;
+  padding: 15px 23px 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* --- chatter ------------------------------------------------------------- */
+
+/* Everything in this block is scoped to `.rh-chatter` or to the chatter panel.
+   The Activity and Administration tables use `.rh-table` too, and their
+   columns are not these columns. */
+
+.rh-panelhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 21px 23px 0;
+}
+.rh-panelheadtext h2 { font-size: 18px; letter-spacing: -0.01em; }
+.rh-panelheadtext p { margin-top: 5px; }
+.rh-panelheadtools {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-left: auto;
+}
+.rh-panelcount { white-space: nowrap; padding-bottom: 10px; }
+/* Not `.rh-search` -- that class is the topbar's global search, and
+   sharing it made this box inherit the topbar's styling and, worse,
+   made a test that typed into `.rh-search input` type into the wrong
+   field entirely. */
+.rh-tablefilter input { min-width: 200px; }
+.rh-panelempty { padding: 4px 23px 0; }
+
+/* The column proportions come from the colgroup; `fixed` is what makes the
+   browser honour them instead of measuring the content. The rejected board
+   let automatic sizing hand most of the width to whichever row had the
+   longest feed list. */
+.rh-chatter { table-layout: fixed; }
+.rh-chatter td,
+.rh-chatter th[scope='row'] { padding: 16px 12px; }
+.rh-chatter th[scope='col'] { font-size: 12px; }
+/* 13px figures with a 12px secondary line under them. The contract's floor is
+   11px and nothing here goes near it. */
+.rh-chatter strong { font-size: 13px; }
+.rh-chatter .rh-sub { font-size: 12px; }
+.rh-chatter tbody tr:hover { background: var(--wash); }
+/* Out of BOTH trees on the desk layout. The column header already names the
+   figure; carrying a second name on all seven cells meant a screen reader
+   read the column twice per cell, seven times per row, every row. `display:
+   none` rather than `aria-hidden`, because the stacked layout below 860 needs
+   the very same element visible and announced -- one CSS switch, no JavaScript
+   watching the viewport. */
+.rh-chatter .rh-cell-label { display: none; }
+
+/* --- sorting ------------------------------------------------------------- */
+
+/* The header IS the control. It keeps the header's own type -- 12px, muted,
+   medium -- so turning the column names into buttons did not turn the header
+   row into a toolbar. */
+.rh-sortbutton {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+.rh-sortbutton:hover { color: var(--ink); text-decoration: underline; }
+.rh-sortbutton.active { color: var(--accent); font-weight: 600; }
+.rh-sortarrow { font-size: 10px; line-height: 1; }
+/* `inline` drops the flex context, and with it `.rh-sortbutton`'s gap -- so
+   the arrow sat flush against the word: `Today↓` where every other column
+   reads `Tone ↓`. */
+.rh-pricehead .rh-sortbutton { display: inline; }
+.rh-pricehead .rh-sortarrow { margin-left: 4px; }
+
+/* Present on every width, and the only sort control that survives the header
+   row's `display: none` below 860. Hidden here rather than unmounted, so the
+   two are never both offering the same thing. */
+.rh-sortpicker { display: none; }
+.rh-sortpicker .rh-field { min-width: 0; }
+.rh-sortpicker select { min-width: 150px; }
+.rh-sortdir { min-height: 40px; white-space: nowrap; }
+
+/* What the sort did, and what it did not. Sits between the panel heading and
+   the table, where a reader looking at a reordered list is looking. */
+.rh-sortnote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: 12px 0 0;
+  padding: 0 23px;
+  max-width: none;
+}
+.rh-sortnote strong { color: var(--ink); font-weight: 600; }
+/* `.rh-textbutton { color: var(--accent) }` is 0,1,0 and loses to
+   `.rh button { color: inherit }` at 0,1,1, so inside this muted paragraph
+   the reset inherited --muted and read as the tail of the sentence beside
+   it: same colour, no underline, nothing to suggest it was a control. */
+.rh-sortnote .rh-sortreset {
+  padding: 0;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rh-sortnote .rh-sortreset:hover { color: var(--accent-strong); }
+.rh-chatter .rh-col-company { min-width: 0; }
+/* Wraps rather than clipping: a warning that does not fit is a warning that
+   did not happen, and the row is allowed to grow for it. */
+.rh-chatter .rh-marks { margin-top: 6px; }
+
+.rh-openname { min-width: 0; }
+/* One line on the desk layout. The whole name stays in the DOM and in the
+   accessible name -- only its DISPLAY is clamped -- and `title` plus the
+   research page both carry it in full. */
+.rh-chatter .rh-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rh-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  color: var(--accent);
+  margin-left: auto;
+}
+.rh-chevron:hover { background: var(--wash); }
+.rh-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* An in-place disclosure. Floating would be clipped by the table's own scroll
+   box, so it opens downward and the row grows while it is open. */
+.rh-detail { display: block; }
+/* The trigger IS the secondary line -- the figure the reader was going to
+   read anyway -- so opening the exact counts costs the row no height. The
+   dotted underline is what says it is a control; colour alone would not. */
+.rh-detailtoggle {
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  color: var(--muted);
+}
+.rh-detailtoggle .rh-sub {
+  text-decoration: underline dotted var(--line) from-font;
+  text-underline-offset: 3px;
+}
+.rh-detailtoggle:hover .rh-sub,
+.rh-detailtoggle[aria-expanded='true'] .rh-sub {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+.rh-detailbody {
+  display: block;
+  margin-top: 7px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--wash);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+/* The [hidden] trap: a display rule above would otherwise keep an
+   attribute-hidden element on screen. */
+.rh-detailbody[hidden] { display: none; }
+.rh-detailnote { margin: 0; }
+.rh-detaillist { list-style: none; margin: 9px 0 0; padding: 0; }
+.rh-detaillist > li { margin-top: 7px; }
+.rh-detaillist strong {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rh-detaillist span { display: block; word-break: break-word; }
+
+.rh-footline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 0;
+}
+.rh-footline strong { color: var(--ink); font-weight: 600; }
+.rh-glossary { margin: 0; }
+.rh-glossary dt {
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 9px;
+}
+.rh-glossary dt:first-child { margin-top: 0; }
+.rh-glossary dd { margin: 3px 0 0; }
+
+/* The secondary filters, one press away rather than always on screen. */
+.rh-more { display: flex; align-items: flex-end; }
+.rh-morebutton::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 140ms;
+  opacity: 0.75;
+}
+.rh-morebutton[aria-expanded='true']::after {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+.rh-morebutton {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  padding: 0 13px;
+  min-height: 40px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rh-morebutton:hover { background: var(--wash); }
+.rh-moresummary { color: var(--muted); font-weight: 400; }
+.rh-morepanel {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+.rh-morepanel[hidden] { display: none; }
+/* A definition next to the control it defines. Full width of the disclosure,
+   so it reads as a note under the row rather than as a fourth field. */
+.rh-fieldnote {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 78ch;
+}
+
+/* --- overview ----------------------------------------------------------- */
+
+.rh-leads { list-style: none; margin: 0; padding: 0; }
+.rh-leads > li {
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+.rh-leads > li:first-child { padding-top: 0; border-top: 0; }
+.rh-leadprice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rh-marklist { list-style: none; margin: 0 0 14px; padding: 0; }
+.rh-marklist > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rh-marklist > li:last-child { border-bottom: 0; }
+.rh-marklink { text-align: left; min-height: 44px; }
+.rh-marklink:hover .rh-ticker { color: var(--accent); text-decoration: underline; }
+.rh-markprice { font-size: 12px; color: var(--muted); flex: none; text-align: right; }
+
+/* --- operations --------------------------------------------------------- */
+
+.rh-opsgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+.rh-opsgrid h2 { font-size: 16px; margin-bottom: 14px; }
+.rh-facts-rows { display: flex; flex-direction: column; }
+.rh-factrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.rh-factrow:last-child { border-bottom: 0; }
+.rh-factrow strong { font-weight: 600; text-align: right; }
+
+/* --- search ------------------------------------------------------------- */
+
+.rh-search { position: relative; flex: 1; max-width: 380px; }
+.rh-search input {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--canvas);
+  padding: 9px 12px;
+  font-size: 13px;
+  min-height: 40px;
+  color: var(--ink);
+}
+.rh-search input:hover { border-color: var(--line); }
+.rh-search input:focus { background: var(--white); border-color: var(--line); }
+
+.rh-matches {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.rh-matches li { border-radius: 7px; }
+.rh-matches li.active { background: var(--wash); }
+.rh-matches button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 11px;
+  min-height: 44px;
+}
+.rh-matches b { font-size: 13px; }
+.rh-nomatch { padding: 12px 11px; font-size: 12px; color: var(--muted); }
+
+/* --- research ----------------------------------------------------------- */
+
+.rh-crumb { margin-bottom: 14px; }
+
+.rh-researchhead {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.rh-identity { display: flex; gap: 14px; align-items: center; }
+.rh-identity h1 { font-size: 27px; }
+.rh-mark.large { width: 46px; height: 46px; font-size: 16px; border-radius: 11px; }
+
+.rh-researchcols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: start;
+}
+
+/* The contract's band for the one number the page is about. */
+.rh-bigprice {
+  font-size: 33px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin-bottom: 4px;
+}
+.rh-move { font-size: 13px; font-weight: 500; letter-spacing: 0; }
+
+.rh-facts {
+  display: flex;
+  gap: 26px;
+  margin: 16px 0 0;
+  flex-wrap: wrap;
+}
+.rh-facts dt { font-size: 12px; color: var(--muted); }
+.rh-facts dd { margin: 3px 0 0; font-size: 12px; font-weight: 600; }
+
+.rh-spans { display: flex; gap: 4px; flex-wrap: wrap; }
+.rh-spans button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 38px;
+}
+.rh-spans button:hover { color: var(--ink); background: var(--wash); }
+.rh-spans button[aria-pressed='true'] {
+  background: var(--accent-wash);
+  border-color: var(--accent-line);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rh-chartwrap { overflow-x: auto; margin-top: 14px; }
+.rh-chartwrap:focus-visible { outline-offset: -3px; }
+
+.rh-summary {
+  background: var(--wash);
+  border-radius: var(--radius);
+  padding: 21px;
+  align-self: start;
+}
+.rh-summary h2 { font-size: 17px; margin-bottom: 12px; }
+.rh-summary h3 { margin: 20px 0 8px; font-size: 12px; }
+.rh-summary p { font-size: 12px; line-height: 1.7; }
+.rh-read { color: var(--ink); }
+.rh-facts-list { list-style: none; margin: 0; padding: 0; }
+.rh-facts-list li {
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 9px;
+  padding-left: 15px;
+  position: relative;
+  color: var(--muted);
+}
+.rh-facts-list li::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-size: 17px;
+  line-height: 1.1;
+}
+.rh-facts-list strong { color: var(--ink); font-weight: 600; }
+
+.rh-empty-actions { display: flex; gap: 10px; justify-content: center; }
+
+/* --- the panels ported from the board's detail components ---------------- */
+/* PriceChart, Breakdown and Posts are reused for their tested behaviour --
+   null handling, session bands, converted basis, keyboard and text
+   equivalents. Their markup carries radar.css's short class names, and
+   radar.css is not loaded here, so the rules they need are restated in the
+   hub's own tokens. Scoped under .rh, so nothing here can reach /radar/. */
+
+/* The chart and the session bands paint from CSS variables rather than from
+   literals, which is what lets one renderer serve two visual systems. Those
+   names are radar.css's; undefined here, every `fill` and `stroke` fell back
+   to black and the chart rendered as a solid block.
+   ------------------------------------------------------------------------
+   `--up` and `--down` are BOTH cyan here, and that is deliberate. In
+   radar.css the price line's colour carries the direction of the whole
+   visible span; on this surface cyan carries which SERIES it is, because
+   price and chatter share one canvas and telling them apart is the first
+   question the chart has to answer. The direction is not dropped -- it moved
+   into the chart legend, in words as well as colour, which is a reading a
+   screen reader can also get and the stroke colour never was. */
+.rh {
+  --rule: var(--line);
+  --rule-soft: var(--line-soft);
+  --ink-2: var(--muted);
+  --bg: var(--white);
+  --raise: var(--wash);
+  --mark: var(--chatter);
+  --mark-soft: var(--chatter-soft);
+  --up: var(--price);
+  --down: var(--price);
+  --warn: var(--amber);
+  /* A shut or extended market is furniture, not a caution: a wash a shade
+     off the plot ground rather than a tint that competes with the series. */
+  --session-pre: var(--dim);
+  --session-pre-soft: rgba(177, 193, 211, 0.07);
+  --session-after: var(--dim);
+  --session-after-soft: rgba(177, 193, 211, 0.07);
+}
+
+.rh .pxchart {
+  display: block;
+  /* 1:1 with its own viewBox, always. `width: 100%` inside a fixed 300px box
+     letterboxed the drawing -- 854px of chart in a 1388px box on standalone
+     research, and dead bands above and below it in a narrow column -- and it
+     scaled the type with it, so an axis label measured anywhere from 8.6px to
+     13px depending on the width. At 1:1 a label is the size it says it is,
+     and the column being narrower is answered by panning rather than by
+     shrinking the only numbers on the price axis. */
+  width: 912px;
+  min-width: 912px;
+  max-width: 912px;
+  aspect-ratio: 912 / 300;
+  height: auto;
+}
+
+/* The band captions are drawn at the top of the plot, which is exactly where
+   the price line rides. They inherit no size of their own, and they are given
+   a halo in the panel's own colour so the line passing through them cannot
+   swallow them. */
+.rh .pxchart .session-bands text {
+  font-size: 12px;
+  fill: var(--dim);
+  paint-order: stroke;
+  stroke: var(--white);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.rh .pxchart .ax {
+  font-size: 12px;
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.rh .pxchart .ax.peak { fill: var(--chatter); font-weight: 600; }
+.rh .pxchart .gridline { stroke: var(--line); }
+.rh .pxchart .hover-hit { cursor: crosshair; }
+.rh .pxchart .hover-line {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.8;
+}
+.rh .pxchart .hover-dot { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.rh .pxchart .hover-dot.px { fill: var(--white); stroke: var(--ink); }
+.rh .pxchart .hover-dot.talk { fill: var(--chatter); stroke: var(--white); }
+.rh .pxchart .hover-card {
+  fill: var(--white);
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.rh .pxchart .hover-text { fill: var(--muted); }
+.rh .pxchart .hover-text.l0 { fill: var(--ink); font-weight: 600; }
+.rh .pxchart .hover-text.l2 { fill: var(--chatter); font-weight: 600; }
+.rh .pxchart .watch-edge { stroke: var(--line); stroke-dasharray: 3 3; }
+.rh .history-proxy-note { font-size: 11px; color: var(--amber); margin-top: 8px; }
+
+.rh .chatter-histogram { margin-top: 10px; }
+.rh .chatter-histogram-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+.rh .chatter-histogram h3 { margin: 0 0 4px; }
+.rh .chatter-histogram-head p { margin: 0; }
+.rh .chatter-tone-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 12px;
+  max-width: 520px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.rh .chatter-tone-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.rh .chatter-tone-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+.rh .chatter-histogram-canvas {
+  overflow-x: visible;
+  padding: 4px 0 2px;
+  outline: none;
+}
+.rh .chatter-histogram-canvas:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+.rh .chatter-histogram-canvas svg {
+  display: block;
+  width: 912px;
+  min-width: 912px;
+  height: auto;
+}
+.rh .chatter-histogram-canvas rect { cursor: pointer; }
+.rh .chatter-interval-detail {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 760px) {
+  .rh .chatter-histogram-head { display: block; }
+  .rh .chatter-tone-legend {
+    justify-content: flex-start;
+    margin-top: 10px;
+  }
+}
+
+.rh .bd {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 30px;
+  align-items: start;
+}
+.rh .bd .sub { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.rh .rh-detailnote, .rh .rh-detaillist strong, .rh .rh-detaillist span {
+  font-size: 12px;
+}
+.rh .bd table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.rh .bd thead th {
+  text-align: left;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rh .bd td,
+.rh .bd tbody th {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.rh .bd tbody th.venue {
+  text-align: left;
+  font-weight: 400;
+  color: var(--ink);
+}
+.rh .bd th.r, .rh .bd td.r { text-align: right; }
+.rh .stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.rh .stat .k { color: var(--muted); }
+.rh .stat .v { font-weight: 600; color: var(--ink); }
+.rh .stat.hot .v { color: var(--amber); }
+.rh .zone { margin: 0; }
+/* The heading wraps as a row before it wraps inside a word, and the gap is
+   what separates the heading from its qualifier -- JSX strips the newline
+   between them, so without this the posts zone read "…saying· 0 posts". */
+.rh .zone h3 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.rh .zone h3 .q { font-weight: 400; font-size: 12px; color: var(--muted); }
+.rh .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+/* Counts in words on THIS surface, which is a different decision from the
+   Chatter column's. The comment here used to forbid a tone bar outright; VC1
+   supersedes that ban, and the bar now lives in `.rh-tonebar` with its own
+   stated denominator. Research keeps words because it has the room for them
+   and because green and red already carry price direction on this page. */
+.rh .wording {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rh .wording b { font-weight: 650; color: var(--ink); }
+.rh .wording .q { color: var(--muted); }
+.rh .wording .q b { color: var(--muted); }
+
+.rh .plain {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-wrap: pretty;
+  max-width: 52ch;
+}
+.rh .plain b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.rh .posts { list-style: none; margin: 0; padding: 0; max-width: 660px; }
+.rh .post { padding: 14px 0 15px; border-bottom: 1px solid var(--line); }
+.rh .post.bull { background: rgba(69, 221, 160, 0.09); padding-inline: 10px; }
+.rh .post.bear { background: var(--red-wash); padding-inline: 10px; }
+.rh .phead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.rh .phead .src {
+  min-width: 66px;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--wash);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.rh .phead .ptone { font-weight: 650; text-transform: uppercase; color: var(--muted); }
+.rh .post.bull .ptone { color: var(--green); }
+.rh .post.bear .ptone { color: var(--red); }
+.rh .phead .pby { color: var(--muted); }
+.rh .phead .who {
+  color: var(--ink);
+  font-weight: 500;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rh .phead .when { color: var(--muted); }
+.rh .phead .out { margin-left: auto; color: var(--green); }
+.rh .phead .out:hover { text-decoration: underline; }
+.rh .post p {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* The clamp is the whole point of the "show the whole post" control. Without
+   it one pasted wall of text runs past thirty screen-heights and buries the
+   posts under it, and the button toggles nothing visible. A height rather
+   than line-clamp, because line-clamp cannot be transitioned. */
+.rh .post p.clamp {
+  height: calc(7 * 1.6em);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2em), transparent);
+}
+.rh .post .more {
+  font-size: 12px;
+  color: var(--green);
+  margin-top: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rh .below { font-size: 11px; color: var(--muted); margin-top: 12px; }
+
+/* --- page states -------------------------------------------------------- */
+
+.rh-empty {
+  padding: 65px 25px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  max-width: 850px;
+  margin: 15px auto;
+}
+.rh-empty h2 { font-size: 22px; margin-bottom: 9px; }
+.rh-empty p { font-size: 13px; color: var(--muted); max-width: 46ch; margin: 0 auto 23px; }
+
+.rh-skeleton {
+  height: 17px;
+  border-radius: 5px;
+  background: var(--wash);
+  margin-bottom: 17px;
+}
+.rh-skeleton.large { height: 180px; }
+.rh-skeleton.half { width: 48%; }
+
+/* A board somebody else is building. The waiting notices stand where the
+   page's rows would, under its heading and controls; the Retry keeps to the
+   end of the line, away from the words it follows. */
+.rh-wait p { margin-top: 4px; }
+.rh-wait .rh-retry { margin-left: auto; flex: none; }
+
+/* When the board was calculated, in the heading's context line. The age is
+   the line's own muted text; the word after it carries the state. "not
+   refreshed", "Last refresh failed" and "Expired" are cautions and take the
+   amber. "refreshing" is not -- a queued refresh is no caution on rows that
+   are still the last real ones -- so it keeps the line's colour, on the
+   token rather than the line, where it cannot quiet the others. */
+.rh-age { font-variant-numeric: tabular-nums; }
+.rh-age b { color: var(--amber); font-weight: 600; }
+.rh-age b.queued { color: inherit; }
+.rh-age button {
+  margin-left: 8px;
+  padding: 1px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.rh-age button:hover { background: var(--wash); }
+.rh-age button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+
+/* --- the chatter workspace ---------------------------------------------- */
+/* Three columns at the desk widths: candidates, the company being examined,
+   its evidence. Below 1280 the evidence rail moves UNDER the centre rather
+   than squeezing it -- the chart is the reason the middle column exists, and
+   an unreadable axis is a worse trade than a scroll. Below 761 the rail and
+   the company become sequential screens. */
+
+.rh-chatterhead.tight { margin-bottom: 16px; align-items: center; }
+.rh-chatterhead.tight h1 { font-size: 22px; letter-spacing: -0.02em; }
+.rh-chatterhead.tight .rh-datestamp { margin-bottom: 4px; }
+
+.rh-modetoggle {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--white);
+}
+.rh-modetoggle button {
+  padding: 9px 15px;
+  min-height: 40px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.rh-modetoggle button + button { border-left: 1px solid var(--line); }
+.rh-modetoggle button:hover { color: var(--ink); background: var(--wash); }
+.rh-modetoggle button[aria-pressed='true'] {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rh-workspacegrid {
+  display: grid;
+  grid-template-columns:
+    minmax(300px, 340px) minmax(500px, 1fr) minmax(280px, 320px);
+  gap: 16px;
+  align-items: start;
+}
+
+/* --- the candidate rail --- */
+
+.rh-rail {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  /* Its own scroll region, so a fifty-company list does not push the chart
+     off the bottom of the page. The header and the controls stay put. */
+  max-height: calc(100vh - var(--top-h) - var(--band-h) - 116px);
+  position: sticky;
+  top: calc(var(--top-h) + var(--band-h) + 16px);
+}
+
+.rh-railhead {
+  padding: 16px 16px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rh-railhead h2 { font-size: 15px; }
+.rh-railhead p { margin-top: 3px; }
+
+.rh-railcontrols {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rh-railfilter input { width: 100%; min-width: 0; }
+.rh-railsort { display: flex; gap: 8px; align-items: flex-end; }
+.rh-railsort .rh-field { flex: 1; min-width: 0; }
+.rh-railsort select { width: 100%; min-width: 0; }
+.rh-railsort .rh-sortdir { flex: none; min-height: 40px; }
+@media (max-width: 860px) {
+  .rh-railsort .rh-sortdir { min-height: 44px; }
+}
+.rh-railreset { align-self: flex-start; }
+.rh-railempty { padding: 16px; }
+
+.rh-railscroll { overflow-y: auto; overscroll-behavior: contain; }
+
+.rh-candidates { list-style: none; margin: 0; padding: 0; }
+
+/* One control for the whole row -- no nested star, chevron or disclosure.
+   The selected row carries an orange edge AND a wash, so it is not colour
+   alone doing the work; `aria-current` carries it for a screen reader. */
+.rh-candidate {
+  display: block;
+  padding: 12px 16px 12px 13px;
+  border-left: 3px solid transparent;
+  border-top: 1px solid var(--line-soft);
+  min-height: 44px;
+  transition: background 130ms, border-color 130ms;
+}
+.rh-candidates > li:first-child .rh-candidate { border-top: 0; }
+.rh-candidate:hover { background: var(--wash); }
+.rh-candidate.selected {
+  background: var(--selected);
+  border-left-color: var(--accent);
+}
+.rh-candidate.selected .rh-ticker { color: var(--accent); }
+.rh-candidate:focus-visible { outline-offset: -3px; }
+
+.rh-candtop, .rh-candbottom {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rh-candbottom { margin-top: 8px; }
+.rh-candname { min-width: 0; }
+.rh-candname .rh-ticker { font-size: 13px; font-weight: 600; }
+.rh-candname .rh-name {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  /* Two lines, then an ellipsis: a legal name is routinely longer than a
+     320px rail, and the accessible text is whole -- `title` repeats it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rh-candattention, .rh-candtone { text-align: right; flex: none; max-width: 46%; }
+.rh-candprice { min-width: 0; }
+.rh-candidate strong { display: block; font-size: 13px; font-weight: 600; }
+.rh-candidate .rh-sub { display: block; font-size: 12px; margin-top: 2px; }
+.rh-candtone .rh-tonebar { margin-left: auto; width: 88px; }
+.rh-candidate .rh-marks { margin-top: 8px; }
+.rh-candidate .rh-badge { font-size: 12px; }
+
+/* --- the selected company --- */
+
+.rh-selected { min-width: 0; }
+.rh-selected .rh-stack { gap: 16px; }
+.rh-backtolist { display: none; margin-bottom: 12px; }
+
+.rh-selectedhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.rh-selectedhead h2 {
+  font-size: 27px;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.rh-selectedticker {
+  color: var(--price);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.rh-nothingpicked {
+  display: flex;
+  align-items: center;
+  min-height: 320px;
+  /* There is no evidence rail to sit beside, so the panel takes that column
+     rather than leaving it as dead canvas. */
+  grid-column: 2 / -1;
+}
+
+/* --- the evidence rail --- */
+
+.rh-evidence {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  padding: 16px;
+  min-width: 0;
+}
+.rh-evidencehead h2 { font-size: 15px; }
+.rh-evidencehead p { margin-top: 3px; }
+
+.rh-evidencegrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.rh-figure {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--wash);
+  padding: 11px 12px;
+  min-width: 0;
+}
+.rh-figurelabel {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  /* Two lines' worth, always. `ACTIVE PLATFORMS` wraps in a 140px cell and
+     its three siblings do not, which dropped that card's value ~18px below
+     its row-mate and broke the 2x2's rhythm. The term is exact -- these are
+     the platforms that COUNTED something, not the ones that were read -- so
+     the grid gives way rather than the wording. */
+  min-height: 2.1em;
+}
+.rh-figurevalue {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-top: 3px;
+  letter-spacing: -0.02em;
+}
+/* A figure that is a sentence rather than a number does not get a number's
+   size -- "Tone unavailable" at 22px reads as a headline finding. */
+.rh-figurevalue.quiet { font-size: 13px; font-weight: 600; color: var(--muted); }
+.rh-figure .rh-sub { display: block; margin-top: 4px; }
+.rh-figure .rh-tonebar.wide { width: 100%; margin-top: 7px; height: 7px; }
+.rh-figure .rh-detail { margin-top: 6px; }
+.rh-evidencenone { margin-top: 14px; }
+
+.rh-checking { margin-top: 18px; }
+.rh-checking h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+.rh-checking p { margin-top: 8px; }
+.rh-checklist { list-style: none; margin: 10px 0 0; padding: 0; }
+.rh-checklist > li {
+  padding: 9px 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+.rh-checklist > li:first-child { border-top: 0; padding-top: 0; }
+.rh-checklist strong { display: block; font-weight: 600; font-size: 12px; }
+.rh-checklist span { display: block; color: var(--muted); margin-top: 3px; }
+
+.rh-evidenceact {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.rh-watchbutton { width: 100%; justify-content: center; min-height: 44px; }
+.rh-watcherror { margin-top: 10px; font-size: 12px; }
+
+/* --- evidence / source posts --- */
+
+.rh-tabs { padding: 0; overflow: hidden; }
+.rh-tablist {
+  display: flex;
+  gap: 2px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--wash);
+}
+.rh-tablist button {
+  padding: 0 14px;
+  min-height: 46px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.rh-tablist button:hover { color: var(--ink); }
+.rh-tablist button[aria-selected='true'] {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.rh-tabs .rh-panel { border: 0; border-radius: 0; background: transparent; }
+
+/* --- the chart's own labels, at workspace width --- */
+
+/* The two gutter prices are drawn from x=860 in a 912-unit box and run past
+   its right edge. The drawing is allowed to paint outside itself and the
+   scroller reserves the room for it to paint into -- measured before this,
+   `$28.53` rendered as `$28.5:` at 1440 and as a flatly wrong `$28` at 1024. */
+.rh .pxchart { overflow: visible; }
+.rh .rh-chartwrap { padding-right: 38px; }
+
+/* --- the chart legend --- */
+/* Which mark is which series, and -- because the stroke here is cyan for
+   series identity rather than green or red for direction -- which way the
+   span went, in a word. */
+.rh-chartlegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  max-width: none;
+}
+.rh-legenditem { display: inline-flex; align-items: center; gap: 7px; }
+.rh-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  flex: none;
+}
+.rh-swatch.price { background: var(--price); }
+.rh-swatch.chatter { background: var(--chatter); height: 9px; width: 9px; border-radius: 2px; }
+.rh-swatch.normal {
+  background: transparent;
+  height: 0;
+  border-top: 2px dashed var(--dim);
+  border-radius: 0;
+}
+.rh-swatch.band {
+  background: rgba(177, 193, 211, 0.14);
+  height: 11px;
+  width: 11px;
+  border-radius: 2px;
+}
+
+/* --- filters in the rail --- */
+
+/* `display: contents` so the bar keeps laying its controls out as direct
+   flex children; the wrapper exists only to be the disclosure's panel in
+   compact mode. */
+.rh-filterbar { display: contents; }
+.rh-filters.compact {
+  display: block;
+  margin-bottom: 0;
+}
+.rh-filters.compact .rh-more { width: 100%; }
+.rh-filters.compact .rh-morebutton {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  /* The summary is the whole point of the collapsed control -- clipping it
+     mid-word hides the filter it exists to announce. */
+  white-space: normal;
+  text-align: left;
+  padding: 10px 13px;
+}
+.rh-filters.compact .rh-moresummary { flex: 1; }
+.rh-filters.compact .rh-morepanel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding-top: 12px;
+  /* Its own scroller, so the candidate list keeps a share of the rail. */
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.rh-rail:has(.rh-filters.compact .rh-morepanel:not([hidden])) {
+  position: static;
+  max-height: none;
+}
+/* An author `display` beats the UA sheet's `[hidden] { display: none }`, and
+   the rule above is more specific than the one that restores it -- so without
+   this the rail opened with every server-side filter already expanded and the
+   candidate list pushed out of its own scroll box. */
+.rh-filters.compact .rh-morepanel[hidden] { display: none; }
+.rh-filters.compact .rh-morecontinued {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+.rh-filters.compact .rh-field { width: 100%; }
+.rh-filters.compact select { width: 100%; }
+.rh-filters.compact .rh-sources { margin: 0; }
+
+@media (max-width: 1599px) {
+  /* The evidence rail goes under the centre rather than taking width from
+     the chart. The candidate rail keeps its column and spans both rows. */
+  .rh-workspacegrid {
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  }
+  /* With only two columns there is width to spare above 1360 -- the chart
+     caps at 912 and stops taking any -- so the rail gets it. At 320 the tone
+     sample wrapped to two lines on every row; at 360 it does not. */
+  @media (min-width: 1360px) {
+    .rh-workspacegrid { grid-template-columns: 360px minmax(0, 1fr); }
+  }
+  .rh-rail { grid-row: 1 / span 2; }
+  .rh-selected { grid-column: 2; }
+  .rh-evidence { grid-column: 2; }
+  .rh-evidencegrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1023px) {
+  .rh-workspacegrid { gap: 12px; }
+  .rh-workspacegrid { grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); }
+  .rh-evidencegrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rh-selectedhead h2 { font-size: 23px; }
+}
+
+/* Sequential screens, decided by whether the two columns actually FIT rather
+   than by a phone-shaped number: a 300px rail, the 12px gutter, the 28px of
+   page padding and the 500px the centre needs for a legible chart come to
+   840. Measured at 800 the centre got 460 -- under its own minimum, with the
+   chart panning and the span buttons on two rows. 860 is the first width that
+   clears it, and it is where the destination band collapses too, so the shell
+   and the workspace change shape together instead of twice.
+   `ChatterWorkspace.SIDE_BY_SIDE` carries the same number. */
+@media (max-width: 859px) {
+  .rh-workspacegrid { grid-template-columns: minmax(0, 1fr); }
+  .rh-rail {
+    grid-row: auto;
+    position: static;
+    max-height: none;
+  }
+  .rh-selected, .rh-evidence { grid-column: 1; }
+  .rh-workspacegrid[data-view='company'] .rh-rail { display: none; }
+  .rh-workspacegrid[data-view='list'] .rh-nothingpicked { display: none; }
+  .rh-backtolist { display: block; }
+  .rh-backtolist .rh-textbutton { min-height: 44px; }
+  .rh-railscroll { overflow-y: visible; }
+  /* Full width is for the LIST, not for one select stretched across it. The
+     three controls sit on a row and wrap as they need to. */
+  .rh-railcontrols { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+  .rh-railfilter { flex: 1 1 200px; }
+  .rh-railsort { flex: 1 1 260px; }
+  .rh-filters.compact { flex: 1 1 100%; }
+  /* The chart heading and its spans stop competing for one row once the
+     heading has to wrap to hold "Price and chatter". */
+  .rh-sectionhead { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .rh-chatterhead.tight { flex-wrap: wrap; align-items: flex-start; }
+  .rh-modetoggle button { min-height: 44px; }
+  .rh-selectedhead h2 { font-size: 21px; }
+  .rh-evidence { padding: 14px; }
+}
+
+@media (max-width: 430px) {
+  /* The mark alone. Five glyphs of wordmark are worth less than the room
+     they take from the search, whose placeholder was clipping to
+     "Find a con"; the logo still says whose application this is. */
+  .rh-wordmark { display: none; }
+  .rh-brand { gap: 0; }
+}
+
+@media (max-width: 400px) {
+  /* Two figures still fit at 390 -- one per row would push "What needs
+     checking" a screen further down. At 320 they stack. */
+  .rh-figurevalue { font-size: 19px; }
+  .rh-candidate { padding: 12px 12px 12px 9px; }
+}
+
+@media (max-width: 340px) {
+  .rh-evidencegrid { grid-template-columns: minmax(0, 1fr); }
+  .rh-candtop, .rh-candbottom { flex-wrap: wrap; gap: 6px; }
+  .rh-candattention, .rh-candtone { text-align: left; max-width: none; }
+  .rh-candtone .rh-tonebar { margin-left: 0; }
+}
+
+/* --- responsive --------------------------------------------------------- */
+
+@media (max-width: 1250px) {
+  .rh-nav { padding-left: 14px; padding-right: 14px; }
+  .rh-navlink { padding: 0 10px; }
+  .rh-top { padding: 0 16px; gap: 14px; }
+  .rh-main { padding: 22px 16px 42px; }
+  .rh-twocol { grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; }
+}
+
+@media (max-width: 1100px) {
+  .rh-twocol { grid-template-columns: 1fr; }
+  /* The chart is 1:1 at every width now, so there is nothing left to set
+     here -- it pans wherever the column is narrower than the drawing, at 768
+     exactly as at 1280, and the axis is 12px in both. */
+  /* The summary follows the evidence rather than sitting beside it. Below
+     this width a 280px rail makes the chart unreadable, and the chart is the
+     reason the page exists. */
+  .rh-researchcols { grid-template-columns: minmax(0, 1fr); }
+  .rh .bd { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+}
+
+@media (max-width: 1000px) {
+  .rh-main { padding: 20px 14px 40px; }
+  .rh h1 { font-size: 28px; }
+}
+
+/* The destination band collapses at 860, and the table stacks at the same
+   width. Under the old left rail those were two different problems -- the
+   rail stole 184px from a seven-column table, so the rail had to go first, at
+   1080. The horizontal band steals no width from anything: it is one 48px
+   row, and four destinations fit across it comfortably down to about 860,
+   which is also where the table gives up. One breakpoint, because there is
+   now one reason for it.
+   ------------------------------------------------------------------------
+   Collapsed, it is a sheet under the identity bar rather than an off-canvas
+   drawer: it opens where the reader pressed, and it does not need the whole
+   viewport for four links. */
+@media (max-width: 860px) {
+  .rh-nav {
+    position: fixed;
+    top: var(--top-h);
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 8px 12px 12px;
+    background: var(--white);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+    transform: translateY(-8px);
+    opacity: 0;
+    visibility: hidden;
+    transition: transform 160ms, opacity 160ms, visibility 160ms;
+  }
+  .rh-nav.open { transform: translateY(0); opacity: 1; visibility: visible; }
+  .rh-navlink {
+    border-bottom: 0;
+    border-left: 3px solid transparent;
+    padding: 0 12px;
+    min-height: 48px;
+    font-size: 15px;
+  }
+  .rh-navlink[aria-current='page'] {
+    border-bottom-color: transparent;
+    border-left-color: var(--accent);
+    background: var(--accent-wash);
+  }
+  .rh-navend { margin-left: 0; flex-direction: column; align-items: stretch; }
+  /* The contextual company tab is a breadcrumb, not a destination; in a
+     stacked menu of destinations it reads as a fifth page. It stays on the
+     bar itself, which is where the heading already names the company. */
+  .rh-navcrumb { display: none; }
+  .rh-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .rh-menu[aria-expanded='true'] {
+    background: var(--accent-wash);
+    border-color: var(--accent-line);
+    color: var(--accent);
+  }
+}
+
+@media (max-width: 860px) {
+  .rh { --top-h: 60px; }
+  .rh-top { padding: 0 12px; gap: 10px; }
+  .rh-topmid { justify-content: flex-start; }
+  .rh-main { padding: 18px 14px 38px; }
+  .rh-heading { flex-wrap: wrap; gap: 16px; }
+  .rh-heading h1 { font-size: 27px; }
+  .rh-pad { padding: 19px; }
+  .rh-button { min-height: 44px; }
+  .rh-textbutton { min-height: 44px; }
+  .rh-session .rh-venue { display: none; }
+  .rh-tablewrap { padding: 16px 18px 0; }
+  .rh-tablefoot { padding: 13px 18px 16px; }
+
+  /* Chatter stacks HERE, at 860, and no other table does -- seven columns is
+     what makes 860 the right number for this one, and the Eighth return
+     scopes the change to it. Watching and Activity keep their own 700px table
+     breakpoint, further down.
+     ---------------------------------------------------------------------
+     Self-sufficient on purpose: it no longer leans on a generic stacking block
+     that now fires 160px later. Written as `.rh-table.rh-chatter` wherever it
+     has to outrank that generic block below 700, so the two do not depend on
+     which one the file happens to list last.
+     ---------------------------------------------------------------------
+     Company and price on the top line, attention and voices beneath, sources
+     and tone beneath that. Tone stays VISIBLE -- the prototype hid it on
+     mobile and the reading is half the point of the page. Qualifications stay
+     in the company block, where they belong.
+     ---------------------------------------------------------------------
+     `display: block` on table elements drops their implicit roles, so the
+     markup carries explicit ARIA roles that survive it; and the cell labels
+     become real visible text here, because the header row is gone and they are
+     the only thing naming each figure. */
+  .rh-table.rh-chatter thead { display: none; }
+  .rh-table.rh-chatter,
+  .rh-table.rh-chatter tbody,
+  .rh-table.rh-chatter tr { display: block; }
+  .rh-table.rh-chatter tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'company  price'
+      'attention voices'
+      'sources  tone';
+    gap: 12px 16px;
+    align-items: start;
+    padding: 15px 0 17px;
+  }
+  .rh-table.rh-chatter tbody tr { border-top: 1px solid var(--line); }
+  .rh-table.rh-chatter tbody tr:first-child { border-top: 0; }
+  .rh-chatter .rh-col-company { grid-area: company; }
+  .rh-chatter .rh-col-price { grid-area: price; }
+  .rh-chatter .rh-col-attention { grid-area: attention; }
+  .rh-chatter .rh-col-voices { grid-area: voices; }
+  .rh-chatter .rh-col-sources { grid-area: sources; }
+  .rh-chatter .rh-col-tone { grid-area: tone; }
+  /* The chevron duplicates the company control, which is a 44px target and is
+     still here. One affordance is enough on a phone.
+     ---------------------------------------------------------------------
+     `.rh-table.rh-chatter`, not `.rh-chatter`: the cell rule below is
+     `.rh-table.rh-chatter td { display: block }` and outranked the plainer
+     selector, so the chevron came back on mobile as a block with no grid area
+     and sat alone at the bottom of every row. */
+  .rh-table.rh-chatter .rh-col-open { display: none; }
+
+  .rh-table.rh-chatter td,
+  .rh-table.rh-chatter th[scope='row'] {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .rh-table.rh-chatter td > *,
+  .rh-table.rh-chatter td.right,
+  .rh-table.rh-chatter td.right > * { text-align: left; }
+  /* Visible, and in the accessibility tree, ONLY here. On the desk layout the
+     column header already names the figure and this repeated it on all seven
+     cells of every row -- see the `display: none` beside `.rh-chatter`. */
+  .rh-table.rh-chatter .rh-cell-label {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .rh-table.rh-chatter td > strong { display: block; }
+  .rh-table.rh-chatter .rh-sub { display: block; margin: 3px 0 0; }
+  .rh-table.rh-chatter .rh-tonebar { margin: 6px 0 0; }
+  /* Two lines, not one and not five. A long legal name wrapped to four lines
+     on a phone and made its row twice as tall as its neighbours; `title` and
+     the research page still carry the whole thing. */
+  .rh-chatter .rh-name {
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  /* A 44px target for the two in-row disclosures. */
+  .rh-chatter .rh-detailtoggle { min-height: 44px; padding: 11px 0; }
+  /* Every disclosure, not only the table's -- the evidence rail stacks two
+     of them, and a 22px target above another 22px target is a thumb miss
+     waiting to land on the neighbour. */
+  .rh-detailtoggle { min-height: 44px; display: inline-flex; align-items: center; }
+  .rh-spans button { min-height: 44px; }
+  .rh-modetoggle button { min-height: 44px; }
+  .rh-field input, .rh-field select {
+    min-width: 0;
+    width: 100%;
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .rh-field { width: 100%; }
+  .rh-search { max-width: none; }
+  .rh-search input { font-size: 16px; }
+  .rh-tablefilter input { font-size: 16px; min-width: 0; }
+  .rh-panelhead { padding: 18px 18px 0; gap: 14px; }
+  .rh-panelheadtools { margin-left: 0; width: 100%; flex-wrap: wrap; }
+  .rh-panelcount { padding-bottom: 0; }
+  .rh-panelempty { padding: 4px 18px 0; }
+  .rh-morebutton { min-height: 44px; width: 100%; justify-content: space-between; }
+  .rh-more { width: 100%; }
+  /* The header row is gone from here down, so this becomes the sort control.
+     `flex`, not `block`: the direction button sits beside the selector. */
+  .rh-sortpicker {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    width: 100%;
+  }
+  .rh-sortpicker .rh-field { flex: 1; }
+  .rh-sortdir { min-height: 44px; flex: none; }
+  .rh-sortnote { padding: 0 18px; }
+  .rh-identity h1 { font-size: 23px; }
+  .rh-mark.large { width: 41px; height: 41px; }
+  .rh-researchhead { gap: 18px; }
+  .rh-summary { padding: 18px; }
+  .rh-spans button { min-height: 44px; }
+
+  .rh .phead .who { max-width: 12ch; }
+}
+
+/* Watching and Activity keep the 700px table breakpoint they always had.
+   Splitting Chatter out to 860 was about ITS seven columns; carrying the other
+   two tables along was an uncommanded change to pages this work was asked only
+   to CHECK, and the capture that seemed to justify it was of an empty table.
+   Chatter's own rules outrank these by specificity, so below 700 it keeps its
+   grid rather than reverting to these label-and-value rows. */
+@media (max-width: 700px) {
+  .rh-table thead { display: none; }
+  .rh-table,
+  .rh-table tbody,
+  .rh-table tr,
+  .rh-table td,
+  .rh-table th[scope='row'] { display: block; }
+  .rh-table tr { border-top: 1px solid var(--line); padding: 6px 0 14px; }
+  .rh-table tbody tr:first-child { border-top: 0; }
+  .rh-table th[scope='row'] { padding: 0; border: 0; }
+  .rh-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 5px 0 0;
+    border: 0;
+    text-align: left;
+  }
+  /* Activity and Watching still mark these `rh-visually-hidden` in the markup,
+     so this is what brings them back into the layout. Chatter no longer does;
+     it toggles `display` instead. Their duplicate announcement on the DESK
+     layout is the same defect Chatter's fix addresses, and it is recorded as a
+     named follow-up rather than changed here. */
+  .rh-table .rh-cell-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    clip-path: none;
+    color: var(--muted);
+    font-size: 11px;
+    flex: none;
+  }
+  .rh-table td.right { text-align: right; }
+  .rh-table td > strong { display: inline; }
+  .rh-table .rh-sub { display: inline; margin: 0 0 0 6px; }
+  .rh-table td > * { text-align: right; }
+  .rh-tonebar { margin-left: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh *,
+  .rh *::before,
+  .rh *::after {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Tone is independent of the cyan price series. */
+.rh .chatter-histogram .ax { fill: var(--muted); font-size: 12px; }
+.rh .rh-swatch.chatter-tone { background: linear-gradient(90deg, #45dda0 0 40%, #ff6b7c 40% 70%, #748391 70%); }
+
+/* Keep explanatory text readable while both plots pan together. */
+.rh .chatter-histogram { width: 912px; }
+.rh .chatter-histogram-head,
+.rh .chatter-interval-detail,
+.rh .chatter-histogram > .rh-caption {
+  position: sticky;
+  left: 0;
+  width: var(--chart-visible-width, 100%);
+  max-width: 912px;
+  box-sizing: border-box;
+}

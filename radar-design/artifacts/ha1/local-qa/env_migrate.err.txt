@@ -1,0 +1,66 @@
+INFO  [alembic.runtime.migration] Context impl MySQLImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> cb85ccb17035, create quiz_rounds and quiz_teams
+INFO  [alembic.runtime.migration] Running upgrade cb85ccb17035 -> 5674f500edd9, add delivery_shifts table
+INFO  [alembic.runtime.migration] Running upgrade 5674f500edd9 -> 7bbac5179456, restructure quiz archive into rounds with trivia, picture, music
+INFO  [alembic.runtime.migration] Running upgrade 7bbac5179456 -> 81b8630f3c06, add reconstructed_text to archived quiz questions
+INFO  [alembic.runtime.migration] Running upgrade 81b8630f3c06 -> 1c5304b6e444, add reconstructed_confidence to archived quiz questions
+INFO  [alembic.runtime.migration] Running upgrade 1c5304b6e444 -> 550f78a86ec3, collapse question_text and reconstructed_text into a single field with AI flag
+INFO  [alembic.runtime.migration] Running upgrade 550f78a86ec3 -> 1cdcdfc9d2d6, add trips to delivery_shifts
+INFO  [alembic.runtime.migration] Running upgrade 1cdcdfc9d2d6 -> ebf7bd2c60a7, add gym tracker tables
+INFO  [alembic.runtime.migration] Running upgrade ebf7bd2c60a7 -> a17b30f0207c, add rest_seconds to session exercises
+INFO  [alembic.runtime.migration] Running upgrade a17b30f0207c -> 69ab88376315, add set completed flag and session resting_set_id
+INFO  [alembic.runtime.migration] Running upgrade 69ab88376315 -> caa1c8f9ca8b, add rest_seconds to template exercises
+INFO  [alembic.runtime.migration] Running upgrade caa1c8f9ca8b -> d4f8b2a91c6e, add replaces_id to session exercises
+INFO  [alembic.runtime.migration] Running upgrade d4f8b2a91c6e -> 7e14cc7ed388, add previous_name to exercises
+INFO  [alembic.runtime.migration] Running upgrade 7e14cc7ed388 -> b3f9a1d5e7c2, add is_unilateral to exercises
+INFO  [alembic.runtime.migration] Running upgrade b3f9a1d5e7c2 -> 9c3e5a71f2b6, add skipped to session exercises
+INFO  [alembic.runtime.migration] Running upgrade 9c3e5a71f2b6 -> f2a7c31d9b48, add deload flag and percentage to workout sessions
+INFO  [alembic.runtime.migration] Running upgrade f2a7c31d9b48 -> a1e4c9d27f63, add base_weight to session sets
+INFO  [alembic.runtime.migration] Running upgrade a1e4c9d27f63 -> c7d3e91a4f28, add weight_increment to exercises
+INFO  [alembic.runtime.migration] Running upgrade c7d3e91a4f28 -> e9b4c2a71d63, add base_reps to session sets
+INFO  [alembic.runtime.migration] Running upgrade e9b4c2a71d63 -> a4c81f2e5b76, add app_user table and seed the admin from the environment
+INFO  [alembic.runtime.migration] Running upgrade a4c81f2e5b76 -> b7d93a5c1e40, add user_id to the three gym root tables
+INFO  [alembic.runtime.migration] Running upgrade b7d93a5c1e40 -> c8e5f14a9b32, add user_id to gym_exercises, swap the unique constraint to (user_id, name)
+INFO  [alembic.runtime.migration] Running upgrade c8e5f14a9b32 -> d1f6b83c25e9, add completed_at to session sets
+INFO  [alembic.runtime.migration] Running upgrade d1f6b83c25e9 -> e4a91c7d20f8, add shared sessions
+INFO  [alembic.runtime.migration] Running upgrade e4a91c7d20f8 -> d98add219b32, cascade delete shared session exercise fks
+INFO  [alembic.runtime.migration] Running upgrade d98add219b32 -> a1c4e8b20f31, add equipment facts to gym exercises
+INFO  [alembic.runtime.migration] Running upgrade a1c4e8b20f31 -> b2d5f9c31a42, add bodyweight, notes and the pain flag to workouts
+INFO  [alembic.runtime.migration] Running upgrade b2d5f9c31a42 -> c4a7e12f6d93, add is_default_seeded to session sets
+INFO  [alembic.runtime.migration] Running upgrade c4a7e12f6d93 -> a1c95e7b4d02, add last_seen_at to push subscriptions
+INFO  [alembic.runtime.migration] Running upgrade a1c95e7b4d02 -> 7883c6e08708, add radar tables
+INFO  [alembic.runtime.migration] Running upgrade 7883c6e08708 -> ad9c47da1fbd, widen radar simhash to unsigned
+INFO  [alembic.runtime.migration] Running upgrade ad9c47da1fbd -> b01b10f20a5b, add low confidence tier
+INFO  [alembic.runtime.migration] Running upgrade b01b10f20a5b -> 01da83522036, add radar bucket sources
+INFO  [alembic.runtime.migration] Running upgrade 01da83522036 -> 9985157b8538, add radar poll state
+INFO  [alembic.runtime.migration] Running upgrade 9985157b8538 -> 38ff07e30e7a, add radar source cursors
+INFO  [alembic.runtime.migration] Running upgrade 38ff07e30e7a -> f6d2b6268488, widen radar external id
+INFO  [alembic.runtime.migration] Running upgrade f6d2b6268488 -> 435a6e5a4cf0, add source config version to bucket sources
+INFO  [alembic.runtime.migration] Running upgrade 435a6e5a4cf0 -> e91f50cd68ac, add radar quotes and profile fields
+INFO  [alembic.runtime.migration] Running upgrade e91f50cd68ac -> c2138190d95a, add cached daily sigma
+INFO  [alembic.runtime.migration] Running upgrade c2138190d95a -> ef00e6c43e25, add radar daily closes
+INFO  [alembic.runtime.migration] Running upgrade ef00e6c43e25 -> c7a3e1f92b04, add is_etf to the ticker universe
+INFO  [alembic.runtime.migration] Running upgrade c7a3e1f92b04 -> d5b81c30fa27, widen radar_poll_state.symbol for subreddit names
+INFO  [alembic.runtime.migration] Running upgrade d5b81c30fa27 -> a53d0b0fcc37, add radar_llm_spend
+INFO  [alembic.runtime.migration] Running upgrade a53d0b0fcc37 -> c489b7c94875, add radar mention events
+INFO  [alembic.runtime.migration] Running upgrade c489b7c94875 -> 1d26ac48e744, add promoted to radar mention events
+INFO  [alembic.runtime.migration] Running upgrade 1d26ac48e744 -> 08316d3e4d77, widen radar source columns
+INFO  [alembic.runtime.migration] Running upgrade 08316d3e4d77 -> 35c3ae366677, widen radar bucket sources baseline days
+INFO  [alembic.runtime.migration] Running upgrade 35c3ae366677 -> a4c8e2f19b70, add radar market instruments
+INFO  [alembic.runtime.migration] Running upgrade a4c8e2f19b70 -> f5a8c2d91e30, partition radar price identities by market instrument
+INFO  [alembic.runtime.migration] Running upgrade f5a8c2d91e30 -> 8b7f2d1c4e90, add radar quote regular close
+INFO  [alembic.runtime.migration] Running upgrade 8b7f2d1c4e90 -> d0a4b9c72e11, persist radar quote provider delay
+INFO  [alembic.runtime.migration] Running upgrade d0a4b9c72e11 -> b3c9d47a1e55, add radar board read indexes
+INFO  [alembic.runtime.migration] Running upgrade b3c9d47a1e55 -> e7a91c04d2b5, add sentiment v2 judgment fields, history, meter, journal flag
+INFO  [alembic.runtime.migration] Running upgrade e7a91c04d2b5 -> f4b2d81c37a9, add chatter_decided_at to radar_mention_events
+INFO  [alembic.runtime.migration] Running upgrade f4b2d81c37a9 -> 6a21d4e8c9f0, add radar market data v2 provenance, shadow, and operational tables
+INFO  [alembic.runtime.migration] Running upgrade 6a21d4e8c9f0 -> b7e1c4d9a2f3, add radar_watch
+INFO  [alembic.runtime.migration] Running upgrade b7e1c4d9a2f3 -> c8d2e5f7a1b4, add radar_reddit_cursors
+INFO  [alembic.runtime.migration] Running upgrade c8d2e5f7a1b4 -> d4e7a1b93c25, add radar_fx_rates
+INFO  [alembic.runtime.migration] Running upgrade d4e7a1b93c25 -> e5f8b2ca4d36, add radar_instruments.history_due_at
+INFO  [alembic.runtime.migration] Running upgrade e5f8b2ca4d36 -> a1c4f7b2e6d8, add radar tone provenance and history display diagnostics
+INFO  [alembic.runtime.migration] Running upgrade a1c4f7b2e6d8 -> b3d9e1f5a274, add radar_judge_trial
+INFO  [alembic.runtime.migration] Running upgrade b3d9e1f5a274 -> d82f9afb5898, add radar observations
+INFO  [alembic.runtime.migration] Running upgrade d82f9afb5898 -> a7c31f0b52d4, add the typed counter projection to radar_ingest_runs
+INFO  [alembic.runtime.migration] Running upgrade a7c31f0b52d4 -> b7e3f9c1a2d4, add radar board results

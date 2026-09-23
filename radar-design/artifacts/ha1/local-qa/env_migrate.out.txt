@@ -1,0 +1,3 @@
+HA1 bound target: 127.0.0.1:3461/radar_ha1_localqa (mysql); no SQL executed by the gate
+radar_ingest_runs: projected 0 rows
+target=127.0.0.1:3461/radar_ha1_localqa alembic_head=b7e3f9c1a2d4 tables=47 admin=zq-ha1-localqa-admin id=2 created=True

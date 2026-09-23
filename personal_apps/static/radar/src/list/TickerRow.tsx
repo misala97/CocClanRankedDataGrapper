@@ -285,8 +285,8 @@ function Lean({ tone }: { tone: Row['tone'] }) {
 
 /** Quote provenance THIS row carries that the board as a whole does not.
  *
- *  The badges said "US fallback - NYSE - USD - After hours - 2740 min stale"
- *  on every row of a board where every one of those was true of every row.
+ *  The badges said "NYSE - USD - After hours - 2740 min stale" on every row
+ *  of a board where every one of those was true of every row.
  *  What the whole board shares, the header states once; what remains here is
  *  only the deviation worth noticing.
  */
@@ -299,9 +299,6 @@ function deviantQuoteFacts(row: Row, quoteSuppress: readonly string[],
                            liftedAge: number | null): string[] {
   const facts: string[] = []
   const quote = row.quote
-  if (quote.is_fallback && !quoteSuppress.includes('fallback')) {
-    facts.push('US price')
-  }
   if (!quoteSuppress.includes('aged')) {
     if (quote.quality === 'stale') {
       facts.push(`quote ${humanAge(quote.age_seconds)} old`)
@@ -321,9 +318,7 @@ function deviantQuoteFacts(row: Row, quoteSuppress: readonly string[],
 }
 
 /** The price figure beside the ratio. The "closed at" prefix the old row
- *  carried is the session's fact, said once by the header; the currency code
- *  a fallback used to append is covered by the 'US price' fact (or by the
- *  header, when every row is a fallback). */
+ *  carried is the session's fact, said once by the header. */
 function rowFigPrice(row: Row): string {
   const price = row.quote.price
   if (price === null || price <= 0 || !row.quote.currency) return 'no quote'

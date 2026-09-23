@@ -1,0 +1,23 @@
+{
+  "price_paths": 1,
+  "bullish": "rgb(69, 221, 160)",
+  "bearish": "rgb(255, 107, 124)",
+  "axis_fill": "rgb(177, 193, 211)",
+  "widths": [
+    {
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "overflow": false
+    }
+  ],
+  "keyboard_detail": true,
+  "escape": true,
+  "pointer_selection": true
+}

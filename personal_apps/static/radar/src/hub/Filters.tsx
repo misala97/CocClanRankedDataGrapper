@@ -1,0 +1,284 @@
+// The controls that change which board the server builds.
+//
+// Every one of these is a server-side filter: changing it is a new request and
+// a new cache entry, not a narrowing of the rows already on screen. That is
+// why they live here rather than beside the in-page text filter, which does
+// the opposite.
+//
+// The vocabulary is the server's, taken from the payload it echoed back:
+// `all_sources` for the feeds it actually offers, `segment_counts` for the
+// groups it can filter to. Nothing here invents an option the API would
+// refuse -- a control that produces a 400 is a control that strands the
+// reader.
+//
+// Window and size stay on the bar. Breadth and the feed checkboxes
+// moved behind a disclosure in the VC1 correction: four selects plus a
+// checkbox group wrapped onto two rows above the table and pushed the data
+// down the page. The disclosure carries a summary of what is selected, so
+// moving them does not hide a filter that is doing something.
+import { useState } from 'react'
+
+import type { BoardPayload, SegmentFilter, Selection } from '../types'
+import { sourceLabel } from '../format'
+
+/** api.py WINDOWS. A window outside this is rejected there with a 400. */
+const WINDOWS = [1, 4, 12, 24] as const
+
+/** api.py VENUE_FLOORS. */
+const VENUES = [
+  { value: 1, label: 'Any venue' },
+  { value: 2, label: 'More than one venue' },
+] as const
+
+/** The groups the board offers, in the order the server counts them. `all` is
+ *  the empty selection -- present-but-empty is how the API is asked for All,
+ *  and omitting it would hand the server its own default instead. */
+const SEGMENTS: { value: SegmentFilter | 'all'; label: string }[] = [
+  { value: 'all', label: 'All companies' },
+  { value: 'discover', label: 'Discover' },
+  { value: 'large', label: 'Large' },
+  { value: 'mid', label: 'Mid' },
+  { value: 'micro', label: 'Micro' },
+  { value: 'recent_ipo', label: 'Recent IPO' },
+  { value: 'fund', label: 'Funds' },
+  { value: 'unknown', label: 'Unclassified' },
+]
+
+export function Filters({ board, selection, onChange, compact = false }: {
+  board: BoardPayload
+  selection: Selection
+  onChange: (next: Selection) => void
+  /** The candidate rail is 320px wide and already carries a text filter and
+   *  an ordering control. `compact` puts EVERY server-side filter behind one
+   *  labelled disclosure rather than two selects on a bar -- the controls
+   *  are identical, the summary line still says what they are doing, and
+   *  nothing is dropped to save the width. */
+  compact?: boolean
+}) {
+  const [more, setMore] = useState(false)
+  return (
+    <div className={`rh-filters${compact ? ' compact' : ''}`}>
+      {compact ? (
+        <div className="rh-more">
+          <button
+            type="button"
+            className="rh-morebutton"
+            aria-expanded={more}
+            aria-controls={MORE_ID}
+            onClick={() => setMore((was) => !was)}
+          >
+            Filters
+            <span className="rh-moresummary">
+              {summariseAll(board, selection)}
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      <div className={compact ? 'rh-morepanel' : 'rh-filterbar'}
+           id={compact ? MORE_ID : undefined}
+           hidden={compact && !more}>
+      <label className="rh-field">
+        <span>Window</span>
+        <select
+          value={selection.window}
+          onChange={(event) => onChange({
+            ...selection, window: Number(event.target.value) })}
+        >
+          {WINDOWS.map((hours) => (
+            <option key={hours} value={hours}>
+              {hours === 1 ? 'Last hour' : `Last ${hours} hours`}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="rh-field">
+        <span>Size</span>
+        <select
+          value={selection.segments[0] ?? 'all'}
+          onChange={(event) => onChange({
+            ...selection,
+            segments: event.target.value === 'all'
+              ? []
+              : [event.target.value as SegmentFilter],
+          })}
+        >
+          {SEGMENTS.map((segment) => (
+            <option key={segment.value} value={segment.value}>
+              {segment.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {/* Everything past this point is still a server-side filter and still
+          reachable by keyboard; it is one press away instead of always on
+          screen. `hidden` rather than unmounted so aria-controls points at
+          something real, and so a test can open it and find the controls.
+          In compact mode there is no second disclosure -- the outer one has
+          already revealed the whole set, and a nested one would ask the
+          reader for two presses to reach a feed checkbox. */}
+      {compact ? null : (
+        <div className="rh-more">
+          <button
+            type="button"
+            className="rh-morebutton"
+            aria-expanded={more}
+            aria-controls={MORE_ID}
+            onClick={() => setMore((was) => !was)}
+          >
+            More filters
+            <span className="rh-moresummary">{summarise(board, selection)}</span>
+          </button>
+        </div>
+      )}
+
+      <div className={compact ? 'rh-morecontinued' : 'rh-morepanel'}
+           id={compact ? undefined : MORE_ID}
+           hidden={!compact && !more}>
+      <label className="rh-field">
+        <span>Breadth</span>
+        <select
+          value={selection.minVenues}
+          onChange={(event) => onChange({
+            ...selection, minVenues: Number(event.target.value) })}
+          aria-describedby={BREADTH_ID}
+        >
+          {VENUES.map((venue) => (
+            <option key={venue.value} value={venue.value}>{venue.label}</option>
+          ))}
+        </select>
+      </label>
+      {/* Beside the control it describes, not only in the table's glossary.
+          The two counts genuinely differ and a reader who sets this filter is
+          exactly the reader who will wonder why a row saying "1 platform"
+          survived a two-venue floor. */}
+      <p id={BREADTH_ID} className="rh-fieldnote">
+        Counts every feed that was read, quiet ones included — which is what
+        the board is scored on. The Sources column counts only the feeds that
+        said something, so the two numbers differ.
+      </p>
+
+      <fieldset className="rh-sources">
+        <legend>Feeds</legend>
+        {board.all_sources.map((source) => {
+          // A concrete subreddit selection roots to its feed, so a link
+          // naming one sub keeps that feed lit rather than lighting none.
+          const on = selection.sources.some(
+            (chosen) => chosen.split(':')[0] === source)
+          // The last one standing cannot be turned off. Two subreddits are
+          // still one feed, so "last" counts roots and not entries.
+          const last = on && rootsOf(selection.sources).length === 1
+          return (
+            <label key={source} className={last ? 'locked' : undefined}>
+              <input
+                type="checkbox"
+                checked={on}
+                // aria-disabled, not disabled, which is the board's own
+                // recorded decision (board/Controls.tsx): a disabled input
+                // leaves the tab order, so the keyboard reader it exists for
+                // never reaches the control OR the description attached to
+                // it. The click is a real no-op instead.
+                aria-disabled={last || undefined}
+                aria-describedby={last ? FLOOR_ID : undefined}
+                onChange={() => {
+                  const next = toggle(selection.sources, source)
+                  // Nothing was asked for. Reporting the same selection back
+                  // would push a history entry that changes nothing, so Back
+                  // would need two presses to go anywhere.
+                  if (next === selection.sources) return
+                  onChange({ ...selection, sources: next })
+                }}
+              />
+              {sourceLabel(source)}
+            </label>
+          )
+        })}
+        {last(selection) ? (
+          <p id={FLOOR_ID} className="rh-sources-note">
+            One feed has to stay on — a board with none is not one the server
+            can build.
+          </p>
+        ) : null}
+      </fieldset>
+      </div>
+      </div>
+    </div>
+  )
+}
+
+const FLOOR_ID = 'rh-feeds-floor'
+const MORE_ID = 'rh-more-filters'
+const BREADTH_ID = 'rh-breadth-note'
+
+/** What the hidden controls are currently doing, in the summary line.
+ *
+ *  A filter behind a disclosure has to announce itself, or a reader wonders
+ *  why the board is short and has no way to see that breadth is set to two
+ *  venues or that a feed is switched off. */
+function summarise(board: BoardPayload, selection: Selection): string {
+  const venue = VENUES.find((v) => v.value === selection.minVenues)
+  const chosen = rootsOf(selection.sources).length
+  const offered = board.all_sources.length
+  const feeds = chosen >= offered
+    ? `all ${offered} ${offered === 1 ? 'feed' : 'feeds'}`
+    : `${chosen} of ${offered} feeds`
+  return `${venue ? venue.label : `${selection.minVenues}+ venues`} · ${feeds}`
+}
+
+/** Everything the compact disclosure is hiding, in one line: the two
+ *  controls that used to sit on the bar as well as the two that were already
+ *  behind it. A filter nobody can see has to announce itself. */
+function summariseAll(board: BoardPayload, selection: Selection): string {
+  const hours = selection.window
+  const segment = SEGMENTS.find(
+    (s) => s.value === (selection.segments[0] ?? 'all'))
+  return [
+    hours === 1 ? 'last hour' : `last ${hours} hours`,
+    segment ? segment.label : 'All companies',
+    summarise(board, selection),
+  ].join(' · ')
+}
+
+/** The feeds a selection covers, each named once. `reddit:options` and
+ *  `reddit:wallstreetbets` are two entries and one feed. */
+function rootsOf(sources: string[]): string[] {
+  return Array.from(new Set(sources.map((name) => name.split(':')[0] ?? name)))
+}
+
+/** Whether the selection is down to its last feed, and the note explaining
+ *  that is therefore worth rendering. */
+function last(selection: Selection): boolean {
+  return rootsOf(selection.sources).length === 1
+}
+
+/** Turning a feed off drops it and every concrete venue under it.
+ *
+ *  Turning the LAST one off returns the selection unchanged. It previously
+ *  returned every other feed instead, which is not a refusal: unchecking
+ *  Reddit silently produced a Bluesky-and-4chan board, fetched it, and left
+ *  the controls showing Reddit unchecked. An empty list is not a board the
+ *  server can build, and neither is a substitute for one nobody asked for.
+ *
+ *  The control is marked aria-disabled in that state and says why, so the
+ *  reader is told rather than having a click absorbed. This function stays
+ *  as the guarantee for THIS control: an ARIA state is an affordance, and
+ *  only the reducer survives a programmatic change. It is not the only floor
+ *  on `sources` -- navigation.readSources has its own for a URL naming a
+ *  retired feed, and that one falls back to the server's echo rather than to
+ *  the reader's current selection.
+ *
+ *  Identity is the signal: a refusal returns `current` itself, so a caller
+ *  can tell "nothing to do" from "here is a new list".
+ */
+export function toggle(current: string[], source: string): string[] {
+  // Both sides rooted. Everything the component passes is a bare root, but
+  // this is exported, and rooting only one side made
+  // toggle(['reddit:options'], 'reddit:options') append a duplicate.
+  const root = source.split(':')[0] ?? source
+  const on = current.some((chosen) => chosen.split(':')[0] === root)
+  if (!on) return [...current, source]
+  const rest = current.filter((chosen) => chosen.split(':')[0] !== root)
+  return rest.length ? rest : current
+}

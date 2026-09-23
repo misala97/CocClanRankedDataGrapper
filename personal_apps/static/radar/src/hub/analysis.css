@@ -1,0 +1,252 @@
+/* Analysis / Explore (HA1). Scoped additions on the hub's own tokens; the
+   shell, the nav and every shared surface come from hub.css unchanged.
+   Cyan is price and orange is chatter here as everywhere on this desk.
+
+   Cascade note: Analysis.tsx is imported by Hub.tsx BEFORE hub.css, so this
+   file lands first in the bundle and an equal-specificity hub.css rule wins.
+   Every override below therefore carries more specificity than the hub rule
+   it replaces. */
+
+.rh-an-heading p { display: flex; flex-wrap: wrap; gap: 6px; }
+.rh-an-heading .rh-an-scope {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 2px 0 4px;
+}
+.rh-an-retro {
+  color: var(--amber);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 12px;
+  align-self: center;
+}
+
+/* --- controls ------------------------------------------------------------ */
+
+.rh-an-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px 32px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.rh-an-company {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+.rh-an-companyname { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.rh-an-range {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  gap: 10px 14px;
+  align-items: end;
+  flex: 0 1 auto;
+}
+.rh-an-range .rh-field input { min-width: 160px; min-height: 44px; font-variant-numeric: tabular-nums; }
+.rh-an-range .rh-button { min-height: 44px; }
+.rh-an-rangeproblem,
+.rh-an-rangehint { grid-column: 1 / -1; font-size: 12px; margin: 0; }
+
+/* --- identity strip ------------------------------------------------------ */
+
+.rh-an-identity { padding: 14px 20px; margin-bottom: 20px; }
+.rh-an-identity dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0;
+}
+.rh-an-identity dl > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rh-an-identity dt,
+.rh-an-detail dt {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.rh-an-identity dd,
+.rh-an-detail dd { margin: 0; font-size: 13px; }
+
+/* --- layout -------------------------------------------------------------- */
+
+.rh-an-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 26px;
+  align-items: start;
+}
+.rh-an-mainstack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.rh-an-rail { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.rh-an-coverage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.rh-an-h2 { font-size: 15px; margin-bottom: 8px; }
+.rh-an-h2.price::before,
+.rh-an-h2.chatter::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 8px;
+  vertical-align: baseline;
+  background: var(--price);
+}
+.rh-an-h2.chatter::before { background: var(--chatter); }
+.rh-an-figure { font-size: 22px; letter-spacing: -0.02em; margin-bottom: 4px; }
+.rh-an-figure b { font-weight: 600; }
+.rh-an-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --- chart --------------------------------------------------------------- */
+
+.rh-an-chart { display: flex; flex-direction: column; gap: 6px; max-width: 1000px; }
+/* Panels and day buttons share this box; see AnalysisChart.tsx. No
+   max-height on the panels: a capped height letterboxes the viewBox and
+   moves the plotted columns away from the buttons under them. */
+.rh-an-plotscroll { overflow-x: auto; }
+.rh-an-plots { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rh-an-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+  font-family: inherit;
+}
+.rh-an-grid { stroke: var(--line-soft); stroke-width: 1; }
+.rh-an-baseline { stroke: var(--line); stroke-width: 1; }
+.rh-an-axis { fill: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rh-an-value { fill: var(--ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* SVG text only; the HTML empty state is .rh-an-empty below. */
+.rh-an-emptytext { fill: var(--muted); font-size: 13px; }
+.rh-an-selected { fill: var(--selected); }
+.rh-an-line { fill: none; stroke: var(--price); stroke-width: 2; stroke-linejoin: round; }
+.rh-an-point { cursor: pointer; }
+.rh-an-point circle[data-state='observed'] { fill: var(--price); stroke: var(--canvas); stroke-width: 1.5; }
+.rh-an-point circle[data-state='missing-open'] { fill: none; stroke: var(--amber); stroke-width: 2; }
+.rh-an-point circle[data-state='missing-unknown'] { fill: none; stroke: var(--dim); stroke-width: 2; stroke-dasharray: 2 2; }
+.rh-an-point line[data-state='missing-closed'] { stroke: var(--dim); stroke-width: 2; }
+.rh-an-point path[data-state='invalid'] { fill: var(--red); }
+.rh-an-point g[data-state='identity_unverified'] circle { fill: none; stroke: var(--dim); stroke-width: 2; }
+.rh-an-point g[data-state='identity_unverified'] line { stroke: var(--dim); stroke-width: 2; }
+.rh-an-bar { cursor: pointer; }
+/* Full bars only: a partial bar's fill="url(#rh-an-hatch)" attribute
+   (AnalysisChart.tsx) would lose to any author fill rule. */
+.rh-an-fill:not(.partial) { fill: var(--chatter); }
+.rh-an-fill.partial { stroke: var(--chatter); stroke-width: 1.5; }
+.rh-an-hatchline { stroke: var(--chatter); stroke-width: 2; }
+.rh-an-zero { fill: var(--chatter); }
+.rh-an-zero.partial { fill: var(--chatter-soft); stroke: var(--chatter); stroke-width: 1; }
+.rh-an-gap { fill: none; stroke: var(--dim); stroke-width: 1; stroke-dasharray: 3 3; }
+.rh-an-gaptext { fill: var(--dim); font-size: 11px; }
+
+/* --- day buttons --------------------------------------------------------- */
+
+/* Horizontal padding is set inline from the chart's LEFT/RIGHT fractions.
+   No grid gap: a gap shifts every column centre off the plotted centre, so
+   the space between buttons is each button's own margin inside its column. */
+.rh-an-days {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.rh-an-chart .rh-an-day {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  margin: 0 3px;
+  padding: 7px 2px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.3;
+  transition: background 160ms;
+}
+.rh-an-chart .rh-an-day:hover { background: var(--wash); }
+.rh-an-chart .rh-an-day.selected {
+  border-color: var(--accent-line);
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+.rh-an-daylabel { font-weight: 600; white-space: nowrap; }
+.rh-an-dayfacts { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rh-an-day.selected .rh-an-dayfacts { color: inherit; }
+.rh-an-caption { margin-top: 6px; }
+
+/* --- detail and table ---------------------------------------------------- */
+
+.rh-an-detail dl { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.rh-an-detail dl > div { display: flex; flex-direction: column; gap: 2px; }
+.rh-an-detailcols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 32px;
+  margin-bottom: 8px;
+}
+.rh-an-sources { padding-left: 0; padding-right: 0; }
+.rh-an-tablepanel .rh-tablewrap { padding-bottom: 20px; }
+.rh-an-table tr.selected td,
+.rh-an-table tr.selected th { background: var(--selected); }
+.rh-an-table th[scope='row'] .rh-textbutton { min-height: 32px; }
+/* The HTML empty/refusal state only. */
+div.rh-an-empty { padding: 40px 20px; }
+
+/* --- widths -------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  .rh-an-columns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  /* Touch targets. hub.css raises .rh-button/.rh-textbutton to 44px here at
+     0,1,0; these selectors are more specific so nothing in Analysis undercuts it. */
+  .rh-an-table th[scope='row'] .rh-textbutton { min-height: 44px; min-width: 44px; }
+  .rh-an-body .rh-notice .rh-button,
+  .rh-an-controls .rh-an-company .rh-button,
+  div.rh-an-empty .rh-empty-actions .rh-button { min-height: 44px; }
+}
+@media (max-width: 760px) {
+  .rh-an-coverage { grid-template-columns: 1fr; }
+  .rh-an-detailcols { grid-template-columns: 1fr; }
+  .rh-an-range { grid-template-columns: 1fr 1fr; }
+  .rh-an-range .rh-button { grid-column: 1 / -1; }
+  .rh-an-range .rh-field input { min-width: 0; width: 100%; }
+  .rh-an-company { flex-wrap: wrap; }
+}
+@media (max-width: 560px) {
+  /* Seven day columns stay at least 44px wide: 440 x (654 / 720) / 7 = 57px
+     a column, 51px a button. The box scrolls sideways inside its panel;
+     the document does not. */
+  .rh-an-plots { min-width: 440px; }
+  .rh-an-chart .rh-an-day { padding: 6px 1px; }
+}
+@media (max-width: 400px) {
+  /* Two 16px inputs side by side left 117px each at 320px and clipped a
+     YYYY-MM-DD value; one column gives each field the form's width. */
+  .rh-an-range { grid-template-columns: 1fr; }
+  .rh-an-dayfacts { display: none; }
+  .rh-an-daylabel { font-size: 11px; white-space: normal; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rh-an-chart .rh-an-day { transition: none; }
+}

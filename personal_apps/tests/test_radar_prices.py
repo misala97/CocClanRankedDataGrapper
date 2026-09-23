@@ -32,18 +32,20 @@ class FakeHttp:
 
 @dataclass(frozen=True)
 class Instrument:
-    ticker: str = 'AAPL'
-    market: str = 'de'
-    venue: str = 'Xetra'
-    mic: str = 'XETR'
-    provider_symbol: str = 'APC'
-    currency: str = 'EUR'
+    ticker: str = 'BRK.B'
+    market: str = 'us'
+    venue: str = 'NYSE'
+    mic: str = 'XNYS'
+    provider_symbol: str = 'BRKB'
+    currency: str = 'USD'
 
 
 def test_currency_mismatch_rejects_provider_snapshot():
+    """A non-USD provider price for a US instrument is refused, never
+    relabelled as dollars."""
     raw = Quote(
-        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
-        provider_symbol='APC', currency='USD', price=decimal.Decimal('194.20'),
+        ticker='BRK.B', market='us', venue='NYSE', mic='XNYS',
+        provider_symbol='BRKB', currency='EUR', price=decimal.Decimal('194.20'),
         previous_close=None, regular_close=None, quote_ts=None, volume=None,
         provider_delay='delayed',
     )
@@ -54,8 +56,8 @@ def test_currency_mismatch_rejects_provider_snapshot():
 
 def test_provider_identity_mismatch_rejects_a_relabelled_snapshot():
     raw = Quote(
-        ticker='WRONG', market='de', venue='Xetra', mic='XETR',
-        provider_symbol='WRONG', currency='EUR', price=decimal.Decimal('194.20'))
+        ticker='WRONG', market='us', venue='NYSE', mic='XNYS',
+        provider_symbol='WRONG', currency='USD', price=decimal.Decimal('194.20'))
 
     with pytest.raises(ValueError, match='provider symbol'):
         normalize_snapshot(Instrument(), raw)
@@ -91,8 +93,39 @@ def test_a_finnhub_quote_declares_live_trade_provenance():
 def test_a_massive_quote_cannot_exist():
     """[A1] massive_grouped is a daily-close source, never an intraday quote."""
     with pytest.raises(ValueError, match='quote source'):
-        Quote(ticker='AAA', price=decimal.Decimal('1'),
+        Quote(ticker='AAA', price=decimal.Decimal('1'), mic='XNGS',
               source='massive_grouped', price_basis='close')
+
+
+def test_a_quote_cannot_be_built_without_an_explicit_mic():
+    """D8: the constructor used to default to `mic='XNAS'`.
+
+    `XNAS` is Nasdaq's *operating* MIC and no listing resolves to it, so a
+    defaulted row was indistinguishable from a legitimately-Nasdaq one while
+    belonging to no instrument at all. Whoever builds a quote now has to say
+    what venue it came from, even if the honest answer is that they do not
+    know.
+    """
+    with pytest.raises(TypeError):
+        Quote(ticker='AAA', price=decimal.Decimal('1'))
+
+    assert Quote(ticker='AAA', price=decimal.Decimal('1'), mic=None).mic is None
+    assert Quote(ticker='AAA', price=decimal.Decimal('1'),
+                 mic='XNGS').mic == 'XNGS'
+
+
+def test_a_provider_that_cannot_name_a_venue_says_so_instead_of_guessing():
+    """Finnhub's `/quote` answers a price and nothing about the listing, so
+    its raw snapshot carries no MIC. `normalize_snapshot` supplies the
+    instrument's MIC on the mapped path; the unmapped path has no instrument
+    and `record_quotes` refuses the row rather than inventing one."""
+    http = FakeHttp({'/quote': {'c': 123.45, 'pc': 120.0, 't': 1786000000}})
+    quote = finnhub.FinnhubProvider(http).quotes(['BRKB'])['BRKB']
+    assert quote.mic is None
+
+    bound = normalize_snapshot(Instrument(), quote)
+    assert bound.mic == Instrument.mic
+    assert bound.venue == Instrument.venue
 
 
 def test_prices_arrive_as_decimal_not_float():
@@ -205,27 +238,27 @@ def test_a_rate_limited_response_is_empty_not_a_crash():
 def test_quote_without_a_status_field_is_a_usable_snapshot():
     """Twelve Data's successful /quote shape does not require a status flag."""
     http = FakeHttp({'/quote': {
-        'symbol': 'APC', 'close': '194.20', 'previous_close': '193.50',
-        'currency': 'EUR', 'timestamp': 1787313600}})
+        'symbol': 'BRKB', 'close': '194.20', 'previous_close': '193.50',
+        'currency': 'USD', 'timestamp': 1787313600}})
 
-    quote = twelvedata.TwelveDataProvider(http).quotes(['APC'])['APC']
+    quote = twelvedata.TwelveDataProvider(http).quotes(['BRKB'])['BRKB']
 
     assert quote.price == decimal.Decimal('194.20')
-    assert quote.currency == 'EUR'
+    assert quote.currency == 'USD'
 
 
-def test_xetra_quote_request_is_mic_qualified_and_identity_bound():
+def test_a_quote_request_is_mic_qualified_and_identity_bound():
     http = FakeHttp({'/quote': {
-        'symbol': 'APC', 'mic_code': 'XETR', 'close': '194.20',
-        'previous_close': '193.50', 'currency': 'EUR',
+        'symbol': 'BRKB', 'mic_code': 'XNYS', 'close': '194.20',
+        'previous_close': '193.50', 'currency': 'USD',
         'timestamp': 1787313600}})
 
     quotes = twelvedata.TwelveDataProvider(http).quotes_for_instruments(
         [Instrument()])
 
-    assert http.calls == [('/quote', {'symbol': 'APC', 'mic_code': 'XETR'})]
-    assert quotes['APC'].mic == 'XETR'
-    assert quotes['APC'].provider_symbol == 'APC'
+    assert http.calls == [('/quote', {'symbol': 'BRKB', 'mic_code': 'XNYS'})]
+    assert quotes['BRKB'].mic == 'XNYS'
+    assert quotes['BRKB'].provider_symbol == 'BRKB'
 
 
 def test_malformed_twelve_data_optional_number_does_not_abort_the_batch():
@@ -233,9 +266,9 @@ def test_malformed_twelve_data_optional_number_does_not_abort_the_batch():
         def get(self, path, params):
             if params['symbol'] == 'BAD':
                 return {'symbol': 'BAD', 'close': '10',
-                        'previous_close': 'not-a-number', 'currency': 'EUR'}
+                        'previous_close': 'not-a-number', 'currency': 'USD'}
             return {'symbol': 'GOOD', 'close': '11',
-                    'previous_close': '10', 'currency': 'EUR'}
+                    'previous_close': '10', 'currency': 'USD'}
 
     instruments = [
         Instrument(ticker='BAD', provider_symbol='BAD'),
@@ -253,9 +286,9 @@ def test_out_of_range_twelve_data_timestamp_is_contained_to_its_symbol():
         def get(self, path, params):
             if params['symbol'] == 'BAD':
                 return {'symbol': 'BAD', 'close': '10', 'timestamp': 10 ** 100,
-                        'currency': 'EUR'}
+                        'currency': 'USD'}
             return {'symbol': 'GOOD', 'close': '11', 'timestamp': 1787313600,
-                    'currency': 'EUR'}
+                    'currency': 'USD'}
 
     instruments = [
         Instrument(ticker='BAD', provider_symbol='BAD'),
@@ -268,19 +301,23 @@ def test_out_of_range_twelve_data_timestamp_is_contained_to_its_symbol():
     assert set(quotes) == {'GOOD'}
 
 
-def test_finnhub_directory_keeps_identifiers_without_guessing_the_mic():
-    """Inventing XETR from a country directory would create a false venue claim."""
-    from features.radar.instruments import CatalogInstrument
+def test_no_provider_offers_a_reference_catalog():
+    """The retired mapper's directory readers are gone with it."""
+    assert not hasattr(finnhub.FinnhubProvider, 'stock_catalog')
+    assert not hasattr(twelvedata.TwelveDataProvider, 'stock_catalog')
+    assert not hasattr(finnhub, 'FINNHUB_EXCHANGE_BY_MIC')
 
-    http = FakeHttp({'/stock/symbol': [{
-        'symbol': 'APC', 'description': 'Apple Inc', 'displaySymbol': 'APC',
-        'currency': 'EUR', 'figi': 'BBG000B9XRY4', 'isin': 'US0378331005',
-        'mic': 'XETR', 'type': 'Common Stock',
-    }]})
 
-    rows = finnhub.FinnhubProvider(http).stock_catalog('XETR')
+def test_the_retired_feed_is_not_an_active_source():
+    """Its archived rows keep their spelling in the database; no active
+    validator accepts it."""
+    from features.radar.prices import (CLOSE_SOURCES, QUOTE_SOURCES,
+                                       validate_close_source)
 
-    assert rows == [CatalogInstrument(
-        symbol='APC', name='Apple Inc', mic='XETR', currency='EUR',
-        isin='US0378331005', figi='BBG000B9XRY4')]
-    assert http.calls == [('/stock/symbol', {'exchange': 'DE'})]
+    assert 'deutsche_boerse_delayed' not in QUOTE_SOURCES
+    assert 'deutsche_boerse_delayed' not in CLOSE_SOURCES
+    with pytest.raises(ValueError, match='unknown quote source'):
+        Quote('AAPL', decimal.Decimal('1'), mic='XNGS',
+              source='deutsche_boerse_delayed')
+    with pytest.raises(ValueError, match='unknown close source'):
+        validate_close_source('deutsche_boerse_delayed', 'close', 'split')

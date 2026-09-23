@@ -1,9 +1,10 @@
 """Which venue's closes a panel chart is actually drawn from.
 
 The rule being pinned: the venue that QUOTES a ticker and the venue that has
-its HISTORY are different questions. A Nasdaq listing quoted at Tradegate has
-three years of dollars and two days of euros, and the chart that reads the
-quote's venue draws the two days.
+its HISTORY are different questions. A Nasdaq listing whose exact-ISIN NYSE
+sibling holds the deeper series draws the sibling's dollars, and says so.
+Nothing is ever converted: archived non-US closes stay in the table and are
+never a candidate, even beside stored reference rates.
 """
 import datetime as dt
 import decimal
@@ -12,17 +13,16 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from features.radar import fx, history
+from features.radar import history
 from models import RadarDailyClose, RadarFxRate, RadarInstrument
 
-# Deliberately predates the ECB's 1999 series, so these EUR/USD fixtures can
-# never overwrite or delete the local development store's real rows.
+# Deliberately predates every real stored series, so these fixtures can never
+# overwrite or delete the local development store's real rows.
 TODAY = dt.date(1990, 1, 7)
 NOW = dt.datetime(1990, 1, 7, 20, 0, 0)
 PREFIX = 'HB'
 OWNED_TICKERS = frozenset({
-    'HBBND', 'HBEDGE', 'HBISIN', 'HBNAT', 'HBNOFX', 'HBONE', 'HBRZLV', 'HBSIB',
-    'HBUSQ', 'HBVOID',
+    'HBARC', 'HBBND', 'HBISIN', 'HBNAT', 'HBONE', 'HBSIB', 'HBUSQ', 'HBVOID',
 })
 
 
@@ -36,7 +36,6 @@ class FakeQuote:
         self.currency = currency
 
 
-DE_QUOTE = FakeQuote('de', 'XGAT', 'Tradegate BSX', 'EUR')
 US_QUOTE = FakeQuote('us', 'XNMS', 'Nasdaq Global Market', 'USD')
 
 
@@ -88,7 +87,8 @@ def test_cleanup_preserves_a_non_test_hb_identity():
             db.session.commit()
 
 
-def close(ticker, days_back, price, *, market, mic, currency):
+def close(ticker, days_back, price, *, market='us', mic='XNMS',
+          currency='USD'):
     db.session.add(RadarDailyClose(
         ticker=ticker, market=market, mic=mic, currency=currency,
         close_date=TODAY - dt.timedelta(days=days_back),
@@ -102,64 +102,74 @@ def instrument(ticker, market, mic, venue, currency, isin, primary=True):
         is_primary=primary, mapping_status='mapped', mapped_at=NOW))
 
 
-def parity_rates():
-    fx.record_rates(
-        [(TODAY - dt.timedelta(days=n), decimal.Decimal('2.0000'))
-         for n in range(0, 40)], NOW, source='test-basis')
+def archived(ticker, isin, days=20, price='5.00'):
+    """An archived non-US listing, deeper than any US series here, and the
+    stored reference rates the retired conversion would have used."""
+    instrument(ticker, 'de', 'XETR', 'Xetra', 'EUR', isin)
+    for n in range(0, days):
+        close(ticker, n, price, market='de', mic='XETR', currency='EUR')
+    for n in range(0, 40):
+        db.session.add(RadarFxRate(
+            rate_date=TODAY - dt.timedelta(days=n), base='EUR', quote='USD',
+            rate=decimal.Decimal('2.0'), source='test-basis', fetched_at=NOW))
 
 
 def test_native_venue_wins_when_it_has_the_depth(clean):
     ticker = f'{PREFIX}NAT'
     for n in range(1, 11):
-        close(ticker, n, '10.00', market='de', mic='XGAT', currency='EUR')
+        close(ticker, n, '10.00')
     for n in range(1, 4):
-        close(ticker, n, '20.00', market='us', mic='XNMS', currency='USD')
-    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD', None)
+        close(ticker, n, '20.00', mic='XNYS')
+    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD',
+               'US000TEST001')
+    instrument(ticker, 'us', 'XNYS', 'NYSE', 'USD', 'US000TEST001',
+               primary=False)
+    archived(ticker, 'US000TEST001')
     db.session.commit()
-    parity_rates()
 
-    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
+    basis = history.resolve_basis(ticker, US_QUOTE, 30, TODAY)
 
-    assert basis.mic == 'XGAT'
-    assert basis.converted_from is None
+    assert (basis.market, basis.mic, basis.currency) == ('us', 'XNMS', 'USD')
+    assert not hasattr(basis, 'converted_from')
     assert len(basis.closes) == 10
 
 
 def test_isin_matched_sibling_wins_over_a_two_day_native_stub(clean):
     ticker = f'{PREFIX}SIB'
     for n in range(1, 3):
-        close(ticker, n, '10.00', market='de', mic='XGAT', currency='EUR')
+        close(ticker, n, '10.00')
     for n in range(1, 21):
-        close(ticker, n, '11.00', market='de', mic='XETR', currency='EUR')
-    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR', 'DE000TEST001')
-    instrument(ticker, 'de', 'XETR', 'Xetra', 'EUR', 'DE000TEST001',
+        close(ticker, n, '11.00', mic='XNYS')
+    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD',
+               'US000TEST002')
+    instrument(ticker, 'us', 'XNYS', 'NYSE', 'USD', 'US000TEST002',
                primary=False)
     db.session.commit()
 
-    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
+    basis = history.resolve_basis(ticker, US_QUOTE, 30, TODAY)
 
-    assert basis.mic == 'XETR'
-    assert basis.venue == 'Xetra'
-    assert basis.currency == 'EUR'
-    assert basis.converted_from is None
+    assert basis.mic == 'XNYS'
+    assert basis.venue == 'NYSE'
+    assert basis.currency == 'USD'
 
 
 def test_basis_counts_only_closes_visible_in_the_requested_span(clean):
     ticker = f'{PREFIX}BND'
     # closes_for includes TODAY-days, but a `days`-wide chart begins one day
     # later. The invisible native row must not defeat two visible siblings.
-    close(ticker, 3, '10.00', market='de', mic='XGAT', currency='EUR')
-    close(ticker, 1, '10.00', market='de', mic='XGAT', currency='EUR')
-    close(ticker, 2, '11.00', market='de', mic='XETR', currency='EUR')
-    close(ticker, 1, '12.00', market='de', mic='XETR', currency='EUR')
-    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR', 'DE000TESTBND')
-    instrument(ticker, 'de', 'XETR', 'Xetra', 'EUR', 'DE000TESTBND',
+    close(ticker, 3, '10.00')
+    close(ticker, 1, '10.00')
+    close(ticker, 2, '11.00', mic='XNYS')
+    close(ticker, 1, '12.00', mic='XNYS')
+    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD',
+               'US000TESTBND')
+    instrument(ticker, 'us', 'XNYS', 'NYSE', 'USD', 'US000TESTBND',
                primary=False)
     db.session.commit()
 
-    basis = history.resolve_basis(ticker, DE_QUOTE, 3, TODAY)
+    basis = history.resolve_basis(ticker, US_QUOTE, 3, TODAY)
 
-    assert basis.mic == 'XETR'
+    assert basis.mic == 'XNYS'
     assert [day for day, _ in basis.closes] == [
         TODAY - dt.timedelta(days=2), TODAY - dt.timedelta(days=1)]
 
@@ -167,99 +177,65 @@ def test_basis_counts_only_closes_visible_in_the_requested_span(clean):
 def test_a_sibling_with_a_different_isin_is_not_a_sibling(clean):
     ticker = f'{PREFIX}ISIN'
     for n in range(1, 21):
-        close(ticker, n, '11.00', market='de', mic='XETR', currency='EUR')
-    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR', 'DE000TEST002')
-    instrument(ticker, 'de', 'XETR', 'Xetra', 'EUR', 'DE000OTHER99',
+        close(ticker, n, '11.00', mic='XNYS')
+    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD',
+               'US000TEST003')
+    instrument(ticker, 'us', 'XNYS', 'NYSE', 'USD', 'US000OTHER99',
                primary=False)
     db.session.commit()
 
-    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
+    basis = history.resolve_basis(ticker, US_QUOTE, 30, TODAY)
 
-    assert basis.mic != 'XETR'
-
-
-def test_converted_us_history_wins_when_germany_has_nothing(clean):
-    """RZLV's exact shape: a German quote, no Xetra listing, deep US closes."""
-    ticker = f'{PREFIX}RZLV'
-    for n in range(1, 21):
-        close(ticker, n, '10.00', market='us', mic='XNMS', currency='USD')
-    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR', 'GB00TEST0001')
-    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD', None)
-    db.session.commit()
-    parity_rates()
-
-    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
-
-    assert basis.market == 'us'
-    assert basis.mic == 'XNMS'
-    assert basis.currency == 'EUR'
-    assert basis.converted_from == 'USD'
-    # Parity rate of 2.0 -- ten dollars is five euros.
-    assert basis.closes[0][1] == decimal.Decimal('5.0000')
+    assert basis.mic != 'XNYS'
 
 
-def test_conversion_loads_the_rate_before_a_non_publication_day(clean):
-    """A Saturday close can use Friday's rate at the query-window edge."""
-    ticker = f'{PREFIX}EDGE'
-    for day in (dt.date(1990, 1, 6), dt.date(1990, 1, 7)):
-        db.session.add(RadarDailyClose(
-            ticker=ticker, market='us', mic='XNMS', currency='USD',
-            close_date=day, close=decimal.Decimal('10.00'), fetched_at=NOW))
-    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR',
-               'GB00TEST0003')
-    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD', None)
-    fx.record_rates([(dt.date(1990, 1, 5), decimal.Decimal('2.0000'))],
-                    NOW, source='test-basis')
+def test_an_archived_listing_is_never_a_basis(clean):
+    """RZLV's old shape, reversed: deep archived closes, a matching ISIN and
+    stored reference rates -- and no US series. The answer is no line."""
+    ticker = f'{PREFIX}ARC'
+    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD',
+               'US000TEST004')
+    archived(ticker, 'US000TEST004')
     db.session.commit()
 
-    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
+    basis = history.resolve_basis(ticker, US_QUOTE, 30, TODAY)
 
-    assert basis.converted_from == 'USD'
-    assert basis.closes == (
-        (dt.date(1990, 1, 6), decimal.Decimal('5.0000')),
-        (dt.date(1990, 1, 7), decimal.Decimal('5.0000')),
-    )
-
-
-def test_conversion_is_skipped_without_stored_rates(clean):
-    ticker = f'{PREFIX}NOFX'
-    for n in range(1, 21):
-        close(ticker, n, '10.00', market='us', mic='XNMS', currency='USD')
-    instrument(ticker, 'de', 'XGAT', 'Tradegate BSX', 'EUR', 'GB00TEST0002')
-    instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD', None)
-    db.session.commit()
-
-    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
-
-    assert basis.closes == ()
+    assert basis == history.EMPTY_BASIS
 
 
 def test_a_us_quote_never_converts(clean):
     ticker = f'{PREFIX}USQ'
     for n in range(1, 21):
-        close(ticker, n, '10.00', market='us', mic='XNMS', currency='USD')
+        close(ticker, n, '10.00')
     instrument(ticker, 'us', 'XNMS', 'Nasdaq Global Market', 'USD', None)
+    archived(ticker, None, price='99.00')
     db.session.commit()
-    parity_rates()
 
     basis = history.resolve_basis(ticker, US_QUOTE, 30, TODAY)
 
     assert basis.currency == 'USD'
-    assert basis.converted_from is None
     assert basis.closes[0][1] == decimal.Decimal('10.0000')
+    assert all(price == decimal.Decimal('10.0000')
+               for _, price in basis.closes)
+
+
+def test_a_non_us_quote_has_no_basis_at_all(clean):
+    archived_quote = FakeQuote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+    with pytest.raises(ValueError, match='unknown market'):
+        history.resolve_basis(f'{PREFIX}VOID', archived_quote, 30, TODAY)
 
 
 def test_a_single_close_is_not_a_line(clean):
     ticker = f'{PREFIX}ONE'
-    close(ticker, 1, '10.00', market='de', mic='XGAT', currency='EUR')
+    close(ticker, 1, '10.00')
     db.session.commit()
 
-    basis = history.resolve_basis(ticker, DE_QUOTE, 30, TODAY)
+    basis = history.resolve_basis(ticker, US_QUOTE, 30, TODAY)
 
     assert basis == history.EMPTY_BASIS
 
 
 def test_nothing_stored_yields_the_empty_basis(clean):
-    basis = history.resolve_basis(f'{PREFIX}VOID', DE_QUOTE, 30, TODAY)
+    basis = history.resolve_basis(f'{PREFIX}VOID', US_QUOTE, 30, TODAY)
     assert basis == history.EMPTY_BASIS
     assert basis.closes == ()

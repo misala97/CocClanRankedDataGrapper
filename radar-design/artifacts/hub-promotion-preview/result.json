@@ -1,0 +1,32 @@
+{
+  "desktop": {
+    "viewport": [
+      1440,
+      1000
+    ],
+    "ticker": "HOWL",
+    "board_requests": [
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=24&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=24&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc"
+    ]
+  },
+  "mobile": {
+    "viewport": [
+      390,
+      844
+    ],
+    "ticker": "HOWL",
+    "board_requests": [
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=24&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=24&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc",
+      "http://127.0.0.1:5033/radar/api/board?sources=bluesky%2Cfourchan%2Creddit&window=12&segment=discover%2Cmid%2Cmicro%2Cunknown&market=de&sort=chatter&dir=desc"
+    ]
+  }
+}

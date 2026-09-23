@@ -1,0 +1,8 @@
+﻿t	n
+universe	0
+instruments	0
+closes	0
+buckets	0
+id	username	is_admin
+1	admin	1
+2	zq-ha1-localqa-admin	1

@@ -92,11 +92,11 @@ class Chart:
     # the same at every zoom.
     normal_per_slot: object = None
     # Where this chart's price line came from (features/radar/history.py).
-    # Not the quote's venue: a Nasdaq listing quoted at Tradegate draws its
-    # Nasdaq closes, converted, and the panel states that beside the chart.
+    # Not necessarily the quote's venue: an exact-ISIN US sibling may hold
+    # the deeper closes, and the panel states that beside the chart. The
+    # currency is always the US dollar.
     currency: str | None = None
     basis_venue: str | None = None
-    converted_from: str | None = None
     # 'intraday' when the line came from quote snapshots, 'daily' when it
     # came from stored closes. The 1D span may be either, and the panel's
     # subtitle must not claim the wrong one.
@@ -355,10 +355,12 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
 
     Takes the whole quote view rather than a (market, mic) pair because the
     week's price line no longer comes from that identity: it comes from
-    whichever of the ticker's listings has the depth, which is a question
+    whichever of the ticker's US listings has the depth, which is a question
     only history.resolve_basis can answer and only from the quote.
     """
     market, mic = quote.market, quote.mic
+    if market != 'us':
+        raise ValueError(f'unknown market: {market}')
     slots, step_minutes = INTRADAY_SPANS[span]
     start = now - dt.timedelta(minutes=slots * step_minutes)
 
@@ -385,8 +387,7 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
                 basis_market, basis_mic = market, mic
             native_basis = (not candidate_basis.closes
                             or (candidate_basis.market == quote.market
-                                and candidate_basis.mic == quote.mic
-                                and candidate_basis.converted_from is None))
+                                and candidate_basis.mic == quote.mic))
             anchored = _daily_anchors(
                 ticker, start, now, step_minutes, slots,
                 dict(candidate_basis.closes), market=basis_market,
@@ -407,8 +408,7 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
             basis_market, basis_mic = market, mic
         native_basis = (not basis.closes
                         or (basis.market == quote.market
-                            and basis.mic == quote.mic
-                            and basis.converted_from is None))
+                            and basis.mic == quote.mic))
         closes = _daily_anchors(
             ticker, start, now, step_minutes, slots,
             dict(basis.closes), market=basis_market, mic=basis_mic,
@@ -433,6 +433,4 @@ def intraday_chart_for(ticker, sources, now, span, *, quote):
         priced_from=priced_from,
         currency=(effective_basis.currency
                   if effective_basis else quote.currency),
-        basis_venue=(effective_basis.venue if effective_basis else quote.venue),
-        converted_from=(effective_basis.converted_from
-                        if effective_basis else None))
+        basis_venue=(effective_basis.venue if effective_basis else quote.venue))

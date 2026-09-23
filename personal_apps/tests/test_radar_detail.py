@@ -18,7 +18,7 @@ import pytest
 
 from app import app as flask_app
 from extensions import db
-from features.radar import detail, detail_panel
+from features.radar import detail, detail_panel, phrasing
 from features.radar.config import source_config_version
 from models import (RadarBucketSource, RadarDailyClose, RadarInstrument,
                     RadarMention, RadarQuote, TickerUniverse)
@@ -295,8 +295,14 @@ def test_the_serialized_payload_carries_who_owns_each_tone(panel_ticker):
     assert [post['judged_label'] for post in posts] ==         [label for _post, _tone, _judged_by, label in built.posts]
     assert 'model' in [post['judged_label'] for post in posts]
     for post in posts:
-        # And the name is present exactly when a model decided the tone.
-        assert (post['judged_label'] is not None) ==             (post['judged_by'] == 'model'), post
+        # A label wherever anything scored the tone, and none where nothing
+        # did. It used to be "present exactly when a MODEL decided it", but
+        # the lexicon case now carries a label too -- 'wording' when a model
+        # has read the mention and left no lean, 'not judged yet' when the
+        # judging pass has not reached it.
+        assert (post['judged_label'] is not None) ==             (post['judged_by'] is not None), post
+        if post['judged_by'] == 'lexicon':
+            assert post['judged_label'] in ('wording', 'not judged yet'), post
 
 
 def test_the_panel_returns_the_posts_themselves(panel_ticker):
@@ -734,31 +740,56 @@ def test_one_quote_in_the_day_falls_back_to_daily_closes(clean_intraday):
         assert len([price for price in chart.closes if price is not None]) >= 2
 
 
+NASDAQ_QUOTE = _Quote('us', 'XNAS', 'NASDAQ', 'USD')
+
+
+def _us_pair(ticker, isin):
+    """A Nasdaq primary and an exact-ISIN NYSE sibling for one ticker."""
+    db.session.add_all([
+        RadarInstrument(
+            ticker=ticker, market='us', venue='NASDAQ', mic='XNAS',
+            provider_symbol=ticker, currency='USD', isin=isin,
+            is_primary=True, mapping_status='mapped', mapped_at=NOW),
+        RadarInstrument(
+            ticker=ticker, market='us', venue='NYSE', mic='XNYS',
+            provider_symbol=ticker, currency='USD', isin=isin,
+            is_primary=False, mapping_status='mapped', mapped_at=NOW),
+    ])
+
+
+def _archived(ticker, isin, *, closes=(), prints=()):
+    """An archived non-US listing with its own closes and prints."""
+    db.session.add(RadarInstrument(
+        ticker=ticker, market='de', venue='Xetra', mic='XETR',
+        provider_symbol=ticker + 'X', currency='EUR', isin=isin,
+        is_primary=True, mapping_status='mapped', mapped_at=NOW))
+    for back, price in closes:
+        db.session.add(RadarDailyClose(
+            ticker=ticker, market='de', mic='XETR', currency='EUR',
+            close_date=NOW.date() - dt.timedelta(days=back),
+            close=decimal.Decimal(price), fetched_at=NOW,
+            source='yahoo_chart', adjustment_basis='split', is_shadow=False))
+    for minutes_ago, price in prints:
+        db.session.add(RadarQuote(
+            ticker=ticker, market='de', mic='XETR', currency='EUR',
+            fetched_at=NOW - dt.timedelta(minutes=minutes_ago),
+            quote_ts=NOW - dt.timedelta(minutes=minutes_ago),
+            price=decimal.Decimal(price)))
+
+
 def test_rejected_daily_anchors_keep_intraday_quote_provenance(clean_intraday):
-    """A thin foreign basis must not relabel the surviving native quote."""
+    """A thin sibling basis must not relabel the surviving native quote."""
     ticker = f'{PREFIX}REJECT'
-    quote_view = _Quote('de', 'XGAT', 'Tradegate BSX', 'EUR')
     with flask_app.app_context():
-        db.session.add_all([
-            RadarInstrument(
-                ticker=ticker, market='de', venue='Tradegate BSX',
-                mic='XGAT', provider_symbol='ZZTG', currency='EUR',
-                isin='DE000ZZTST06', is_primary=True,
-                mapping_status='mapped', mapped_at=NOW),
-            RadarInstrument(
-                ticker=ticker, market='de', venue='Xetra', mic='XETR',
-                provider_symbol='ZZXE', currency='EUR',
-                isin='DE000ZZTST06', is_primary=False,
-                mapping_status='mapped', mapped_at=NOW),
-            RadarQuote(
-                ticker=ticker, market='de', mic='XGAT', currency='EUR',
-                fetched_at=NOW - dt.timedelta(minutes=10),
-                quote_ts=NOW - dt.timedelta(minutes=10),
-                price=decimal.Decimal('99.00')),
-        ])
+        _us_pair(ticker, 'US000ZZTST06')
+        db.session.add(RadarQuote(
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
+            fetched_at=NOW - dt.timedelta(minutes=10),
+            quote_ts=NOW - dt.timedelta(minutes=10),
+            price=decimal.Decimal('99.00')))
         for back, price in ((1, '42.50'), (2, '41.00')):
             db.session.add(RadarDailyClose(
-                ticker=ticker, market='de', mic='XETR', currency='EUR',
+                ticker=ticker, market='us', mic='XNYS', currency='USD',
                 close_date=NOW.date() - dt.timedelta(days=back),
                 close=decimal.Decimal(price), fetched_at=NOW,
                 source='yahoo_chart', adjustment_basis='split',
@@ -766,78 +797,42 @@ def test_rejected_daily_anchors_keep_intraday_quote_provenance(clean_intraday):
         db.session.commit()
 
         chart = detail.intraday_chart_for(
-            ticker, ['bluesky'], NOW, '1D', quote=quote_view)
+            ticker, ['bluesky'], NOW, '1D', quote=NASDAQ_QUOTE)
 
         assert chart.priced_from == 'intraday'
         assert 99.0 in [price for price in chart.closes if price is not None]
-        assert chart.basis_venue == 'Tradegate BSX'
-        assert chart.converted_from is None
+        assert chart.basis_venue == 'NASDAQ'
+        assert chart.currency == 'USD'
+        assert not hasattr(chart, 'converted_from')
 
 
-def test_a_converted_basis_never_uses_its_unconverted_quote_prints(
-        clean_intraday):
-    """Changing `use_quote_prints=native_basis` to true must fail here.
-
-    Two US prints would make the converted fallback line acceptable, but they
-    are raw dollars and cannot be mixed into an EUR-priced daily anchor line.
-    """
-    from features.radar import fx
-    from models import RadarFxRate
-
-    ticker = f'{PREFIX}CONVERT'
-    now = dt.datetime(1990, 1, 9, 15, 0, 0)
-    rate_source = 'dt-convert'
-    quote_view = _Quote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+def test_an_archived_listing_never_supplies_a_chart_line(clean_intraday):
+    """Archived non-US closes and prints -- deeper and newer than the US
+    data -- are never drawn, converted or relabelled. The US line stays."""
+    ticker = f'{PREFIX}ARCHIVE'
     with flask_app.app_context():
-        RadarFxRate.query.filter_by(source=rate_source).delete(
-            synchronize_session=False)
-        try:
-            db.session.add_all([
-                RadarInstrument(
-                    ticker=ticker, market='de', venue='Tradegate BSX',
-                    mic='XGAT', provider_symbol='ZZTG', currency='EUR',
-                    isin='DE000ZZTST07', is_primary=True,
-                    mapping_status='mapped', mapped_at=now),
-                RadarInstrument(
-                    ticker=ticker, market='us', venue='Nasdaq',
-                    mic='XNAS', provider_symbol='ZZUS', currency='USD',
-                    isin=None, is_primary=True,
-                    mapping_status='mapped', mapped_at=now),
-                RadarQuote(
-                    ticker=ticker, market='de', mic='XGAT', currency='EUR',
-                    fetched_at=now - dt.timedelta(minutes=10),
-                    quote_ts=now - dt.timedelta(minutes=10),
-                    price=decimal.Decimal('99.00')),
-            ])
-            for minutes_ago, price in ((10, '500.00'), (50, '600.00')):
-                db.session.add(RadarQuote(
-                    ticker=ticker, market='us', mic='XNAS', currency='USD',
-                    fetched_at=now - dt.timedelta(minutes=minutes_ago),
-                    quote_ts=now - dt.timedelta(minutes=minutes_ago),
-                    price=decimal.Decimal(price)))
-            for back, price in ((1, '10.00'), (2, '9.00')):
-                db.session.add(RadarDailyClose(
-                    ticker=ticker, market='us', mic='XNAS', currency='USD',
-                    close_date=now.date() - dt.timedelta(days=back),
-                    close=decimal.Decimal(price), fetched_at=now,
-                    source='yahoo_chart', adjustment_basis='split',
-                    is_shadow=False))
-            db.session.commit()
-            fx.record_rates(
-                [(now.date() - dt.timedelta(days=back), decimal.Decimal('2.0'))
-                 for back in (1, 2)], now, source=rate_source)
+        db.session.add(RadarInstrument(
+            ticker=ticker, market='us', venue='NASDAQ', mic='XNAS',
+            provider_symbol=ticker, currency='USD', isin='US000ZZTST07',
+            is_primary=True, mapping_status='mapped', mapped_at=NOW))
+        for minutes_ago, price in ((50, '10.00'), (20, '10.50')):
+            db.session.add(RadarQuote(
+                ticker=ticker, market='us', mic='XNAS', currency='USD',
+                fetched_at=NOW - dt.timedelta(minutes=minutes_ago),
+                quote_ts=NOW - dt.timedelta(minutes=minutes_ago),
+                price=decimal.Decimal(price)))
+        _archived(ticker, 'US000ZZTST07',
+                  closes=[(back, '500.00') for back in range(1, 8)],
+                  prints=[(40, '600.00'), (5, '700.00')])
+        db.session.commit()
 
+        for span in ('1D', '1W'):
             chart = detail.intraday_chart_for(
-                ticker, ['bluesky'], now, '1D', quote=quote_view)
-
-            assert chart.priced_from == 'intraday'
-            assert [price for price in chart.closes if price is not None] == [99.0]
-            assert chart.basis_venue == 'Tradegate BSX'
-            assert chart.converted_from is None
-        finally:
-            RadarFxRate.query.filter_by(source=rate_source).delete(
-                synchronize_session=False)
-            db.session.commit()
+                ticker, ['bluesky'], NOW, span, quote=NASDAQ_QUOTE)
+            prices = {price for price in chart.closes if price is not None}
+            assert prices <= {10.0, 10.5}, span
+            assert chart.currency == 'USD', span
+            assert chart.basis_venue == 'NASDAQ', span
 
 
 def test_the_1d_chart_reports_where_its_line_came_from(client, panel_live):
@@ -860,31 +855,21 @@ def test_the_1d_chart_reports_where_its_line_came_from(client, panel_live):
     assert len(real) >= 2
 
 
-def test_a_german_intraday_chart_never_splices_usd_quote_history(clean_intraday):
-    """Germany with no Xetra print is not a USD chart with a German label."""
-    from models import RadarQuote
-
+def test_no_chart_is_built_for_an_archived_quote(clean_intraday):
+    """A non-US quote view is a caller bug, never a relabelled US chart."""
     with flask_app.app_context():
-        db.session.add(RadarQuote(
-            ticker=f'{PREFIX}A', market='us', mic='XNAS', currency='USD',
-            fetched_at=NOW - dt.timedelta(minutes=10),
-            quote_ts=NOW - dt.timedelta(minutes=10),
-            price=decimal.Decimal('4.25')))
-        db.session.commit()
-
-        chart = detail.intraday_chart_for(
-            f'{PREFIX}A', ['bluesky'], NOW, '1D',
-            quote=_Quote('de', 'XETR', 'Xetra', 'EUR'))
-
-        assert all(price is None for price in chart.closes)
+        with pytest.raises(ValueError, match='unknown market'):
+            detail.intraday_chart_for(
+                f'{PREFIX}A', ['bluesky'], NOW, '1D',
+                quote=_Quote('de', 'XETR', 'Xetra', 'EUR'))
 
 
-def test_germany_detail_marks_us_fallback_and_uses_its_us_history(clean):
-    """A fallback has a US quote and history, never an empty EUR-labelled splice."""
-    ticker = f'{PREFIX}FALLBACK'
+def test_the_detail_panel_is_us_only_and_ignores_archived_rows(clean):
+    """The panel shows the US quote and US history; archived rows stay put."""
+    ticker = f'{PREFIX}USONLY'
     with flask_app.app_context():
         db.session.add(TickerUniverse(
-            symbol=ticker, name='Fallback Corp', exchange='Nasdaq',
+            symbol=ticker, name='Only US Corp', exchange='Nasdaq',
             first_seen=NOW, market_cap=decimal.Decimal('100000000')))
         db.session.add(RadarQuote(
             ticker=ticker, market='us', mic='XNAS', currency='USD',
@@ -898,18 +883,24 @@ def test_germany_detail_marks_us_fallback_and_uses_its_us_history(clean):
                 ticker=ticker, market='us', mic='XNAS', currency='USD',
                 close_date=NOW.date() - dt.timedelta(days=back),
                 close=decimal.Decimal(price), fetched_at=NOW))
+        _archived(ticker, None,
+                  closes=[(back, '3.00') for back in range(0, 20)],
+                  prints=[(1, '3.90')])
         db.session.commit()
 
-        built = detail_panel.build(ticker, ['bluesky'], NOW, span='1M', market='de')
+        built = detail_panel.build(ticker, ['bluesky'], NOW, span='1M')
 
-        assert built.market == 'de'
-        assert built.quote.is_fallback is True
-        assert built.quote.currency == 'USD'
+        assert built.market == 'us'
+        assert (built.quote.market, built.quote.currency,
+                built.quote.price) == ('us', 'USD', decimal.Decimal('4.25'))
+        assert not hasattr(built.quote, 'is_fallback')
         assert built.chart.closes[-1] == decimal.Decimal('4.25')
-        # A US-fallback quote is USD, so its history is USD too -- never
-        # converted, and never labelled as anything but its own venue.
+        assert decimal.Decimal('3.00') not in built.chart.closes
         assert built.chart.currency == 'USD'
-        assert built.chart.converted_from is None
+        assert not hasattr(built.chart, 'converted_from')
+        with pytest.raises(ValueError, match='unknown market'):
+            detail_panel.build(ticker, ['bluesky'], NOW, span='1M',
+                               market='de')
 
 
 def test_a_slot_with_no_quote_is_none_rather_than_the_last_price(clean_intraday):
@@ -977,78 +968,62 @@ def test_a_week_uses_native_quote_prints_without_a_daily_basis(
                         if price is not None]
 
 
-def test_a_quote_only_eur_week_keeps_quote_currency_and_venue(clean_intraday):
-    ticker = f'{PREFIX}WEUR'
-    quote_view = _Quote('de', 'XGAT', 'Tradegate BSX', 'EUR')
+def test_a_quote_only_week_keeps_quote_currency_and_venue(clean_intraday):
+    ticker = f'{PREFIX}WQUOTE'
     with flask_app.app_context():
         for days_back, price in ((1, '4.25'), (2, '4.00')):
             observed = NOW - dt.timedelta(days=days_back)
             db.session.add(RadarQuote(
-                ticker=ticker, market='de', mic='XGAT', currency='EUR',
+                ticker=ticker, market='us', mic='XNAS', currency='USD',
                 fetched_at=observed, quote_ts=observed,
                 price=decimal.Decimal(price)))
         db.session.commit()
 
         chart = detail.intraday_chart_for(
-            ticker, ['bluesky'], NOW, '1W', quote=quote_view)
+            ticker, ['bluesky'], NOW, '1W', quote=NASDAQ_QUOTE)
 
         assert len([value for value in chart.closes if value is not None]) == 2
-        assert chart.currency == 'EUR'
-        assert chart.basis_venue == 'Tradegate BSX'
+        assert chart.currency == 'USD'
+        assert chart.basis_venue == 'NASDAQ'
 
 
-def test_a_week_anchors_an_xgat_primary_from_its_verified_xetra_sibling(
+def test_a_week_anchors_a_nasdaq_primary_from_its_verified_nyse_sibling(
         clean_intraday):
     """The week chart consumes the same basis the month chart does.
 
-    It used to consume the exact-ISIN Xetra SEAM, which filled only the days
-    before the first native Tradegate close. There is no seam now: the
-    sibling wins the basis whole when it has the depth, and the chart says
+    The sibling wins the basis whole when it has the depth, and the chart says
     which venue that was.
     """
     ticker = f'{PREFIX}WPROXY'
     with flask_app.app_context():
-        db.session.add_all([
-            RadarInstrument(
-                ticker=ticker, market='de', venue='Tradegate BSX',
-                mic='XGAT', provider_symbol='ZZTG', currency='EUR',
-                isin='DE000ZZTST05', is_primary=True,
-                mapping_status='mapped', mapped_at=NOW),
-            RadarInstrument(
-                ticker=ticker, market='de', venue='Xetra', mic='XETR',
-                provider_symbol='ZZXE', currency='EUR',
-                isin='DE000ZZTST05', is_primary=False,
-                mapping_status='mapped', mapped_at=NOW),
-        ])
+        _us_pair(ticker, 'US000ZZTST05')
         # Two closes, not one: one stored close is a dot, and the basis
         # refuses to call a dot a price line (history.MIN_BASIS_CLOSES).
         for back, price in ((1, '42.50'), (2, '41.00')):
             db.session.add(RadarDailyClose(
-                ticker=ticker, market='de', mic='XETR', currency='EUR',
+                ticker=ticker, market='us', mic='XNYS', currency='USD',
                 close_date=NOW.date() - dt.timedelta(days=back),
                 close=decimal.Decimal(price), fetched_at=NOW,
                 source='yahoo_chart', adjustment_basis='split',
                 is_shadow=False))
-        # A real Tradegate print must not leak into a chart whose selected
-        # basis is Xetra. The chart's venue label and prices stay one claim.
+        # A real Nasdaq print must not leak into a chart whose selected
+        # basis is NYSE. The chart's venue label and prices stay one claim.
         db.session.add(RadarQuote(
-            ticker=ticker, market='de', mic='XGAT', currency='EUR',
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
             fetched_at=NOW - dt.timedelta(days=1, hours=3),
             quote_ts=NOW - dt.timedelta(days=1, hours=3),
             price=decimal.Decimal('99.00')))
         db.session.commit()
 
         chart = detail.intraday_chart_for(
-            ticker, ['bluesky'], NOW, '1W',
-            quote=_Quote('de', 'XGAT', 'Tradegate BSX', 'EUR'))
+            ticker, ['bluesky'], NOW, '1W', quote=NASDAQ_QUOTE)
 
         prices = [price for price in chart.closes if price is not None]
         assert 42.5 in prices
         assert 41.0 in prices
         assert 99.0 not in prices
-        assert chart.basis_venue == 'Xetra'
-        assert chart.currency == 'EUR'
-        assert chart.converted_from is None
+        assert chart.basis_venue == 'NYSE'
+        assert chart.currency == 'USD'
 
 
 def test_a_slot_before_observation_began_is_unknown_not_zero(clean_intraday):
@@ -1284,17 +1259,18 @@ def test_each_post_says_who_judged_it(judged_posts):
 
 
 def test_chart_carries_its_basis_not_the_quotes_venue():
-    """A chart drawn from a converted US series says so on the chart itself.
+    """A chart drawn from a sibling US venue says so on the chart itself.
 
-    The header keeps saying Tradegate: that is where the headline price is
-    from. The chart is a different statement and carries its own.
+    The header keeps naming the quote's venue: that is where the headline
+    price is from. The chart is a different statement and carries its own.
+    Nothing is ever converted, so there is no conversion field at all.
     """
     chart = detail.Chart(start=dt.date(2026, 9, 1), closes=[1.0, 2.0],
                          chatter=[None, None], watched_from=None)
 
     assert chart.currency is None
     assert chart.basis_venue is None
-    assert chart.converted_from is None
+    assert not hasattr(chart, 'converted_from')
     assert chart.priced_from == 'daily'
     assert not hasattr(chart, 'history_proxy')
 
@@ -1320,16 +1296,16 @@ def test_a_print_stamped_at_the_bell_is_an_anchor():
 
 
 def test_extended_hours_prints_anchor_when_the_session_had_none():
-    """Tradegate's whole poll window is its late session.
+    """A day whose only prints came after the bell still anchors.
 
-    Its regular window is 09:00-17:30 Berlin and every stored XGAT quote_ts
-    on production falls after it, so a regular-only filter kept zero of them.
+    A regular-only filter would keep zero of them and draw nothing for a day
+    the tape did report.
     """
     from features.radar import detail as detail_mod
     from features.radar.market_calendars import session_bounds
 
     day = dt.datetime(2026, 9, 3, 12, 0, tzinfo=dt.timezone.utc)
-    bounds = session_bounds('de', day, mic='XGAT')
+    bounds = session_bounds('us', day)
     late = bounds.regular_closes_at.astimezone(
         dt.timezone.utc).replace(tzinfo=None) + dt.timedelta(minutes=30)
 
@@ -1348,3 +1324,117 @@ def test_a_print_outside_the_extended_session_is_not_an_anchor():
         dt.timezone.utc).replace(tzinfo=None) - dt.timedelta(hours=2)
 
     assert detail_mod._session_prints([(stray, 10.0)], bounds) == []
+
+
+def test_an_unjudged_mention_says_so_rather_than_crediting_the_wording_score():
+    """The lexicon scores every mention at ingest, so `judged_by` is 'lexicon'
+    from the moment one exists. The row therefore said 'wording' whether that
+    was the final word or merely the only thing that had run yet -- and on the
+    live board, 100% of mentions under ten minutes old are in the second case.
+    """
+    from features.radar.detail_panel import _judged_by, _judged_label
+
+    # Nothing has read it: the wording score is standing in, not deciding.
+    assert _judged_by(0.5, None, None) == 'lexicon'
+    assert _judged_label('lexicon', None, None) == 'not judged yet'
+
+    # A model HAS read it and left no lean; the wording score is the answer.
+    assert _judged_label('lexicon', None, dt.datetime(2026, 9, 10)) == 'wording'
+
+    # Nothing at all scored it -- no label, as before.
+    assert _judged_by(None, None, None) is None
+    assert _judged_label(None, None, None) is None
+
+
+def test_the_label_change_leaves_tone_precedence_alone():
+    """`judged_by` drives which value the tone comes from, and the tone on
+    screen really is the wording score's read. Only the LABEL learned a new
+    fact; the three-valued contract is untouched."""
+    from features.radar.detail_panel import _judged_by, _tone_of
+
+    for judged_at in (None, dt.datetime(2026, 9, 10)):
+        assert _judged_by(0.5, None, None) == 'lexicon'
+    assert _tone_of(0.5, None, None) == 'bullish'
+    assert _tone_of(-0.5, None, None) == 'bearish'
+    assert _judged_by(None, 'bullish', None) == 'model'
+    assert _judged_by(None, None, 'positive') == 'model'
+
+
+def _priced(ticker, snapshots):
+    """Quote snapshots in the window, newest last."""
+    from models import RadarQuote
+
+    for minutes_ago, price, basis in snapshots:
+        db.session.add(RadarQuote(
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
+            fetched_at=NOW - dt.timedelta(minutes=minutes_ago),
+            quote_ts=NOW - dt.timedelta(minutes=minutes_ago),
+            price=decimal.Decimal(price), price_basis=basis))
+    db.session.commit()
+
+
+def test_a_non_trade_basis_keeps_the_panel_move_too(panel_ticker):
+    """The board row and this panel are the same number about the same window.
+
+    `leaderboard._assemble` stopped discarding a measured move on 2026-09-10;
+    this path kept the old gate. The chatter workspace draws the row and the
+    panel side by side, so the withheld move printed a percentage in the
+    candidate rail and `move unknown` under the company's own heading, at the
+    same instant, about the same number.
+
+    This fixture is ineligible for a reason that has nothing to do with the
+    session: the latest quote is a closing price rather than an executed
+    trade. `score_eligible` is not a session gate -- markets.py refuses a
+    non-trade basis, a fallback listing and a frozen tape as well -- and this
+    is the population that shows it.
+
+    It matters more than the shut case below, because it is the one that
+    reaches `phrasing._read_price`: that function short-circuits on a closed
+    or frozen tape, so those two produce no new sentence, while THIS one gains
+    "The price moved X% over the same window" -- on the hub and, from the same
+    endpoint, on the original board at /radar/. That is the intended
+    alignment, since the row has printed this move since 2026-09-10 and
+    `move_since` measures between executed trades either way. It is a visible
+    change to a deployed surface, and it is pinned here rather than left to be
+    discovered.
+    """
+    ticker = f'{PREFIX}A'
+    # Two executed trades to measure between, and a closing price as the
+    # latest quote -- which is what makes the CURRENT quote ineligible.
+    _priced(ticker, ((200, '110.00', 'trade'),
+                     (60, '100.00', 'trade'),
+                     (5, '100.50', 'close')))
+
+    built = detail_panel.build(ticker, ['bluesky'], NOW, window_hours=24)
+
+    assert built.quote.price_basis == 'close'
+    assert built.quote.score_eligible is False, 'a close cannot anchor a score'
+    assert built.quote.tape_status == 'ok', 'and this tape is printing fine'
+    assert built.session != 'closed', 'and the market is open'
+    assert built.price_move is not None, 'the measured move must survive'
+
+    clauses = phrasing.read_clauses(
+        built, built.mentions, built.expected, built.breakdown.voices,
+        built.session, baseline_days=built.baseline_days,
+        venues=len(built.breakdown.venues))
+    assert any('The price moved' in clause.text for clause in clauses), (
+        'the clause this population newly gets')
+
+
+def test_a_shut_exchange_keeps_the_panel_move_too(panel_ticker):
+    """The case the correction was written for: the market is simply closed."""
+    ticker = f'{PREFIX}A'
+    shut = NOW.replace(hour=3)          # 03:00 UTC is the middle of the night
+    from models import RadarQuote
+    for minutes_ago, price in ((200, '110.00'), (30, '100.00')):
+        db.session.add(RadarQuote(
+            ticker=ticker, market='us', mic='XNAS', currency='USD',
+            fetched_at=shut - dt.timedelta(minutes=minutes_ago),
+            quote_ts=shut - dt.timedelta(minutes=minutes_ago),
+            price=decimal.Decimal(price), price_basis='trade'))
+    db.session.commit()
+
+    built = detail_panel.build(ticker, ['bluesky'], shut, window_hours=24)
+
+    assert built.session == 'closed', 'the fixture must be shut'
+    assert built.price_move is not None, 'the measured move must survive'

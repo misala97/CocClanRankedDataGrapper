@@ -1,0 +1,23 @@
+{
+  "python": "3.12.6",
+  "parent_pid": 9524,
+  "child_pid": 23728,
+  "outcome": "done",
+  "result": {
+    "kind": "invalid",
+    "reason": "request_spec"
+  },
+  "reaped": true,
+  "seconds": 0.922,
+  "child_marker_lines": [
+    {
+      "pid": 23728,
+      "name": "__mp_main__",
+      "flask_loaded": true,
+      "sentinel": "dummy-sentinel-not-a-real-secret"
+    }
+  ],
+  "child_re_executed_parent_script": true,
+  "child_imported_flask_via_parent_script": true,
+  "child_saw_dummy_sentinel": true
+}

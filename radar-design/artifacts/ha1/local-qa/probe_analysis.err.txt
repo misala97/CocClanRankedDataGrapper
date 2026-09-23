@@ -1,0 +1,120 @@
+Traceback (most recent call last):
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\cursors.py", line 159, in execute
+    result = self._query(query)
+             ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\cursors.py", line 330, in _query
+    conn.query(q)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 582, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 847, in _read_query_result
+    result.read()
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 1252, in read
+    self._read_result_packet(first_packet)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 1329, in _read_result_packet
+    self._read_rowdata_packet()
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 1376, in _read_rowdata_packet
+    packet = self.connection._read_packet()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 803, in _read_packet
+    packet.raise_for_error()
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\err.py", line 154, in raise_mysql_exception
+    raise errorclass(errno, errval, sqlstate=sqlstate)
+pymysql.err.OperationalError: (1969, 'Query execution was interrupted (max_statement_time exceeded)')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\features\radar\analysis.py", line 203, in _rows
+    result = self.session.execute(sa.text(timed), params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\scoping.py", line 765, in execute
+    return self._proxied.execute(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\session.py", line 2351, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\session.py", line 2258, in _execute_internal
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+           ^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\sql\elements.py", line 527, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 2363, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\cursors.py", line 159, in execute
+    result = self._query(query)
+             ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\cursors.py", line 330, in _query
+    conn.query(q)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 582, in query
+    self._affected_rows = self._read_query_result(unbuffered=unbuffered)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 847, in _read_query_result
+    result.read()
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 1252, in read
+    self._read_result_packet(first_packet)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 1329, in _read_result_packet
+    self._read_rowdata_packet()
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 1376, in _read_rowdata_packet
+    packet = self.connection._read_packet()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\connections.py", line 803, in _read_packet
+    packet.raise_for_error()
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\protocol.py", line 219, in raise_for_error
+    err.raise_mysql_exception(self._data)
+  File "C:\Users\michi\AppData\Local\Programs\Python\Python312\Lib\site-packages\pymysql\err.py", line 154, in raise_mysql_exception
+    raise errorclass(errno, errval, sqlstate=sqlstate)
+sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) (1969, 'Query execution was interrupted (max_statement_time exceeded)')
+[SQL: SET STATEMENT max_statement_time=2.000 FOR SELECT bucket_start, source, mention_count, status, source_config_version
+FROM radar_bucket_sources
+WHERE ticker = %(ticker)s AND bucket_start >= %(utc_start)s AND bucket_start < %(utc_end)s
+ORDER BY bucket_start, source
+LIMIT %(row_limit)s]
+[parameters: {'ticker': 'ZQM5B2FB1', 'utc_start': datetime.datetime(2026, 9, 7, 0, 0), 'utc_end': datetime.datetime(2026, 9, 14, 0, 0), 'row_limit': 43009}]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\probe_analysis.py", line 426, in <module>
+    main()
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\probe_analysis.py", line 335, in main
+    entry.update(reader_allocation(company, instrument))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\probe_analysis.py", line 200, in reader_allocation
+    payload = analysis_mod.read_company(company, instrument, FROM, TO,
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\features\radar\analysis.py", line 405, in read_company
+    bucket_rows = store.bucket_sources(instrument['ticker'], start, end,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\features\radar\analysis.py", line 237, in bucket_sources
+    return self._rows(BUCKET_SOURCES, timeout_s, **buckets_params(ticker, start, end))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\scratchpad\ha1\probe_analysis.py", line 108, in _rows
+    rows = super()._rows(sql, timeout_s, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\personal_apps\features\radar\analysis.py", line 211, in _rows
+    raise ContractError('analysis_limit', 503,
+features.radar.analysis_contract.ContractError: the store did not answer within the bounded time

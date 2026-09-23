@@ -15,7 +15,6 @@ import os
 import requests
 
 from . import PriceUnavailable, Quote
-from ..instruments import CatalogInstrument
 
 API_BASE = 'https://api.twelvedata.com'
 
@@ -107,7 +106,8 @@ class TwelveDataProvider:
             return None
         return Quote(
             ticker=symbol, provider_symbol=symbol,
-            mic=mic_code or 'XNAS', provider_mic=mic_code,
+            # No stand-in when the provider did not name a venue.
+            mic=mic_code, provider_mic=mic_code,
             price=price, previous_close=previous_close,
             regular_close=regular_close, quote_ts=quote_ts,
             currency=payload.get('currency') or '', provider_delay='delayed',
@@ -134,61 +134,3 @@ class TwelveDataProvider:
             if quote is not None:
                 found[instrument.provider_symbol] = quote
         return found
-
-    def stock_catalog(self, mic_code):
-        """Normalized, complete stock/ETF reference data for one MIC catalog.
-
-        Mapping writes treat an absent match as durable information.  A partial
-        directory response therefore has to be a failure, not a smaller
-        successful catalog that could incorrectly mark listings unavailable.
-        """
-        rows = []
-        total_count = None
-        offset = 0
-        while total_count is None or len(rows) < total_count:
-            payload = self._http.get('/stocks', {
-                'mic_code': mic_code, 'show_plan': 'true', 'offset': offset})
-            if (not isinstance(payload, dict) or
-                    payload.get('status') == 'error'):
-                raise PriceUnavailable('/stocks: provider returned no catalog')
-
-            meta = payload.get('meta')
-            page_total = meta.get('total_count') if isinstance(meta, dict) else None
-            if (isinstance(page_total, bool) or not isinstance(page_total, int) or
-                    page_total < 0):
-                raise PriceUnavailable('/stocks: provider did not establish total count')
-            if total_count is None:
-                total_count = page_total
-            elif page_total != total_count:
-                raise PriceUnavailable('/stocks: provider changed total count')
-
-            page = payload.get('data')
-            if not isinstance(page, list) or (not page and len(rows) < total_count):
-                raise PriceUnavailable('/stocks: provider returned an incomplete catalog')
-            if len(rows) + len(page) > total_count:
-                raise PriceUnavailable('/stocks: provider exceeded total count')
-            rows.extend(page)
-            offset += len(page)
-
-        catalog = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            kind = str(row.get('type') or row.get('instrument_type') or '').lower()
-            if not ('stock' in kind or 'etf' in kind or
-                    'exchange traded fund' in kind):
-                continue
-            symbol = row.get('symbol')
-            currency = row.get('currency')
-            if not symbol or not currency:
-                continue
-            row_mic = row.get('mic_code') or row.get('mic')
-            # A German catalog must explicitly identify an EUR Xetra listing;
-            # do not infer either field from the request parameter.
-            if mic_code == 'XETR' and (row_mic != 'XETR' or currency != 'EUR'):
-                continue
-            catalog.append(CatalogInstrument(
-                symbol=str(symbol), name=row.get('name') or row.get('description'),
-                mic=row_mic, currency=currency, isin=row.get('isin'),
-                figi=row.get('figi_code') or row.get('figi')))
-        return catalog

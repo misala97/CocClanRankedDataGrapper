@@ -1,0 +1,183 @@
+HA1 bound target: 127.0.0.1:3461/radar_ha1_localqa (mysql); no SQL executed by the gate
+{
+  "generated_at": "2026-09-15T12:05:03.519925+00:00",
+  "target": "127.0.0.1:3461/radar_ha1_localqa",
+  "synthetic": true,
+  "symbols": {
+    "Z": "ZQZ104228",
+    "T": "ZQT104228",
+    "M": "ZQM104228",
+    "S": "ZQS104228"
+  },
+  "hardware": {
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 167 Stepping 1, GenuineIntel",
+    "python": "3.12.6"
+  },
+  "fingerprint_start": {
+    "digest": "8781d5381f8141f28720a469e3c415fe64f84a032b4a3dce952450398fde36c9",
+    "files": 154
+  },
+  "failures": [],
+  "engine": "mysql (10, 11, 14)",
+  "dialect": {
+    "initialized": true,
+    "server_version_info": [
+      10,
+      11,
+      14
+    ],
+    "timeout_dialect": "mariadb:set_statement",
+    "failure": null
+  },
+  "source_limit": {
+    "rows": 65,
+    "sources": 65,
+    "status": 503,
+    "code": "analysis_limit"
+  },
+  "row_limit": {
+    "rows": 43009,
+    "sources": 64,
+    "status": 503,
+    "code": "analysis_limit",
+    "status_after_sentinel_removed": 200
+  },
+  "timeout": {
+    "limit_s": 1.0,
+    "probes": {
+      "sleep": {
+        "errno": 1969,
+        "code": "analysis_limit",
+        "returned": null,
+        "elapsed_s": 1.005,
+        "requested_s": 3.0,
+        "classification": "interrupted_error"
+      },
+      "cpu": {
+        "errno": 1969,
+        "code": "analysis_limit",
+        "returned": null,
+        "elapsed_s": 1.009,
+        "requested_s": null,
+        "classification": "interrupted_error"
+      },
+      "cpu_subsecond": {
+        "errno": 1969,
+        "code": "analysis_limit",
+        "returned": null,
+        "requested_s": 0.25,
+        "effective_s": 0.25,
+        "rendered": "SET STATEMENT max_statement_time=0.250 FOR",
+        "elapsed_s": 0.264,
+        "overshoot_s": 0.014,
+        "budget_check_after": "refused:analysis_limit",
+        "classification": "interrupted_error"
+      }
+    },
+    "dialect": "mariadb:set_statement",
+    "connection_id_before": 33,
+    "session_max_statement_time_before": "0.0",
+    "recovery_ok": true,
+    "connection_id_after": 33,
+    "session_max_statement_time_after": "0.0"
+  },
+  "after_timeout_status": 200,
+  "deadline": {
+    "scope": "reader/resolver budget excluding pre-reader auth and pool wait; not a hard full-HTTP cancellation guarantee",
+    "statement_interruption_delay_s": {
+      "cpu": 0.009,
+      "cpu_subsecond": 0.014
+    },
+    "reader": {
+      "status": 503,
+      "code": "analysis_limit",
+      "elapsed_s": 5.052,
+      "overshoot_s": 0.052,
+      "calls": [
+        {
+          "method": "company_by_id",
+          "handed_timeout_s": 2.0,
+          "issued_at_s": 0.0
+        },
+        {
+          "method": "instrument_by_id",
+          "handed_timeout_s": 2.0,
+          "issued_at_s": 1.9629
+        },
+        {
+          "method": "daily_closes",
+          "handed_timeout_s": 1.0789999999979045,
+          "issued_at_s": 3.9223
+        },
+        {
+          "method": "bucket_sources",
+          "handed_timeout_s": 0.046999999998661224,
+          "issued_at_s": 4.964
+        }
+      ],
+      "handed_timeouts_s": [
+        2.0,
+        2.0,
+        1.0789999999979045,
+        0.046999999998661224
+      ]
+    },
+    "http": {
+      "status": 503,
+      "code": "analysis_limit",
+      "full_request_ms": 5058.9,
+      "elapsed_s": 5.059,
+      "overshoot_s": 0.059,
+      "before_first_reader_statement_s": 0.0016,
+      "calls": [
+        {
+          "method": "company_by_id",
+          "handed_timeout_s": 2.0,
+          "issued_at_s": 0.0016
+        },
+        {
+          "method": "instrument_by_id",
+          "handed_timeout_s": 2.0,
+          "issued_at_s": 1.9646
+        },
+        {
+          "method": "daily_closes",
+          "handed_timeout_s": 1.0780000000013388,
+          "issued_at_s": 3.9254
+        },
+        {
+          "method": "bucket_sources",
+          "handed_timeout_s": 0.031000000002677552,
+          "issued_at_s": 4.9696
+        }
+      ],
+      "handed_timeouts_s": [
+        2.0,
+        2.0,
+        1.0780000000013388,
+        0.031000000002677552
+      ]
+    },
+    "acceptance": "mastermind_ruling_required"
+  },
+  "after_deadline_status": 200,
+  "original_failure": null,
+  "cleanup": {
+    "status": "complete",
+    "error": null,
+    "remaining": {},
+    "planned_symbols": [
+      "ZQZ104228",
+      "ZQT104228",
+      "ZQM104228",
+      "ZQS104228"
+    ],
+    "planned_usernames": []
+  },
+  "fingerprint_end": {
+    "digest": "8781d5381f8141f28720a469e3c415fe64f84a032b4a3dce952450398fde36c9",
+    "files": 154
+  },
+  "finished_at": "2026-09-15T12:06:03.656500+00:00"
+}

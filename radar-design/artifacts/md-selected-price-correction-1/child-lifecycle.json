@@ -1,0 +1,49 @@
+{
+  "launcher": "subprocess",
+  "platform": "win32",
+  "python": "3.12.6",
+  "normal": {
+    "admission_seconds": 0.0,
+    "supervisor_seconds": 0.593,
+    "exitcode": 0,
+    "heavy_modules_in_child": [],
+    "child_env_keys": [
+      "SYSTEMROOT"
+    ]
+  },
+  "production_child_bad_spec": {
+    "seconds": 0.609,
+    "exitcode": 0
+  },
+  "hanging": {
+    "admission_seconds": 0.0,
+    "deadline_seconds": 6.0,
+    "cleanup_allowance_seconds": 1.0,
+    "supervisor_seconds": 6.219,
+    "wall_seconds_until_idle": 6.235,
+    "exitcode": 1,
+    "other_key_state_meanwhile": "busy"
+  },
+  "oversized": {
+    "supervisor_seconds": 0.812,
+    "wall_seconds_until_idle": 0.828,
+    "exitcode": 1,
+    "result_limit_bytes": 524288
+  },
+  "stderr_flood_8MiB": {
+    "supervisor_seconds": 0.656,
+    "exitcode": 0
+  },
+  "early_exit": {
+    "supervisor_seconds": 0.563,
+    "exitcode": 3
+  },
+  "garbage": {
+    "supervisor_seconds": 0.563,
+    "exitcode": 0
+  },
+  "nonzero": {
+    "supervisor_seconds": 0.657,
+    "exitcode": 5
+  }
+}

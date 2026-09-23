@@ -1,0 +1,2 @@
+HA1 bound target: 127.0.0.1:3461/radar_ha1_localqa (mysql); no SQL executed by the gate
+seeded 15 owned preview cases on 127.0.0.1:3461/radar_ha1_localqa; manifest C:\Users\michi\Desktop\CodingStuff\.worktrees\radar-ha1-us-daily-explore\radar-design\artifacts\ha1\runtime\preview-fixtures.json

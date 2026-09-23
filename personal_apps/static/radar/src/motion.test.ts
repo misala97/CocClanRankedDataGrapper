@@ -101,7 +101,7 @@ describe('accessibility contracts in the stylesheet', () => {
   })
 
   it('stacks the identity price below its facts on a 390px screen', () => {
-    /* The compact USD fallback label can be longer than the available inline
+    /* The compact venue and currency label can be longer than the available inline
        space beside an unbroken company name.  Keeping price as a flex item
        made its right edge clip; the small layout needs one full-width price
        lane instead. */
@@ -131,6 +131,19 @@ describe('expanding retained posts', () => {
     for (const rule of postRules) {
       expect(rule, rule).not.toMatch(/transition:[^;]*\bheight\b/)
     }
+  })
+})
+
+describe('the age line', () => {
+  it('quiets the refreshing token, never the line a failure is printed in', () => {
+    // `.age.stale b` once took every bold token on a stale line out of the
+    // caution colour -- and a stale board whose rebuilds are failing prints
+    // "Last refresh failed" on that same line, as a board nothing refreshes
+    // prints "not refreshed": both want the reader's eye. The quiet
+    // treatment is the refreshing token's own.
+    expect(rules).toMatch(
+      /\.brand \.age b\.queued \{[^}]*color:\s*var\(--ink-2\)/)
+    expect(rules).not.toMatch(/\.age\.stale\s+b\b/)
   })
 })
 

@@ -1,7 +1,7 @@
 // Number and label formatting. Pure, and tested -- these are the functions
 // that decide whether an unknown reads as unknown or as a zero.
 
-import type { Mark } from './types'
+import type { Mark, QuoteCurrency } from './types'
 
 /** The em-dash every unknown renders as. One constant so it cannot drift into
  *  a hyphen in one place and an en-dash in another. */
@@ -271,26 +271,37 @@ export function dayStamp(iso: string | null): string {
  *  printed, so a pair of axis labels either side of one chart cannot come out
  *  as `$202` above `$46.33`. It defaults to the value itself.
  */
-export function money(value: number, scale = value, currency = 'USD'): string {
-  // The venue's currency, as a sign where one is common and as a code
-  // otherwise: a German chart printed `$1.93` for a euro print until
-  // 2026-09-02, and a number in the wrong currency is worse than none.
-  const sign = currency === 'USD' ? '$' : currency === 'EUR' ? '\u20ac' : `${currency} `
-  if (scale >= 100) return `${sign}${value.toFixed(0)}`
-  if (scale >= 1) return `${sign}${value.toFixed(2)}`
-  return `${sign}${value.toFixed(4)}`
+export function money(value: number, scale = value): string {
+  // Radar prices are US dollars and nothing else; the chart axes and hover
+  // are only ever handed dollar closes.
+  if (scale >= 100) return `$${value.toFixed(0)}`
+  if (scale >= 1) return `$${value.toFixed(2)}`
+  return `$${value.toFixed(4)}`
 }
 
-/** A venue price in its provider-declared currency.
+/** A Radar market price, `$194.20` style.
  *
- * `explicitCode` is for a US fallback inside Germany mode: a dollar glyph
- * alone is too easy to overlook next to German venue rows. */
-export function formatPrice(value: number, currency: string,
-                            { explicitCode = false }: { explicitCode?: boolean } = {}): string {
-  const formatted = new Intl.NumberFormat('de-DE', {
-    style: 'currency', currency,
+ *  Only a US dollar value is a Radar price. Anything else -- which the server
+ *  no longer sends -- is shown as unknown rather than relabelled or given a
+ *  dollar sign it does not have. */
+export function formatPrice(value: number, currency: QuoteCurrency | null): string {
+  if (currency !== 'USD' || !Number.isFinite(value)) return UNKNOWN
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
   }).format(value)
-  return explicitCode ? `${formatted} · ${currency}` : formatted
+}
+
+/** The hub's two-decimal price figure: `$1,234.50`.
+ *
+ *  A row whose quote carries no currency at all keeps its bare number, as it
+ *  always has (chatterSort.ts explains why that row stays on screen). A
+ *  currency other than the US dollar is not a Radar price and reads as
+ *  unknown. */
+export function usdText(value: number, currency: QuoteCurrency | null): string {
+  const text = value.toLocaleString('en-US',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (currency === 'USD') return `$${text}`
+  return currency === null ? text : UNKNOWN
 }
 
 /** The delayed age in a human unit, or the normal unknown marker where a
@@ -327,6 +338,21 @@ export function humanAge(ageSeconds: number | null): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 48) return `${hours}h`
   return `${Math.floor(hours / 24)}d`
+}
+
+/** A board's age at the resolution the state it describes actually moves at.
+ *
+ *  Seconds below a minute, because the age line ticks every second and a
+ *  board that has just arrived saying "0 min ago" cannot be watched getting
+ *  older. `humanAge` takes over past ninety minutes, where its units --
+ *  hours, then days -- are the ones a person would pick and the seconds
+ *  stopped meaning anything hours ago. One formatter for both surfaces' age
+ *  lines (list/ListPane.tsx, hub/PageState.tsx), so the two never state one
+ *  age two ways. */
+export function boardAge(seconds: number): string {
+  if (seconds < 60) return `${Math.max(0, Math.floor(seconds))}s`
+  const minutes = Math.floor(seconds / 60)
+  return minutes < 90 ? `${minutes}m` : humanAge(seconds)
 }
 
 /** The ratio as the chart-row's short figure: `4.5×`, `40×`.

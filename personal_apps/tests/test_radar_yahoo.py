@@ -103,14 +103,17 @@ def test_unknown_mic_rejects_rather_than_weakening_identity():
         [instrument('AAPL', mic='XXXX')]) == {}
 
 
-def test_xetr_instrument_accepts_german_metadata():
+def test_a_non_us_venue_has_no_allowlist_and_is_refused():
+    """The retired exchange is gone from the allowlist: even a payload that
+    matches its own metadata is absent, for quotes and for history."""
     payload = chart_payload(symbol='SAP.DE', currency='EUR', exchange='GER')
-    quote = yahoo.YahooProvider(FakeHttp(payload)).quotes_for_instruments(
+    provider = yahoo.YahooProvider(FakeHttp(payload))
+    assert 'XETR' not in yahoo._EXCHANGE_ALLOWLIST
+    assert provider.quotes_for_instruments(
         [instrument('SAP', mic='XETR', currency='EUR',
                     provider_symbol='SAP.DE', market='de',
-                    venue='Xetra')])['SAP.DE']
-    assert quote.currency == 'EUR'
-    assert quote.mic == 'XETR'
+                    venue='Xetra')]) == {}
+    assert provider.daily_closes('SAP.DE', 5, mic_code='XETR') == []
 
 
 def test_daily_closes_use_the_split_only_close_series_not_adjclose():

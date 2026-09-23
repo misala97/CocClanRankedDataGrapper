@@ -1,0 +1,39 @@
+HA1 bound target: 127.0.0.1:3461/radar_ha1_localqa (mysql); no SQL executed by the gate
+{
+  "target": "127.0.0.1:3461/radar_ha1_localqa",
+  "probe": {
+    "limit_s": 1.0,
+    "probes": {},
+    "dialect": "mysql:not-mariadb"
+  },
+  "probe_failures": [
+    "timeout: a MariaDB target is required; bound dialect is 'mysql:not-mariadb', so nothing is proven"
+  ],
+  "raw": {
+    "benchmark_5M_unlimited": {
+      "value": "0",
+      "error": null,
+      "elapsed_s": 2.361
+    },
+    "benchmark_50M_limit_1s": {
+      "value": "0",
+      "error": null,
+      "elapsed_s": 1.005
+    },
+    "sleep_3_limit_1s": {
+      "value": "None",
+      "error": "OperationalError: (1969, 'Query execution was interrupted (max_statement_time exceeded)')",
+      "elapsed_s": 1.012
+    },
+    "seq_sum_limit_1s": {
+      "value": "100000000",
+      "error": null,
+      "elapsed_s": 0.001
+    },
+    "cross_join_limit_1s": {
+      "value": "None",
+      "error": "OperationalError: (1969, 'Query execution was interrupted (max_statement_time exceeded)')",
+      "elapsed_s": 1.01
+    }
+  }
+}

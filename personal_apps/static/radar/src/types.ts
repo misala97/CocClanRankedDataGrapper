@@ -5,6 +5,8 @@
 // no separate "initial" type -- a second shape is a second thing to keep in
 // sync, and the first divergence would show up as a blank panel.
 
+import type { SelectedPriceOps } from './hub/priceChart'
+
 /** A mention count for one hour. `null` means the hour was never measured --
  *  ingest was down, or the sources were unreachable. It is not a quiet hour
  *  and must never render as a zero. */
@@ -54,8 +56,12 @@ export interface Clause {
  *  it changes one ticker's chart, not which rows are listed. */
 export type PanelSpan = '1D' | '1W' | '1M' | '6M' | '1Y' | '3Y'
 
-/** Price context is independent from Radar's stable social ticker identity. */
-export type Market = 'us' | 'de'
+/** Radar prices US listings only; the server names the market on every
+ *  payload, and it is always this one. */
+export type Market = 'us'
+
+/** Every displayed Radar market price is a native US dollar value. */
+export type QuoteCurrency = 'USD'
 
 /** The provider's freshness classification, never inferred from a missing
  * price on the client. */
@@ -69,13 +75,12 @@ export interface ChartSession {
   kind: Extract<Session, 'premarket' | 'afterhours' | 'closed'>
 }
 
-/** One selected venue quote. Germany-mode fallbacks retain their real US/USD
- * identity rather than appearing as converted German quotes. */
+/** One selected US venue quote. Null currency means no quote. */
 export interface MarketQuote {
   market: Market
   venue: string | null
   mic: string | null
-  currency: string | null
+  currency: QuoteCurrency | null
   price: number | null
   regular_move: number | null
   extended_move: number | null
@@ -88,7 +93,6 @@ export interface MarketQuote {
   /** Server-side decision; never re-derived from the displayed session. */
   score_eligible: boolean
   score_term: QuoteScoreTerm
-  is_fallback: boolean
   /** Market-data v2 provenance. Null on legacy rows; never controls
    *  client-side eligibility. */
   source: QuoteSource | null
@@ -99,8 +103,7 @@ export interface MarketQuote {
 
 export type PriceBasis = 'trade' | 'midpoint' | 'close'
 export type QuoteSource =
-  | 'legacy' | 'finnhub' | 'twelvedata'
-  | 'deutsche_boerse_delayed' | 'yahoo_chart'
+  | 'legacy' | 'finnhub' | 'twelvedata' | 'yahoo_chart'
 
 /** Price and chatter over the same calendar days, sharing `from`.
  *
@@ -127,17 +130,33 @@ export interface DetailChart {
   /** The day observation began. Before it the chatter lane is unobserved
    *  rather than silent, and the panel draws that boundary. */
   watched_from: string | null
-  /** The currency `closes` is expressed in, and the venue those closes came
-   *  from. Not necessarily the quote's: a Nasdaq listing quoted at Tradegate
-   *  draws its Nasdaq closes converted to EUR. */
-  currency: string | null
+  /** The currency `closes` is expressed in -- always US dollars -- and the
+   *  US venue those closes came from, which may be an exact-ISIN sibling of
+   *  the quote's own. Nothing is ever converted. */
+  currency: QuoteCurrency | null
   basis_venue: string | null
-  /** Set only when `closes` was converted out of another currency. The panel
-   *  states it beside the chart -- a converted line must never read native. */
-  converted_from: string | null
   /** 'intraday' when the line is quote snapshots, 'daily' when it is stored
    *  closes. 1D may be either. */
   priced_from: 'intraday' | 'daily'
+  /** Optional hub-only partition of the same chatter totals. */
+  chatter_tone?: ChatterTone
+}
+
+export type ChatterToneSlot = null | {
+  bullish: number
+  bearish: number
+  neutral: number
+  unjudged: number
+  unavailable: number
+  status: 'complete' | 'partial' | 'unavailable'
+}
+
+export interface ChatterTone {
+  version: 1
+  basis: 'recorded-judgments'
+  calculated_at: string
+  retained_from: string
+  slots: ChatterToneSlot[]
 }
 
 export interface Post {
@@ -225,7 +244,18 @@ export interface Row {
   ratio: number | null
   authors: number
   text_ratio: number
+  /** Every scored feed this ticker has a bucket on in the window, including
+   *  the ones that counted nothing. `venues` and the breadth filter are built
+   *  on this, so it keeps meaning "looked at". */
   sources: string[]
+  /** The subset of `sources` whose summed mentions in this window are above
+   *  zero -- bucket-observed activity, not independence and not verification.
+   *
+   *  Optional only while a board cached before this field existed can still
+   *  be served. Absent means unavailable, which is NOT the same as `[]`: an
+   *  empty array is a measurement saying no feed counted anything. Never fall
+   *  back to `sources.length` -- that is the misleading count this replaces. */
+  activity_sources?: string[]
   price: number | null
   price_move: number | null
   direction: 'up' | 'down' | 'flat'
@@ -265,7 +295,11 @@ export interface Row {
 export type Session = 'premarket' | 'regular' | 'afterhours' | 'closed'
 
 export interface BoardPayload {
-  generated_at: string
+  /** When this board was BUILT, by whoever built it. Null on a waiting shell:
+   *  there is no board, so there is no instant to name, and "calculated just
+   *  now" about one that does not exist is the one thing a freshness stamp
+   *  must never say. */
+  generated_at: string | null
   market: Market
   display_timezone: 'Europe/Berlin'
   /** Selected market context, stated once above its rows. */
@@ -290,7 +324,12 @@ export interface BoardPayload {
   triplet_hours: number[]
   series_hours: number
   lead_count: number
-  rows: Row[]
+  /** Null is not empty. Empty means nothing was loud enough in this window,
+   *  which is a real and different answer; null means nobody has built this
+   *  board yet, and a surface that could not tell the two apart would draw
+   *  "no movement" over a cache miss. Null only ever arrives with `pending`
+   *  or `busy` set. */
+  rows: Row[] | null
   /** What the eligibility floor and the breadth filter left out, by reason.
    *  Without it a quiet board and a stopped ingest look identical. */
   excluded: Record<string, number>
@@ -319,16 +358,79 @@ export interface BoardPayload {
       over_ceiling: number
     }
   }
+  /** The market-data cycles, when the server put them on the board. Absent
+   *  on a waiting shell for the same reason `spend` is: these are frozen
+   *  into a payload at build time and a shell was never built. */
+  market_data_ops?: OpsPayload['market_data']
+
+  // --- how this answer was delivered ---------------------------------------
+  //
+  // Every response carries all of it -- the shared store's, and the one a
+  // worker built for itself -- so the surface renders one shape rather than
+  // telling a missing field from a false one. Named field for field in
+  // features/radar/board_shared.ENVELOPE_KEYS.
+
+  /** Read from the store somebody else writes, rather than built here. */
+  shared: boolean
+  /** No board yet; one is queued or being built. `rows` is null. */
+  pending: boolean
+  /** The generation is refusing work. Nothing was queued, and the client is
+   *  being asked to slow down rather than to wait in line. `rows` is null. */
+  busy: boolean
+  /** The board below is past its freshness bound and a refresh is queued.
+   *  Still a board, and still worth reading. */
+  stale: boolean
+  /** The attempt to build a NEWER board failed. A verdict on the queue, not
+   *  on the rows: with rows present they are the last good board. */
+  failed: boolean
+  /** When the board was published, and when its build finished. Null while
+   *  there is nothing to describe. */
+  as_of: string | null
+  built_at: string | null
+  /** How old the board was when the server answered. The surface adds its
+   *  own elapsed time on top rather than re-deriving this from a stamp. */
+  age_seconds: number | null
+  /** The bounds the age is read against: fresh below the first, worth
+   *  serving under a stale mark below the second, and past the second it
+   *  misdescribes the rolling window it names. */
+  fresh_seconds: number
+  hard_expiry_seconds: number
+  /** The server's own read of when to come back, in milliseconds. It knows
+   *  the queue; the client's schedule does not, so this is a floor and never
+   *  a ceiling. Null when there is nothing to come back for. */
+  retry_after_ms: number | null
+  /** How long this key has been in the queue. Null when it is not in one. */
+  queue_age_seconds: number | null
+  /** When the ops summaries inside this payload were read. */
+  ops_collected_at: string | null
+}
+
+/** A board with rows in it: what every part of the surface that draws a list
+ *  is entitled to assume, and what a waiting shell is not. */
+export type ReadyBoard = BoardPayload & {
+  rows: Row[]
+  as_of: string
+  generated_at: string
+}
+
+/** Whether this answer is a board at all.
+ *
+ *  Rows AND the two stamps, not `!pending`: a shell is recognised by what it
+ *  is missing rather than by a flag, so a payload from an older deployment
+ *  that carries neither flag nor rows is still handled as the absence it is.
+ */
+export function isReady(payload: BoardPayload): payload is ReadyBoard {
+  return payload.rows !== null && payload.as_of !== null
+    && payload.generated_at !== null
 }
 
 /** The board's sort keys, in the order the header reads left to right. Same
  *  spelling as the query parameter and as board.SORT_KEYS on the server. */
 export const SORT_KEYS = ['ticker', 'mentions', 'divergence', 'ratio',
-                          'move', 'lean'] as const
+                          'move', 'lean', 'chatter'] as const
 export type SortKey = typeof SORT_KEYS[number]
 
 export interface Selection {
-  market: Market
   sources: string[]
   /** Server-side filter, unlike the chart span -- changing it refetches. */
   minVenues: number
@@ -340,6 +442,87 @@ export interface Selection {
    *  refetches, because it changes WHICH rows are on the board. */
   sort: SortKey | null
   dir: 'asc' | 'desc'
+}
+
+/** One Berlin calendar day of recorded ingest activity.
+ *
+ *  Every counter is nullable and the null is the point: it means no completed
+ *  run reported that figure for this day, which is not the same as a run that
+ *  measured zero. `counted_runs` is how many summaries the counters were
+ *  actually drawn from -- lower than `completed_runs` when a run stored no
+ *  summary or stored one in a schema version the server will not add to the
+ *  current one.
+ *
+ *  `completeness` never says complete. Successful runs prove those cycles
+ *  happened, never that every post on every source was seen.
+ */
+export interface ActivityDay {
+  date: string
+  posts_seen: number | null
+  posts_new: number | null
+  mentions: number | null
+  buckets_written: number | null
+  completed_runs: number
+  counted_runs: number
+  incomplete_runs: number
+  error_runs: number
+  completeness: 'partial' | 'unknown'
+}
+
+export interface ActivityPayload {
+  generated_at: string
+  /** UTC bounds of the Berlin days below. A DST day is 23 or 25 hours. */
+  from: string
+  to: string
+  /** When the first run was ever recorded. Days before it are not missing
+   *  measurements -- nothing was recording yet. Null before the first run. */
+  recording_started_at: string | null
+  days: ActivityDay[]
+}
+
+/** The operational summaries the server already computes, read-only.
+ *
+ *  Shapes copied from features/radar/{spend,llm_sentiment,market_data}.py and
+ *  features/radar/routes/operations.py. Deliberately not `any`: a contract
+ *  that drifts should break the build rather than render a blank tile.
+ */
+export interface OpsPayload {
+  generated_at: string
+  /** This web process's selected-price acquisition health. Optional so an
+   *  older deployment without it still renders the page. */
+  selected_price_ops?: SelectedPriceOps
+  spend: { today_usd: number; month_usd: number; unpriced_tokens: number }
+  sentiment: {
+    pending: number
+    /** Always sent by llm_sentiment.ops_summary; optional only so an older
+     *  deployment does not break the page. */
+    gated_pending?: number
+    pinned_pending?: number
+    p95_age_minutes: number | null
+    review: {
+      demanded: number
+      attempted: number
+      served: number
+      capped: number
+      over_ceiling: number
+    }
+  }
+  market_data: {
+    quote_basis_24h: Record<string, number>
+    grouped_closes: {
+      latest_accepted_date: string | null
+      retryable_gaps: string[]
+      counts: Record<string, number> | null
+      error_code: string | null
+      http_status: number | null
+      backoff_until: string | null
+    }
+    /** Keyed `source:market`; the claim, or null where none was made. */
+    post_close_claims: Record<string, string | null>
+  }
+  /** How old the board archive is. Null until capture is switched on and has
+   *  stored its first quarter-hour. */
+  capture: { latest_observed_at: string | null }
 }
 
 /** One universe match. Identity only: whether it is on the board, and its

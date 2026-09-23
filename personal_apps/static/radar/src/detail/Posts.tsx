@@ -81,14 +81,17 @@ export function Posts({ posts, total, retentionNote }: {
                     here so a post can never disagree with the counts. */}
                 <span className={`ptone ${post.tone}`}>{post.tone}</span>
                 {post.judged_by && (
-                  // A fact, not a badge: who read this post -- the model, or
-                  // the wording score that stands in until it does. The
-                  // model's NAME comes from the server, which is the only
-                  // place that knows which backend wrote this tone.
+                  // A fact, not a badge: who read this post -- or that nobody
+                  // has yet. Every word of it comes from the server, which is
+                  // the only place that knows which backend wrote this tone
+                  // and whether the judging pass has reached the mention at
+                  // all. This used to hardcode 'wording' for anything the
+                  // model had not decided, which told the reader the wording
+                  // score was the final word on a post the encoder had simply
+                  // not got to.
                   <span className="pby">
-                    {post.judged_by === 'model'
-                      ? (post.judged_label ?? 'model')
-                      : 'wording'}
+                    {post.judged_label
+                      ?? (post.judged_by === 'model' ? 'model' : 'wording')}
                   </span>
                 )}
                 {/* Handles have no length limit anywhere upstream, and a long

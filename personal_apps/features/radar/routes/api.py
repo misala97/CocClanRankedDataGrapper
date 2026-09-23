@@ -1,6 +1,7 @@
 """JSON for the leaderboard surface."""
 import dataclasses
 import datetime as dt
+import os
 import threading
 
 from flask import jsonify, request
@@ -8,8 +9,9 @@ from flask import jsonify, request
 from auth import current_user, login_required
 
 from .. import board as board_mod
+from .. import board_shared, board_store
 from .. import detail as detail_mod
-from .. import detail_panel, llm_sentiment, market_data, phrasing, spend
+from .. import chatter_tone, detail_panel, llm_sentiment, market_data, phrasing, spend
 from .. import search as search_mod
 from .. import watch
 from ..config import DEFAULT_SEGMENT, REDDIT_SUBS, SOURCES, source_root
@@ -42,10 +44,10 @@ class Query:
     window: int
     limit: int
     min_venues: int
-    # Omission means the live session -- see default_market. The API remains
-    # strict for any value that is supplied, so a typo cannot silently return
-    # a different market.
-    market: str = 'de'
+    # Radar is US-only. Omission means US; parse_query refuses any other
+    # supplied value, so a legacy link cannot silently open a different
+    # board than the one it names.
+    market: str = 'us'
     # None is the default two-tier ranking; otherwise one of board.SORT_KEYS.
     sort: str = None
     direction: str = 'desc'
@@ -67,9 +69,7 @@ def _iso_z(value):
 def _chart_sessions(chart, market, span, mic=None):
     """What kind of time each stretch of the chart is, in UTC intervals.
 
-    A chart may represent a real German quote or an explicit US fallback.  Its
-    bands must follow the quote's actual market calendar, not the selected
-    surface's market label.
+    Its bands follow the quote's own market calendar.
 
     Three kinds since the single-lane chart (2026-08-30): premarket and
     afterhours as before, plus `closed` -- nights, weekends and holidays --
@@ -112,8 +112,8 @@ def _chart_sessions(chart, market, span, mic=None):
     day = start.date() - dt.timedelta(days=1)
     last_day = end.date() + dt.timedelta(days=1)
     while day <= last_day:
-        # Noon UTC unambiguously selects this local US or German calendar day;
-        # the extra day at either side covers a session crossing a UTC date.
+        # Noon UTC unambiguously selects this local US calendar day; the
+        # extra day at either side covers a session crossing a UTC date.
         probe = dt.datetime.combine(day, dt.time(12), tzinfo=dt.timezone.utc)
         bounds = session_bounds(market, probe, mic=mic)
         if session_state(market, bounds.regular_opens_at,
@@ -229,7 +229,6 @@ def _quote(view):
         'tape_status': view.tape_status,
         'score_eligible': view.score_eligible,
         'score_term': view.score_term,
-        'is_fallback': view.is_fallback,
         # Market-data v2 provenance: decided in QuoteView, never re-derived
         # here (spec 10).
         'source': view.source,
@@ -243,22 +242,28 @@ class BadQuery(ValueError):
     """A query parameter the caller sent that cannot be honoured."""
 
 
-def default_market(now=None):
-    """The market an unqualified request opens on: whichever session is live.
+def _supplied_markets(args):
+    """Every `market` value the request supplied.
 
-    Michi, 2026-09-01, reversing the DE-always default of 2026-08-30. US only
-    when the US session is regular AND the German one is not; DE otherwise.
-    The home market wins the 15:30-17:30 overlap, and with nothing live there
-    is no price move to diverge from on either venue, so the board opens on
-    the one the reader trades.
+    A query string may repeat a parameter and `MultiDict.get` answers only the
+    first; a plain mapping, as the producer and unit tests pass, holds one.
     """
-    now = now or dt.datetime.now(dt.timezone.utc)
-    # Callers pass the codebase's naive-UTC `now`; the calendars want it aware.
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=dt.timezone.utc)
-    us_live = session_state('us', now) == 'regular'
-    de_live = session_state('de', now) == 'regular'
-    return 'us' if us_live and not de_live else 'de'
+    getlist = getattr(args, 'getlist', None)
+    if getlist is not None:
+        return getlist('market')
+    value = args.get('market')
+    return [] if value is None else [value]
+
+
+def require_us_market(args):
+    """Raise BadQuery unless every supplied market is empty or `us`.
+
+    Shared with the human pages' check ahead of their friendly fallback, so a
+    repeated parameter cannot open the US board while also naming another
+    market, whichever position that value takes.
+    """
+    if any(value not in ('', 'us') for value in _supplied_markets(args)):
+        raise BadQuery('unsupported market')
 
 
 def parse_query(args, now=None):
@@ -267,10 +272,16 @@ def parse_query(args, now=None):
     Every parameter is validated rather than coerced. Silently ignoring an
     unknown source would return the default board under a selection the viewer
     never made, which is worse than an error.
+
+    Radar covers US listings only: an omitted market is US, and any supplied
+    value other than `us` -- including a retired market from an old bookmark,
+    in any position of a repeated parameter -- is refused rather than
+    normalized to the US board. `now` is accepted for callers that parse
+    a question at a fixed instant; nothing here reads the clock.
     """
-    market = args.get('market') or default_market(now)
-    if market not in {'us', 'de'}:
-        raise BadQuery('unknown market')
+    del now
+    require_us_market(args)
+    market = 'us'
 
     raw_sources = args.get('sources')
     if raw_sources:
@@ -401,6 +412,11 @@ def _row(entry):
         'authors': r.authors,
         'text_ratio': r.text_ratio,
         'sources': r.sources,
+        # The subset of `sources` that counted something in this window. Sent
+        # BESIDE the full list rather than replacing it: `sources` is what
+        # `venues` and the breadth filter are built on, and narrowing it here
+        # would change which companies the board admits. See Row.sources.
+        'activity_sources': r.activity_sources,
         'price': _decimal_or_none(r.price),
         'price_move': _decimal_or_none(r.price_move),
         'direction': r.direction,
@@ -472,12 +488,88 @@ def _build_board(query, now):
     return board
 
 
-def build_payload(args, now=None, user_id=None):
-    """Validated query -> serialized board. Shared by the page and the API.
+# What `RADAR_BOARD_SHARED_RESULTS` has to say for a worker to read boards
+# instead of building them. Four spellings of yes, because an operator setting
+# a flag by hand writes whichever one their other services taught them, and a
+# `RADAR_BOARD_SHARED_RESULTS=true` that silently meant no would be diagnosed
+# as the cache not working.
+_TRUTHY = {'1', 'true', 'yes', 'on'}
+
+
+def shared_results_enabled():
+    """Whether this worker reads the shared store or builds its own board.
+
+    Read from the environment on every call rather than resolved at import.
+    The flag is the rollback: an operator turning it off wants the next
+    request served the old way, and a module-level constant would make that a
+    deploy instead of a restart -- or, under gunicorn's preloading, not even
+    that.
+    """
+    return os.environ.get('RADAR_BOARD_SHARED_RESULTS',
+                          '').strip().lower() in _TRUTHY
+
+
+def build_payload(args, now=None, user_id=None, poll=False):
+    """The board for one request, from wherever this deployment gets boards.
+
+    The dispatch, and nothing else. With the flag on a web worker reads a
+    board the producer built; with it off it builds one itself, exactly as it
+    always has. Both answers carry the same envelope, so neither client has a
+    second shape to render.
+
+    `poll` is a viewer asking again about a board it is already waiting for.
+    It means nothing to the synchronous path -- which has no wait -- and is
+    accepted there rather than branched on, so the two paths keep one
+    signature and the route does not have to know which one it called.
+    """
+    if not shared_results_enabled():
+        return build_payload_direct(args, now=now, user_id=user_id)
+
+    # Imported here rather than at module load: the engine belongs to the
+    # application context, and this module is imported while one is being
+    # built.
+    from extensions import db
+
+    now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    return board_shared.read_payload(db.engine, args, now, user_id, poll=poll)
+
+
+def account_fields(query, now, user_id):
+    """The caller's own marks, to be added on top of a board that has none.
+
+    One function, because both paths add this half and it is the half no cache
+    can ever answer: a stored board is viewer-invariant -- which is the whole
+    reason one of them can answer everybody -- so a reader's marks are fetched
+    per request and never compressed into the payload. Two copies of this
+    would be two chances for the same account to see a different mark
+    depending on which path served the board.
+
+    `user_id=None` is a board nobody has claimed: no marks, and so no pinned
+    rows to build for them.
+    """
+    watching = watch.tickers_for(user_id) if user_id is not None else []
+    return {
+        'watching': watching,
+        'watch_rows': [_row(entry) for entry in board_mod.build_pinned_rows(
+            watching, query.sources, now, window_hours=query.window,
+            market=query.market)] if watching else [],
+    }
+
+
+def build_payload_direct(args, now=None, user_id=None):
+    """Validated query -> serialized board, built right here. Never the store.
 
     `user_id` adds the caller's watching list and its rows on top of the
     memoised, viewer-invariant board -- a handful of tickers, uncached
     because it is per account.
+
+    Still called on purpose by two callers even when the shared path is on.
+    `observations.capture` records what a board SHOWED, so it has to build
+    one -- filing a `pending` shell as an observation, or filing one board
+    under two quarter-hours, would put a hole in an archive whose whole claim
+    is that its rows were seen. And the equivalence test in
+    `test_radar_board_producer.py` compares this against the producer's blob,
+    which is what keeps the two ways of making a board the same board.
     """
     now = now or dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     query = parse_query(args, now=now)
@@ -496,20 +588,67 @@ def build_payload(args, now=None, user_id=None):
     # first click silently discarded the concrete selection.
     board.sources = sorted({source_root(s) for s in query.sources})
     payload = serialize(board)
-    watching = watch.tickers_for(user_id) if user_id is not None else []
-    payload['watching'] = watching
-    payload['watch_rows'] = [_row(entry) for entry in board_mod.build_pinned_rows(
-        watching, query.sources, now, window_hours=query.window,
-        market=query.market)] if watching else []
+    payload.update(account_fields(query, now, user_id))
+    payload.update(_direct_envelope(board.generated_at, now))
     return payload
+
+
+def _direct_envelope(generated_at, now):
+    """The delivery fields for a board this process just built.
+
+    Every one of them is the degenerate case of what the shared path reports,
+    and each is written rather than left out: a client that had to tell a
+    missing field from a false one would need two code paths for the state
+    that is meant to be the simple one.
+
+    `as_of` and `built_at` are both `generated_at`, which is honest rather
+    than lazy -- there is one clock reading here, taken before the build, and
+    claiming a separate publication instant would invent a number. The age is
+    real though: the build is memoised for a minute, so a second reader inside
+    that minute is genuinely being handed a board that is thirty seconds old
+    and the head's stamp has always said so.
+    """
+    bounds = board_store.limits()
+    stamp = _iso_z(generated_at)
+    return {
+        'shared': False,
+        'pending': False,
+        'busy': False,
+        'stale': False,
+        'failed': False,
+        'as_of': stamp,
+        'built_at': stamp,
+        'age_seconds': (now - generated_at).total_seconds(),
+        'fresh_seconds': bounds.fresh_seconds,
+        'hard_expiry_seconds': bounds.hard_expiry_seconds,
+        # Nothing to come back for: the next request builds its own board.
+        'retry_after_ms': None,
+        'queue_age_seconds': None,
+        # The ops summaries inside this payload were read while it was being
+        # serialized, which is this same instant.
+        'ops_collected_at': stamp,
+    }
 
 
 @radar_bp.route('/api/board')
 @login_required
 def board():
-    """Ranked rows for the selected sources, segment and window."""
+    """Ranked rows for the selected sources, segment and window.
+
+    `poll=1` is the client saying it is asking again about a board it is
+    already waiting for. It is read here rather than in `parse_query`, which
+    reads named keys only and must go on ignoring it: `poll` is not part of
+    the question, so two requests that differ only by it are one cache key.
+
+    That literal `'1'` and nothing else. This parameter is written by our own
+    client rather than typed by an operator, so the four spellings of yes the
+    environment flag accepts would buy nothing here -- and the cost of reading
+    a stray `poll=true` as a poll is a real request that stops counting as
+    one, on the counter eviction ranks keys by.
+    """
     try:
-        return jsonify(build_payload(request.args, user_id=current_user().id))
+        return jsonify(build_payload(request.args, user_id=current_user().id,
+                                     poll=request.args.get('poll') == '1'))
     except BadQuery as exc:
         return jsonify({'error': str(exc)}), 400
 
@@ -551,7 +690,7 @@ def search():
     ]})
 
 
-def serialize_detail(d):
+def serialize_detail(d, *, tone=None):
     """One ticker's panel.
 
     Five zones, in the order the reader meets them: who this is, what we
@@ -601,13 +740,12 @@ def serialize_detail(d):
             'sessions': _chart_sessions(d.chart, d.quote.market, d.span,
                                         mic=d.quote.mic),
             # Where this line came from. The axis reads `currency` from
-            # here, never from the quote: they differ exactly when the
-            # basis is a converted foreign listing, which is the case the
-            # reader most needs told (spec §1/§3).
+            # here, never from the quote; the venue may be an exact-ISIN US
+            # sibling of the quote's own.
             'currency': d.chart.currency,
             'basis_venue': d.chart.basis_venue,
-            'converted_from': d.chart.converted_from,
             'priced_from': d.chart.priced_from,
+            **({'chatter_tone': tone} if tone is not None else {}),
         },
         'breakdown': {
             'venues': [{'source': v.source, 'mentions': v.mentions,
@@ -661,6 +799,9 @@ def ticker_detail(ticker):
     span = request.args.get('span', detail_mod.DEFAULT_SPAN)
     if not detail_mod.known_span(span):
         return jsonify({'error': 'unknown span'}), 400
+    tone_arg = request.args.get('tone')
+    if tone_arg not in (None, '', '1'):
+        return jsonify({'error': 'tone must be 1 when supplied'}), 400
     try:
         query = parse_query(request.args)
     except BadQuery as exc:
@@ -673,4 +814,9 @@ def ticker_detail(ticker):
                                     market=query.market)
     except detail_mod.UnknownTicker:
         return jsonify({'error': 'unknown ticker'}), 404
-    return jsonify(serialize_detail(built))
+    tone = (chatter_tone.chart_tone(
+        built.ticker, query.sources, built.chart, now=now)
+            if tone_arg == '1' else None)
+    if tone is None:
+        return jsonify(serialize_detail(built))
+    return jsonify(serialize_detail(built, tone=tone))

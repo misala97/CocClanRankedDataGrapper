@@ -19,7 +19,9 @@ export function Account({ payload, shared }: {
   return (
     <>
       <Excluded payload={payload} />
-      <Marks rows={payload.rows} suppress={shared} session={payload.session} />
+      {/* A waiting shell has no rows, so it has no marks to explain. */}
+      <Marks rows={payload.rows ?? []} suppress={shared}
+             session={payload.session} />
       <Spend payload={payload} />
     </>
   )

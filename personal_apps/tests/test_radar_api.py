@@ -50,65 +50,129 @@ def test_an_unknown_source_is_rejected(client):
     assert client.get('/radar/api/board?sources=nonsense').status_code == 400
 
 
-def test_unknown_market_is_rejected(client):
-    """A misspelled API market stays 400."""
+def test_an_omitted_market_is_us_and_any_other_market_is_rejected(client):
+    """Radar is US-only. Omission means US; an explicit non-US market is a
+    clear 400, never silently normalized to the US board."""
     from features.radar.routes.api import BadQuery, parse_query
-    import pytest
 
-    with pytest.raises(BadQuery, match='unknown market'):
-        parse_query({'market': 'moon'})
-    assert client.get('/radar/api/board?market=moon').status_code == 400
+    assert parse_query({}).market == 'us'
+    assert parse_query({'market': ''}).market == 'us'
+    assert parse_query({'market': 'us'}).market == 'us'
+    for market in ('de', 'moon', 'US', 'eu'):
+        with pytest.raises(BadQuery, match='^unsupported market$'):
+            parse_query({'market': market})
+
+    for path in ('/radar/api/board?market=de', '/radar/api/board?market=moon',
+                 '/radar/api/ticker/AAPL?market=de'):
+        response = client.get(path)
+        assert response.status_code == 400, path
+        assert response.get_json() == {'error': 'unsupported market'}, path
+    assert client.get('/radar/api/board?market=us').status_code == 200
 
 
-# Tuesday 2026-09-01: Berlin is UTC+2, New York UTC-4. Xetra regular is
-# 09:00-17:30 Berlin, NYSE regular 09:30-16:00 New York.
-@pytest.mark.parametrize('utc_hour, expected, why', [
-    (10, 'de', 'DE regular, US pre-market: the German session is the live one'),
-    (14, 'de', 'both regular: the home market wins the overlap'),
-    (16, 'us', 'US regular, DE after hours: the US session is the only live one'),
-    (2, 'de', 'both closed: nothing is live, DE is the venue the reader trades'),
-])
-def test_the_board_opens_on_the_live_session(utc_hour, expected, why):
-    """Michi, 2026-09-01, reversing the 2026-08-30 DE default: open on the
-    market whose session is live. `?market=` stays honoured as before."""
+def test_every_supplied_market_value_is_checked_not_only_the_first():
+    """A repeated `market` is validated value by value. Reading only the first
+    would let `market=us&market=de` open the US board while the reverse
+    order is refused. Plain mappings, as the producer passes, still parse."""
+    from werkzeug.datastructures import MultiDict
+
+    from features.radar.routes.api import BadQuery, parse_query
+
+    for pairs in ([('market', 'us'), ('market', 'de')],
+                  [('market', 'de'), ('market', 'us')],
+                  [('market', ''), ('market', 'moon')],
+                  [('market', 'us'), ('market', 'US')]):
+        with pytest.raises(BadQuery, match='^unsupported market$'):
+            parse_query(MultiDict(pairs))
+
+    for pairs in ([], [('market', '')], [('market', 'us')],
+                  [('market', 'us'), ('market', 'us')],
+                  [('market', ''), ('market', 'us')],
+                  [('market', 'us'), ('market', '')]):
+        assert parse_query(MultiDict(pairs)).market == 'us', pairs
+
+    assert parse_query({'market': 'us', 'window': '24'}).market == 'us'
+    with pytest.raises(BadQuery, match='^unsupported market$'):
+        parse_query({'market': 'de'})
+
+
+@pytest.mark.parametrize('path', (
+    '/radar/api/board?market=us&market=de',
+    '/radar/api/board?market=de&market=us',
+    '/radar/api/ticker/AAPL?span=1M&market=us&market=de',
+    '/radar/api/ticker/AAPL?span=1M&market=de&market=us',
+))
+def test_a_repeated_market_with_any_unsupported_value_is_a_400(client, path):
+    response = client.get(path)
+    assert response.status_code == 400
+    assert response.get_json() == {'error': 'unsupported market'}
+
+
+def test_a_repeated_supported_market_still_answers_us(client):
+    for path in ('/radar/api/board?market=us&market=us',
+                 '/radar/api/board?market=&market=us'):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.get_json()['market'] == 'us', path
+
+    response = client.get('/radar/api/ticker/AAPL?span=1M&market=us&market=us')
+    assert response.status_code == 200
+    assert response.get_json()['identity']['quote']['market'] == 'us'
+
+
+# Tuesday 2026-09-01, at hours when the old live-session default answered
+# 'de' (10, 14, 2 UTC) and 'us' (16 UTC).
+@pytest.mark.parametrize('utc_hour', [10, 14, 16, 2])
+def test_the_board_opens_on_us_at_every_hour(utc_hour):
+    """There is no live-session market default any more: omission is US."""
     import datetime as dt
-    from features.radar.routes.api import default_market, parse_query
+    from features.radar.routes import api
 
     now = dt.datetime(2026, 9, 1, utc_hour, 0, tzinfo=dt.timezone.utc)
 
-    assert default_market(now) == expected, why
-    assert parse_query({}, now=now).market == expected, why
-    assert parse_query({'market': 'us'}, now=now).market == 'us'
-    assert parse_query({'market': 'de'}, now=now).market == 'de'
+    assert not hasattr(api, 'default_market')
+    assert api.parse_query({}, now=now).market == 'us'
+    assert api.Query(sources=[], segments=[], window=12, limit=50,
+                     min_venues=1).market == 'us'
 
 
-def test_human_page_bad_market_falls_back_to_the_default_payload(client):
-    """Address-bar recovery stays friendly while the JSON API remains strict."""
+def test_human_pages_reject_an_explicit_unsupported_market(client):
+    """Address-bar recovery stays friendly for malformed filters, but an
+    explicit non-US market is a visible 400, never the US board."""
+    for path in ('/radar/?market=moon', '/radar/?market=de',
+                 '/radar/hub/?market=de&window=24',
+                 '/radar/legacy/?market=de'):
+        response = client.get(path)
+        assert response.status_code == 400, path
+        body = response.get_data(as_text=True)
+        assert 'unsupported market' in body, path
+        assert 'radar-data' not in body and 'radar-hub-data' not in body, path
+
+
+def test_human_page_bad_filter_falls_back_to_the_us_payload(client):
+    """A malformed non-market filter still opens the default (US) board."""
     import re
-    from features.radar.routes.api import parse_query
 
-    response = client.get('/radar/?market=moon')
+    response = client.get('/radar/legacy/?window=nonsense')
     payload = json.loads(re.search(
         r'<script type="application/json" id="radar-data">(.*?)</script>',
         response.get_data(as_text=True), re.S).group(1))
 
     assert response.status_code == 200
-    # The default depends on the clock (see the live-session test); whatever
-    # it is right now, the recovered page must carry it rather than a third
-    # value.
-    assert payload['market'] == parse_query({}).market
+    assert payload['market'] == 'us'
 
 
 def test_board_echoes_market_and_berlin_display_timezone(client):
-    """The selected market is part of the payload, while wire instants stay UTC."""
-    payload = client.get('/radar/api/board?market=de').get_json()
+    """The US market is part of the payload, while wire instants stay UTC."""
+    for path in ('/radar/api/board', '/radar/api/board?market=us'):
+        payload = client.get(path).get_json()
 
-    assert payload['market'] == 'de'
-    assert payload['display_timezone'] == 'Europe/Berlin'
-    assert payload['generated_at'].endswith('Z')
-    assert payload['market_venue'] == 'Tradegate-first Germany'
-    assert payload['next_boundary_label'] in {'opens', 'closes'}
-    assert payload['next_boundary_at'].endswith('Z')
+        assert payload['market'] == 'us'
+        assert payload['display_timezone'] == 'Europe/Berlin'
+        assert payload['generated_at'].endswith('Z')
+        assert payload['market_venue'] == 'US markets'
+        assert payload['next_boundary_label'] in {'opens', 'closes'}
+        assert payload['next_boundary_at'].endswith('Z')
 
 
 def test_quote_serializer_keeps_the_market_quote_contract_and_utc_wire_time():
@@ -121,22 +185,22 @@ def test_quote_serializer_keeps_the_market_quote_contract_and_utc_wire_time():
     from features.radar.routes import api
     import pytest
 
-    quoted_at = dt.datetime(2026, 8, 28, 11, 18)
-    view = select_quote('AAPL', 'de', {'de': Quote(
-        ticker='AAPL', market='de', venue='Xetra', mic='XETR',
-        provider_symbol='APC', currency='EUR', price=decimal.Decimal('194.2'),
+    # 11:18 New York: the US regular session.
+    quoted_at = dt.datetime(2026, 8, 28, 15, 18)
+    view = select_quote('AAPL', 'us', {'us': Quote(
+        ticker='AAPL', market='us', venue='NASDAQ', mic='XNAS',
+        provider_symbol='AAPL', currency='USD', price=decimal.Decimal('194.2'),
         previous_close=decimal.Decimal('193.5'), quote_ts=quoted_at,
         fetched_at=quoted_at, provider_delay='delayed')}, quoted_at)
 
     payload = api._quote(view)
 
     assert payload == {
-        'market': 'de', 'venue': 'Xetra', 'mic': 'XETR', 'currency': 'EUR',
+        'market': 'us', 'venue': 'NASDAQ', 'mic': 'XNAS', 'currency': 'USD',
         'price': 194.2, 'regular_move': pytest.approx(0.0036175710594315244),
         'extended_move': None, 'session': 'regular', 'quality': 'delayed',
-        'age_seconds': 0, 'quoted_at': '2026-08-28T11:18:00Z',
+        'age_seconds': 0, 'quoted_at': '2026-08-28T15:18:00Z',
         'tape_status': 'ok', 'score_eligible': True, 'score_term': 'divergence',
-        'is_fallback': False,
         'source': 'legacy', 'price_basis': 'trade',
         'bid': None, 'ask': None,
     }
@@ -437,6 +501,65 @@ def test_the_row_serializer_actually_runs(client):
     _json.dumps(payload)
 
 
+def test_the_row_serializes_the_feeds_that_counted_something(client):
+    """`sources` is every scored feed that was looked at; `activity_sources`
+    is the subset that counted something. Both cross the boundary, because
+    the second is what the row displays and the first is what the breadth
+    filter is built on."""
+    import datetime as dt
+    import json as _json
+    from app import app as flask_app
+    from extensions import db
+    from features.radar import board
+    from features.radar.routes.api import serialize
+    from features.radar.config import source_config_version
+    from models import (RadarBucketSource, RadarMention, RadarPost,
+                        TickerUniverse)
+
+    now = dt.datetime(2026, 3, 12, 15, 0, 0)
+    tag = 'ACTZ'
+
+    def wipe():
+        RadarMention.query.filter(RadarMention.ticker == tag).delete(
+            synchronize_session=False)
+        RadarPost.query.filter(RadarPost.external_id.like(f'{tag}%')).delete(
+            synchronize_session=False)
+        RadarBucketSource.query.filter(
+            RadarBucketSource.ticker == tag).delete(synchronize_session=False)
+        TickerUniverse.query.filter_by(symbol=tag).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+    def bucket(source, mentions, authors):
+        return RadarBucketSource(
+            ticker=tag, bucket_start=now - dt.timedelta(minutes=30),
+            source=source, mention_count=mentions,
+            high_confidence_count=mentions, low_count=0,
+            distinct_authors=authors, distinct_text_ratio=0.9,
+            engagement_weighted_count=float(mentions), status='ok',
+            source_config_version=source_config_version(),
+            expected=1.0, variance=2.0, mention_z=5.0, baseline_days=30)
+
+    with flask_app.app_context():
+        wipe()
+        db.session.add(TickerUniverse(symbol=tag, name='Activity Corp',
+                                      first_seen=dt.datetime(2020, 1, 1),
+                                      daily_sigma=0.02))
+        db.session.add(bucket('bluesky', 10, 6))
+        db.session.add(bucket('reddit:options', 0, 0))
+        db.session.commit()
+
+        payload = serialize(board.build(['bluesky', 'reddit'], now))
+        wipe()
+
+    rows = [r for r in payload['rows'] if r['ticker'] == tag]
+    assert len(rows) == 1, 'the fixture row did not reach the board'
+    row = rows[0]
+    assert row['sources'] == ['bluesky', 'reddit:options']
+    assert row['activity_sources'] == ['bluesky']
+    _json.dumps(payload)
+
+
 def test_an_unsupported_venue_filter_is_rejected(client):
     assert client.get('/radar/api/board?venues=7').status_code == 400
     assert client.get('/radar/api/board?venues=2').status_code == 200
@@ -609,8 +732,8 @@ def test_detail_intraday_chart_times_remain_explicit_utc_wire_values():
     assert payload['chart']['watched_from'] == '2026-08-28T10:15:00Z'
 
 
-def test_intraday_chart_serializes_clipped_selected_market_session_intervals():
-    """Bands describe the actual quote venue and do not escape the chart."""
+def test_intraday_chart_serializes_clipped_us_session_intervals():
+    """Bands follow the US calendar and do not escape the chart."""
     import dataclasses
     import datetime as dt
 
@@ -622,30 +745,29 @@ def test_intraday_chart_serializes_clipped_selected_market_session_intervals():
         top_author_share=None, top_two_share=None, peak_hour=None,
         peak_count=0, first_seen=None, mentions=0, voices=0)
     built = _stub_detail(breakdown)
-    built.quote = dataclasses.replace(built.quote, market='de', mic='XETR')
+    built.quote = dataclasses.replace(built.quote, market='us', mic='XNAS')
+    # Friday 2026-08-28, EDT: US pre-market is 08:00-13:30 UTC.
     built.chart = detail.Chart(
-        start=dt.datetime(2026, 8, 28, 5, 30),
+        start=dt.datetime(2026, 8, 28, 7, 30),
         closes=[None] * 6, chatter=[None] * 6, watched_from=None,
         step_minutes=15)
 
     payload = api.serialize_detail(built)
 
-    # Closed stretches ride along since the single-lane chart; the
-    # pre-market interval itself must stay exactly as it was.
     sessions = payload['chart']['sessions']
     assert [b for b in sessions if b['kind'] == 'premarket'] == [{
-        'start': '2026-08-28T06:00:00Z',
-        'end': '2026-08-28T06:55:00Z',
+        'start': '2026-08-28T08:00:00Z',
+        'end': '2026-08-28T09:00:00Z',
         'kind': 'premarket',
     }]
     closed = [b for b in sessions if b['kind'] == 'closed']
-    # The chart opens at 05:30Z, half an hour before Xetra's pre-market.
-    assert closed and closed[0]['start'] == '2026-08-28T05:30:00Z'
-    assert closed[0]['end'] == '2026-08-28T06:00:00Z'
+    # The chart opens at 07:30Z, half an hour before the US pre-market.
+    assert closed == [{'start': '2026-08-28T07:30:00Z',
+                       'end': '2026-08-28T08:00:00Z', 'kind': 'closed'}]
 
 
-def test_intraday_chart_at_xetra_premarket_end_has_no_premarket_band():
-    """06:55Z is the exclusive end of the summer pre-market interval."""
+def test_intraday_chart_at_the_us_regular_open_has_no_band():
+    """13:30Z is the exclusive end of the summer pre-market interval."""
     import dataclasses
     import datetime as dt
 
@@ -657,9 +779,9 @@ def test_intraday_chart_at_xetra_premarket_end_has_no_premarket_band():
         top_author_share=None, top_two_share=None, peak_hour=None,
         peak_count=0, first_seen=None, mentions=0, voices=0)
     built = _stub_detail(breakdown)
-    built.quote = dataclasses.replace(built.quote, market='de', mic='XETR')
+    built.quote = dataclasses.replace(built.quote, market='us', mic='XNAS')
     built.chart = detail.Chart(
-        start=dt.datetime(2026, 8, 28, 6, 55),
+        start=dt.datetime(2026, 8, 28, 13, 30),
         closes=[None], chatter=[None], watched_from=None, step_minutes=15)
 
     assert api.serialize_detail(built)['chart']['sessions'] == []
@@ -815,14 +937,20 @@ def test_the_sort_is_part_of_the_board_cache_key(client):
 
 def test_panel_chart_states_its_basis(client):
     """The chart's own provenance travels with the chart, not the quote."""
-    response = client.get('/radar/api/ticker/AAPL?span=1M&market=de')
+    assert client.get(
+        '/radar/api/ticker/AAPL?span=1M&market=de').status_code == 400
+    response = client.get('/radar/api/ticker/AAPL?span=1M')
     assert response.status_code == 200
     chart = response.get_json()['chart']
 
-    assert 'currency' in chart
+    assert chart['currency'] in ('USD', None)
     assert 'basis_venue' in chart
-    assert 'converted_from' in chart
     assert chart['priced_from'] in ('daily', 'intraday')
     for gone in ('history_proxy', 'proxy_mic', 'proxy_venue',
-                 'native_mic', 'native_venue', 'native_from'):
+                 'native_mic', 'native_venue', 'native_from',
+                 'converted_from'):
         assert gone not in chart
+    quote = response.get_json()['identity']['quote']
+    assert quote['market'] == 'us'
+    assert quote['currency'] in ('USD', None)
+    assert 'is_fallback' not in quote

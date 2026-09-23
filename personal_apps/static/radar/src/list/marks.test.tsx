@@ -90,7 +90,6 @@ const row = (ticker: string, marks: Mark[]): Row => ({
     regular_move: 0.02, extended_move: null, session: 'regular',
     quality: 'live', age_seconds: 0, quoted_at: '2026-08-22T19:00:00Z',
     tape_status: 'ok', score_eligible: true, score_term: 'divergence',
-    is_fallback: false,
     source: 'legacy',
     price_basis: 'trade',
     bid: null,

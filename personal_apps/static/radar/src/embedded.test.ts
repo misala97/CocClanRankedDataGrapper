@@ -4,9 +4,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { loadPayload } from './embedded'
+import { loadPayload, parsePayload } from './embedded'
 
-const board = '{"rows":[],"market":"de"}'
+const board = '{"rows":[],"market":"us"}'
 
 function embed(text: string | null) {
   document.body.innerHTML = text === null
@@ -15,7 +15,7 @@ function embed(text: string | null) {
 }
 
 beforeEach(() => {
-  window.history.replaceState(null, '', '/static/radar/dev.html?market=de&window=12')
+  window.history.replaceState(null, '', '/static/radar/dev.html?window=12')
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -30,7 +30,7 @@ describe('the opening board', () => {
 
     const payload = await loadPayload()
 
-    expect(payload?.market).toBe('de')
+    expect(payload?.market).toBe('us')
     expect(spy).not.toHaveBeenCalled()
   })
 
@@ -43,8 +43,18 @@ describe('the opening board', () => {
 
     const payload = await loadPayload()
 
-    expect(payload?.market).toBe('de')
-    expect(spy.mock.calls[0]?.[0]).toBe('/radar/api/board?market=de&window=12')
+    expect(payload?.market).toBe('us')
+    expect(spy.mock.calls[0]?.[0]).toBe('/radar/api/board?window=12')
+  })
+
+  it('reads an older document without a market as the US board', () => {
+    expect(parsePayload('{"rows":[]}')?.market).toBe('us')
+  })
+
+  it('refuses a board for any market but the US one, never relabelling it', () => {
+    for (const market of ['de', 'DE', 'eu', '', null, 1]) {
+      expect(parsePayload(JSON.stringify({ rows: [], market }))).toBeNull()
+    }
   })
 
   it('is null when the fetch lands on the login page', async () => {
@@ -63,5 +73,24 @@ describe('the opening board', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline') }))
 
     expect(await loadPayload()).toBeNull()
+  })
+})
+
+describe('a document that was served while the board was being built', () => {
+  const shell = '{"rows":null,"pending":true,"busy":false,"market":"us"}'
+
+  it('opens on the waiting shell rather than on nothing at all', () => {
+    // `rows` is normally the check, because it is what the page IS. A null
+    // one under `pending` is the store saying "there is no board yet" in as
+    // many words -- an answer, with a selection to draw and a line to say --
+    // and rejecting it would replace a page that says "calculating" with a
+    // page that says nothing.
+    expect(parsePayload(shell)?.pending).toBe(true)
+    expect(parsePayload(shell)?.rows).toBeNull()
+  })
+
+  it('still refuses a null board that claims nobody is building one', () => {
+    expect(parsePayload('{"rows":null,"market":"us"}')).toBeNull()
+    expect(parsePayload('{"rows":null,"pending":false,"busy":false}')).toBeNull()
   })
 })

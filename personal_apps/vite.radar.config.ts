@@ -28,6 +28,10 @@ export default defineConfig({
     rollupOptions: {
       input: {
         board: resolve(here, 'static/radar/src/entries/board.tsx'),
+        // The opt-in hub at /radar/hub/. Its own entry beside the board's
+        // rather than in place of it: /radar/ has to keep working unchanged
+        // while the hub is reviewed.
+        hub: resolve(here, 'static/radar/src/entries/hub.tsx'),
       },
     },
   },

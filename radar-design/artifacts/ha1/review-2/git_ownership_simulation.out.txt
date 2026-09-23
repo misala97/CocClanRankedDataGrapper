@@ -1,0 +1,11 @@
+﻿# REVIEW-2 git ownership simulation (no config written; env var scoped to this process)
+git version 2.39.1.windows.1
+## plain: git -C <candidate> rev-parse HEAD  (form used by local_runtime.git)
+fatal: detected dubious ownership in repository at 'C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore'
+To add an exception for this directory, call:
+System.Management.Automation.RemoteException
+	git config --global --add safe.directory C:/Users/michi/Desktop/CodingStuff/.worktrees/radar-ha1-us-daily-explore
+exit=128
+## per-command: git -c safe.directory=<candidate> -C <candidate> rev-parse HEAD
+1ac39fe4e1a5dd7d04830e96a96563183687b447
+exit=0

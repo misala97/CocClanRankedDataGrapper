@@ -3,8 +3,8 @@ import type { MarketQuote } from './types'
 
 /**
  * The quote's provenance and freshness travel with the quote itself.  Keeping
- * this treatment shared prevents a list row from claiming a live Xetra quote
- * while its detail panel says something different about the same snapshot.
+ * this treatment shared prevents a list row from claiming a live quote while
+ * its detail panel says something different about the same snapshot.
  */
 export function QuoteBadges({ quote, moves = false }: {
   quote: MarketQuote
@@ -14,10 +14,8 @@ export function QuoteBadges({ quote, moves = false }: {
 }) {
   return (
     <span className="quote-badges">
-      <span className={`quote-source${quote.is_fallback ? ' fallback' : ''}`}>
-        {quote.is_fallback
-          ? `US fallback · ${quote.venue ?? 'US venue'} · ${currencyLabel(quote.currency)}`
-          : `${quote.venue ?? 'Venue unavailable'} · ${currencyLabel(quote.currency)}`}
+      <span className="quote-source">
+        {`${quote.venue ?? 'Venue unavailable'} · ${currencyLabel(quote.currency)}`}
       </span>
       <SessionBadge session={quote.session} />
       <BasisBadge quote={quote} />
@@ -28,7 +26,7 @@ export function QuoteBadges({ quote, moves = false }: {
   )
 }
 
-function currencyLabel(currency: string | null): string {
+function currencyLabel(currency: MarketQuote['currency']): string {
   return currency ?? 'Currency unavailable'
 }
 

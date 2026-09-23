@@ -1,0 +1,27 @@
+{
+  "normal": {
+    "admission_seconds": 0.0,
+    "supervisor_seconds": 0.656,
+    "exitcode": 0,
+    "heavy_modules_in_child": []
+  },
+  "production_child_bad_spec": {
+    "seconds": 0.719,
+    "exitcode": 0
+  },
+  "hanging": {
+    "admission_seconds": 0.0,
+    "deadline_seconds": 6.0,
+    "cleanup_allowance_seconds": 1.0,
+    "supervisor_seconds": 6.219,
+    "wall_seconds_until_idle": 6.235,
+    "exitcode": -15,
+    "other_key_state_meanwhile": "busy"
+  },
+  "oversized": {
+    "supervisor_seconds": 0.859,
+    "wall_seconds_until_idle": 0.906,
+    "exitcode": -15,
+    "result_limit_bytes": 524288
+  }
+}

@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
-import { UNKNOWN, count, dayStamp, decodeEntities, divergence, exchangeLabel,
-         formatMarketDate, formatPrice, formatQuoteAge, money, move, postStamp,
-         rowPrice, segmentLabel, signed, sourceLabel, stampTime, zscore }
+import { UNKNOWN, boardAge, count, dayStamp, decodeEntities, divergence,
+         exchangeLabel, formatMarketDate, formatPrice, formatQuoteAge, money,
+         move, postStamp, rowPrice, segmentLabel, signed, sourceLabel,
+         stampTime, usdText, zscore }
   from './format'
+
+describe('a board\'s age on its age line', () => {
+  // Both surfaces print it through this one formatter (list/ListPane.tsx,
+  // hub/PageState.tsx), so they never state one age two ways.
+  it('counts seconds, then minutes, then hours and days', () => {
+    expect(boardAge(0)).toBe('0s')
+    expect(boardAge(59.9)).toBe('59s')
+    expect(boardAge(60)).toBe('1m')
+    expect(boardAge(89 * 60 + 59)).toBe('89m')
+    expect(boardAge(90 * 60)).toBe('1h')
+    expect(boardAge(3 * 86_400)).toBe('3d')
+    // A clock a second behind the server's is not a board from the future.
+    expect(boardAge(-2)).toBe('0s')
+  })
+})
 
 describe('an unknown never renders as a zero', () => {
   // The single rule PRODUCT.md is most insistent about. A row with no quote,
@@ -171,12 +187,21 @@ describe('the price under a ticker', () => {
 })
 
 describe('money', () => {
-  it('formats venue currency explicitly', () => {
-    /* The formatter must report the venue's real currency; Germany-mode US
-       fallbacks are dollars, not synthetic euros. */
-    expect(formatPrice(194.2, 'EUR')).toBe('194,20\u00a0€')
-    expect(formatPrice(220.5, 'USD', { explicitCode: true }))
-      .toBe('220,50\u00a0$ · USD')
+  it('formats a market price as US dollars, $194.20 style', () => {
+    expect(formatPrice(194.2, 'USD')).toBe('$194.20')
+    expect(formatPrice(1234.5, 'USD')).toBe('$1,234.50')
+  })
+
+  it('never gives a non-dollar value a dollar sign or a euro sign', () => {
+    /* The server sends only US dollars. Anything else is not a Radar price:
+       it is unknown, never relabelled and never converted. */
+    for (const currency of [null, 'EUR', 'GBP']) {
+      const text = formatPrice(194.2, currency as 'USD' | null)
+      expect(text).toBe(UNKNOWN)
+    }
+    expect(usdText(194.2, 'USD')).toBe('$194.20')
+    expect(usdText(194.2, null)).toBe('194.20')
+    expect(usdText(194.2, 'EUR' as unknown as 'USD')).toBe(UNKNOWN)
   })
 
   it('labels delayed quote age in a human unit and preserves an unknown age', () => {
@@ -209,11 +234,10 @@ describe('count', () => {
   })
 })
 
-describe('money in the venue currency', () => {
-  it('prints the euro sign for a German quote and keeps the dollar default', () => {
-    expect(money(1.5, 1.5, 'EUR')).toBe('€1.50')
-    expect(money(202.4, 202.4, 'EUR')).toBe('€202')
+describe('money is always dollars', () => {
+  it('prints the dollar sign and takes no currency', () => {
     expect(money(1.5, 1.5)).toBe('$1.50')
-    expect(money(1.5, 1.5, 'GBP')).toBe('GBP 1.50')
+    expect(money(202.4, 202.4)).toBe('$202')
+    expect(money.length).toBe(1)
   })
 })

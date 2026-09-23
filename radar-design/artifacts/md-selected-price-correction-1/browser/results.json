@@ -1,0 +1,372 @@
+{
+  "fixture_evidence": true,
+  "port": 5047,
+  "dist_hub": "assets/hub-CZqS9Prw.js",
+  "dist_css": [
+    "assets/hub-Bmvv_e8B.css"
+  ],
+  "cases": {
+    "initial-failure-research-1440": {
+      "checks": {
+        "retry_state_shown": true,
+        "retry_button_visible": true,
+        "no_chart_drawn": true,
+        "caption_not_loading": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "retry_state_shown": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "caption_not_loading": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "no_document_overflow": {
+          "inner": 1440,
+          "scroll": 1440
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "chart_requests": 2,
+      "shot": "initial-failure-research-1440.png"
+    },
+    "refresh-failure-research-1440": {
+      "checks": {
+        "answered_chart_had_live_wording": true,
+        "retry_state_replaces_the_chart": true,
+        "no_old_now_or_current_session_wording": true,
+        "caption_not_loaded": true,
+        "legacy_chart_not_substituted": true,
+        "no_document_overflow": true,
+        "recovered_chart_drawn": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "answered_chart_had_live_wording": {
+          "caption": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent sessio",
+          "ends": [
+            "$331.70",
+            "$329.99",
+            "18/15m"
+          ]
+        },
+        "retry_state_replaces_the_chart": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "no_old_now_or_current_session_wording": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "caption_not_loaded": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. Th",
+        "no_document_overflow": {
+          "inner": 1440,
+          "scroll": 1440
+        },
+        "recovered_chart_drawn": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent session so far \u00b7 Tue 15 Sep (US Eastern, model",
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot_answered": "refresh-failure-research-1440-answered.png",
+      "seconds_until_retry_state": 2.88,
+      "shot_failed": "refresh-failure-research-1440-failed.png",
+      "shot_recovered": "refresh-failure-research-1440-recovered.png",
+      "chart_requests": [
+        "ok",
+        "fail",
+        "fail",
+        "ok"
+      ]
+    },
+    "initial-failure-chatter-1440": {
+      "checks": {
+        "retry_state_shown": true,
+        "retry_button_visible": true,
+        "no_chart_drawn": true,
+        "caption_not_loading": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "retry_state_shown": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "caption_not_loading": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "no_document_overflow": {
+          "inner": 1440,
+          "scroll": 1440
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "chart_requests": 2,
+      "shot": "initial-failure-chatter-1440.png"
+    },
+    "refresh-failure-chatter-1440": {
+      "checks": {
+        "answered_chart_had_live_wording": true,
+        "retry_state_replaces_the_chart": true,
+        "no_old_now_or_current_session_wording": true,
+        "caption_not_loaded": true,
+        "legacy_chart_not_substituted": true,
+        "no_document_overflow": true,
+        "recovered_chart_drawn": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "answered_chart_had_live_wording": {
+          "caption": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent sessio",
+          "ends": [
+            "$331.70",
+            "$329.99",
+            "18/15m"
+          ]
+        },
+        "retry_state_replaces_the_chart": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "no_old_now_or_current_session_wording": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "caption_not_loaded": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. Th",
+        "no_document_overflow": {
+          "inner": 1440,
+          "scroll": 1440
+        },
+        "recovered_chart_drawn": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent session so far \u00b7 Tue 15 Sep (US Eastern, model",
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot_answered": "refresh-failure-chatter-1440-answered.png",
+      "seconds_until_retry_state": 2.89,
+      "shot_failed": "refresh-failure-chatter-1440-failed.png",
+      "shot_recovered": "refresh-failure-chatter-1440-recovered.png",
+      "chart_requests": [
+        "ok",
+        "fail",
+        "fail",
+        "ok"
+      ]
+    },
+    "admin-unknown-1440": {
+      "checks": {
+        "pid_and_scope_kept": true,
+        "no_process_started_label": true,
+        "coordinator_label_present": true,
+        "workers_unknown_with_source": true,
+        "coordinator_not_started": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "pid_and_scope_kept": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\nnot started in this process\nConfigured web workers\nUnknown \u2014 WEB_CONCURRENCY is not set to a positive number; each worker keeps its own limits\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisiti",
+        "workers_unknown_with_source": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\nnot started in this process\nConfigured web workers\nUnknown \u2014 WEB_CONCURRENCY is not set to a positive number; each worker keeps its own limits\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset when it restarts. Each web worker has its own limits; the ingest daemon's Yahoo traffic is separate.",
+        "no_document_overflow": {
+          "inner": 1440,
+          "scroll": 1440
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot": "admin-unknown-1440.png"
+    },
+    "admin-configured-1440": {
+      "checks": {
+        "pid_and_scope_kept": true,
+        "no_process_started_label": true,
+        "coordinator_label_present": true,
+        "workers_from_source": true,
+        "coordinator_start_stamp": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "pid_and_scope_kept": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\n15 Sep, 10:00 Berlin\nConfigured web workers\n2 (from WEB_CONCURRENCY)\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset w",
+        "workers_from_source": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\n15 Sep, 10:00 Berlin\nConfigured web workers\n2 (from WEB_CONCURRENCY)\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset when it restarts. Each web worker has its own limits; the ingest daemon's Yahoo traffic is separate.",
+        "coordinator_start_stamp": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\n15 Sep, 10:00 Berlin\nConfigured web workers\n2 (from WEB_CONCURRENCY)\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset when it restarts. Each web worker has its own limits; the ingest daemon's Yahoo traffic is separate.",
+        "no_document_overflow": {
+          "inner": 1440,
+          "scroll": 1440
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot": "admin-configured-1440.png"
+    },
+    "initial-failure-research-390": {
+      "checks": {
+        "retry_state_shown": true,
+        "retry_button_visible": true,
+        "no_chart_drawn": true,
+        "caption_not_loading": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "retry_state_shown": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "caption_not_loading": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "no_document_overflow": {
+          "inner": 390,
+          "scroll": 390
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "chart_requests": 2,
+      "shot": "initial-failure-research-390.png"
+    },
+    "refresh-failure-research-390": {
+      "checks": {
+        "answered_chart_had_live_wording": true,
+        "retry_state_replaces_the_chart": true,
+        "no_old_now_or_current_session_wording": true,
+        "caption_not_loaded": true,
+        "legacy_chart_not_substituted": true,
+        "no_document_overflow": true,
+        "recovered_chart_drawn": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "answered_chart_had_live_wording": {
+          "caption": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent sessio",
+          "ends": [
+            "$331.70",
+            "$329.99",
+            "18/15m"
+          ]
+        },
+        "retry_state_replaces_the_chart": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "no_old_now_or_current_session_wording": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "caption_not_loaded": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. Th",
+        "no_document_overflow": {
+          "inner": 390,
+          "scroll": 390
+        },
+        "recovered_chart_drawn": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent session so far \u00b7 Tue 15 Sep (US Eastern, model",
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot_answered": "refresh-failure-research-390-answered.png",
+      "seconds_until_retry_state": 2.89,
+      "shot_failed": "refresh-failure-research-390-failed.png",
+      "shot_recovered": "refresh-failure-research-390-recovered.png",
+      "chart_requests": [
+        "ok",
+        "fail",
+        "fail",
+        "ok"
+      ]
+    },
+    "initial-failure-chatter-390": {
+      "checks": {
+        "retry_state_shown": true,
+        "retry_button_visible": true,
+        "no_chart_drawn": true,
+        "caption_not_loading": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "retry_state_shown": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "caption_not_loading": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe 1D chart for AAPL could not be loaded. The chart data could not be read.\n\nRetry",
+        "no_document_overflow": {
+          "inner": 390,
+          "scroll": 390
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "chart_requests": 2,
+      "shot": "initial-failure-chatter-390.png"
+    },
+    "refresh-failure-chatter-390": {
+      "checks": {
+        "answered_chart_had_live_wording": true,
+        "retry_state_replaces_the_chart": true,
+        "no_old_now_or_current_session_wording": true,
+        "caption_not_loaded": true,
+        "legacy_chart_not_substituted": true,
+        "no_document_overflow": true,
+        "recovered_chart_drawn": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "answered_chart_had_live_wording": {
+          "caption": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent sessio",
+          "ends": [
+            "$331.70",
+            "$329.99",
+            "18/15m"
+          ]
+        },
+        "retry_state_replaces_the_chart": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "no_old_now_or_current_session_wording": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. The chart data could not be read.\n\nRetry",
+        "caption_not_loaded": "Price and chatter\n\nCurrent or last session \u00b7 not loaded\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nThe latest 1D chart for AAPL could not be loaded, so the earlier chart is hidden. Th",
+        "no_document_overflow": {
+          "inner": 390,
+          "scroll": 390
+        },
+        "recovered_chart_drawn": "Price and chatter\n\nCurrent session so far \u00b7 1-minute bar closes \u00b7 mentions per 15 min\n\n1D\n1W\n1M\n6M\n1Y\n3Y\n\nCurrent session so far \u00b7 Tue 15 Sep (US Eastern, model",
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot_answered": "refresh-failure-chatter-390-answered.png",
+      "seconds_until_retry_state": 2.88,
+      "shot_failed": "refresh-failure-chatter-390-failed.png",
+      "shot_recovered": "refresh-failure-chatter-390-recovered.png",
+      "chart_requests": [
+        "ok",
+        "fail",
+        "fail",
+        "ok"
+      ]
+    },
+    "admin-unknown-390": {
+      "checks": {
+        "pid_and_scope_kept": true,
+        "no_process_started_label": true,
+        "coordinator_label_present": true,
+        "workers_unknown_with_source": true,
+        "coordinator_not_started": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "pid_and_scope_kept": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\nnot started in this process\nConfigured web workers\nUnknown \u2014 WEB_CONCURRENCY is not set to a positive number; each worker keeps its own limits\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisiti",
+        "workers_unknown_with_source": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\nnot started in this process\nConfigured web workers\nUnknown \u2014 WEB_CONCURRENCY is not set to a positive number; each worker keeps its own limits\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset when it restarts. Each web worker has its own limits; the ingest daemon's Yahoo traffic is separate.",
+        "no_document_overflow": {
+          "inner": 390,
+          "scroll": 390
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot": "admin-unknown-390.png"
+    },
+    "admin-configured-390": {
+      "checks": {
+        "pid_and_scope_kept": true,
+        "no_process_started_label": true,
+        "coordinator_label_present": true,
+        "workers_from_source": true,
+        "coordinator_start_stamp": true,
+        "no_document_overflow": true,
+        "no_page_errors": true,
+        "no_unmocked_requests": true
+      },
+      "details": {
+        "pid_and_scope_kept": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\n15 Sep, 10:00 Berlin\nConfigured web workers\n2 (from WEB_CONCURRENCY)\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset w",
+        "workers_from_source": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\n15 Sep, 10:00 Berlin\nConfigured web workers\n2 (from WEB_CONCURRENCY)\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset when it restarts. Each web worker has its own limits; the ingest daemon's Yahoo traffic is separate.",
+        "coordinator_start_stamp": "Selected price charts\nScope\nThis web process (pid 31337)\nAcquisition coordinator started\n15 Sep, 10:00 Berlin\nConfigured web workers\n2 (from WEB_CONCURRENCY)\nChart / provider switch\non / off\nAcquiring now\nno\nStarts, last 60 s\n0 of 10\nCached charts\n0 \u00b7 0 KiB\nProvider backoff until\nnone\nOutcomes\nsuccess 3 \u00b7 timeout 1\nAcquisition time\navg 0.78 s \u00b7 max 1.20 s\n\nCounts for this web process only, reset when it restarts. Each web worker has its own limits; the ingest daemon's Yahoo traffic is separate.",
+        "no_document_overflow": {
+          "inner": 390,
+          "scroll": 390
+        },
+        "no_page_errors": [],
+        "no_unmocked_requests": []
+      },
+      "shot": "admin-configured-390.png"
+    }
+  },
+  "failures": [],
+  "server_404": [],
+  "seconds": 31.4,
+  "port_free_after": true
+}

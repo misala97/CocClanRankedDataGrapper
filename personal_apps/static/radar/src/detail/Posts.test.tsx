@@ -26,6 +26,19 @@ describe('who judged a post', () => {
     expect(screen.getByText('Claude')).toHaveClass('pby')
   })
 
+  it('says a post is not judged yet rather than crediting the wording score', () => {
+    // The server decides this: it is the only side that knows whether the
+    // judging pass has reached the mention. The component must print what it
+    // is given rather than assuming 'wording' for anything non-model.
+    const { container } = render(<Posts total={2} posts={[
+      post({ author: 'ann', judged_by: 'lexicon',
+             judged_label: 'not judged yet', tone: 'neutral' }),
+      post({ author: 'bob', judged_by: 'lexicon', judged_label: 'wording',
+             tone: 'bearish' }),
+    ]} />)
+    expect(labelsIn(container)).toEqual(['not judged yet', 'wording'])
+  })
+
   // The name is the SERVER'S answer, not the component's. It was a literal
   // 'Claude' here, which stopped being true the moment a second backend
   // could write tone.

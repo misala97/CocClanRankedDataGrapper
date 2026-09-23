@@ -1,5 +1,5 @@
 # personal_apps/tests/test_radar_market_data_report.py
-"""The activation-gate report: enforced read-only, non-vacuous gates."""
+"""The US close activation-gate report: enforced read-only, non-vacuous."""
 import datetime as dt
 import decimal
 from types import SimpleNamespace
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from app import app as flask_app
 from extensions import db
 from scripts.report_radar_market_data_shadow import (
-    GERMAN_GATES, Gate, ReadOnlyViolation, ShadowReport, build_report,
-    exit_code, install_statement_guard)
+    Gate, ReadOnlyViolation, ShadowReport, build_report, exit_code,
+    install_statement_guard)
 from scripts import report_radar_market_data_shadow as report_mod
 
 NOW = dt.datetime(2027, 1, 4, 21, 30)
@@ -46,8 +46,7 @@ def test_a_full_report_mutates_nothing(ctx):
     after = db.session.query(sa.func.count(RadarQuote.id)).scalar()
     assert before == after
     assert isinstance(report, ShadowReport)
-    assert {gate.name for gate in report.gates} == set(GERMAN_GATES) | {
-        'grouped_agreement'}
+    assert {gate.name for gate in report.gates} == {'grouped_agreement'}
 
 
 def test_an_empty_window_is_incomplete_never_vacuously_green(ctx):
@@ -55,93 +54,46 @@ def test_an_empty_window_is_incomplete_never_vacuously_green(ctx):
     # Dev DB has no shadow session: multiple gates lack evidence and the
     # grouped backfill is absent. That is incomplete evidence, exit 2.
     assert report.incomplete
-    assert exit_code(report, 'german') in (1, 2)
     assert exit_code(report, 'us-closes') == 2
+    assert exit_code(report) == 2
 
 
-def test_identity_audit_validation_is_strict(ctx, monkeypatch):
-    from features.radar import instruments as inst
-    decisions = [inst.MappingDecision(
-        ticker='ZZRPT', status='mapped', reason=None, mic='XGAT',
-        symbol='ZZR', isin='DE000ZZTST01', currency='EUR',
-        mapping_source='openfigi')]
-    generation = inst.persist_generation(decisions, NOW)
-    try:
-        audit = {
-            'generation_sha256': 'f' * 64,  # wrong hash
-            'reviewed_at': '2027-01-04T20:00:00Z', 'reviewer': 'Michi',
-            'rows': [{'ticker': 'ZZRPT', 'mic': 'XGAT', 'symbol': 'ZZR',
-                      'isin': 'DE000ZZTST01', 'currency': 'EUR',
-                      'correct': True}],
-        }
-        report = build_report(db.session, START, NOW, identity_audit=audit)
-        identity = report.gate('identity')
-        assert identity.passed is False
-        assert 'generation hash mismatch' in identity.detail['problems']
-
-        # A row not confirmed correct is a truth violation, exit 1.
-        audit['generation_sha256'] = generation.payload_sha256
-        audit['rows'][0]['correct'] = False
-        report = build_report(db.session, START, NOW, identity_audit=audit)
-        assert any('wrong identities' in item
-                   for item in report.truth_violations)
-        assert exit_code(report, 'german') == 1
-    finally:
-        db.session.delete(generation)
-        db.session.commit()
-
-
-def test_each_german_gate_can_fail_alone():
-    def gate(name, passed=True):
-        return Gate(name, passed, 1, 1, 1, {})
-
-    def report(**overrides):
-        gates = [gate(name, overrides.get(name, True))
-                 for name in GERMAN_GATES] + [gate('grouped_agreement',
-                                                  False)]
-        return ShadowReport(
-            start=START, end=NOW, gates=tuple(gates),
-            truth_violations=(), incomplete=(),
-            grouped_informational={}, generation_sha256='a' * 64,
-            instrument_map_sha256='b' * 64)
-
-    # All German gates green: the grouped gate is informational for german.
-    assert exit_code(report(), 'german') == 0
-    for name in GERMAN_GATES:
-        code = exit_code(report(**{name: False}), 'german')
-        assert code in (1, 2), name
-    # And the reverse independence: german failures never gate us-closes.
-    grouped_green = ShadowReport(
-        start=START, end=NOW,
-        gates=tuple(gate(name, False) for name in GERMAN_GATES) + (
-            gate('grouped_agreement', True),),
-        truth_violations=(), incomplete=(), grouped_informational={},
-        generation_sha256=None, instrument_map_sha256='b' * 64)
-    assert exit_code(grouped_green, 'us-closes') == 0
-
-
-def test_truth_violations_only_block_their_own_activation_track():
-    gates = tuple(Gate(name, True, 1, 1, 1, {})
-                  for name in GERMAN_GATES) + (
-        Gate('grouped_agreement', True, 3, 3, 3, {}),)
+def test_only_the_us_close_gate_exists(capsys):
+    """The retired market's gates, audit and selector are gone; asking for
+    them is an error, never a silent switch to the US gate."""
+    for name in ('GERMAN_GATES', '_german_gates', '_active_generation',
+                 'MIN_IDENTITY_AUDIT'):
+        assert not hasattr(report_mod, name), name
+    assert report_mod.GATES == ('us-closes',)
     report = ShadowReport(
-        start=START, end=NOW, gates=gates,
-        truth_violations=('venue hop inside the window: [ZZX]',),
+        start=START, end=NOW,
+        gates=(Gate('grouped_agreement', True, 3, 3, 3, {}),),
+        truth_violations=(), incomplete=(), grouped_informational={},
+        instrument_map_sha256='b' * 64)
+    assert exit_code(report) == 0
+    with pytest.raises(ValueError, match='unknown gate'):
+        exit_code(report, 'german')
+    for argv in (['--from', 'x', '--to', 'y', '--gate', 'german'],
+                 ['--from', 'x', '--to', 'y', '--identity-audit', 'a.json']):
+        with pytest.raises(SystemExit):
+            report_mod.main(argv)
+    assert 'german' in capsys.readouterr().err
+
+
+def test_truth_violations_block_the_us_close_gate():
+    gates = (Gate('grouped_agreement', True, 3, 3, 3, {}),)
+    clean = ShadowReport(
+        start=START, end=NOW, gates=gates, truth_violations=(),
         incomplete=(), grouped_informational={},
-        generation_sha256='a' * 64, instrument_map_sha256='b' * 64,
-        german_truth_violations=('venue hop inside the window: [ZZX]',),
-        grouped_truth_violations=())
-    assert exit_code(report, 'german') == 1
-    assert exit_code(report, 'us-closes') == 0
+        instrument_map_sha256='b' * 64)
+    assert exit_code(clean, 'us-closes') == 0
 
     grouped_report = ShadowReport(
         start=START, end=NOW, gates=gates,
         truth_violations=('conflicting grouped duplicate',),
         incomplete=(), grouped_informational={},
-        generation_sha256='a' * 64, instrument_map_sha256='b' * 64,
-        german_truth_violations=(),
+        instrument_map_sha256='b' * 64,
         grouped_truth_violations=('conflicting grouped duplicate',))
-    assert exit_code(grouped_report, 'german') == 0
     assert exit_code(grouped_report, 'us-closes') == 1
 
 
