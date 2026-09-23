@@ -282,3 +282,11 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   hash, no console errors; u1's settings restored. Fixed from that pass: decimal stops
   read "2,5 · 5 · 7,5" (commas were ambiguous), the Übungen row breaks between
   phrases. NOT shipped (additive migration; ships with G3 + V1 + V2 on the owner's OK).
+- 2026-09-23 — Release push (owner: "Yes push and deploy everything together"). Tree
+  ef6ca0e = b439e44 + G3, V1, V2, V3 and their docs, gym files only; alembic heads
+  [fc72f159a49f]; checks as in the V3 entry (same code). V2's MODIFY re-checked for
+  MariaDB: `weight` FLOAT / `reps` INT since ebf7bd2c60a7, no defaults, so only the
+  NULL flag changes. Pushed origin/main b439e44..ef6ca0e (fast-forward). Deploy NOT
+  run by Claude: SSH refused the key ("invalid format", both clients) and auto mode
+  denied the read-only prod pre-check and a look into ~/.ssh. Michi runs
+  `update_coc.sh`.

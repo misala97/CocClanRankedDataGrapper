@@ -27,10 +27,9 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
    allows it (scratchpad `upgrade_dev_db.py`). Its gym tables were copied first to the
    schema `personal_apps_gymbak_20260923`; re-copy if gym rows change before the upgrade.
 2. Radar: `.worktrees/radar-selected-price-charts` has an untracked `3f82a7e5b5dc` on
-   `b7e3f9c1a2d4`. Before it ships, its `down_revision` must be main's head at that
-   moment: `e2c7a9f41b86` today, `fc72f159a49f` once G3 + V2 + V3 are merged, or
-   `flask db upgrade` stops on two heads. The note at the top of that worktree's
-   `HANDOFF.md` says so (updated after V3).
+   `b7e3f9c1a2d4`. Before it ships, its `down_revision` must be main's head:
+   `fc72f159a49f` since ef6ca0e reached main, or `flask db upgrade` stops on two heads.
+   The note at the top of that worktree's `HANDOFF.md` says so (updated after V3).
 3. Main checkout: 18 `radar-design/*.md` show as modified. They are the local copies that
    sat untracked before main tracked the folder; main's versions are newer (diff
    +389/-4348). Not ours; the owner decides. Byte copies of all 85 formerly untracked
@@ -72,13 +71,20 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
   table), then reset the checkout to a pre-V3 commit, rebuild, restart. Pre-V3 code
   reads a NULL workout rest as the exercise's rest, so live rows stay right.
 - Ledger entries "G3/V1/V2/V3 done in code" have the checks.
-- Shipping = one merge of dev_personal into main (main is b439e44), push,
-  `update_coc.sh`. It carries a prod table drop (G3), a column change with a data
-  rewrite (V2) and a new table (V3), so it needs Michi's explicit OK. Don't nag.
-  Afterwards alembic heads on main = [fc72f159a49f].
+- PUSHED TO MAIN on Michi's OK ("Yes push and deploy everything together"): origin/main
+  b439e44..ef6ca0e (fast-forward from dev_personal), alembic head [fc72f159a49f].
+  NOT DEPLOYED YET: Claude's SSH failed ("Load key ~/.ssh/id_ed25519: invalid format",
+  Git Bash and Windows OpenSSH alike), and auto mode denied the prod pre-check and
+  looking into ~/.ssh. `update_coc.sh` runs G3's table drop, V2's column change + data
+  rewrite, V3's new table. Rollback after a deploy, code still in place:
+  `flask db downgrade c5a1d8e3f207` (V3), `4b8e2d6f1a93` (V2), `e2c7a9f41b86` (G3),
+  then reset the checkout to b439e44, rebuild, restart.
+- The local `main` branch is checked out in `CodingStuff-worktrees/radar-release-merge`
+  at fe68454 (stale, an ancestor of origin/main); not ours, left alone.
 
 ## Next work
-- Nothing open in the plan's task table. Waiting on Michi's OK to ship G3 + V1-V3.
+- Nothing open in the plan's task table. The deploy of ef6ca0e is Michi's
+  (`update_coc.sh`); afterwards record the result in the ledger.
 - Flagged for Michi (V3 decision, mine): routines no longer hold their own rest; the
   lifter's setting applies in every workout. Today's routine rows all equal the setting.
 - Possible V1 follow-up (not asked for): the exercise sheet's swap select could put
