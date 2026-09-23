@@ -1,4 +1,4 @@
-# HANDOFF — gym first-run workflows + global exercise list (current state, 2026-09-23, after G3)
+# HANDOFF — gym first-run workflows + global exercise list (current state, 2026-09-23, after V1)
 
 Plan + ledger (binding): `docs/superpowers/plans/2026-09-23-gym-first-run-workflows.md`.
 Read its task table, the "Owner rulings on the L1 review" block and the ledger before
@@ -50,14 +50,21 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
 - Rollback, unlike G2's, is clean: `flask db downgrade e2c7a9f41b86` recreates the table
   empty, and b439e44's code refills it with identity rows as its links need them.
 
+## V1: done in code, NOT shipped
+- 84dda2b on dev_personal: the add sheet leads with "Deine" (common exercises,
+  clustered by movement), then every movement by muscle; variants open a movement page.
+  No migration: the payload only gained fields. Ledger entry "V1 done in code".
+- It ships with the next merge to main. Today that merge also carries G3, whose
+  migration drops a prod table: shipping needs the owner's explicit OK either way.
+
 ## Next work
-- V1: add-sheet picker that groups variants of one movement, the one you mainly do
-  first (G1 did the functional list-only search). Mockup round first.
 - V2: first set of a never-done exercise, no invented plan. Mockup round first.
 - V3: personal settings UI (G1 cut the form to step/rest/bar/stack). Mockup round first.
-- Mockup rounds: real HTML on the real CSS, 390×844, 3 lanes, one screen per turn, via
+- Mockup rounds: real HTML on the real CSS, 390x844, 3 lanes, one screen per turn, via
   the impeccable skill.
-- Optional: an independent review of G1/G2 (subagent), only if Michi names the size.
+- Possible V1 follow-up (not asked for): the exercise sheet's swap select could put
+  the same movement's variants first.
+- Optional: an independent review of G1-V1 (subagent), only if Michi names the size.
 
 ## Workspace
 - Checkout `C:\Users\michi\Desktop\CodingStuff`, branch `dev_personal` (no worktree).
@@ -79,8 +86,9 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
     `heads_check.py` = alembic heads + which `app` loads; `collide_check.py` = untracked
     files a ref would overwrite; `run_g3_migration.py` = G3 migration both ways.
   - The scratch DB `personal_apps_g1` is at `4b8e2d6f1a93` (G3) and clean.
-  - Headless capture hangs on the live session page (it polls sync.json and never
-    fires `load`): navigate with `wait_until='commit'` and check text there.
+  - `v1_check.py` = the V1 add-sheet check (in-process, u1 + u4, light/dark/desktop).
+  - Headless capture hangs on a FOLLOWER's live session page (it polls sync.json and
+    never fires `load`): use `wait_until='commit'` and check text. Solo pages capture.
 - Frontend, from `personal_apps`: `npx vitest run`, `npx tsc --noEmit`, `npm run build`.
 - Do NOT run `npm run build` while the pytest suite runs: rewriting the vite manifest
   races template rendering (one spurious failure seen, ledger T4).

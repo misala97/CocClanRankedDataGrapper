@@ -57,7 +57,7 @@ stack and secondary groups -- the two creation paths disagree.
 | G1 | Spec: `library.py` becomes the one read-only exercise list for both lifters; NO custom exercises; per-user overrides of step/rest/stack stops/bar defaulting to the list; stats scoped by user | done — 80a833a spec, 3e81749 cf65778 9141915; shipped in b439e44, deployed 2026-09-23 |
 | G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | done — 812dad8; ran on prod 2026-09-23 (41 -> 41 by mapping, 0 retired) |
 | G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | done in code — 39bc25c on dev_personal, UNMERGED; migration 4b8e2d6f1a93 drops `gym_shared_session_exercises` on prod, ships only with the owner's OK |
-| V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | open — G1 T4 did the functional part (list-only, `matches` search, no create row); grouping + visual design remain |
+| V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | done in code, 84dda2b (unmerged) — lane D from the mockup round (owner: "Build it like that") |
 | V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | open |
 | V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | open — G1 T4 cut the form to the four personal fields; the redesign remains |
 
@@ -186,3 +186,28 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   session page never fires `load` and headless capture hangs on it (polls sync.json),
   so that step checks text. Rows the runs made removed (checked). NOT shipped: the
   migration drops a prod table, so push to main + deploy wait for the owner's OK.
+- 2026-09-23 — V1 mockup round: lanes A/B/C, then lane D = the owner's mix of C and B
+  ("my common ones first and the rest in a properly ordered list by movement"); mockups
+  committed in 5727236 (`personal_apps/scratchpad/puls/v1_picker/`). Owner: "Build it
+  like that".
+- 2026-09-23 — V1 done in code, 84dda2b (dev_personal, unmerged; no migration).
+  Server: `exercises.usage` (finished workouts with a completed set, counted once per
+  workout; weight = sum of 0.5^(age_days/42); rank by weight, workouts, last done;
+  common = 2+ workouts and >= 15% of the lifter's own top weight, so a break does not
+  empty "Deine"; only exercises the picker offers are ranked, so a retired row cannot
+  set the bar). `library.MOVEMENT_GROUP` / `LIST_GROUPS` / `Entry.label`. Catalogue
+  rows gained movement, label, movement_group, workouts, days_ago, rank, common; the
+  payload gained list_groups. Client: `session/picker.ts` (clusters, sections, search
+  order, metas) and a rewritten `AddExerciseSheet`: "Deine" clusters, "Alle Übungen"
+  by muscle A-Z, one-tap add for one-variant movements, a movement page (level 2) for
+  the rest with Zurück (`Sheet` got `onBack`), "meistens" only when there is a choice.
+  No autofocus; a list tap keeps the keyboard down and focus on the row (aria-disabled
+  while busy -- `disabled` dropped focus onto the page behind, found in the browser
+  check); the sheet keeps one height at every level (it collapsed on level 2 and on an
+  empty search, moving the field under the thumb). Fixture regenerated from the
+  scratch DB; `make_session_fixture._stabilise` now anonymises partners. Checks: tsc
+  clean, vitest 498, build clean, gym pytest 709 passed (scratch DB). Browser check
+  `v1_check.py` (in-process server, scratch DB, 390x844 + 1280x800 + dark): all pass —
+  no overflow, every control >= 44px, sticky group head at 72px, level 2 focus/scroll
+  both ways, add from level 2 lands with focus held, first run for u4, no console
+  errors. Solo live session pages screenshot fine; only follower pages poll.
