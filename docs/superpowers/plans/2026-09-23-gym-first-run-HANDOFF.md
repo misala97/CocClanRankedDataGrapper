@@ -46,7 +46,9 @@ G1 plan: `docs/superpowers/plans/2026-09-23-gym-global-exercise-list.md` (T1-T5,
   explicit OK. Tested both ways on the scratch DB; alembic heads = [4b8e2d6f1a93].
 - Shipping it: merge dev_personal into main (main is b439e44; dev_personal is ahead by
   the docs commit 80c5dcf plus G3), push, `update_coc.sh`. The radar worktree's
-  `3f82a7e5b5dc` then needs `down_revision = '4b8e2d6f1a93'` instead (update its note).
+  `3f82a7e5b5dc` then needs `down_revision = '4b8e2d6f1a93'` instead (its note says so).
+- Rollback, unlike G2's, is clean: `flask db downgrade e2c7a9f41b86` recreates the table
+  empty, and b439e44's code refills it with identity rows as its links need them.
 
 ## Next work
 - V1: add-sheet picker that groups variants of one movement, the one you mainly do
