@@ -731,17 +731,21 @@ after the list changes (`python gym_exercise_art/make_prompts.py`, from
 
 ## How to do it
 
-1. In ChatGPT, attach `raw/reference.webp` (the approved Butterfly) and paste one
-   prompt from below.
+Every prompt below comes with its own steps and save path. In short:
+
+1. In ChatGPT, attach `reference.webp` (the approved Butterfly) from
+   `{raw}`
+   and paste the prompt. ChatGPT cannot read files from your PC or save to it,
+   so the reference is attached by hand and the saving is yours.
 2. Check the picture before saving it: the right machine or equipment, both sides
    even unless the prompt says one-sided, the orange on the right muscle, no text
    anywhere. If something is off, tell ChatGPT what to fix, or regenerate.
-3. Download it and save it under its name from the list, in
-   `{raw}`
-   PNG, WEBP and JPG all work: keep the name, the ending may differ. Git ignores
-   this folder, so nothing gets committed by accident.
-4. Any order, over as many days as you like. Staying in one chat keeps the style
-   closest; in a new chat, attach the reference again.
+3. Right-click the picture, "Save image as...", and paste the save path shown
+   above the prompt into the file name box: the picture lands in the right folder
+   under the right name. PNG, WEBP and JPG all work; the ending may differ. Git
+   ignores this folder, so nothing gets committed by accident.
+4. Any order, over as many days as you like. Attach the reference every time,
+   also in the same chat, so the style stays the same.
 5. When all {count} are saved, tell Claude: the names get checked, the pictures
    shrunk to small web files, and the app work starts with a mockup round.
 
@@ -799,7 +803,11 @@ def main():
     for number, movement in enumerate(movements, 1):
         s = SCENES[movement]
         out += ['', f'### {number:02} · {movement} → `{files[movement]}.png`', '',
-                f'Shows {BY_KEY[s["key"]].name}: {s["why"]}.', '', '```text', prompt(s), '```']
+                f'Shows {BY_KEY[s["key"]].name}: {s["why"]}.', '',
+                'Attach `reference.webp` from the raw folder, paste the prompt, then save the '
+                'picture as:', '',
+                '```text', os.path.join(RAW, files[movement] + '.png'), '```', '',
+                '```text', prompt(s), '```']
     with open(os.path.join(HERE, 'PROMPTS.md'), 'w', encoding='utf-8', newline='\n') as handle:
         handle.write('\n'.join(out) + '\n')
 

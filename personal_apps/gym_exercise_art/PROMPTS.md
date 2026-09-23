@@ -7,17 +7,21 @@ after the list changes (`python gym_exercise_art/make_prompts.py`, from
 
 ## How to do it
 
-1. In ChatGPT, attach `raw/reference.webp` (the approved Butterfly) and paste one
-   prompt from below.
+Every prompt below comes with its own steps and save path. In short:
+
+1. In ChatGPT, attach `reference.webp` (the approved Butterfly) from
+   `C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw`
+   and paste the prompt. ChatGPT cannot read files from your PC or save to it,
+   so the reference is attached by hand and the saving is yours.
 2. Check the picture before saving it: the right machine or equipment, both sides
    even unless the prompt says one-sided, the orange on the right muscle, no text
    anywhere. If something is off, tell ChatGPT what to fix, or regenerate.
-3. Download it and save it under its name from the list, in
-   `C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw`
-   PNG, WEBP and JPG all work: keep the name, the ending may differ. Git ignores
-   this folder, so nothing gets committed by accident.
-4. Any order, over as many days as you like. Staying in one chat keeps the style
-   closest; in a new chat, attach the reference again.
+3. Right-click the picture, "Save image as...", and paste the save path shown
+   above the prompt into the file name box: the picture lands in the right folder
+   under the right name. PNG, WEBP and JPG all work; the ending may differ. Git
+   ignores this folder, so nothing gets committed by accident.
+4. Any order, over as many days as you like. Attach the reference every time,
+   also in the same chat, so the style stays the same.
 5. When all 67 are saved, tell Claude: the names get checked, the pictures
    shrunk to small web files, and the app work starts with a mockup round.
 
@@ -106,6 +110,12 @@ not quite the same distance from the chest; redo 08 if that bothers you.
 
 Shows Bankdrücken (Kurzhantel): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bankdruecken.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -123,6 +133,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 02 · Schrägbankdrücken → `schraegbankdruecken.png`
 
 Shows Schrägbankdrücken (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schraegbankdruecken.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -142,6 +158,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Negativbankdrücken (Langhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\negativbankdruecken.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -159,6 +181,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 04 · Floor Press → `floor-press.png`
 
 Shows Floor Press (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\floor-press.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -178,6 +206,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Fliegende (Kurzhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\fliegende.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -195,6 +229,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 06 · Überzüge → `ueberzuege.png`
 
 Shows Überzüge (Kurzhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\ueberzuege.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -214,6 +254,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Brustpresse (Maschine): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\brustpresse.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -231,6 +277,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 08 · Butterfly → `butterfly.png`
 
 Shows Butterfly (Maschine): the variant you log most.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\butterfly.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -250,6 +302,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Kreuzheben (Langhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\kreuzheben.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -267,6 +325,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 10 · Rack Pulls → `rack-pulls.png`
 
 Shows Rack Pulls (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rack-pulls.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -286,6 +350,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Rudern (Maschine): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rudern.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -303,6 +373,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 12 · Shrugs → `shrugs.png`
 
 Shows Shrugs (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\shrugs.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -322,6 +398,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Latzug (Maschine, Scheiben): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\latzug.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -339,6 +421,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 14 · Rückenstrecker → `rueckenstrecker.png`
 
 Shows Rückenstrecker (Maschine): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rueckenstrecker.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -358,6 +446,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows High Row (Maschine, Scheiben): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\high-row.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -375,6 +469,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 16 · Schulterdrücken → `schulterdruecken.png`
 
 Shows Schulterdrücken (Langhantel, stehend): the variant you log most.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schulterdruecken.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -394,6 +494,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Aufrechtes Rudern (Langhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\aufrechtes-rudern.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -411,6 +517,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 18 · Arnold Press → `arnold-press.png`
 
 Shows Arnold Press (Kurzhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\arnold-press.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -430,6 +542,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Seitheben (Maschine): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\seitheben.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -447,6 +565,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 20 · Frontheben → `frontheben.png`
 
 Shows Frontheben (Kabel, einarmig): your Front Raises (cable, one arm).
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\frontheben.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -466,6 +590,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Vorgebeugtes Seitheben (Kurzhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\vorgebeugtes-seitheben.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -483,6 +613,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 22 · Face Pulls → `face-pulls.png`
 
 Shows Face Pulls (Kabel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\face-pulls.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -502,6 +638,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Reverse Butterfly (Maschine): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reverse-butterfly.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -519,6 +661,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 24 · Außenrotation → `aussenrotation.png`
 
 Shows Außenrotation (Kabel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\aussenrotation.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -538,6 +686,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Schulterpresse (Maschine): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schulterpresse.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -555,6 +709,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 26 · Bizepscurls → `bizepscurls.png`
 
 Shows Bizepscurls (Kurzhantel): the variant you log most.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bizepscurls.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -574,6 +734,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Scottcurls (Maschine): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\scottcurls.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -591,6 +757,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 28 · Hammercurls → `hammercurls.png`
 
 Shows Hammercurls (Kurzhantel): the variant you log most.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\hammercurls.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -610,6 +782,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Konzentrationscurls (Kurzhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\konzentrationscurls.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -627,6 +805,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 30 · Schrägbankcurls → `schraegbankcurls.png`
 
 Shows Schrägbankcurls (Kurzhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\schraegbankcurls.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -646,6 +830,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Bayesian Curls (Kabel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bayesian-curls.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -663,6 +853,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 32 · French Press → `french-press.png`
 
 Shows French Press (SZ-Stange): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\french-press.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -682,6 +878,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Trizepsstrecken über Kopf (Kabel): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizepsstrecken-ueber-kopf.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -699,6 +901,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 34 · Trizeps-Kickbacks → `trizeps-kickbacks.png`
 
 Shows Trizeps-Kickbacks (Kurzhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizeps-kickbacks.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -718,6 +926,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Trizepsdrücken (Kabel, Stange): the variant you log most.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizepsdruecken.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -735,6 +949,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 36 · Dips → `dips.png`
 
 Shows Dips (Maschine): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\dips.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -754,6 +974,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Trizepsstrecken (Maschine): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\trizepsstrecken.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -771,6 +997,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 38 · Kniebeugen → `kniebeugen.png`
 
 Shows Kniebeugen (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\kniebeugen.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -790,6 +1022,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Frontkniebeugen (Langhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\frontkniebeugen.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -807,6 +1045,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 40 · Ausfallschritte → `ausfallschritte.png`
 
 Shows Ausfallschritte (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\ausfallschritte.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -826,6 +1070,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Rumänisches Kreuzheben (Langhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rumaenisches-kreuzheben.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -843,6 +1093,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 42 · Good Mornings → `good-mornings.png`
 
 Shows Good Mornings (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\good-mornings.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -862,6 +1118,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Goblet Squat (Kurzhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\goblet-squat.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -879,6 +1141,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 44 · Bulgarische Kniebeugen → `bulgarische-kniebeugen.png`
 
 Shows Bulgarische Kniebeugen (Kurzhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\bulgarische-kniebeugen.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -898,6 +1166,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Step-ups (Kurzhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\step-ups.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -915,6 +1189,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 46 · Beinstrecker → `beinstrecker.png`
 
 Shows Beinstrecker (Maschine): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\beinstrecker.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -934,6 +1214,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Beinbeuger (Maschine, liegend): the lying variant, the clearest picture of the movement.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\beinbeuger.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -951,6 +1237,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 48 · Beinpresse → `beinpresse.png`
 
 Shows Beinpresse (Maschine): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\beinpresse.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -970,6 +1262,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Adduktoren (Maschine): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\adduktoren.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -987,6 +1285,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 50 · Hackenschmidt → `hackenschmidt.png`
 
 Shows Hackenschmidt (Maschine, Scheiben): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\hackenschmidt.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1006,6 +1310,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Pendulum Squat (Maschine, Scheiben): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\pendulum-squat.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1023,6 +1333,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 52 · Belt Squat → `belt-squat.png`
 
 Shows Belt Squat (Maschine, Scheiben): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\belt-squat.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1042,6 +1358,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Hip Thrust (Langhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\hip-thrust.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1059,6 +1381,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 54 · Glute Bridge → `glute-bridge.png`
 
 Shows Glute Bridge (Langhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\glute-bridge.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1078,6 +1406,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Glute-Kickbacks (Kabel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\glute-kickbacks.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1095,6 +1429,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 56 · Abduktoren → `abduktoren.png`
 
 Shows Abduktoren (Maschine): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\abduktoren.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1114,6 +1454,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Abduktion (Kabel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\abduktion.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1131,6 +1477,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 58 · Pull-Through → `pull-through.png`
 
 Shows Pull-Through (Kabel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\pull-through.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1150,6 +1502,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Swings (Kettlebell): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\swings.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1167,6 +1525,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 60 · Wadenheben → `wadenheben.png`
 
 Shows Wadenheben (Maschine, stehend): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\wadenheben.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1186,6 +1550,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Crunches (Kabel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\crunches.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1203,6 +1573,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 62 · Rumpfrotation → `rumpfrotation.png`
 
 Shows Rumpfrotation (Maschine): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\rumpfrotation.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1222,6 +1598,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Holzhacker (Kabel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\holzhacker.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1240,6 +1622,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Pallof Press (Kabel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\pallof-press.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1256,6 +1644,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 65 · Seitbeugen → `seitbeugen.png`
 
 Shows Seitbeugen (Kurzhantel): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\seitbeugen.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
@@ -1275,6 +1669,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 
 Shows Handgelenkcurls (Langhantel): the list's first variant.
 
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\handgelenkcurls.png
+```
+
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
 Colours only: equipment (machines, benches, bars, dumbbells, plates, cables, handles) in #291238 and #634674; skin and clothes in muted neutrals (#DACAE3, #C2ABCF, white); the working muscle highlighted in #C2410C as a simple flat shape over the body or shirt.
@@ -1292,6 +1692,12 @@ No text, no numbers, no labels, no logos, no watermark, no arrows, no gym backgr
 ### 67 · Reverse Curls → `reverse-curls.png`
 
 Shows Reverse Curls (SZ-Stange): the list's first variant.
+
+Attach `reference.webp` from the raw folder, paste the prompt, then save the picture as:
+
+```text
+C:\Users\michi\Desktop\CodingStuff\personal_apps\gym_exercise_art\raw\reverse-curls.png
+```
 
 ```text
 Use the attached reference image for the style and draw a new illustration exactly like it: the same flat vector look, outlines and soft shading, the same lifter (short dark hair, white t-shirt, lavender shorts, white socks, lavender sneakers), the same solid #EEE5F3 background, square 1:1, the whole person and all equipment in frame with generous margin.
