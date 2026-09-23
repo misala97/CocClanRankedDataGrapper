@@ -58,7 +58,7 @@ stack and secondary groups -- the two creation paths disagree.
 | G2 | Migration: map the 41 prod exercises onto list entries (mapping table owner-approved), re-point sessions/routines/shared rows, drop the copies | done — 812dad8; ran on prod 2026-09-23 (41 -> 41 by mapping, 0 retired) |
 | G3 | Shared sessions on shared ids: retire matching/mapping, confirm page = one tap | done in code — 39bc25c on dev_personal, UNMERGED; migration 4b8e2d6f1a93 drops `gym_shared_session_exercises` on prod, ships only with the owner's OK |
 | V1 | Add sheet = pick from the list (search per `library.matches`, groups; variants of one movement grouped, the one you mainly do first), no create path — mockup round, then build | done in code, 84dda2b (unmerged) — lane D from the mockup round (owner: "Build it like that") |
-| V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | open |
+| V2 | First set of a never-done exercise (no invented plan) — mockup round, then build | done in code, 4cd8bf2 (unmerged) — lane A "Du tippst" (owner: "Ja A siehr am besten aus"); migration c5a1d8e3f207 blanks open placeholder sets on prod, ships only with the owner's OK |
 | V3 | Personal exercise settings (replaces the 9-field form) — mockup round, then build | open — G1 T4 cut the form to the four personal fields; the redesign remains |
 
 Direction change (owner, 2026-09-23 mid-round): "One list of preconfigured read only
@@ -211,3 +211,33 @@ Owner rulings on the L1 review (2026-09-23), binding for G1-V3:
   no overflow, every control >= 44px, sticky group head at 72px, level 2 focus/scroll
   both ways, add from level 2 lands with focus held, first run for u4, no console
   errors. Solo live session pages screenshot fine; only follower pages poll.
+- 2026-09-23 — V2 mockup round: lanes A "Du tippst" (blank fields, the button asks
+  for each number), B "Vom Gerät" (tap one of the machine's real weights, then the
+  reps), C "Probesatz" (set 1 is a trial, then a step up or down), each at three moments
+  (Langhantel with other variants known, Maschine with nothing known, while typing).
+  Owner picked A. Lane A committed in cb026e5 (`personal_apps/scratchpad/puls/v2_first_set/`
+  a1-a3 + `cmp_a.html`; B/C left untracked).
+- 2026-09-23 — V2 done in code, 4cd8bf2 (dev_personal, unmerged). Server: a blank plan
+  is NULL weight/reps with `is_default_seeded` kept; `_seeded_sets` plans 3 blank sets
+  (DEFAULT_PLAN_WEIGHT/REPS gone). Migration c5a1d8e3f207 (down 4b8e2d6f1a93): both
+  columns nullable, open flagged sets lose the 20 kg and (where still 8) the reps;
+  downgrade writes 20 x 8 into every NULL. `gym_toggle_set_complete` refuses a set
+  with a blank (stays open, keeps the number it had, no rest -- the same quiet refusal
+  as `gym_add_set`) and, live only, `_fill_blanks_after` gives the open sets after a
+  logged one its numbers. The flag-based `_propagate_default_correction` is unchanged
+  (owner ruling); None -> value always counts as a change. Deload skips flagged and
+  blank sets. Payload: `live_floor` (bar, else lightest stack stop, else one step) and
+  `first_time` {se id: up to 2 VariantRefs -- the lifter's other variants of the
+  movement by usage rank, top set of the latest non-deload workout; information only}.
+  Export emits null for a blank open set. Client: `Stepper` blank state (dashed slot,
+  "-" disabled, "+" lands on `live_floor`, `open()` handle focusing inside the tap so
+  iOS raises the keypad, `enterKeyHint` "next" chaining kg -> Wdh., `onDraft`); the go
+  button reads "Gewicht eintippen" / "Wdh. eintippen" / "Satz geschafft"; chips "Satz N";
+  "Erstes Mal" note with the refs; queue "neu"; optimistic tick mirrors the fill.
+  Checks: tsc clean, vitest 512 passed, build clean, gym pytest 718 passed (scratch DB,
+  now at c5a1d8e3f207); migration up/down/up on the scratch DB with marker rows.
+  Browser check `v2_check.py` (in-process server, scratch DB, 390x844 + 1280x800 +
+  dark): all pass — blank chips, note, empty slots, keypad Enter flow, ring while
+  typing, sets 2/3 take 40 x 10 on screen and in the DB, note gone after set 1, queue
+  "neu", u1's refs, "+" lands on the 20 kg bar, no overflow, controls >= 44px, no
+  console errors. NOT shipped: the migration rewrites open sets on prod.
