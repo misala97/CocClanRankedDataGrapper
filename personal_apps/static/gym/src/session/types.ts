@@ -68,6 +68,10 @@ export interface LiveExercise {
   /** Where the exercise's drawing loads from, or null while it has none
    *  (off the list, or not drawn yet): the page shows the placeholder. */
   picture: string | null
+  /** The done sets (count, volume) of the hidden originals this row replaced:
+   *  they count in place (Q1), so the retally adds them. Zero otherwise. */
+  replaced_sets_done: number
+  replaced_volume: number
   sets: LiveSet[]
 }
 
@@ -120,15 +124,12 @@ export interface SeedSource {
   sets: Suggestion[]
 }
 
-/** What one just-logged set beat. 'weight' wins when a set beats both, which
- *  is session_report's own ranking -- the live takeover and the debrief must
- *  not name the same record two different ways.
- *
- *  `value` and `previous` are kilograms for a weight record and estimated
- *  one-rep-max kilograms for an e1rm one. No 'volume' kind: that exists per
- *  session in the debrief, never per set. */
+/** What one just-logged set beat. A record is e1RM only (D3): `value` and
+ *  `previous` are estimated one-rep-max kilograms, the same pair the debrief
+ *  prints, so the live takeover and the debrief never name one set's record
+ *  two different ways. */
 export interface LiveRecord {
-  kind: 'weight' | 'e1rm'
+  kind: 'e1rm'
   value: number
   previous: number
   /** ISO. The start of the session that held the old best. */

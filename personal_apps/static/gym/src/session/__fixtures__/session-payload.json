@@ -2113,10 +2113,10 @@
   "ready_for_more": null,
   "record_details": {
     "100": {
-      "kind": "weight",
-      "previous": 26.0,
+      "kind": "e1rm",
+      "previous": 34.7,
       "previous_at": "2026-08-16T10:35:16",
-      "value": 60.0
+      "value": 76.0
     }
   },
   "record_set_ids": [
@@ -2221,6 +2221,8 @@
       "pain": false,
       "picture": "/static/gym/art/bankdruecken.webp?v=0ac424e2",
       "position": 1,
+      "replaced_sets_done": 0,
+      "replaced_volume": 0.0,
       "rest_seconds": null,
       "rest_setting": 150,
       "rest_setting_mine": false,
@@ -2261,6 +2263,8 @@
       "pain": false,
       "picture": "/static/gym/art/butterfly.webp?v=705047cc",
       "position": 2,
+      "replaced_sets_done": 0,
+      "replaced_volume": 0.0,
       "rest_seconds": null,
       "rest_setting": 150,
       "rest_setting_mine": true,

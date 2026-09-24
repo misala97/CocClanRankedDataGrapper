@@ -15,7 +15,17 @@ from features.gym.exercises import setup as exercise_setup, setups as exercise_s
 from features.gym.scope import current_user_id
 
 
-def load_performed(exercise_ids=None, since=None, include_active=False, exclude_session_exercise_ids=None):
+def counts(s):
+    """Whether a logged set counts: stats.set_counts(), the one rule (Q1)."""
+    return stats.set_counts(s.completed, s.reps)
+
+
+def done_sets(session_exercise):
+    """The sets of one exercise that count, as (weight, reps) in logged order."""
+    return tuple((s.weight, s.reps) for s in session_exercise.sets if counts(s))
+
+
+def load_performed(exercise_ids=None, since=None, include_active=False):
     """Every exercise-as-performed with at least one completed set, as the
     single flat shape stats.py consumes.
 
@@ -33,12 +43,8 @@ def load_performed(exercise_ids=None, since=None, include_active=False, exclude_
     an average or a "sessions since PR" count before the workout is actually
     done.
 
-    `exclude_session_exercise_ids`, if given, drops those specific
-    SessionExercise rows outright before they ever become a PerformedExercise
-    -- gym_verlauf uses this to exclude a replaced-away original from its
-    own session's totals, the same exclusion performed_from_session() already
-    applies when building a single session's `current` for session_report().
-    Default (None) excludes nothing, so every other caller here is unaffected.
+    Only the sets that count (counts()); a replaced-away original's are
+    among them, as everywhere (Q1).
     """
     query = (
         SessionExercise.query
@@ -57,17 +63,12 @@ def load_performed(exercise_ids=None, since=None, include_active=False, exclude_
     if since is not None:
         query = query.filter(WorkoutSession.started_at >= since)
 
-    exclude_ids = exclude_session_exercise_ids or ()
     rows = query.order_by(WorkoutSession.started_at).all()
     # Every row is the caller's own, so one lifter's settings cover them all.
     setups = exercise_setups(current_user_id(), {se.exercise for se in rows})
     performed = []
     for session_exercise in rows:
-        if session_exercise.id in exclude_ids:
-            continue
-        completed = tuple(
-            (s.weight, s.reps) for s in session_exercise.sets if s.completed
-        )
+        completed = done_sets(session_exercise)
         if not completed:
             continue
         performed.append(_to_performed(session_exercise, completed,
@@ -124,18 +125,15 @@ def _session_rest_entries(session_, setups=None):
 def performed_from_session(session_):
     """This session's exercises as performed.
 
-    A replaced-away original is skipped: its slot is represented by the
-    substitute that took over, and counting both would inflate the session's
-    totals with an exercise the historical comparison was never scoped to.
+    A replaced-away original is kept: the sets logged on it before the swap
+    were done, and they count like any other (Q1). It used to be skipped
+    here -- and so left out of the debrief's totals while Heute and Statistik
+    counted it.
     """
     setups = exercise_setups(session_.user_id, {se.exercise for se in session_.exercises})
     performed = []
     for session_exercise in session_.exercises:
-        if session_exercise.replaced_by:
-            continue
-        completed = tuple(
-            (s.weight, s.reps) for s in session_exercise.sets if s.completed
-        )
+        completed = done_sets(session_exercise)
         if not completed:
             continue
         performed.append(_to_performed(session_exercise, completed,

@@ -24,6 +24,7 @@ from .helpers import (
     InvalidInput, _debrief_args, _delete_session_and_links, _refuse_live_write_if_finished,
     _to_int, _to_name, _wants_json,
 )
+from .history import counts
 from .workout import (
     _heute_payload, _mutation_response, _template_exercises_from_session,
 )
@@ -79,7 +80,7 @@ def gym_toggle_deload(session_id):
     session_.deload_pct = pct if on else None
 
     has_completed_set = any(
-        s.completed for se in session_.exercises for s in se.sets
+        counts(s) for se in session_.exercises for s in se.sets
     )
     if not has_completed_set:
         setups = exercise_setups(session_.user_id, [se.exercise for se in session_.exercises])
@@ -90,6 +91,11 @@ def gym_toggle_deload(session_id):
                 session_exercise.exercise.is_unilateral,
             )
             for s in session_exercise.sets:
+                if s.completed:
+                    # A ticked set is a record of what happened, even one
+                    # with no reps that counts for nothing (Q1): rescaling
+                    # it would give it DELOAD_REPS and make it count.
+                    continue
                 if s.is_default_seeded or s.weight is None or s.reps is None:
                     # An invented default-plan set (_seeded_sets, no history)
                     # has no real working weight to take a percentage of --

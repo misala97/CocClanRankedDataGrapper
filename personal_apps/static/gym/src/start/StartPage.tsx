@@ -74,8 +74,11 @@ function StallRow({ item }: { item: Stall }) {
       onClick={morphFrom('ex')}>
       <span className="row__main stack">
         <span className="row__name row__name--wrap">{item.name}</span>
+        {/* The count runs from the last record in any slot, so the weight
+            is the newest attempt's, wherever it stood -- "meist" says the
+            slot is the usual one, not the one the weight comes from. */}
         <span className="row__meta">
-          {`Als ${item.position}. Übung · ${kg1(item.stuck_at)} kg`}
+          {`Meist als ${item.position}. Übung · zuletzt ${kg1(item.stuck_at)} kg`}
         </span>
       </span>
       <span className="vtag vtag--stall">{sincePr(item.sessions_since_pr)}</span>

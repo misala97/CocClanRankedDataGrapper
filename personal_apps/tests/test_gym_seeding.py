@@ -101,6 +101,26 @@ def test_best_means_e1rm_not_top_weight(history_builder):
     assert [s['reps'] for s in seeded] == [12]
 
 
+def test_a_set_over_twelve_reps_does_not_make_a_workout_the_best(history_builder):
+    """G-130 (D3 c-A): 40 x 25 "beat" 55 x 8 on its unjudged estimate, so
+    one burnout set -- or a typo -- decided the next plan."""
+    build, created = history_builder
+    build(days_ago=10, position=2, sets=[(55.0, 8)])
+    build(days_ago=5, position=2, sets=[(40.0, 25)])
+    seeded = _seed(created['exercise'], position=2)
+    assert [s['weight'] for s in seeded] == [55.0]
+
+
+def test_a_workout_whose_only_set_has_no_reps_never_seeds(history_builder):
+    """G-038: a completed 0-rep leftover is no set, so its workout is no
+    evidence -- it outranked 50 x 8 on its weight alone."""
+    build, created = history_builder
+    build(days_ago=10, position=2, sets=[(50.0, 8)])
+    build(days_ago=5, position=2, sets=[(80.0, 0)])
+    seeded = _seed(created['exercise'], position=2)
+    assert [s['weight'] for s in seeded] == [50.0]
+
+
 def test_a_fresher_slot_does_not_outrank_valid_evidence(history_builder):
     """Fatigue direction: slot 1 is fresher than slot 3, so its bigger number
     is NOT proof of what slot 3 can do. The slot-3 session wins even at a

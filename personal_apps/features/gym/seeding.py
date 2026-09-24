@@ -33,14 +33,26 @@ def _owner(session_, user_id):
     return session_.user_id or user_id or current_user_id()
 
 
+def _done(session_exercise):
+    """The row's sets that count (stats.set_counts): a 0-rep leftover is no
+    set to copy into a plan (G-038)."""
+    return [s for s in session_exercise.sets if stats.set_counts(s.completed, s.reps)]
+
+
 def _session_exercise_e1rm(session_exercise):
-    """The best estimated 1RM among this row's completed sets. What "best"
-    means when two past performances compete: 60x12 beats 62x6, because more
-    reps at similar weight is the stronger performance, and comparing raw top
-    weight would seed the six-rep session as the better one."""
+    """The best judged e1RM among this row's sets. What "best" means when two
+    past performances compete: 60x12 beats 62x6, because more reps at similar
+    weight is the stronger performance, and comparing raw top weight would
+    seed the six-rep session as the better one.
+
+    Judged (stats.judged_e1rm, D3): a set above twelve reps does not make a
+    workout the best one -- 40 × 25 "beat" 55 × 8, so one burnout or typo set
+    decided the next plan (G-130). A row with no judged set ranks below every
+    row with one."""
     return max(
-        (stats.epley_1rm(s.weight, s.reps) for s in session_exercise.sets if s.completed),
-        default=0.0,
+        (value for value in (stats.judged_e1rm(s.weight, s.reps) for s in _done(session_exercise))
+         if value is not None),
+        default=-1.0,
     )
 
 
@@ -78,7 +90,7 @@ def _seed_source(picked):
             # row of it is "last time".
             'is_latest': session_exercise.session_id == newest.session_id,
             'sets': [{'weight': s.weight, 'reps': s.reps}
-                     for s in session_exercise.sets if s.completed]}
+                     for s in _done(session_exercise)]}
 
 
 class Pick(NamedTuple):
@@ -135,7 +147,8 @@ def _pick_session_exercise(exercise_id, position=None, user_id=None, exclude_ses
         .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
         .filter(
             SessionExercise.exercise_id == exercise_id,
-            SessionExercise.sets.any(SessionSet.completed == True),
+            # A set that counts (stats.set_counts): done, with reps.
+            SessionExercise.sets.any((SessionSet.completed == True) & (SessionSet.reps >= 1)),
             # Never seed from a deload -- see the docstring.
             WorkoutSession.is_deload == False,
             WorkoutSession.user_id == user_id,
@@ -181,7 +194,7 @@ def _last_performance(exercise_id, position=None, user_id=None, picked=None):
     last_session_exercise = picked[0]
     if not last_session_exercise:
         return None
-    completed_sets = [s for s in last_session_exercise.sets if s.completed]
+    completed_sets = _done(last_session_exercise)
     if not completed_sets:
         return None
     last_set = completed_sets[-1]
@@ -197,7 +210,21 @@ def _last_full_performance(exercise_id, position=None, user_id=None, exclude_ses
         exclude_session_id=exclude_session_id)
     if not last_session_exercise:
         return []
-    return [{'weight': s.weight, 'reps': s.reps} for s in last_session_exercise.sets if s.completed]
+    return [{'weight': s.weight, 'reps': s.reps} for s in _done(last_session_exercise)]
+
+
+def _deload_applies(session_):
+    """Whether a plan or suggestion made now starts at deload weights: the
+    deload is on and it rescaled the plan -- some set carries base_weight --
+    or nothing is done yet, so switching it on now would rescale everything.
+    Marked after a set was done, the deload only labels the workout and every
+    weight stays (session_admin's toggle, "Nur markiert"): a set planned then
+    must not drop to 70 % behind a full-weight one (B3 review, un-skip)."""
+    if not (session_.is_deload and session_.deload_pct):
+        return False
+    sets = [s for se in session_.exercises for s in se.sets]
+    return (any(s.base_weight is not None for s in sets)
+            or not any(stats.set_counts(s.completed, s.reps) for s in sets))
 
 
 def _seeded_sets(session_, exercise_id, position, user_id=None):
@@ -240,7 +267,7 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
             for j in range(1, stats.DEFAULT_PLAN_SETS + 1)
         ]
 
-    pct = session_.deload_pct if session_.is_deload else None
+    pct = session_.deload_pct if _deload_applies(session_) else None
     if not pct:
         return [
             SessionSet(position=j, weight=prev['weight'], reps=prev['reps'], completed=False)
@@ -268,6 +295,35 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
     ]
 
 
+def missing_planned_sets(session_, session_exercise, user_id=None):
+    """The sets a row coming back from a skip still owes: the plan a fresh
+    start would seed (_seeded_sets), less as many sets as the row kept,
+    numbered on after them (G-125).
+
+    Skipping drops only the open sets, so what the row keeps was done.
+    Un-skipping used to seed only a row with NO set left: one skipped at
+    1 of 3 came back "fully done", and its plan was lost.
+
+    A blank plan (no history) takes the numbers of the last set done here,
+    as typing the first set carries them to the rest when nothing is skipped
+    (routes' _propagate_default_correction) -- and clears the default flag
+    the same way.
+    """
+    kept = sorted(session_exercise.sets, key=lambda s: s.position)
+    done = _done(session_exercise)
+    last = max(done, key=lambda s: s.position) if done else None
+    planned = _seeded_sets(session_, session_exercise.exercise_id,
+                           session_exercise.position, user_id=user_id)
+    missing = planned[len(kept):]
+    after = kept[-1].position if kept else 0
+    for offset, pending in enumerate(missing, start=1):
+        pending.position = after + offset
+        if last is not None and pending.is_default_seeded:
+            pending.weight, pending.reps = last.weight, last.reps
+            pending.is_default_seeded = False
+    return missing
+
+
 def _plan_signature(sets):
     """What a plan says, without which rows say it."""
     return [(s.weight, s.reps) for s in sets]
@@ -285,11 +341,13 @@ def reseed_for_slot(session_, session_exercise, old_position, new_position, user
     - a skipped exercise: it carries no pending sets at all, by
       gym_toggle_skip_session_exercise's own rule;
     - pending sets that are no longer what seeding handed out for the OLD
-      slot: a typed weight, a set removed to do three instead of four, or a
-      deload that was flagged after the first set and so never rescaled the
-      plan. The plan is the lifter's from that point on. This is derived by
-      asking seeding the same question again rather than kept as a flag on the
-      row, so it needs no schema and cannot drift from what seeding does.
+      slot: a typed weight, or a set removed to do three instead of four.
+      The plan is the lifter's from that point on. This is derived by asking
+      seeding the same question again rather than kept as a flag on the row,
+      so it needs no schema and cannot drift from what seeding does. (A
+      deload flagged after the first set is no such change: it only labels
+      the workout, so seeding plans at working weight then too --
+      _deload_applies.)
 
     Moving ONE exercise renumbers every row between its old and new slot, so
     this runs for rows the lifter never touched -- which is exactly why the
@@ -304,6 +362,8 @@ def reseed_for_slot(session_, session_exercise, old_position, new_position, user
     if old_position == new_position or session_exercise.skipped:
         return False
     current = list(session_exercise.sets)
+    # Any tick, not the counting rule: the rewrite below keeps `completed`,
+    # so a ticked 0-rep leftover would come out of it as a counted set.
     if any(s.completed for s in current):
         return False
     exercise_id = session_exercise.exercise_id
@@ -346,7 +406,7 @@ def _seeded_suggestion(session_, exercise, position, user_id=None, picked=None):
     last = _last_performance(exercise.id, position=position, user_id=user_id, picked=picked)
     if not last:
         return None
-    pct = session_.deload_pct if session_.is_deload else None
+    pct = session_.deload_pct if _deload_applies(session_) else None
     if not pct:
         return last
     setup = exercise_setup(_owner(session_, user_id), exercise)

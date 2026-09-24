@@ -13,8 +13,9 @@ import { useSheets } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
 
+/** A record is e1RM only (D3); the weight and volume kinds are gone. */
 const KINDS: Record<RecordKind, string> = {
-  weight: 'Gewichts', e1rm: 'e1RM', volume: 'Volumen',
+  e1rm: 'e1RM',
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -28,6 +29,12 @@ const minutes = (count: number) =>
 /** 185 -> "3:05". */
 const clock = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
+
+/** A replaced original and its substitute share a slot, so the position alone
+ *  gave React two children with one key -- which it may drop or double on the
+ *  next render (B3 review). */
+const entryKey = (entry: FinishedExercise) =>
+  entry.session_exercise_id ?? `${entry.exercise_id}-${entry.position}`
 
 /** The verdict. Every branch says something -- the zero-record case gets a real
  *  substitute rather than falling through to silence. The deload branch sits
@@ -154,9 +161,9 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
     (instant(session.finished_at).getTime() - instant(session.started_at).getTime()) / 60000)
   const weekday = payload.weekday_short[localParts(session.started_at).weekday]
 
-  // Counted from the ticks themselves. Only a WEIGHT record earns a gold tick
-  // (a set can honestly carry that and nothing else), but the label counted
-  // every record kind -- 21 ticks with 1 gold announced "davon 3 mit Rekord".
+  // Counted from the ticks themselves: a gold tick is a record SET, one whose
+  // own e1RM beat every earlier workout (D3), where record_count counts
+  // exercises -- two gold sets on one lift are one record above.
   const tickRecords = payload.tick_states.filter((t) => t === 'record').length
   const lead = payload.records[0]
 
@@ -200,7 +207,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
 
       {payload.tick_states.length > 0 && (
         <div className="ticks" role="img"
-          aria-label={`${payload.total_sets} Sätze erledigt${tickRecords ? `, davon ${tickRecords} mit Gewichts-Rekord` : ''}`}>
+          aria-label={`${payload.total_sets} Sätze erledigt${tickRecords ? `, davon ${tickRecords} mit Rekord` : ''}`}>
           {payload.tick_states.map((tick, i) => (
             <span key={i} className={tick === 'record' ? 'tick is-record' : 'tick is-on'} />
           ))}
@@ -308,8 +315,8 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
       )}
 
       {/* Attention is cold and always carries the word. `advice` is only ever
-          produced for a verdict of 'stagniert', and a deload sets every verdict
-          to None -- so a deload can never reach this. */}
+          produced for a verdict of 'stagniert', and a deload keeps only
+          'rekord' -- so a deload can never reach this. */}
       {payload.advice.length > 0 && (
         <section className="next-time" aria-labelledby="sec-next">
           <h2 className="next-time__lbl" id="sec-next">Nächstes Mal</h2>
@@ -342,7 +349,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                     </p>
                   )}
                   {payload.exercises.map((entry) => (
-                    <div className="row row--top" key={entry.position}>
+                    <div className="row row--top" key={entryKey(entry)}>
                       <span className="row__lead">{entry.position}</span>
                       <a className="row__main stack" href={`/gym/exercises/${entry.exercise_id}`}>
                         <span className="row__name row__name--wrap">{entry.name}</span>
@@ -429,7 +436,9 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           <input type="hidden" name="pct"
             value={String(session.deload_pct ?? payload.deload_default_pct)} />
           <button type="submit" className="quiet-acts__btn">
-            {session.is_deload ? 'Deload-Markierung entfernen' : 'War ein Deload'}
+            {/* An action, both ways (G-078): "War ein Deload" read as a
+                statement. Marking no longer touches records (D3). */}
+            {session.is_deload ? 'Deload-Markierung entfernen' : 'Als Deload markieren'}
           </button>
         </form>
         {/* Delayed-commit undo instead of "unwiderruflich" + confirm(): five
@@ -495,7 +504,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           <p className="flash flash--error" role="alert">{saveError}</p>
         )}
         {payload.exercises.map((entry) => (
-          <div className="sheet__group" key={entry.position}>
+          <div className="sheet__group" key={entryKey(entry)}>
             {/* .label is the meta treatment: uppercase, mono, letterspaced. 4.4
                 is explicit that exercise names are sentence case in the body
                 face, and calls it the most-violated rule in this project. */}

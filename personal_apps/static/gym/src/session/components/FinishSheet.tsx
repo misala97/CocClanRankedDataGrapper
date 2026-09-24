@@ -34,6 +34,9 @@ export function FinishSheet({
   // page first rendered.
   const isOpen = useSheets((s) => s.openId === 'sheet-finish')
   const open = setsTotal - setsDone
+  // sets_done is counts(), the rule gym_discard_session refuses by -- done
+  // sets on a skipped or replaced exercise included -- so this never offers
+  // a discard the server would refuse (G-131).
   const empty = setsDone === 0
   const minutes = isOpen
     ? Math.max(0, Math.floor((Date.now() - new Date(`${startedAt}Z`).getTime()) / 60000))

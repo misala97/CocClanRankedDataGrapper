@@ -334,7 +334,9 @@ def test_reorder_does_not_seed_a_skipped_exercise(solo):
 def test_reorder_after_a_late_deload_does_not_scale_only_the_rows_that_moved(solo):
     """Flagging a deload after the first set deliberately leaves the plan at
     working weight. A reorder then used to re-seed just the rows it moved --
-    at the deload percentage -- and leave a half-scaled workout."""
+    at the deload percentage -- and leave a half-scaled workout. Such a
+    deload only labels the workout (B3 review), so the moved row is planned
+    for its new slot exactly as without one: at working weight."""
     press = _row(solo['session'], PRESS)
     _post(solo['leader'], f"/gym/set/{press['set_ids'][0]}/toggle_complete",
           completed='1', weight=100, reps=5)
@@ -343,7 +345,7 @@ def test_reorder_after_a_late_deload_does_not_scale_only_the_rows_that_moved(sol
     _reorder(solo['leader'], solo['session'], [PRESS, ROW, CURL, RAISE])
 
     raise_row = _row(solo['session'], RAISE)
-    assert raise_row['sets'] == LEADER_RAISE_AT_3
+    assert raise_row['sets'] == LEADER_RAISE_AT_4
     assert raise_row['base_weights'] == [None, None, None]
 
 
@@ -467,6 +469,24 @@ def test_the_leaders_unskip_carries_and_reseeds_from_the_followers_history(pair)
     after = _row(pair['follower_session'], RAISE)
     assert after['skipped'] is False
     assert after['sets'] == FOLLOWER_RAISE_AT_3
+
+
+def test_the_leaders_unskip_plans_what_the_follower_still_owes(pair):
+    """G-125 on the follower's path: the follower did 1 of 3 and skipped,
+    then the leader's un-skip carried over. It re-seeded only a row with no
+    set left, so the row came back "fully done" and its plan was lost."""
+    follower_raise = _row(pair['follower_session'], RAISE)
+    _post(pair['follower'], f"/gym/set/{follower_raise['set_ids'][0]}/toggle_complete",
+          completed='1', weight=35, reps=9)
+    _post(pair['follower'], f"/gym/session-exercise/{follower_raise['id']}/skip")
+    leader_raise = _row(pair['leader_session'], RAISE)['id']
+    _post(pair['leader'], f'/gym/session-exercise/{leader_raise}/skip')
+    _post(pair['leader'], f'/gym/session-exercise/{leader_raise}/skip')
+
+    after = _row(pair['follower_session'], RAISE)
+    assert after['skipped'] is False
+    assert after['sets'] == FOLLOWER_RAISE_AT_3
+    assert after['completed'] == [True, False, False]
 
 
 def test_the_followers_unskip_of_a_leader_skipped_exercise_survives(pair):

@@ -51,7 +51,8 @@ def test_performed_exercise_carries_stack_kg():
 
 
 def test_epley_1rm_at_one_rep_is_the_weight_itself():
-    assert stats.epley_1rm(100.0, 1) == 100.0 * (1 + 1 / 30.0)
+    # D3: a single IS a one-rep max; the formula read 103,3 for 100 × 1.
+    assert stats.epley_1rm(100.0, 1) == 100.0
 
 
 def test_epley_1rm_at_zero_reps_is_the_weight():
@@ -85,7 +86,7 @@ def test_best_weight_and_best_e1rm_pick_different_sets_when_they_should():
     # estimates lower than 12 reps at 90.
     row = perf([(100.0, 5), (90.0, 12)])
     assert stats.best_weight(row) == 100.0
-    assert stats.best_e1rm(row) == stats.epley_1rm(90.0, 12)
+    assert stats.best_e1rm(row) == stats.judged_e1rm(90.0, 12)
 
 
 def day(n):
@@ -123,26 +124,67 @@ def test_more_reps_at_the_same_weight_counts_as_a_pr():
     assert stats.sessions_since_pr(rows) == 0
 
 
-def test_sessions_since_pr_scopes_to_position_when_that_slot_has_history():
+def test_sessions_since_pr_counts_from_the_last_record_in_any_slot():
+    """B3 review: the count ran per slot, so a climb in slot 3 below the
+    lift's own best read as a fresh PR. A record is exercise-wide (D3), and
+    so is the drought: nothing here beat the debut."""
     rows = [
         perf([(85.0, 8)], position=1, started_at=day(0)),
         perf([(70.0, 8)], position=3, started_at=day(7)),
         perf([(72.5, 8)], position=3, started_at=day(14)),
     ]
-    # Slot 3 has 2 sessions and is climbing, so it has a fresh PR of its own --
-    # the heavier slot-1 session must not mask that.
-    assert stats.sessions_since_pr(rows, position=3) == 0
+    assert stats.sessions_since_pr(rows) == 2
 
 
-def test_sessions_since_pr_falls_back_to_all_positions_when_the_slot_is_thin():
+def test_a_deload_record_ends_the_drought_and_a_deload_never_adds_to_it():
+    """B3 review: [100, 100, 100, deload 110] read "Rekord" beside
+    "2 Einheiten ohne PR". The deload workout set a record (D3 b-A), so the
+    count restarts there; a later deload is no failed attempt."""
+    rows = [perf([(100.0, 5)], started_at=day(i), session_id=i + 1) for i in range(3)]
+    rows.append(perf([(110.0, 5)], started_at=day(7), session_id=4, is_deload=True))
+    assert stats.exercise_state(rows) == 'rekord'
+    assert stats.sessions_since_pr(rows) == 0
+    rows.append(perf([(90.0, 5)], started_at=day(14), session_id=5, is_deload=True))
+    assert stats.sessions_since_pr(rows) == 0
+    rows.append(perf([(100.0, 5)], started_at=day(21), session_id=6))
+    assert stats.sessions_since_pr(rows) == 1
+
+
+def test_ties_after_a_deload_record_never_read_as_a_stall():
+    """B3 review: five ties then a deload record flared "Neuer
+    e1RM-Rekord", and the next workout's live line said "Stagniert"."""
+    rows = [perf([(100.0, 5)], started_at=day(i), session_id=i + 1) for i in range(6)]
+    assert stats.exercise_state(rows) == 'stagniert'
+    rows.append(perf([(110.0, 5)], started_at=day(10), session_id=7, is_deload=True))
+    assert stats.exercise_state(rows) == 'rekord'
+    assert stats.sessions_since_pr(rows) == 0
+    assert stats.stall_report({1: rows}) == []
+
+
+def test_a_workout_with_no_judged_set_adds_nothing_to_the_drought():
+    """Sets above 12 reps are shown, never judged (D3 c-A): 8 x 15 was no
+    attempt at the number the drought counts by."""
     rows = [
-        perf([(85.0, 8)], position=1, started_at=day(0)),
-        perf([(80.0, 8)], position=1, started_at=day(7)),
-        perf([(70.0, 8)], position=3, started_at=day(14)),
+        perf([(10.0, 10)], started_at=day(0), session_id=1),
+        perf([(10.0, 10)], started_at=day(7), session_id=2),
+        perf([(8.0, 15)], started_at=day(14), session_id=3),
     ]
-    # Slot 3 has only one session, too little to judge from, so the answer
-    # comes from every position instead of being None.
-    assert stats.sessions_since_pr(rows, position=3) == 2
+    assert stats.sessions_since_pr(rows) == 1
+
+
+def test_the_stall_report_quotes_the_newest_attempt_and_the_last_record():
+    """B3 review: `stuck_at` came from the last row of the slot, a
+    15-rep row included, and `since` from the slot's peak."""
+    rows = [
+        perf([(10.0, 10)], started_at=day(0), session_id=1),
+        perf([(11.0, 10)], started_at=day(7), session_id=2),      # the record
+        *[perf([(10.0, 10)], started_at=day(14 + 7 * i), session_id=3 + i) for i in range(4)],
+        perf([(8.0, 15)], started_at=day(50), session_id=9),
+    ]
+    [entry] = stats.stall_report({1: rows})
+    assert entry['sessions_since_pr'] == 4
+    assert entry['stuck_at'] == 10.0
+    assert entry['since'] == day(7)
 
 
 def test_exercise_state_neu_when_never_performed():
@@ -276,7 +318,8 @@ def test_exercise_progress_on_an_exercise_with_no_history_is_empty_not_broken():
     assert result['last_progression'] is None
 
 
-def test_session_report_totals_and_flags_a_weight_record():
+def test_session_report_totals_and_flags_an_e1rm_record():
+    # A heavier set is an e1RM record, the only kind there is (D3).
     current = [perf([(85.0, 8)], started_at=day(21), session_id=9)]
     history = [
         perf([(80.0, 8)], started_at=day(0), session_id=1),
@@ -287,8 +330,11 @@ def test_session_report_totals_and_flags_a_weight_record():
     assert report['total_sets'] == 1
     assert report['total_volume'] == 680.0
     assert report['record_count'] == 1
-    assert report['records'][0]['kind'] == 'weight'
-    assert report['records'][0]['previous'] == 80.0
+    assert report['records'][0]['kind'] == 'e1rm'
+    assert report['records'][0]['value'] == 107.7
+    assert report['records'][0]['previous'] == 101.3
+    # The first workout that reached the bar, not the later tie of it.
+    assert report['records'][0]['previous_at'] == day(0)
     assert report['exercises'][0]['verdict'] == 'rekord'
 
 
@@ -503,11 +549,10 @@ def test_session_record_counts_compares_the_top_session_against_the_second_best(
     assert counts.get(1, 0) == 0
 
 
-def test_session_record_counts_does_not_count_a_record_since_overtaken_by_a_later_session():
-    # This is the exact real-world bug: session 2 was a record only against
-    # what came before it (session 1), but session 3 has since beaten it --
-    # session 2 must NOT count, because it does not beat *every other*
-    # session, only the ones before it.
+def test_session_record_counts_keeps_a_record_a_later_session_overtook():
+    # D3 a-A: a record beats every EARLIER session and stays one. The old
+    # "beats every OTHER session" rule took session 2's badge back the day
+    # session 3 beat it (G-126: Verlauf 0/1/11/2 against Statistik 8/46/41/3).
     rows = [
         perf([(80.0, 8)], started_at=day(0), session_id=1),
         perf([(85.0, 8)], started_at=day(7), session_id=2),
@@ -516,7 +561,7 @@ def test_session_record_counts_does_not_count_a_record_since_overtaken_by_a_late
     counts = stats.session_record_counts(rows)
 
     assert counts.get(1, 0) == 0
-    assert counts.get(2, 0) == 0
+    assert counts.get(2, 0) == 1
     assert counts.get(3, 0) == 1
 
 
@@ -555,10 +600,9 @@ def test_session_record_counts_ties_do_not_count_as_a_record():
 
 def test_session_record_counts_catches_an_e1rm_record_that_is_not_a_weight_record():
     # session 2 is not the heaviest, but 12 reps at 90 estimates a higher
-    # 1RM than 5 reps at 100 -- it must still register as a record on the
-    # e1RM axis alone. (session 1 legitimately also counts here, via the
-    # separate weight axis: 100kg is still the heaviest of the two -- that
-    # is a real, independent record, not a fixture mistake.)
+    # 1RM than 5 reps at 100 -- it registers on the e1RM alone. Session 1
+    # does not: weight is no kind of record (D3), and a first session has
+    # nothing to beat.
     rows = [
         perf([(100.0, 5)], started_at=day(0), session_id=1),   # heaviest weight
         perf([(90.0, 12)], started_at=day(7), session_id=2),   # lighter but a higher e1RM
@@ -568,8 +612,8 @@ def test_session_record_counts_catches_an_e1rm_record_that_is_not_a_weight_recor
 
     counts = stats.session_record_counts(rows)
 
-    assert counts.get(2, 0) == 1   # via e1RM
-    assert counts.get(1, 0) == 1   # via weight (heaviest of the two)
+    assert counts.get(2, 0) == 1
+    assert counts.get(1, 0) == 0
 
 
 def test_session_record_counts_combines_a_sessions_own_duplicate_rows_for_one_exercise():
@@ -826,82 +870,51 @@ def test_a_run_of_deloads_cannot_push_an_exercise_to_stagniert():
     assert stats.exercise_state(rows) != 'stagniert'
 
 
-def test_a_deload_session_cannot_set_a_record():
-    # 200 kg logged in a deload session must not become the exercise's PR.
+def test_a_deload_session_can_hold_the_best():
+    # D3 b-A: a record is a record, deload or not. (It was 'must not become
+    # the PR'; the heaviest set is a fact either way.)
     rows = [perf([(80.0, 8)], started_at=day(0)),
             perf([(200.0, 8)], started_at=day(7), is_deload=True)]
-    assert stats._pr_weight(rows)['weight'] == 80.0
-    assert stats._pr_e1rm(rows)['weight'] == 80.0
+    assert stats._pr_weight(rows)['weight'] == 200.0
+    assert stats._pr_e1rm(rows)['weight'] == 200.0
 
 
-def test_a_deload_row_is_not_the_baseline_a_later_set_is_judged_against():
-    # The direction that actually depends on the filter: a heavy deload must
-    # not BLOCK a real record. Asserting False here could never discriminate --
-    # filtering only shrinks the set that max() runs over, so anything true
-    # before the filter stays true after it.
+def test_a_deload_row_is_a_bar_like_any_other():
     prior = [perf([(80.0, 8)], started_at=day(0)),
              perf([(200.0, 8)], started_at=day(7), is_deload=True)]
-    assert stats.is_new_best(85.0, 8, prior) is True
+    assert stats.record_detail(85.0, 8, prior) is None
 
 
-def test_is_new_best_is_false_when_only_deload_history_exists():
-    # No real history to beat -- the same "a first attempt isn't a record"
-    # rule the empty case already has.
+def test_deload_history_alone_is_a_bar_too():
     prior = [perf([(60.0, 8)], started_at=day(0), is_deload=True)]
-    assert stats.is_new_best(200.0, 8, prior) is False
+    assert stats.record_detail(200.0, 8, prior)['previous'] == 76.0
 
 
-def test_new_best_detail_names_the_weight_it_beat_and_when():
+def test_record_detail_names_what_it_beat_and_when():
     prior = [perf([(77.5, 8)], started_at=day(0)),
              perf([(80.0, 8)], started_at=day(7)),
              perf([(80.0, 6)], started_at=day(14))]
-    detail = stats.new_best_detail(82.5, 7, prior)
-    assert detail['kind'] == 'weight'
-    assert detail['value'] == 82.5
-    assert detail['previous'] == 80.0
+    detail = stats.record_detail(82.5, 7, prior)
+    assert detail['kind'] == 'e1rm'
+    assert detail['value'] == 101.8
+    assert detail['previous'] == 101.3
     # The session that HELD the best, not the most recent one.
     assert detail['previous_at'] == day(7)
 
 
-def test_new_best_detail_reports_an_e1rm_record_when_the_weight_did_not_move():
-    # Same weight, two more reps: no weight record, but a real one.
+def test_record_detail_counts_more_reps_at_the_same_weight():
     prior = [perf([(80.0, 8)], started_at=day(0))]
-    detail = stats.new_best_detail(80.0, 10, prior)
+    detail = stats.record_detail(80.0, 10, prior)
     assert detail['kind'] == 'e1rm'
-    assert detail['previous'] == round(stats.epley_1rm(80.0, 8), 1)
+    assert detail['previous'] == stats.judged_e1rm(80.0, 8)
 
 
-def test_weight_outranks_e1rm_when_a_set_beats_both():
-    # session_report's _record_rank puts weight first; the live screen has to
-    # agree or one set gets two different names on two screens.
+def test_record_detail_is_none_when_nothing_was_beaten():
     prior = [perf([(80.0, 8)], started_at=day(0))]
-    assert stats.new_best_detail(85.0, 10, prior)['kind'] == 'weight'
-
-
-def test_new_best_detail_is_none_when_nothing_was_beaten():
-    prior = [perf([(80.0, 8)], started_at=day(0))]
-    assert stats.new_best_detail(80.0, 8, prior) is None
-    assert stats.new_best_detail(75.0, 5, prior) is None
-
-
-def test_new_best_detail_and_is_new_best_never_disagree():
-    """is_new_best delegates, so this is a guard against someone
-    reintroducing a second copy of the two comparisons."""
-    prior = [perf([(80.0, 8)], started_at=day(0)),
-             perf([(60.0, 12)], started_at=day(7))]
-    for weight, reps in [(85.0, 8), (80.0, 8), (80.0, 10), (79.0, 20),
-                         (60.0, 12), (100.0, 1), (20.0, 30)]:
-        assert stats.is_new_best(weight, reps, prior) is (
-            stats.new_best_detail(weight, reps, prior) is not None)
-
-
-def test_new_best_detail_ignores_deload_history_like_is_new_best():
-    prior = [perf([(80.0, 8)], started_at=day(0)),
-             perf([(200.0, 8)], started_at=day(7), is_deload=True)]
-    detail = stats.new_best_detail(85.0, 8, prior)
-    assert detail['kind'] == 'weight'
-    # 200 kg came from a deload, so it is not what 85 kg beat.
-    assert detail['previous'] == 80.0
+    assert stats.record_detail(80.0, 8, prior) is None
+    assert stats.record_detail(75.0, 5, prior) is None
+    # Heavier, but a lower e1RM: weight is no kind of record (D3).
+    assert stats.record_detail(90.0, 2, prior) is None
 
 
 def test_stall_report_ignores_deload_sessions():
@@ -927,13 +940,15 @@ def test_session_report_excludes_deloads_from_the_volume_average():
     assert report['exercises'][0]['volume_delta_pct'] == 0
 
 
-def test_session_report_awards_no_record_when_the_session_is_a_deload():
+def test_session_report_keeps_the_records_of_a_deload_session():
+    # G-078: marking the workout a deload took back records already
+    # celebrated in it (D3 b-A).
     current = [perf([(200.0, 8)], started_at=day(7), is_deload=True)]
     history = [perf([(80.0, 8)], started_at=day(0))]
     report = stats.session_report(current, history)
-    assert report['records'] == []
-    assert report['record_count'] == 0
-    assert report['exercises'][0]['is_weight_pr'] is False
+    assert report['record_count'] == 1
+    assert report['exercises'][0]['is_record'] is True
+    assert report['exercises'][0]['verdict'] == 'rekord'
 
 
 def test_session_report_gives_no_stagnation_advice_on_a_deload():
@@ -956,12 +971,12 @@ def test_session_report_on_an_empty_session_is_not_a_deload():
     assert stats.session_report([], [])['is_deload'] is False
 
 
-def test_session_record_counts_ignores_deload_sessions():
+def test_session_record_counts_counts_deload_sessions_like_any_other():
     rows = [
         perf([(80.0, 8)], started_at=day(0), session_id=1),
         perf([(200.0, 8)], started_at=day(7), session_id=2, is_deload=True),
     ]
-    assert stats.session_record_counts(rows) == {}
+    assert stats.session_record_counts(rows) == {2: 1}
 
 
 def test_exercise_progress_keeps_deload_rows_but_marks_them():
@@ -973,7 +988,6 @@ def test_exercise_progress_keeps_deload_rows_but_marks_them():
     assert progress['table'][0]['is_deload'] is True
     assert progress['table'][1]['is_deload'] is False
     assert [point['is_deload'] for point in progress['series'][0]['points']] == [False, True]
-    # ...but the deload still holds no record
     assert progress['pr_weight']['weight'] == 80.0
 
 
@@ -992,7 +1006,8 @@ def test_exercise_progress_has_no_last_progression_when_only_deloads_exist():
     rows = [perf([(60.0, 8)], started_at=day(0), is_deload=True)]
     progress = stats.exercise_progress(rows)
     assert progress['last_progression'] is None
-    assert progress['pr_weight'] is None
+    # The heaviest set is a fact, deload or not (D3).
+    assert progress['pr_weight']['weight'] == 60.0
     assert progress['table'] != []      # the row is still reported
 
 

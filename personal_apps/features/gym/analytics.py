@@ -104,32 +104,31 @@ def monthly_tonnage(rows, now):
     single bar gap and quietly redraw the timeline as though it never happened
     -- the point of this strip is that it is a real calendar.
 
-    `has_record` marks a month containing at least one all-time best (weight or
-    e1RM), computed against every row, so the marks agree with what
-    record_timeline() lists. `has_deload` marks a month containing a deload
-    session; deloads still contribute their tonnage, exactly as they do to
-    totals().
+    `records` counts the month's records -- record_timeline()'s entries, so
+    the two agree. It was a yes/no mark, and with a record in every month it
+    sat on every bar and said nothing (G-026). `deload_volume` is the part of
+    the month's tonnage lifted in deload workouts: a month with one light
+    week was hatched whole, the biggest two months of the year included.
+    Deloads still count in `volume`, exactly as they do in totals().
     """
     if not rows:
         return []
 
     volume = defaultdict(float)
-    deload_months = set()
-    session_month = {}
+    deload_volume = defaultdict(float)
     for row in rows:
         # Local month: a session at 23:30 on the 31st is stored under the next
         # month in UTC, so it was banded into a month it did not happen in.
         local = stats.to_local(row.started_at)
         key = (local.year, local.month)
         volume[key] += stats.row_volume(row)
-        session_month[row.session_id] = key
         if row.is_deload:
-            deload_months.add(key)
+            deload_volume[key] += stats.row_volume(row)
 
-    record_months = set()
+    records = defaultdict(int)
     for record in record_timeline(rows):
         record_local = stats.to_local(record['started_at'])
-        record_months.add((record_local.year, record_local.month))
+        records[(record_local.year, record_local.month)] += 1
 
     first = stats.to_local(min(row.started_at for row in rows))
     year, month = first.year, first.month
@@ -145,8 +144,8 @@ def monthly_tonnage(rows, now):
             'month': month,
             'volume': round(volume.get(key, 0.0), 1),
             'is_gap': key not in volume,
-            'has_deload': key in deload_months,
-            'has_record': key in record_months,
+            'deload_volume': round(deload_volume.get(key, 0.0), 1),
+            'records': records.get(key, 0),
         })
         month += 1
         if month > 12:
@@ -172,11 +171,15 @@ def progression_ranking(rows, since=None):
     data does not make.
 
     `points` is the per-session best e1RM in chronological order, for the
-    sparkline. One point per session, not per set.
+    sparkline. One point per session, not per set. The judged e1RM, as every
+    judgement reads it (stats.judged_e1rm): a session with only sets above
+    twelve reps is no point on this curve.
     """
     by_exercise = defaultdict(list)
     for row in stats.progression_rows(rows):
         if since is not None and row.started_at < since:
+            continue
+        if stats.judged_best(row) is None:
             continue
         by_exercise[row.exercise_id].append(row)
 
@@ -186,7 +189,7 @@ def progression_ranking(rows, since=None):
         # (two slots) is still one data point on its curve
         best_per_session = {}
         for row in exercise_rows:
-            current = stats.best_e1rm(row)
+            current = stats.judged_best(row)
             seen = best_per_session.get(row.session_id)
             if seen is None or current > seen[1]:
                 best_per_session[row.session_id] = (row.started_at, current)
@@ -554,17 +557,26 @@ def balance_drift(rows, now):
     much was trained at all, and a lifter who simply did less last month would
     read as having abandoned every muscle group at once.
 
-    Both periods must hold real training. Everything before the window is the
-    comparison, so a lifter one window into their history has nothing to have
-    drifted from -- that is silence, not a drift of zero.
+    Two equal windows: the last DRIFT_WINDOW_DAYS against the same span just
+    before them. "Before" was the whole history ahead of the window (G-127),
+    so a month was set against years, and the comparison moved every time
+    the history grew. Both must hold real training, so a lifter one window
+    into their history has nothing to have drifted from -- that is silence,
+    not a drift of zero.
+
+    `delta` is in percentage points (G-127: it was labelled "%"); the page
+    shows both shares.
     """
     cutoff = now - dt.timedelta(days=DRIFT_WINDOW_DAYS)
+    start = cutoff - dt.timedelta(days=DRIFT_WINDOW_DAYS)
     recent_volume = defaultdict(float)
     earlier_volume = defaultdict(float)
     recent_sessions = set()
     earlier_sessions = set()
 
     for row in rows:
+        if row.started_at < start:
+            continue
         recent = row.started_at >= cutoff
         volume = (recent_volume if recent else earlier_volume)
         sessions = (recent_sessions if recent else earlier_sessions)
@@ -674,29 +686,26 @@ def record_drought(rows):
     deliberately not a record (see record_timeline), but it is still the last
     time the number moved, so the drought runs from there rather than being
     reported as unanswerable.
-    """
-    last_record = {}
-    for record in record_timeline(rows):
-        exercise_id = record['exercise_id']
-        if exercise_id not in last_record:      # newest first, so the first wins
-            last_record[exercise_id] = record['started_at']
 
-    by_exercise = defaultdict(dict)
-    for row in stats.progression_rows(rows):
-        by_exercise[row.exercise_id][row.session_id] = (row.started_at, row.name)
+    The count is stats.drought(), the one behind every "ohne PR" and
+    "Stagniert" in the app, so this list and the exercise's own page can
+    never disagree.
+    """
+    by_exercise = defaultdict(list)
+    for row in rows:
+        by_exercise[row.exercise_id].append(row)
 
     exercises = []
-    for exercise_id, sessions in by_exercise.items():
-        ordered = sorted(sessions.values())
-        if len(ordered) < MIN_SESSIONS_FOR_DROUGHT:
+    for exercise_id, exercise_rows in by_exercise.items():
+        counted = stats.drought(exercise_rows)
+        if counted is None or counted['workouts'] < MIN_SESSIONS_FOR_DROUGHT:
             continue
-        anchor = last_record.get(exercise_id, ordered[0][0])
         exercises.append({
             'exercise_id': exercise_id,
-            'name': ordered[0][1],
-            'sessions': len(ordered),
-            'sessions_since': sum(1 for started_at, _ in ordered if started_at > anchor),
-            'last_record_at': last_record.get(exercise_id),
+            'name': exercise_rows[0].name,
+            'sessions': counted['workouts'],
+            'sessions_since': counted['since'],
+            'last_record_at': counted['last_record_at'],
         })
 
     exercises.sort(key=lambda entry: (-entry['sessions_since'], entry['name']))
@@ -758,64 +767,24 @@ def effort_distribution(rows):
 
 
 def record_timeline(rows):
-    """Rekorde: every personal best ever set, newest first.
+    """Rekorde: every record ever set, newest first -- one entry per exercise
+    and workout, with the e1RM it reached and the best it beat.
 
-    A judgement, so deload rows are dropped -- a light week cannot hold a
-    record.
-
-    Chronological by construction: a record is a session that beat every
-    EARLIER session for that exercise. stats.session_record_counts() asks a
-    deliberately different question ("beats every OTHER session") so a page can
-    show a count that does not change as later sessions arrive. A timeline is a
-    history, and history is what was true on the day.
-
-    The first session of an exercise is never a record: there was nothing to
-    beat, and calling it one would make every exercise's debut a milestone.
+    The one meaning (stats.record_marks, D3): against every EARLIER workout,
+    e1RM only, deloads counted like any other workout. The same records
+    Verlauf and Heute count, so the two pages no longer disagree about a
+    month (G-126), and a workout's debut is never one: there was nothing to
+    beat.
     """
-    by_exercise = defaultdict(dict)
-    for row in stats.progression_rows(rows):
-        seen = by_exercise[row.exercise_id].get(row.session_id)
-        candidate = (row.started_at, stats.best_weight(row), stats.best_e1rm(row), row.name)
-        if seen is None:
-            by_exercise[row.exercise_id][row.session_id] = candidate
-        else:
-            # same exercise twice in one session: judge it as its best showing
-            by_exercise[row.exercise_id][row.session_id] = (
-                seen[0], max(seen[1], candidate[1]), max(seen[2], candidate[2]), seen[3])
-
-    timeline = []
-    for exercise_id, sessions in by_exercise.items():
-        ordered = sorted(sessions.items(), key=lambda item: item[1][0])
-        best_weight = None
-        best_e1rm = None
-        for session_id, (started_at, weight, e1rm, name) in ordered:
-            # ONE entry per exercise-day, carrying whichever bests it set.
-            #
-            # These used to be two rows. They are not two events: e1RM is Epley
-            # arithmetic over the same set, so it moves whenever weight or reps
-            # move, and a weight PB almost always drags an e1RM PB along with
-            # it -- 43 of 57 rows on a real history were e1RM, and 12 dates
-            # carried both kinds for the same lift. Two rows made one lift look
-            # like two milestones and made the timeline's own count untrue to
-            # what happened. Nothing is dropped: both figures ride on the row.
-            entry = None
-            if best_weight is not None and weight > best_weight:
-                entry = {'started_at': started_at, 'session_id': session_id,
-                         'exercise_id': exercise_id, 'name': name,
-                         'weight': {'value': round(weight, 1), 'previous': round(best_weight, 1)},
-                         'e1rm': None}
-            if best_e1rm is not None and e1rm > best_e1rm:
-                gain = {'value': round(e1rm, 1), 'previous': round(best_e1rm, 1)}
-                if entry is None:
-                    entry = {'started_at': started_at, 'session_id': session_id,
-                             'exercise_id': exercise_id, 'name': name,
-                             'weight': None, 'e1rm': gain}
-                else:
-                    entry['e1rm'] = gain
-            if entry is not None:
-                timeline.append(entry)
-            best_weight = weight if best_weight is None else max(best_weight, weight)
-            best_e1rm = e1rm if best_e1rm is None else max(best_e1rm, e1rm)
-
+    by_workout = {}
+    for row, mark in stats.record_marks(rows).items():
+        key = (row.exercise_id, row.session_id)
+        entry = by_workout.get(key)
+        # The same exercise twice in one workout: its stronger showing.
+        if entry is None or mark['value'] > entry['e1rm']['value']:
+            by_workout[key] = {'started_at': row.started_at, 'session_id': row.session_id,
+                               'exercise_id': row.exercise_id, 'name': row.name,
+                               'e1rm': {'value': mark['value'], 'previous': mark['previous']}}
+    timeline = list(by_workout.values())
     timeline.sort(key=lambda entry: (entry['started_at'], entry['name']), reverse=True)
     return timeline

@@ -24,8 +24,10 @@ export interface TonnageMonth {
   volume: number
   /** A month with no training at all, drawn as a break rather than a zero. */
   is_gap: boolean
-  has_deload: boolean
-  has_record: boolean
+  /** The part of `volume` lifted in deload workouts. */
+  deload_volume: number
+  /** Records set in the month (exercise-workouts, as the timeline counts). */
+  records: number
 }
 
 export interface ProgressionRow {
@@ -201,9 +203,9 @@ export interface TimelineRecord {
   session_id: number
   exercise_id: number
   name: string
-  /** A row is here because it set at least one of the two. */
-  weight: RecordMove | null
-  e1rm: RecordMove | null
+  /** A record is e1RM only (D3): the best the workout reached, and the best
+   *  of every workout before it. */
+  e1rm: RecordMove
 }
 
 export interface RecordYear {

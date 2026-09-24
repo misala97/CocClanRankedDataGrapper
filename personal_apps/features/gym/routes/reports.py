@@ -26,7 +26,7 @@ from .helpers import (
     DAYPART_NAMES, MONTH_NAMES, WEEKDAY_NAMES, WEEKDAY_SHORT, InvalidInput,
 )
 from .history import (
-    _session_rest_entries, load_performed,
+    _session_rest_entries, done_sets, load_performed,
 )
 from ._blueprint import (
     gym_bp,
@@ -47,21 +47,17 @@ def gym_verlauf():
     sessions = (
         my_sessions()
         .filter(WorkoutSession.finished_at.isnot(None))
-        .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise))
+        .options(joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
+                 joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets))
         .order_by(WorkoutSession.started_at.desc())
         .all()
     )
 
-    # Replaced-away originals must not contribute to their own session's
-    # volume/record totals below -- the same exclusion performed_from_session()
-    # already applies for session_report()/the detail page: the substitute
-    # took over that slot, and counting both would inflate the session's
-    # totals with an exercise the historical comparison was never scoped to.
-    # `sessions` above already eager-loads every finished session's
-    # .exercises (for the exercise-list column) -- reused here for zero extra
-    # queries, reading replaces_id (a plain, already-loaded column) rather
-    # than the replaced_by backref, which would lazy-load once per row (see
-    # session_detail's identical replaced_original_ids, same reasoning).
+    # Replaced-away originals, from replaces_id (a plain, already-loaded
+    # column) rather than the replaced_by backref, which would lazy-load once
+    # per row. Their done sets count like any other (Q1), so they are in the
+    # totals below -- and in the name list only when they have some: one
+    # swapped out before its first set contributed nothing.
     replaced_away_ids = {
         se.replaces_id
         for s in sessions for se in s.exercises
@@ -73,18 +69,15 @@ def gym_verlauf():
     # own docstring). Every session's volume and record count below is
     # derived from this one result set in Python; must not be recomputed per
     # session (spec 5.4, same discipline as gym_heute/gym_uebungen).
-    performed = load_performed(exclude_session_exercise_ids=replaced_away_ids)
+    performed = load_performed()
 
     volume_by_session = {}
     for row in performed:
         volume_by_session[row.session_id] = volume_by_session.get(row.session_id, 0.0) + stats.row_volume(row)
 
-    # Same "beats every OTHER session, regardless of when it happened"
-    # semantics stats.session_report's own is_weight_pr/is_e1rm_pr/
-    # is_volume_pr use -- computed for every session in this one pass so a
-    # session's count here always agrees with what its own detail page
-    # (session_report) shows, instead of the strictly weaker "beats only the
-    # sessions before it" a chronological-only comparison would give.
+    # Against the sessions BEFORE each one (stats.record_marks, D3), so a
+    # session keeps its count when a later one goes higher -- the same records
+    # its own debrief names and Statistik lists.
     records_by_session = stats.session_record_counts(performed)
 
     history = [
@@ -97,7 +90,7 @@ def gym_verlauf():
             # mid-workout, so a session showed 10 names next to a total built
             # from 7 -- and opening it revealed the 7.
             'exercises': [se.exercise.name for se in s.exercises
-                          if se.id not in replaced_away_ids],
+                          if se.id not in replaced_away_ids or done_sets(se)],
             # Searchable date text, so a query like "31.07" or "juli" works.
             # data-search carried only the name and the exercises, and item 5
             # stopped appending the date to new session names -- so date search
@@ -292,15 +285,10 @@ def gym_statistik():
     query per exercise, no matter how long the history gets. All analysis
     lives in analytics.py.
 
-    Unlike gym_verlauf, this does NOT exclude a replaced-away original's sets.
-    That is deliberate. Verlauf reports a session's volume as the sum of the
-    slots it ran, so an abandoned original would double-count a slot the
-    substitute already represents. Statistik describes what was lifted, and a
-    set you performed before swapping the exercise out was still performed --
-    the same reason deload sessions count toward tonnage here. The consequence
-    is that "Groesstes Workout" can exceed the figure Verlauf shows for that
-    same session; if that ever needs to change, change it here, not by
-    quietly filtering one of them.
+    A replaced-away original's done sets count here, as they do in Verlauf
+    (Q1): Statistik describes what was lifted, and a set you performed before
+    swapping the exercise out was still performed -- the same reason deload
+    sessions count toward tonnage here.
     """
     now = dt.datetime.utcnow()
     performed = load_performed()

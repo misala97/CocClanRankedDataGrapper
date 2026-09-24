@@ -42,7 +42,7 @@ def _minimal():
 def _a_row():
     return {
         'session_id': 7, 'started_at': '2026-08-01T18:30:00',
-        'position': 2, 'is_deload': False, 'sets_display': '3 × 8',
+        'position': 2, 'is_deload': False, 'is_record': False, 'sets_display': '3 × 8',
         'best_weight': 80.0, 'volume': 1920.0, 'e1rm': 100.0,
     }
 
@@ -121,7 +121,7 @@ def test_matches_real_chart_geometry():
         for exercise in touched_exercises(_admin_id()):
             rows = load_performed(exercise_ids=[exercise.id], include_active=True)
             progress = stats.exercise_progress(rows, position=None)
-            candidate = _chart_geometry(progress['series'], progress.get('pr_e1rm'))
+            candidate = _chart_geometry(progress['series'])
             if candidate:
                 geometry = candidate
                 break

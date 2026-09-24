@@ -33,7 +33,6 @@ const BURST_COUNT = 23
 const EXIT_MS = 180
 
 const KINDS: Record<Celebration['record']['kind'], string> = {
-  weight: 'Neuer Gewichts-Rekord',
   e1rm: 'Neuer e1RM-Rekord',
 }
 

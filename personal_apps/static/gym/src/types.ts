@@ -64,6 +64,9 @@ export interface SessionRow {
   started_at: string
   position: number
   is_deload: boolean
+  /** This workout's best e1RM beat every workout before it (D3). History: a
+   *  record later overtaken keeps the tag. */
+  is_record: boolean
   sets_display: string
   best_weight: number
   volume: number
@@ -90,14 +93,14 @@ export interface E1rmPR {
   position: number
 }
 
-/** x/y are SVG coordinates. e1rm and started_at ride along because
- *  _chart_geometry computes is_best from them after laying the points out. */
+/** x/y are SVG coordinates. e1rm and started_at ride along for the readout.
+ *  is_record as on SessionRow. */
 export interface ChartPoint {
   x: number
   y: number
   e1rm: number
   started_at: string
-  is_best: boolean
+  is_record: boolean
   is_deload: boolean
 }
 

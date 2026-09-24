@@ -15,19 +15,23 @@ describe('the session payload fixture', () => {
     expect(unexpected).toEqual([])
   })
 
-  it('omits sets belonging to a skipped exercise', () => {
-    // The route counts ticks only for exercises it did not skip, so the strip
-    // is shorter than the sum of every exercise's sets. A component that
-    // zipped ticks against all sets would silently misalign.
+  it('ticks every set that counts, and no open set of a skipped exercise', () => {
+    // Q1: a done set counts wherever it is -- on a skipped exercise, or
+    // carried from a replaced original -- while a skipped exercise's open
+    // sets are not going to be lifted. So the strip is not the sum of every
+    // exercise's sets, and a component that zipped ticks against all sets
+    // would silently misalign.
     const everySet = fixture.visible_exercises
       .reduce((n, se) => n + se.sets.length, 0)
-    const skippedSets = fixture.visible_exercises
+    const skippedOpen = fixture.visible_exercises
       .filter((se) => se.skipped)
-      .reduce((n, se) => n + se.sets.length, 0)
+      .reduce((n, se) => n + se.sets.filter((s) => !s.completed).length, 0)
+    const carried = fixture.visible_exercises
+      .reduce((n, se) => n + se.replaced_sets_done, 0)
 
-    expect(skippedSets).toBeGreaterThan(0)
-    expect(fixture.tick_states).toHaveLength(everySet - skippedSets)
-    expect(fixture.sets_total).toBe(everySet - skippedSets)
+    expect(skippedOpen).toBeGreaterThan(0)
+    expect(fixture.tick_states).toHaveLength(everySet - skippedOpen + carried)
+    expect(fixture.sets_total).toBe(everySet - skippedOpen + carried)
   })
 
   it('only names seed bases the union allows, keyed like suggestions', () => {
@@ -53,7 +57,7 @@ describe('the session payload fixture', () => {
     // to say.
     const setIds = fixture.visible_exercises
       .flatMap((se) => se.sets).map((s) => String(s.id))
-    const allowed = new Set(['weight', 'e1rm'])
+    const allowed = new Set(['e1rm'])
     for (const [key, record] of Object.entries(fixture.record_details)) {
       expect(setIds).toContain(key)
       expect(fixture.record_set_ids).toContain(Number(key))

@@ -11,7 +11,7 @@ import type { Celebration } from '../useRecordTakeover'
 const celebration = (over: Partial<Celebration> = {}): Celebration => ({
   setId: 101,
   record: {
-    kind: 'weight', value: 82.5, previous: 80.0,
+    kind: 'e1rm', value: 82.5, previous: 80.0,
     previous_at: '2026-09-09T18:30:00',
   },
   exerciseName: 'Bankdrücken',
@@ -33,12 +33,10 @@ afterEach(() => {
 })
 
 describe('RecordTakeover', () => {
-  it('names which kind of record was set', () => {
+  it('names the record an e1RM record, the only kind there is (D3)', () => {
     mount()
-    expect(screen.getByText('Neuer Gewichts-Rekord')).toBeInTheDocument()
-    mount({ record: { kind: 'e1rm', value: 88.0, previous: 86.7,
-                      previous_at: '2026-09-09T18:30:00' } })
     expect(screen.getByText('Neuer e1RM-Rekord')).toBeInTheDocument()
+    expect(screen.queryByText(/Gewichts-Rekord/)).not.toBeInTheDocument()
   })
 
   it('says which set of which exercise it was', () => {

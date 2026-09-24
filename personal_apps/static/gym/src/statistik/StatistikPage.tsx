@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type CSSProperties } from 'react'
 import type {
   ProgressionRow, StatistikPayload, TimelineRecord, TonnageMonth,
 } from './types'
@@ -39,22 +39,18 @@ function span(days: number): string {
 }
 
 function Record({ record, hit = false }: { record: TimelineRecord; hit?: boolean }) {
-  // A row is in the timeline because it set at least one of the two, and the
-  // weight record leads when it set both.
-  const move = record.weight ?? record.e1rm!
-  const unit = record.weight ? 'kg' : 'kg e1RM'
+  // A record is an e1RM (D3): what the workout reached, against the best of
+  // every workout before it. The weight row that used to lead is gone.
+  const move = record.e1rm
   return (
     <a className={`rec${hit ? ' is-hit' : ''}`} href={`/gym/session/${record.session_id}`}
       onClick={morphFrom('session', '.rec__name')}>
       <span className="rec__date">{shortDate(record.started_at)}</span>
       <span className="rec__name">{record.name}</span>
       <span className="rec__val">
-        {`${kg1(move.value)} ${unit} `}
+        {`${kg1(move.value)} kg e1RM `}
         <small>{`vorher ${kg1(move.previous)}`}</small>
       </span>
-      {record.weight !== null && record.e1rm !== null && (
-        <span className="rec__also">{`auch e1RM ${kg1(record.e1rm.value)}`}</span>
-      )}
     </a>
   )
 }
@@ -324,9 +320,12 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 // so no clock is consulted (a clock check would flip the
                 // month-boundary render).
                 const isCurrent = i === months.length - 1 && !m.is_gap
+                // Only the deload SHARE is hatched, from the foot of the bar
+                // (G-026): one light workout among twelve hatched the month.
+                const deloadShare = m.volume > 0 ? m.deload_volume / m.volume : 0
                 const label = `${payload.month_names[m.month - 1]} ${m.year}: ${de(m.volume)} kg`
-                  + (m.has_record ? ', Rekordmonat' : '')
-                  + (m.has_deload ? ', Deload' : '')
+                  + (m.records > 0 ? `, ${m.records} ${m.records === 1 ? 'Rekord' : 'Rekorde'}` : '')
+                  + (m.deload_volume > 0 ? `, davon ${de(m.deload_volume)} kg Deload` : '')
                   + (m.is_gap ? ', kein Workout' : '')
                   + (isCurrent ? ', läuft noch' : '')
                 const key = `${m.year}-${m.month}`
@@ -337,14 +336,18 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                      is the one caller that raises no pointer at all (detail 0
                      -- Enter and Space synthesise a clickless click). */
                   <button type="button" key={key} role="listitem"
-                    className={`mo${m.has_record ? ' is-record' : ''}${m.has_deload ? ' is-deload' : ''}${m.is_gap ? ' is-gap' : ''}${isCurrent ? ' is-current' : ''}${selKeys.has(key) ? ' is-picked' : ''}`}
+                    className={`mo${deloadShare > 0 ? ' is-deload' : ''}${m.is_gap ? ' is-gap' : ''}${isCurrent ? ' is-current' : ''}${selKeys.has(key) ? ' is-picked' : ''}`}
                     aria-label={label} title={label}
                     aria-pressed={selKeys.has(key)}
                     onClick={(e) => {
                       if (e.detail !== 0) return
                       toggleMonth(i)
                     }}
-                    style={{ blockSize: `${m.is_gap ? 2 : roundTo((m.volume / peak) * 100, 1)}%` }} />
+                    style={{
+                      blockSize: `${m.is_gap ? 2 : roundTo((m.volume / peak) * 100, 1)}%`,
+                      ...(deloadShare > 0
+                        ? { '--deload-share': `${roundTo(deloadShare * 100, 1)}%` } : {}),
+                    } as CSSProperties} />
                 )
               })}
             </div>
@@ -369,8 +372,16 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                     <>
                       {`${payload.month_names[m.month - 1]} ${m.year} · `}
                       <b>{`${de(m.volume)} kg`}</b>
-                      {m.has_record && <span className="chart__read-tag vtag vtag--record">Rekordmonat</span>}
-                      {m.has_deload && <span className="chart__read-tag vtag vtag--deload">Deload</span>}
+                      {m.records > 0 && (
+                        <span className="chart__read-tag vtag vtag--record">
+                          {`${m.records} ${m.records === 1 ? 'Rekord' : 'Rekorde'}`}
+                        </span>
+                      )}
+                      {m.deload_volume > 0 && (
+                        <span className="chart__read-tag vtag vtag--deload">
+                          {`Deload ${de(m.deload_volume)} kg`}
+                        </span>
+                      )}
                       {m.is_gap && ' · kein Workout'}
                     </>
                   )
@@ -378,13 +389,11 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 const first = selMonths[0]!
                 const last = selMonths[selMonths.length - 1]!
                 const sum = selMonths.reduce((a, m) => a + m.volume, 0)
-                const recordMonths = selMonths.filter((m) => m.has_record).length
                 return (
                   <>
                     {`${payload.month_names[first.month - 1]} ${first.year} – ${payload.month_names[last.month - 1]} ${last.year}`}
                     {` · ${selMonths.length} Monate · `}
                     <b>{`${de(sum)} kg`}</b>
-                    {recordMonths > 0 && ` · ${recordMonths} ${recordMonths === 1 ? 'Rekordmonat' : 'Rekordmonate'}`}
                     {recordsInSel > 0 && ` · ${recordsInSel} ${recordsInSel === 1 ? 'Rekord' : 'Rekorde'} unten markiert`}
                   </>
                 )
@@ -398,10 +407,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 Tonnage
               </span>
               <span className="key">
-                <span className="key__dot key__dot--sq key__dot--record" />Monat mit Rekord
-              </span>
-              <span className="key">
-                <span className="key__dot key__dot--sq key__dot--deload" />Deload-Monat
+                <span className="key__dot key__dot--sq key__dot--deload" />Deload-Anteil
               </span>
               <span className="key">
                 {/* Not "Pause": on this page that word is already the gap
@@ -716,7 +722,9 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
           <div className="sec__head">
             <h2 className="label" id="drift-h">Was sich zuletzt verschoben hat</h2>
             <span className="sec__sp" />
-            <span className="label">{`Letzte ${drift.window_days} Tage gegen davor`}</span>
+            <span className="label">
+              {`Letzte ${drift.window_days} Tage gegen die ${drift.window_days} davor`}
+            </span>
           </div>
           {drift.statable && topDrift !== null && bottomDrift !== null ? (
             <>
@@ -730,9 +738,12 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                           / Math.max(Math.abs(topDrift.delta), Math.abs(bottomDrift.delta), 1)) * 100, 1)}%`,
                       }} />
                   </span>
-                  <span className="prog__pct"
-                    title={`${whole(group.earlier_share)} % → ${whole(group.recent_share)} %`}>
-                    {`${signed1(group.delta)} %`}
+                  {/* Both shares, not their difference: the difference
+                      is in percentage POINTS and read as a percentage --
+                      "−8,9 %" for a share that more than halved (G-127). */}
+                  <span className="prog__pct prog__pct--shares"
+                    title={`${signed1(group.delta)} Prozentpunkte`}>
+                    {`${kg1(group.earlier_share)} % → ${kg1(group.recent_share)} %`}
                   </span>
                 </div>
               ))}
@@ -742,8 +753,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
             </>
           ) : (
             <p className="empty">
-              Noch kein Davor zum Vergleichen — dafür braucht es Workouts vor
-              den letzten {drift.window_days} Tagen.
+              {`Noch kein Vergleich — dafür braucht es genug Workouts in den letzten ${drift.window_days} Tagen und in den ${drift.window_days} davor.`}
             </p>
           )}
         </section>
@@ -781,7 +791,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
         </div>
       </div>
 
-      {/* One row per exercise-day, carrying whichever bests it set. The recent
+      {/* One row per exercise-day that set an e1RM record (D3). The recent
           ones are flat and everything older folds into year bands, because
           bounding by CALENDAR did nothing for a history that fits inside one
           year: one band, forced open, holding every record there was. */}

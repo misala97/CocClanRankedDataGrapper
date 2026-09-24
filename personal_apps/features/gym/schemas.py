@@ -85,6 +85,9 @@ class SessionRow(_Model):
     started_at: datetime
     position: int
     is_deload: bool
+    #: This workout's best e1RM beat every workout before it (D3). History:
+    #: a record later overtaken keeps the tag.
+    is_record: bool
     sets_display: str
     best_weight: float
     volume: float
@@ -122,12 +125,12 @@ class E1rmPR(_Model):
 
 class ChartPoint(_Model):
     """One plotted session. x/y are SVG coordinates; e1rm and started_at are
-    carried alongside because _chart_geometry computes is_best from them."""
+    carried alongside for the readout. is_record as on SessionRow."""
     x: float
     y: float
     e1rm: float
     started_at: datetime
-    is_best: bool
+    is_record: bool
     is_deload: bool
 
 
@@ -293,6 +296,11 @@ class LiveExercise(_Model):
     #: Where the exercise's drawing loads from (art.picture_url), or None
     #: while it has none -- off the list, or not drawn yet: the placeholder.
     picture: str | None
+    #: The done sets (count, volume) of the hidden originals this row
+    #: replaced, so the client's retally counts them in place (Q1). Zero
+    #: where nothing was replaced.
+    replaced_sets_done: int
+    replaced_volume: float
     sets: list[LiveSet]
 
 
@@ -357,11 +365,10 @@ class LiveRecord(_Model):
     are built from the same judgement in the same loop, so a detail without a
     gold chip (or the reverse) is a bug, not a state.
 
-    `value` and `previous` are kilograms for a weight record and estimated
-    one-rep-max kilograms for an e1rm one: the same units as each other, and
-    the same pair session_report's flare prints, so the live screen and the
-    debrief never name one set's record two different ways."""
-    kind: Literal['weight', 'e1rm']
+    `value` and `previous` are estimated one-rep-max kilograms: a record is
+    e1RM only (D3), the same pair session_report's records print, so the live
+    screen and the debrief never name one set's record two different ways."""
+    kind: Literal['e1rm']
     value: float
     previous: float
     # The start of the session that held the old best.
@@ -762,12 +769,12 @@ class FinishedExercise(_Model):
     has_history: bool
     avg_volume: float | None
     volume_delta_pct: int | None
-    is_weight_pr: bool
-    is_volume_pr: bool
-    is_e1rm_pr: bool
+    #: This exercise's best e1RM here beat every earlier workout's (D3).
+    is_record: bool
     sessions_since_pr: int | None
-    # 'rekord' | 'stagniert' | 'steigend' | 'neu', or None -- a deload sets
-    # every verdict to None, which is why the tag strip can be empty.
+    # 'rekord' | 'stagniert' | 'steigend' | 'neu', or None -- a deload keeps
+    # only 'rekord' (a record is a record, D3) and has no progress verdict
+    # otherwise, which is why the tag strip can be empty.
     verdict: str | None
     set_rows: list[CorrectableSet]
     # The per-exercise note and pain flag, which belong to the workout rather
@@ -779,9 +786,10 @@ class FinishedExercise(_Model):
 
 
 class SessionRecord(_Model):
-    """One record this session set. Ranked by kind then by relative gain, so
-    records[0] is the strongest claim rather than the biggest number."""
-    kind: Literal['weight', 'e1rm', 'volume']
+    """One record this session set, one per exercise, e1RM only (D3). Ranked
+    by relative gain, so records[0] is the strongest claim rather than the
+    biggest number."""
+    kind: Literal['e1rm']
     name: str
     exercise_id: int
     position: int
@@ -829,8 +837,8 @@ class FinishedPayload(_Model):
     # would quote a percentage of a working weight over the real numbers.
     deload_applied: bool
     previous_session: PreviousSession | None
-    # One entry per logged set, in order: 'record' only for the single set that
-    # lifted a WEIGHT record, 'done' for the rest.
+    # One entry per logged set, in order: 'record' for every set whose e1RM
+    # beat each earlier workout's (D3), 'done' for the rest.
     tick_states: list[Literal['record', 'done']]
     # Measured pace -- the average gap between consecutive sets, which holds
     # the rest AND the next set. None for any session logged before
@@ -883,8 +891,10 @@ class TonnageMonth(_Model):
     volume: float
     #: A month with no training at all, drawn as a break rather than as a zero.
     is_gap: bool
-    has_deload: bool
-    has_record: bool
+    #: The part of `volume` lifted in deload workouts.
+    deload_volume: float
+    #: Records set in the month (exercise-workouts, as the timeline counts).
+    records: int
 
 
 class ProgressionRow(_Model):
@@ -1070,10 +1080,9 @@ class TimelineRecord(_Model):
     session_id: int
     exercise_id: int
     name: str
-    #: A session can set either kind, both, or -- for a row that is here at
-    #: all -- at least one.
-    weight: RecordMove | None
-    e1rm: RecordMove | None
+    #: A record is e1RM only (D3): the best the workout reached, and the
+    #: best of every workout before it.
+    e1rm: RecordMove
 
 
 class RecordYear(_Model):

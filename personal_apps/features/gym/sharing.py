@@ -26,8 +26,9 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from extensions import db
 from models import PendingPush, SessionExercise, SharedSession, WorkoutSession
 
+from . import stats
 from .locking import lock_sessions
-from .seeding import _seeded_sets, reseed_for_slot
+from .seeding import _seeded_sets, missing_planned_sets, reseed_for_slot
 
 
 def active_links_led_by(session_id):
@@ -129,7 +130,9 @@ def _release_mirror(follower, row):
     stops being shared -- mirrors_id goes, so from here on it is an exercise
     the follower added themselves. An untouched row still disappears.
     """
-    if any(s.completed for s in row.sets):
+    # Logged is the one counting rule (Q1): a ticked set with no reps is
+    # no work, and it goes with the row.
+    if any(stats.set_counts(s.completed, s.reps) for s in row.sets):
         row.mirrors_id = None
         return True
     # Deleting an exercise cascades to its sets, so clear the session's
@@ -207,7 +210,7 @@ def _carry_skip(shared, leader_row):
     reconcile_follower for what mirroring the flag on every structural change
     did to the follower's own choices. Applied with the same meaning a skip
     has on your own screen (gym_toggle_skip_session_exercise): skipping drops
-    the pending sets, un-skipping seeds a plan if none is left -- from the
+    the pending sets, un-skipping plans the sets still owed -- from the
     FOLLOWER's history, at the follower's slot.
 
     An exercise the follower has already started is left alone. Their logged
@@ -232,16 +235,17 @@ def _carry_skip(shared, leader_row):
     if row is None or row.skipped == leader_row.skipped:
         return False
     if leader_row.skipped:
-        if any(s.completed for s in row.sets):
+        if any(stats.set_counts(s.completed, s.reps) for s in row.sets):
             return False
         row.skipped = True
-        for pending in list(row.sets):
+        # Only what is still pending, as on your own screen: a ticked set
+        # with no reps stays where the lifter left it.
+        for pending in [s for s in row.sets if not s.completed]:
             row.sets.remove(pending)
     else:
         row.skipped = False
-        if not row.sets:
-            row.sets.extend(_seeded_sets(follower, row.exercise_id, row.position,
-                                         user_id=shared.follower_user_id))
+        row.sets.extend(missing_planned_sets(follower, row,
+                                             user_id=shared.follower_user_id))
     follower.structure_version = (follower.structure_version or 0) + 1
     return True
 

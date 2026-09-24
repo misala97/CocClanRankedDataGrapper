@@ -1,4 +1,4 @@
-import type { LiveExercise, SessionDetailPayload } from './types'
+import type { LiveExercise, LiveSet, SessionDetailPayload } from './types'
 import { instant } from '../format'
 import { REST_MAX } from '../settings/values'
 
@@ -16,45 +16,46 @@ import { REST_MAX } from '../settings/values'
  * untouched below.)
  */
 
+/** Whether a set counts: done, with reps (Q1, G-038) -- stats.set_counts,
+ *  the one rule every screen counts by. */
+const counts = (s: LiveSet) => s.completed && s.reps !== null && s.reps >= 1
+
 /** Recompute the tallies a set change moves. Kept together because they are
  *  one fact counted three ways, and updating one without the others would show
- *  a strip that disagreed with the number above it. */
+ *  a strip that disagreed with the number above it. The same walk as
+ *  _live_data's, so the server's answer never moves the strip. */
 function retally(payload: SessionDetailPayload): SessionDetailPayload {
   let done = 0
   let total = 0
   let volume = 0
   const ticks: SessionDetailPayload['tick_states'] = []
 
+  // 'now' is the first open set of the live exercise, the one the steppers
+  // are bound to.
+  const live = payload.visible_exercises.find((se) => se.id === payload.live_id)
+  const nowId = live && !live.skipped ? live.sets.find((s) => !s.completed)?.id : undefined
+
   for (const se of payload.visible_exercises) {
-    // Sets on a skipped exercise are omitted from the strip and the totals --
-    // matching _live_data, which skips them outright.
-    if (se.skipped) continue
+    // The hidden originals this row replaced: their done sets count in place,
+    // ahead of the row's own (Q1).
+    done += se.replaced_sets_done
+    total += se.replaced_sets_done
+    volume += se.replaced_volume
+    for (let i = 0; i < se.replaced_sets_done; i += 1) ticks.push('done')
     for (const s of se.sets) {
-      total += 1
-      if (s.completed) {
+      if (counts(s)) {
         done += 1
+        total += 1
         ticks.push('done')
-        // A completed set always has its numbers; the ?? only satisfies the
+        // A counted set always has its numbers; the ?? only satisfies the
         // type, which a blank planned set shares.
         volume += (s.weight ?? 0) * (s.reps ?? 0) * (se.is_unilateral ? 2 : 1)
-      } else {
-        ticks.push('open')
+      } else if (!se.skipped && !s.completed) {
+        // A skipped exercise's open sets are not going to be lifted, and a
+        // done set without reps is no set: neither is a tick.
+        total += 1
+        ticks.push(s.id === nowId ? 'now' : 'open')
       }
-    }
-  }
-
-  // 'now' is the first open set of the live exercise, the one the steppers are
-  // bound to. Marked after the fact so the walk above stays simple.
-  const live = payload.visible_exercises.find((se) => se.id === payload.live_id)
-  if (live && !live.skipped) {
-    let index = 0
-    for (const se of payload.visible_exercises) {
-      if (se.skipped) continue
-      for (const s of se.sets) {
-        if (se.id === live.id && !s.completed) { ticks[index] = 'now'; break }
-        index += 1
-      }
-      if (se.id === live.id) break
     }
   }
 
@@ -131,7 +132,7 @@ export function deleteSet(
 }
 
 /** Skipping is instant and reversible, and it changes the totals because a
- *  skipped exercise's sets leave the strip entirely. */
+ *  skipped exercise's open sets leave the strip; its done sets stay. */
 export function toggleSkip(
   payload: SessionDetailPayload,
   sessionExerciseId: number,

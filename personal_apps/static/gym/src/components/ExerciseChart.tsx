@@ -131,17 +131,19 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
                 <circle
                   key={`pt-${i}`}
                   cx={point.x} cy={point.y}
-                  r={point.is_best ? 6 : 3.5}
-                  {...(point.is_best ? {
+                  r={point.is_record ? 6 : 3.5}
+                  {...(point.is_record ? {
                     className: 'chart__pr',
                     style: { '--at': (point.x / chart.width).toFixed(3) } as CSSProperties,
                     stroke: 'var(--done)',
                     strokeWidth: 1.5,
                   } : {})}
-                  {...(point.is_deload ? { stroke: 'var(--unlit)', strokeWidth: 1.5 } : {})}
-                  fill={point.is_deload
-                    ? 'none'
-                    : (point.is_best ? 'var(--record)' : 'var(--done)')}
+                  {...(point.is_deload && !point.is_record
+                    ? { stroke: 'var(--unlit)', strokeWidth: 1.5 } : {})}
+                  /* A deload record is gold like any other: a record is a
+                     record, deload or not (D3). */
+                  fill={point.is_record ? 'var(--record)'
+                    : (point.is_deload ? 'none' : 'var(--done)')}
                 />
               ))}
 
@@ -209,7 +211,7 @@ export function ExerciseChart({ chart, sessionCount, firstDate, lastDate }: Prop
               {shortDate(point.started_at)}
               {' · '}<b>{kg1(point.e1rm)} kg</b> e1RM
               {chart.series.length > 1 && ` · P${picked!.position}`}
-              {point.is_best && <span className="chart__read-tag vtag vtag--record">Rekord</span>}
+              {point.is_record && <span className="chart__read-tag vtag vtag--record">Rekord</span>}
               {point.is_deload && <span className="chart__read-tag vtag vtag--deload">Deload</span>}
             </>
           )

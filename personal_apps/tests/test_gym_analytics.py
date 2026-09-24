@@ -111,9 +111,10 @@ def test_progression_ranking_reports_first_to_current_change():
     ]
     entry = analytics.progression_ranking(rows)[0]
     assert entry['sessions'] == 2
-    assert entry['first_e1rm'] == round(stats.epley_1rm(100.0, 8), 1)
-    assert entry['current_e1rm'] == round(stats.epley_1rm(110.0, 8), 1)
-    assert entry['change_pct'] == 10.0
+    assert entry['first_e1rm'] == stats.judged_e1rm(100.0, 8) == 126.7
+    assert entry['current_e1rm'] == stats.judged_e1rm(110.0, 8) == 139.3
+    # From the numbers as shown, so the line adds up: 126,7 -> 139,3 is +9,9 %.
+    assert entry['change_pct'] == 9.9
     assert entry['best_weight'] == 110.0
     assert len(entry['points']) == 2
 
@@ -667,7 +668,7 @@ def test_weekday_distribution_reports_volume_per_day_not_only_frequency():
     assert days[2]['avg_volume'] == 0.0
 
 
-def test_balance_drift_compares_the_recent_window_against_everything_before():
+def test_balance_drift_compares_the_recent_window_against_the_one_before():
     old = [perf([(100.0, 10)], started_at=day(i), session_id=i, muscle_group='Brust')
            for i in range(4)]
     recent = [perf([(100.0, 10)], started_at=day(40 + i), session_id=40 + i,
@@ -679,6 +680,27 @@ def test_balance_drift_compares_the_recent_window_against_everything_before():
     assert groups['Ruecken']['earlier_share'] == 0.0
     assert groups['Ruecken']['delta'] == 100.0
     assert groups['Brust']['delta'] == -100.0
+
+
+def test_balance_drift_compares_two_equal_windows():
+    """G-127: "davor" was the whole history ahead of the window, so a month
+    was set against years and moved as the history grew. Now it is the same
+    span just before the window; anything older is out of both."""
+    ancient = [perf([(100.0, 10)], started_at=day(i), session_id=i,
+                    muscle_group='Beine', exercise_id=3, name='Kniebeuge')
+               for i in range(4)]
+    earlier = [perf([(100.0, 10)], started_at=day(60 + i), session_id=60 + i,
+                    muscle_group='Brust')
+               for i in range(4)]
+    recent = [perf([(100.0, 10)], started_at=day(90 + i), session_id=90 + i,
+                   muscle_group='Ruecken', exercise_id=2, name='Rudern')
+              for i in range(4)]
+    result = analytics.balance_drift(ancient + earlier + recent, day(94))
+    groups = {g['label']: g for g in result['groups']}
+    assert 'Beine' not in groups
+    assert groups['Brust']['earlier_share'] == 100.0
+    assert result['earlier_sessions'] == 4
+    assert result['statable'] is True
 
 
 def test_balance_drift_needs_both_periods_to_hold_workouts():
@@ -839,11 +861,10 @@ def test_record_timeline_reports_a_beaten_previous_best():
         perf([(100.0, 8)], started_at=day(0), session_id=1),
         perf([(110.0, 8)], started_at=day(7), session_id=2),
     ]
-    weight_records = [r for r in analytics.record_timeline(rows) if r['weight']]
-    assert len(weight_records) == 1
-    assert weight_records[0]['weight']['value'] == 110.0
-    assert weight_records[0]['weight']['previous'] == 100.0
-    assert weight_records[0]['started_at'] == day(7)
+    timeline = analytics.record_timeline(rows)
+    assert len(timeline) == 1
+    assert timeline[0]['e1rm'] == {'value': 139.3, 'previous': 126.7}
+    assert timeline[0]['started_at'] == day(7)
 
 
 def test_record_timeline_does_not_count_the_first_session():
@@ -857,16 +878,17 @@ def test_record_timeline_is_newest_first():
         perf([(110.0, 8)], started_at=day(7), session_id=2),
         perf([(120.0, 8)], started_at=day(14), session_id=3),
     ]
-    dates = [r['started_at'] for r in analytics.record_timeline(rows) if r['weight']]
+    dates = [r['started_at'] for r in analytics.record_timeline(rows)]
     assert dates == [day(14), day(7)]
 
 
-def test_record_timeline_excludes_deload_sessions():
+def test_record_timeline_counts_deload_sessions_like_any_other():
+    # D3 b-A: a record is a record, deload or not.
     rows = [
         perf([(100.0, 8)], started_at=day(0), session_id=1),
         perf([(200.0, 8)], started_at=day(7), session_id=2, is_deload=True),
     ]
-    assert analytics.record_timeline(rows) == []
+    assert [r['session_id'] for r in analytics.record_timeline(rows)] == [2]
 
 
 def test_record_timeline_reports_an_e1rm_only_record():
@@ -877,24 +899,19 @@ def test_record_timeline_reports_an_e1rm_only_record():
     ]
     timeline = analytics.record_timeline(rows)
     assert len(timeline) == 1
-    assert timeline[0]['weight'] is None
+    assert 'weight' not in timeline[0]
     assert timeline[0]['e1rm']['previous'] < timeline[0]['e1rm']['value']
 
 
-def test_record_timeline_merges_both_bests_of_one_exercise_day():
-    """A heavier top set almost always drags an e1RM best along with it. That
-    is one lift, not two milestones, so it is one row carrying both figures --
-    otherwise the timeline doubles in length and its own count stops describing
-    what happened."""
+def test_record_timeline_names_the_e1rm_when_the_weight_moved_too():
+    """One lift, one row, one figure: weight is no kind of record (D3)."""
     rows = [
         perf([(100.0, 8)], started_at=day(0), session_id=1),
         perf([(120.0, 10)], started_at=day(7), session_id=2),
     ]
     timeline = analytics.record_timeline(rows)
     assert len(timeline) == 1
-    assert timeline[0]['weight']['value'] == 120.0
-    assert timeline[0]['weight']['previous'] == 100.0
-    assert timeline[0]['e1rm'] is not None
+    assert timeline[0]['e1rm'] == {'value': 160.0, 'previous': 126.7}
 
 
 def test_record_timeline_on_no_history_is_empty():
@@ -958,8 +975,7 @@ def test_record_timeline_orders_same_day_records_predictably():
         perf([(120.0, 8)], started_at=day(7), session_id=2, exercise_id=1, name='Alpha'),
         perf([(120.0, 8)], started_at=day(7), session_id=2, exercise_id=2, name='Zebra'),
     ]
-    weight_records = [r for r in analytics.record_timeline(rows) if r['weight']]
-    assert [r['name'] for r in weight_records] == ['Zebra', 'Alpha']
+    assert [r['name'] for r in analytics.record_timeline(rows)] == ['Zebra', 'Alpha']
 
 
 # ---- monthly_tonnage: the career strip -------------------------------------
@@ -994,7 +1010,21 @@ def test_monthly_tonnage_sums_volume_and_counts_deloads():
     ]
     months = analytics.monthly_tonnage(rows, dt.datetime(2026, 1, 20))
     assert months[0]['volume'] == 1500.0     # deloads still count toward tonnage
-    assert months[0]['has_deload'] is True
+    # Their share, not a yes/no over the whole month (G-026).
+    assert months[0]['deload_volume'] == 500.0
+
+
+def test_monthly_tonnage_counts_each_months_records():
+    """A yes/no mark sat on every month and said nothing (G-026)."""
+    rows = [
+        perf([(100.0, 8)], started_at=dt.datetime(2026, 1, 5), session_id=1),
+        perf([(110.0, 8)], started_at=dt.datetime(2026, 2, 5), session_id=2),
+        perf([(120.0, 8)], started_at=dt.datetime(2026, 2, 19), session_id=3),
+        perf([(115.0, 8)], started_at=dt.datetime(2026, 3, 5), session_id=4),
+    ]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 3, 20))
+    assert [m['records'] for m in months] == [0, 2, 0]
+    assert [m['deload_volume'] for m in months] == [0, 0, 0]
 
 
 def test_monthly_tonnage_runs_to_the_local_month():

@@ -79,7 +79,7 @@ def _default_position(series):
     return fallback['position'], 'most'
 
 
-def _chart_geometry(series, pr_e1rm=None):
+def _chart_geometry(series):
     """Turn exercise_progress()'s series into SVG coordinates.
 
     Computed here rather than in the template because Jinja doing coordinate
@@ -192,6 +192,7 @@ def _chart_geometry(series, pr_e1rm=None):
                     0.0), CHART_W), 2),
                 'y': round(CHART_H - CHART_PAD - (point['e1rm'] - lo) / span * (CHART_H - 2 * CHART_PAD), 2),
                 'is_deload': point['is_deload'],
+                'is_record': point['is_record'],
                 'e1rm': point['e1rm'],
                 'started_at': point['started_at'],
             })
@@ -242,32 +243,12 @@ def _chart_geometry(series, pr_e1rm=None):
             entry['label_y'] = round(min(e['label_y'] for e in placed) - LABEL_GAP, 2) if placed else 12.0
         placed.append(entry)
 
-    # The gold dot is the EXERCISE's best -- the same number the PR band above
-    # the chart prints -- not the best of whatever happens to be plotted.
-    #
-    # Marking per series was the first bug: a position with a single session was
-    # trivially its own best and got a record dot, so one chart carried two
-    # golds and one of them meant nothing. Taking the max of the plotted points
-    # fixed that and introduced the next one: under `?position=N` the plotted
-    # set is one slot, so the slot's ceiling was promoted to "Rekord" and the
-    # chart gold-dotted 85,8 while the band directly above it read 87,4.
-    #
-    # pr_e1rm comes from the UNFILTERED history (stats.exercise_progress), so a
-    # filtered view that contains no record now correctly shows no gold at all.
-    # A deload can never hold it, matching every other record rule here.
-    candidates = [p for entry in out for p in entry['points'] if not p['is_deload']]
-    if pr_e1rm is not None:
-        best = pr_e1rm.get('e1rm') if isinstance(pr_e1rm, dict) else pr_e1rm
-    else:
-        best = max((p['e1rm'] for p in candidates), default=None)
-    claimed = False
-    for entry in out:
-        for point in entry['points']:
-            point['is_best'] = (
-                best is not None and not claimed
-                and not point['is_deload'] and point['e1rm'] == best
-            )
-            claimed = claimed or point['is_best']
+    # A gold dot is a record: a workout whose best e1RM beat every workout
+    # before it (D3), marked by stats.exercise_progress over the WHOLE
+    # exercise -- never judged from whatever happens to be plotted, which
+    # under `?position=N` once promoted a slot's ceiling to "Rekord". It is
+    # history, like the badge in the list: a record later overtaken stays
+    # gold. (It used to be the single best point, deload excluded.)
 
     # One label per gridline, as a percentage of the viewBox so the HTML gutter
     # can sit beside the SVG and stay at text size instead of being scaled up
@@ -332,7 +313,7 @@ def _chart_geometry(series, pr_e1rm=None):
     return {'series': out, 'lo': data_lo, 'hi': data_hi, 'axis_lo': lo, 'axis_hi': hi,
             'ticks': ticks, 'dates': dates, 'width': CHART_W, 'height': CHART_H,
             'has_deload': any(p['is_deload'] for p in plotted),
-            'has_record': any(p['is_best'] for p in plotted),
+            'has_record': any(p['is_record'] for p in plotted),
             'projection': projection_out}
 
 
@@ -385,7 +366,7 @@ def _exercise_detail_payload(exercise, raw_position):
         'exercise': _exercise_meta(exercise, exercise_setup(current_user_id(), exercise)),
         'selected_position_is_default': position_is_default,
         'selected_position_reason': default_reason,
-        'chart': _chart_geometry(data['series'], data.get('pr_e1rm')),
+        'chart': _chart_geometry(data['series']),
         'chip_class': chip_class,
         'chip_label': chip_label,
         # The settings sheet names the equipment; it no longer picks one.
@@ -462,7 +443,7 @@ def gym_exercise_progress_json(exercise_id):
         # raw series and let Chart.js lay them out on a category axis, which drew
         # a six-week gap and four same-day sessions at the same width -- so the
         # two charts in this app disagreed about what the x axis meant.
-        'chart': _chart_geometry(progress['series'], progress.get('pr_e1rm')),
+        'chart': _chart_geometry(progress['series']),
         'pr_weight': fmt_weight_pr(progress['pr_weight']),
         'pr_e1rm': fmt_e1rm_pr(progress['pr_e1rm']),
     })

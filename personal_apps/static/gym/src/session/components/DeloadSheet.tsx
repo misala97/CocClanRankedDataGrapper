@@ -16,9 +16,9 @@ interface Props {
 }
 
 /**
- * A deliberately light session. It gets no colour of its own and holds no
- * records -- its purpose is that the statistics do not read a planned light
- * week as a plateau.
+ * A deliberately light session. It gets no colour of its own; a record it
+ * sets still counts (D3), but it never counts against progress -- its purpose
+ * is that the statistics do not read a planned light week as a plateau.
  */
 export function DeloadSheet({
   session, deloadApplied, deloadPcts, deloadDefaultPct, hasCompletedSet, onToggle,
@@ -28,9 +28,10 @@ export function DeloadSheet({
   return (
     <Sheet id="sheet-deload" title="Deload">
       <p className="sheet__note">
-        Eine bewusst leichte Einheit. Sie bekommt keine eigene Farbe und hält keine
-        Rekorde — ihr Zweck ist, dass die Statistik eine geplante leichte Woche
-        nicht als Plateau liest.
+        Eine bewusst leichte Einheit. Sie bekommt keine eigene Farbe und zählt
+        nicht gegen die Stagnation — ihr Zweck ist, dass die Statistik eine
+        geplante leichte Woche nicht als Plateau liest. Ein Rekord bleibt ein
+        Rekord.
       </p>
 
       {session.is_deload && !hasCompletedSet && (

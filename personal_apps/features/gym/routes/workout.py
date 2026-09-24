@@ -36,7 +36,7 @@ from .. import sharing
 from ..locking import lock_sessions, lock_user
 from ..seeding import (
     _pick_session_exercise, _seed_source, _seeded_sets, _seeded_suggestion,
-    reseed_for_slot,
+    missing_planned_sets, reseed_for_slot,
 )
 from ._blueprint import gym_bp
 from .helpers import (
@@ -46,7 +46,7 @@ from .helpers import (
     _to_bodyweight, _to_int, _to_name, _to_note, _to_reps, _to_rest_seconds, _to_weight,
     _username, _wants_json,
 )
-from .history import load_performed, performed_from_session, _session_rest_entries
+from .history import counts, done_sets, load_performed, performed_from_session, _session_rest_entries
 
 
 def _template_exercises_from_session(session_):
@@ -472,6 +472,29 @@ def _live_context(session_, keep_started=False):
             'live_id': live_se.id if live_se else None}
 
 
+def _replaced_done(session_, visible_exercises):
+    """What the hidden originals behind each visible row did, as {se.id:
+    {'sets': n, 'volume': kg}} -- zero where nothing was replaced.
+
+    A substitute can itself be substituted, so the walk follows replaces_id
+    all the way down. Each original's volume is its own exercise's: the swap
+    may have been from a two-arm movement to a one-arm one.
+    """
+    by_id = {se.id: se for se in session_.exercises}
+    carried = {}
+    for se in visible_exercises:
+        sets = volume = 0
+        hidden = by_id.get(se.replaces_id)
+        while hidden is not None:
+            for s in hidden.sets:
+                if counts(s):
+                    sets += 1
+                    volume += stats.set_volume(s.weight, s.reps, hidden.exercise.is_unilateral)
+            hidden = by_id.get(hidden.replaces_id)
+        carried[se.id] = {'sets': sets, 'volume': volume}
+    return carried
+
+
 def _live_data(session_):
     """Every value session_detail.html renders from, ORM objects included.
 
@@ -504,46 +527,41 @@ def _live_data(session_):
     # This lifter's step, rest and stack stops for every exercise in the session.
     setups = exercise_setups(session_.user_id, [se.exercise for se in session_.exercises])
     history = load_performed(exercise_ids=[se.exercise_id for se in visible_exercises])
+    # The workouts BEFORE this one: the bar every set here is judged against
+    # (D3). "Every other finished workout" let one finished later -- a
+    # partner's, one entered for an earlier day -- judge this one.
     by_exercise = {}
-    for row in history:
-        if row.session_id != session_.id:
-            by_exercise.setdefault(row.exercise_id, []).append(row)
+    for row in stats.earlier_rows(history, session_.started_at, session_.id):
+        by_exercise.setdefault(row.exercise_id, []).append(row)
     stagnation_counts = {}
     record_set_ids = set()
     record_details = {}
-    # Both signals below are progress judgements, and a deload session is not
-    # an attempt at progress -- so neither is computed during one. The PR flare
-    # must agree with the recap screen (session_report awards no record on a
-    # deload), and a "go heavier" nudge is wrong advice beside deliberately
-    # reduced weights. Guarding the whole loop rather than `continue`-ing per
-    # iteration: is_deload is loop-invariant, and a per-iteration skip would
-    # let a later maintainer add work above it that silently never runs.
-    if not session_.is_deload:
-        for se in visible_exercises:
-            prior = by_exercise.get(se.exercise_id, [])
-            count = stats.sessions_since_pr(prior, position=se.position)
+    for se in visible_exercises:
+        prior = by_exercise.get(se.exercise_id, [])
+        # A stall is a progress judgement, and a deload workout is no attempt
+        # at progress: a "go heavier" nudge is wrong advice beside
+        # deliberately reduced weights.
+        if not session_.is_deload:
+            count = stats.sessions_since_pr(prior)
             if count is not None and count >= stats.STAGNATION_THRESHOLD:
                 stagnation_counts[se.id] = count
-            # Live equivalent of the finished-session PR flare (session_report's
-            # is_weight_pr/is_e1rm_pr) -- checked per completed set, against the
-            # same prior-sessions-only pool, so a set can light up cyan the
-            # instant it's confirmed rather than only on the recap screen an
-            # hour later.
-            # One judgement, two outputs: the ids the chips read, and what each
-            # record actually beat, for the takeover to say. Asking
-            # is_new_best and then asking again for the detail would run the
-            # same comparison twice per completed set.
-            for s in se.sets:
-                if not s.completed:
-                    continue
-                detail = stats.new_best_detail(s.weight, s.reps, prior)
-                if detail is None:
-                    continue
-                record_set_ids.add(s.id)
-                record_details[s.id] = detail
+        # A record is a record, deload or not (D3), and the flare says so the
+        # instant the set is confirmed -- the same judgement the debrief's
+        # records make, per set. One judgement, two outputs: the ids the chips
+        # read, and what each record beat, for the takeover to say.
+        for s in se.sets:
+            if not counts(s):
+                continue
+            detail = stats.record_detail(s.weight, s.reps, prior)
+            if detail is None:
+                continue
+            record_set_ids.add(s.id)
+            record_details[s.id] = detail
     # The stall line's prescription: the same "+one increment, snapped up
     # onto the machine's real stops" the debrief's Nächstes-Mal advice
-    # computes, anchored on the weight the steppers will actually pre-fill.
+    # computes, from the same number -- the top set of the workout the plan
+    # comes from (G-123: it stepped up from that workout's LAST set, a
+    # back-off set as often as not, and named today's top weight or less).
     # DISPLAY ONLY, an owner decision: a stall means the current weight is
     # already at the edge, so seeding heavier would push straight into failed
     # sets -- the number is said, never written.
@@ -560,10 +578,11 @@ def _live_data(session_):
     stall_next_weight = {}
     for se_id, _count in stagnation_counts.items():
         se = next(x for x in visible_exercises if x.id == se_id)
-        suggestion = suggestions.get(se_id)
-        if suggestion is None:
+        picked = picks[se_id][0]
+        top = max((w for w, _ in done_sets(picked)), default=None) if picked is not None else None
+        if top is None:
             continue
-        next_weight = step_up(se.exercise, suggestion['weight'])
+        next_weight = step_up(se.exercise, top)
         if next_weight is not None:
             stall_next_weight[se_id] = next_weight
 
@@ -596,7 +615,7 @@ def _live_data(session_):
     # from -- so _seeded_sets planned them blank -- and nothing of them logged
     # in this workout yet either. The live screen marks these "Erstes Mal".
     logged_here = {se.exercise_id for se in session_.exercises
-                   if any(s.completed for s in se.sets)}
+                   if any(counts(s) for s in se.sets)}
     first_time = _first_time_refs(
         [se for se in visible_exercises
          if picks[se.id][0] is None and se.exercise_id not in logged_here],
@@ -605,28 +624,41 @@ def _live_data(session_):
     # One tick per set in the whole workout, in order, so the strip reads as
     # the session filling up rather than as a chart. 'now' is the single set
     # about to be performed -- the same set the steppers are bound to.
+    #
+    # What was done is counts() (Q1), on every row: a set lifted before its
+    # exercise was skipped, or before it was replaced, was lifted all the
+    # same. The count used to leave both out while the volume kept the
+    # skipped one, and the debrief, Heute and Statistik each had a third
+    # answer (G-064). A replaced original is hidden, so its done sets ride on
+    # the substitute that took its slot, ahead of the substitute's own.
+    replaced_done = _replaced_done(session_, visible_exercises)
     sets_done = sets_total = 0
     tick_states = []
     next_set_id = None
     if live_se is not None:
         next_set_id = next((s.id for s in live_se.sets if not s.completed), None)
     for se in visible_exercises:
-        if se.skipped:
-            continue
+        carried = replaced_done[se.id]['sets']
+        sets_done += carried
+        sets_total += carried
+        tick_states.extend(['done'] * carried)
         for s in se.sets:
-            sets_total += 1
-            if s.completed:
+            if counts(s):
                 sets_done += 1
+                sets_total += 1
                 tick_states.append('done')
-            elif s.id == next_set_id:
-                tick_states.append('now')
+            elif se.skipped or s.completed:
+                # Skipped: its open sets are not going to be lifted. Done but
+                # no reps (a legacy row; G-038): not a set.
+                continue
             else:
-                tick_states.append('open')
+                sets_total += 1
+                tick_states.append('now' if s.id == next_set_id else 'open')
 
     session_volume = sum(
         stats.set_volume(s.weight, s.reps, se.exercise.is_unilateral)
-        for se in visible_exercises for s in se.sets if s.completed
-    )
+        for se in visible_exercises for s in se.sets if counts(s)
+    ) + sum(carry['volume'] for carry in replaced_done.values())
 
     resting = bool(session_.rest_ends_at and session_.rest_ends_at > dt.datetime.utcnow())
     rest_total_seconds = _rest_total_seconds(session_, setups) if resting else 0
@@ -664,6 +696,7 @@ def _live_data(session_):
         sets_total=sets_total,
         sets_open=sets_total - sets_done,
         session_volume=session_volume,
+        replaced_done=replaced_done,
         # A rest is running if it has not elapsed. Deliberately NOT scoped to
         # the live exercise: finishing an exercise's last set schedules a rest
         # and advances the live exercise at the same moment, so requiring the
@@ -697,7 +730,9 @@ def _live_data(session_):
         # Scoped to the caller: PushSubscription.endpoint is a global table
         # (one row per browser installation, re-pointed on re-subscribe), so
         # "any row at all" would leak whether some OTHER user has push set up.
-        has_completed_set=any(s.completed for se in session_.exercises for s in se.sets),
+        # has_completed_set: the deload toggle's rule (session_admin), which
+        # is counts() like every other "was anything done".
+        has_completed_set=any(counts(s) for se in session_.exercises for s in se.sets),
         # Whether the deload percentage was actually applied to the weights.
         # base_weight is non-NULL exactly when a set's weight is deload-scaled,
         # so this is the honest test -- the session's is_deload flag is not,
@@ -757,6 +792,10 @@ def _session_payload(session_):
             'notes': se.notes,
             'pain': se.pain,
             'picture': art.picture_url(se.exercise.library_key),
+            # The done sets of the hidden originals this row replaced, so the
+            # client's retally can count them in place (Q1).
+            'replaced_sets_done': data['replaced_done'][se.id]['sets'],
+            'replaced_volume': data['replaced_done'][se.id]['volume'],
             'sets': [{
                 'id': s.id, 'weight': s.weight, 'reps': s.reps,
                 'completed': s.completed, 'base_weight': s.base_weight,
@@ -930,8 +969,8 @@ def _finished_payload(session_):
     page was mounted from.
 
     Re-queries with eager loads regardless of how `session_` arrived:
-    performed_from_session walks se.sets, se.exercise and se.replaced_by per
-    row, all lazy -- 21 queries on a 7-exercise session without this.
+    performed_from_session walks se.sets and se.exercise per row, both lazy --
+    21 queries on a 7-exercise session without this.
 
     `just_finished` reads the request args, so it is False on every mutation
     POST; the island preserves its own flag across payload swaps because the
@@ -940,17 +979,13 @@ def _finished_payload(session_):
     # The finished workout is one page now (spec 6.5): build the report
     # and hand off to session_finished.html instead of session_detail.html.
     #
-    # Eager-loaded first. performed_from_session walks se.sets, se.exercise
-    # and se.replaced_by per row, all lazy -- 21 queries on a 7-exercise
-    # session. The live branch below already avoids touching se.replaced_by
-    # for exactly this reason and says so in its own comment; this branch
-    # was doing it twice.
+    # Eager-loaded first. performed_from_session walks se.sets and
+    # se.exercise per row, both lazy -- 21 queries on a 7-exercise session.
     session_ = (
         my_sessions()
         .options(
             joinedload(WorkoutSession.exercises).joinedload(SessionExercise.exercise),
             joinedload(WorkoutSession.exercises).joinedload(SessionExercise.sets),
-            joinedload(WorkoutSession.exercises).joinedload(SessionExercise.replaced_by),
         )
         .filter(WorkoutSession.id == session_.id)
         .one()
@@ -1011,13 +1046,10 @@ def _finished_payload(session_):
     # gym_update_set, so attach the real rows here instead. `current`
     # (and therefore data['exercises'], built from it 1:1 in order) came
     # from performed_from_session()'s filtered/ordered walk of
-    # session_.exercises -- skip a replaced-away original, skip an
-    # exercise with no completed sets. Re-deriving that exact filter and
-    # zipping lines each entry back up with its real SessionExercise.
-    reported_session_exercises = [
-        se for se in session_.exercises
-        if not se.replaced_by and any(s.completed for s in se.sets)
-    ]
+    # session_.exercises -- every row with a set that counts, a replaced-away
+    # original included (Q1). Re-deriving that exact filter and zipping
+    # lines each entry back up with its real SessionExercise.
+    reported_session_exercises = [se for se in session_.exercises if done_sets(se)]
     # Seeded before the zip: the template guarded on the presence of these
     # keys, and the payload has to carry them either way rather than let a
     # short zip drop a field the contract requires.
@@ -1030,18 +1062,19 @@ def _finished_payload(session_):
     # correction sheet offers them an add row, so a set lost to a flaky
     # connection or never ticked can still be entered after finishing --
     # otherwise the only exercises it could correct were the ones already
-    # right. A replaced-away original stays out, as everywhere on this page.
-    # From replaces_id, already loaded on every row, like _live_context --
-    # se.replaced_by would lazy-load a query per row.
+    # right. A replaced-away original with nothing done stays out: it was
+    # swapped before it was lifted. From replaces_id, already loaded on
+    # every row, like _live_context -- se.replaced_by would lazy-load a query
+    # per row.
     replaced_ids = {se.replaces_id for se in session_.exercises if se.replaces_id}
     data['unlogged'] = [
         {'session_exercise_id': se.id, 'name': se.exercise.name}
         for se in sorted(session_.exercises, key=lambda row: row.position)
-        if se.id not in replaced_ids and not any(s.completed for s in se.sets)
+        if se.id not in replaced_ids and not done_sets(se)
     ]
     for entry, se in zip(data['exercises'], reported_session_exercises):
         entry['set_rows'] = [{'id': s.id, 'weight': s.weight, 'reps': s.reps}
-                             for s in se.sets if s.completed]
+                             for s in se.sets if counts(s)]
         # Same reason as set_rows above: the note-and-pain fields
         # (the debrief's "Sätze & Notizen" sheet) post to
         # gym_update_session_exercise_meta, which needs the real
@@ -1064,24 +1097,18 @@ def _finished_payload(session_):
     # The closed tick strip: one tick per logged set, in order, so the
     # debrief finishes the thing the live screen spent the workout filling.
     #
-    # A record is an exercise-level fact here (session_report awards one per
-    # exercise), so only a WEIGHT record can honestly be attributed to a
-    # single set -- the one that lifted it, first match only. Volume and
-    # e1RM records belong to the exercise as a whole and are carried by the
-    # flare and the per-exercise tag instead of by a gold tick that would be
-    # pointing at an arbitrary set.
-    records_by_name = {record['name']: record for record in data['records']}
+    # Gold is a record SET: its own e1RM beat the best of every workout
+    # before this one (D3) -- the live flare's judgement, set by set, so the
+    # strip lights exactly the sets that flared. It used to gild the first
+    # set matching a weight record's number, found by exercise name.
+    prior = {}
+    for row in stats.earlier_rows(history, session_.started_at, session_.id):
+        prior.setdefault(row.exercise_id, []).append(row)
     tick_states = []
     for entry in data['exercises']:
-        record = records_by_name.get(entry['name'])
-        claimed = False
+        bar = prior.get(entry['exercise_id'], [])
         for set_row in entry['set_rows']:
-            is_record = (
-                record is not None and record['kind'] == 'weight'
-                and not claimed and set_row['weight'] == record['value']
-            )
-            if is_record:
-                claimed = True
+            is_record = stats.record_detail(set_row['weight'], set_row['reps'], bar) is not None
             tick_states.append('record' if is_record else 'done')
     data['tick_states'] = tick_states
     # Measured pace: the average gap between consecutive sets, which exists
@@ -1404,8 +1431,8 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     in session_.exercises, so _template_exercises_from_session still picks
     it up if this session is later saved/updated as a template (no change
     needed there: it already includes every non-substitute row). Toggling
-    back off (undo) re-derives pending sets the same way a fresh template
-    start does, but only if nothing is left over from before the skip."""
+    back off (undo) plans the sets it still owes: what a fresh start would
+    seed, after the ones done before the skip (missing_planned_sets)."""
     session_exercise = _locked_session_exercise(session_exercise_id)
     session_ = session_exercise.session
     refusal = _refuse_structure_edit_if_finished(session_)
@@ -1420,10 +1447,8 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
         for s in list(session_exercise.sets):
             if not s.completed:
                 db.session.delete(s)
-    elif not session_exercise.sets:
-        session_exercise.sets.extend(
-            _seeded_sets(session_, session_exercise.exercise_id, session_exercise.position)
-        )
+    else:
+        session_exercise.sets.extend(missing_planned_sets(session_, session_exercise))
 
     db.session.commit()
     # The skip itself is what travels -- once, as this event. Reconciliation
@@ -1904,7 +1929,9 @@ def gym_discard_session(session_id):
     does: the other side trains on alone.
     """
     session_ = owned_session(session_id)
-    logged = any(s.completed for se in session_.exercises for s in se.sets)
+    # counts(), the one rule: the finish sheet offers "verwerfen" off the same
+    # count (sets_done), so it never offers what this refuses (G-131).
+    logged = any(counts(s) for se in session_.exercises for s in se.sets)
     if session_.finished_at is not None or logged:
         return redirect(url_for('gym.session_detail', session_id=session_.id))
     _delete_session_and_links(session_)

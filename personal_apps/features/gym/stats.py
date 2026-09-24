@@ -12,6 +12,7 @@ these from the ORM in one pass and everything here consumes them.
 import datetime as dt
 import math
 from dataclasses import dataclass
+from itertools import groupby
 from typing import Optional, Tuple
 from zoneinfo import ZoneInfo
 
@@ -138,9 +139,10 @@ class PerformedExercise:
     started_at: dt.datetime
     sets: Tuple
     # True when this row was performed in a deliberately light session. Every
-    # function below that makes a *judgement* (records, stagnation, averages)
-    # drops these rows via _progression_rows(); every function that reports
-    # what actually happened (tonnage, balance, consistency) keeps them.
+    # function below that judges PROGRESS (stagnation, trends, averages) drops
+    # these rows via _progression_rows(); records do not (D3: a record is a
+    # record, deload or not), and nor does anything that reports what actually
+    # happened (tonnage, balance, consistency).
     # Defaulted so callers predating the flag keep working.
     is_deload: bool = False
     # The exercise's own loadable step, as stored -- None when it has none and
@@ -160,13 +162,54 @@ class PerformedExercise:
     finished_at: Optional[dt.datetime] = None
 
 
+def set_counts(completed, reps):
+    """Whether a logged set counts -- the one rule, everywhere (Q1): the set
+    count, the volume, the debrief, records, the plan, and whether a workout
+    counts at all. Done, and at least one rep (G-038: a 0 × 0 set counted as
+    done and as a record). On any exercise of the workout, a skipped or
+    replaced one included: the set was done. Takes the two fields rather than
+    a set so this module stays free of the ORM; routes/history.counts() is
+    the ORM-side spelling."""
+    return bool(completed) and reps is not None and reps >= 1
+
+
 def epley_1rm(weight, reps):
     """Estimated one-rep max. No real single-rep test happens mid-workout, so
     this is the standard estimate every mainstream lifting tracker uses for
     the same reason. It is the yardstick for progress throughout this module,
     rather than raw weight, so that more reps at the same weight still counts
-    as getting stronger."""
+    as getting stronger.
+
+    A single IS a one-rep max: the formula's +3,3 % applies from two reps on,
+    as Epley meant it (D3, walkthrough 2026-09-23 -- 100 × 1 read 103,3)."""
+    if reps <= 1:
+        return float(weight)
     return weight * (1 + reps / 30.0)
+
+
+#: Above this many reps a set is still shown, but nothing is judged by it: no
+#: record, no stall count, no seed pick (D3). The estimate drifts far past a
+#: dozen reps -- 40 × 25 "beat" 55 × 8 -- and one burnout or typo set must not
+#: decide what counts.
+RECORD_MAX_REPS = 12
+
+
+def judged_e1rm(weight, reps):
+    """The e1RM a judgement may use, to the 0,1 kg it is shown at -- or None
+    for a set nothing is judged by: no reps, or more than RECORD_MAX_REPS.
+
+    Rounded before any comparison, so a tie on screen is a tie in the rule:
+    90 × 10 and 100 × 6 both read 120,0, and one of them "beating" the other
+    by a float's last digit was a record nobody could see."""
+    if reps is None or reps < 1 or reps > RECORD_MAX_REPS:
+        return None
+    return round(epley_1rm(weight, reps), 1)
+
+
+def judged_best(row):
+    """A row's best judged e1RM, or None when none of its sets is judged."""
+    values = [value for value in (judged_e1rm(w, r) for w, r in row.sets) if value is not None]
+    return max(values) if values else None
 
 
 def set_volume(weight, reps, is_unilateral):
@@ -180,6 +223,12 @@ def best_weight(row):
 
 
 def best_e1rm(row):
+    """A row's e1RM as shown: its best judged set -- or, for a row with none
+    (only sets above RECORD_MAX_REPS), the plain estimate of its best set.
+    Shown, never judged: every judgement reads judged_best()."""
+    judged = judged_best(row)
+    if judged is not None:
+        return judged
     return max(epley_1rm(weight, reps) for weight, reps in row.sets)
 
 
@@ -187,63 +236,79 @@ def row_volume(row):
     return sum(set_volume(weight, reps, row.is_unilateral) for weight, reps in row.sets)
 
 
-def is_new_best(weight, reps, prior_rows):
-    """True if one just-logged (weight, reps) pair beats every OTHER
-    session's best for this exercise -- the same "beats every OTHER
-    session, regardless of when it happened" semantics session_report's own
-    is_weight_pr/is_e1rm_pr already use (unscoped by position there too, so
-    a set flagged live here always agrees with the flare that same exercise
-    gets at session end), just applied to one set the moment it's checked
-    instead of a whole session's aggregate after the fact. False with no
-    prior history to beat -- a first attempt at an exercise isn't a record
-    of anything yet.
+# -- Records: one meaning, everywhere (D3, walkthrough 2026-09-23) -----------
+#
+# A set is a record when its judged e1RM beats the best of every EARLIER
+# workout of its exercise. A tie is none; a first workout has nothing to beat;
+# the badge stays as history when a later workout goes higher. Deload plays no
+# part -- a light workout is neither excused from the bar nor barred from
+# setting one. Weight and volume are facts, not kinds of record. There were
+# seven definitions of "Rekord" before this; every screen now asks the walker
+# below or record_detail(), and nothing else decides.
 
-    Deload sessions are excluded from `prior_rows`: a light week must not
-    lower the bar a normal set is judged against. If deloads are the only
-    history, this is False, the same as having no history at all.
+def session_order(row):
+    """Workouts in the order they happened: by start, then by id -- a
+    workout entered later for an earlier day is judged on its day."""
+    return (row.started_at, row.session_id)
+
+
+def earlier_rows(rows, started_at, session_id):
+    """The rows of every workout before the one that started at
+    `started_at` (ties broken by id): what a set of that workout is judged
+    against."""
+    return [row for row in rows if session_order(row) < (started_at, session_id)]
+
+
+def record_detail(weight, reps, earlier):
+    """What one set beat, or None when it is no record: its judged e1RM
+    against the best of every workout in `earlier` -- which the caller limits
+    to workouts before the set's own (earlier_rows).
+
+    `previous_at` is the start of the FIRST workout that reached the old best,
+    so "vorher" names the day the bar was set, not a later tie of it.
     """
-    return new_best_detail(weight, reps, prior_rows) is not None
-
-
-def new_best_detail(weight, reps, prior_rows):
-    """What a just-logged set beat, or None if it beat nothing.
-
-    is_new_best answers whether; this answers which and by how much, so a
-    screen can say "82,5 kg, vorher 80,0 kg am 09.09." instead of only
-    "Bestwert". Same judgement, one implementation -- is_new_best delegates
-    here rather than repeating the two comparisons, because the two drifting
-    apart would show as a record that celebrates and then is not listed.
-
-    Weight outranks e1RM when a set beats both, matching session_report's
-    _record_rank (kind first, weight before e1rm): the debrief and the live
-    screen must not name the same set's record differently.
-
-    The returned `previous_at` is the start of the session that held the old
-    best, so "vorher" names a real workout the lifter can remember.
-    """
-    prior_rows = _progression_rows(prior_rows)
-    if not prior_rows:
+    value = judged_e1rm(weight, reps)
+    if value is None:
         return None
+    best = None
+    for row in sorted(earlier, key=session_order):
+        row_best = judged_best(row)
+        if row_best is not None and (best is None or row_best > best[0]):
+            best = (row_best, row.started_at)
+    if best is None or value <= best[0]:
+        return None
+    return {'kind': 'e1rm', 'value': value, 'previous': best[0], 'previous_at': best[1]}
 
-    previous_weight_row = max(prior_rows, key=best_weight)
-    if weight > best_weight(previous_weight_row):
-        return {
-            'kind': 'weight',
-            'value': weight,
-            'previous': best_weight(previous_weight_row),
-            'previous_at': previous_weight_row.started_at,
-        }
 
-    previous_e1rm_row = max(prior_rows, key=best_e1rm)
-    if epley_1rm(weight, reps) > best_e1rm(previous_e1rm_row):
-        return {
-            'kind': 'e1rm',
-            'value': round(epley_1rm(weight, reps), 1),
-            'previous': round(best_e1rm(previous_e1rm_row), 1),
-            'previous_at': previous_e1rm_row.started_at,
-        }
+def record_marks(rows):
+    """Every row of `rows` that set a record, with what it beat:
+    {row: {'value', 'previous', 'previous_at'}}. A row absent set none.
 
-    return None
+    Per exercise, workout by workout in order (session_order). A workout's own
+    rows never judge each other: the same exercise twice in one workout is two
+    tries at the same bar, and either may clear it.
+    """
+    by_exercise = {}
+    for row in rows:
+        by_exercise.setdefault(row.exercise_id, []).append(row)
+
+    marks = {}
+    for exercise_rows in by_exercise.values():
+        best = None     # (value, started_at) of the best so far
+        for _, workout in groupby(sorted(exercise_rows, key=session_order), key=session_order):
+            workout = list(workout)
+            workout_best = None
+            for row in workout:
+                value = judged_best(row)
+                if value is None:
+                    continue
+                if best is not None and value > best[0]:
+                    marks[row] = {'value': value, 'previous': best[0], 'previous_at': best[1]}
+                if workout_best is None or value > workout_best:
+                    workout_best = value
+            if workout_best is not None and (best is None or workout_best > best[0]):
+                best = (workout_best, workout[0].started_at)
+    return marks
 
 
 def _chronological(rows):
@@ -254,16 +319,17 @@ def progression_rows(rows):
     """Only the rows that count as an attempt at progress.
 
     A deload session is deliberately light: its numbers are not a failed
-    attempt at a record, and treating them as one manufactures exactly the
-    plateau the deload existed to break. Every function that makes a
-    *judgement* -- records, stagnation, volume averages -- starts here.
-    Functions that report what actually happened (tonnage, balance,
-    consistency, the history table) deliberately do not.
+    attempt at progress, and treating them as one manufactures exactly the
+    plateau the deload existed to break. The progress judgements --
+    stagnation, the trend, volume averages -- start here. Records do not: a
+    record a deload sets still counts (D3), so record_marks and drought read
+    every row. Functions that report what actually happened (tonnage,
+    balance, consistency, the history table) deliberately do not either.
 
-    Public (and called directly from routes.py) because the exercise
+    Public (and called directly from the routes) because the exercise
     catalogue route has to make the same judgement/report split on its own
-    unfiltered rows before handing them to dominant_position/best_e1rm/
-    best_weight -- see gym_uebungen()'s own comment for why.
+    unfiltered rows before handing them to dominant_position and last_weight
+    -- see gym_uebungen()'s own comment for why.
     """
     return [row for row in rows if not row.is_deload]
 
@@ -297,23 +363,43 @@ def _scoped(rows, position):
     return _chronological(scoped if len(scoped) >= 2 else rows)
 
 
-def sessions_since_pr(rows, position=None):
-    """How many completed sessions in a row have passed without a new best
-    estimated 1RM. None when there is too little history to say anything.
-    Deload sessions are not counted -- see _progression_rows()."""
-    scoped = _scoped(_progression_rows(rows), position)
-    if len(scoped) < 2:
+def drought(rows):
+    """How long one exercise has gone without a record, or None when it has
+    no judged workout: {'since', 'anchor_at', 'last_record_at', 'workouts'}.
+
+    Counted from the newest workout that set a record (record_marks: any
+    slot, deload or not), else from the debut -- the first judged workout,
+    the last time the number moved. `since` counts the attempts after it:
+    workouts with a judged set that were no deload. A deload workout can set
+    a record and so reset the count, but never adds to it -- a light week is
+    no failed attempt -- and a workout with only sets above RECORD_MAX_REPS
+    was no attempt at the number either. `workouts` counts every attempt.
+
+    The one count behind "N Einheiten ohne PR", "Stagniert", the live stall
+    line, Start's stall list and Statistik's drought: it used to be judged
+    per slot and blind to deloads, so a lift could read "Rekord" beside
+    "2 Einheiten ohne PR" (B3 review)."""
+    judged = [row for row in rows if judged_best(row) is not None]
+    if not judged:
         return None
-    best_ever = None
-    since = 0
-    for row in scoped:
-        current = best_e1rm(row)
-        if best_ever is None or current > best_ever:
-            best_ever = current
-            since = 0
-        else:
-            since += 1
-    return since
+    last_record = max((session_order(row) for row in record_marks(judged)), default=None)
+    anchor = last_record if last_record is not None else min(session_order(row) for row in judged)
+    attempts = {session_order(row) for row in judged if not row.is_deload}
+    return {
+        'since': sum(1 for key in attempts if key > anchor),
+        'anchor_at': anchor[0],
+        'last_record_at': last_record[0] if last_record is not None else None,
+        'workouts': len(attempts),
+    }
+
+
+def sessions_since_pr(rows):
+    """Workouts in a row without a record (drought), or None while fewer
+    than two attempts leave nothing to say."""
+    counted = drought(rows)
+    if counted is None or counted['workouts'] < 2:
+        return None
+    return counted['since']
 
 
 def ready_for_more(rows, position=None):
@@ -393,19 +479,28 @@ def ready_for_more(rows, position=None):
 
 def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):
     """One of 'neu', 'rekord', 'stagniert', 'steigend', or None for stable.
-    Mutually exclusive; first match wins. Deload sessions are excluded
-    throughout -- an exercise whose only history is deloads reads 'neu',
-    because there is no honest basis for comparison."""
-    rows = _progression_rows(rows)
-    if not rows:
+    Mutually exclusive; first match wins.
+
+    'rekord' is the one meaning (record_marks): the exercise's newest workout
+    set a record -- in any slot, deload or not. It used to be judged within
+    the slot, so a slot's best below the lift's own best read "Rekord", and a
+    tie did too (G-033). The rest are progress judgements and drop deload
+    workouts: an exercise whose only history is deloads reads 'neu', because
+    there is no honest basis for comparison. 'stagniert' counts from the last
+    record (drought), so it reads every row: a deload record resets it.
+    `position` only lenses 'steigend', last against previous in the slot."""
+    if rows:
+        newest = max(session_order(row) for row in rows)
+        if any(session_order(row) == newest for row in record_marks(rows)):
+            return 'rekord'
+    progression = _progression_rows(rows)
+    if not progression:
         return 'neu'
-    scoped = _scoped(rows, position)
-    if len(scoped) >= 2 and best_e1rm(scoped[-1]) > max(best_e1rm(row) for row in scoped[:-1]):
-        return 'rekord'
-    since = sessions_since_pr(rows, position=position)
+    since = sessions_since_pr(rows)
     if since is not None and since >= threshold:
         return 'stagniert'
-    if len(scoped) >= 2 and best_e1rm(scoped[-1]) > best_e1rm(scoped[-2]):
+    scoped = _scoped([row for row in progression if judged_best(row) is not None], position)
+    if len(scoped) >= 2 and judged_best(scoped[-1]) > judged_best(scoped[-2]):
         return 'steigend'
     return None
 
@@ -413,37 +508,34 @@ def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):
 def stall_report(rows_by_exercise, threshold=STAGNATION_THRESHOLD):
     """Every exercise currently stagnating, worst first.
 
-    `rows_by_exercise` maps exercise_id -> list of PerformedExercise. Each
-    entry reports the slot it was judged in, the weight it is stuck at, and
-    when the plateau started, so the page can say something specific rather
-    than just flagging a name.
+    `rows_by_exercise` maps exercise_id -> list of PerformedExercise, deload
+    workouts included: a deload record ends a drought like any other. Each
+    entry reports the slot the lift is mostly done in, the top weight of its
+    newest attempt, and when the number last moved (the drought's anchor), so
+    the page can say something specific rather than just flagging a name.
 
-    The slot an exercise is judged in (`dominant_position`) is chosen from
-    these deload-filtered rows too, so a deload session cannot skew which
-    position counts as dominant.
+    The slot (`dominant_position`) is chosen from the deload-filtered rows,
+    so a deload session cannot skew which position counts as dominant.
     """
     report = []
     for exercise_id, rows in rows_by_exercise.items():
-        # Filtered here; exercise_state() and sessions_since_pr() below each
-        # filter again internally. That's by design, not dead code -- both
-        # are called elsewhere on unfiltered rows and must stay correct on
-        # their own, so _progression_rows() being idempotent means calling
-        # it again here costs nothing but keeps this loop honest too.
-        rows = _progression_rows(rows)
-        if not rows:
+        progression = _progression_rows(rows)
+        if not progression:
             continue
-        position = dominant_position(rows)
+        position = dominant_position(progression)
         if exercise_state(rows, position=position, threshold=threshold) != 'stagniert':
             continue
-        scoped = _scoped(rows, position)
-        peak = max(scoped, key=best_e1rm)
+        counted = drought(rows)
+        # The newest ATTEMPT: a row with only sets above RECORD_MAX_REPS
+        # was none, and its weight is no plateau (B3 review).
+        attempts = _chronological([row for row in progression if judged_best(row) is not None])
         report.append({
             'exercise_id': exercise_id,
-            'name': rows[0].name,
+            'name': progression[0].name,
             'position': position,
-            'stuck_at': best_weight(scoped[-1]),
-            'since': peak.started_at,
-            'sessions_since_pr': sessions_since_pr(rows, position=position),
+            'stuck_at': best_weight(attempts[-1]),
+            'since': counted['anchor_at'],
+            'sessions_since_pr': counted['since'],
         })
     report.sort(key=lambda entry: (-entry['sessions_since_pr'], entry['name']))
     return report
@@ -500,29 +592,32 @@ def _sets_display(row):
 
 
 def _pr_weight(rows):
-    """The heaviest single set ever logged. A deload cannot hold a record."""
+    """The heaviest single set ever logged: a fact, not a kind of record (D3)
+    -- deloads included, the first to reach it kept. None when nothing was
+    loaded at all: "0,0 kg" is no heaviest set (G-038)."""
     best = None
-    for row in _progression_rows(rows):
+    for row in _chronological(rows):
         for weight, reps in row.sets:
             if best is None or weight > best['weight']:
                 best = {'weight': weight, 'reps': reps, 'session_id': row.session_id,
                         'started_at': row.started_at, 'position': row.position}
-    return best
+    return best if best is not None and best['weight'] > 0 else None
 
 
 def _pr_e1rm(rows):
-    """The single set with the highest estimated 1RM -- not always the
-    heaviest one, since more reps at less weight can estimate higher. A
-    deload cannot hold a record."""
+    """The set with the best judged e1RM -- not always the heaviest one,
+    since more reps at less weight can estimate higher. The first set to
+    reach it, deloads included (D3); None when no set is judged or the best
+    is 0 kg (bodyweight: no estimate to speak of, G-038)."""
     best = None
-    for row in _progression_rows(rows):
+    for row in _chronological(rows):
         for weight, reps in row.sets:
-            value = epley_1rm(weight, reps)
-            if best is None or value > best['e1rm']:
-                best = {'e1rm': round(value, 1), 'weight': weight, 'reps': reps,
+            value = judged_e1rm(weight, reps)
+            if value is not None and (best is None or value > best['e1rm']):
+                best = {'e1rm': value, 'weight': weight, 'reps': reps,
                         'session_id': row.session_id,
                         'started_at': row.started_at, 'position': row.position}
-    return best
+    return best if best is not None and best['e1rm'] > 0 else None
 
 
 def exercise_progress(rows, position=None):
@@ -538,12 +633,15 @@ def exercise_progress(rows, position=None):
 
     `table` and `series` keep deload rows and mark them `is_deload`: they are
     the record of what was performed, and dropping them would leave holes in
-    the chart. The PR and state fields below exclude them.
+    the chart. Both mark `is_record` on every row that set one -- history, so
+    a later best does not take the tag back (D3) -- judged over the WHOLE
+    exercise, whatever slot is shown.
     """
     chronological = _chronological(rows)
     available_positions = sorted({row.position for row in chronological})
     shown = ([row for row in chronological if row.position == position]
              if position is not None else chronological)
+    marks = record_marks(chronological)
 
     table = [
         {
@@ -551,6 +649,7 @@ def exercise_progress(rows, position=None):
             'started_at': row.started_at,
             'position': row.position,
             'is_deload': row.is_deload,
+            'is_record': row in marks,
             'sets_display': _sets_display(row),
             'best_weight': best_weight(row),
             'volume': round(row_volume(row), 1),
@@ -570,6 +669,7 @@ def exercise_progress(rows, position=None):
                 {
                     'started_at': row.started_at,
                     'is_deload': row.is_deload,
+                    'is_record': row in marks,
                     'e1rm': round(best_e1rm(row), 1),
                     'best_weight': best_weight(row),
                     'volume': round(row_volume(row), 1),
@@ -594,7 +694,7 @@ def exercise_progress(rows, position=None):
         'pr_weight': _pr_weight(chronological),
         'pr_e1rm': _pr_e1rm(chronological),
         'state': exercise_state(rows, position=position),
-        'sessions_since_pr': sessions_since_pr(rows, position=position),
+        'sessions_since_pr': sessions_since_pr(rows),
         # The newest row that counts as an attempt at progress. `table[0]` is
         # the newest row of ANY kind and can be a deload, so anything quoting
         # "the weight you are stuck at" must read this instead -- otherwise
@@ -696,12 +796,18 @@ def deload_weight(weight, pct, increment, stack_kg=None):
     return snap_to_stack(prescribed, stack_kg, 'down')
 
 
-def _verdict(entry, since):
+def _verdict(entry, since, is_deload, is_judged=True):
+    """A record is a record in any workout; everything else is a progress
+    judgement, which a deload workout never was an attempt at."""
+    if entry['is_record']:
+        return 'rekord'
+    if is_deload:
+        return None
     if not entry['has_history']:
         return 'neu'
-    if entry['is_weight_pr'] or entry['is_volume_pr'] or entry['is_e1rm_pr']:
-        return 'rekord'
-    if since is not None and since >= STAGNATION_THRESHOLD:
+    # A row with no judged set (only sets above RECORD_MAX_REPS) was no
+    # attempt at the number a stall counts by: no stall, no "go heavier".
+    if since is not None and since >= STAGNATION_THRESHOLD and is_judged:
         return 'stagniert'
     if entry['volume_delta_pct'] is not None and entry['volume_delta_pct'] > 0:
         return 'steigend'
@@ -711,23 +817,29 @@ def _verdict(entry, since):
 def session_report(current, history, comparable_session_volumes=()):
     """The finished-workout page.
 
-    `current` is this session's performed exercises -- the caller must already
-    have dropped any exercise that was replaced mid-workout, since its slot is
-    represented by the substitute that took over and counting both would
-    inflate the total. `history` is every other performed row for those same
+    `current` is this session's performed exercises, a replaced-away original
+    included: the sets done on it before the swap were done, and they count
+    like any other (Q1). `history` is every other performed row for those same
     exercises. `comparable_session_volumes` holds the total volume of past
     sessions built from the same template, and is empty for freeform workouts:
     averaging a leg day into a push day produces a number that is arithmetically
     correct and completely meaningless.
 
-    A deload session awards no records and produces no stagnation advice: it
-    was never an attempt at either. Past deloads are dropped from `history`
-    so they cannot become a baseline or deflate an average.
+    Records have the one meaning (record_marks, D3): e1RM only, against the
+    workouts BEFORE this one. `history` may hold later ones -- a debrief read
+    weeks on -- and they are no bar for it: the badge is what was true on the
+    day. A deload workout keeps its records (G-078) but gets no stagnation
+    advice or trend verdict: it was never an attempt at progress. Past
+    deloads stay out of the averages and the stall count for the same reason.
     """
     # This session's own deload state. Every row in `current` comes from the
     # same session, so any of them answers it; an empty session (no completed
     # sets) is not a deload.
     is_deload = bool(current) and current[0].is_deload
+    if current:
+        history = earlier_rows(history, current[0].started_at, current[0].session_id)
+    marks = record_marks(list(history) + list(current))
+    done_before = {row.exercise_id for row in history}
 
     by_exercise = {}
     for row in _progression_rows(history):
@@ -748,8 +860,7 @@ def session_report(current, history, comparable_session_volumes=()):
 
         past = by_exercise.get(row.exercise_id, [])
         past_volumes = [row_volume(p) for p in past]
-        has_history = bool(past_volumes)
-        avg_volume = (sum(past_volumes) / len(past_volumes)) if has_history else None
+        avg_volume = (sum(past_volumes) / len(past_volumes)) if past_volumes else None
 
         entry = {
             'exercise_id': row.exercise_id,
@@ -760,18 +871,21 @@ def session_report(current, history, comparable_session_volumes=()):
             'volume': round(volume, 1),
             'best_weight': weight,
             'e1rm': round(e1rm, 1),
-            'has_history': has_history,
-            'avg_volume': round(avg_volume, 1) if has_history else None,
+            # Done before at all, deloads included: "neu" is a fact, the
+            # first time -- not a judgement.
+            'has_history': row.exercise_id in done_before,
+            'avg_volume': round(avg_volume, 1) if avg_volume is not None else None,
             'volume_delta_pct': (round((volume - avg_volume) / avg_volume * 100)
                                  if avg_volume else None),
-            'is_weight_pr': (not is_deload) and has_history and weight > max(best_weight(p) for p in past),
-            'is_volume_pr': (not is_deload) and has_history and volume > max(past_volumes),
-            'is_e1rm_pr': (not is_deload) and has_history and e1rm > max(best_e1rm(p) for p in past),
+            'is_record': row in marks,
         }
 
-        since = sessions_since_pr(past + ([] if is_deload else [row]), position=row.position)
+        # Counted from the last record (drought) with this workout in it: a
+        # record here -- deload or not -- ends the drought, and a deload row
+        # never adds to it.
+        since = sessions_since_pr(past + [row])
         entry['sessions_since_pr'] = since
-        entry['verdict'] = None if is_deload else _verdict(entry, since)
+        entry['verdict'] = _verdict(entry, since, is_deload, judged_best(row) is not None)
         exercises.append(entry)
 
         if entry['verdict'] == 'stagniert':
@@ -795,75 +909,31 @@ def session_report(current, history, comparable_session_volumes=()):
                     'suggested_weight': suggested_weight,
                 })
 
-    # One record per exercise, strongest kind first -- three badges on one
-    # lift is noise, and a weight PR already implies the others matter less.
-    #
-    # Grouped per EXERCISE, not per row: a session that (rarely) logs the same
-    # exercise in two slots is one performance of that lift, and
-    # session_record_counts() already judges it that way for Heute and Verlauf.
-    # Counting each slot separately here is how the same session read
-    # "6 Rekorde" in every list and "7 neue Rekorde" as its own headline. The
-    # volume bar is per past SESSION (summed across its slots) for the same
-    # reason, matching session_record_counts' session_values exactly.
-    if not is_deload:
-        current_by_exercise = {}
-        for row in current:
+    # One record per exercise. Grouped per EXERCISE, not per row: a session
+    # that (rarely) logs the same exercise in two slots is one performance of
+    # that lift, as session_record_counts() counts it for Heute and Verlauf --
+    # counting each slot is how one workout read "6 Rekorde" in every list and
+    # "7 neue Rekorde" as its own headline. The stronger of its marked rows
+    # leads; every marked row faced the same bar.
+    current_by_exercise = {}
+    for row in current:
+        if row in marks:
             current_by_exercise.setdefault(row.exercise_id, []).append(row)
+    for exercise_id, rows in current_by_exercise.items():
+        lead = max(rows, key=lambda r: marks[r]['value'])
+        mark = marks[lead]
+        records.append({'kind': 'e1rm', 'name': lead.name, 'position': lead.position,
+                        'exercise_id': exercise_id, 'value': mark['value'],
+                        'previous': mark['previous'], 'previous_at': mark['previous_at']})
 
-        for exercise_id, rows in current_by_exercise.items():
-            past = by_exercise.get(exercise_id, [])
-            if not past:
-                continue
-            weight = max(best_weight(r) for r in rows)
-            e1rm = max(best_e1rm(r) for r in rows)
-            volume = sum(row_volume(r) for r in rows)
+    # By how much each beat the old one -- relative, so a heavy lift's +2 kg
+    # does not automatically outrank a light lift's +5 kg. A first load on a
+    # bodyweight lift (from 0) is the biggest step there is.
+    def _gain(record):
+        previous = record['previous']
+        return (record['value'] - previous) / previous if previous > 0 else math.inf
 
-            past_by_session = {}
-            for p in past:
-                past_by_session.setdefault(p.session_id, []).append(p)
-            past_session_volumes = {
-                session_id: sum(row_volume(p) for p in session_rows)
-                for session_id, session_rows in past_by_session.items()
-            }
-
-            if weight > max(best_weight(p) for p in past):
-                lead = max(rows, key=best_weight)
-                previous_row = max(past, key=best_weight)
-                records.append({'kind': 'weight', 'name': lead.name, 'position': lead.position,
-                                'exercise_id': exercise_id,
-                                'value': weight, 'previous': best_weight(previous_row),
-                                'previous_at': previous_row.started_at})
-            elif e1rm > max(best_e1rm(p) for p in past):
-                lead = max(rows, key=best_e1rm)
-                previous_row = max(past, key=best_e1rm)
-                records.append({'kind': 'e1rm', 'name': lead.name, 'position': lead.position,
-                                'exercise_id': exercise_id,
-                                'value': round(e1rm, 1), 'previous': round(best_e1rm(previous_row), 1),
-                                'previous_at': previous_row.started_at})
-            elif volume > max(past_session_volumes.values()):
-                best_session_id = max(past_session_volumes, key=lambda s: past_session_volumes[s])
-                records.append({'kind': 'volume', 'name': rows[0].name, 'position': rows[0].position,
-                                'exercise_id': exercise_id,
-                                'value': round(volume, 1),
-                                'previous': round(past_session_volumes[best_session_id], 1),
-                                'previous_at': max(p.started_at for p in past_by_session[best_session_id])})
-
-    # NOT by raw value: `value` is kilograms-lifted for a weight record and
-    # kilograms-of-volume for a volume one, and a session total is two orders of
-    # magnitude larger than anything you actually put on a bar. Sorted that way,
-    # a 1.656 kg volume sum outranked a real 62 -> 72 kg strength PR, so the page
-    # led with a number nobody lifted.
-    #
-    # Kind first, because that is the order these mean something in, then by how
-    # much the record beat the old one -- relative, so a heavy lift's +2 kg does
-    # not automatically outrank a light lift's +5 kg.
-    def _record_rank(record):
-        kind_order = {'weight': 0, 'e1rm': 1, 'volume': 2}
-        previous = record.get('previous') or 0
-        gain = ((record['value'] - previous) / previous) if previous else 1.0
-        return (kind_order.get(record['kind'], 9), -gain)
-
-    records.sort(key=_record_rank)
+    records.sort(key=lambda record: -_gain(record))
     advice.sort(key=lambda item: -item['sessions'])
 
     avg_total = ((sum(comparable_session_volumes) / len(comparable_session_volumes))
@@ -889,78 +959,24 @@ def session_report(current, history, comparable_session_volumes=()):
 
 
 def session_record_counts(rows):
-    """The {session_id: record_count} companion to session_report()'s own
-    per-session record_count -- every finished session's count, computed in
-    one pass, for a page (Verlauf) that needs all of them at once rather
-    than paying an N+1 by calling session_report() once per session.
+    """{session_id: how many exercises set a record in it} for every workout
+    in `rows`, in one pass -- Heute and Verlauf need all of them at once.
 
-    Uses the exact same "beats every OTHER session, regardless of when it
-    happened" semantics as session_report's is_weight_pr / is_e1rm_pr /
-    is_volume_pr -- not "beats only the sessions that came before it" -- so
-    a session's number here always agrees with what session_report() would
-    compute for that same session, which is what its own detail page shows.
-    `rows` is every already-loaded PerformedExercise across every session;
-    the caller must already have dropped any exercise that was replaced
-    mid-workout (see performed_from_session), the same requirement
-    session_report's own `current` carries -- a replaced-away original's
-    slot is represented by the substitute that took over, and counting both
-    would inflate a session's own totals.
+    The one meaning (record_marks): against the workouts BEFORE each one, so
+    a workout keeps its count when a later one goes higher. It used to ask
+    "beats every OTHER workout", which took a badge back the moment a later
+    workout beat it: Jun-Sep read 0/1/11/2 here and 8/46/41/3 on Statistik
+    (G-126). A workout with records on two exercises counts two; the same
+    exercise in two of its slots counts once. Workouts without one are absent.
 
-    One pass per exercise, per metric (best weight, best e1RM, summed
-    volume): the session holding the single highest value can only be
-    compared against the second-highest, since it cannot be said to beat
-    itself; every other session is compared against the single highest
-    value, since that is the highest bar anyone else has set. That is
-    mathematically the same question session_report asks per row (does this
-    beat the max of every OTHER session), just answered for every session
-    in one sweep instead of one query's worth of "current" at a time.
-
-    A session can (rarely) log the same exercise twice, in two different
-    slots -- its rows for that exercise are combined into one per-session
-    value first (max weight, max e1RM, summed volume) so that session is
-    judged as a single performance on that exercise, not as two rows that
-    could otherwise shadow or double-count each other. This mirrors
-    session_report itself: two rows in `current` for one exercise would each
-    be compared independently against the very same `history`, so a
-    stronger row could earn a record while a weaker sibling row from the
-    same session correctly does not -- combining first collapses that
-    per-exercise decision into the single best-of-both-rows number, which is
-    the same one-record-per-exercise-per-session outcome session_report
-    produces in the overwhelmingly common case of one row per exercise.
-
-    Deload sessions are excluded outright: they can neither hold a record nor
-    be the bar another session has to clear.
+    `rows` is every PerformedExercise of the lifter's finished workouts, a
+    replaced-away original included: its sets were done (Q1).
     """
-    rows_by_exercise = {}
-    for row in _progression_rows(rows):
-        by_session = rows_by_exercise.setdefault(row.exercise_id, {})
-        by_session.setdefault(row.session_id, []).append(row)
-
-    record_counts = {}
-    for sessions in rows_by_exercise.values():
-        session_values = {
-            session_id: {
-                'weight': max(best_weight(row) for row in session_rows),
-                'e1rm': max(best_e1rm(row) for row in session_rows),
-                'volume': sum(row_volume(row) for row in session_rows),
-            }
-            for session_id, session_rows in sessions.items()
-        }
-
-        record_here = set()
-        for metric in ('weight', 'e1rm', 'volume'):
-            ranked = sorted(session_values.items(), key=lambda item: -item[1][metric])
-            top_session_id, top_value = ranked[0][0], ranked[0][1][metric]
-            second_value = ranked[1][1][metric] if len(ranked) > 1 else None
-            for session_id, values in session_values.items():
-                threshold = second_value if session_id == top_session_id else top_value
-                if threshold is not None and values[metric] > threshold:
-                    record_here.add(session_id)
-
-        for session_id in record_here:
-            record_counts[session_id] = record_counts.get(session_id, 0) + 1
-
-    return record_counts
+    marked = {(row.session_id, row.exercise_id) for row in record_marks(rows)}
+    counts = {}
+    for session_id, _exercise_id in marked:
+        counts[session_id] = counts.get(session_id, 0) + 1
+    return counts
 
 
 def muscle_group_volume(rows, catalogue_groups, now, days=ROLLING_WINDOW_DAYS):

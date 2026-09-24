@@ -395,6 +395,32 @@ def test_skipping_carries_across(linked_pair):
         assert all(se.skipped for se in follower_session.exercises)
 
 
+def test_a_ticked_set_with_no_reps_neither_blocks_the_skip_nor_goes_with_it(linked_pair):
+    """B3 review: a tick with 0 reps is no logged work (Q1), so it no longer
+    holds the leader's skip back -- and, as a skip on your own screen does, the
+    carried skip drops only what is still pending."""
+    from extensions import db
+    from features.gym import sharing
+    from models import SessionExercise, SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        follower_session = db.session.get(WorkoutSession, linked_pair['follower_session'])
+        follower_row = follower_session.exercises[0]
+        follower_row.sets.append(SessionSet(position=1, weight=40.0, reps=0, completed=True))
+        follower_row.sets.append(SessionSet(position=2, weight=40.0, reps=8, completed=False))
+        db.session.commit()
+        follower_row_id = follower_row.id
+
+        row = db.session.get(SessionExercise, linked_pair['leader_row'])
+        row.skipped = True
+        db.session.commit()
+        sharing.propagate_structure(row.session, skip_changed=row)
+
+        kept = db.session.get(SessionExercise, follower_row_id)
+        assert kept.skipped is True
+        assert [(s.reps, s.completed) for s in kept.sets] == [(0, True)]
+
+
 def test_reconciliation_alone_does_not_reimpose_the_leaders_skip(linked_pair):
     """Owner decision 2026-09-20: the follower's own choices stick. Mirroring
     `skipped` on every reconciliation un-skipped what the follower had skipped

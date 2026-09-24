@@ -9,7 +9,7 @@ import type { LiveRecord, SessionDetailPayload } from './types'
  * that matter are celebrating on a reload and not celebrating at all. */
 
 const RECORD: LiveRecord = {
-  kind: 'weight', value: 82.5, previous: 80.0,
+  kind: 'e1rm', value: 82.5, previous: 80.0,
   previous_at: '2026-09-09T18:30:00',
 }
 

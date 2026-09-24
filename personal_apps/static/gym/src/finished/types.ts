@@ -31,11 +31,11 @@ export interface FinishedExercise {
   has_history: boolean
   avg_volume: number | null
   volume_delta_pct: number | null
-  is_weight_pr: boolean
-  is_volume_pr: boolean
-  is_e1rm_pr: boolean
+  /** This exercise's best e1RM here beat every earlier workout's (D3). */
+  is_record: boolean
   sessions_since_pr: number | null
-  /** A deload sets every verdict to null, which is why the tag can be absent. */
+  /** A deload keeps only 'rekord' and has no progress verdict otherwise, which
+   *  is why the tag can be absent. */
   verdict: 'rekord' | 'stagniert' | 'steigend' | 'neu' | null
   set_rows: CorrectableSet[]
   session_exercise_id: number | null
@@ -43,7 +43,8 @@ export interface FinishedExercise {
   pain: boolean
 }
 
-export type RecordKind = 'weight' | 'e1rm' | 'volume'
+/** A record is e1RM only (D3). */
+export type RecordKind = 'e1rm'
 
 export interface SessionRecord {
   kind: RecordKind

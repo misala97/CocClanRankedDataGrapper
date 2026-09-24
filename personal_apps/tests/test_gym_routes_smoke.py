@@ -1980,9 +1980,10 @@ def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
         # Set 1: same weight as the evidence (20,0, so finding 1b's
         # retirement rule does not fire) but more reps than the past
         # session's best -- a live e1RM PR, so this chip renders through
-        # the is_record branch of the label.
+        # the is_record branch of the label. 12 reps, the most a record
+        # is judged on (D3).
         db.session.add(SessionSet(session_exercise_id=today_se.id, position=1,
-                                  weight=20.0, reps=15, completed=True,
+                                  weight=20.0, reps=12, completed=True,
                                   completed_at=dt.datetime.utcnow()))
         # Set 2: completed but not a record -- the plain "erledigt" branch.
         db.session.add(SessionSet(session_exercise_id=today_se.id, position=2,
@@ -2010,7 +2011,7 @@ def test_the_ready_badge_says_je_seite_for_unilateral_exercises(client):
         # "je Seite". What the server decides is the numbers behind them and
         # which set holds the record.
         sets = live['sets']
-        assert (sets[0]['weight'], sets[0]['reps']) == (20.0, 15)
+        assert (sets[0]['weight'], sets[0]['reps']) == (20.0, 12)
         assert sets[0]['id'] in payload['record_set_ids'], 'set 1 is not the record'
         assert (sets[1]['weight'], sets[1]['reps']) == (18.0, 8)
         assert sets[1]['completed'] and not sets[2]['completed']

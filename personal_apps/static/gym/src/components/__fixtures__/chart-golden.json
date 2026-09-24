@@ -12,7 +12,7 @@
               "y": 118.0,
               "e1rm": 44.3,
               "started_at": "2026-06-14T13:24:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -20,7 +20,7 @@
               "y": 118.0,
               "e1rm": 44.3,
               "started_at": "2026-06-19T12:38:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -28,7 +28,7 @@
               "y": 118.0,
               "e1rm": 44.3,
               "started_at": "2026-06-25T13:25:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -36,7 +36,7 @@
               "y": 114.55,
               "e1rm": 45.5,
               "started_at": "2026-07-06T20:43:31",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -44,7 +44,7 @@
               "y": 114.55,
               "e1rm": 45.5,
               "started_at": "2026-07-09T20:51:49",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -52,7 +52,7 @@
               "y": 111.11,
               "e1rm": 46.7,
               "started_at": "2026-07-12T20:41:48",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -60,7 +60,7 @@
               "y": 111.11,
               "e1rm": 46.7,
               "started_at": "2026-07-15T09:37:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -68,7 +68,7 @@
               "y": 80.09,
               "e1rm": 57.5,
               "started_at": "2026-07-31T00:22:43",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -76,7 +76,7 @@
               "y": 10.0,
               "e1rm": 81.9,
               "started_at": "2026-07-31T01:03:16",
-              "is_best": true,
+              "is_record": true,
               "is_deload": false
             },
             {
@@ -84,7 +84,7 @@
               "y": 52.51,
               "e1rm": 67.1,
               "started_at": "2026-07-31T07:03:33",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -92,7 +92,7 @@
               "y": 16.03,
               "e1rm": 79.8,
               "started_at": "2026-07-31T11:14:10",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             }
           ],
@@ -150,7 +150,7 @@
               "y": 118.0,
               "e1rm": 44.3,
               "started_at": "2026-06-14T13:24:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -158,7 +158,7 @@
               "y": 118.0,
               "e1rm": 44.3,
               "started_at": "2026-06-19T12:38:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -166,7 +166,7 @@
               "y": 118.0,
               "e1rm": 44.3,
               "started_at": "2026-06-25T13:25:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -174,7 +174,7 @@
               "y": 114.55,
               "e1rm": 45.5,
               "started_at": "2026-07-06T20:43:31",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -182,7 +182,7 @@
               "y": 114.55,
               "e1rm": 45.5,
               "started_at": "2026-07-09T20:51:49",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -190,7 +190,7 @@
               "y": 111.11,
               "e1rm": 46.7,
               "started_at": "2026-07-12T20:41:48",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -198,7 +198,7 @@
               "y": 111.11,
               "e1rm": 46.7,
               "started_at": "2026-07-15T09:37:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -206,7 +206,7 @@
               "y": 80.09,
               "e1rm": 57.5,
               "started_at": "2026-07-31T00:22:43",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -214,7 +214,7 @@
               "y": 10.0,
               "e1rm": 81.9,
               "started_at": "2026-07-31T01:03:16",
-              "is_best": true,
+              "is_record": true,
               "is_deload": false
             },
             {
@@ -222,7 +222,7 @@
               "y": 52.51,
               "e1rm": 67.1,
               "started_at": "2026-07-31T07:03:33",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             },
             {
@@ -230,7 +230,7 @@
               "y": 16.03,
               "e1rm": 79.8,
               "started_at": "2026-07-31T11:14:10",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             }
           ],
@@ -249,7 +249,7 @@
               "y": 118.0,
               "e1rm": 44.3,
               "started_at": "2026-06-30T11:39:00",
-              "is_best": false,
+              "is_record": false,
               "is_deload": false
             }
           ],

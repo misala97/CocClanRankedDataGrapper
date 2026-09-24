@@ -14,14 +14,14 @@ const exercise = (over: Partial<FinishedExercise> = {}): FinishedExercise => ({
   exercise_id: 10, name: 'Bankdrücken', position: 1,
   sets: [[60, 8], [60, 8]], sets_display: '2 × 60 kg', volume: 960,
   best_weight: 60, e1rm: 75, has_history: true, avg_volume: 900,
-  volume_delta_pct: 7, is_weight_pr: false, is_volume_pr: false, is_e1rm_pr: false,
+  volume_delta_pct: 7, is_record: false,
   sessions_since_pr: 2, verdict: null,
   set_rows: [{ id: 501, weight: 60, reps: 8 }, { id: 502, weight: 60, reps: 8 }],
   session_exercise_id: 90, notes: null, pain: false, ...over,
 })
 
 const record = (over: Partial<SessionRecord> = {}): SessionRecord => ({
-  kind: 'weight', name: 'Bankdrücken', exercise_id: 10, position: 1,
+  kind: 'e1rm', name: 'Bankdrücken', exercise_id: 10, position: 1,
   value: 72.5, previous: 70, previous_at: '2026-07-20T10:00:00', ...over,
 })
 
@@ -78,7 +78,7 @@ describe('FinishedPage', () => {
     it('leads with records when there are any', () => {
       mount({ records: [record()], record_count: 1 })
       expect(screen.getByText('1 neuer Rekord.')).toBeInTheDocument()
-      mount({ records: [record(), record({ kind: 'volume' })], record_count: 2 })
+      mount({ records: [record(), record({ name: 'Dips', exercise_id: 11 })], record_count: 2 })
       expect(screen.getByText('2 neue Rekorde.')).toBeInTheDocument()
     })
 
@@ -122,12 +122,13 @@ describe('FinishedPage', () => {
   })
 
   describe('the tick strip', () => {
-    it('counts only weight records in its label', () => {
+    it('counts the gold ticks in its label, not the records', () => {
       // 21 ticks with 1 gold once announced "davon 3 mit Rekord": the label
-      // counted every record kind while only a weight record earns a tick.
-      mount({ tick_states: ['done', 'record', 'done'], total_sets: 3 })
+      // counted records while the strip shows record SETS.
+      mount({ tick_states: ['done', 'record', 'done'], total_sets: 3,
+              records: [record()], record_count: 1 })
       expect(screen.getByRole('img'))
-        .toHaveAccessibleName('3 Sätze erledigt, davon 1 mit Gewichts-Rekord')
+        .toHaveAccessibleName('3 Sätze erledigt, davon 1 mit Rekord')
     })
 
     it('says nothing about records when none earned a tick', () => {
@@ -180,12 +181,12 @@ describe('FinishedPage', () => {
     it('flares exactly one, however many there are', () => {
       // It used to loop: six records meant six identical full-bleed gold slabs.
       mount({
-        records: [record(), record({ kind: 'e1rm', name: 'Dips', exercise_id: 11 }),
-          record({ kind: 'volume', name: 'Rudern', exercise_id: 12 })],
+        records: [record(), record({ name: 'Dips', exercise_id: 11 }),
+          record({ name: 'Rudern', exercise_id: 12 })],
         record_count: 3,
       })
       expect(screen.getAllByText(/Neuer .*-Rekord/)).toHaveLength(1)
-      expect(screen.getByText('Neuer Gewichts-Rekord')).toBeInTheDocument()
+      expect(screen.getByText('Neuer e1RM-Rekord')).toBeInTheDocument()
       // The rest become quiet rows.
       const others = screen.getByRole('region', { name: 'Weitere Rekorde' })
       expect(within(others).getAllByRole('link')).toHaveLength(2)
@@ -367,6 +368,20 @@ describe('FinishedPage', () => {
     })
   })
 
+  it('keeps a replaced original and its substitute apart in one slot', () => {
+    // B3 review: both sit at position 1, and the position was the key.
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mount({ exercises: [
+      exercise({ session_exercise_id: 90 }),
+      exercise({ exercise_id: 11, name: 'Schrägbankdrücken', session_exercise_id: 91,
+                 set_rows: [{ id: 503, weight: 50, reps: 8 }] }),
+    ] })
+    expect(screen.getAllByText('Bankdrücken').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Schrägbankdrücken').length).toBeGreaterThan(0)
+    expect(errors.mock.calls.flat().join(' ')).not.toMatch(/same key/)
+    errors.mockRestore()
+  })
+
   it('keeps deleting a workout quiet', () => {
     mount()
     const del = screen.getByRole('button', { name: 'Workout löschen' })
@@ -417,7 +432,7 @@ describe('saving without a reload', () => {
       is_deload: true,
     }))
     mount()
-    await userEvent.click(screen.getByRole('button', { name: 'War ein Deload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Als Deload markieren' }))
     expect(await screen.findByText('Als Deload markiert. Bewusst leichter.'))
       .toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Deload-Markierung entfernen' }))

@@ -73,14 +73,12 @@ def _catalogue_payload():
     entries_by_id = {}
     for exercise in exercises:
         rows = rows_by_exercise.get(exercise.id, [])
-        # Judged slot, record weight and record e1RM must agree with what
-        # the exercise's own detail page shows and with what stall_report()
-        # judges on the dashboard, so deload rows are dropped BEFORE they
-        # reach dominant_position/best_e1rm/best_weight/sessions_since_pr --
-        # the same filter-before-judge order stall_report() uses (see its
-        # own docstring). `last_done` stays on the unfiltered `rows`: "when
-        # did I last do this" is a fact a deload session legitimately
-        # answers, it is not a judgement.
+        # The judged slot and "what you would load today" must agree with the
+        # exercise's own page and with stall_report(), so deload rows are
+        # dropped before they reach dominant_position and last_weight -- a
+        # deliberately light workout is no working weight. Records, the
+        # heaviest set, the "ohne PR" count and `last_done` read every row:
+        # those are facts, and a deload workout legitimately answers them.
         progression = stats.progression_rows(rows)
         # dominant_position() requires at least one row -- a brand new
         # exercise, or one whose only history is deloads, has no position to
@@ -88,8 +86,10 @@ def _catalogue_payload():
         # empty-rows check before position is ever consulted, so None is a
         # safe stand-in here.
         position = stats.dominant_position(progression) if progression else None
-        best_e1rm = max((stats.best_e1rm(row) for row in progression), default=None)
-        state = stats.exercise_state(progression, position=position)
+        # Every row, deloads included: 'Rekord' is a record whatever the
+        # workout was (D3), and exercise_state drops deloads itself for the
+        # progress verdicts -- as on the exercise's own page.
+        state = stats.exercise_state(rows, position=position)
         chip_class, chip_label = EXERCISE_STATE_CHIP.get(state, (None, None))
         last_done = max((row.started_at for row in rows), default=None)
         entries_by_id[exercise.id] = {
@@ -97,7 +97,9 @@ def _catalogue_payload():
             'chip_class': chip_class,
             'chip_label': chip_label,
             'last_done': last_done,
-            'best_weight': max((stats.best_weight(row) for row in progression), default=None),
+            # Every row, deloads included: the heaviest set is a fact, and the
+            # exercise's own page says "Schwerster Satz" from all of them.
+            'best_weight': max((stats.best_weight(row) for row in rows), default=None),
             # What you would load TODAY, which is the question a catalogue is
             # opened with. The row led with the all-time best -- unlabelled, so
             # "Military Press · 15,0 kg" could not be told apart from a working
@@ -106,7 +108,9 @@ def _catalogue_payload():
             'last_weight': stats.best_weight(progression[-1]) if progression else None,
             'days_ago': (stats.calendar_days_between(last_done, now)
                          if last_done is not None else None),
-            'sessions_since_pr': stats.sessions_since_pr(progression, position=position) if progression else None,
+            # From the last record, whatever slot or workout set it: the same
+            # count as the chip beside it and every other "ohne PR" (drought).
+            'sessions_since_pr': stats.sessions_since_pr(rows),
         }
 
     # Default/grouped view (spec 6.2's "nach Muskelgruppe"). The two flat

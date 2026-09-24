@@ -14,27 +14,34 @@ export function RecordsBand({
 }: Props) {
   return (
     <>
-      {prWeight !== null && prE1rm !== null ? (
+      {/* Each figure stands on its own. The heaviest set is a fact, not a
+          record -- a record is an e1RM (D3) -- and either can be missing: no
+          set above 0 kg, or none of 1 to 12 reps to estimate from. */}
+      {prWeight !== null || prE1rm !== null ? (
         <div className="prs">
-          <span className="pr">
-            <span className="pr__val">{kg1(prWeight.weight)}<small>kg</small></span>
-            <span className="label">Bestes Gewicht</span>
-            {/* One string, not interpolated children -- see ExerciseHeader for
-                why the raster depends on it. */}
-            <span className="pr__sub">
-              {`${prWeight.reps} Wdh. · Pos. ${prWeight.position} · ${shortDate(prWeight.started_at)}`}
+          {prWeight !== null && (
+            <span className="pr">
+              <span className="pr__val">{kg1(prWeight.weight)}<small>kg</small></span>
+              <span className="label">Schwerster Satz</span>
+              {/* One string, not interpolated children -- see ExerciseHeader for
+                  why the raster depends on it. */}
+              <span className="pr__sub">
+                {`${prWeight.reps} Wdh. · Pos. ${prWeight.position} · ${shortDate(prWeight.started_at)}`}
+              </span>
             </span>
-          </span>
-          <span className="pr">
-            <span className="pr__val">{kg1(prE1rm.e1rm)}<small>kg</small></span>
-            <span className="label">Bestes e1RM</span>
-            <span className="pr__sub">
-              {`${kg1(prE1rm.weight)} kg × ${prE1rm.reps} · Pos. ${prE1rm.position} · ${shortDate(prE1rm.started_at)}`}
+          )}
+          {prE1rm !== null && (
+            <span className="pr">
+              <span className="pr__val">{kg1(prE1rm.e1rm)}<small>kg</small></span>
+              <span className="label">Bestes e1RM</span>
+              <span className="pr__sub">
+                {`${kg1(prE1rm.weight)} kg × ${prE1rm.reps} · Pos. ${prE1rm.position} · ${shortDate(prE1rm.started_at)}`}
+              </span>
             </span>
-          </span>
+          )}
         </div>
       ) : (
-        <p className="empty">Noch kein Rekord — bisher nur Deload-Sätze protokolliert.</p>
+        <p className="empty">Noch kein Bestwert — bisher nur Sätze ohne Gewicht.</p>
       )}
 
       {state === 'stagniert' && lastProgression !== null ? (

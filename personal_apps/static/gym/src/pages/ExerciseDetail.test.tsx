@@ -38,7 +38,7 @@ const stackExercise: ExerciseMeta = {
 function row(over: Partial<SessionRow> = {}): SessionRow {
   return {
     session_id: 7, started_at: '2026-08-01T18:30:00', position: 2,
-    is_deload: false, sets_display: '3 × 8', best_weight: 80,
+    is_deload: false, is_record: false, sets_display: '3 × 8', best_weight: 80,
     volume: 1920, e1rm: 100, ...over,
   }
 }
@@ -118,27 +118,47 @@ describe('ExerciseDetailPage', () => {
     expect(screen.queryByText(/die stärkste/)).not.toBeInTheDocument()
   })
 
-  it('marks the record row on session_id, not on the date', () => {
-    const sameDay = [
-      row({ session_id: 7, e1rm: 100 }),
+  it('tags every row the server marks as a record, an overtaken one too', () => {
+    // Same day, and the older record since beaten: the tag is the server's
+    // per-row mark (D3), not a match against the one best set.
+    const rows = [
+      row({ session_id: 9, e1rm: 104, is_record: true }),
       row({ session_id: 8, e1rm: 90, volume: 2200 }),
+      row({ session_id: 7, e1rm: 100, is_record: true }),
     ]
     render(<ExerciseDetailPage
       payload={payload({
-        table: sameDay,
+        table: rows,
         pr_e1rm: {
-          e1rm: 100, weight: 80, reps: 5, session_id: 7,
+          e1rm: 104, weight: 84, reps: 5, session_id: 9,
           started_at: '2026-08-01T18:30:00', position: 2,
         },
       })} />)
-    // exactly one row is gold, even though both share a date
-    expect(screen.getAllByText('Rekord')).toHaveLength(1)
+    expect(screen.getAllByText('Rekord')).toHaveLength(2)
   })
 
   it('labels deload rows', () => {
     render(<ExerciseDetailPage
       payload={payload({ table: [row({ is_deload: true })] })} />)
     expect(screen.getByText('Deload')).toBeInTheDocument()
+  })
+
+  it('says what a record is, and lets a deload row hold one (G-078)', () => {
+    render(<ExerciseDetailPage
+      payload={payload({ table: [row({ is_deload: true, is_record: true })] })} />)
+    expect(screen.getByText(/Rekord heißt: das beste e1RM bis zu diesem Tag\./))
+      .toBeInTheDocument()
+    expect(screen.queryByText(/keine Rekorde/)).not.toBeInTheDocument()
+    expect(screen.getByText('Rekord')).toBeInTheDocument()
+    expect(screen.getByText('Deload')).toBeInTheDocument()
+  })
+
+  it('says why there is no best yet when no set had a weight', () => {
+    // Deloads no longer explain an empty band: they hold records (G-078).
+    render(<ExerciseDetailPage
+      payload={payload({ table: [row({ best_weight: 0, e1rm: 0, volume: 0 })] })} />)
+    expect(screen.getByText('Noch kein Bestwert — bisher nur Sätze ohne Gewicht.'))
+      .toBeInTheDocument()
   })
 
   it('offers no way to delete the exercise: the list is everyone\'s', () => {

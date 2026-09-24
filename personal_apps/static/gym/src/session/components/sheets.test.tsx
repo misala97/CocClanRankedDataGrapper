@@ -52,6 +52,13 @@ describe('DeloadSheet', () => {
     expect(screen.getByText('60 %')).not.toHaveAttribute('aria-current')
   })
 
+  it('keeps a record a deload sets (G-078)', () => {
+    render(<DeloadSheet {...base} session={session} onToggle={vi.fn()} />)
+    open('sheet-deload')
+    expect(screen.getByText(/Ein Rekord bleibt ein Rekord\./)).toBeInTheDocument()
+    expect(screen.queryByText(/keine\s+Rekorde/)).not.toBeInTheDocument()
+  })
+
   it('explains a flag that changed no weights', () => {
     const deload = { ...session, is_deload: true, deload_pct: 70 }
     render(<DeloadSheet {...base} session={deload} hasCompletedSet

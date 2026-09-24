@@ -171,8 +171,7 @@ export function ExerciseDetailPage({ payload }: Props) {
 
             <div className="exdetail__log">
               <SessionLog table={p.table} selectedPosition={p.selected_position}
-                isUnilateral={p.exercise.is_unilateral}
-                prWeight={p.pr_weight} prE1rm={p.pr_e1rm} />
+                isUnilateral={p.exercise.is_unilateral} />
             </div>
           </>
         ) : (

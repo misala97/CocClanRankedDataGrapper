@@ -386,8 +386,8 @@ export function LivePanel({
       {records.length > 0 && (
         <p className="live__record">
           <span className="live__record-lbl">Rekord</span>
-          {/* "Bestwert", not "schwerer": is_new_best counts an e1RM record too,
-              so a set can land here at a lighter weight and more reps. */}
+          {/* "Bestwert", not "schwerer": a record is e1RM only (D3), so a set
+              can land here at a lighter weight and more reps. */}
           {records.length === 1
             ? ` Satz ${live.sets.indexOf(records[0]!) + 1} ist ein neuer Bestwert in dieser Übung.`
             : ` ${records.length} Sätze über deinem bisherigen Bestwert.`}

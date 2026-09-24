@@ -33,6 +33,7 @@ def _minimal():
             'is_unilateral': False, 'rest_seconds': 90, 'rest_setting': 150,
             'rest_setting_mine': True, 'increment': 2.5,
             'notes': None, 'pain': False, 'picture': None,
+            'replaced_sets_done': 0, 'replaced_volume': 0.0,
             'sets': [{
                 'id': 100, 'weight': 60.0, 'reps': 8, 'completed': False,
                 'base_weight': None,
@@ -151,23 +152,24 @@ def test_record_details_are_keyed_by_set_id_as_strings():
     data = _minimal()
     data['record_set_ids'] = [100]
     data['record_details'] = {'100': {
-        'kind': 'weight', 'value': 82.5, 'previous': 80.0,
+        'kind': 'e1rm', 'value': 82.5, 'previous': 80.0,
         'previous_at': '2026-09-09T18:30:00',
     }}
     dumped = SessionDetailPayload.model_validate(data).model_dump(mode='json')
     assert list(dumped['record_details']) == ['100']
-    assert dumped['record_details']['100']['kind'] == 'weight'
+    assert dumped['record_details']['100']['kind'] == 'e1rm'
     assert dumped['record_details']['100']['previous'] == 80.0
 
 
-def test_rejects_a_record_kind_the_live_screen_cannot_render():
-    """'volume' is a real kind in session_report's debrief, but no set-level
-    volume record exists live -- accepting one would put a word on the gold
-    slab that the copy has no branch for."""
+@pytest.mark.parametrize('kind', ['weight', 'volume'])
+def test_rejects_a_record_kind_the_live_screen_cannot_render(kind):
+    """A record is e1RM only (D3). The weight and volume kinds are gone --
+    accepting one would put a word on the gold slab that the copy has no
+    branch for."""
     data = _minimal()
     data['record_set_ids'] = [100]
     data['record_details'] = {'100': {
-        'kind': 'volume', 'value': 1830.0, 'previous': 1656.0,
+        'kind': kind, 'value': 1830.0, 'previous': 1656.0,
         'previous_at': '2026-09-09T18:30:00',
     }}
     with pytest.raises(ValidationError, match='kind'):

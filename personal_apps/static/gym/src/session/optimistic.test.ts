@@ -108,13 +108,16 @@ describe('optimistic deleteSet', () => {
 })
 
 describe('optimistic toggleSkip', () => {
-  it('takes a skipped exercise sets out of the strip entirely', () => {
-    // Matching _live_data, which skips them outright -- so skipping changes
-    // the totals, not just a class on a row.
+  it('keeps a skipped exercise\'s done sets and drops its open ones', () => {
+    // Matching _live_data (Q1): what was lifted before the skip was lifted,
+    // and the sets still open are not going to be.
     const before = payload.tick_states.length
+    const open = live.sets.filter((s) => !s.completed).length
     const next = toggleSkip(payload, live.id)
     expect(next.visible_exercises.find((se) => se.id === live.id)!.skipped).toBe(true)
-    expect(next.tick_states.length).toBe(before - live.sets.length)
+    expect(next.tick_states.length).toBe(before - open)
+    expect(next.sets_done).toBe(payload.sets_done)
+    expect(next.session_volume).toBe(payload.session_volume)
   })
 
   it('puts them back when un-skipped', () => {
@@ -122,6 +125,36 @@ describe('optimistic toggleSkip', () => {
     const next = toggleSkip(payload, skipped.id)
     expect(next.tick_states.length)
       .toBe(payload.tick_states.length + skipped.sets.length)
+  })
+})
+
+describe('optimistic retally', () => {
+  it('counts the done sets of a replaced original in place (Q1)', () => {
+    // The server carries them on the substitute; the retally must keep them,
+    // or every tick would drop them until the server answered.
+    const carried: SessionDetailPayload = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === live.id ? { ...se, replaced_sets_done: 2, replaced_volume: 1000 } : se),
+    }
+    const next = toggleSet(carried, openSet.id, true, 20, 8)
+    expect(next.sets_done).toBe(payload.sets_done + 2 + 1)
+    expect(next.sets_total).toBe(payload.sets_total + 2)
+    expect(next.tick_states.slice(0, 2)).toEqual(['done', 'done'])
+    expect(next.session_volume).toBe(payload.session_volume + 1000 + 20 * 8 * 2)
+  })
+
+  it('counts no done set without reps (G-038)', () => {
+    const zero: SessionDetailPayload = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === live.id
+          ? { ...se, sets: se.sets.map((s) => (s.id === doneSet.id ? { ...s, reps: 0 } : s)) }
+          : se),
+    }
+    const next = toggleSkip(toggleSkip(zero, live.id), live.id)
+    expect(next.sets_done).toBe(payload.sets_done - 1)
+    expect(next.has_completed_set).toBe(payload.sets_done - 1 > 0)
   })
 })
 

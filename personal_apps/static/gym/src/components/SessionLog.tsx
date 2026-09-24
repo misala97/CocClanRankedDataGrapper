@@ -1,17 +1,13 @@
-import type { E1rmPR, SessionRow, WeightPR } from '../types'
+import type { SessionRow } from '../types'
 import { kg1, shortDate, volume } from '../format'
 
 interface Props {
   table: SessionRow[]
   selectedPosition: number | null
   isUnilateral: boolean
-  prWeight: WeightPR | null
-  prE1rm: E1rmPR | null
 }
 
-export function SessionLog({
-  table, selectedPosition, isUnilateral, prWeight, prE1rm,
-}: Props) {
+export function SessionLog({ table, selectedPosition, isUnilateral }: Props) {
   return (
     <section className="sec sec--log" aria-labelledby="sec-log">
       {/* Same scoping as the chart above: this list is filtered too, and a
@@ -31,18 +27,11 @@ export function SessionLog({
       )}
 
       {table.map((row) => {
-        /* Matched on session_id, not started_at. Two sessions on one day both
-           matched the date and both went gold; and because .row.is-record
-           tinted .vol, the gold landed on VOLUME -- so a 1.656 kg row was gold
-           while a 1.830 kg row below it was larger and plain. The record is an
-           e1RM or a weight, never a volume. */
-        const isE1rmPr = prE1rm !== null
-          && row.session_id === prE1rm.session_id
-          && row.position === prE1rm.position
-        const isWeightPr = prWeight !== null
-          && row.session_id === prWeight.session_id
-          && row.position === prWeight.position
-        const isRecord = isE1rmPr || isWeightPr
+        /* The server's mark, per row: this workout's e1RM beat every one
+           before it (D3). History -- a record later overtaken keeps its tag,
+           as its badge does everywhere else. It used to be matched here
+           against the one best set, by session. */
+        const isRecord = row.is_record
 
         return (
           <a
@@ -76,8 +65,9 @@ export function SessionLog({
       })}
 
       <p className="exdetail__note">
-        Deload-Einheiten bleiben in der Liste — sie sind das Protokoll. Sie halten
-        keine Rekorde und zählen nicht gegen die Stagnation.
+        Rekord heißt: das beste e1RM bis zu diesem Tag. Deload-Einheiten bleiben
+        in der Liste — sie sind das Protokoll — und zählen nicht gegen die
+        Stagnation.
       </p>
     </section>
   )

@@ -26,6 +26,7 @@ from ..locking import lock_sessions, lock_user
 from .helpers import (
     _delete_session_and_links, _get_active_session, _to_int, _username,
 )
+from .history import counts
 from ._blueprint import (
     gym_bp,
 )
@@ -134,7 +135,7 @@ def _invite_refusal(shared):
     # _discardable_active. Before this, opening the app on the way to the gym
     # (which starts one) locked you out of your partner's invite until you
     # found the way to finish an empty workout.
-    if any(s.completed for se in active.exercises for s in se.sets):
+    if any(counts(s) for se in active.exercises for s in se.sets):
         return 'Du hast schon Sätze in einem laufenden Workout — beende es zuerst.'
     if sharing.active_links_led_by(active.id) or sharing.is_live_follower(active.id):
         # Nothing logged yet, but somebody else is training it with you --

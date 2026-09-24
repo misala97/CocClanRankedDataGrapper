@@ -7,7 +7,7 @@ import type { StatistikPayload, TimelineRecord } from './types'
 const record = (over: Partial<TimelineRecord> = {}): TimelineRecord => ({
   started_at: '2026-07-31T16:00:00', session_id: 900, exercise_id: 4,
   name: 'Reverse Fly (Machine)',
-  weight: { value: 45, previous: 40 }, e1rm: null, ...over,
+  e1rm: { value: 57, previous: 53.3 }, ...over,
 })
 
 const base: StatistikPayload = {
@@ -18,9 +18,9 @@ const base: StatistikPayload = {
   },
   longest_gap: 7,
   months: [
-    { year: 2026, month: 6, volume: 51247, is_gap: false, has_deload: false, has_record: true },
-    { year: 2026, month: 7, volume: 102494, is_gap: false, has_deload: true, has_record: false },
-    { year: 2026, month: 8, volume: 0, is_gap: true, has_deload: false, has_record: false },
+    { year: 2026, month: 6, volume: 51247, is_gap: false, deload_volume: 0, records: 3 },
+    { year: 2026, month: 7, volume: 102494, is_gap: false, deload_volume: 25623.5, records: 0 },
+    { year: 2026, month: 8, volume: 0, is_gap: true, deload_volume: 0, records: 0 },
   ],
   progression: [
     {
@@ -215,9 +215,20 @@ describe('StatistikPage', () => {
       // exactly one fact: that it existed.
       mount()
       const bars = screen.getAllByRole('listitem')
-      expect(bars[0]).toHaveAccessibleName('Juni 2026: 51.247 kg, Rekordmonat')
-      expect(bars[1]).toHaveAccessibleName('Juli 2026: 102.494 kg, Deload')
+      expect(bars[0]).toHaveAccessibleName('Juni 2026: 51.247 kg, 3 Rekorde')
+      expect(bars[1]).toHaveAccessibleName('Juli 2026: 102.494 kg, davon 25.624 kg Deload')
       expect(bars[2]).toHaveAccessibleName('August 2026: 0 kg, kein Workout')
+    })
+
+    it('hatches only the deload share of a bar, and marks no record month', () => {
+      // G-026: one light workout hatched the whole month, and a gold tick sat
+      // on every bar a record fell in -- which was every bar.
+      const { container } = mount()
+      const bars = container.querySelectorAll('.mo')
+      expect(bars[0]).not.toHaveClass('is-deload')
+      expect(bars[1]).toHaveClass('is-deload')
+      expect((bars[1] as HTMLElement).style.getPropertyValue('--deload-share')).toBe('25%')
+      expect(container.querySelector('.mo.is-record')).toBeNull()
     })
 
     it('counts the weeks that held a workout, which tonnage cannot show', () => {
@@ -257,7 +268,7 @@ describe('StatistikPage', () => {
       await user.click(bars[0]!)
       const read = container.querySelector('.chart__read')!
       expect(read).toHaveTextContent('Juni 2026 · 51.247 kg')
-      expect(read).toHaveTextContent('Rekordmonat')
+      expect(read).toHaveTextContent('3 Rekorde')
       expect(bars[0]).toHaveClass('is-picked')
       await user.click(bars[0]!)
       expect(screen.getByText(/Balken antippen/)).toBeInTheDocument()
@@ -317,7 +328,7 @@ describe('StatistikPage', () => {
 
       const read = container.querySelector('.chart__read')!
       expect(read).toHaveTextContent('3 Monate')
-      expect(read).toHaveTextContent('Rekordmonat')
+      expect(read).not.toHaveTextContent('Rekordmonat')
       expect(container.querySelectorAll('.mo.is-picked')).toHaveLength(3)
     })
 
@@ -446,8 +457,13 @@ describe('StatistikPage', () => {
       const { container } = mount()
       const rows = container.querySelector('[aria-labelledby="drift-h"]')!
       expect(rows).toHaveTextContent('Brust')
-      expect(rows).toHaveTextContent('+4,1 %')
-      expect(rows).toHaveTextContent('-4,6 %')
+      // Both shares, never the difference labelled "%": it is in percentage
+      // points (G-127), which the title says.
+      expect(rows).toHaveTextContent('20,3 % → 24,4 %')
+      expect(rows).toHaveTextContent('29,4 % → 24,8 %')
+      expect(rows).not.toHaveTextContent('+4,1 %')
+      expect(rows.querySelector('.prog__pct')).toHaveAttribute('title', '+4,1 Prozentpunkte')
+      expect(rows).toHaveTextContent('Letzte 28 Tage gegen die 28 davor')
       expect(rows).toHaveTextContent('Aus 12 Workouts zuletzt gegen 17 davor.')
     })
 
@@ -461,7 +477,7 @@ describe('StatistikPage', () => {
 
     it('says there is no before to compare against, rather than drifting by zero', () => {
       mount(nothing)
-      expect(screen.getByText(/Noch kein Davor/)).toBeInTheDocument()
+      expect(screen.getByText(/Noch kein Vergleich/)).toBeInTheDocument()
     })
   })
 
@@ -650,22 +666,9 @@ describe('StatistikPage', () => {
       expect(within(section).getByText('1 weitere')).toBeInTheDocument()
     })
 
-    it('leads with the weight record and mentions the e1RM alongside', () => {
-      mount({
-        recent_records: [record({
-          weight: { value: 45, previous: 40 }, e1rm: { value: 57, previous: 53.3 },
-        })],
-        record_years: [],
-      })
-      expect(screen.getByText(/45,0 kg/)).toHaveTextContent('45,0 kg vorher 40,0')
-      expect(screen.getByText('auch e1RM 57,0')).toBeInTheDocument()
-    })
-
-    it('falls back to the e1RM when that is the only record set', () => {
-      const { container } = mount({
-        recent_records: [record({ weight: null, e1rm: { value: 57, previous: 53.3 } })],
-        record_years: [],
-      })
+    it('states each record as the e1RM it reached and the one it beat', () => {
+      // A record is e1RM only (D3): the weight row that used to lead is gone.
+      const { container } = mount({ recent_records: [record()], record_years: [] })
       expect(container.querySelector('.rec__val'))
         .toHaveTextContent('57,0 kg e1RM vorher 53,3')
       expect(screen.queryByText(/auch e1RM/)).not.toBeInTheDocument()

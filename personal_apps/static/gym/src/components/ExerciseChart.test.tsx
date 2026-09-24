@@ -21,7 +21,7 @@ function tapAt(container: HTMLElement, geom: ChartGeometry, x: number, y: number
 function point(over: Partial<ChartPoint> & Pick<ChartPoint, 'x' | 'y'>): ChartPoint {
   return {
     e1rm: 100, started_at: '2026-06-01T18:00:00',
-    is_best: false, is_deload: false, ...over,
+    is_record: false, is_deload: false, ...over,
   }
 }
 
@@ -36,7 +36,7 @@ const chart: ChartGeometry = {
     points: [
       point({ x: 10, y: 140 }),
       point({ x: 160, y: 80, is_deload: true }),
-      point({ x: 310, y: 20, is_best: true }),
+      point({ x: 310, y: 20, is_record: true }),
     ],
   }],
 }

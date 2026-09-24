@@ -15,7 +15,7 @@ from features.gym.routes.reports import _year_bands
 
 
 def _point(started_at, e1rm):
-    return {'started_at': started_at, 'e1rm': e1rm, 'is_deload': False}
+    return {'started_at': started_at, 'e1rm': e1rm, 'is_deload': False, 'is_record': False}
 
 
 def test_the_chart_spreads_two_workouts_of_one_local_day():
