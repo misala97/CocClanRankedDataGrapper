@@ -6,7 +6,7 @@ from flask import Blueprint, abort, jsonify, render_template, request, session, 
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db
-from models import AppUser
+from models import AppUser, PushSubscription
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -170,10 +170,35 @@ def login():
 
 @auth_bp.route('/logout')
 def logout():
+    _forget_this_devices_push()
     session.clear()
     if _on_full_access_host():
         return redirect(url_for('index'))
     return redirect(url_for('pubquiz.pubquiz'))
+
+
+# The push subscription this login registered (gym push_routes.gym_push_subscribe).
+PUSH_SUBSCRIPTION_KEY = 'push_subscription_id'
+
+
+def _forget_this_devices_push():
+    """Logging out takes this device's push subscription with it.
+
+    It used to stay, and a shared phone kept buzzing with the previous user's
+    rest timers, invites and digests (G-134). Only this device's row goes --
+    the user's other devices keep theirs. Done here rather than by a script on
+    the logout link, so every page's logout counts, not only the gym's. The
+    browser keeps its subscription; whoever logs in and opens the gym next
+    registers it as their own.
+    """
+    subscription_id = session.get(PUSH_SUBSCRIPTION_KEY)
+    user_id = session.get('user_id')
+    if subscription_id is None or user_id is None:
+        return
+    (PushSubscription.query
+     .filter_by(id=subscription_id, user_id=user_id)
+     .delete(synchronize_session=False))
+    db.session.commit()
 
 
 MIN_PASSWORD_LENGTH = 8

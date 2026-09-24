@@ -85,9 +85,18 @@ self.addEventListener('pushsubscriptionchange', (event) => {
         if (!fresh) return;
         const body = fresh.toJSON();
         if (previous) body.replaces = previous.endpoint;
+        // The subscribe route sits behind the gym's CSRF gate like every
+        // other write, and a worker has no page to read the token from --
+        // so it asks for it. Without the token every renewal was refused.
+        const answer = await fetch('/gym/push/token', {
+            headers: { Accept: 'application/json' }, credentials: 'same-origin',
+        });
+        if (!answer.ok) return; // logged out: no one to renew it for
+        const { token } = await answer.json();
         await fetch('/gym/push/subscribe', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            credentials: 'same-origin',
             body: JSON.stringify(body),
         });
     })());

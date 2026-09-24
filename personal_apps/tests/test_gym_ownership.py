@@ -604,6 +604,9 @@ def test_a_push_goes_only_to_the_sessions_owner(two_users, monkeypatch):
         sent_to.append(subscription_info['endpoint'])
 
     monkeypatch.setattr(push, 'webpush', fake_webpush)
+    # A development machine runs with sending off (G-096); the stub above
+    # is what makes switching it on safe here.
+    monkeypatch.setitem(flask_app.config, 'PUSH_SENDING', True)
 
     endpoints = {}
     with flask_app.app_context():

@@ -1,4 +1,5 @@
 import datetime as dt
+import logging
 import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -8,6 +9,8 @@ from extensions import db
 from models import AppUser, PendingPush, WorkoutSession
 from features.gym import push, stats
 from features.gym.push import send_push_to_user
+
+log = logging.getLogger('gym_notifier')
 
 
 def check_pending_pushes():
@@ -33,9 +36,23 @@ def check_pending_pushes():
             .all()
         )
         for pending, user_id in due:
-            # A rest timer belongs to whoever started the session it came from.
-            send_push_to_user(user_id, {'title': 'Rest complete', 'body': 'Time for your next set.'})
+            pending_id = pending.id
+            try:
+                # A rest timer belongs to whoever started the session it came from.
+                send_push_to_user(user_id, {'title': 'Rest complete', 'body': 'Time for your next set.'})
+            except Exception:
+                # One bad row must not hold the others. An exception here used
+                # to end the pass before anything was marked, so the same row
+                # failed again every ten seconds and every push due after it
+                # waited behind it (G-133). A rest push is only worth sending
+                # on time, so a failed one is retired like a sent one.
+                db.session.rollback()
+                log.exception('rest push %s failed', pending_id)
+            # Marked and committed one row at a time: a later failure cannot
+            # roll back a push that already reached the phone, which would
+            # send it again on the next pass.
             pending.sent = True
+            db.session.commit()
 
         # Retire the orphans in the same pass, so they stop being scanned
         # every 20 seconds for the life of the database.
@@ -51,7 +68,7 @@ def check_pending_pushes():
         for pending in orphaned:
             pending.sent = True
 
-        if due or orphaned:
+        if orphaned:
             db.session.commit()
 
 
@@ -110,10 +127,18 @@ def send_weekly_digests():
     there is nothing to filter here."""
     now = dt.datetime.utcnow()
     with app.app_context():
-        for user in AppUser.query.all():
-            payload = _weekly_digest_for(user.id, now)
-            if payload is not None:
-                send_push_to_user(user.id, payload)
+        user_ids = [user_id for (user_id,) in db.session.query(AppUser.id)]
+        for user_id in user_ids:
+            try:
+                payload = _weekly_digest_for(user_id, now)
+                if payload is not None:
+                    send_push_to_user(user_id, payload)
+            except Exception:
+                # One user's failure is theirs alone. The loop used to stop at
+                # the first exception, and everyone after that user went
+                # without the week's digest (G-133).
+                db.session.rollback()
+                log.exception('weekly digest for user %s failed', user_id)
 
 
 if __name__ == '__main__':

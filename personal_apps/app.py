@@ -42,6 +42,9 @@ app.config['PERMANENT_SESSION_LIFETIME'] = dt.timedelta(days=30)
 app.config['VAPID_PUBLIC_KEY']   = os.getenv("VAPID_PUBLIC_KEY")
 app.config['VAPID_PRIVATE_KEY']  = os.getenv("VAPID_PRIVATE_KEY")
 app.config['VAPID_CLAIMS_EMAIL'] = os.getenv("VAPID_CLAIMS_EMAIL", "mailto:michi7788@googlemail.com")
+# A development machine sets PERSONAL_PUSH_SENDING=off: its database copies production's
+# subscriptions, and a local invite would otherwise buzz real phones (features/gym/push.py).
+app.config['PUSH_SENDING'] = os.getenv("PERSONAL_PUSH_SENDING", "on").lower() != "off"
 
 db.init_app(app)
 migrate = Migrate(app, db)

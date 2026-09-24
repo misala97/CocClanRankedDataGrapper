@@ -72,7 +72,9 @@ def gym_invite_partner(session_id):
             follower_user_id=partner_id,
         ))
         db.session.commit()
-        push.send_push_to_user(partner_id, {
+        # Off the request's thread: the invite is saved, and the answer must
+        # not wait on -- or fail with -- the partner's push service (G-133).
+        push.send_push_later(partner_id, {
             'title': f'{_username(current_user_id())} trainiert',
             'body': f'{session_.name or "Workout"} — mitmachen?',
         })

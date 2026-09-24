@@ -5,7 +5,7 @@ import datetime as dt
 import os
 
 from flask import (
-    current_app, jsonify, request, send_from_directory,
+    current_app, jsonify, request, send_from_directory, session,
 )
 from extensions import (
     db,
@@ -14,7 +14,7 @@ from models import (
     PushSubscription,
 )
 from auth import (
-    login_required,
+    PUSH_SUBSCRIPTION_KEY, _get_csrf_token, login_required,
 )
 from features.gym.scope import (
     current_user_id,
@@ -42,14 +42,46 @@ def gym_service_worker():
     )
 
 
+def _json_object():
+    """The request's JSON body when it is an object, else an empty one.
+
+    A list or a bare string used to reach `.get` and answer 500."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def _text(value):
+    """A JSON string field, or None for anything else -- a number or a list
+    in the endpoint's place used to reach the URL parser and the query as-is
+    and answer 500."""
+    return value if isinstance(value, str) and value else None
+
+
+@gym_bp.route('/gym/push/token')
+@login_required
+def gym_push_token():
+    """The session's CSRF token, for the service worker.
+
+    The worker has no page and so no <meta name="csrf-token"> to read. Its
+    renewal after a pushsubscriptionchange went out without a token, the
+    blueprint's gate refused every one, and a rotated subscription stayed
+    unknown until a gym page next opened (G-134). Handing the token out is
+    safe: another site can make this request but cannot read the answer,
+    and under SameSite=Lax its request carries no login in the first place.
+    """
+    response = jsonify({'token': _get_csrf_token()})
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @gym_bp.route('/gym/push/subscribe', methods=['POST'])
 @login_required
 def gym_push_subscribe():
-    data = request.get_json(silent=True) or {}
-    endpoint = data.get('endpoint')
-    keys = data.get('keys') or {}
-    p256dh = keys.get('p256dh')
-    auth_key = keys.get('auth')
+    data = _json_object()
+    endpoint = _text(data.get('endpoint'))
+    keys = data.get('keys') if isinstance(data.get('keys'), dict) else {}
+    p256dh = _text(keys.get('p256dh'))
+    auth_key = _text(keys.get('auth'))
     if not endpoint or not p256dh or not auth_key:
         return jsonify({'status': 'error', 'message': 'invalid subscription'}), 400
     if not is_valid_push_endpoint(endpoint):
@@ -73,29 +105,35 @@ def gym_push_subscribe():
         # stays valid at the push service long after its browser forgot it.
         sub.last_seen_at = now
     else:
-        db.session.add(PushSubscription(endpoint=endpoint, p256dh_key=p256dh,
-                                        auth_key=auth_key, user_id=current_user_id(),
-                                        last_seen_at=now))
+        sub = PushSubscription(endpoint=endpoint, p256dh_key=p256dh,
+                               auth_key=auth_key, user_id=current_user_id(),
+                               last_seen_at=now)
+        db.session.add(sub)
 
     # The endpoint this one rotated away from, when the service worker's
     # pushsubscriptionchange told the client about it. Scoped to the caller:
     # it is a client-supplied endpoint, so unscoped it would be a way to
     # delete anyone's subscription by naming it.
-    replaces = data.get('replaces')
+    replaces = _text(data.get('replaces'))
     if replaces and replaces != endpoint:
         (PushSubscription.query
          .filter_by(endpoint=replaces, user_id=current_user_id())
          .delete(synchronize_session=False))
 
+    db.session.flush()
+    subscription_id = sub.id
     db.session.commit()
+    # Which subscription this login registered, so logging out can take it
+    # along (auth.logout) -- that device's, and only that device's.
+    if session.get(PUSH_SUBSCRIPTION_KEY) != subscription_id:
+        session[PUSH_SUBSCRIPTION_KEY] = subscription_id
     return jsonify({'status': 'ok'})
 
 
 @gym_bp.route('/gym/push/unsubscribe', methods=['POST'])
 @login_required
 def gym_push_unsubscribe():
-    data = request.get_json(silent=True) or {}
-    endpoint = data.get('endpoint')
+    endpoint = _text(_json_object().get('endpoint'))
     if endpoint:
         PushSubscription.query.filter_by(endpoint=endpoint, user_id=current_user_id()).delete()
         db.session.commit()
