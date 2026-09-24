@@ -133,7 +133,7 @@ def _stabilise(payload):
     }
     # Every dict keyed by SessionExercise.id has to be renumbered with the
     # rows, or the fixture names exercises it does not contain.
-    for keyed_by_se in ('seed_sources', 'stall_next_weight'):
+    for keyed_by_se in ('seed_sources', 'next_targets', 'deload_hints', 'routine_plans'):
         payload[keyed_by_se] = {
             str(se_map[int(k)]): v for k, v in payload[keyed_by_se].items()
             if int(k) in se_map

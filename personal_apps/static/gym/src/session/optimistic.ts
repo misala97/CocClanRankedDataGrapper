@@ -1,4 +1,4 @@
-import type { LiveExercise, LiveSet, SessionDetailPayload } from './types'
+import type { LiveExercise, LiveSet, RoutinePlan, SessionDetailPayload } from './types'
 import { instant } from '../format'
 import { REST_MAX } from '../settings/values'
 
@@ -179,6 +179,20 @@ export function setExerciseMeta(
       se.id === sessionExerciseId
         ? { ...se, pain: meta.pain, notes: meta.notes || null }
         : se),
+  }
+}
+
+/** The routine's plan for a row, as the steppers left it. Only that: the
+ *  target it changes is worked out on the server, and arrives with the
+ *  answer. */
+export function setRoutinePlan(
+  payload: SessionDetailPayload,
+  sessionExerciseId: number,
+  plan: RoutinePlan,
+): SessionDetailPayload {
+  return {
+    ...payload,
+    routine_plans: { ...payload.routine_plans, [String(sessionExerciseId)]: plan },
   }
 }
 

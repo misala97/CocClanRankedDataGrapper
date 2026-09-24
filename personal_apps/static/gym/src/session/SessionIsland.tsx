@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   QueryClient, QueryClientProvider, useQuery, useQueryClient,
 } from '@tanstack/react-query'
-import type { SessionDetailPayload } from './types'
+import type { RoutinePlan, SessionDetailPayload } from './types'
 import { api, fetchSession, MutationFailed, type SessionMetaPatch } from './api'
 import { postNavigate } from '../api'
 import { enablePush, heartbeatSubscription } from '../push'
@@ -149,6 +149,10 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
 
   const setRest = useSessionMutation(sessionId,
     (seId: number, seconds: number) => api.setRest(seId, seconds), optimistic.setRest)
+  // The whole plan each time, so its newest answers an older failure.
+  const setRoutinePlan = useSessionMutation(sessionId,
+    (seId: number, plan: RoutinePlan) => api.setRoutinePlan(seId, plan),
+    optimistic.setRoutinePlan, { key: (seId) => `routine-plan-${seId}` })
   // By field: the bodyweight saved later answers the one that was lost.
   const sessionMeta = useSessionMutation(sessionId,
     (meta: SessionMetaPatch) => api.setSessionMeta(sessionId, meta),
@@ -306,6 +310,15 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       `/gym/session/${sessionId}/save_as_template`, { template_name: name }),
     exerciseActions: (seId: number): ExerciseSheetActions => ({
       onRestChange: (seconds) => setRest.mutate([seId, seconds]),
+      // Flushed as the page goes away, it goes out at once (sendNow): queued
+      // behind a write in flight, it never left before the page was gone.
+      onRoutinePlanChange: (plan, leaving) => {
+        sendNow(leaving,
+          () => api.setRoutinePlan(seId, plan, true),
+          () => setRoutinePlan.mutateAsync([seId, plan]),
+          `routine-plan-${seId}`)
+          .catch(() => {}) // rolled back and bannered by the mutation layer
+      },
       onOpenSettings: () => openSheet(`sheet-settings-${seId}`),
       // No close(): the flag saves on the tap and the note on blur, both
       // while the sheet stays open.

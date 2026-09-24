@@ -1,7 +1,7 @@
 """What you do to a session rather than in it: deload, summary, delete,
 and saving it back to a template."""
 
-from features.gym import stats
+from features.gym import plan, stats
 
 from flask import (
     flash, jsonify, redirect, request, url_for,
@@ -196,9 +196,7 @@ def gym_update_template(session_id):
     if session_.template_id:
         template = my_templates().filter_by(id=session_.template_id).first()
         if template:
-            template.exercises.clear()
-            db.session.flush()
-            template.exercises.extend(_template_exercises_from_session(session_))
+            plan.replace_routine_rows(template, _template_exercises_from_session(session_))
             db.session.commit()
             flash(f'Routine „{template.name}“ auf diese Übungsliste aktualisiert.', 'success')
     return redirect(url_for('gym.session_detail', session_id=session_.id))

@@ -25,6 +25,7 @@ const actions = (): SessionActions => ({
     onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
     onToggleSkip: vi.fn(), onReplace: vi.fn(),
     onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
+    onRoutinePlanChange: vi.fn(),
   }),
 })
 
@@ -52,6 +53,28 @@ describe('SessionPage', () => {
     for (const se of payload.visible_exercises) {
       expect(screen.getAllByText(se.name).length).toBeGreaterThan(0)
     }
+  })
+
+  it('hands a deload marked late to the rows still ahead', () => {
+    // D4: the payload's hints reach the queue, not only the live card.
+    const ahead = payload.visible_exercises.find((se) => se.id !== payload.live_id)!
+    const { container } = mount({
+      payload: { ...payload, deload_hints: { [String(ahead.id)]: 35 } },
+    })
+    expect(container.querySelector('.queue__deload')).toHaveTextContent('Deload ≈ 35,0')
+  })
+
+  it("gives an exercise its routine's plan in its sheet, and only that one", () => {
+    const [held, added] = payload.visible_exercises
+    mount({ payload: {
+      ...payload,
+      session: { ...payload.session, template_name: 'Push' },
+      routine_plans: { [String(held!.id)]: { sets: 4, rep_min: 8, rep_max: 12 } },
+    } })
+    act(() => { useSheets.getState().open(`sheet-ex-${held!.id}`) })
+    expect(document.querySelector(`#sheet-ex-${held!.id}`)).toHaveTextContent('Routine „Push“')
+    act(() => { useSheets.getState().open(`sheet-ex-${added!.id}`) })
+    expect(document.querySelector(`#sheet-ex-${added!.id}`)).not.toHaveTextContent('Routine „')
   })
 
   it('has a live region before anything is announced', () => {

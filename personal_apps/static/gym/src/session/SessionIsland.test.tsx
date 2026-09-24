@@ -83,6 +83,31 @@ describe('SessionIsland', () => {
     })
   })
 
+  it('sends a routine plan flushed on the way out at once, past a write in flight', async () => {
+    // Queued behind the save still waiting on gym wifi, the plan never left
+    // before the page was gone, and the edit was lost (B5 review).
+    const withRoutine = {
+      ...payload,
+      session: { ...payload.session, template_name: 'Push' },
+      routine_plans: { '10': { sets: 3, rep_min: 6, rep_max: 10 } },
+    }
+    const user = userEvent.setup()
+    const calls = network((url) => (url.endsWith('/update')
+      ? new Promise(() => {}) : json(withRoutine)))
+    render(<SessionIsland initial={withRoutine} />)
+    await editFirstSet(user)
+    await waitFor(() => expect(calls.some((c) => c.url === '/gym/set/100/update')).toBe(true))
+
+    await user.click(within(document.querySelector(SHEET) as HTMLElement)
+      .getByRole('button', { name: 'Ein Satz mehr' }))
+    act(() => { window.dispatchEvent(new Event('pagehide')) })
+
+    await waitFor(() => {
+      expect(calls.find((c) => c.url === '/gym/session-exercise/10/routine-plan')?.init.keepalive)
+        .toBe(true)
+    })
+  })
+
   it('sends a lost write again before finishing, and stays when it fails again', async () => {
     // Finishing past it filed the workout without the set -- the banner had
     // said so, but only for the writes that failed AFTER the tap.

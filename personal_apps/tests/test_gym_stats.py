@@ -1205,143 +1205,6 @@ def test_rest_medians_ignores_gaps_with_no_planned_time():
     assert stats.rest_medians([(180, 150), (200, None), (220, 150)]) == (150, 200)
 
 
-def test_two_top_weight_sets_at_ten_reps_say_go_heavier():
-    """The rule, in its plainest form: the working weight has become easy."""
-    row = perf([(35.0, 10), (35.0, 11), (35.0, 8)])
-    assert stats.ready_for_more([row]) == {'sets': 2, 'weight': 35.0, 'is_latest': True}
-
-
-def test_nine_reps_is_not_enough():
-    """DELOAD_REPS is this app's own definition of a full set. Nine is a set
-    you finished, not one that had room left in it."""
-    row = perf([(35.0, 9), (35.0, 9), (35.0, 9)])
-    assert stats.ready_for_more([row]) is None
-
-
-def test_one_good_top_set_is_not_a_pattern():
-    row = perf([(35.0, 12), (30.0, 12), (30.0, 12)])
-    assert stats.ready_for_more([row]) is None
-
-
-def test_only_the_sessions_own_heaviest_weight_counts():
-    """A ramp-up set at a lighter weight says nothing about whether the
-    working weight is easy, however many reps it ran to."""
-    row = perf([(20.0, 15), (20.0, 15), (35.0, 10)])
-    assert stats.ready_for_more([row]) is None
-
-
-def test_a_deload_session_is_not_evidence():
-    """Two easy sets at a deload's top weight are the expected outcome, not
-    readiness -- so the judgement falls through to the last real session."""
-    deload = perf([(25.0, 10), (25.0, 10)], is_deload=True,
-                  started_at=dt.datetime(2026, 8, 3), session_id=2)
-    real = perf([(35.0, 8), (35.0, 7)],
-                started_at=dt.datetime(2026, 7, 27), session_id=1)
-    assert stats.ready_for_more([deload, real]) is None
-
-
-def test_the_newest_qualifying_session_wins():
-    older = perf([(30.0, 12), (30.0, 12)],
-                 started_at=dt.datetime(2026, 7, 20), session_id=1)
-    newer = perf([(35.0, 10), (35.0, 11)],
-                 started_at=dt.datetime(2026, 7, 27), session_id=2)
-    assert stats.ready_for_more([older, newer]) == {'sets': 2, 'weight': 35.0, 'is_latest': True}
-
-
-def test_a_deload_logged_afterwards_does_not_downgrade_the_wording():
-    """is_latest is measured among the sessions that COUNT. A deload after the
-    evidence must leave "Letztes Mal" intact: nothing on screen treats that
-    deload as the last time either -- the chips' prefill skips it too."""
-    evidence = perf([(35.0, 10), (35.0, 11)],
-                    started_at=dt.datetime(2026, 7, 27), session_id=1)
-    later_deload = perf([(25.0, 10), (25.0, 10)], is_deload=True,
-                        started_at=dt.datetime(2026, 8, 3), session_id=2)
-    assert stats.ready_for_more([evidence, later_deload]) == {
-        'sets': 2, 'weight': 35.0, 'is_latest': True}
-
-
-def test_a_thin_slot_falls_back_to_every_position():
-    """_scoped()'s own rule: fewer than two sessions in this slot cannot
-    support a judgement, and answering from another slot beats answering
-    'no idea'.
-
-    Three qualifying sets, not two: a mutant that hardcodes the returned
-    count to 2 (`'sets': len(qualifying)` -> `'sets': 2`) survives every
-    other fixture in this file, because they all happen to have exactly two
-    qualifying sets. This is the one that pins the real count."""
-    row = perf([(35.0, 10), (35.0, 10), (35.0, 11)], position=1,
-               started_at=dt.datetime(2026, 7, 27), session_id=1)
-    assert stats.ready_for_more([row], position=7) == {
-        'sets': 3, 'weight': 35.0, 'is_latest': True}
-
-
-def test_a_populated_slot_is_judged_on_its_own_sessions():
-    """Two sessions in slot 7 is enough to answer from slot 7 alone, so slot
-    1's easy session must not leak in.
-
-    The leaking session is deliberately the NEWEST row (2026-07-28, session 4)
-    -- _scoped()'s fallback path reads scoped[-1], and if position were ever
-    ignored, this is the row that would win. An older leaking session would
-    let position-blind code land on the real slot-7 session by accident and
-    pass for the wrong reason. It also carries three qualifying sets, not
-    two, so this stays a real test of scoping even against a strong
-    temptation to leak in -- not just a coincidence of a weak fixture."""
-    easy_elsewhere = perf([(35.0, 12), (35.0, 12), (35.0, 11)], position=1,
-                          started_at=dt.datetime(2026, 7, 28), session_id=4)
-    hard_here_a = perf([(35.0, 6), (35.0, 5)], position=7,
-                       started_at=dt.datetime(2026, 7, 24), session_id=2)
-    hard_here_b = perf([(35.0, 7), (35.0, 6)], position=7,
-                       started_at=dt.datetime(2026, 7, 27), session_id=3)
-    rows = [easy_elsewhere, hard_here_a, hard_here_b]
-    assert stats.ready_for_more(rows, position=7) is None
-
-
-def test_last_time_is_the_newest_workout_whichever_of_its_rows_counted():
-    """The newest workout holds the exercise twice (added twice, or swapped
-    for itself): the slot-7 row is the evidence, the other row of the SAME
-    workout sorts last. That workout is still "Letztes Mal" -- by workout,
-    as the seed line says it (fix-round review)."""
-    older = perf([(35.0, 6), (35.0, 5)], position=7,
-                 started_at=dt.datetime(2026, 7, 24), session_id=2)
-    here = perf([(35.0, 10), (35.0, 10)], position=7,
-                started_at=dt.datetime(2026, 7, 28), session_id=4)
-    again = perf([(30.0, 8)], position=9,
-                 started_at=dt.datetime(2026, 7, 28), session_id=4)
-    assert stats.ready_for_more([older, here, again], position=7) == {
-        'sets': 2, 'weight': 35.0, 'is_latest': True}
-
-
-def test_no_history_says_nothing():
-    assert stats.ready_for_more([]) is None
-
-
-def test_a_bodyweight_exercise_never_qualifies():
-    """At 0 kg every set trivially 'matches the heaviest weight', so without
-    this guard 3x12 pull-ups would badge forever -- there is no weight to
-    add, so the badge has nothing honest left to suggest."""
-    row = perf([(0.0, 12), (0.0, 12), (0.0, 12)])
-    assert stats.ready_for_more([row]) is None
-
-
-def test_an_older_qualifying_session_is_not_the_latest():
-    """is_latest is false the moment a NEWER session exists anywhere in the
-    rows, even at a different position and even one that does not itself
-    qualify -- the badge must not say 'Letztes Mal' about a session that was
-    not, in fact, the last one trained.
-
-    Slot 1 has two sessions of its own so _scoped() judges from slot 1
-    without falling back -- the evidence is genuinely the newest SLOT-1
-    session, just not the newest session overall."""
-    old_p1 = perf([(30.0, 12), (30.0, 12)], position=1,
-                  started_at=dt.datetime(2026, 7, 1), session_id=1)
-    new_p1 = perf([(35.0, 10), (35.0, 11)], position=1,
-                  started_at=dt.datetime(2026, 7, 20), session_id=2)
-    newer_p3 = perf([(45.0, 8), (45.0, 7), (45.0, 6)], position=3,
-                    started_at=dt.datetime(2026, 8, 1), session_id=3)
-    result = stats.ready_for_more([old_p1, new_p1, newer_p3], position=1)
-    assert result == {'sets': 2, 'weight': 35.0, 'is_latest': False}
-
-
 class TestE1rmProjection:
     """The "bei diesem Tempo" gate: every rule errs toward silence."""
 
@@ -1402,3 +1265,120 @@ class TestE1rmProjection:
         result = stats.e1rm_projection(old + fresh, now)
         assert result is not None
         assert abs(result['per_week'] - 1.0) < 0.05
+
+
+# --------------------------------------------------------------------------
+# The plan model (D2 P1): set count, rep range, "Nächstes Mal".
+# --------------------------------------------------------------------------
+
+def _targets(*pairs):
+    return [{'weight': weight, 'reps': reps} for weight, reps in pairs]
+
+
+class TestNextTarget:
+    """Double progression, set by set (Michi 09-24, M2): each set one rep more
+    at its own weight, up to the top of the range; once every planned set
+    was done at the top, each set one loadable step up and back to the
+    bottom (G-035)."""
+
+    def test_each_set_gets_one_rep_more_at_its_own_weight(self):
+        assert stats.next_target([(60.0, 9), (60.0, 8), (60.0, 8)], 6, 10, 3, 2.5) \
+            == _targets((60.0, 10), (60.0, 9), (60.0, 9))
+
+    def test_a_lighter_set_keeps_its_weight(self):
+        # One weight for every set asked +5 kg of the back-off sets.
+        assert stats.next_target([(40.0, 8), (35.0, 9), (35.0, 8)], 6, 10, 3, 2.5) \
+            == _targets((40.0, 9), (35.0, 10), (35.0, 9))
+
+    def test_a_set_left_out_last_time_is_aimed_at_like_the_one_before_it(self):
+        # Rudern (M2): 85 x 11 and 85 x 9 of three planned sets, range 7-11.
+        assert stats.next_target([(85.0, 11), (85.0, 9)], 7, 11, 3, 8.0) \
+            == _targets((85.0, 11), (85.0, 10), (85.0, 10))
+
+    def test_cuts_to_the_planned_sets(self):
+        assert stats.next_target([(60.0, 8)] * 5, 6, 10, 3, 2.5) \
+            == _targets(*[(60.0, 9)] * 3)
+
+    def test_steps_up_once_every_planned_set_reached_the_top(self):
+        assert stats.next_target([(40.0, 10), (35.0, 10), (35.0, 11)], 6, 10, 3, 2.5) \
+            == _targets((42.5, 6), (37.5, 6), (37.5, 6))
+
+    def test_waits_for_every_planned_set_before_stepping_up(self):
+        # Two sets at the top of the range, three planned: the third was not
+        # done, so it has not reached anything yet.
+        assert stats.next_target([(60.0, 10), (60.0, 10)], 6, 10, 3, 2.5) \
+            == _targets(*[(60.0, 10)] * 3)
+
+    def test_a_set_past_the_top_is_not_asked_for_less(self):
+        assert stats.next_target([(60.0, 12), (60.0, 8)], 6, 10, 2, 2.5) \
+            == _targets((60.0, 12), (60.0, 9))
+
+    def test_climbs_one_rep_at_a_time_below_the_range(self):
+        assert stats.next_target([(80.0, 4), (80.0, 5)], 6, 10, 2, 2.5) \
+            == _targets((80.0, 5), (80.0, 6))
+
+    def test_snaps_the_step_onto_a_machines_real_stops(self):
+        assert stats.next_target([(45.0, 12)] * 3, 8, 12, 3, 5.0, [40, 45, 52, 59]) \
+            == _targets(*[(52, 8)] * 3)
+
+    def test_topped_out_on_a_known_stack_asks_for_one_rep_more(self):
+        # Snapping clamps back to the top stop; the same weight again at the
+        # bottom of the range would be a step back.
+        assert stats.next_target([(59.0, 12)] * 3, 8, 12, 3, 5.0, [40, 45, 52, 59]) \
+            == _targets(*[(59.0, 13)] * 3)
+
+    def test_bodyweight_progresses_by_reps(self):
+        assert stats.next_target([(0.0, 10)] * 3, 6, 10, 3, 2.5) \
+            == _targets(*[(0.0, 11)] * 3)
+
+    def test_nothing_lifted_has_no_target(self):
+        assert stats.next_target([], 6, 10, 3, 2.5) is None
+
+
+class TestPlanShape:
+    """Filled once from history, then only an explicit edit changes it
+    (G-050: one test workout shrank a routine)."""
+
+    def test_set_count_is_the_most_a_recent_workout_held(self):
+        # Max, not mode: a cut-short workout must not shrink the plan.
+        assert stats.plan_set_count([3, 2, 4]) == 4
+
+    def test_set_count_defaults_without_history(self):
+        assert stats.plan_set_count([]) == stats.DEFAULT_PLAN_SETS
+
+    def test_set_count_stays_between_one_and_ten(self):
+        assert stats.plan_set_count([14]) == 10
+        assert stats.plan_set_count([0]) == 1
+
+    def test_rep_range_centres_on_the_median_reps_at_the_top_weight(self):
+        assert stats.derived_rep_range([8, 8, 7, 9, 8]) == (6, 10)
+
+    def test_rep_range_rounds_a_half_up(self):
+        assert stats.derived_rep_range([7, 8]) == (6, 10)
+
+    def test_rep_range_never_starts_below_one(self):
+        assert stats.derived_rep_range([2, 2, 1]) == (1, 4)
+
+    def test_rep_range_defaults_to_six_to_ten(self):
+        assert stats.derived_rep_range([]) == (6, 10)
+
+    def test_history_range_reads_only_each_workouts_top_weight(self):
+        # The back-off set's 12 reps say nothing about the working range.
+        assert stats.rep_range_from([[(100, 8), (90, 12)]]) == (6, 10)
+
+    def test_history_range_holds_a_lift_done_for_high_reps(self):
+        # A calf raise done for 15 aims at 13-17: skipped as past
+        # RECORD_MAX_REPS, it got 6-10 and a "42,5 × 6" (B5 review).
+        assert stats.rep_range_from([[(40, 15)] * 3] * 3) == (13, 17)
+
+    def test_rep_range_never_ends_above_what_a_routine_keeps(self):
+        # The sheet posts the range back as it is, and the route refuses
+        # anything past MAX_PLAN_REPS: the range moves down instead.
+        assert stats.derived_rep_range([100, 100, 5]) == (96, stats.MAX_PLAN_REPS)
+
+    def test_history_range_reads_the_newest_five_workouts(self):
+        newest = [[(100, 8)]] * stats.RANGE_WORKOUTS
+        assert stats.rep_range_from(newest + [[(100, 12)]] * 10) == (6, 10)
+
+    def test_history_range_defaults_without_history(self):
+        assert stats.rep_range_from([]) == stats.DEFAULT_REP_RANGE

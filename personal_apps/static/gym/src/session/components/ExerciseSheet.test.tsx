@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useUndo } from '../../undo'
@@ -8,6 +8,7 @@ import { useSaveState, useSheets } from '../stores'
 import { payload } from '../types.test-d'
 import { listed } from '../__fixtures__/catalogue'
 import type { LiveExercise } from '../types'
+import { NUDGE_SETTLE_MS } from '../../settings/Choice'
 
 beforeEach(() => {
   useUndo.setState({ pending: null, timer: null })
@@ -34,13 +35,15 @@ const actions = () => ({
   onSetUpdate: vi.fn(), onSetDelete: vi.fn(() => Promise.resolve()), onAddSet: vi.fn(),
   onToggleSkip: vi.fn(), onReplace: vi.fn(),
   onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
+  onRoutinePlanChange: vi.fn(),
 })
 
 function open(props: Partial<Parameters<typeof ExerciseSheet>[0]> = {}) {
   const a = actions()
   const result = render(
     <ExerciseSheet exercise={exercise} catalogue={catalogue}
-      suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...a} {...props} />)
+      suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} routine={null}
+      {...a} {...props} />)
   act(() => { useSheets.getState().open(`sheet-ex-${exercise.id}`) })
   return { ...result, actions: a }
 }
@@ -212,10 +215,10 @@ describe('ExerciseSheet', () => {
     }
     const view = render(
       <ExerciseSheet exercise={exercise} catalogue={catalogue}
-        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...a} />)
+        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} routine={null} {...a} />)
     view.rerender(
       <ExerciseSheet exercise={logged} catalogue={catalogue}
-        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...a} />)
+        suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} routine={null} {...a} />)
     act(() => { useSheets.getState().open(`sheet-ex-${exercise.id}`) })
 
     expect(screen.getByLabelText('Satz 1, Gewicht in kg')).toHaveValue(60)
@@ -250,7 +253,8 @@ describe('ExerciseSheet', () => {
       sets: exercise.sets.map((s, i) => (i === 0 ? { ...s, weight: 42.5 } : s)),
     }
     rerender(<ExerciseSheet exercise={changed} catalogue={catalogue}
-      suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} {...actions()} />)
+      suggestion={{ weight: 60, reps: 8 }} canMakeLive={false} routine={null}
+      {...actions()} />)
     expect(screen.getByLabelText('Satz 1, Gewicht in kg')).toHaveValue(42.5)
   })
 
@@ -356,7 +360,8 @@ describe('ExerciseSheet', () => {
     expect(screen.getByText('Übung überspringen')).toBeInTheDocument()
 
     rerender(<ExerciseSheet exercise={skipped} catalogue={catalogue}
-      suggestion={null} canMakeLive={false} {...actions()} />)
+      suggestion={null} canMakeLive={false} routine={null}
+      {...actions()} />)
     expect(screen.getByText('Nicht mehr überspringen')).toBeInTheDocument()
   })
 
@@ -396,5 +401,83 @@ describe('ExerciseSheet', () => {
     useUndo.getState().undoNow()
     expect(a.onRemove).not.toHaveBeenCalled()
     expect(useUndo.getState().pending).toBeNull()
+  })
+
+  describe("the routine's plan (D2 P1)", () => {
+    const routine = { name: 'Push', plan: { sets: 3, rep_min: 6, rep_max: 10 } }
+
+    it('shows what the routine keeps, when the routine holds the exercise', () => {
+      open({ routine })
+      const group = screen.getByText('Routine „Push“').closest('.sheet__group')!
+      expect([...group.querySelectorAll('.field-num__val')].map((o) => o.textContent))
+        .toEqual(['3', '6', '10'])
+      // What changes when: the routine from the next workout, today's
+      // target at once -- the sets already planned stay.
+      expect(group).toHaveTextContent(
+        'Ab dem nächsten Workout plant die Routine so. Das Ziel heute rechnet schon damit.')
+    })
+
+    it('has nothing to change without a routine that holds the exercise', () => {
+      open({ routine: null })
+      expect(screen.queryByText(/^Routine „/)).toBeNull()
+    })
+
+    it('saves a run of taps once, when they settle', () => {
+      vi.useFakeTimers()
+      try {
+        const { actions: a } = open({ routine })
+        fireEvent.click(screen.getByRole('button', { name: 'Ein Satz mehr' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Ein Satz mehr' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Bis: eine Wiederholung mehr' }))
+        expect(a.onRoutinePlanChange).not.toHaveBeenCalled()
+        act(() => { vi.advanceTimersByTime(NUDGE_SETTLE_MS) })
+        expect(a.onRoutinePlanChange).toHaveBeenCalledTimes(1)
+        expect(a.onRoutinePlanChange)
+          .toHaveBeenCalledWith({ sets: 5, rep_min: 6, rep_max: 11 }, false)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('keeps the range the right way round', () => {
+      open({ routine: { name: 'Push', plan: { sets: 3, rep_min: 8, rep_max: 8 } } })
+      expect(screen.getByRole('button', { name: 'Ab: eine Wiederholung mehr' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Bis: eine Wiederholung weniger' })).toBeDisabled()
+    })
+
+    it('stays within one to ten sets', () => {
+      open({ routine: { name: 'Push', plan: { sets: 10, rep_min: 6, rep_max: 10 } } })
+      expect(screen.getByRole('button', { name: 'Ein Satz mehr' })).toBeDisabled()
+    })
+
+    it('sends a draft still settling when the sheet goes away', () => {
+      vi.useFakeTimers()
+      try {
+        const { actions: a, unmount } = open({ routine })
+        fireEvent.click(screen.getByRole('button', { name: 'Ein Satz weniger' }))
+        unmount()
+        expect(a.onRoutinePlanChange).toHaveBeenCalledTimes(1)
+        expect(a.onRoutinePlanChange)
+          .toHaveBeenCalledWith({ sets: 2, rep_min: 6, rep_max: 10 }, false)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('sends a draft still settling as leaving when the page goes away', () => {
+      // A tap on "Fortschritt" or a closed tab: the write has to outlive
+      // the page (B5 review).
+      vi.useFakeTimers()
+      try {
+        const { actions: a } = open({ routine })
+        fireEvent.click(screen.getByRole('button', { name: 'Ein Satz mehr' }))
+        act(() => { window.dispatchEvent(new Event('pagehide')) })
+        expect(a.onRoutinePlanChange).toHaveBeenCalledTimes(1)
+        expect(a.onRoutinePlanChange)
+          .toHaveBeenCalledWith({ sets: 4, rep_min: 6, rep_max: 10 }, true)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 })

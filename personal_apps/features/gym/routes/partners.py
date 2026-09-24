@@ -3,7 +3,7 @@ accept / decline flow they land in."""
 
 from features.gym.schemas import SharedConfirmPayload
 from .. import push
-from .. import sharing
+from .. import plan, sharing
 import datetime as dt
 
 from flask import (
@@ -276,6 +276,10 @@ def gym_shared_accept(shared_id):
     posted_template_id = _to_int(request.form.get('template_id', ''))
     if posted_template_id:
         chosen_template = my_templates().filter_by(id=posted_template_id).first()
+    if chosen_template is not None:
+        # Booked under it, the workout is planned by it like a start (D2 P1):
+        # filled from THIS lifter's history the first time.
+        plan.fill_routine_plan(chosen_template, current_user_id())
 
     follower_session = WorkoutSession(
         # The name is copied once so the workout reads as the same one. It is

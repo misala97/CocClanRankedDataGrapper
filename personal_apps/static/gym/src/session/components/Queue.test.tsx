@@ -166,6 +166,27 @@ describe('Queue', () => {
     expect(row.querySelector('.queue__load')).toHaveTextContent(/^neu$/)
   })
 
+  it('says what a deload marked late would lift on the rows still ahead', () => {
+    // D4: nothing rescales once a set is done, so a row ahead keeps its plan
+    // and says the deload's weight under it. Not the live row: the card
+    // above says it there.
+    const other = exercises.find((se) => se.id !== liveId)!
+    const ahead: LiveExercise = {
+      ...other, skipped: false,
+      sets: [1, 2, 3].map((n) => ({
+        id: 900 + n, weight: 50, reps: 8, completed: false, base_weight: null,
+      })),
+    }
+    const { container } = render(<Queue liveId={liveId} onReorder={noop}
+      exercises={exercises.map((se) => (se.id === other.id ? ahead : se))}
+      deloadHints={{ [String(other.id)]: 35, [String(liveId)]: 42.5 }} />)
+    const row = container.querySelector(`[data-se-id="${other.id}"]`)!
+    expect(row.querySelector('.queue__load')).toHaveTextContent(/^3 × 50,0/)
+    expect(row.querySelector('.queue__deload')).toHaveTextContent('Deload ≈ 35,0')
+    const live = container.querySelector(`[data-se-id="${liveId}"]`)!
+    expect(live.querySelector('.queue__deload')).toBeNull()
+  })
+
   it('opens that exercise own sheet from its row', async () => {
     // One interaction for every exercise instead of a menu on each.
     const user = userEvent.setup()

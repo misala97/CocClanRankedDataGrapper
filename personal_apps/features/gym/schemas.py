@@ -375,14 +375,19 @@ class LiveRecord(_Model):
     previous_at: datetime
 
 
-class ReadyForMore(_Model):
-    """`that weight went easy` -- only ever computed for the live exercise,
-    and never during a deload."""
-    sets: int
+class TargetSet(_Model):
+    """One set of "what to lift" (stats.next_target): display only, never
+    seeded."""
     weight: float
-    is_latest: bool
-    # One loadable step above `weight`, or None when the stack is topped out.
-    next_weight: float | None
+    reps: int
+
+
+class RoutinePlan(_Model):
+    """What the workout's routine keeps for one exercise (D2 P1): how many
+    sets it plans and the rep range the target aims at."""
+    sets: int
+    rep_min: int
+    rep_max: int
 
 
 class VariantRef(_Model):
@@ -440,19 +445,28 @@ class SessionDetailPayload(_Model):
     # Keyed the same way. None for an exercise with no history at all.
     seed_sources: dict[str, SeedSource | None]
     stagnation_counts: dict[str, int]
-    #: Keyed like stagnation_counts. The stall line's "go to X" number --
-    #: display only, never seeded (owner decision: a stall is already at the
-    #: edge). Absent for an exercise whose known stack is topped out.
-    stall_next_weight: dict[str, float]
+    #: Keyed like stagnation_counts: what to lift, set by set, for every
+    #: exercise with a workout to build on (D2 P1). Empty in a deload.
+    next_targets: dict[str, list[TargetSet]]
+    #: Keyed the same way (D4): during a deload marked after the first set,
+    #: the weight the deload would have planned for each exercise not started
+    #: yet -- nothing rescales mid-workout. Empty otherwise.
+    deload_hints: dict[str, float]
+    #: Keyed the same way: the routine's plan for each exercise it holds,
+    #: where the sheet's steppers start. Empty without a routine of your own.
+    routine_plans: dict[str, RoutinePlan]
+    #: Kept, saying nothing, for a page loaded before B5's deploy: its bundle
+    #: reads both unguarded (the stall line's step-up, the "Bereit" line), and
+    #: the first answer without them blanked the live screen mid-workout (B5
+    #: review). Drop them in a batch after that deploy.
+    stall_next_weight: dict[str, float] = {}
+    ready_for_more: None = None
     # A set in the route; a list here. json.dumps cannot serialize a set, so
     # the builder converts and this type is what makes that non-optional.
     record_set_ids: list[int]
     # Keyed by Set.id, string-keyed on the wire like suggestions above. One
     # entry per id in record_set_ids and no others.
     record_details: dict[str, LiveRecord]
-    ready_for_more: ReadyForMore | None
-
-    min_full_reps: int
     # Keyed by SessionExercise.id like suggestions: the exercises the lifter
     # meets for the first time -- no history, nothing logged in this workout
     # yet. Each lists up to two of the lifter's other variants of the same

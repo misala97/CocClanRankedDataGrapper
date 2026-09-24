@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import type { CatalogueExercise, LiveExercise, Suggestion } from '../types'
+import type { CatalogueExercise, LiveExercise, RoutinePlan, Suggestion } from '../types'
 import { useUndo } from '../../undo'
 import { useSaveState } from '../stores'
 import {
   MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG, parseSetInput, setInputProblem,
 } from '../../setInput'
 import { Drawing, movementOf } from './Picture'
+import { RoutinePlanGroup } from './RoutinePlanGroup'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
 import { Choice } from '../../settings/Choice'
@@ -28,6 +29,9 @@ export interface ExerciseSheetActions {
   onShowProgress(): void
   /** Pull this exercise in front of the live one, so it is up next. */
   onMakeLive(): void
+  /** The routine's plan for the exercise, once the steppers settle --
+   *  `leaving` when the page is going away and the write must outlive it. */
+  onRoutinePlanChange(plan: RoutinePlan, leaving: boolean): void
 }
 
 interface Props extends ExerciseSheetActions {
@@ -40,6 +44,9 @@ interface Props extends ExerciseSheetActions {
   /** Whether "Jetzt machen" is offered: not for the live exercise itself,
    *  a finished or skipped one, or a follower whose order is the leader's. */
   canMakeLive: boolean
+  /** The workout's routine and what it keeps for this exercise; null when
+   *  the routine does not hold it, or the workout has no routine of yours. */
+  routine: { name: string; plan: RoutinePlan } | null
 }
 
 /**
@@ -54,10 +61,10 @@ interface Props extends ExerciseSheetActions {
  * down, in a sheet that says they hold for every workout.
  */
 export function ExerciseSheet({
-  exercise, catalogue, suggestion, canMakeLive,
+  exercise, catalogue, suggestion, canMakeLive, routine,
   onRestChange, onOpenSettings, onMetaSave, onSetUpdate, onSetDelete,
   onAddSet, onToggleSkip, onReplace, onRemove, onShowProgress,
-  onMakeLive,
+  onMakeLive, onRoutinePlanChange,
 }: Props) {
   const [pain, setPain] = useState(exercise.pain)
   const [notes, setNotes] = useState(exercise.notes ?? '')
@@ -131,6 +138,13 @@ export function ExerciseSheet({
           <span className="sheet-row__chev"><Icon name="forward" /></span>
         </button>
       </div>
+
+      {/* A third lifetime, between the two: the routine's, from the next
+          workout on (D2 P1). */}
+      {routine !== null && (
+        <RoutinePlanGroup routineName={routine.name} plan={routine.plan}
+          onSave={onRoutinePlanChange} />
+      )}
 
       {/* The opposite lifetime to the settings above: a twinge and a note
           belong to this workout, not to the machine.

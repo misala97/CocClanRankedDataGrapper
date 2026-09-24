@@ -273,6 +273,7 @@ def test_subscribing_to_push_stamps_the_owner(two_users):
 DESCENDANT_ROUTES = [
     ('POST', '/gym/session-exercise/{}/replace',   'session_exercise_id'),
     ('POST', '/gym/session-exercise/{}/rest',      'session_exercise_id'),
+    ('POST', '/gym/session-exercise/{}/routine-plan', 'session_exercise_id'),
     ('POST', '/gym/session-exercise/{}/sets/add',  'session_exercise_id'),
     ('POST', '/gym/session-exercise/{}/delete',    'session_exercise_id'),
     ('POST', '/gym/session-exercise/{}/skip',      'session_exercise_id'),

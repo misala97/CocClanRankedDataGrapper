@@ -21,6 +21,14 @@ import { TemplateSheet } from './components/TemplateSheet'
 import { ExerciseSheet, type ExerciseSheetActions } from './components/ExerciseSheet'
 import { LiveSettingsSheet } from './components/LiveSettingsSheet'
 
+/** A row's routine and the plan it keeps, for its sheet: null when the
+ *  routine does not hold the exercise, or there is no routine of yours. */
+function routineOf(payload: SessionDetailPayload, seId: number) {
+  const plan = payload.routine_plans[String(seId)]
+  const name = payload.session.template_name
+  return plan === undefined || name === null ? null : { name, plan }
+}
+
 /**
  * Every write the screen can perform. Supplied by the entry in 2c-iii, which
  * is where the optimistic path and the API client live -- this component knows
@@ -111,7 +119,7 @@ export function SessionPage({
         done={payload.sets_done} total={payload.sets_total} />
 
       <Queue exercises={payload.visible_exercises} liveId={payload.live_id}
-        onReorder={actions.onReorder} />
+        deloadHints={payload.deload_hints} onReorder={actions.onReorder} />
 
       <div className="session-foot">
         {/* Opens the finish sheet -- the pre-debrief beat -- instead of a
@@ -160,6 +168,7 @@ export function SessionPage({
         <ExerciseSheet key={se.id} exercise={se}
           catalogue={payload.exercises}
           suggestion={payload.suggestions[String(se.id)] ?? null}
+          routine={routineOf(payload, se.id)}
           // Moving a row is a reorder, which a follower's order refuses (it
           // is the leader's). A finished or skipped exercise has nothing to
           // do now, and the live one is already up.

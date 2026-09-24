@@ -329,56 +329,67 @@ describe('LivePanel', () => {
     const advised: SessionDetailPayload = {
       ...payload,
       stagnation_counts: { [String(live.id)]: 4 },
-      ready_for_more: { sets: 3, weight: 35, is_latest: true, next_weight: 37.5 },
     }
     const { container } = render(<LivePanel payload={advised} {...handlers()} />)
-    const stall = container.querySelector('.live__stall')!
     const button = container.querySelector('#set-confirm')!
-    expect(stall.compareDocumentPosition(button))
-      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(screen.getByText(/4 Workouts ohne neuen e1RM-PR/)).toBeInTheDocument()
-
-    // Read the whole paragraph: the label is its own element, so a text query
-    // spanning both would never match.
-    const ready = container.querySelector('.live__ready')!
-    expect(ready.textContent).toContain('Bereit')
-    expect(ready.textContent).toContain('Letztes Mal 3 Sätze auf 35,0 kg')
-    expect(ready.textContent).toContain(`mit ${payload.min_full_reps}+ Wdh.`)
-    // Names the step, not only the evidence for it.
-    expect(ready.textContent).toContain('Zeit für 37,5 kg')
-    // Says "je Seite" exactly when the lift is logged per side.
-    expect(ready.textContent!.includes('je Seite')).toBe(live.is_unilateral)
+    for (const advice of [container.querySelector('.live__stall')!,
+      container.querySelector('.targetline')!]) {
+      expect(advice.compareDocumentPosition(button))
+        .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    }
+    // The stall line keeps its fact and gives no weight of its own: what to
+    // lift is the target's to say (D2 P1), one answer rather than two.
+    const stall = container.querySelector('.live__stall')!
+    expect(stall.textContent).toBe('Stagniert 4 Workouts ohne neuen e1RM-PR.')
   })
 
-  it('states the prescription in the stall line, and only states it', () => {
-    // Owner decision: a stall means the current weight is already at the
-    // edge, so the number is said, never seeded -- the steppers stay on the
-    // proven weight. Same copy as the debrief's Nächstes-Mal advice.
-    const advised: SessionDetailPayload = {
+  it('says the target set by set, and only says it', () => {
+    // Each set at its own weight, one rep on (Michi, M2 09-24), in the
+    // Vorgabe line's own notation. Said, never seeded: the steppers keep
+    // pre-filling last time's numbers.
+    const aimed: SessionDetailPayload = {
       ...payload,
-      stagnation_counts: { [String(live.id)]: 4 },
-      stall_next_weight: { [String(live.id)]: 68 },
+      next_targets: { [String(live.id)]: [
+        { weight: 40, reps: 9 }, { weight: 35, reps: 10 }, { weight: 35, reps: 9 }] },
     }
-    render(<LivePanel payload={advised} {...handlers()} />)
-    expect(screen.getByText(/auf 68,0 kg gehen, notfalls 2 Wdh\. weniger/))
-      .toBeInTheDocument()
-    // The steppers still pre-fill from history, not from the prescription --
-    // the stepper renders its value as text, kg1-formatted.
+    const { container } = render(<LivePanel payload={aimed} {...handlers()} />)
+    expect(container.querySelector('.targetline')!.textContent)
+      .toBe('Ziel 40,0 × 9 · 35,0 × 10 · 9')
     const next = live.sets.find((s) => !s.completed)!
     expect(screen.getByLabelText('Gewicht eingeben'))
       .toHaveTextContent(kg1(next.weight!))
   })
 
-  it('falls back to the generic nudge when the stack is topped out', () => {
-    // stall_next_weight omits an exercise whose known stack has no stop above
-    // the plateau -- repeating the stuck number is not advice.
-    const advised: SessionDetailPayload = {
+  it('leads with the target, then where the plan came from', () => {
+    // The exercise page's order (M2): "Nächstes Ziel", then "Letztes Mal".
+    const { container } = render(<LivePanel payload={payload} {...handlers()} />)
+    const target = container.querySelector('.targetline')!
+    expect(target.compareDocumentPosition(container.querySelector('.seedline')!))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
+  it('has no target line without a workout to build on', () => {
+    const { container } = render(
+      <LivePanel payload={{ ...payload, next_targets: {} }} {...handlers()} />)
+    expect(container.querySelector('.targetline')).toBeNull()
+  })
+
+  it('names what a deload marked late would lift, and changes nothing', () => {
+    // D4: marked after the first set, the deload rescales nothing (08-12
+    // rule); the exercise says the weight instead, where its target stood.
+    const late: SessionDetailPayload = {
       ...payload,
-      stagnation_counts: { [String(live.id)]: 4 },
-      stall_next_weight: {},
+      session: { ...payload.session, is_deload: true, deload_pct: 70 },
+      next_targets: {},
+      deload_hints: { [String(live.id)]: 35 },
     }
-    render(<LivePanel payload={advised} {...handlers()} />)
-    expect(screen.getByText(/mehr Gewicht oder Wdh\. versuchen/)).toBeInTheDocument()
+    const { container } = render(<LivePanel payload={late} {...handlers()} />)
+    const hint = container.querySelector('.targetline--deload')!
+    expect(hint.textContent)
+      .toBe(`Deload 70 % ≈ 35,0 kg${live.is_unilateral ? ' je Seite' : ''}`)
+    const next = live.sets.find((s) => !s.completed)!
+    expect(screen.getByLabelText('Gewicht eingeben'))
+      .toHaveTextContent(kg1(next.weight!))
   })
 
   /** A rest of `total` seconds with `left` still to go, after the live
@@ -696,7 +707,7 @@ const firstTime = (refs: SessionDetailPayload['first_time'][string] = [
   })),
   suggestions: { ...payload.suggestions, [String(live.id)]: null },
   seed_sources: { ...payload.seed_sources, [String(live.id)]: null },
-  stagnation_counts: {}, stall_next_weight: {}, ready_for_more: null,
+  stagnation_counts: {}, next_targets: {}, deload_hints: {},
   record_set_ids: [], record_details: {},
   first_time: { [String(live.id)]: refs },
   live_floor: 20,

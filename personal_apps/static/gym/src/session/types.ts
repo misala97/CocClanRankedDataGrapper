@@ -136,15 +136,18 @@ export interface LiveRecord {
   previous_at: string
 }
 
-/** "That weight went easy" -- only ever computed for the live exercise, and
- *  never during a deload. Null or a verdict; never an empty object. */
-export interface ReadyForMore {
-  sets: number
+/** One set of what to lift (D2 P1): display only, never seeded. */
+export interface TargetSet {
   weight: number
-  is_latest: boolean
-  /** The step up the note names -- the stall advice's own rule. Null when
-   *  the stack has nothing heavier. */
-  next_weight: number | null
+  reps: number
+}
+
+/** What the workout's routine keeps for one exercise (D2 P1): the sets it
+ *  plans and the rep range the target aims at. */
+export interface RoutinePlan {
+  sets: number
+  rep_min: number
+  rep_max: number
 }
 
 /** Another variant of a movement as the lifter last did it: the top set of
@@ -204,18 +207,22 @@ export interface SessionDetailPayload {
   /** Keyed the same way. Null for an exercise with no history at all. */
   seed_sources: Record<string, SeedSource | null>
   stagnation_counts: Record<string, number>
-  /** Keyed like stagnation_counts. The stall line's "go to X" number --
-   *  display only, never seeded. Absent when a known stack is topped out. */
-  stall_next_weight: Record<string, number>
+  /** Keyed like stagnation_counts: what to lift, set by set, for every
+   *  exercise with a workout to build on. Empty in a deload. */
+  next_targets: Record<string, TargetSet[]>
+  /** Keyed the same way (D4): in a deload marked after the first set, the
+   *  weight the deload would have planned for each exercise not started yet --
+   *  nothing rescales mid-workout. Empty otherwise. */
+  deload_hints: Record<string, number>
+  /** Keyed the same way: the routine's plan for each exercise it holds, where
+   *  the sheet's steppers start. Empty without a routine of your own. */
+  routine_plans: Record<string, RoutinePlan>
   /** A set on the server, a list on the wire. */
   record_set_ids: number[]
   /** Keyed by Set.id, string-keyed like suggestions. One entry per id in
    *  record_set_ids and no others -- both are built from the same judgement
    *  in the same server loop. */
   record_details: Record<string, LiveRecord>
-  ready_for_more: ReadyForMore | null
-
-  min_full_reps: number
   /** Keyed by SessionExercise.id like suggestions: the exercises met for the
    *  first time -- no history, nothing logged in this workout yet. Each lists
    *  up to two of the lifter's other variants of the movement with their last

@@ -21,7 +21,7 @@ from sqlalchemy.orm import contains_eager, selectinload
 
 from extensions import db
 from models import Exercise, SessionExercise, SessionSet, WorkoutSession
-from features.gym import stats
+from features.gym import plan, stats
 from features.gym.exercises import setup as exercise_setup
 from features.gym.scope import current_user_id
 
@@ -76,8 +76,7 @@ def _seed_source(picked):
     The live card says it as one line of numbers (G-053): the sets lifted
     that day, and "Letztes Mal" only when `is_latest` -- when the workout
     picked is also the newest one that counts. Deloads are left out of
-    "newest" as they are out of the pick, the same rule stats.ready_for_more
-    words its "Letztes Mal" by.
+    "newest" as they are out of the pick.
     """
     session_exercise, basis, newest = picked
     if session_exercise is None:
@@ -227,10 +226,19 @@ def _deload_applies(session_):
             or not any(stats.set_counts(s.completed, s.reps) for s in sets))
 
 
-def _seeded_sets(session_, exercise_id, position, user_id=None):
+def _seeded_sets(session_, exercise_id, position, user_id=None, count=None):
     """Pending sets for `exercise_id` in `position` -- pre-filled from history
     when there is any (honouring the session's deload), and a blank plan (sets
     with no numbers yet) when there is none.
+
+    How many (D2 P1): the routine row's set count (plan.planned_count) --
+    the picked workout's sets cut to it, in order, or its last set repeated
+    up to it; with no history, that many blank sets. It used to be however
+    many sets the one picked workout held, so a short test workout shrank
+    the routine (G-050). `count` names it for a row the routine does not
+    hold by that exercise: a substitute stands in for its original's slot.
+    No count at all -- no routine, an added exercise, a routine not started
+    since the plan model -- keeps the old rule.
 
     `user_id` is whose history to read, not whose session this is (`session_`
     already carries that): the two agree at every call site except
@@ -249,10 +257,14 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
     the deload back off restores these sets to the working weight like any
     other.
     """
+    if count is None:
+        count = plan.planned_count(session_, exercise_id)
     # session_.id is None while gym_start is still building the workout --
     # nothing to exclude yet, and nothing of it is in the database to find.
     seeded = _last_full_performance(exercise_id, position=position, user_id=user_id,
                                     exclude_session_id=session_.id)
+    if seeded and count is not None:
+        seeded = (seeded + [seeded[-1]] * count)[:count]
     if not seeded:
         # No history: a blank plan -- the set count, no numbers. Any number
         # here would be invented, and an invented number reads as advice (the
@@ -264,7 +276,7 @@ def _seeded_sets(session_, exercise_id, position, user_id=None):
         return [
             SessionSet(position=j, weight=None, reps=None, completed=False,
                        is_default_seeded=True)
-            for j in range(1, stats.DEFAULT_PLAN_SETS + 1)
+            for j in range(1, (count or stats.DEFAULT_PLAN_SETS) + 1)
         ]
 
     pct = session_.deload_pct if _deload_applies(session_) else None
@@ -313,7 +325,8 @@ def missing_planned_sets(session_, session_exercise, user_id=None):
     done = _done(session_exercise)
     last = max(done, key=lambda s: s.position) if done else None
     planned = _seeded_sets(session_, session_exercise.exercise_id,
-                           session_exercise.position, user_id=user_id)
+                           session_exercise.position, user_id=user_id,
+                           count=plan.slot_count(session_, session_exercise))
     missing = planned[len(kept):]
     after = kept[-1].position if kept else 0
     for offset, pending in enumerate(missing, start=1):
@@ -367,10 +380,14 @@ def reseed_for_slot(session_, session_exercise, old_position, new_position, user
     if any(s.completed for s in current):
         return False
     exercise_id = session_exercise.exercise_id
-    seeded_for_old_slot = _seeded_sets(session_, exercise_id, old_position, user_id=user_id)
+    # The count too: a substitute's plan is its slot's, and asking without
+    # it would find every such plan "touched".
+    count = plan.slot_count(session_, session_exercise)
+    seeded_for_old_slot = _seeded_sets(session_, exercise_id, old_position, user_id=user_id,
+                                       count=count)
     if _plan_signature(current) != _plan_signature(seeded_for_old_slot):
         return False
-    wanted = _seeded_sets(session_, exercise_id, new_position, user_id=user_id)
+    wanted = _seeded_sets(session_, exercise_id, new_position, user_id=user_id, count=count)
     if _plan_signature(current) == _plan_signature(wanted):
         return False
 

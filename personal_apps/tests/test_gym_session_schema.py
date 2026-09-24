@@ -46,9 +46,9 @@ def _minimal():
         'seed_sources': {'10': {'date': '2026-08-01T09:00:00', 'position': 1,
                                 'basis': 'slot', 'is_latest': True,
                                 'sets': [{'weight': 60.0, 'reps': 8}]}},
-        'stagnation_counts': {}, 'stall_next_weight': {}, 'record_set_ids': [],
-        'record_details': {},
-        'ready_for_more': None, 'min_full_reps': 5,
+        'stagnation_counts': {}, 'next_targets': {}, 'deload_hints': {},
+        'routine_plans': {},
+        'record_set_ids': [], 'record_details': {},
         'first_time': {},
         'exercises': [{'id': 5, 'name': 'Bankdrücken (Langhantel)', 'muscle_group': 'Brust',
                        'search': 'bankdrucken langhantel bench press',
@@ -92,18 +92,14 @@ def test_accepts_a_session_with_nothing_live():
     assert SessionDetailPayload.model_validate(data).live_id is None
 
 
-def test_ready_for_more_is_none_or_a_verdict():
-    """The route initialises it to None and only fills it for the live
-    exercise, outside a deload. An empty dict is not one of its values."""
+def test_a_target_is_a_weight_and_reps_per_set():
+    """Set by set (D2 P1): a set without its reps is no target."""
     data = _minimal()
-    assert SessionDetailPayload.model_validate(data).ready_for_more is None
+    data['next_targets'] = {'10': [{'weight': 60.0, 'reps': 9}, {'weight': 55.0, 'reps': 10}]}
+    targets = SessionDetailPayload.model_validate(data).next_targets['10']
+    assert [(t.weight, t.reps) for t in targets] == [(60.0, 9), (55.0, 10)]
 
-    data['ready_for_more'] = {'sets': 3, 'weight': 60.0, 'is_latest': True,
-                              'next_weight': 62.5}
-    verdict = SessionDetailPayload.model_validate(data).ready_for_more
-    assert verdict is not None and verdict.sets == 3
-
-    data['ready_for_more'] = {}
+    data['next_targets'] = {'10': [{'weight': 60.0}]}
     with pytest.raises(ValidationError):
         SessionDetailPayload.model_validate(data)
 
@@ -139,11 +135,15 @@ def test_int_keyed_dicts_serialize_as_string_keys():
     10. Pinned here so the React side is not surprised by it."""
     data = _minimal()
     data['stagnation_counts'] = {'10': 4}
-    data['stall_next_weight'] = {'10': 68.0}
+    data['next_targets'] = {'10': [{'weight': 68.0, 'reps': 6}]}
+    data['deload_hints'] = {'10': 42.5}
+    data['routine_plans'] = {'10': {'sets': 3, 'rep_min': 6, 'rep_max': 10}}
     dumped = SessionDetailPayload.model_validate(data).model_dump(mode='json')
     assert list(dumped['stagnation_counts']) == ['10']
     assert list(dumped['suggestions']) == ['10']
-    assert list(dumped['stall_next_weight']) == ['10']
+    assert list(dumped['next_targets']) == ['10']
+    assert list(dumped['deload_hints']) == ['10']
+    assert list(dumped['routine_plans']) == ['10']
 
 
 def test_record_details_are_keyed_by_set_id_as_strings():

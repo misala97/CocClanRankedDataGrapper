@@ -1875,23 +1875,27 @@ button.pic { cursor: zoom-in; }
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--stall-ink);
 }
 
-/* Same shape as .live__stall above, different ink on purpose: a stall is a
-   warning and wears --stall-ink, readiness is the good news and wears the
-   same accent the chip you are about to perform does. */
-.live__ready {
-  margin-top: var(--sp-4); padding: var(--sp-3);
-  border-radius: var(--r-inset); box-shadow: inset 0 0 0 1px var(--live);
-  font-size: var(--t-meta); color: var(--dim); line-height: 1.45;
+/* "Ziel" (D2 P1): the seed line's anatomy -- a word, then the numbers in
+   ink -- as one line, not a boxed note: it is the plan's other half, not a
+   verdict on it. The word wears the accent of the chip you are about to
+   perform; nothing opens, so no chevron and no tap height. A deload's
+   "≈ x kg" (D4) takes the same place in the quiet ink. */
+.targetline {
+  margin-top: var(--sp-3); display: flex; align-items: baseline; gap: var(--sp-2);
+  font-size: var(--t-sm); color: var(--dim);
 }
-.live__ready-lbl {
-  display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
-  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--live-ink);
+.targetline__lbl { flex: none; font-weight: var(--w-semi); color: var(--live-ink); }
+.targetline__val {
+  flex: 1; min-inline-size: 0; color: var(--ink); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
 }
+.targetline--deload .targetline__lbl { color: var(--dim); }
+.targetline + .seedline { margin-top: 0; }
 
-/* Same note anatomy a third time, and deliberately the quietest: where the
-   plan's numbers came from is provenance, not a verdict, so it takes the
-   neutral edge and no ink of its own -- stall and ready stay the only two
-   notes that raise their voice. */
+/* Same note anatomy again, and deliberately the quietest: where the plan's
+   numbers came from is provenance, not a verdict, so it takes the neutral
+   edge and no ink of its own -- the stall stays the note that raises its
+   voice. */
 .live__seed {
   margin-top: var(--sp-4); padding: var(--sp-3);
   border-radius: var(--r-inset); box-shadow: inset 0 0 0 1px var(--edge);
@@ -1901,10 +1905,10 @@ button.pic { cursor: zoom-in; }
   display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
-/* D11 on the live card, as for the rail caption: the four note labels are
+/* D11 on the live card, as for the rail caption: the three note labels are
    words at the data floor, not tracked uppercase eyebrows at 11px. Each
    keeps its own ink, so the note still says what kind it is. */
-.live__record-lbl, .live__stall-lbl, .live__ready-lbl, .live__seed-lbl {
+.live__record-lbl, .live__stall-lbl, .live__seed-lbl {
   font-size: var(--t-meta); letter-spacing: 0; text-transform: none;
 }
 /* "Erstes Mal": the lifter's other variants of the movement, a line of its
@@ -2221,6 +2225,9 @@ button.pic { cursor: zoom-in; }
 .queue__row.is-now { background: var(--wash-live); border-radius: var(--r-inset); padding-inline: var(--sp-2); }
 .queue__row.is-now .row__name { color: var(--ink); font-weight: var(--w-bold); }
 .queue__row.is-now .queue__load { color: var(--live-ink); font-weight: var(--w-bold); }
+/* The deload's weight under the plan (D4): quieter than the plan it sits
+   under -- a hint, not the plan. */
+.queue__deload { font-weight: var(--w-body); color: var(--dim); }
 /* Finishing an exercise moves this wash one row down the list -- the only
    place on the screen that says which exercise you were just handed. It fades
    in on the new row rather than cutting, so the handover is followable; the
@@ -2713,6 +2720,9 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 .pills--fit .pill small { font-size: var(--t-micro); font-weight: var(--w-semi); margin-block-start: 2px; }
 /* The live kg stepper's look, for a setting you nudge. */
 .nudge { margin-block-start: var(--sp-3); }
+/* The routine's plan (D2 P1): sets, reps from, reps to -- three nudges in
+   one row, each as wide as the others. */
+.plan-steps { display: flex; gap: var(--sp-2); }
 .sorts--sheet { margin-inline: 0; }
 .sheet__row { display: flex; align-items: center; gap: var(--sp-3); padding-block: var(--sp-2); }
 .sheet__row label { flex: 1; font-size: var(--t-sm); color: var(--dim); }

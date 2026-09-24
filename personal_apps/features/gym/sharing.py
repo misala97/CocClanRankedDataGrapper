@@ -26,7 +26,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from extensions import db
 from models import PendingPush, SessionExercise, SharedSession, WorkoutSession
 
-from . import stats
+from . import plan, stats
 from .locking import lock_sessions
 from .seeding import _seeded_sets, missing_planned_sets, reseed_for_slot
 
@@ -351,8 +351,14 @@ def reconcile_follower(shared):
                 # leader. A skipped leader row gets none, matching
                 # gym_toggle_skip_session_exercise's own rule that a skipped
                 # exercise carries no pending sets.
+                # A leader's substitute stands in the follower's own slot
+                # too: their routine's count for the exercise it replaces,
+                # as target_for and missing_planned_sets read it. The
+                # follower row's replaces_id is only set further down, so
+                # the leader's chain names the slot (B5 review).
                 row.sets.extend(_seeded_sets(follower, leader_row.exercise_id, leader_row.position,
-                                             user_id=shared.follower_user_id))
+                                             user_id=shared.follower_user_id,
+                                             count=plan.slot_count(follower, leader_row)))
             db.session.add(row)
             mirrored[leader_row.id] = row
             changed = True

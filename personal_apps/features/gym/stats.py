@@ -99,12 +99,11 @@ NO_GROUP_LABEL = 'Ohne Muskelgruppe'
 # side at a time.
 DEFAULT_INCREMENT = 2.5
 
-# How many sets an exercise with no history at all plans for. A template stores
-# only an ordered list of exercises -- no set count, no weight, no reps -- so the
-# first run of a NEW template hits this too, not just a freestyle workout.
-# Before this existed such an exercise arrived with no sets, and the live screen
-# (which assumes a plan throughout) called it finished the moment one set was
-# logged.
+# How many sets an exercise with no history at all plans for -- and the count a
+# routine row is filled with when there is no history to read one from (D2 P1,
+# plan_set_count). Before this existed such an exercise arrived with no sets,
+# and the live screen (which assumes a plan throughout) called it finished the
+# moment one set was logged.
 #
 # Three sets is the shape almost every plan starts at. The sets carry no
 # numbers: a 20 kg x 8 placeholder used to fill them, which was wrong for
@@ -400,81 +399,6 @@ def sessions_since_pr(rows):
     if counted is None or counted['workouts'] < 2:
         return None
     return counted['since']
-
-
-def ready_for_more(rows, position=None):
-    """Whether the last comparable session says the working weight has become
-    easy -- two or more sets at that session's own heaviest weight, each run
-    to a full set's worth of reps.
-
-    Returns the evidence rather than a bare yes: the badge quotes it, the way
-    the stagnation line beside it quotes its count. A lifter who cannot see
-    why a nudge appeared has to go looking for the reason.
-
-    "That session's heaviest", not an all-time best: the question is whether
-    the weight you are actually working at has room left in it, and a ramp-up
-    set says nothing about that. Two sets, not one, because one good set is a
-    good set and two is a pattern.
-
-    Deload sessions are excluded (progression_rows): light weight for ten reps
-    is what a deload IS, so counting it would leave this permanently lit. The
-    position lens and its fallback come from _scoped() -- exercise order
-    decides how fatigued you were, and a slot with too little history borrows
-    from the others rather than going silent.
-
-    This badge and the set chips beside it can name different sessions as
-    their evidence, because they use two different lenses on the same
-    history:
-
-    - This function, via _scoped(): same slot once that slot has two or more
-      sessions logged, ever -- no time limit -- else every position.
-    - routes._last_session_exercise(), which pre-fills the chips' weight/
-      reps: same slot only while that slot's own record is still younger
-      than ROLLING_WINDOW_DAYS, else the most recent session at ANY
-      position.
-
-    The two agree while a slot is trained regularly. Once a slot's own
-    history goes stale, they can disagree: the badge can still be quoting an
-    old same-slot session (this lens has no staleness cutoff) while the chip
-    has already fallen back to a different, more recent slot -- so the badge
-    reads "Letztes Mal ... 35,0 kg" beside a chip prefilled at 40,0. This is
-    a known divergence, not a bug: the badge is answering "was the last time
-    in THIS slot easy", the chip is answering "what should I load RIGHT
-    NOW", and those are legitimately different questions. Unifying the two
-    lenses is a design decision, not a fix -- left alone on purpose.
-
-    What IS a bug is stating that divergence as if it were not one: the
-    returned dict carries `is_latest`, true only when the evidence session is
-    also the most recent session in `rows` at ANY position. The caller uses
-    it to say "Letztes Mal" (a dated claim) only when it is true, and a
-    slot-scoped "Zuletzt in diesem Slot" otherwise -- so the sentence never
-    asserts a false "last time" about a session that was not, in fact, last.
-    """
-    prog = progression_rows(rows)
-    scoped = _scoped(prog, position)
-    if not scoped:
-        return None
-    last = scoped[-1]
-    top = max(weight for weight, _ in last.sets)
-    # A bodyweight set (weight 0) has no weight to add -- every set trivially
-    # "matches the heaviest weight", so this would otherwise fire forever on
-    # a pure-bodyweight exercise instead of only when there is genuinely room
-    # to load more.
-    if top == 0:
-        return None
-    qualifying = [reps for weight, reps in last.sets
-                  if weight == top and reps >= DELOAD_REPS]
-    if len(qualifying) < 2:
-        return None
-    # "Newest" among the sessions that COUNT, not among all of them: a deload
-    # logged after the evidence must not downgrade the wording, because
-    # nothing on screen treats that deload as the last time either -- the
-    # chips' prefill skips it for the same reason this judgement does.
-    # By workout, not by row, as the seed line judges it: the newest workout
-    # can hold the exercise twice, and either row of it is "last time".
-    newest = _chronological(prog)[-1]
-    return {'sets': len(qualifying), 'weight': top,
-            'is_latest': last.session_id == newest.session_id}
 
 
 def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):
@@ -794,6 +718,123 @@ def deload_weight(weight, pct, increment, stack_kg=None):
     # A recorded stack overrides the increment grid: its stops are the only
     # positions that exist, and the grid is at best a good guess at them.
     return snap_to_stack(prescribed, stack_kg, 'down')
+
+
+def step_up(weight, increment, stack_kg=None):
+    """One loadable step above `weight`, snapped UP onto the machine's real
+    stops -- or None when topped out on a known stack, where snapping clamps
+    back to the top stop and repeating that number is not advice. Callers
+    resolve `increment` through resolve_increment()."""
+    heavier = snap_to_stack(_next_weight(weight, increment), stack_kg, 'up')
+    return heavier if heavier > weight else None
+
+
+# --------------------------------------------------------------------------
+# The plan model (D2 P1): how many sets, in which rep range, and what to lift
+# next time. A routine's rows carry the count and the range; they are filled
+# from history once and then changed only by an explicit edit -- a value
+# derived afresh at every start is how one test workout shrank a routine
+# (G-050).
+# --------------------------------------------------------------------------
+
+#: A routine row's set count stays within this.
+MAX_PLAN_SETS = 10
+
+#: And its rep range within this -- wide enough for any range a history
+#: gives (derived_rep_range), narrow enough to catch a slip.
+MAX_PLAN_REPS = 100
+
+#: No history to read a range from. The owner trains 6-8; the range is wide
+#: enough to hold that and leave room to climb.
+DEFAULT_REP_RANGE = (6, 10)
+
+#: A derived range spans this many reps either side of the median.
+REP_RANGE_SPREAD = 2
+
+
+def plan_set_count(counts):
+    """A routine row's set count from the counted sets of the exercise in
+    recent workouts: the most any of them held -- max, not mode, so a
+    workout cut short does not shrink the plan. None there:
+    DEFAULT_PLAN_SETS."""
+    if not counts:
+        return DEFAULT_PLAN_SETS
+    return min(MAX_PLAN_SETS, max(1, max(counts)))
+
+
+def derived_rep_range(reps):
+    """A rep range centred on the median of `reps` -- the reps of the sets
+    done at the top weight of recent workouts -- REP_RANGE_SPREAD either
+    side, never starting below 1 nor ending past MAX_PLAN_REPS (the range
+    moves down instead: the sheet posts it back as it is). Half a rep rounds
+    up. None: DEFAULT_REP_RANGE."""
+    if not reps:
+        return DEFAULT_REP_RANGE
+    middle = min(int(_median(reps) + 0.5), MAX_PLAN_REPS - REP_RANGE_SPREAD)
+    return max(1, middle - REP_RANGE_SPREAD), middle + REP_RANGE_SPREAD
+
+
+#: The rep range reads the top-weight sets of this many workouts.
+RANGE_WORKOUTS = 5
+
+
+def rep_range_from(workouts):
+    """The rep range a lifter's history gives (derived_rep_range): centred on
+    the reps done at the top weight of the newest RANGE_WORKOUTS workouts.
+    `workouts` holds each one's counted sets as (weight, reps), newest first.
+    High reps too, unlike a record (D3): a lift only ever done for 15 has its
+    range there -- passed over, it got the default and a target of 6 -- and
+    one light day among heavy ones barely moves a median."""
+    reps = []
+    read = 0
+    for sets in workouts:
+        if not sets:
+            continue
+        top = max(weight for weight, _ in sets)
+        reps.extend(count for weight, count in sets if weight == top)
+        read += 1
+        if read == RANGE_WORKOUTS:
+            break
+    return derived_rep_range(reps)
+
+
+def next_target(sets, rep_min, rep_max, target_sets, increment, stack_kg=None):
+    """What to lift next time, set by set, by double progression (D2 P1,
+    G-035): a {'weight', 'reps'} per planned set, or None with nothing
+    lifted. Display only: nothing in the plan changes because of it.
+
+    `sets` are the (weight, reps) of the counted sets it builds on, in order
+    -- the live card passes the seed pick's, so it never shows a plan from
+    one workout and a target from another. They are cut to `target_sets`,
+    as seeding cuts the plan, or the last one repeated up to it: a set left
+    out last time is aimed at like the one before it.
+    - Every planned set done at the top of the range: each one loadable step
+      up (snapped onto a known stack), back to the bottom of the range. A
+      set left out was not done, so it holds the step back.
+    - Else each set at its own weight, one rep more, up to the top of the
+      range -- below the range too: one rep at a time. Set by set (Michi,
+      M2 09-24): one weight for every set asked +5 kg of the back-off sets
+      behind a heavy first one.
+    Where no step up exists the only way on is reps: a bodyweight set (0 kg,
+    which a plate would turn into another exercise) and the top stop of a
+    known stack go on at their weight, one rep more, past the range.
+    """
+    if not sets:
+        return None
+    count = max(1, target_sets)
+    base = (list(sets) + [sets[-1]] * count)[:count]
+    if len(sets) >= count and all(reps >= rep_max for _weight, reps in base):
+        return [_stepped_up(weight, reps, rep_min, increment, stack_kg) for weight, reps in base]
+    # A set already past the top waits there for the others: not one rep less.
+    return [{'weight': weight, 'reps': reps if reps >= rep_max else reps + 1}
+            for weight, reps in base]
+
+
+def _stepped_up(weight, reps, rep_min, increment, stack_kg):
+    heavier = step_up(weight, increment, stack_kg) if weight > 0 else None
+    if heavier is None:
+        return {'weight': weight, 'reps': reps + 1}
+    return {'weight': heavier, 'reps': rep_min}
 
 
 def _verdict(entry, since, is_deload, is_judged=True):

@@ -1,6 +1,7 @@
 {
   "deload_applied": false,
   "deload_default_pct": 70,
+  "deload_hints": {},
   "deload_pcts": [
     60,
     70,
@@ -2080,7 +2081,6 @@
   "live_id": 10,
   "live_increment": 2.0,
   "live_index": 1,
-  "min_full_reps": 10,
   "muscle_groups": [
     "Bizeps",
     "Trizeps",
@@ -2095,6 +2095,36 @@
     "Cardio",
     "Sonstiges"
   ],
+  "next_targets": {
+    "10": [
+      {
+        "reps": 10,
+        "weight": 26.0
+      },
+      {
+        "reps": 10,
+        "weight": 26.0
+      },
+      {
+        "reps": 9,
+        "weight": 26.0
+      }
+    ],
+    "11": [
+      {
+        "reps": 10,
+        "weight": 77.0
+      },
+      {
+        "reps": 9,
+        "weight": 77.0
+      },
+      {
+        "reps": 9,
+        "weight": 69.0
+      }
+    ]
+  },
   "partner_status": [],
   "partners": [
     {
@@ -2115,7 +2145,7 @@
     "100": {
       "kind": "e1rm",
       "previous": 34.7,
-      "previous_at": "2026-08-16T10:35:16",
+      "previous_at": "2026-08-23T10:20:02",
       "value": 76.0
     }
   },
@@ -2124,6 +2154,7 @@
   ],
   "rest_total_seconds": 0,
   "resting": false,
+  "routine_plans": {},
   "seed_sources": {
     "10": {
       "basis": "slot",
@@ -2176,7 +2207,7 @@
     "notes": null,
     "rest_ends_at": null,
     "resting_set_id": null,
-    "started_at": "2026-09-24T11:10:18",
+    "started_at": "2026-09-24T21:37:42",
     "structure_version": 0,
     "template_id": null,
     "template_name": null
@@ -2189,9 +2220,7 @@
   "stagnation_counts": {
     "11": 4
   },
-  "stall_next_weight": {
-    "11": 77.0
-  },
+  "stall_next_weight": {},
   "suggestions": {
     "10": {
       "reps": 8,

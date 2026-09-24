@@ -8,6 +8,9 @@ import { PictureTile } from './Picture'
 interface Props {
   exercises: LiveExercise[]
   liveId: number | null
+  /** D4, keyed by SessionExercise.id: in a deload marked after the first set,
+   *  the weight the deload would plan for each exercise not started yet. */
+  deloadHints?: Record<string, number>
   onReorder: (order: number[]) => void
 }
 
@@ -65,7 +68,7 @@ interface DragState {
  * script has to remember to set: the Jinja-era body-class contract is how the
  * mode shipped dead once already.
  */
-export function Queue({ exercises, liveId, onReorder }: Props) {
+export function Queue({ exercises, liveId, deloadHints = {}, onReorder }: Props) {
   const openSheet = useSheets((s) => s.open)
   const reordering = useWorkoutUi((s) => s.reorderUnlocked)
   const announce = useAnnouncer((s) => s.announce)
@@ -320,6 +323,8 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
         const total = se.sets.length
         const isLive = se.id === liveId
         const isDone = total > 0 && done === total
+        // Not on the live row: the card above says it there.
+        const deloadHint = isLive ? undefined : deloadHints[String(se.id)]
 
         const className = [
           'row queue__row',
@@ -377,7 +382,16 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
               <span className="row__name">{se.name}</span>
             </button>
 
-            <span className="row__trail queue__load">{loadSummary(se, isLive)}</span>
+            {/* D4: the plan stays what it was -- nothing rescales once a set
+                is done -- and the deload's weight goes under it. */}
+            {deloadHint === undefined
+              ? <span className="row__trail queue__load">{loadSummary(se, isLive)}</span>
+              : (
+                <span className="row__trail row__trail--stack queue__load">
+                  <span>{loadSummary(se, isLive)}</span>
+                  <span className="queue__deload">{`Deload ≈ ${kg1(deloadHint)}`}</span>
+                </span>
+              )}
           </div>
         )
       })}

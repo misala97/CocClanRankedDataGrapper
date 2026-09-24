@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  deleteSet, reorderExercises, setExerciseMeta, setRest, shiftRest, skipRest, toggleSet, toggleSkip,
-  updateSet,
+  deleteSet, reorderExercises, setExerciseMeta, setRest, setRoutinePlan, shiftRest, skipRest,
+  toggleSet, toggleSkip, updateSet,
 } from './optimistic'
 import { payload } from './types.test-d'
 import type { SessionDetailPayload } from './types'
@@ -183,8 +183,18 @@ describe('what deliberately has no optimistic path', () => {
     // untouched and the server's answer still replaces it wholesale.
     const module = await import('./optimistic')
     expect(Object.keys(module).sort()).toEqual(
-      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'setRest', 'shiftRest', 'skipRest', 'toggleSet',
-        'toggleSkip', 'updateSet'])
+      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'setRest', 'setRoutinePlan', 'shiftRest',
+        'skipRest', 'toggleSet', 'toggleSkip', 'updateSet'])
+  })
+})
+
+describe('setRoutinePlan', () => {
+  it("stores the routine's plan for the row, and guesses no target", () => {
+    const plan = { sets: 4, rep_min: 8, rep_max: 12 }
+    const next = setRoutinePlan(payload, 10, plan)
+    expect(next.routine_plans).toEqual({ ...payload.routine_plans, '10': plan })
+    // The target follows the plan, but it is the server's to work out.
+    expect(next.next_targets).toBe(payload.next_targets)
   })
 })
 

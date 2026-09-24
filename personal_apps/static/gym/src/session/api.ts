@@ -1,4 +1,4 @@
-import type { SessionDetailPayload } from './types'
+import type { RoutinePlan, SessionDetailPayload } from './types'
 import { getJson, postForm, MutationFailed } from '../api'
 
 /**
@@ -77,6 +77,12 @@ export const api = {
    *  lifter's settings, saved by ../settings/api. */
   setRest: (sessionExerciseId: number, seconds: number) =>
     post(`/gym/session-exercise/${sessionExerciseId}/rest`, { rest_seconds: seconds }),
+
+  /** The routine's plan for the exercise (D2 P1): kept by the routine, so it
+   *  plans the next workout; this one's sets stay. */
+  setRoutinePlan: (sessionExerciseId: number, plan: RoutinePlan, keepalive = false) =>
+    post(`/gym/session-exercise/${sessionExerciseId}/routine-plan`,
+      { sets: plan.sets, rep_min: plan.rep_min, rep_max: plan.rep_max }, keepalive),
 
   setExerciseMeta: (sessionExerciseId: number, meta: { pain: boolean; notes: string }) =>
     post(`/gym/session-exercises/${sessionExerciseId}/meta`,

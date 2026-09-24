@@ -255,10 +255,11 @@ export function LivePanel({
   }
 
   const stall = payload.stagnation_counts[String(live.id)]
-  const stallNext = payload.stall_next_weight[String(live.id)]
+  const target = payload.next_targets[String(live.id)]
+  const deloadHint = payload.deload_hints[String(live.id)]
+  const deloadPct = payload.session.deload_pct
   const source = payload.seed_sources[String(live.id)] ?? null
   const firstTime = payload.first_time[String(live.id)]
-  const ready = payload.ready_for_more
   const perSide = live.is_unilateral ? ' je Seite' : ''
   const records = live.sets.filter(
     (s) => s.completed && payload.record_set_ids.includes(s.id))
@@ -296,29 +297,36 @@ export function LivePanel({
           you are about to set, and it used to render under the 64px confirm
           button -- after the control you would act on it with, and off-screen
           on a phone by the time you had scrolled to the queue. */}
+      {/* The fact only: what to lift is the target's to say (D2 P1). The
+          stall line used to name a weight of its own, and "Bereit" a third
+          -- two answers that could disagree with the one below. */}
       {stall !== undefined && (
         <p className="live__stall">
           <span className="live__stall-lbl">Stagniert</span>
-          {/* The prescription is said, never seeded -- the steppers stay on
-              the proven weight, and going up is the lifter's call. Same
-              number and same copy as the debrief's Nächstes-Mal advice. */}
-          {stallNext !== undefined
-            ? ` ${stall} Workouts ohne neuen e1RM-PR — auf ${kg1(stallNext)} kg gehen, notfalls 2 Wdh. weniger.`
-            : ` ${stall} Workouts ohne neuen e1RM-PR — mehr Gewicht oder Wdh. versuchen.`}
+          {` ${stall} Workouts ohne neuen e1RM-PR.`}
         </p>
       )}
 
-      {/* Same slot and the same reason. The two never contradict each other --
-          stagnation counts sessions without a PR, this reads the last
-          session's reps -- but if both fire, both are worth saying. */}
-      {/* Names the step as well as the evidence for it, with the same step-up
-          the stall line uses. Said, not seeded, like that one. A stack that
-          is topped out has no next weight and keeps the evidence alone. */}
-      {ready !== null && (
-        <p className="live__ready">
-          <span className="live__ready-lbl">Bereit</span>
-          {` ${ready.is_latest ? 'Letztes Mal' : 'Zuletzt an dieser Position'} ${ready.sets} Sätze auf ${kg1(ready.weight)} kg${perSide} mit ${payload.min_full_reps}+ Wdh.`}
-          {ready.next_weight !== null && ` Zeit für ${kg1(ready.next_weight)} kg${perSide}.`}
+      {/* What to lift today, set by set (D2 P1, G-035): double progression
+          from the workout the line under it names, in that line's notation.
+          Said, never seeded: the steppers keep last time's numbers, and
+          going up is the lifter's call. First, as on the exercise page
+          (M2): the aim, then where the plan came from. */}
+      {target !== undefined && (
+        <p className="targetline">
+          <span className="targetline__lbl">Ziel</span>
+          {' '}
+          <span className="targetline__val">{setsLine(target)}</span>
+        </p>
+      )}
+      {/* D4: a deload marked after the first set rescales nothing (the 08-12
+          rule), so an exercise not started yet says what the deload would
+          have planned -- in its target's place, as a deload aims at nothing. */}
+      {deloadHint !== undefined && (
+        <p className="targetline targetline--deload">
+          <span className="targetline__lbl">{`Deload${deloadPct !== null ? ` ${deloadPct} %` : ''}`}</span>
+          {' '}
+          <span className="targetline__val">{`≈ ${kg1(deloadHint)} kg${perSide}`}</span>
         </p>
       )}
 

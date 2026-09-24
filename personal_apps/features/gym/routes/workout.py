@@ -19,7 +19,7 @@ from models import (
     SessionExercise, SessionSet, PendingPush, SharedSession, MUSCLE_GROUPS,
 )
 from auth import login_required
-from features.gym import art, stats
+from features.gym import art, plan, stats
 from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
 from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
 from features.gym.exercises import (
@@ -35,7 +35,7 @@ from features.gym.scope import (
 from .. import sharing
 from ..locking import lock_sessions, lock_user
 from ..seeding import (
-    _pick_session_exercise, _seed_source, _seeded_sets, _seeded_suggestion,
+    _deload_applies, _pick_session_exercise, _seed_source, _seeded_sets, _seeded_suggestion,
     missing_planned_sets, reseed_for_slot,
 )
 from ._blueprint import gym_bp
@@ -397,6 +397,9 @@ def gym_start():
             # The row already carries the date; the name should say which
             # workout it was.
             session_.name = template.name
+        # The routine's plan, filled from history the first time it is
+        # started (D2 P1) -- before the rows below are seeded by it.
+        plan.fill_routine_plan(template, current_user_id())
         for i, te in enumerate(template.exercises, start=1):
             # No rest on the row: it follows the lifter's setting, read at
             # each set, so "Deine Pause" changed mid-workout counts from the
@@ -542,17 +545,11 @@ def _live_data(session_):
     record_details = {}
     for se in visible_exercises:
         prior = by_exercise.get(se.exercise_id, [])
-        # A stall is a progress judgement, and a deload workout is no attempt
-        # at progress: a "go heavier" nudge is wrong advice beside
-        # deliberately reduced weights.
-        if not session_.is_deload:
-            count = stats.sessions_since_pr(prior)
-            if count is not None and count >= stats.STAGNATION_THRESHOLD:
-                stagnation_counts[se.id] = count
         # A record is a record, deload or not (D3), and the flare says so the
         # instant the set is confirmed -- the same judgement the debrief's
         # records make, per set. One judgement, two outputs: the ids the chips
         # read, and what each record beat, for the takeover to say.
+        record_today = False
         for s in se.sets:
             if not counts(s):
                 continue
@@ -561,55 +558,73 @@ def _live_data(session_):
                 continue
             record_set_ids.add(s.id)
             record_details[s.id] = detail
-    # The stall line's prescription: the same "+one increment, snapped up
-    # onto the machine's real stops" the debrief's Nächstes-Mal advice
-    # computes, from the same number -- the top set of the workout the plan
-    # comes from (G-123: it stepped up from that workout's LAST set, a
-    # back-off set as often as not, and named today's top weight or less).
-    # DISPLAY ONLY, an owner decision: a stall means the current weight is
-    # already at the edge, so seeding heavier would push straight into failed
-    # sets -- the number is said, never written.
-    def step_up(exercise, weight):
-        """One loadable step above `weight`, snapped onto the machine's real
-        stops -- or None when topped out on a known stack, where snapping
-        clamps back to the top stop and repeating that number is not advice."""
-        setup = setups[exercise.id]
-        increment = stats.resolve_increment(setup.weight_increment, exercise.is_unilateral)
-        heavier = stats.snap_to_stack(
-            stats._next_weight(weight, increment), setup.stack_kg, 'up')
-        return heavier if heavier > weight else None
+            record_today = True
+        # A stall is a progress judgement, and a deload workout is no attempt
+        # at progress: a "go heavier" nudge is wrong advice beside
+        # deliberately reduced weights. A record today has ended it: the card
+        # said "Stagniert" beside "Rekord" (M5 mockup, 09-24).
+        if not session_.is_deload and not record_today:
+            count = stats.sessions_since_pr(prior)
+            if count is not None and count >= stats.STAGNATION_THRESHOLD:
+                stagnation_counts[se.id] = count
+    # What to lift, set by set (D2 P1, G-035): double progression from the
+    # last workout of the exercise -- "+1 rep each time". Not from the seed
+    # pick, the best e1RM of four weeks: after a step up in weight the
+    # lighter sets never beat it, and the card asked for the same step up
+    # workout after workout (B5 review). The one answer to "what do I lift":
+    # the "Bereit" line and the stall line's own step-up said it twice more,
+    # and could disagree. Said, never seeded, like they were. None in a
+    # deload: a light week aims at nothing.
+    routine = plan.routine_rows(session_)
+    next_targets = {}
+    if not session_.is_deload:
+        for se in visible_exercises:
+            last = picks[se.id].newest
+            if last is None:
+                continue
+            setup = setups[se.exercise_id]
+            earlier = sorted(by_exercise.get(se.exercise_id, []), key=stats.session_order,
+                             reverse=True)
+            target = plan.target_for(
+                se, routine, list(done_sets(last)),
+                [row.sets for row in earlier if not row.is_deload],
+                stats.resolve_increment(setup.weight_increment, se.exercise.is_unilateral),
+                setup.stack_kg)
+            if target:
+                next_targets[se.id] = target
 
-    stall_next_weight = {}
-    for se_id, _count in stagnation_counts.items():
-        se = next(x for x in visible_exercises if x.id == se_id)
-        picked = picks[se_id][0]
-        top = max((w for w, _ in done_sets(picked)), default=None) if picked is not None else None
-        if top is None:
-            continue
-        next_weight = step_up(se.exercise, top)
-        if next_weight is not None:
-            stall_next_weight[se_id] = next_weight
-
-    ready_for_more = None
-    if not session_.is_deload and live_se is not None:
-        # Only the live exercise: the queue below is an overview, and seven
-        # badges at once is decoration rather than a decision.
-        ready_for_more = stats.ready_for_more(
-            by_exercise.get(live_se.exercise_id, []), position=live_se.position)
-        # "That weight went easy" is only advice while that weight is what you
-        # are about to lift. Above it, the lifter has already acted -- or the
-        # evidence is older than what the prefill found, and the nudge would
-        # argue with the chips underneath it.
-        planned_top = max((s.weight for s in live_se.sets if s.weight is not None),
-                          default=None)
-        if ready_for_more and planned_top is not None and planned_top > ready_for_more['weight']:
-            ready_for_more = None
-        # The note used to stop at the evidence ("2 Sätze auf 40 kg mit 10+
-        # Wdh.") and leave the arithmetic to the lifter. Said, never seeded --
-        # the same owner ruling as the stall line: going up is their call.
-        if ready_for_more:
-            ready_for_more = {**ready_for_more,
-                              'next_weight': step_up(live_se.exercise, ready_for_more['weight'])}
+    # D4: a deload marked after the first set only labels the workout, and
+    # nothing rescales mid-workout (08-12 rule) -- so an exercise not started
+    # yet says what the deload would have planned: its working weight, the
+    # heaviest set of the workout it was seeded from, taken down as seeding
+    # takes it down (_seeded_sets).
+    deload_hints = {}
+    if session_.is_deload and session_.deload_pct and not _deload_applies(session_):
+        for se in visible_exercises:
+            picked = picks[se.id][0]
+            if picked is None or se.skipped or any(counts(s) for s in se.sets):
+                continue
+            top = max(weight for weight, _ in done_sets(picked))
+            if top <= 0:
+                continue
+            setup = setups[se.exercise_id]
+            deload_hints[se.id] = stats.deload_weight(
+                top, session_.deload_pct,
+                stats.resolve_increment(setup.weight_increment, se.exercise.is_unilateral),
+                stack_kg=setup.stack_kg)
+    # Where the sheet's "Routine" steppers start (D2 P1): the plan the
+    # workout's routine keeps for each exercise it holds -- the lifter's own
+    # routine only. A substitute is not in it and has none -- not even when
+    # its exercise has a row of its own elsewhere in the routine: that row is
+    # another slot's plan.
+    routine_plans = {}
+    if session_.template is not None and session_.template.user_id == session_.user_id:
+        for se in visible_exercises:
+            row = routine.get(se.exercise_id) if se.replaces_id is None else None
+            if row is not None:
+                sets, rep_min, rep_max = plan.row_plan(row, session_.user_id,
+                                                       session_.template_id)
+                routine_plans[se.id] = {'sets': sets, 'rep_min': rep_min, 'rep_max': rep_max}
     exercises = library_exercises()
     # What the owner of this session does -- the add sheet leads with it. The
     # session's lifter, not the request's: the same rule as their setups.
@@ -718,13 +733,11 @@ def _live_data(session_):
         suggestions=suggestions,
         seed_sources=seed_sources,
         stagnation_counts=stagnation_counts,
-        stall_next_weight=stall_next_weight,
+        next_targets=next_targets,
+        deload_hints=deload_hints,
+        routine_plans=routine_plans,
         record_set_ids=record_set_ids,
         record_details=record_details,
-        ready_for_more=ready_for_more,
-        # Passed in rather than hardcoded in the template, so the badge's
-        # copy cannot drift from the rule that decides it.
-        min_full_reps=stats.DELOAD_REPS,
         first_time=first_time,
         exercises=exercises,
         usage=usage,
@@ -837,11 +850,11 @@ def _session_payload(session_):
         'suggestions': {str(k): v for k, v in data['suggestions'].items()},
         'seed_sources': {str(k): v for k, v in data['seed_sources'].items()},
         'stagnation_counts': {str(k): v for k, v in data['stagnation_counts'].items()},
-        'stall_next_weight': {str(k): v for k, v in data['stall_next_weight'].items()},
+        'next_targets': {str(k): v for k, v in data['next_targets'].items()},
+        'deload_hints': {str(k): v for k, v in data['deload_hints'].items()},
+        'routine_plans': {str(k): v for k, v in data['routine_plans'].items()},
         'record_set_ids': sorted(data['record_set_ids']),
         'record_details': {str(k): v for k, v in data['record_details'].items()},
-        'ready_for_more': data['ready_for_more'],
-        'min_full_reps': data['min_full_reps'],
         'first_time': {str(k): v for k, v in data['first_time'].items()},
         'exercises': [_catalogue_entry(e, data['usage'].get(e.id), data['usage_now'])
                       for e in data['exercises']],
@@ -1277,8 +1290,11 @@ def gym_replace_session_exercise(session_exercise_id):
         # seeds from that and one without gets the default plan -- the
         # ORIGINAL row and its already-logged sets are left untouched, only
         # the new substitute row is seeded.
+        # With the set count of the slot it stands in for (D2 P1): the
+        # routine plans the slot, whichever exercise fills it today.
         substitute.sets.extend(
-            _seeded_sets(original.session, exercise_id, original.position))
+            _seeded_sets(original.session, exercise_id, original.position,
+                         count=plan.slot_count(original.session, original)))
         db.session.add(substitute)
 
     # No IntegrityError to swallow any more: a concurrent replace of the same
@@ -1309,6 +1325,44 @@ def gym_update_session_exercise_rest(session_exercise_id):
     db.session.commit()
     return _mutation_response(
         session_exercise.session, 'gym.session_detail', session_id=session_id)
+
+
+def _to_whole(value, low, high):
+    """A whole number from `low` to `high`, else None: "2.5", "drei" and a
+    blank are none."""
+    number = _to_int(value)
+    return number if number is not None and low <= number <= high else None
+
+
+@gym_bp.route('/gym/session-exercise/<int:session_exercise_id>/routine-plan', methods=['POST'])
+@login_required
+def gym_update_routine_plan(session_exercise_id):
+    """The routine's plan for the exercise, from the live sheet (D2 P1): how
+    many sets it gets and the rep range it aims at. The routine keeps it, so
+    it plans the next workout. This workout's sets stay as they were seeded;
+    only its target, which reads the routine, follows at once."""
+    session_exercise = owned_session_exercise(session_exercise_id)
+    session_ = session_exercise.session
+    refusal = _refuse_structure_edit_if_finished(session_)
+    if refusal is not None:
+        return refusal
+    if session_.template is None or session_.template.user_id != session_.user_id:
+        raise InvalidInput('Dieses Workout hat keine Routine.')
+    if session_exercise.replaces_id is not None:
+        raise InvalidInput('Ein Ersatz hat in der Routine keinen eigenen Plan.')
+    row = plan.routine_row(session_, session_exercise.exercise_id)
+    if row is None:
+        raise InvalidInput('Die Routine dieses Workouts hat die Übung nicht.')
+    sets = _to_whole(request.form.get('sets'), 1, stats.MAX_PLAN_SETS)
+    rep_min = _to_whole(request.form.get('rep_min'), 1, stats.MAX_PLAN_REPS)
+    rep_max = _to_whole(request.form.get('rep_max'), 1, stats.MAX_PLAN_REPS)
+    if None in (sets, rep_min, rep_max) or rep_min > rep_max:
+        raise InvalidInput(f'Sätze 1 bis {stats.MAX_PLAN_SETS}, Wiederholungen 1 bis '
+                           f'{stats.MAX_PLAN_REPS} — „von“ nicht über „bis“.')
+    row.target_sets, row.rep_min, row.rep_max = sets, rep_min, rep_max
+    session_id = session_.id
+    db.session.commit()
+    return _mutation_response(session_, 'gym.session_detail', session_id=session_id)
 
 
 @gym_bp.route('/gym/sessions/<int:session_id>/meta', methods=['POST'])

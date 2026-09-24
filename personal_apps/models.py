@@ -298,6 +298,12 @@ class TemplateExercise(db.Model):
     position     = db.Column(db.Integer, nullable=False, default=0)
     # No rest: a routine holds none since V3 -- the lifter's setting decides
     # (exercises.setups). The column went with G-076 (migration a3c9e5f1b7d2).
+    # The plan (D2 P1, features/gym/plan.py): how many sets, in which rep
+    # range. NULL until the routine is first started after c5f2a8d4e1b7, then
+    # filled from history once; only an explicit edit changes them after.
+    target_sets  = db.Column(db.SmallInteger, nullable=True)
+    rep_min      = db.Column(db.SmallInteger, nullable=True)
+    rep_max      = db.Column(db.SmallInteger, nullable=True)
 
     template = db.relationship('WorkoutTemplate', back_populates='exercises')
     exercise = db.relationship('Exercise')

@@ -36,4 +36,8 @@ export const pain: boolean = payload.visible_exercises[0]!.pain
 export const ticks: TickState[] = payload.tick_states
 export const suggestionKeyIsAString: string = Object.keys(payload.suggestions)[0]!
 export const recordIds: number[] = payload.record_set_ids
-export const ready: null | { sets: number } = payload.ready_for_more
+export const target: { weight: number; reps: number }[] | undefined =
+  payload.next_targets[String(payload.live_id)]
+export const hint: number | undefined = payload.deload_hints['10']
+export const routinePlan: { sets: number; rep_min: number; rep_max: number } | undefined =
+  payload.routine_plans['10']

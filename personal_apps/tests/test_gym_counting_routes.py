@@ -185,10 +185,11 @@ def test_a_set_over_twelve_reps_is_no_record(client, rows):
     assert ids[1] not in payload['record_set_ids']
 
 
-def test_the_stall_line_steps_up_from_the_top_set(client, rows):
-    """G-123: from the heaviest set of the workout the plan comes from, as
-    the debrief's advice does -- not from its last set, a back-off set as
-    often as not, which named a weight below the top one."""
+def test_a_stalled_lift_is_aimed_set_by_set_from_its_own_weights(client, rows):
+    """G-123 stepped up from the workout's last set, a back-off set as often
+    as not. The target reads every set at its own weight (D2 P1): the top
+    set one rep on, the back-off set -- already at the top of the 6-10 range
+    its history gives -- held there."""
     with flask_app.app_context():
         lift = rows.exercise('stall top set')
         for days_ago in (25, 20, 15, 10, 5):
@@ -201,7 +202,8 @@ def test_the_stall_line_steps_up_from_the_top_set(client, rows):
 
     payload = embedded_payload(client.get(f'/gym/session/{ids[0]}').get_data(as_text=True))
     assert payload['stagnation_counts'][str(ids[1])] >= 4
-    assert payload['stall_next_weight'][str(ids[1])] == 62.5
+    assert payload['next_targets'][str(ids[1])] == [
+        {'weight': 60.0, 'reps': 9}, {'weight': 50.0, 'reps': 10}]
 
 
 def test_un_skip_plans_the_sets_still_owed(client, rows):
