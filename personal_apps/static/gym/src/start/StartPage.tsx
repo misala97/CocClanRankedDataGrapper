@@ -5,6 +5,7 @@ import { csrfToken, CsrfField } from '../csrf'
 import { heartbeatSubscription } from '../push'
 import { UndoToast, useUndo } from '../undo'
 import { recency, sincePr } from '../catalogue/format'
+import { MAX_NAME_CHARS } from '../setInput'
 import { useSheets, usePush } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
@@ -130,7 +131,7 @@ function RoutineEdit({ routine, onSave, onDelete }: RoutineEditProps) {
           onSubmit={submit(`/gym/templates/${routine.template_id}/rename`)}>
           <CsrfField />
           <input type="text" name="name" defaultValue={routine.name} className="input"
-            aria-label={`Neuer Name für ${routine.name}`} required />
+            aria-label={`Neuer Name für ${routine.name}`} required maxLength={MAX_NAME_CHARS} />
           <button type="submit" className="btn btn--ghost btn--sm">Speichern</button>
         </form>
         <form method="post" action={`/gym/templates/${routine.template_id}/delete`}
@@ -232,7 +233,8 @@ function FirstRun({ onboarding, daysSinceLast, push, onEnablePush, onStartFree }
                   <div className="field grow">
                     <label className="label" htmlFor="onb-name">Name der Routine</label>
                     <input type="text" id="onb-name" name="template_name" className="input"
-                      defaultValue={last.name ?? ''} placeholder="z. B. Oberkörper" required />
+                      defaultValue={last.name ?? ''} placeholder="z. B. Oberkörper" required
+                      maxLength={MAX_NAME_CHARS} />
                   </div>
                   <button type="submit" className="lead__go">Als Routine speichern</button>
                 </form>
@@ -737,7 +739,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
           <div className="field grow">
             <label className="label" htmlFor="start-name">Name (optional)</label>
             <input type="text" id="start-name" name="name" className="input"
-              placeholder="z. B. Push Day" />
+              placeholder="z. B. Push Day" maxLength={MAX_NAME_CHARS} />
           </div>
           <div className="field grow">
             <label className="label" htmlFor="start-template">Routine</label>

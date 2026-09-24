@@ -3,7 +3,7 @@ import {
   QueryClient, QueryClientProvider, useQuery, useQueryClient,
 } from '@tanstack/react-query'
 import type { SessionDetailPayload } from './types'
-import { api, fetchSession } from './api'
+import { api, fetchSession, type SessionMetaPatch } from './api'
 import { postNavigate } from '../api'
 import { csrfToken } from '../csrf'
 import { heartbeatSubscription } from '../push'
@@ -132,8 +132,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   const setRest = useSessionMutation(sessionId,
     (seId: number, seconds: number) => api.setRest(seId, seconds), optimistic.setRest)
   const sessionMeta = useSessionMutation(sessionId,
-    (meta: { bodyweightKg: number | null; notes: string }) =>
-      api.setSessionMeta(sessionId, meta))
+    (meta: SessionMetaPatch) => api.setSessionMeta(sessionId, meta))
   const skipRest = useSessionMutation(sessionId, () => api.skipRest(sessionId))
   const toggleDeload = useSessionMutation(sessionId,
     (on: boolean, pct: number) => api.toggleDeload(sessionId, on, pct))
@@ -235,7 +234,9 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     onFinish: () => leaveAfterWrites(`/gym/session/${sessionId}/finish`),
     onDiscard: () => leaveAfterWrites(`/gym/session/${sessionId}/discard`),
     onReorder: (order) => reorder.mutate([order]),
-    onSessionMetaSave: (meta) => { sessionMeta.mutate([meta]); close() },
+    // Saved per field as it is left, so the sheet stays open: leaving the
+    // bodyweight for the note must not close it under the lifter.
+    onSessionMetaSave: (meta) => { sessionMeta.mutate([meta]) },
     onSkipRest: () => { skipRest.mutate([]); close() },
     // A navigation, not an in-place write: the invite has its own page.
     // postNavigate carries the csrf_token the hand-built form here forgot,

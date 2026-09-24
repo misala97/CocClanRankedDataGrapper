@@ -704,10 +704,20 @@ def test_to_increment_is_comma_tolerant():
     assert _to_increment('2,5') == 2.5
 
 
-@pytest.mark.parametrize('raw', ['-9', 'abc', '0', ''])
-def test_to_increment_rejects_non_positive_and_unparseable(raw):
+def test_a_blank_increment_is_the_lists_again():
     from features.gym.routes import _to_increment
-    assert _to_increment(raw) is None
+    assert _to_increment('') is None
+    assert _to_increment('  ') is None
+
+
+@pytest.mark.parametrize('raw', ['-9', 'abc', '0', 'inf', '51'])
+def test_to_increment_refuses_what_is_not_a_step(raw):
+    """These used to store NULL just as quietly as a blank, and 'inf' got
+    through to the database (walkthrough G-071). Now they say why."""
+    from features.gym.routes import _to_increment
+    from features.gym.routes.helpers import InvalidInput
+    with pytest.raises(InvalidInput):
+        _to_increment(raw)
 
 
 def test_update_exercise_sets_and_clears_the_increment_without_losing_other_fields(client):

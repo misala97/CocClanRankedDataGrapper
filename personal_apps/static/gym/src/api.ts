@@ -24,8 +24,13 @@ const writeHeaders = () => ({ ...JSON_HEADERS, 'X-CSRF-Token': csrfToken() })
  */
 const TIMEOUT_MS = 8000
 
+export type FailureReason =
+  'timeout' | 'network' | 'forbidden' | 'finished' | 'unauthorized' | 'invalid'
+
 export class MutationFailed extends Error {
-  constructor(readonly reason: 'timeout' | 'network' | 'forbidden' | 'finished') {
+  /** `serverMessage`: for 'invalid', the server's own sentence saying what it
+   *  refused (routes/helpers.py InvalidInput). */
+  constructor(readonly reason: FailureReason, readonly serverMessage?: string) {
     super(reason)
   }
 
@@ -37,6 +42,16 @@ export class MutationFailed extends Error {
     if (this.reason === 'forbidden') {
       return 'Sitzung abgelaufen — bitte Seite neu laden.'
     }
+    // The login ran out (401, auth.login_redirect). A reload lands on the
+    // login page, which is the only way back.
+    if (this.reason === 'unauthorized') {
+      return 'Abgemeldet — bitte neu anmelden.'
+    }
+    // A value the server will not store. It says which and why; retrying the
+    // same value cannot work.
+    if (this.reason === 'invalid') {
+      return this.serverMessage ?? 'Eingabe ungültig — nicht gespeichert.'
+    }
     // A live-screen write to a workout that already finished (409, see
     // _refuse_live_write_if_finished). Nothing to retry: the screen is stale.
     if (this.reason === 'finished') {
@@ -46,6 +61,42 @@ export class MutationFailed extends Error {
       ? 'Keine Antwort vom Server — deine letzte Änderung wurde nicht gespeichert.'
       : 'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.'
   }
+
+  /** Whether the same request could work if sent again. Only a lost or slow
+   *  connection can; a refused value or a stale page cannot. */
+  get retryable(): boolean {
+    return this.reason === 'timeout' || this.reason === 'network'
+  }
+
+  /** Whether a reload is the way out: a fresh page mints a fresh CSRF token,
+   *  and without a login it lands on the login page. */
+  get needsReload(): boolean {
+    return this.reason === 'forbidden' || this.reason === 'unauthorized'
+  }
+}
+
+/** A non-ok answer, named. Every status the server uses on purpose has its
+ *  own reason; only what is left over reads as a failed connection -- a 400
+ *  and a lapsed login used to be "Verbindung fehlgeschlagen" too (G-083,
+ *  G-093). */
+async function failureFrom(response: Response): Promise<MutationFailed> {
+  switch (response.status) {
+    case 401: return new MutationFailed('unauthorized')
+    case 403: return new MutationFailed('forbidden')
+    case 409: return new MutationFailed('finished')
+    case 400: {
+      const body = await response.json().catch(() => null) as { error?: unknown } | null
+      return new MutationFailed('invalid',
+        typeof body?.error === 'string' ? body.error : undefined)
+    }
+    default: return new MutationFailed('network')
+  }
+}
+
+/** fetch follows redirects by itself, so a server that still sends a lapsed
+ *  login to the login page answers a JSON read with that page, and a 200. */
+function landedOnLogin(response: Response): boolean {
+  return response.redirected && new URL(response.url, window.location.href).pathname === '/login'
 }
 
 /** POST form fields, get the page's fresh payload back. The caller names the
@@ -83,11 +134,8 @@ export async function postFormData<T>(
       // answered; keepalive lets the request outlive the document.
       keepalive: opts.keepalive ?? false,
     })
-    if (!response.ok) {
-      throw new MutationFailed(
-        response.status === 403 ? 'forbidden'
-          : response.status === 409 ? 'finished' : 'network')
-    }
+    if (!response.ok) throw await failureFrom(response)
+    if (landedOnLogin(response)) throw new MutationFailed('unauthorized')
     return await response.json() as T
   } catch (error) {
     if (error instanceof MutationFailed) throw error
@@ -125,6 +173,7 @@ export async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     headers: JSON_HEADERS, credentials: 'same-origin',
   })
-  if (!response.ok) throw new MutationFailed('network')
+  if (!response.ok) throw await failureFrom(response)
+  if (landedOnLogin(response)) throw new MutationFailed('unauthorized')
   return await response.json() as T
 }

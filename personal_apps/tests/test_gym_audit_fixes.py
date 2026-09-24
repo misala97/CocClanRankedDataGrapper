@@ -148,13 +148,19 @@ def test_everything_skipped_leaves_nothing_live(client, live_session):
 # --- B5: nothing invented from an empty or impossible field ------------------
 
 def test_an_empty_or_impossible_add_creates_no_set(client, live_session):
-    for data in ({'weight': '', 'reps': ''}, {'weight': '0', 'reps': '0'},
-                 {'weight': '-5', 'reps': '8'}, {'weight': 'nan', 'reps': '8'},
-                 {'weight': 'inf', 'reps': '8'}):
-        body = client.post(f"/gym/session-exercise/{live_session['se']}/sets/add",
-                           data=data, headers=LIVE).get_json()
-        exercise = next(se for se in body['visible_exercises'] if se['id'] == live_session['se'])
-        assert len(exercise['sets']) == 2, data
+    from models import SessionSet
+    url = f"/gym/session-exercise/{live_session['se']}/sets/add"
+    # Empty: nothing to add, quietly -- the same answer a stale page gets.
+    body = client.post(url, data={'weight': '', 'reps': ''}, headers=LIVE).get_json()
+    exercise = next(se for se in body['visible_exercises'] if se['id'] == live_session['se'])
+    assert len(exercise['sets']) == 2
+    # Impossible: refused with the reason since the 2026-09-23 walkthrough
+    # (G-070); it used to be the same quiet 200.
+    for data in ({'weight': '0', 'reps': '0'}, {'weight': '-5', 'reps': '8'},
+                 {'weight': 'nan', 'reps': '8'}, {'weight': 'inf', 'reps': '8'}):
+        assert client.post(url, data=data, headers=LIVE).status_code == 400, data
+    with flask_app.app_context():
+        assert SessionSet.query.filter_by(session_exercise_id=live_session['se']).count() == 2
 
 
 def test_a_bodyweight_set_at_zero_kg_is_still_allowed(client, live_session):

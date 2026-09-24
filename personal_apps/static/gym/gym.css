@@ -587,6 +587,11 @@ label.label {
    stack-steps field toggles [hidden] via JS when Art isn't Steckgewicht, and
    without this it stayed painted, flex-laid-out, right where it was. */
 .field[hidden] { display: none; }
+/* Why a field's value was not taken, under the field. Empty, it takes the
+   flex gap back rather than leaving a blank line -- and stays in the tree, so
+   a screen reader hears the reason the moment there is one. */
+.field__hint { margin: 0; font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--live-ink); }
+.field__hint:empty { margin-block-start: calc(-1 * var(--sp-1)); }
 
 .input, .select, .textarea {
   min-block-size: 44px;
@@ -1936,6 +1941,9 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   min-block-size: var(--tap);
 }
 .field-num__lbl { font-size: var(--t-meta); font-weight: var(--w-med); color: var(--unlit); margin-top: 2px; }
+/* A typed number the field refused: the label says why, in the colour this
+   app gives a failure (see the flash notes). */
+.field-num__lbl.is-refused { color: var(--live-ink); font-weight: var(--w-semi); }
 .field-num__keys { display: flex; gap: var(--sp-2); margin-top: var(--sp-3); inline-size: 100%; }
 .field-num__key {
   flex: 1; min-block-size: var(--tap); border-radius: var(--r-inset);
@@ -2449,6 +2457,14 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 }
 .sset__unit { font-size: var(--t-meta); color: var(--unlit); }
 .sset__acts { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-1); }
+/* Why a row's button is off. Empty, it takes no room; it stays in the tree
+   so a screen reader hears the reason the moment there is one. Indented to
+   start under the numbers, past the ordinal column. */
+.sset__hint {
+  margin: 0 0 var(--sp-1); padding-inline-start: calc(1.1rem + var(--sp-2));
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--live-ink);
+}
+.sset__hint:empty { margin: 0; }
 .sset__acts .icon-btn { inline-size: 40px; block-size: 40px; }
 .sheet .sheet__row .load__unit,
 .sheet .sheet__row .load__x,
@@ -2679,7 +2695,7 @@ summary.sheet-row::-webkit-details-marker { display: none; }
 /* The number fields were identifiable only by an --edge border: 1,55:1 light,
    1,24:1 dark, against 1.4.11's 3:1 for a control boundary. A filled ground
    carries it instead of a hairline that has to. */
-.sheet .input, .sheet .field-num { background: var(--raised); }
+.sheet .input, .sheet .textarea, .sheet .field-num { background: var(--raised); }
 
 /* ---- the add-exercise sheet: yours first, then every movement ---- */
 /* A list, not a <select>: the select could not be searched, could not show what

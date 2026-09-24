@@ -81,7 +81,9 @@ export const useWorkoutUi = create<WorkoutUiState>((set) => ({
 
 export interface SaveError {
   message: string
-  retry(): void
+  /** Null when sending the same write again cannot work -- a value the
+   *  server refused says so, and the banner offers no retry for it. */
+  retry: (() => void) | null
 }
 
 interface SaveStateStore {
@@ -91,7 +93,7 @@ interface SaveStateStore {
   begin(): void
   end(): void
   succeed(): void
-  fail(message: string, retry: () => void): void
+  fail(message: string, retry: (() => void) | null): void
   dismissError(): void
   lock(formId: string): void
   unlock(formId: string): void

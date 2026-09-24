@@ -54,6 +54,18 @@ describe('useSessionMutation', () => {
       .toBe(new MutationFailed('network').germanMessage)
   })
 
+  it('says why a refused value was refused, and offers no retry for it', async () => {
+    const { fire } = harness(() => Promise.reject(
+      new MutationFailed('invalid', 'Wiederholungen: bitte eine ganze Zahl von 1 bis 1000.')))
+    fire()
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert'))
+        .toHaveTextContent('Wiederholungen: bitte eine ganze Zahl von 1 bis 1000.')
+    })
+    expect(useSaveState.getState().error?.retry).toBeNull()
+  })
+
   /** Two writes, each with an optimistic guess, answered by hand. */
   function twoWrites() {
     const client = new QueryClient({

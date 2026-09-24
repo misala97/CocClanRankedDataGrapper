@@ -20,7 +20,7 @@ from features.gym.scope import (
     current_user_id, my_sessions, my_templates, owned_session, owned_template,
 )
 from .helpers import (
-    _delete_session_and_links, _refuse_live_write_if_finished, _to_int, _wants_json,
+    _delete_session_and_links, _refuse_live_write_if_finished, _to_int, _to_name, _wants_json,
 )
 from .workout import (
     _heute_payload, _mutation_response, _template_exercises_from_session,
@@ -193,7 +193,7 @@ def gym_update_template(session_id):
 @login_required
 def gym_save_as_template(session_id):
     session_ = owned_session(session_id)
-    template_name = request.form.get('template_name', '').strip()
+    template_name = _to_name(request.form.get('template_name', ''))
     if template_name:
         template = WorkoutTemplate(name=template_name, user_id=current_user_id())
         template.exercises.extend(_template_exercises_from_session(session_))
@@ -229,7 +229,7 @@ def gym_rename_template(template_id):
     no unique constraint, so there is no collision case to reject -- any
     non-empty name is accepted."""
     template = owned_template(template_id)
-    new_name = request.form.get('name', '').strip()
+    new_name = _to_name(request.form.get('name', ''))
     if new_name:
         template.name = new_name
         db.session.commit()

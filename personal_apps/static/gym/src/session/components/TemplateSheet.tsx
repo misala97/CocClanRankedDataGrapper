@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Sheet } from './Sheet'
+import { MAX_NAME_CHARS } from '../../setInput'
 
 interface Props {
   onSave(name: string): void
@@ -23,7 +24,7 @@ export function TemplateSheet({ onSave }: Props) {
         <div className="field grow">
           <label className="label" htmlFor="template-name-input">Name der Routine</label>
           <input type="text" id="template-name-input" name="template_name"
-            className="input" placeholder="z.B. Push Day" required
+            className="input" placeholder="z.B. Push Day" required maxLength={MAX_NAME_CHARS}
             value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <button type="submit" className="btn btn--live btn--block">Speichern</button>

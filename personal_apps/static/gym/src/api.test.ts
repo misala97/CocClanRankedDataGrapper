@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MutationFailed, postForm, postNavigate } from './api'
+import { MutationFailed, getJson, postForm, postNavigate } from './api'
 import { resetCsrfCache } from './csrf'
 
 describe('postNavigate', () => {
@@ -63,5 +63,56 @@ describe('postForm failure reasons', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500 } as Response)))
     const error = await postForm('/gym/x').catch((e: unknown) => e)
     expect((error as MutationFailed).reason).toBe('network')
+    expect((error as MutationFailed).retryable).toBe(true)
+  })
+
+  it('shows the server\'s own sentence for a refused value, with nothing to retry', async () => {
+    // G-070/G-083: a 400 used to read as "Verbindung fehlgeschlagen".
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false, status: 400,
+      json: async () => ({ error: 'Gewicht: bitte 0 bis 1000 kg.' }),
+    } as Response)))
+    const error = await postForm('/gym/x').catch((e: unknown) => e) as MutationFailed
+    expect(error.reason).toBe('invalid')
+    expect(error.germanMessage).toBe('Gewicht: bitte 0 bis 1000 kg.')
+    expect(error.retryable).toBe(false)
+  })
+
+  it('still says the value was refused when a 400 carries no sentence', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false, status: 400, json: async () => { throw new SyntaxError('html') },
+    } as unknown as Response)))
+    const error = await postForm('/gym/x').catch((e: unknown) => e) as MutationFailed
+    expect(error.reason).toBe('invalid')
+    expect(error.germanMessage).toContain('nicht gespeichert')
+  })
+
+  it('names a 401 as a lapsed login, and a reload as the way out', async () => {
+    // G-093: auth.login_redirect answers an island's fetch with a 401.
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401 } as Response)))
+    const error = await postForm('/gym/x').catch((e: unknown) => e) as MutationFailed
+    expect(error.reason).toBe('unauthorized')
+    expect(error.germanMessage).toContain('anmelden')
+    expect(error.needsReload).toBe(true)
+  })
+
+  it('reads a redirect that landed on the login page as a lapsed login', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, status: 200, redirected: true, url: 'http://localhost/login',
+      json: async () => { throw new SyntaxError('html') },
+    } as unknown as Response)))
+    const error = await postForm('/gym/x').catch((e: unknown) => e) as MutationFailed
+    expect(error.reason).toBe('unauthorized')
+  })
+})
+
+describe('getJson failure reasons', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('names a 401 on a read as a lapsed login, not a failed connection', async () => {
+    // The sync.json poll and the detail read answered the login page (G-093).
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401 } as Response)))
+    const error = await getJson('/gym/x.json').catch((e: unknown) => e) as MutationFailed
+    expect(error.reason).toBe('unauthorized')
   })
 })

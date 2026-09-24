@@ -2,7 +2,9 @@ import { useState } from 'react'
 import type { CatalogueExercise, LiveExercise, Suggestion } from '../types'
 import { useUndo } from '../../undo'
 import { useSaveState } from '../stores'
-import { parseSetInput } from '../../setInput'
+import {
+  MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG, parseSetInput, setInputProblem,
+} from '../../setInput'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
 import { Choice } from '../../settings/Choice'
@@ -138,7 +140,7 @@ export function ExerciseSheet({
         <div className="field">
           <label className="label" htmlFor={`ex-notes-${exercise.id}`}>Notiz</label>
           <input type="text" id={`ex-notes-${exercise.id}`} className="input"
-            placeholder="—" value={notes}
+            placeholder="—" value={notes} maxLength={MAX_NOTE_CHARS}
             onChange={(e) => setNotes(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
             onBlur={() => {
@@ -270,17 +272,21 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
   const parsed = parseSetInput(weight, reps)
   const changed = parsed !== null
     && (parsed.weight !== set.weight || parsed.reps !== set.reps)
+  const problem = setInputProblem(weight, reps)
 
   return (
+    <>
     <div className="sset">
       <span className="label">{ordinal}</span>
-      <input type="number" step="0.5" min="0" className="input input--num"
+      <input type="number" step="0.5" min="0" max={MAX_WEIGHT_KG} className="input input--num"
         aria-label={`Satz ${ordinal}, Gewicht in kg`} value={weight}
+        aria-invalid={problem?.startsWith('Gewicht') || undefined}
         onChange={(e) => setWeight(e.target.value)} />
       <span className="sset__unit">kg</span>
       <span className="sset__unit">×</span>
-      <input type="number" min="1" className="input input--num"
+      <input type="number" min="1" max={MAX_REPS} className="input input--num"
         aria-label={`Satz ${ordinal}, Wiederholungen`} value={reps}
+        aria-invalid={problem?.startsWith('Wiederholungen') || undefined}
         onChange={(e) => setReps(e.target.value)} />
       <span className="sset__acts">
         <button type="button" className="icon-btn"
@@ -296,6 +302,16 @@ function SetEditor({ set, ordinal, onSave, onDelete }: {
           onClick={() => onDelete(set.id, ordinal)}>✕</button>
       </span>
     </div>
+    <SetInputHint problem={problem} />
+    </>
+  )
+}
+
+/** Why the row's button is off: a disabled save with no reason looked like a
+ *  broken button (walkthrough G-070). */
+function SetInputHint({ problem }: { problem: string | null }) {
+  return (
+    <p className="sset__hint" aria-live="polite">{problem}</p>
   )
 }
 
@@ -324,17 +340,21 @@ function AddSetRow({ seed, busy, onAdd }: {
   const [weight, setWeight] = useState(seed ? String(seed.weight) : '')
   const [reps, setReps] = useState(seed ? String(seed.reps) : '')
   const parsed = parseSetInput(weight, reps)
+  const problem = setInputProblem(weight, reps)
 
   return (
+    <>
     <div className="sset">
       <span className="label" aria-hidden="true">+</span>
-      <input type="number" step="0.5" min="0" className="input input--num" required
+      <input type="number" step="0.5" min="0" max={MAX_WEIGHT_KG} className="input input--num" required
         aria-label="Neuer Satz, Gewicht in kg" value={weight}
+        aria-invalid={problem?.startsWith('Gewicht') || undefined}
         onChange={(e) => setWeight(e.target.value)} />
       <span className="sset__unit">kg</span>
       <span className="sset__unit">×</span>
-      <input type="number" min="1" className="input input--num" required
+      <input type="number" min="1" max={MAX_REPS} className="input input--num" required
         aria-label="Neuer Satz, Wiederholungen" value={reps}
+        aria-invalid={problem?.startsWith('Wiederholungen') || undefined}
         onChange={(e) => setReps(e.target.value)} />
       <span className="sset__acts">
         {/* Visible text short so the action slot never wraps; the accessible
@@ -348,5 +368,7 @@ function AddSetRow({ seed, busy, onAdd }: {
         </button>
       </span>
     </div>
+    <SetInputHint problem={problem} />
+    </>
   )
 }

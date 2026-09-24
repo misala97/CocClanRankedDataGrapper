@@ -5,6 +5,7 @@ import { useRestTick } from '../useRestTick'
 import { useRecordTakeover } from '../useRecordTakeover'
 import { Icon } from '../../components/Icon'
 import { kg1, shortDate } from '../../format'
+import { MAX_REPS, MAX_WEIGHT_KG, REPS_HINT, WEIGHT_HINT } from '../../setInput'
 import { RecordTakeover } from './RecordTakeover'
 import { SetRow } from './SetRow'
 import { Stepper, type StepperHandle } from './Stepper'
@@ -337,11 +338,13 @@ export function LivePanel({
         <Stepper ref={kgField} label={`kg${perSide}`} value={weight}
           step={payload.live_increment} decimals={1}
           floor={payload.live_floor ?? payload.live_increment}
+          max={MAX_WEIGHT_KG} refusedHint={WEIGHT_HINT}
           ariaLabel="Gewicht eingeben"
           enterHint={reps === null ? 'next' : 'done'}
           onEnter={reps === null ? () => repsField.current?.open() : undefined}
           onDraft={setDraftWeight} onChange={setWeight} />
         <Stepper ref={repsField} label="Wdh." value={reps} step={1} decimals={0} min={1}
+          max={MAX_REPS} refusedHint={REPS_HINT}
           ariaLabel="Wiederholungen eingeben"
           enterHint={weight === null ? 'next' : 'done'}
           onEnter={weight === null ? () => kgField.current?.open() : undefined}

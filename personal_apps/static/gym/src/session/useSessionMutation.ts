@@ -95,12 +95,13 @@ export function useSessionMutation<Args extends unknown[]>(
       // server knows what is stored, so ask -- quietly; if the network is what
       // failed, the snapshot stays and the banner already says so.
       void client.invalidateQueries({ queryKey: key })
-      // A stale CSRF token cannot be retried into working -- the only fix is
-      // a fresh page (which mints a fresh token), so that is what the retry
-      // does for it.
-      fail(error.germanMessage, error.reason === 'forbidden'
+      // A stale CSRF token or a lapsed login cannot be retried into working
+      // -- the only fix is a fresh page (a fresh token, or the login page), so
+      // that is what the retry does for them. A refused value has no retry at
+      // all: sending it again gets the same refusal.
+      fail(error.germanMessage, error.needsReload
         ? () => { window.location.reload() }
-        : () => { mutation.mutate(args) })
+        : error.retryable ? () => { mutation.mutate(args) } : null)
     },
 
     onSettled: () => { end() },

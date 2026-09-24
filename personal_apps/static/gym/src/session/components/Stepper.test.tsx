@@ -217,4 +217,55 @@ describe('Stepper with no number yet', () => {
     await user.type(screen.getByRole('textbox'), '0{Enter}')
     expect(onChange).toHaveBeenCalledTimes(1)
   })
+
+  it('says why a typed number was not taken, where the label was', async () => {
+    // G-070: -10 kg or 0 reps snapped back without a word, so a refusal
+    // looked like a missed tap.
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<Stepper label="kg" value={20} step={2.5} decimals={1} max={1000}
+      refusedHint="0 bis 1000 kg" ariaLabel="Gewicht eingeben" onChange={onChange} />)
+
+    for (const typed of ['-10', '1000,5', 'abc']) {
+      await user.click(screen.getByLabelText('Gewicht eingeben'))
+      await user.clear(screen.getByRole('textbox'))
+      await user.type(screen.getByRole('textbox'), `${typed}{Enter}`)
+      expect(screen.getByText('0 bis 1000 kg')).toBeInTheDocument()
+    }
+    expect(onChange).not.toHaveBeenCalled()
+
+    // The next step or entry is a fresh start: the label comes back.
+    await user.click(screen.getByLabelText('Gewicht erhöhen'))
+    expect(screen.getByText('kg')).toBeInTheDocument()
+    expect(onChange).toHaveBeenLastCalledWith(22.5)
+  })
+
+  it('takes a bound itself, and a cleared entry without comment', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<Stepper label="kg" value={20} step={2.5} decimals={1} max={1000}
+      refusedHint="0 bis 1000 kg" ariaLabel="Gewicht eingeben" onChange={onChange} />)
+
+    await user.click(screen.getByLabelText('Gewicht eingeben'))
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), '{Enter}')
+    expect(screen.queryByText('0 bis 1000 kg')).toBeNull()
+    await user.click(screen.getByLabelText('Gewicht eingeben'))
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), '1000{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith(1000)
+  })
+
+  it('refuses a rep count that is not a whole number rather than rounding it', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<Stepper label="Wdh." value={8} step={1} decimals={0} min={1} max={1000}
+      refusedHint="1 bis 1000 Wdh." ariaLabel="Wiederholungen eingeben" onChange={onChange} />)
+
+    await user.click(screen.getByLabelText('Wiederholungen eingeben'))
+    await user.clear(screen.getByRole('textbox'))
+    await user.type(screen.getByRole('textbox'), '2,5{Enter}')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByText('1 bis 1000 Wdh.')).toBeInTheDocument()
+  })
 })

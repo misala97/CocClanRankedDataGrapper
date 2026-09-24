@@ -2,7 +2,9 @@
 
 Every coercion here answers the same question: what does this value mean when
 the input is missing, blank, or not a number. They arrive from form posts and
-query strings, so none of them may raise.
+query strings, so none of them may raise anything but InvalidInput -- the
+typed-field parsers raise it for a value a lifter typed that cannot be stored,
+and the blueprint answers it with the reason (routes/__init__.py).
 
 This is a leaf module -- it imports no other routes module, which is what lets
 every other one import it. _cancel_pending_push lives here rather than with the
@@ -16,12 +18,15 @@ import math
 
 from flask import jsonify, redirect, request, url_for
 
+from auth import wants_json
 from extensions import db
 from models import (
     AppUser, WorkoutSession, PendingPush, SharedSession, STALE_SESSION_TIMEOUT,
 )
 from features.gym import stats
-from features.gym.exercises import list_values, settle_rests
+from features.gym.exercises import (
+    REST_MAX_SECONDS, REST_MIN_SECONDS, list_values, settle_rests,
+)
 from features.gym.scope import my_sessions
 from .. import sharing
 from ._blueprint import gym_bp
@@ -61,16 +66,33 @@ def _to_float(value, fallback=None):
 
 
 def _to_increment(value):
-    """A weight increment as typed, or None.
+    """A weight increment as typed: None for a blank, else a number above 0
+    and at most MAX_INCREMENT_KG. InvalidInput for anything else.
 
     Comma-tolerant: `type=number` normalises to a dot, but the field degrades
-    to text without JS and a German keyboard produces `2,5`. Blank,
-    unparseable and non-positive all store NULL, which
-    stats.resolve_increment() reads as "use the default" -- so clearing the
-    field is the way to put an exercise back on 2.5 kg.
+    to text without JS and a German keyboard produces `2,5`. A blank stores
+    NULL, which stats.resolve_increment() reads as "use the default" -- so
+    clearing the field is the way to put an exercise back on 2.5 kg. An
+    unparseable or non-positive value used to do the same, silently; 'inf'
+    got through to the database and came back as a 500.
     """
-    parsed = _to_float(str(value).replace(',', '.').strip())
-    return parsed if parsed and parsed > 0 else None
+    raw, parsed = _typed_number(value, _to_float)
+    if not raw:
+        return None
+    if parsed is None or not 0 < parsed <= MAX_INCREMENT_KG:
+        raise InvalidInput(f'Gewichtsstufe: bitte mehr als 0 und höchstens {MAX_INCREMENT_KG} kg.')
+    return parsed
+
+
+def _to_bar_weight(value):
+    """A bar's own weight: None for a blank (the list's value), else 0 to
+    MAX_BAR_KG -- 0 is "nothing inside the number". InvalidInput otherwise."""
+    raw, parsed = _typed_number(value, _to_float)
+    if not raw:
+        return None
+    if parsed is None or not 0 <= parsed <= MAX_BAR_KG:
+        raise InvalidInput(f'Stangengewicht: bitte 0 bis {MAX_BAR_KG} kg.')
+    return parsed
 
 
 def _to_int(value, fallback=None):
@@ -80,24 +102,132 @@ def _to_int(value, fallback=None):
         return fallback
 
 
+class InvalidInput(Exception):
+    """A typed value the server will not store, and the sentence that says why.
+
+    These used to be dropped with a 200 -- the old number stayed and the screen
+    snapped back without a word (G-070, G-071, G-092) -- or, for a name longer
+    than its column, to reach the database and come back as a 500 that the
+    island called a connection failure (G-083). The blueprint's handler
+    (routes/__init__.py) answers an island with a 400 carrying the message,
+    which api.ts shows as it is, and a form post with the message flashed on
+    the page it came from.
+    """
+
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+
+# The largest numbers a set can carry. A bound on what someone can mean when
+# they type it, not a judgement on anyone's lifting: the heaviest real sled
+# loads fit well inside it, a fat-fingered 9999 does not -- and a stored 9999
+# stays the record, the next workout's seed and most of the tonnage. Mirrored
+# in static/gym/src/setInput.ts.
+MAX_SET_WEIGHT_KG = 1000
+MAX_SET_REPS = 1000
+BODYWEIGHT_RANGE_KG = (20, 400)
+# A bar or a weight step past these is a typo, not equipment.
+MAX_BAR_KG = 100
+MAX_INCREMENT_KG = 50
+MAX_STACK_STOPS = 100
+# Names are VARCHAR(150). Notes are TEXT: 65,535 *bytes*, fewer characters
+# once umlauts and emoji take two to four bytes each.
+MAX_NAME_CHARS = 150
+MAX_NOTE_CHARS = 2000
+
+
+def _typed_number(value, parse):
+    """(raw text, number or None) for a typed field. The raw text is '' for a
+    blank; the number is None when the text is not a finite number."""
+    raw = str(value if value is not None else '').replace(',', '.').strip()
+    if not raw:
+        return raw, None
+    parsed = parse(raw)
+    if parsed is not None and not math.isfinite(parsed):
+        parsed = None
+    return raw, parsed
+
+
 def _to_weight(value):
-    """A set's weight as typed, or None when it cannot be one.
+    """A set's weight as typed: None for a blank -- not an edit, like a field
+    the form never sent -- else a number of 0 to MAX_SET_WEIGHT_KG.
+    InvalidInput for anything else.
 
     Stricter than _to_float on purpose: float() also accepts 'nan' and 'inf',
-    and an empty add row on the live screen used to arrive as 0 x 0 and be
-    logged as a completed set. Zero itself stays valid -- a bodyweight set
-    is logged at 0 kg. Comma-tolerant for the same reason as _to_increment.
+    and exponent notation made 1e9 kg a stored set. Zero stays valid -- a
+    bodyweight set is logged at 0 kg. Comma-tolerant for the same reason as
+    _to_increment.
     """
-    parsed = _to_float(str(value).replace(',', '.').strip())
-    if parsed is None or not math.isfinite(parsed) or parsed < 0:
+    raw, parsed = _typed_number(value, _to_float)
+    if not raw:
         return None
+    if parsed is None or not 0 <= parsed <= MAX_SET_WEIGHT_KG:
+        raise InvalidInput(f'Gewicht: bitte 0 bis {MAX_SET_WEIGHT_KG} kg.')
     return parsed
 
 
 def _to_reps(value):
-    """A set's rep count, or None. A set of zero reps is not a set."""
-    parsed = _to_int(value)
-    return parsed if parsed is not None and parsed >= 1 else None
+    """A set's rep count: None for a blank, else a whole number of 1 to
+    MAX_SET_REPS. InvalidInput for anything else -- a set of zero reps is not
+    a set, and 2.5 of them is not a count."""
+    raw = str(value if value is not None else '').strip()
+    if not raw:
+        return None
+    parsed = _to_int(raw)
+    if parsed is None or not 1 <= parsed <= MAX_SET_REPS:
+        raise InvalidInput(f'Wiederholungen: bitte eine ganze Zahl von 1 bis {MAX_SET_REPS}.')
+    return parsed
+
+
+def _to_bodyweight(value):
+    """A workout's bodyweight: None for a blank (the field was cleared), else
+    a number within BODYWEIGHT_RANGE_KG. InvalidInput for anything else, so a
+    typo no longer erases the weight that was stored (G-071)."""
+    raw, parsed = _typed_number(value, _to_float)
+    if not raw:
+        return None
+    low, high = BODYWEIGHT_RANGE_KG
+    if parsed is None or not low <= parsed <= high:
+        raise InvalidInput(f'Körpergewicht: bitte {low} bis {high} kg.')
+    return parsed
+
+
+def _to_rest_seconds(value):
+    """A rest as typed: None for a blank, else whole seconds within the
+    stepper's ends. InvalidInput for anything else. One check for every rest
+    a lifter can set -- two of the three routes stored any number, a negative
+    one included, which scheduled the "rest over" push in the past (G-092)."""
+    raw = str(value if value is not None else '').strip()
+    if not raw:
+        return None
+    seconds = _to_int(raw)
+    if seconds is None or not REST_MIN_SECONDS <= seconds <= REST_MAX_SECONDS:
+        raise InvalidInput(
+            f'Pause: bitte {_clock(REST_MIN_SECONDS)} bis {_clock(REST_MAX_SECONDS)} min.')
+    return seconds
+
+
+def _clock(seconds):
+    return f'{seconds // 60}:{seconds % 60:02d}'
+
+
+def _to_name(value):
+    """A routine's or workout's name as typed, stripped; '' for a blank.
+    InvalidInput past the column's length."""
+    name = (value or '').strip()
+    if len(name) > MAX_NAME_CHARS:
+        raise InvalidInput(f'Name zu lang — höchstens {MAX_NAME_CHARS} Zeichen.')
+    return name
+
+
+def _to_note(value):
+    """A note as typed, stripped; None for a blank. InvalidInput past
+    MAX_NOTE_CHARS."""
+    note = (value or '').strip()
+    if len(note) > MAX_NOTE_CHARS:
+        raise InvalidInput(f'Notiz zu lang — höchstens {MAX_NOTE_CHARS} Zeichen.')
+    return note or None
 
 
 # Sent by the live workout island on every write. The debrief writes to the
@@ -163,9 +293,13 @@ def _to_stack_steps(raw):
             value = float(chunk)
         except ValueError:
             continue
-        if value > 0:
+        # 'inf' parses, and reached the database as a stop.
+        if math.isfinite(value) and 0 < value <= MAX_SET_WEIGHT_KG:
             steps.append(value)
-    return sorted(set(steps)) or None
+    steps = sorted(set(steps))
+    if len(steps) > MAX_STACK_STOPS:
+        raise InvalidInput(f'Höchstens {MAX_STACK_STOPS} Stufen.')
+    return steps or None
 
 
 def _exercise_meta(exercise, setup):
@@ -282,14 +416,7 @@ def _username(user_id):
     return row.username if row is not None else 'Jemand'
 
 
-def _wants_json():
-    """Whether this request is an island's fetch rather than a form post.
-
-    Both halves are load-bearing. A browser form post sends
-    `Accept: text/html,...,*/*;q=0.8`, so accept_json is TRUE via the wildcard
-    -- testing it alone would flip every form post to JSON and take the page
-    down. A bare fetch() sends */* and lands on the html side too, which is
-    why every island sends `Accept: application/json` explicitly (src/api.ts).
-    """
-    return (request.accept_mimetypes.accept_json
-            and not request.accept_mimetypes.accept_html)
+# Whether this request is an island's fetch rather than a form post. The
+# test lives with the login check, which needs it too (auth.login_redirect);
+# the routes here read it under its old name.
+_wants_json = wants_json

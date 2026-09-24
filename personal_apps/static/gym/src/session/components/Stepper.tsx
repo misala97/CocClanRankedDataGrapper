@@ -18,6 +18,12 @@ interface Props {
   /** The lowest number the field takes. Reps start at 1 -- the server does
    *  not take a set of none. */
   min?: number
+  /** The highest number the field takes; the server refuses anything past
+   *  it (setInput.ts MAX_WEIGHT_KG / MAX_REPS). */
+  max?: number
+  /** What the label says instead while a typed number is refused, e.g.
+   *  "0 bis 1000 kg". */
+  refusedHint?: string
   /** Where "+" lands from a blank; "−" has nowhere to go from one. */
   floor?: number
   ariaLabel: string
@@ -44,11 +50,15 @@ const de = (value: number, decimals: number) =>
  * slot, and typing is the way in (the go button opens the entry itself).
  */
 export const Stepper = forwardRef<StepperHandle, Props>(function Stepper({
-  label, value, step, decimals, min = 0, floor = min, ariaLabel,
-  enterHint = 'done', onEnter, onDraft, onChange,
+  label, value, step, decimals, min = 0, max = Infinity, floor = min, ariaLabel,
+  refusedHint, enterHint = 'done', onEnter, onDraft, onChange,
 }, ref) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  // A typed number the field would not take. It used to snap back to the old
+  // value without a word -- -10 kg, 0 reps -- so the lifter could not tell a
+  // refusal from a missed tap (walkthrough G-070).
+  const [refused, setRefused] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   // Closing the field blurs it synchronously, and that blur would otherwise
   // commit the very value an Escape just rejected. The original carried the
@@ -68,26 +78,29 @@ export const Stepper = forwardRef<StepperHandle, Props>(function Stepper({
   // Both separators: the app renders commas, phone keypads vary on which they
   // offer, and rejecting either would be a silent no-op at the moment the
   // lifter is correcting a number. Not snapped to the increment: the increment
-  // governs stepping, typing is exact by intent.
+  // governs stepping, typing is exact by intent -- which is also why 2.5 reps
+  // is refused rather than rounded into a count nobody typed.
   const parse = (text: string): number | null => {
     const parsed = Number.parseFloat(text.replace(',', '.'))
     if (!Number.isFinite(parsed)) return null
-    const next = decimals ? parsed : Math.round(parsed)
-    return next < min ? null : next
+    if (!decimals && !Number.isInteger(parsed)) return null
+    return parsed < min || parsed > max ? null : parsed
   }
 
   const bump = (direction: 1 | -1) => {
+    setRefused(false)
     if (value === null) {
       if (direction === 1) onChange(floor)
       return
     }
     // toFixed is a display concern only. Rounding the stored number here would
     // turn a 1.25 kg step into an effective 1.3 after a few taps.
-    onChange(Math.max(min, value + direction * step))
+    onChange(Math.min(max, Math.max(min, value + direction * step)))
   }
 
   const openEntry = () => {
     settled.current = false
+    setRefused(false)
     const text = value === null ? '' : de(value, decimals)
     setDraft(text)
     onDraft?.(value)
@@ -103,7 +116,12 @@ export const Stepper = forwardRef<StepperHandle, Props>(function Stepper({
     onDraft?.(null)
     if (!save) return false
     const next = parse(draft)
-    if (next === null) return false
+    if (next === null) {
+      // A cleared field is no answer rather than a wrong one: the old value
+      // stands without comment. Anything typed gets the reason.
+      setRefused(draft.trim() !== '')
+      return false
+    }
     onChange(next)
     return true
   }
@@ -138,7 +156,11 @@ export const Stepper = forwardRef<StepperHandle, Props>(function Stepper({
           {value === null ? null : de(value, decimals)}
         </button>
       )}
-      <span className="field-num__lbl">{label}</span>
+      {/* The label turns into the reason while a typed number is refused --
+          under the number that was refused, and read out once. */}
+      <span className={`field-num__lbl${refused ? ' is-refused' : ''}`} aria-live="polite">
+        {refused && refusedHint ? refusedHint : label}
+      </span>
       <span className="field-num__keys">
         <button type="button" className="field-num__key"
           aria-label={`${noun} verringern`} disabled={value === null}

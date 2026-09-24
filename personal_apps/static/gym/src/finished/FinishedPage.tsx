@@ -5,6 +5,9 @@ import type {
 } from './types'
 import { postForm, MutationFailed } from '../api'
 import { kg1, volume as de } from '../format'
+import {
+  BODYWEIGHT_MAX_KG, BODYWEIGHT_MIN_KG, MAX_NAME_CHARS, MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG,
+} from '../setInput'
 import { UndoToast, useUndo } from '../undo'
 import { useSheets } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
@@ -406,7 +409,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                   and redirected having created nothing -- and the redirect is
                   the same one a success produces. */}
               <input type="text" name="template_name" className="input"
-                placeholder="Name der Routine" required
+                placeholder="Name der Routine" required maxLength={MAX_NAME_CHARS}
                 aria-label="Name der neuen Routine" />
               <button type="submit" className="btn btn--ghost btn--block">
                 Als Routine speichern
@@ -480,12 +483,14 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                 Körpergewicht (kg)
               </label>
               <input type="number" id="finished-session-bodyweight" name="bodyweight_kg"
-                step="0.1" min="0" className="input input--num rest-form__input"
+                step="0.1" min={BODYWEIGHT_MIN_KG} max={BODYWEIGHT_MAX_KG}
+                className="input input--num rest-form__input"
                 defaultValue={session.bodyweight_kg ?? ''} placeholder="—" />
             </div>
             <div className="field grow">
               <label className="label" htmlFor="finished-session-notes">Notiz</label>
-              <input type="text" id="finished-session-notes" name="notes" className="input"
+              <textarea id="finished-session-notes" name="notes" className="textarea" rows={3}
+                maxLength={MAX_NOTE_CHARS}
                 defaultValue={session.notes ?? ''} placeholder="z. B. nach 8h Schicht" />
             </div>
             <button type="submit" className="btn btn--ghost btn--sm">Speichern</button>
@@ -516,12 +521,12 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                 <span className="label">{i + 1}</span>
                 {/* required + min: the browser refuses an empty or zero-rep
                     row before the submit handler ever runs. */}
-                <input type="number" name="weight" step="0.5" min="0" required
+                <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG} required
                   className="input input--num" defaultValue={s.weight}
                   aria-label={`${entry.name}, Satz ${i + 1}, Gewicht in kg`} />
                 <span className="sset__unit">kg</span><span className="sset__unit">×</span>
-                <input type="number" name="reps" min="1" required className="input input--num"
-                  defaultValue={s.reps}
+                <input type="number" name="reps" min="1" max={MAX_REPS} required
+                  className="input input--num" defaultValue={s.reps}
                   aria-label={`${entry.name}, Satz ${i + 1}, Wiederholungen`} />
                 <span className="sset__acts">
                   <button type="submit" className="icon-btn"
@@ -555,7 +560,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
                 <div className="field grow">
                   <label className="label"
                     htmlFor={`finished-ex-notes-${entry.session_exercise_id}`}>Notiz</label>
-                  <input type="text" className="input" name="notes"
+                  <input type="text" className="input" name="notes" maxLength={MAX_NOTE_CHARS}
                     id={`finished-ex-notes-${entry.session_exercise_id}`}
                     defaultValue={entry.notes ?? ''} placeholder="—" />
                 </div>
@@ -597,12 +602,12 @@ function AddSetForm({ sessionExerciseId, name, seed, onSubmit }: {
       className="sset" onSubmit={onSubmit}>
       <CsrfField />
       <span className="label" aria-hidden="true">+</span>
-      <input type="number" name="weight" step="0.5" min="0" required
+      <input type="number" name="weight" step="0.5" min="0" max={MAX_WEIGHT_KG} required
         className="input input--num" defaultValue={seed?.weight ?? ''}
         aria-label={`${name}, neuer Satz, Gewicht in kg`} />
       <span className="sset__unit">kg</span><span className="sset__unit">×</span>
-      <input type="number" name="reps" min="1" required className="input input--num"
-        defaultValue={seed?.reps ?? ''}
+      <input type="number" name="reps" min="1" max={MAX_REPS} required
+        className="input input--num" defaultValue={seed?.reps ?? ''}
         aria-label={`${name}, neuer Satz, Wiederholungen`} />
       <span className="sset__acts">
         {/* Short visible text so the action track never wraps, like the live

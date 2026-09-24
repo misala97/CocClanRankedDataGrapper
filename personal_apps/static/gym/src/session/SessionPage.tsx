@@ -1,4 +1,5 @@
 import type { SessionDetailPayload } from './types'
+import type { SessionMetaPatch } from './api'
 import { useAnnouncer, useSheets } from './stores'
 import { FinishSheet } from './components/FinishSheet'
 import { SessionHeader } from './components/SessionHeader'
@@ -34,7 +35,7 @@ export interface SessionActions {
    *  only then, and the server refuses it otherwise. */
   onDiscard(): void
   onReorder(order: number[]): void
-  onSessionMetaSave(meta: { bodyweightKg: number | null; notes: string }): void
+  onSessionMetaSave(meta: SessionMetaPatch): void
   onSkipRest(): void
   onInvite(partnerId: number): void
   onEnablePush(): void

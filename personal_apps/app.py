@@ -49,7 +49,8 @@ migrate = Migrate(app, db)
 from models import *
 db.configure_mappers()
 
-from auth import auth_bp, _is_logged_in, _request_hostname, login_required, is_admin, FULL_ACCESS_HOST
+from auth import (auth_bp, _is_logged_in, _request_hostname, login_redirect, login_required,
+                  is_admin, FULL_ACCESS_HOST)
 from features.pubquiz.routes import pubquiz_bp
 from features.tips.routes import tips_bp
 from features.quizbank.routes import quizbank_bp
@@ -131,7 +132,9 @@ def _require_login_on_full_access_host():
         return
     if not _is_logged_in():
         if hostname == FULL_ACCESS_HOST:
-            return redirect(url_for('auth.login'))
+            # A 401 for an island's fetch, the login page for everything else:
+            # this gate answers before any route's own login check does.
+            return login_redirect()
         return
     # This check used to run on the full-access host only, so a member who
     # signed in on the pub-quiz domain got the quiz admin there (G-151). The

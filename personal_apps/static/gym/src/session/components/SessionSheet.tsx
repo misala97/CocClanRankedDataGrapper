@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import type { Partner, PartnerStatus, SessionMeta } from '../types'
+import type { SessionMetaPatch } from '../api'
+import {
+  BODYWEIGHT_MAX_KG, BODYWEIGHT_MIN_KG, MAX_NOTE_CHARS, parseBodyweight,
+} from '../../setInput'
 import { usePush, useSheets, useWorkoutUi } from '../stores'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
@@ -15,7 +19,7 @@ interface Props {
    *  session_is_shared): its order is the leader's. */
   following?: boolean
   pushSupported: boolean
-  onMetaSave(meta: { bodyweightKg: number | null; notes: string }): void
+  onMetaSave(meta: SessionMetaPatch): void
   onSkipRest(): void
   onInvite(partnerId: number): void
   onEnablePush(): void
@@ -37,9 +41,11 @@ export function SessionSheet({
   const close = useSheets((s) => s.close)
   const subscribed = usePush((s) => s.subscribed)
 
-  const [bodyweight, setBodyweight] = useState(
-    session.bodyweight_kg === null ? '' : String(session.bodyweight_kg))
+  const storedBodyweight = session.bodyweight_kg === null ? '' : String(session.bodyweight_kg)
+  const [bodyweight, setBodyweight] = useState(storedBodyweight)
   const [notes, setNotes] = useState(session.notes ?? '')
+  const bodyweightKg = parseBodyweight(bodyweight)
+  const bodyweightRefused = bodyweight.trim() !== '' && bodyweightKg === null
   const [partnerId, setPartnerId] = useState(partners[0]?.id ?? 0)
 
   return (
@@ -143,24 +149,34 @@ export function SessionSheet({
         <div className="sheet__group-head">
           <span className="label">Dieses Workout</span>
         </div>
+        {/* Each field saves itself when it is left, like the exercise note.
+            One "Speichern" beside the note used to be the only way to save
+            either, so a bodyweight typed and left was never stored (G-071). */}
         <div className="field">
           <label className="label" htmlFor="session-bodyweight">Körpergewicht (kg)</label>
-          <input type="number" id="session-bodyweight" step="0.1" min="0"
+          <input type="number" id="session-bodyweight" step="0.1"
+            min={BODYWEIGHT_MIN_KG} max={BODYWEIGHT_MAX_KG} inputMode="decimal"
             className="input input--num" placeholder="—"
-            value={bodyweight} onChange={(e) => setBodyweight(e.target.value)} />
+            aria-invalid={bodyweightRefused || undefined}
+            aria-describedby="session-bodyweight-hint"
+            value={bodyweight} onChange={(e) => setBodyweight(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+            onBlur={() => {
+              if (bodyweight === storedBodyweight || bodyweightRefused) return
+              onMetaSave({ bodyweightKg })
+            }} />
+          <p className="field__hint" id="session-bodyweight-hint" aria-live="polite">
+            {bodyweightRefused ? `Bitte ${BODYWEIGHT_MIN_KG} bis ${BODYWEIGHT_MAX_KG} kg.` : ''}
+          </p>
         </div>
-        <div className="sheet__save-row">
-          <div className="field">
-            <label className="label" htmlFor="session-notes">Notiz</label>
-            <input type="text" id="session-notes" className="input"
-              placeholder="z. B. nach 8h Schicht"
-              value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-          <button type="button" className="btn btn--ghost btn--sm"
-            onClick={() => onMetaSave({
-              bodyweightKg: bodyweight === '' ? null : Number(bodyweight),
-              notes,
-            })}>Speichern</button>
+        <div className="field">
+          <label className="label" htmlFor="session-notes">Notiz</label>
+          <textarea id="session-notes" className="textarea" rows={3}
+            maxLength={MAX_NOTE_CHARS} placeholder="z. B. nach 8h Schicht"
+            value={notes} onChange={(e) => setNotes(e.target.value)}
+            onBlur={() => {
+              if (notes !== (session.notes ?? '')) onMetaSave({ notes })
+            }} />
         </div>
       </div>
 

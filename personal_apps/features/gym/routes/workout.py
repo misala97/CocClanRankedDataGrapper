@@ -43,7 +43,8 @@ from .helpers import (
     NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT,
     _cancel_pending_push, _delete_session_and_links,
     _get_active_session, _refuse_live_write_if_finished,
-    _to_increment, _to_int, _to_reps, _to_weight, _username, _wants_json,
+    _to_bodyweight, _to_int, _to_name, _to_note, _to_reps, _to_rest_seconds, _to_weight,
+    _username, _wants_json,
 )
 from .history import load_performed, performed_from_session, _session_rest_entries
 
@@ -344,7 +345,7 @@ def gym_start():
         return redirect(url_for('gym.session_detail', session_id=active_session.id))
 
     template_id = request.form.get('template_id', type=int)
-    name = request.form.get('name', '').strip() or None
+    name = _to_name(request.form.get('name', '')) or None
     # Resolved before the session is built, and scoped to the caller: a
     # template_id belonging to someone else must not be seeded from *or*
     # stored, or the row keeps a link that update_template would later follow
@@ -1232,7 +1233,7 @@ def gym_update_session_exercise_rest(session_exercise_id):
     refusal = _refuse_live_write_if_finished(session_exercise.session)
     if refusal is not None:
         return refusal
-    seconds = _to_int(request.form.get('rest_seconds', ''))
+    seconds = _to_rest_seconds(request.form.get('rest_seconds', ''))
     if seconds is not None and seconds == exercise_setup(
             session_exercise.session.user_id, session_exercise.exercise).default_rest_seconds:
         seconds = None
@@ -1254,8 +1255,16 @@ def gym_update_session_meta(session_id):
     refusal = _refuse_live_write_if_finished(session)
     if refusal is not None:
         return refusal
-    session.bodyweight_kg = _to_increment(request.form.get('bodyweight_kg', ''))
-    session.notes = request.form.get('notes', '').strip() or None
+    # Each field only when sent, so either one can be saved on its own. Both
+    # are read before either is written: a refused bodyweight must not leave
+    # the note half-saved, or the other way round.
+    fields = {}
+    if 'bodyweight_kg' in request.form:
+        fields['bodyweight_kg'] = _to_bodyweight(request.form['bodyweight_kg'])
+    if 'notes' in request.form:
+        fields['notes'] = _to_note(request.form['notes'])
+    for field, value in fields.items():
+        setattr(session, field, value)
     db.session.commit()
     return _mutation_response(
         session, 'gym.session_detail', session_id=session.id)
@@ -1271,7 +1280,7 @@ def gym_update_session_exercise_meta(session_exercise_id):
     refusal = _refuse_live_write_if_finished(session_exercise.session)
     if refusal is not None:
         return refusal
-    session_exercise.notes = request.form.get('notes', '').strip() or None
+    session_exercise.notes = _to_note(request.form.get('notes', ''))
     session_exercise.pain = request.form.get('pain') == 'on'
     db.session.commit()
     return _mutation_response(
@@ -1518,8 +1527,10 @@ def _apply_typed_weight_reps(set_):
     than from a separate local.
     """
     was_default_seeded = set_.is_default_seeded
-    # An empty or impossible field is not an edit: None leaves the stored
-    # number standing, exactly like a field the form never sent.
+    # An empty field is not an edit: None leaves the stored number standing,
+    # exactly like a field the form never sent. An impossible one is refused
+    # with a 400 that says why (helpers.InvalidInput), before anything is
+    # written -- it used to be dropped just as quietly as a blank.
     weight = _to_weight(request.form.get('weight', ''))
     reps = _to_reps(request.form.get('reps', ''))
     weight_changed = False

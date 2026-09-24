@@ -2,7 +2,7 @@ import os
 import secrets
 from functools import wraps
 
-from flask import Blueprint, abort, render_template, request, session, redirect, url_for
+from flask import Blueprint, abort, jsonify, render_template, request, session, redirect, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db
@@ -87,11 +87,40 @@ def _post_login_redirect():
     return redirect(url_for('pubquiz.pubquiz'))
 
 
+def wants_json():
+    """Whether this request is an island's fetch rather than a page load or a
+    form post.
+
+    Both halves are load-bearing. A browser form post sends
+    `Accept: text/html,...,*/*;q=0.8`, so accept_json is TRUE via the wildcard
+    -- testing it alone would flip every form post to JSON and take the page
+    down. A bare fetch() sends */* and lands on the html side too, which is
+    why every island sends `Accept: application/json` explicitly
+    (static/gym/src/api.ts).
+    """
+    return (request.accept_mimetypes.accept_json
+            and not request.accept_mimetypes.accept_html)
+
+
+def login_redirect():
+    """The answer to a request that needs a login it does not carry.
+
+    A page load or a form post goes to the login page. An island's fetch gets
+    a 401 it can read instead: fetch follows a redirect by itself, so the
+    login page used to arrive as the answer to a JSON read, fail to parse, and
+    reach the lifter as "Verbindung fehlgeschlagen" -- in the middle of a
+    workout, for a login that had simply run out (G-093).
+    """
+    if wants_json():
+        return jsonify({'error': 'login_required'}), 401
+    return redirect(url_for('auth.login'))
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not _is_logged_in():
-            return redirect(url_for('auth.login'))
+            return login_redirect()
         return f(*args, **kwargs)
     return decorated
 
@@ -111,7 +140,7 @@ def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not _is_logged_in():
-            return redirect(url_for('auth.login'))
+            return login_redirect()
         if not is_admin():
             abort(403)
         return f(*args, **kwargs)

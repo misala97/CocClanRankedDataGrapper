@@ -100,7 +100,7 @@ describe('useSaveState', () => {
     const retry = vi.fn()
     useSaveState.getState().fail('Keine Antwort vom Server', retry)
     expect(useSaveState.getState().error?.message).toBe('Keine Antwort vom Server')
-    useSaveState.getState().error?.retry()
+    useSaveState.getState().error?.retry?.()
     expect(retry).toHaveBeenCalledOnce()
   })
 

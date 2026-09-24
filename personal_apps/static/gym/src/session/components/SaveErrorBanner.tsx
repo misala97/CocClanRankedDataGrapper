@@ -17,13 +17,14 @@ export function SaveErrorBanner() {
   // connection returns, the banner retries itself. Safe to fire twice --
   // toggleSet states its target (idempotent) and addSet is lock-guarded.
   useEffect(() => {
-    if (error === null) return
-    const retry = () => error.retry()
+    const retry = error?.retry
+    if (!retry) return
     window.addEventListener('online', retry)
     return () => window.removeEventListener('online', retry)
   }, [error])
 
   if (error === null) return null
+  const { retry } = error
 
   return (
     <div className="note-save" role="alert">
@@ -33,11 +34,14 @@ export function SaveErrorBanner() {
         {/* --ghost, not --stall: .btn--stall paints --live-ink, which put a
             second orange control on screen beside the solid-orange confirm
             button. The retry is this banner's own primary action and the
-            banner already has all the attention it needs. */}
+            banner already has all the attention it needs. A refused value
+            has no retry -- the message says what to change instead. */}
+        {retry && (
+          <button type="button" className="btn btn--ghost btn--sm"
+            onClick={() => retry()}>Erneut versuchen</button>
+        )}
         <button type="button" className="btn btn--ghost btn--sm"
-          onClick={() => error.retry()}>Erneut versuchen</button>
-        <button type="button" className="btn btn--ghost btn--sm"
-          onClick={dismiss}>Verwerfen</button>
+          onClick={dismiss}>{retry ? 'Verwerfen' : 'OK'}</button>
       </div>
     </div>
   )

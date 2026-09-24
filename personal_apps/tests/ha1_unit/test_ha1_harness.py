@@ -933,6 +933,7 @@ def toy_app(*, remove_member_gate=False, add_radar_member=False):
         blueprint.add_url_rule(rule, endpoint, lambda: 'ok')
         app.register_blueprint(blueprint)
     namespace = {'request': flask.request, 'redirect': flask.redirect, 'url_for': flask.url_for,
+                 'login_redirect': lambda: flask.redirect(flask.url_for('auth.login')),
                  'abort': flask.abort, 'FULL_ACCESS_HOST': HOST, '_MEMBER_BLUEPRINTS': members,
                  '_request_hostname': lambda: flask.request.host.split(':')[0].rstrip('.').lower(),
                  '_is_logged_in': lambda: 'user_id' in flask.session,

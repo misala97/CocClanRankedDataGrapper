@@ -32,18 +32,31 @@ function open(props: Partial<typeof base> = {}) {
 }
 
 describe('SessionSheet', () => {
-  it('saves bodyweight and note together, and says what they apply to', async () => {
+  it('saves bodyweight and note each as it is left, and says what they apply to', async () => {
+    // G-071: one "Speichern" beside the note was the only way to save either,
+    // so a bodyweight typed and left was never stored.
     const user = userEvent.setup()
     const { props } = open()
     await user.type(screen.getByLabelText('Körpergewicht (kg)'), '82.4')
-    await user.type(screen.getByLabelText('Notiz'), 'nach Schicht')
-    await user.click(screen.getByText('Speichern'))
+    await user.click(screen.getByLabelText('Notiz'))
+    expect(props.onMetaSave).toHaveBeenLastCalledWith({ bodyweightKg: 82.4 })
 
-    expect(props.onMetaSave).toHaveBeenCalledWith({
-      bodyweightKg: 82.4, notes: 'nach Schicht',
-    })
+    await user.type(screen.getByLabelText('Notiz'), 'nach Schicht')
+    await user.click(screen.getByText('Dieses Workout'))
+    expect(props.onMetaSave).toHaveBeenLastCalledWith({ notes: 'nach Schicht' })
+    expect(screen.queryByText('Speichern')).toBeNull()
     // The caption is the group's head now, not a floating footnote.
     expect(screen.getByText('Dieses Workout')).toBeInTheDocument()
+  })
+
+  it('says why a bodyweight is not taken, and does not send it', async () => {
+    const user = userEvent.setup()
+    const { props } = open()
+    await user.type(screen.getByLabelText('Körpergewicht (kg)'), '5')
+    await user.click(screen.getByLabelText('Notiz'))
+    expect(props.onMetaSave).not.toHaveBeenCalled()
+    expect(screen.getByText('Bitte 20 bis 400 kg.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Körpergewicht (kg)')).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('does not offer reordering to a follower, and says whose order it is', () => {

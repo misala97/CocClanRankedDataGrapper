@@ -16,6 +16,13 @@ const LIVE = { 'X-Gym-Surface': 'live' }
 const post = (url: string, fields: Record<string, string | number | boolean> = {}) =>
   postForm<SessionDetailPayload>(url, fields, { headers: LIVE })
 
+/** A workout's own bodyweight and note. A key left out is left alone; a
+ *  null bodyweight clears it. */
+export interface SessionMetaPatch {
+  bodyweightKg?: number | null
+  notes?: string
+}
+
 export function fetchSession(sessionId: number): Promise<SessionDetailPayload> {
   return getJson<SessionDetailPayload>(`/gym/session/${sessionId}/detail.json`)
 }
@@ -69,11 +76,17 @@ export const api = {
     post(`/gym/session-exercises/${sessionExerciseId}/meta`,
       { pain: meta.pain ? 'on' : '', notes: meta.notes }),
 
-  setSessionMeta: (sessionId: number, meta: { bodyweightKg: number | null; notes: string }) =>
-    post(`/gym/sessions/${sessionId}/meta`, {
-      bodyweight_kg: meta.bodyweightKg === null ? '' : meta.bodyweightKg,
-      notes: meta.notes,
-    }),
+  /** Either field alone, or both: the server writes only what is sent, so
+   *  the bodyweight saves on its own and the note on its own (G-071 -- one
+   *  shared button beside the note used to leave a typed bodyweight unsaved). */
+  setSessionMeta: (sessionId: number, meta: SessionMetaPatch) => {
+    const fields: Record<string, string | number> = {}
+    if (meta.bodyweightKg !== undefined) {
+      fields.bodyweight_kg = meta.bodyweightKg === null ? '' : meta.bodyweightKg
+    }
+    if (meta.notes !== undefined) fields.notes = meta.notes
+    return post(`/gym/sessions/${sessionId}/meta`, fields)
+  },
 
   reorder: (sessionId: number, order: number[]) =>
     post(`/gym/session/${sessionId}/exercises/reorder`, { order: order.join(',') }),

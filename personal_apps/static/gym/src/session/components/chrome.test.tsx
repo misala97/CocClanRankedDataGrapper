@@ -89,6 +89,20 @@ describe('SaveErrorBanner', () => {
     await user.click(await screen.findByText('Verwerfen'))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+
+  it('offers no retry for a value the server refused, only the reason', async () => {
+    // G-070: sending the same refused value again gets the same refusal, and
+    // the connection coming back must not send it either.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    render(<SaveErrorBanner />)
+    useSaveState.getState().fail('Gewicht: bitte 0 bis 1000 kg.', null)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gewicht: bitte 0 bis 1000 kg.')
+    expect(screen.queryByText('Erneut versuchen')).not.toBeInTheDocument()
+    window.dispatchEvent(new Event('online'))
+    await user.click(screen.getByText('OK'))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })
 
 describe('ReorderBar', () => {

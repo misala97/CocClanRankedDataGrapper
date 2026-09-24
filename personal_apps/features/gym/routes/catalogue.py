@@ -11,7 +11,7 @@ from features.gym.schemas import CataloguePayload, ExerciseMeta, RestOverview
 import datetime as dt
 
 from flask import (
-    abort, jsonify, redirect, render_template, request, url_for,
+    jsonify, redirect, render_template, request, url_for,
 )
 from extensions import (
     db,
@@ -23,7 +23,7 @@ from auth import (
     login_required,
 )
 from features.gym.exercises import (
-    REST_MAX_SECONDS, REST_MIN_SECONDS, exercise_or_404, rest_overview, save_setup,
+    exercise_or_404, rest_overview, save_setup,
     set_rest_for_all, setup as exercise_setup, setups as exercise_setups,
     touched_exercises,
 )
@@ -32,7 +32,7 @@ from features.gym.scope import (
 )
 from .helpers import (
     EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _exercise_meta,
-    _to_increment, _to_int, _to_stack_steps, _to_weight, _wants_json,
+    _to_bar_weight, _to_increment, _to_rest_seconds, _to_stack_steps, _wants_json,
 )
 from .history import (
     load_performed,
@@ -170,9 +170,9 @@ def gym_update_exercise(exercise_id):
     # Kept in the body: the form/route pairing test reads field names here.
     parsers = {
         'weight_increment': _to_increment,
-        'default_rest_seconds': _to_int,
+        'default_rest_seconds': _to_rest_seconds,
         'stack_kg': _to_stack_steps,
-        'bar_weight': _to_weight,
+        'bar_weight': _to_bar_weight,
     }
     submitted = {field: parse(request.form.get(field, ''))
                  for field, parse in parsers.items() if field in request.form}
@@ -204,12 +204,7 @@ def gym_rest_for_all():
     seconds within the stepper's ends, or blank for "Je nach Übungsart".
     Anything else is refused -- a garbled number must not quietly switch
     the rest for all off. Answers with the fresh overview."""
-    raw = request.form.get('rest_seconds', '').strip()
-    seconds = None
-    if raw:
-        seconds = _to_int(raw)
-        if seconds is None or not REST_MIN_SECONDS <= seconds <= REST_MAX_SECONDS:
-            abort(400)
+    seconds = _to_rest_seconds(request.form.get('rest_seconds', ''))
     user_id = current_user_id()
     set_rest_for_all(user_id, seconds)
     db.session.commit()

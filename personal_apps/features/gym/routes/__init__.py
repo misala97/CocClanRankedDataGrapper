@@ -10,8 +10,11 @@ scripts/make_chart_fixture.py import these private helpers from
 `features.gym.routes`, and keeping that path working is what let the 2912-line
 routes.py split into this package without touching a single caller.
 """
-from flask import abort, current_app, request
+from urllib.parse import urlsplit, urlunsplit
 
+from flask import abort, current_app, flash, jsonify, redirect, request, url_for
+
+from extensions import db
 from ._blueprint import gym_bp
 
 from . import helpers          # noqa: F401
@@ -73,6 +76,25 @@ def _require_csrf_on_writes():
     submitted = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
     if not _valid_csrf(submitted):
         abort(403)
+
+
+@gym_bp.errorhandler(helpers.InvalidInput)
+def _refuse_invalid_input(error):
+    """A typed value the server will not store (helpers.InvalidInput).
+
+    An island gets a 400 with the sentence, which it shows in place of
+    "Verbindung fehlgeschlagen". A form post goes back to the page it was sent
+    from, with the sentence flashed there -- only this site's own gym pages,
+    never wherever a Referer points. Nothing half-written survives either way.
+    """
+    db.session.rollback()
+    if helpers._wants_json():
+        return jsonify({'error': error.message}), 400
+    flash(error.message, 'error')
+    came_from = urlsplit(request.referrer or '')
+    if came_from.netloc == request.host and came_from.path.startswith('/gym'):
+        return redirect(urlunsplit(('', '', came_from.path, came_from.query, '')))
+    return redirect(url_for('gym.gym_heute'))
 
 
 __all__ = ['gym_bp']
