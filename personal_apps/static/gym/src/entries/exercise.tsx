@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { ExerciseDetailPage } from '../pages/ExerciseDetail'
 import type { ExerciseDetailPayload } from '../types'
+import { reloadWhenRestored } from '../fresh'
+
+reloadWhenRestored()
 
 // The payload is embedded in the document by the Jinja shell rather than
 // fetched, so the first render has everything and there is no waterfall on

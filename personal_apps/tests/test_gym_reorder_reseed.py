@@ -527,6 +527,10 @@ def test_a_follower_cannot_reorder_while_linked(pair):
 
 
 def test_a_follower_can_reorder_again_once_the_link_has_ended(pair):
+    # Finishing needs something lifted: an empty workout is only discarded (D5).
+    press = _row(pair['leader_session'], PRESS)
+    _post(pair['leader'], f"/gym/set/{press['set_ids'][0]}/toggle_complete",
+          completed='1', weight=100, reps=5)
     _client_for(pair['leader']).post(f"/gym/session/{pair['leader_session']}/finish")
 
     _reorder(pair['follower'], pair['follower_session'], [CURL, RAISE, ROW, PRESS])

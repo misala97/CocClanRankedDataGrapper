@@ -40,9 +40,11 @@ function Row({ entry, weekdayShort }: {
         <span className="row__name row__name--strong">{name}</span>
         {/* Weekday first: it is the one time dimension a training log is read
             for, and the band above already states the month. Sub-minute
-            sessions printed "0 min" on 10 of 27 rows. */}
+            sessions printed "0 min" on 10 of 27 rows. A workout the app ended
+            itself says so: its end is its last set, not a "Beenden" (D5). */}
         <span className="row__meta">
-          {`${weekday} · ${pad(started.day)}.${pad(started.month)}. · ${pad(started.hour)}:${pad(started.minute)} · ${minutes < 1 ? '< 1' : minutes} min`}
+          {`${weekday} · ${pad(started.day)}.${pad(started.month)}. · ${pad(started.hour)}:${pad(started.minute)} · ${minutes < 1 ? '< 1' : minutes} min`
+            + (entry.auto_finished ? ' · automatisch beendet' : '')}
         </span>
         {/* The roster is clipped on essentially every row. While a search
             runs, matching exercises float to the FRONT of the line (stable

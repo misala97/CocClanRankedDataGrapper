@@ -3,14 +3,13 @@ import {
   QueryClient, QueryClientProvider, useQuery, useQueryClient,
 } from '@tanstack/react-query'
 import type { SessionDetailPayload } from './types'
-import { api, fetchSession, type SessionMetaPatch } from './api'
+import { api, fetchSession, MutationFailed, type SessionMetaPatch } from './api'
 import { postNavigate } from '../api'
-import { csrfToken } from '../csrf'
-import { heartbeatSubscription } from '../push'
+import { enablePush, heartbeatSubscription } from '../push'
 import { useUndo } from '../undo'
 import { sessionKey, useSessionMutation } from './useSessionMutation'
 import * as optimistic from './optimistic'
-import { usePush, useSaveState, useSheets } from './stores'
+import { failureCheckpoint, usePush, useSaveState, useSheets } from './stores'
 import { useWakeLock } from './useWakeLock'
 import { useFollowerSync } from './useFollowerSync'
 import { SessionPage, type SessionActions } from './SessionPage'
@@ -47,18 +46,11 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   // only ever renders an unfinished session, so the flag is simply true.
   useWakeLock(true)
 
-  // Back from the debrief, the browser restores this page from its cache,
-  // still live and still accepting taps -- into a workout that has finished.
-  // A restored page is a stale one; the server knows what it is now.
-  useEffect(() => {
-    const onShow = (event: PageTransitionEvent) => {
-      if (event.persisted) window.location.reload()
-    }
-    window.addEventListener('pageshow', onShow)
-    return () => window.removeEventListener('pageshow', onShow)
-  }, [])
+  // Back from the debrief, a page restored from the browser's cache would
+  // still be live and accepting taps into a finished workout: the entry
+  // reloads it, as every gym page's does (../fresh.ts).
 
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: sessionKey(sessionId),
     queryFn: () => fetchSession(sessionId),
     initialData: initial,
@@ -68,6 +60,19 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   })
+
+  // Finished under this screen -- on the other phone, or by the three-hour
+  // rule: a refetch says so, and the page for the workout now is its
+  // debrief. The screen kept taking sets for it (B4 review).
+  useEffect(() => {
+    if (data.session.finished_at !== null) window.location.reload()
+  }, [data.session.finished_at])
+  // Thrown away under this screen -- on the other phone, or by the three-hour
+  // rule with nothing in it: there is no page for it any more. A refetch
+  // read that as a lost connection (B4 re-review).
+  useEffect(() => {
+    if (error instanceof MutationFailed && error.reason === 'gone') window.location.assign('/gym')
+  }, [error])
 
   // Training with a partner: the leader's structural edits land in these rows
   // as writes, so the page only has to notice they happened. Server-gated to
@@ -95,19 +100,27 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       .catch(() => setSubscribed(false))
   }, [setSubscribed])
 
+  // A set's writes are named by the set (WriteOptions.key): its delete
+  // answers its lost tick and its lost numbers, whichever hook sent them --
+  // and so does the delete sent past the queue (sendNow).
   const toggleSet = useSessionMutation(sessionId,
     (setId: number, completed: boolean, weight: number | null, reps: number | null) =>
       api.toggleSet(setId, completed, weight, reps),
-    optimistic.toggleSet)
+    optimistic.toggleSet, { key: (setId) => `set-${setId}:done` })
+  // Every add is new work: a later add to the same row does not answer a
+  // lost one, and a lost one is not sent again by itself.
   const addSet = useSessionMutation(sessionId,
-    (seId: number, weight: number, reps: number) => api.addSet(seId, weight, reps))
+    (seId: number, weight: number, reps: number) => api.addSet(seId, weight, reps),
+    undefined, { key: () => null, idempotent: false })
   const updateSet = useSessionMutation(sessionId,
     (setId: number, weight: number, reps: number) => api.updateSet(setId, weight, reps),
-    optimistic.updateSet)
+    optimistic.updateSet, { key: (setId) => `set-${setId}:numbers` })
   const deleteSet = useSessionMutation(sessionId,
-    (setId: number) => api.deleteSet(setId), optimistic.deleteSet)
+    (setId: number) => api.deleteSet(setId), optimistic.deleteSet,
+    { key: (setId) => `set-${setId}` })
+  // A toggle: sent twice, the skip is undone.
   const toggleSkip = useSessionMutation(sessionId,
-    (seId: number) => api.toggleSkip(seId), optimistic.toggleSkip)
+    (seId: number) => api.toggleSkip(seId), optimistic.toggleSkip, { idempotent: false })
   const exerciseMeta = useSessionMutation(sessionId,
     (seId: number, meta: { pain: boolean; notes: string }) =>
       api.setExerciseMeta(seId, meta),
@@ -116,28 +129,39 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
   // Reordering is optimistic for the row order alone -- that IS the user's
   // intent -- while live_id waits for the server like every other live-moving
   // write below.
+  // The newest order answers an older one that was lost: resent, that one
+  // would put back what the lifter had already changed.
   const reorder = useSessionMutation(sessionId,
     (order: number[]) => api.reorder(sessionId, order),
-    optimistic.reorderExercises)
+    optimistic.reorderExercises, { key: () => 'order' })
 
   // No optimistic entry: each of these moves which exercise is live, and that
   // decision belongs to the server.
+  // Adding and swapping are new work each time, like an added set.
   const addExercise = useSessionMutation(sessionId,
-    (exerciseId: number) => api.addExercise(sessionId, exerciseId))
+    (exerciseId: number) => api.addExercise(sessionId, exerciseId),
+    undefined, { idempotent: false })
   const removeExercise = useSessionMutation(sessionId,
     (seId: number) => api.removeExercise(seId))
   const replaceExercise = useSessionMutation(sessionId,
-    (seId: number, exerciseId: number) => api.replaceExercise(seId, exerciseId))
+    (seId: number, exerciseId: number) => api.replaceExercise(seId, exerciseId),
+    undefined, { idempotent: false })
 
   const setRest = useSessionMutation(sessionId,
     (seId: number, seconds: number) => api.setRest(seId, seconds), optimistic.setRest)
+  // By field: the bodyweight saved later answers the one that was lost.
   const sessionMeta = useSessionMutation(sessionId,
-    (meta: SessionMetaPatch) => api.setSessionMeta(sessionId, meta))
-  const skipRest = useSessionMutation(sessionId, () => api.skipRest(sessionId), optimistic.skipRest)
+    (meta: SessionMetaPatch) => api.setSessionMeta(sessionId, meta),
+    undefined, { key: (meta) => Object.keys(meta).sort().join(',') })
+  // The rest is now: a lost skip or shift is reported, never sent again.
+  const skipRest = useSessionMutation(sessionId, () => api.skipRest(sessionId),
+    optimistic.skipRest, { key: () => 'rest', ephemeral: true })
   const shiftRest = useSessionMutation(sessionId,
-    (seconds: number) => api.shiftRest(sessionId, seconds), optimistic.shiftRest)
+    (seconds: number) => api.shiftRest(sessionId, seconds), optimistic.shiftRest,
+    { key: () => 'rest', ephemeral: true })
   const toggleDeload = useSessionMutation(sessionId,
-    (on: boolean, pct: number) => api.toggleDeload(sessionId, on, pct))
+    (on: boolean, pct: number) => api.toggleDeload(sessionId, on, pct),
+    undefined, { key: () => 'deload' })
 
   const close = useSheets((s) => s.close)
   const openSheet = useSheets((s) => s.open)
@@ -163,15 +187,23 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
 
   /** Leave for `url` once every write has landed. Finishing with a set still
    *  on its way used to navigate away from it: the form post won the race and
-   *  the set never reached the workout. A pending undo is sent first, and a
-   *  write that FAILS while waiting keeps the lifter here, with the banner. */
-  const leaveAfterWrites = (url: string) => {
+   *  the set never reached the workout. A pending undo is sent first, and so
+   *  is every lost write that mends by itself -- finishing past one filed the
+   *  workout without it (B4 review). A write that FAILS while waiting, one
+   *  only the lifter may send again, or one only a fresh page mends, keeps
+   *  the lifter here, with the banner.
+   *
+   *  `discarding`: the workout is thrown away, and whatever was lost goes
+   *  with it. Sent again first, a lost set landed and the discard refused a
+   *  workout that now had one (B4 re-review). */
+  const leaveAfterWrites = (url: string, discarding = false) => {
     setFinishing(true)
-    const errorBefore = useSaveState.getState().error
+    const failedSince = failureCheckpoint()
+    if (discarding) useSaveState.getState().dismissErrors()
+    else useSaveState.getState().resendAll()
     useUndo.getState().commitNow()
     void writesSettled(client, sessionKey(sessionId)).then(() => {
-      const error = useSaveState.getState().error
-      if (error !== null && error !== errorBefore) {
+      if (failedSince() || useSaveState.getState().errors.some((e) => e.remedy !== 'auto')) {
         setFinishing(false)
         close()
         return
@@ -179,6 +211,22 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       postNavigate(url)
     })
   }
+
+  /** A write the page may not stay alive to see answered -- an undo window
+   *  flushed by leaving it (G-147). Sent at once with keepalive: queued
+   *  behind a write still in flight -- this workout's writes take turns --
+   *  it never started before the page was gone (B4 review). Its success
+   *  answers the failures its set had, as the queued write's would; if it
+   *  fails, the queued write is the fallback, banner and all. */
+  const sendNow = (keepalive: boolean,
+    direct: () => Promise<unknown>, queued: () => Promise<unknown>, answers: string) => (keepalive
+    ? direct()
+      .then(() => {
+        useSaveState.getState().succeed(answers)
+        void client.invalidateQueries({ queryKey: sessionKey(sessionId) })
+      })
+      .catch(() => queued())
+    : queued())
 
   const appendSet = (seId: number, weight: number, reps: number) => {
     // add cannot be made idempotent -- a second POST creates a second set --
@@ -222,8 +270,11 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       offerUndo({
         label: `Satz ${owner.sets.indexOf(target) + 1} wieder offen.`,
         undo: () => setPendingUnlog(null),
-        commit: () => {
-          toggleSet.mutateAsync([setId, false, target.weight, target.reps])
+        commit: (keepalive) => {
+          sendNow(keepalive,
+            () => api.toggleSet(setId, false, target.weight, target.reps, true),
+            () => toggleSet.mutateAsync([setId, false, target.weight, target.reps]),
+            `set-${setId}:done`)
             .catch(() => {}) // rolled back and bannered by the mutation layer
             // Cleared once the answer is in the payload, not before -- the
             // chip would flash back to done for the length of the request.
@@ -234,7 +285,7 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     // A POST that redirects to the debrief. This was `window.location.href`
     // -- a GET to a POST-only route, a 405 for everyone -- until 2026-08-11.
     onFinish: () => leaveAfterWrites(`/gym/session/${sessionId}/finish`),
-    onDiscard: () => leaveAfterWrites(`/gym/session/${sessionId}/discard`),
+    onDiscard: () => leaveAfterWrites(`/gym/session/${sessionId}/discard`, true),
     onReorder: (order) => reorder.mutate([order]),
     // Saved per field as it is left, so the sheet stays open: leaving the
     // bodyweight for the note must not close it under the lifter.
@@ -260,7 +311,11 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       // while the sheet stays open.
       onMetaSave: (meta) => exerciseMeta.mutate([seId, meta]),
       onSetUpdate: (setId, weight, reps) => updateSet.mutate([setId, weight, reps]),
-      onSetDelete: (setId) => deleteSet.mutate([setId]),
+      // The promise, so the sheet can bring the row back if the write fails.
+      // Flushed as the page goes away (G-147), it goes out at once (sendNow).
+      onSetDelete: (setId, keepalive) => sendNow(keepalive,
+        () => api.deleteSet(setId, true), () => deleteSet.mutateAsync([setId]),
+        `set-${setId}`),
       onAddSet: (weight, reps) => appendSet(seId, weight, reps),
       // In front of the live exercise, which is how the live rule reads a
       // step away from a busy machine (_live_context).
@@ -290,40 +345,6 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
       // still in flight.
       busyExerciseId={addExercise.isPending ? addExercise.variables?.[0] ?? null : null} />
   )
-}
-
-/** The key comes from the payload, not a second DOM node: it is already a
- *  field the server serves, and a separate element would be a second place for
- *  it to go missing. Null whenever VAPID is unset in .env. */
-async function enablePush(vapidPublicKey: string | null) {
-  if (vapidPublicKey === null) return
-  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym' })
-  const permission = await Notification.requestPermission()
-  if (permission !== 'granted') return
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToBytes(vapidPublicKey),
-  })
-  await fetch('/gym/push/subscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-    body: JSON.stringify(subscription.toJSON()),
-  })
-  usePush.getState().setSubscribed(true)
-}
-
-/** The VAPID key is base64url; PushManager wants raw bytes.
- *
- *  Returns ArrayBuffer rather than Uint8Array: applicationServerKey is typed
- *  BufferSource, and a Uint8Array's backing buffer is ArrayBufferLike, which
- *  admits SharedArrayBuffer and so does not satisfy it. */
-function urlBase64ToBytes(base64: string): ArrayBuffer {
-  const padding = '='.repeat((4 - (base64.length % 4)) % 4)
-  const normalised = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const raw = atob(normalised)
-  const bytes = new Uint8Array(new ArrayBuffer(raw.length))
-  for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i)
-  return bytes.buffer
 }
 
 export function SessionIsland({ initial }: { initial: SessionDetailPayload }) {

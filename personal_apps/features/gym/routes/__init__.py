@@ -15,6 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 from flask import abort, current_app, flash, jsonify, redirect, request, url_for
 
 from extensions import db
+from ..scope import current_user_id
 from ._blueprint import gym_bp
 
 from . import helpers          # noqa: F401
@@ -55,6 +56,18 @@ def _exercise_rows_follow_the_list():
 
 
 @gym_bp.before_request
+def _settle_an_abandoned_workout_first():
+    """A page is built from a workout that is what it is now: one nobody
+    came back to is ended before anything reads it (helpers.
+    _settle_if_abandoned) -- not halfway through the render by the nav's
+    context processor, after the page had drawn it as running. JSON reads
+    too: the island's refetch learns its workout was ended and reloads.
+    Writes settle in their own guards."""
+    if request.method == 'GET' and current_user_id() is not None:
+        helpers._get_active_session()
+
+
+@gym_bp.before_request
 def _require_csrf_on_writes():
     """Second defence layer on every gym write, behind SameSite=Lax.
 
@@ -76,6 +89,20 @@ def _require_csrf_on_writes():
     submitted = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
     if not _valid_csrf(submitted):
         abort(403)
+
+
+@gym_bp.after_request
+def _pages_are_never_stored(response):
+    """A gym page carries its data in its HTML -- the island payload -- so a
+    stored copy is the workout as it was: before the delete, the finish, the
+    new record (G-141). no-store keeps pages out of the HTTP cache and, in
+    Chrome, out of the back-forward cache; a page Safari restores anyway is
+    reloaded by its island (static/gym/src/fresh.ts). HTML only: the bundles
+    are hashed and immutable (app.py), and the JSON reads carry no validator
+    a browser could cache on."""
+    if response.mimetype == 'text/html':
+        response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @gym_bp.errorhandler(helpers.InvalidInput)

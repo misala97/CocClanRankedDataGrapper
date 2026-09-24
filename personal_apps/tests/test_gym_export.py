@@ -51,7 +51,7 @@ def _session(exercises=None, **kwargs):
                 started_at=dt.datetime(2026, 8, 6, 9, 30),
                 finished_at=dt.datetime(2026, 8, 6, 11, 2),
                 is_deload=False, deload_pct=None, bodyweight_kg=96.8,
-                notes='nach 8h Schicht')
+                notes='nach 8h Schicht', planned_sets=9, auto_finished=False)
     base.update(kwargs)
     return SimpleNamespace(
         exercises=exercises if exercises is not None else [_session_exercise()],
@@ -121,6 +121,8 @@ def test_session_carries_every_contract_key():
         'template_name': None,
         'started_at': '2026-08-06T09:30:00Z',
         'finished_at': '2026-08-06T11:02:00Z',
+        'planned_sets': 9,
+        'auto_finished': False,
         'deload': False,
         'deload_pct': None,
         'bodyweight_kg': 96.8,

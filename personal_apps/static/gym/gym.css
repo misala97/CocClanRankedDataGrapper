@@ -2415,6 +2415,8 @@ button.pic { cursor: zoom-in; }
   font-size: var(--t-micro); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
+/* One line per distinct reason when several writes were lost. */
+.note-save__msg { display: block; }
 /* Rises from the edge it is now docked to. */
 @keyframes stall-arrive { from { opacity: 0; transform: translateY(8px); } }
 .session-view .note-save:not(.hidden) { animation: stall-arrive var(--dur-3) var(--ease-out); }

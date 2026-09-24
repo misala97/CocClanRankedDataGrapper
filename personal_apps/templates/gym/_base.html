@@ -65,8 +65,11 @@
         navigator.serviceWorker.register('/sw.js', { scope: '/gym' });
     }
     </script>
-    {# Speculation rules: the next page starts downloading on touch-down (and
-       on hover, on desktop), so the navigation itself feels instant. PREFETCH,
+    {# Speculation rules: the next page starts downloading on touch-down (or
+       mouse-down), so the navigation itself feels instant. Conservative, not
+       moderate: moderate fetched on hover and on scroll into view, and a copy
+       fetched before a delete on this page was the copy shown after it
+       (G-141) -- touch-down is the start of the navigation itself. PREFETCH,
        not prerender -- prefetch only pulls the HTML into cache, while
        prerender would run the page's JavaScript early, and a live clock or a
        push registration executing in a hidden renderer is not worth the
@@ -86,7 +89,7 @@
             { "not": { "href_matches": "/gym/export*" } }
           ]
         },
-        "eagerness": "moderate"
+        "eagerness": "conservative"
       }]
     }
     </script>

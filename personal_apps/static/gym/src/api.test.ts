@@ -115,4 +115,14 @@ describe('getJson failure reasons', () => {
     const error = await getJson('/gym/x.json').catch((e: unknown) => e) as MutationFailed
     expect(error.reason).toBe('unauthorized')
   })
+
+  it('names a 404 as gone, with nothing to retry (B4 re-review)', async () => {
+    // A discarded workout's read: it read as a lost connection, retried
+    // forever.
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404 } as Response)))
+    const error = await getJson('/gym/x.json').catch((e: unknown) => e) as MutationFailed
+    expect(error.reason).toBe('gone')
+    expect(error.retryable).toBe(false)
+    expect(error.germanMessage).toContain('Gibt es nicht mehr')
+  })
 })

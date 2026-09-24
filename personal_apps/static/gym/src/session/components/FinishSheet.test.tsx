@@ -35,7 +35,39 @@ describe('FinishSheet', () => {
     await user.click(screen.getByText('Workout verwerfen'))
     expect(props.onDiscard).toHaveBeenCalled()
     expect(props.onFinish).not.toHaveBeenCalled()
-    expect(screen.getByText('Trotzdem beenden')).toBeInTheDocument()
+  })
+
+  it('never files an empty workout: discard or go back (D5)', async () => {
+    const user = userEvent.setup()
+    const props = mount({ setsDone: 0, setsTotal: 6, volume: 0 })
+    expect(screen.getByText(/Kein Satz erfasst — ein leeres Workout wird nicht gespeichert\./))
+      .toBeInTheDocument()
+    expect(screen.queryByText('Trotzdem beenden')).toBeNull()
+    expect(screen.queryByText('Beenden')).toBeNull()
+    await user.click(screen.getByText('Zurück zum Workout'))
+    expect(useSheets.getState().openId).toBeNull()
+    expect(props.onFinish).not.toHaveBeenCalled()
+    expect(props.onDiscard).not.toHaveBeenCalled()
+  })
+
+  it('says what happens to the open sets, and offers the way back (G-010)', async () => {
+    const user = userEvent.setup()
+    const props = mount({ setsDone: 3, setsTotal: 5 })
+    expect(screen.getByText('2 offene Sätze werden gelöscht.')).toBeInTheDocument()
+    await user.click(screen.getByText('Zurück zum Workout'))
+    expect(useSheets.getState().openId).toBeNull()
+    expect(props.onFinish).not.toHaveBeenCalled()
+  })
+
+  it('names a single open set in the singular', () => {
+    mount({ setsDone: 3, setsTotal: 4 })
+    expect(screen.getByText('Ein offener Satz wird gelöscht.')).toBeInTheDocument()
+  })
+
+  it('has nothing to warn about when every set is done', () => {
+    mount({ setsDone: 4, setsTotal: 4 })
+    expect(screen.queryByText(/gelöscht/)).toBeNull()
+    expect(screen.queryByText('Zurück zum Workout')).toBeNull()
   })
 
   it('says it is still saving instead of leaving', () => {

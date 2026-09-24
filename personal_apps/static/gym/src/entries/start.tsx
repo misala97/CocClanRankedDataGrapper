@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { StartPage } from '../start/StartPage'
 import type { HeutePayload } from '../start/types'
+import { reloadWhenRestored } from '../fresh'
+
+reloadWhenRestored()
 
 const dataEl = document.getElementById('gym-data')
 const rootEl = document.getElementById('gym-root')

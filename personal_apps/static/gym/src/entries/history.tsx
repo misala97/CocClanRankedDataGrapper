@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { HistoryPage } from '../history/HistoryPage'
 import type { HistoryPayload } from '../history/types'
+import { reloadWhenRestored } from '../fresh'
+
+reloadWhenRestored()
 
 // Embedded, not fetched: this page sees the whole history, and search and the
 // export selection are client-side over the rows it already has.

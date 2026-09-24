@@ -40,6 +40,7 @@ export function SessionSheet({
   const setReorder = useWorkoutUi((s) => s.setReorder)
   const close = useSheets((s) => s.close)
   const subscribed = usePush((s) => s.subscribed)
+  const pushError = usePush((s) => s.error)
 
   const storedBodyweight = session.bodyweight_kg === null ? '' : String(session.bodyweight_kg)
   const [bodyweight, setBodyweight] = useState(storedBodyweight)
@@ -138,6 +139,9 @@ export function SessionSheet({
               </span>
             </button>
             <p className="sheet__note">Installiere die App zuerst über „Zum Home-Bildschirm“.</p>
+            {pushError !== null && (
+              <p className="flash flash--error" role="alert">{pushError}</p>
+            )}
           </div>
         )}
       </div>

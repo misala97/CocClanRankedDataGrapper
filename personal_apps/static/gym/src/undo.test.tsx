@@ -78,6 +78,29 @@ describe('UndoToast', () => {
     expect(commit).toHaveBeenCalledWith(true)
   })
 
+  it('flushes it when the app goes to the background, too (G-062)', () => {
+    // A phone kills a backgrounded app without pagehide: the delete waiting
+    // out its window was lost, and the set came back.
+    render(<UndoToast />)
+    let fns!: ReturnType<typeof offer>
+    act(() => { fns = offer() })
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(fns.commit).toHaveBeenCalledWith(true)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    visibility.mockRestore()
+  })
+
+  it('keeps the window open while the page stays visible', () => {
+    render(<UndoToast />)
+    let fns!: ReturnType<typeof offer>
+    act(() => { fns = offer() })
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(fns.commit).not.toHaveBeenCalled()
+    visibility.mockRestore()
+  })
+
   it('renders nothing with nothing pending', () => {
     render(<UndoToast />)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()

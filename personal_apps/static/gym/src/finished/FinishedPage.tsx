@@ -181,6 +181,11 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
           <span className="finished__when">
             {`${weekday} · ${shortDate(session.started_at)} · ${minutes(elapsed)}`}
           </span>
+          {/* The app ended it (D5): the duration stops at the last set, and
+              this says why nobody tapped "Beenden". */}
+          {session.auto_finished && (
+            <span className="finished__rest">Automatisch beendet — nach 3 Stunden ohne Satz.</span>
+          )}
           {/* Measured, not planned. Absent for every session logged before
               completed_at existed, and silent rather than zero in that case.
               Pace, not "Pause": the gap between two logged sets includes the
@@ -443,14 +448,17 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         </form>
         {/* Delayed-commit undo instead of "unwiderruflich" + confirm(): five
             seconds to take it back, then the POST fires and the page moves on
-            to Verlauf. */}
+            to Verlauf -- also when the window was closed by the app going to
+            the background (G-062), since the page is still there when the
+            lifter comes back. Replaced, not pushed: Back would land on a
+            workout that no longer exists. */}
         <button type="button" className="quiet-acts__btn quiet-acts__btn--danger"
           onClick={() => useUndo.getState().offer({
             label: 'Workout gelöscht.',
             commit: (keepalive) => {
               postForm<{ deleted: boolean }>(
                 `/gym/session/${session.id}/delete`, {}, { keepalive })
-                .then(() => { if (!keepalive) window.location.assign('/gym/verlauf') })
+                .then(() => { window.location.replace('/gym/verlauf') })
                 .catch((error) => setSaveError(error instanceof MutationFailed
                   ? error.germanMessage
                   : 'Löschen fehlgeschlagen.'))

@@ -31,7 +31,7 @@ const catalogue = [
 
 const actions = () => ({
   onRestChange: vi.fn(), onOpenSettings: vi.fn(), onMetaSave: vi.fn(),
-  onSetUpdate: vi.fn(), onSetDelete: vi.fn(), onAddSet: vi.fn(),
+  onSetUpdate: vi.fn(), onSetDelete: vi.fn(() => Promise.resolve()), onAddSet: vi.fn(),
   onToggleSkip: vi.fn(), onReplace: vi.fn(),
   onRemove: vi.fn(), onShowProgress: vi.fn(), onMakeLive: vi.fn(),
 })
@@ -175,7 +175,25 @@ describe('ExerciseSheet', () => {
     expect(a.onSetDelete).not.toHaveBeenCalled()
     expect(screen.getAllByLabelText(/Satz \d+ löschen/)).toHaveLength(rowsBefore - 1)
     useUndo.getState().commitNow()
-    expect(a.onSetDelete).toHaveBeenCalledWith(first.id)
+    expect(a.onSetDelete).toHaveBeenCalledWith(first.id, false)
+  })
+
+  it('sends a delete flushed on the way out with keepalive (G-062)', async () => {
+    const user = userEvent.setup()
+    const { actions: a } = open()
+    await user.click(screen.getByLabelText('Satz 1 löschen'))
+    useUndo.getState().commitNow(true)
+    expect(a.onSetDelete).toHaveBeenCalledWith(exercise.sets[0]!.id, true)
+  })
+
+  it('brings the row back when its delete fails (G-147)', async () => {
+    // The set stayed hidden: gone from the screen, still on the server.
+    const user = userEvent.setup()
+    open({ onSetDelete: vi.fn(() => Promise.reject(new Error('offline'))) })
+    const rowsBefore = screen.getAllByLabelText(/Satz \d+ löschen/).length
+    await user.click(screen.getByLabelText('Satz 1 löschen'))
+    await act(async () => { useUndo.getState().commitNow() })
+    expect(screen.getAllByLabelText(/Satz \d+ löschen/)).toHaveLength(rowsBefore)
   })
 
   it('shows what a set is worth now, not what it was at page load', async () => {

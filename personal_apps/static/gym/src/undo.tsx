@@ -12,10 +12,10 @@ import { create } from 'zustand'
  *
  * One offer at a time: a second destructive tap COMMITS the first
  * immediately rather than stacking toasts -- two pending deletions with one
- * visible button is how the wrong one gets kept. The pagehide flush is what
- * makes the delay safe: navigating away commits the pending write (with
- * keepalive, so the request survives the page), instead of silently
- * forgetting it.
+ * visible button is how the wrong one gets kept. The flush is what makes the
+ * delay safe: navigating away or going to the background commits the pending
+ * write (with keepalive, so the request survives the page), instead of
+ * silently forgetting it.
  */
 const UNDO_MS = 5000
 
@@ -74,13 +74,24 @@ export function UndoToast() {
   const commitNow = useUndo((s) => s.commitNow)
 
   // A pending write must survive leaving the page: commit it with keepalive
-  // the moment the document starts to hide. Registered while something is
-  // pending only, so the listener does not outlive its reason.
+  // the moment the document starts to hide. pagehide alone was not enough
+  // (G-062): a phone kills a backgrounded app without one, and the delete
+  // waiting out its window never reached the server -- the set came back.
+  // Going to the background is the last moment a page is sure to get, so it
+  // commits there, the window cut short. Registered while something is
+  // pending only, so the listeners do not outlive their reason.
   useEffect(() => {
     if (pending === null) return
     const flush = () => useUndo.getState().commitNow(true)
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
     window.addEventListener('pagehide', flush)
-    return () => window.removeEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [pending])
 
   // Most offers are made from inside a sheet -- a set deleted in the exercise

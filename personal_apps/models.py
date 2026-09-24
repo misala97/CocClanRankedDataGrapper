@@ -140,8 +140,9 @@ class DeliveryShift(db.Model):
     notes        = db.Column(db.Text, nullable=True)
 
 
-# An active (unfinished) workout older than this is treated as abandoned and
-# auto-finished the next time it's looked up, capped at started_at + this.
+# A running workout with no set for this long -- counted from its last set,
+# or from its start while it has none -- is treated as abandoned the next time
+# it is looked up: finished at that last set, or discarded when empty (D5).
 STALE_SESSION_TIMEOUT = dt.timedelta(hours=3)
 
 
@@ -313,9 +314,10 @@ class WorkoutSession(db.Model):
     rest_ends_at = db.Column(db.DateTime, nullable=True)  # display-only target for the in-page countdown
     resting_set_id = db.Column(db.Integer, db.ForeignKey('gym_session_sets.id'), nullable=True)  # which set's completion started the current rest timer, for the per-set progress bar
     # A deliberately light session. Excluded from every judgement that assumes
-    # an attempt at progress (records, stagnation, volume averages, next
-    # session's pre-fill) and kept in every figure where it is simply true
-    # (tonnage, balance, consistency). See features/gym/stats.py.
+    # an attempt at progress (stagnation, volume averages, next session's
+    # pre-fill) and kept in every figure where it is simply true (tonnage,
+    # balance, consistency) -- and a record it sets is a record (D3). See
+    # features/gym/stats.py.
     is_deload    = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
     # The percentage of normal working weight actually used, stored per session
     # rather than read from a constant: changing the default later must not
@@ -333,6 +335,15 @@ class WorkoutSession(db.Model):
     # and its own gaps. NULL whenever it was skipped, which is most of them.
     bodyweight_kg = db.Column(db.Float, nullable=True)
     notes         = db.Column(db.Text, nullable=True)
+    # How many sets the workout held when it was finished: the ones lifted
+    # plus the ones still open, which finishing deletes (D5). The comparison
+    # on the debrief leaves cut-short workouts out of its baseline (D10), and
+    # once the open sets are gone this is the only trace of the plan. NULL on
+    # workouts finished before it existed, and while a workout runs.
+    planned_sets  = db.Column(db.SmallInteger, nullable=True)
+    # Ended by the app three hours after its last set rather than by the
+    # lifter (D5): the debrief and Verlauf say "automatisch beendet".
+    auto_finished = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
 
     template = db.relationship('WorkoutTemplate', back_populates='sessions_started_from')
     exercises = db.relationship(

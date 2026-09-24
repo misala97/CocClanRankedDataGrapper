@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { FinishedPage } from '../finished/FinishedPage'
 import type { FinishedPayload } from '../finished/types'
+import { reloadWhenRestored } from '../fresh'
+
+reloadWhenRestored()
 
 const dataEl = document.getElementById('gym-data')
 const rootEl = document.getElementById('gym-root')

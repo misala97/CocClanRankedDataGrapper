@@ -24,7 +24,8 @@ from features.gym.scope import (
 )
 from ..locking import lock_sessions, lock_user
 from .helpers import (
-    _delete_session_and_links, _get_active_session, _to_int, _username,
+    _discard_session, _get_active_session, _is_abandoned, _settle_if_abandoned, _to_int,
+    _username,
 )
 from .history import counts
 from ._blueprint import (
@@ -44,11 +45,18 @@ def gym_invite_partner(session_id):
     """
     session_ = owned_session(session_id)
     partner_id = request.form.get('partner_id', type=int)
+    # A screen left open for hours invited a partner into a workout that was
+    # over: it is ended first, and then refused below (B4 re-review).
+    if _settle_if_abandoned(session_) == 'discarded':
+        return redirect(url_for('gym.gym_heute'))
     # Checked and inserted under the workout's lock: a double tap used to run
     # both halves past the check below, and the second insert hit the
     # (session, partner) unique key -- a 500 (G-136). Now it waits, then
-    # finds the invite the first one made.
+    # finds the invite the first one made. Read again: it may be gone.
     lock_sessions([session_id])
+    session_ = db.session.get(WorkoutSession, session_id)
+    if session_ is None:
+        return redirect(url_for('gym.gym_heute'))
 
     if not partner_id or partner_id == current_user_id():
         flash('Kein Trainingspartner ausgewählt.', 'error')
@@ -126,7 +134,11 @@ def _invite_refusal(shared):
     who may not be the invite's recipient that it exists at all.
     """
     leader_session = db.session.get(WorkoutSession, shared.leader_session_id)
-    if leader_session is None or leader_session.finished_at is not None:
+    # Abandoned counts as over, though nothing of the partner's ends the
+    # leader's workout (B4 re-review): joining it seeded a workout three
+    # hours cold, and the leader's next page files it anyway.
+    if (leader_session is None or leader_session.finished_at is not None
+            or _is_abandoned(leader_session)):
         return 'Das Workout ist schon vorbei.'
     active = _get_active_session()
     if active is None:
@@ -231,6 +243,9 @@ def gym_shared_accept(shared_id):
     # Under the lifter's lock, like a start: "Mitmachen" tapped twice made two
     # workouts, and the link kept the second while the first ran on unlinked
     # (G-136). The second tap now waits and finds the join already done.
+    # An abandoned workout is ended first: that commits, which would release
+    # the lock (B4 review).
+    _get_active_session()
     lock_user(current_user_id())
     joined = db.session.get(SharedSession, shared_id)
     if (joined is not None and joined.follower_user_id == current_user_id()
@@ -249,7 +264,9 @@ def gym_shared_accept(shared_id):
     # is dropped, not left running beside this one.
     abandoned = _discardable_active()
     if abandoned is not None:
-        _delete_session_and_links(abandoned)
+        # Not committed yet: that would let go of lock_user, and a second
+        # "Mitmachen" would run on unguarded. The join commits it below.
+        _discard_session(abandoned, commit=False)
 
     # The routine THIS lifter books the workout under, if they picked one on
     # the confirm page. Resolved through my_templates(), so a posted id that

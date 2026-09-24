@@ -5,6 +5,8 @@ export interface FinishedSession {
   name: string | null
   started_at: string
   finished_at: string
+  /** Ended by the app, at its last set, three hours on (D5). */
+  auto_finished: boolean
   is_deload: boolean
   deload_pct: number | null
   bodyweight_kg: number | null

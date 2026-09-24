@@ -23,9 +23,12 @@ interface Props {
  * tech: platform focus trap, Esc, backdrop.
  *
  * "Abbrechen" dismisses; the primary states the decision. An empty workout is
- * told it will not count -- honestly, not alarmingly -- and is offered the way
- * out it usually wants: gone, not filed as an empty entry in the history.
- * Finishing it anyway stays, as the ghost below.
+ * told it will not be kept -- honestly, not alarmingly -- and "verwerfen" is
+ * the only way out: a workout with nothing lifted is never filed (D5, G-023;
+ * the server refuses to finish one). Open sets are named with what finishing
+ * does to them, deletes them (D5, G-010), and "Zurück zum Workout" is the
+ * other answer, spelled out beside it rather than left to the header's
+ * "Abbrechen".
  */
 export function FinishSheet({
   volume, setsDone, setsTotal, startedAt, finishing = false, onFinish, onDiscard,
@@ -33,6 +36,7 @@ export function FinishSheet({
   // Subscribed so the minutes are computed when the sheet OPENS, not when the
   // page first rendered.
   const isOpen = useSheets((s) => s.openId === 'sheet-finish')
+  const close = useSheets((s) => s.close)
   const open = setsTotal - setsDone
   // sets_done is counts(), the rule gym_discard_session refuses by -- done
   // sets on a skipped or replaced exercise included -- so this never offers
@@ -46,7 +50,9 @@ export function FinishSheet({
     <Sheet id="sheet-finish" title="Workout beenden" closeLabel="Abbrechen">
       <div className="finish-sum">
         {empty ? (
-          <p className="finish-sum__none">Kein Satz erfasst — das Workout zählt nicht.</p>
+          <p className="finish-sum__none">
+            Kein Satz erfasst — ein leeres Workout wird nicht gespeichert.
+          </p>
         ) : (
           <>
             <span className="finish-sum__vol">
@@ -58,7 +64,7 @@ export function FinishSheet({
             </span>
             {open > 0 && (
               <p className="finish-sum__open">
-                {open === 1 ? 'Ein Satz noch offen.' : `${open} Sätze noch offen.`}
+                {open === 1 ? 'Ein offener Satz wird gelöscht.' : `${open} offene Sätze werden gelöscht.`}
               </p>
             )}
           </>
@@ -70,19 +76,23 @@ export function FinishSheet({
         <button type="button" className="btn btn--live btn--block" disabled>
           Speichert noch…
         </button>
-      ) : empty ? (
-        <>
-          <button type="button" className="btn btn--live btn--block" onClick={onDiscard}>
-            Workout verwerfen
-          </button>
-          <button type="button" className="btn btn--ghost btn--block" onClick={onFinish}>
-            Trotzdem beenden
-          </button>
-        </>
       ) : (
-        <button type="button" className="btn btn--live btn--block" onClick={onFinish}>
-          Beenden
-        </button>
+        <>
+          {empty ? (
+            <button type="button" className="btn btn--live btn--block" onClick={onDiscard}>
+              Workout verwerfen
+            </button>
+          ) : (
+            <button type="button" className="btn btn--live btn--block" onClick={onFinish}>
+              Beenden
+            </button>
+          )}
+          {(empty || open > 0) && (
+            <button type="button" className="btn btn--ghost btn--block" onClick={close}>
+              Zurück zum Workout
+            </button>
+          )}
+        </>
       )}
     </Sheet>
   )

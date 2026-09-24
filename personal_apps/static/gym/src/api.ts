@@ -25,7 +25,7 @@ const writeHeaders = () => ({ ...JSON_HEADERS, 'X-CSRF-Token': csrfToken() })
 const TIMEOUT_MS = 8000
 
 export type FailureReason =
-  'timeout' | 'network' | 'forbidden' | 'finished' | 'unauthorized' | 'invalid'
+  'timeout' | 'network' | 'forbidden' | 'finished' | 'unauthorized' | 'invalid' | 'gone'
 
 export class MutationFailed extends Error {
   /** `serverMessage`: for 'invalid', the server's own sentence saying what it
@@ -57,6 +57,11 @@ export class MutationFailed extends Error {
     if (this.reason === 'finished') {
       return 'Das Workout ist schon beendet.'
     }
+    // 404: what the page shows is not there any more -- deleted in another
+    // tab, or on the other phone. Sending it again finds nothing either.
+    if (this.reason === 'gone') {
+      return 'Gibt es nicht mehr — bitte Seite neu laden.'
+    }
     return this.reason === 'timeout'
       ? 'Keine Antwort vom Server — deine letzte Änderung wurde nicht gespeichert.'
       : 'Verbindung fehlgeschlagen — deine letzte Änderung wurde nicht gespeichert.'
@@ -83,6 +88,7 @@ async function failureFrom(response: Response): Promise<MutationFailed> {
   switch (response.status) {
     case 401: return new MutationFailed('unauthorized')
     case 403: return new MutationFailed('forbidden')
+    case 404: return new MutationFailed('gone')
     case 409: return new MutationFailed('finished')
     case 400: {
       const body = await response.json().catch(() => null) as { error?: unknown } | null

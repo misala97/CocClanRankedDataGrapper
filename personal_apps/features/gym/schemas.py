@@ -537,6 +537,9 @@ class HistoryEntry(_Model):
     started_at: datetime
     finished_at: datetime | None
     is_deload: bool
+    # Ended by the app three hours after its last set (D5): the row says so,
+    # since its end is that set's time rather than a "Beenden".
+    auto_finished: bool
     volume: float
     record_count: int
     # The same exercises the volume beside it was computed from. The row listed
@@ -726,6 +729,8 @@ class FinishedSession(_Model):
     name: str | None
     started_at: datetime
     finished_at: datetime
+    # Ended by the app, at its last set, three hours on (D5).
+    auto_finished: bool
     is_deload: bool
     deload_pct: int | None
     bodyweight_kg: float | None

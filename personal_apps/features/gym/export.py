@@ -108,6 +108,11 @@ def session_payload(session, setups):
         'template_name': session.template.name if session.template else None,
         'started_at': _stamp(session.started_at),
         'finished_at': _stamp(session.finished_at),
+        # Open sets are deleted at the finish (D5); this is how many there
+        # were meant to be. Null for workouts finished before it was kept.
+        'planned_sets': session.planned_sets,
+        # Ended by the app three hours after its last set, not by "Beenden".
+        'auto_finished': bool(session.auto_finished),
         'deload': session.is_deload,
         # Kept beside the boolean: how deep a deload went is not recoverable
         # from "it was one".

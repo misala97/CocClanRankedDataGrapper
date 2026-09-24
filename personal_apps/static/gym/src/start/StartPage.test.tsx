@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StartPage } from './StartPage'
@@ -325,6 +325,49 @@ describe('editing a routine in place', () => {
     expect(within(routines).getByText('Push')).toBeInTheDocument()
     expect(spy).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
+  })
+
+  it('brings the routine back when its delete fails (G-147)', async () => {
+    // The row went at the tap; a delete that never reached the server left
+    // it gone from the page while it still existed.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline') }))
+    const { container } = mount()
+    const user = userEvent.setup()
+    await user.click(container.querySelector('.lead__edit-toggle')!)
+    await user.click(screen.getByRole('button', { name: 'Löschen' }))
+    expect(screen.getByText(/Noch keine Routinen/)).toBeInTheDocument()
+
+    await act(async () => { useUndo.getState().commitNow() })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Verbindung fehlgeschlagen')
+    const routines = screen.getByRole('region', { name: /Am längsten her|Routinen/ })
+    expect(within(routines).getByText('Push')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('says why push did not turn on, beside the prompt (G-148)', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        getRegistration: async () => ({ pushManager: { getSubscription: async () => null } }),
+        register: async () => ({
+          pushManager: { subscribe: async () => ({ toJSON: () => ({ endpoint: 'e' }) }) },
+        }),
+      },
+    })
+    vi.stubGlobal('PushManager', function PushManager() {})
+    vi.stubGlobal('Notification', { requestPermission: async () => 'granted' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 500 })))
+    try {
+      mount({ vapid_public_key: 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U' })
+      const user = userEvent.setup()
+      await user.click(await screen.findByText('Pausen-Benachrichtigung aktivieren'))
+      expect(await screen.findByRole('alert')).toHaveTextContent(/nicht aktivieren/)
+      // Still offered: the device is not subscribed, so the tap can be tried again.
+      expect(screen.getByText('Pausen-Benachrichtigung aktivieren')).toBeInTheDocument()
+    } finally {
+      Reflect.deleteProperty(navigator, 'serviceWorker')
+      vi.unstubAllGlobals()
+    }
   })
 
   it('states a failure and keeps the page', async () => {

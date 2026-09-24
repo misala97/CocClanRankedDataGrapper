@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { usePush, useSaveState, useSheets, useWorkoutUi } from './stores'
+import {
+  failureCheckpoint, usePush, useSaveState, useSheets, useWorkoutUi,
+} from './stores'
 
 /**
  * The eleven pieces of state the server cannot know. Every one of them was
@@ -96,31 +98,114 @@ describe('useSaveState', () => {
     expect(useSaveState.getState().pending).toBe(0)
   })
 
-  it('records an error with the retry that produced it', () => {
+  it('records a failure with the retry that produced it', () => {
     const retry = vi.fn()
-    useSaveState.getState().fail('Keine Antwort vom Server', retry)
-    expect(useSaveState.getState().error?.message).toBe('Keine Antwort vom Server')
-    useSaveState.getState().error?.retry?.()
+    useSaveState.getState().fail('set-1', 'Keine Antwort vom Server', retry)
+    const [error] = useSaveState.getState().errors
+    expect(error?.message).toBe('Keine Antwort vom Server')
+    error?.retry?.()
     expect(retry).toHaveBeenCalledOnce()
   })
 
-  it('clears the error on dismiss and on the next success -- NOT on settle', () => {
-    useSaveState.getState().fail('x', () => {})
-    useSaveState.getState().dismissError()
-    expect(useSaveState.getState().error).toBeNull()
+  it('keeps every failed write, not only the last one (G-139)', () => {
+    // Each failed write was already rolled back. One slot kept only the
+    // newest, and ANY later success emptied it -- earlier losses vanished
+    // with no banner.
+    useSaveState.getState().fail('set-1', 'Keine Antwort vom Server', vi.fn())
+    useSaveState.getState().fail('set-2', 'Keine Antwort vom Server', vi.fn())
+    useSaveState.getState().succeed('set-3')
+    expect(useSaveState.getState().errors.map((e) => e.key)).toEqual(['set-1', 'set-2'])
+  })
+
+  it('holds one entry per write, cleared when that write lands', () => {
+    useSaveState.getState().fail('set-1', 'x', vi.fn())
+    useSaveState.getState().fail('set-1', 'y', vi.fn())
+    expect(useSaveState.getState().errors.map((e) => e.message)).toEqual(['y'])
+    useSaveState.getState().succeed('set-1')
+    expect(useSaveState.getState().errors).toEqual([])
+  })
+
+  it('sends every retryable failure once, and keeps the refused ones', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    useSaveState.getState().fail('a', 'Keine Antwort vom Server', first)
+    useSaveState.getState().fail('b', 'Gewicht: bitte 0 bis 1000 kg.', null)
+    useSaveState.getState().fail('c', 'Keine Antwort vom Server', second)
+    // Twice: the tap and the returning connection can both ask.
+    useSaveState.getState().retryAll()
+    useSaveState.getState().retryAll()
+    expect(first).toHaveBeenCalledOnce()
+    expect(second).toHaveBeenCalledOnce()
+    expect(useSaveState.getState().errors.map((e) => e.key)).toEqual(['b'])
+  })
+
+  it('lets a fresh page answer every failure when one needs it (B4 review)', () => {
+    // A stale token or a lapsed login fails every write alike: resending
+    // the others first only raced the reload.
+    const resend = vi.fn()
+    const reload = vi.fn()
+    useSaveState.getState().fail('a', 'Keine Antwort vom Server', resend)
+    useSaveState.getState().fail('b', 'Bitte neu anmelden', reload, 'reload')
+    useSaveState.getState().retryAll()
+    expect(reload).toHaveBeenCalledOnce()
+    expect(resend).not.toHaveBeenCalled()
+  })
+
+  it('resends only what resending can fix, and leaves the reload to the lifter (B4 review)', () => {
+    const resend = vi.fn()
+    const reload = vi.fn()
+    useSaveState.getState().fail('a', 'Keine Antwort vom Server', resend)
+    useSaveState.getState().fail('b', 'Bitte neu anmelden', reload, 'reload')
+    useSaveState.getState().resendAll()
+    expect(resend).toHaveBeenCalledOnce()
+    expect(reload).not.toHaveBeenCalled()
+    expect(useSaveState.getState().errors.map((e) => e.key)).toEqual(['b'])
+  })
+
+  it('resends a write that is new work each time only on the lifter\'s say-so (B4 re-review)', () => {
+    // Its answer may be what was lost: the set is in, and sent again by
+    // itself it lands twice. The lifter sees the refetched screen and knows.
+    const added = vi.fn()
+    const moved = vi.fn()
+    useSaveState.getState().fail('add', 'Keine Antwort vom Server', added, 'manual')
+    useSaveState.getState().fail('order', 'Keine Antwort vom Server', moved)
+    useSaveState.getState().resendAll()
+    expect(moved).toHaveBeenCalledOnce()
+    expect(added).not.toHaveBeenCalled()
+    expect(useSaveState.getState().errors.map((e) => e.key)).toEqual(['add'])
+
+    useSaveState.getState().retryAll()
+    expect(added).toHaveBeenCalledOnce()
+    expect(useSaveState.getState().errors).toEqual([])
+  })
+
+  it('lets a write answer the failures about a part of what it names (B4 re-review)', () => {
+    // The set is gone: its lost tick and its lost numbers are moot.
+    const { fail } = useSaveState.getState()
+    fail('set-4:done', 'Keine Antwort vom Server', vi.fn())
+    fail('set-4:numbers', 'Keine Antwort vom Server', vi.fn())
+    fail('set-41:done', 'Keine Antwort vom Server', vi.fn())
+    useSaveState.getState().succeed('set-4')
+    expect(useSaveState.getState().errors.map((e) => e.key)).toEqual(['set-41:done'])
+  })
+
+  it('clears the errors on dismiss and on success -- NOT on settle', () => {
+    useSaveState.getState().fail('a', 'x', () => {})
+    useSaveState.getState().dismissErrors()
+    expect(useSaveState.getState().errors).toEqual([])
 
     // A write that FINISHES is not a write that WORKED. end() runs from
     // onSettled, which fires straight after onError -- when end() also
     // cleared the error, the banner for a lost write was removed in the same
     // tick it appeared, so a failed save reverted in silence. Only a real
     // answer from the server clears it.
-    useSaveState.getState().fail('y', () => {})
+    useSaveState.getState().fail('a', 'y', () => {})
     useSaveState.getState().begin()
     useSaveState.getState().end()
-    expect(useSaveState.getState().error?.message).toBe('y')
+    expect(useSaveState.getState().errors.map((e) => e.message)).toEqual(['y'])
 
-    useSaveState.getState().succeed()
-    expect(useSaveState.getState().error).toBeNull()
+    useSaveState.getState().succeed('a')
+    expect(useSaveState.getState().errors).toEqual([])
   })
 
   it('locks a form while its write is in flight', () => {
@@ -140,6 +225,28 @@ describe('useSaveState', () => {
     // one twice is not.
     useSaveState.getState().lock('set-100')
     expect(useSaveState.getState().isLocked('set-101')).toBe(false)
+  })
+})
+
+describe('failureCheckpoint', () => {
+  // What "Beenden" waits on: leave only if nothing failed on the way out.
+  it('is quiet when nothing failed after it, whatever failed before', () => {
+    useSaveState.getState().fail('set-1', 'x', vi.fn())
+    const failedSince = failureCheckpoint()
+    expect(failedSince()).toBe(false)
+    useSaveState.getState().succeed('set-1')
+    expect(failedSince()).toBe(false)
+  })
+
+  it('sees a new failure, and the same write failing again', () => {
+    useSaveState.getState().fail('set-1', 'x', vi.fn())
+    const failedSince = failureCheckpoint()
+    useSaveState.getState().fail('set-1', 'x', vi.fn())
+    expect(failedSince()).toBe(true)
+
+    const later = failureCheckpoint()
+    useSaveState.getState().fail('set-2', 'y', null)
+    expect(later()).toBe(true)
   })
 })
 

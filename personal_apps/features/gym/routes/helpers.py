@@ -16,18 +16,20 @@ Moved verbatim from the pre-split routes.py.
 import datetime as dt
 import math
 
-from flask import jsonify, redirect, request, url_for
+from flask import flash, jsonify, redirect, request, session as flask_session, url_for
 
 from auth import wants_json
 from extensions import db
 from models import (
-    AppUser, WorkoutSession, PendingPush, SharedSession, STALE_SESSION_TIMEOUT,
+    AppUser, WorkoutSession, PendingPush, SessionExercise, SessionSet, SharedSession,
+    STALE_SESSION_TIMEOUT,
 )
 from features.gym import stats
 from features.gym.exercises import (
     REST_MAX_SECONDS, REST_MIN_SECONDS, list_values, settle_rests,
 )
-from features.gym.scope import my_sessions
+from features.gym.locking import lock_sessions
+from features.gym.scope import LIVE_SURFACE_HEADER, my_sessions
 from .. import sharing
 from ._blueprint import gym_bp
 
@@ -230,10 +232,10 @@ def _to_note(value):
     return note or None
 
 
-# Sent by the live workout island on every write. The debrief writes to the
-# same set routes on purpose -- a finished workout is corrected there -- so
-# finished_at alone cannot tell the two apart; the surface that asked can.
-LIVE_SURFACE_HEADER = 'X-Gym-Surface'
+# LIVE_SURFACE_HEADER (scope.py) is sent by the live workout island on every
+# write. The debrief writes to the same set routes on purpose -- a finished
+# workout is corrected there -- so finished_at alone cannot tell the two
+# apart; the surface that asked can.
 
 
 def _refuse_live_write_if_finished(session_):
@@ -246,9 +248,15 @@ def _refuse_live_write_if_finished(session_):
     debrief payload it could not render. The island answers a 409 by
     reloading, which shows the debrief.
     """
-    if session_.finished_at is None or request.headers.get(LIVE_SURFACE_HEADER) != 'live':
+    if request.headers.get(LIVE_SURFACE_HEADER) != 'live':
         return None
-    return _finished_refusal(session_)
+    # A screen left open overnight writes into a workout nobody came back
+    # to: it ends at its last set first, and the screen reloads into that
+    # (B4 review) -- instead of today's set landing in yesterday's workout.
+    session_id = session_.id
+    if _settle_if_abandoned(session_) == 'live':
+        return None
+    return _finished_refusal(session_id)
 
 
 def _refuse_structure_edit_if_finished(session_):
@@ -264,27 +272,32 @@ def _refuse_structure_edit_if_finished(session_):
     counted them (G-090). The header no longer decides whether; the live
     island still answers the 409 by reloading into the debrief.
     """
-    if session_.finished_at is None:
+    session_id = session_.id
+    if _settle_if_abandoned(session_) == 'live':
         return None
-    return _finished_refusal(session_)
+    return _finished_refusal(session_id)
 
 
-def _finished_refusal(session_):
+def _finished_refusal(session_id):
+    """By id: the workout may have been discarded on the way here."""
     if _wants_json():
         return jsonify({'finished': True}), 409
-    return redirect(url_for('gym.session_detail', session_id=session_.id))
+    return redirect(url_for('gym.session_detail', session_id=session_id))
 
 
-def _delete_session_and_links(session_):
+def _delete_session_and_links(session_, commit=True):
     """Delete a workout together with every partner link it took part in.
 
     Plain FKs with no ondelete point at the session from both halves of a
     link, with no ORM cascade either -- so the link rows have to go first.
     The resting-set pointer is cleared before the cascade deletes the set it
-    names. Commits.
+    names. Commits, unless `commit=False`: a caller holding lock_user, which
+    a commit lets go of, commits once it is done (the join).
     """
     session_.resting_set_id = None
-    db.session.commit()
+    # Flushed, not committed: a commit would let go of the lock a caller
+    # holds (_settle_if_abandoned) with the workout still half there.
+    db.session.flush()
     doomed_link_ids = [row.id for row in SharedSession.query.filter(
         db.or_(SharedSession.leader_session_id == session_.id,
                SharedSession.follower_session_id == session_.id)).all()]
@@ -292,7 +305,19 @@ def _delete_session_and_links(session_):
         SharedSession.query.filter(SharedSession.id.in_(doomed_link_ids)).delete(
             synchronize_session=False)
     db.session.delete(session_)
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
+
+
+def _discard_session(session_, commit=True):
+    """Throw away a running workout of the caller's (_delete_session_and_links)
+    and remember it (DISCARDED_SESSION_KEY): a screen of theirs still showing
+    it goes home, not to a 404."""
+    session_id = session_.id
+    _delete_session_and_links(session_, commit=commit)
+    flask_session[DISCARDED_SESSION_KEY] = session_id
 
 
 def _to_stack_steps(raw):
@@ -347,30 +372,139 @@ def _exercise_meta(exercise, setup):
     }
 
 
+def _counted(session_):
+    """The workout's sets that count (Q1), on every row -- a set lifted
+    before its exercise was skipped or replaced was lifted all the same."""
+    return [s for se in session_.exercises for s in se.sets
+            if stats.set_counts(s.completed, s.reps)]
+
+
+def planned_set_count(session_):
+    """How many sets the workout holds: every set that counts, plus the open
+    ones still ahead -- the "von Y" of the finish sheet, by the same rule as
+    the live tally (workout._live_data). Open sets of a skipped row are not
+    ahead, and neither are a replaced original's: its slot is the
+    substitute's now. A ticked set without reps is neither (G-038)."""
+    replaced = {se.replaces_id for se in session_.exercises if se.replaces_id is not None}
+    ahead = sum(1 for se in session_.exercises
+                if not se.skipped and se.id not in replaced
+                for s in se.sets if not s.completed)
+    return len(_counted(session_)) + ahead
+
+
+def _finish_session(session_, finished_at, auto=False):
+    """End a running workout: the one way it happens, whether the lifter
+    taps "Beenden" or the app gives up on it (_settle_if_abandoned). Does not
+    commit.
+
+    What was never lifted goes (D5, G-080): open sets used to stay behind,
+    invisible everywhere but the export. Their number is kept first, as
+    planned_sets -- the debrief's comparison leaves cut-short workouts out
+    (D10) and could not tell one otherwise. Whoever finishes first ends the
+    sharing; the other trains on alone.
+    """
+    session_.planned_sets = planned_set_count(session_)
+    session_.finished_at = finished_at
+    session_.auto_finished = auto
+    session_.rest_ends_at = None
+    # Before the sets go: the pointer is a foreign key to one of them.
+    session_.resting_set_id = None
+    settle_rests(session_)
+    _cancel_pending_push(session_)
+    for se in session_.exercises:
+        for s in [s for s in se.sets if not stats.set_counts(s.completed, s.reps)]:
+            se.sets.remove(s)
+    sharing.end_links_for(session_)
+
+
+def _last_set_at(session_):
+    """When the last set that counts (Q1) was ticked, or None when none
+    carries a stamp. One query: every gym page asks it (_is_abandoned), and
+    walking the workout's rows cost one per exercise (B4 re-review)."""
+    return (db.session.query(db.func.max(SessionSet.completed_at))
+            .join(SessionExercise, SessionSet.session_exercise_id == SessionExercise.id)
+            .filter(SessionExercise.session_id == session_.id,
+                    SessionSet.completed == True,  # noqa: E712
+                    SessionSet.reps >= 1)
+            .scalar())
+
+
+# The last running workout of the lifter's that was thrown away
+# (_discard_session), kept in their own signed cookie.
+DISCARDED_SESSION_KEY = 'gym_discarded_session'
+
+
+def _is_abandoned(session_):
+    """Left alone for STALE_SESSION_TIMEOUT: counted from its last set, or
+    from its start while it has none."""
+    return (dt.datetime.utcnow() - (_last_set_at(session_) or session_.started_at)
+            > STALE_SESSION_TIMEOUT)
+
+
+def _settle_if_abandoned(session_):
+    """End a running workout nobody came back to, and say what it is now:
+    'live', 'finished' or 'discarded'.
+
+    Abandoned (_is_abandoned), it is finished at its last set and marked
+    auto_finished, or discarded when nothing in it counts (D5, G-086,
+    G-124). It used to be finished at start + 3 h, a set logged a minute
+    earlier notwithstanding, and filed as a 180-minute workout, empty ones
+    included.
+
+    Under the session lock and re-read, like a finish: two requests noticing
+    the same workout at once -- a page and its prefetch, two phones -- both
+    deleted it (a 500 for the second), and a tick racing the finish could
+    lose its set to the finish's delete (B4 review). Like lock_sessions this
+    ends the caller's transaction when there is something to settle: ask it
+    before changing anything, and never while holding lock_user -- its
+    commit releases that lock.
+    """
+    if session_.finished_at is not None:
+        return 'finished'
+    if not _is_abandoned(session_):
+        return 'live'
+    session_id = session_.id
+    lock_sessions([session_id])
+    session_ = db.session.get(WorkoutSession, session_id)
+    if session_ is None:
+        # Another request settled it first -- this one goes home as well.
+        flask_session[DISCARDED_SESSION_KEY] = session_id
+        return 'discarded'
+    if session_.finished_at is not None:
+        return 'finished'
+    if not _is_abandoned(session_):
+        return 'live'
+    if not _counted(session_):
+        _discard_session(session_)
+        # Whichever request noticed it, the next page says why it is gone.
+        flash('Das leere Workout wurde nach 3 Stunden ohne Satz verworfen.', 'error')
+        return 'discarded'
+    # Sets from before completed_at existed carry no stamp: the old cap is
+    # the only end there is to give them.
+    _finish_session(session_, _last_set_at(session_) or session_.started_at + STALE_SESSION_TIMEOUT,
+                    auto=True)
+    db.session.commit()
+    return 'finished'
+
+
+def _was_discarded(session_id):
+    """Whether this is the lifter's running workout that was thrown away
+    (_discard_session) -- which a screen of theirs may still be showing."""
+    return (flask_session.get(DISCARDED_SESSION_KEY) == session_id
+            and db.session.get(WorkoutSession, session_id) is None)
+
+
 def _get_active_session():
-    """The one in-progress workout, if any. Sessions left open past
-    STALE_SESSION_TIMEOUT are treated as abandoned and auto-finished here,
-    capped at started_at + timeout rather than "now"."""
+    """The one in-progress workout, if any -- once an abandoned one has been
+    ended (_settle_if_abandoned). That commits, so a caller about to take
+    lock_user asks this first."""
     session_ = (
         my_sessions()
         .filter_by(finished_at=None)
         .order_by(WorkoutSession.started_at.desc())
         .first()
     )
-    if session_ and dt.datetime.utcnow() - session_.started_at > STALE_SESSION_TIMEOUT:
-        session_.finished_at = session_.started_at + STALE_SESSION_TIMEOUT
-        session_.rest_ends_at = None
-        session_.resting_set_id = None
-        settle_rests(session_)
-        _cancel_pending_push(session_)
-        # This is a second, differently-spelled site that stamps finished_at
-        # (started_at + timeout, not utcnow()) -- the brief's suggested grep
-        # for the literal string "finished_at = dt.datetime.utcnow()" does not
-        # match it, but going stale ends the workout exactly as explicitly
-        # finishing it does, so the same rule applies: whoever finishes first
-        # ends the sharing, the other trains on alone.
-        sharing.end_links_for(session_)
-        db.session.commit()
+    if session_ is None or _settle_if_abandoned(session_) != 'live':
         return None
     return session_
 
@@ -396,9 +530,9 @@ def _local_filter(moment):
 def inject_gym_nav_context():
     """Makes the active session available to `_nav.html` on every gym page,
     not just the dashboard -- so the nav can show a "session running" dot
-    and link straight to it from anywhere. Reuses `_get_active_session`,
-    which is already idempotent (it only mutates state once, the first time
-    it notices a session has gone stale past the timeout)."""
+    and link straight to it from anywhere. An abandoned workout was already
+    ended before the page was built (routes/__init__.py), so this only
+    reads."""
     return {'gym_active_session': _get_active_session()}
 
 

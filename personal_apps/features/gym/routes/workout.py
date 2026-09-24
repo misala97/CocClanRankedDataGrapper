@@ -10,7 +10,7 @@ Moved verbatim from the pre-split routes.py.
 """
 import datetime as dt
 
-from flask import abort, current_app, jsonify, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from sqlalchemy.orm import joinedload, load_only
 
 from extensions import db
@@ -24,7 +24,7 @@ from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
 from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
 from features.gym.exercises import (
     REST_MAX_SECONDS, REST_NUDGE_SECONDS,
-    exercise_or_404, library_exercises, search_text, settle_rests,
+    exercise_or_404, library_exercises, search_text,
     setup as exercise_setup, setups as exercise_setups, touched_exercises,
     usage as exercise_usage,
 )
@@ -41,9 +41,10 @@ from ..seeding import (
 from ._blueprint import gym_bp
 from .helpers import (
     NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT, InvalidInput,
-    _cancel_pending_push, _debrief_args, _delete_session_and_links,
+    _cancel_pending_push, _debrief_args, _discard_session, _finish_session,
     _get_active_session, _refuse_live_write_if_finished, _refuse_structure_edit_if_finished,
-    _to_bodyweight, _to_int, _to_name, _to_note, _to_reps, _to_rest_seconds, _to_weight,
+    _settle_if_abandoned, _to_bodyweight, _to_int, _to_name, _to_note, _to_reps,
+    _to_rest_seconds, _to_weight, _was_discarded,
     _username, _wants_json,
 )
 from .history import counts, done_sets, load_performed, performed_from_session, _session_rest_entries
@@ -370,6 +371,9 @@ def gym_heute():
 def gym_start():
     # Checked and inserted under the lifter's lock: two starts at once -- two
     # tabs, two devices -- both saw no running workout and made two (G-091).
+    # An abandoned workout is ended BEFORE the lock: ending it commits, and
+    # the commit would release the lock (B4 review).
+    _get_active_session()
     lock_user(current_user_id())
     active_session = _get_active_session()
     if active_session:
@@ -1143,6 +1147,7 @@ def _finished_payload(session_):
     data['session'] = {
         'id': session_.id, 'name': session_.name,
         'started_at': session_.started_at, 'finished_at': session_.finished_at,
+        'auto_finished': session_.auto_finished,
         'is_deload': session_.is_deload, 'deload_pct': session_.deload_pct,
         'bodyweight_kg': session_.bodyweight_kg, 'notes': session_.notes,
         'template_id': session_.template_id,
@@ -1154,7 +1159,14 @@ def _finished_payload(session_):
 @gym_bp.route('/gym/session/<int:session_id>')
 @login_required
 def session_detail(session_id):
-    session_ = owned_session(session_id)
+    session_ = None if _was_discarded(session_id) else owned_session(session_id)
+    # Settled before anything is built from it: the nav's context processor
+    # used to end an abandoned workout halfway through rendering it as
+    # running, and the page came up live on a workout already filed (B4
+    # review). Discarded -- now, or while a screen still showed it -- the
+    # answer is Heute, where the reason is flashed, not a 404.
+    if session_ is None or _settle_if_abandoned(session_) == 'discarded':
+        return redirect(url_for('gym.gym_heute'))
 
     if session_.finished_at:
         # The finished workout is one page now (spec 6.5): hand off to
@@ -1895,23 +1907,31 @@ def gym_shift_rest(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/finish', methods=['POST'])
 @login_required
 def gym_finish_session(session_id):
-    session_ = owned_session(session_id)
+    session_ = None if _was_discarded(session_id) else owned_session(session_id)
+    # Nobody came back to it: it ends at its last set, not now -- "Beenden"
+    # on a screen left open overnight filed a 20-hour workout (B4 review).
+    if session_ is None or _settle_if_abandoned(session_) == 'discarded':
+        return redirect(url_for('gym.gym_heute'))
+    # Two tabs, or a double submit: the second waits here and then sees the
+    # first one's finish below. Read again: the other may have discarded it.
+    lock_sessions([session_id])
+    session_ = db.session.get(WorkoutSession, session_id)
+    if session_ is None:
+        return redirect(url_for('gym.gym_heute'))
     if session_.finished_at is not None:
         # A second finish -- a double submit, or a live screen restored hours
         # later -- used to re-stamp the workout and stretch its duration to
         # however long the phone sat in a pocket. The first stamp stands.
         return redirect(url_for('gym.session_detail', session_id=session_.id))
-    session_.finished_at = dt.datetime.utcnow()
-    session_.rest_ends_at = None
-    session_.resting_set_id = None
-    settle_rests(session_)
-    # Finishing early (before a running rest timer naturally elapses) must
-    # cancel its still-pending push -- otherwise the notifier daemon fires it
-    # later for a workout that's already over.
-    _cancel_pending_push(session_)
-    # Whoever finishes first ends the sharing. The other trains on alone --
-    # a workout must never be cut short by someone else's.
-    sharing.end_links_for(session_)
+    if not any(counts(s) for se in session_.exercises for s in se.sets):
+        # Nothing lifted: there is nothing to file, only a workout to throw
+        # away (D5, G-023). The finish sheet offers "verwerfen" alone here;
+        # this is the answer to a screen that thought otherwise.
+        flash('Kein Satz erfasst — ein leeres Workout lässt sich nur verwerfen.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+    # The rest timer's pending push goes with it, the open sets go, and the
+    # sharing ends -- see _finish_session.
+    _finish_session(session_, dt.datetime.utcnow())
     db.session.commit()
     return redirect(url_for('gym.session_detail', session_id=session_.id, just_finished=1))
 
@@ -1928,13 +1948,28 @@ def gym_discard_session(session_id):
     for removing it afterwards. Ends any partner link it held, like finishing
     does: the other side trains on alone.
     """
-    session_ = owned_session(session_id)
+    if _was_discarded(session_id):
+        return redirect(url_for('gym.gym_heute'))
+    # Nobody came back to it: settled first, like a finish -- filed at its
+    # last set, or gone already when nothing in it counts.
+    if _settle_if_abandoned(owned_session(session_id)) == 'discarded':
+        return redirect(url_for('gym.gym_heute'))
+    # A double submit, or a discard racing a finish or a tick: the second
+    # waits here and reads what the first left (B4 re-review).
+    lock_sessions([session_id])
+    session_ = db.session.get(WorkoutSession, session_id)
+    if session_ is None:
+        return redirect(url_for('gym.gym_heute'))
+    if session_.finished_at is not None:
+        return redirect(url_for('gym.session_detail', session_id=session_id))
     # counts(), the one rule: the finish sheet offers "verwerfen" off the same
     # count (sets_done), so it never offers what this refuses (G-131).
-    logged = any(counts(s) for se in session_.exercises for s in se.sets)
-    if session_.finished_at is not None or logged:
-        return redirect(url_for('gym.session_detail', session_id=session_.id))
-    _delete_session_and_links(session_)
+    if any(counts(s) for se in session_.exercises for s in se.sets):
+        # A screen that missed a set of its own -- the other phone's. It
+        # used to come back without a word, as if the tap did nothing.
+        flash('Das Workout hat schon Sätze — beende es statt es zu verwerfen.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_id))
+    _discard_session(session_)
     return redirect(url_for('gym.gym_heute'))
 
 

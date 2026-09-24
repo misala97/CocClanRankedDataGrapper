@@ -114,8 +114,9 @@ describe('SessionPage', () => {
     expect(sheet.getByText(new RegExp(
       `${payload.sets_done} von ${payload.sets_total} Sätzen erledigt`))).toBeInTheDocument()
     expect(sheet.getByText(/kg bewegt/)).toBeInTheDocument()
+    // Open sets do not survive the finish, and the sheet says so (D5).
     if (payload.sets_total - payload.sets_done > 0) {
-      expect(sheet.getByText(/offen\./)).toBeInTheDocument()
+      expect(sheet.getByText(/werden? gelöscht\./)).toBeInTheDocument()
     }
   })
 
@@ -132,7 +133,7 @@ describe('SessionPage', () => {
 
   it('surfaces a save failure without touching the payload', () => {
     mount()
-    act(() => { useSaveState.getState().fail('Verbindung fehlgeschlagen', vi.fn()) })
+    act(() => { useSaveState.getState().fail('set-1', 'Verbindung fehlgeschlagen', vi.fn()) })
     expect(screen.getByRole('alert'))
       .toHaveTextContent('Verbindung fehlgeschlagen')
   })
@@ -141,7 +142,7 @@ describe('SessionPage', () => {
     // Gym wifi comes back before anyone finds the retry button.
     mount()
     const retry = vi.fn()
-    act(() => { useSaveState.getState().fail('Verbindung fehlgeschlagen', retry) })
+    act(() => { useSaveState.getState().fail('set-1', 'Verbindung fehlgeschlagen', retry) })
     act(() => { window.dispatchEvent(new Event('online')) })
     expect(retry).toHaveBeenCalledOnce()
   })

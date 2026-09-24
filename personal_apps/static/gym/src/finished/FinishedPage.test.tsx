@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FinishedPage } from './FinishedPage'
@@ -29,7 +29,7 @@ const base: FinishedPayload = {
   session: {
     id: 42, name: 'Push Day',
     started_at: '2026-08-09T16:00:00', finished_at: '2026-08-09T17:05:00',
-    is_deload: false, deload_pct: null, bodyweight_kg: null, notes: null,
+    auto_finished: false, is_deload: false, deload_pct: null, bodyweight_kg: null, notes: null,
     template_id: null, template_name: null,
   },
   exercises: [exercise()],
@@ -72,6 +72,14 @@ describe('FinishedPage', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Push Day')
     // Weekday first, then the date once -- the name often embeds one already.
     expect(screen.getByText(/So · 09\.08\.2026 · 65 Minuten/)).toBeInTheDocument()
+    expect(screen.queryByText(/Automatisch beendet/)).not.toBeInTheDocument()
+  })
+
+  it('says when the app ended the workout itself (D5)', () => {
+    // Its end is the last set, and the duration stops there.
+    mount({ session: { ...base.session, auto_finished: true } })
+    expect(screen.getByText('Automatisch beendet — nach 3 Stunden ohne Satz.'))
+      .toBeInTheDocument()
   })
 
   describe('the verdict', () => {
@@ -390,6 +398,30 @@ describe('FinishedPage', () => {
     expect(screen.getByRole('link', { name: 'Zum Start' })).toHaveAttribute('href', '/gym')
     expect(screen.getByRole('link', { name: 'Verlauf' })).toHaveAttribute('href', '/gym/verlauf')
   })
+
+  it.each([false, true])(
+    'leaves a deleted workout for Verlauf, and out of the history (keepalive %s)',
+    async (keepalive) => {
+      // The undo window now also closes when the app goes to the background
+      // (G-062), and the page is still there when the lifter comes back: it
+      // must not go on showing a workout that no longer exists. Replaced, not
+      // pushed: Back would reload a page that is gone (G-141).
+      const replace = vi.fn()
+      vi.stubGlobal('location', { ...window.location, replace, assign: vi.fn() })
+      vi.stubGlobal('fetch', vi.fn(async () => ({
+        ok: true, redirected: false, url: '/gym/session/1/delete',
+        json: async () => ({ deleted: true }),
+      } as unknown as Response)))
+      try {
+        const user = userEvent.setup()
+        mount()
+        await user.click(screen.getByRole('button', { name: 'Workout löschen' }))
+        await act(async () => { useUndo.getState().commitNow(keepalive) })
+        expect(replace).toHaveBeenCalledWith('/gym/verlauf')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
 })
 
 describe('saving without a reload', () => {

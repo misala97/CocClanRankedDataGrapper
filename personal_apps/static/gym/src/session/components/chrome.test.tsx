@@ -75,7 +75,7 @@ describe('SaveErrorBanner', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const retry = vi.fn()
     render(<SaveErrorBanner />)
-    useSaveState.getState().fail('Keine Antwort vom Server', retry)
+    useSaveState.getState().fail('set-1', 'Keine Antwort vom Server', retry)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Keine Antwort vom Server')
     await user.click(screen.getByText('Erneut versuchen'))
@@ -85,7 +85,7 @@ describe('SaveErrorBanner', () => {
   it('dismisses', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     render(<SaveErrorBanner />)
-    useSaveState.getState().fail('x', () => {})
+    useSaveState.getState().fail('set-1', 'x', () => {})
     await user.click(await screen.findByText('Verwerfen'))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -95,12 +95,53 @@ describe('SaveErrorBanner', () => {
     // the connection coming back must not send it either.
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     render(<SaveErrorBanner />)
-    useSaveState.getState().fail('Gewicht: bitte 0 bis 1000 kg.', null)
+    useSaveState.getState().fail('set-1', 'Gewicht: bitte 0 bis 1000 kg.', null)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Gewicht: bitte 0 bis 1000 kg.')
     expect(screen.queryByText('Erneut versuchen')).not.toBeInTheDocument()
     window.dispatchEvent(new Event('online'))
     await user.click(screen.getByText('OK'))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('resends when the connection returns, but never reloads on its own (B4 review)', async () => {
+    // A reload in the middle of a set, because the wifi came back, would
+    // throw away whatever the lifter was typing.
+    render(<SaveErrorBanner />)
+    const resend = vi.fn()
+    const reload = vi.fn()
+    useSaveState.getState().fail('set-1', 'Keine Antwort vom Server', resend)
+    useSaveState.getState().fail('set-2', 'Bitte neu anmelden', reload, 'reload')
+    await screen.findByRole('alert')
+
+    window.dispatchEvent(new Event('online'))
+    expect(resend).toHaveBeenCalledOnce()
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('counts the lost writes and says each reason once (G-139)', async () => {
+    render(<SaveErrorBanner />)
+    useSaveState.getState().fail('set-1', 'Keine Antwort vom Server', vi.fn())
+    useSaveState.getState().fail('set-2', 'Keine Antwort vom Server', vi.fn())
+    useSaveState.getState().fail('set-3', 'Gewicht: bitte 0 bis 1000 kg.', null)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('3 Änderungen nicht gespeichert')
+    expect(screen.getAllByText('Keine Antwort vom Server')).toHaveLength(1)
+    expect(alert).toHaveTextContent('Gewicht: bitte 0 bis 1000 kg.')
+  })
+
+  it('sends every lost write again from the one button', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const first = vi.fn()
+    const second = vi.fn()
+    render(<SaveErrorBanner />)
+    useSaveState.getState().fail('set-1', 'Keine Antwort vom Server', first)
+    useSaveState.getState().fail('set-2', 'Keine Antwort vom Server', second)
+
+    await user.click(await screen.findByText('Erneut versuchen'))
+    expect(first).toHaveBeenCalledOnce()
+    expect(second).toHaveBeenCalledOnce()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

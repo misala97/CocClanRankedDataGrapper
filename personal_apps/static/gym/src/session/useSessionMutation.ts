@@ -1,9 +1,34 @@
+import { useId } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SessionDetailPayload } from './types'
-import { MutationFailed } from './api'
+import { fetchSession, MutationFailed } from './api'
 import { useSaveState } from './stores'
 
 export const sessionKey = (sessionId: number) => ['session', sessionId] as const
+
+/** How one kind of write's failures are told apart and offered again. */
+export interface WriteOptions<Args extends unknown[]> {
+  /** Which earlier failure a success answers (G-139). By default the row the
+   *  write names first, for this hook alone. A write that states the whole of
+   *  something -- the exercise order, the deload mark, a field of the workout
+   *  -- names that, so its newest intent answers the older failure whose
+   *  retry would put back what the lifter had already changed. A name is the
+   *  workout's, not the hook's: every write naming 'set-4' answers it, and
+   *  one naming 'set-4' answers 'set-4:done' too (stores.succeed). null:
+   *  every call is new work -- an added set -- and answers only itself (B4
+   *  review). */
+  key?: (...args: Args) => string | null
+  /** About this moment only, like the rest countdown: a failure is reported
+   *  but never sent again -- a minute later "+15 s" moves a different rest. */
+  ephemeral?: boolean
+  /** false: sent twice, it is done twice -- an added set or exercise, a swap,
+   *  the skip toggle. Its answer can be lost after it landed, so a failure
+   *  is sent again only on the lifter's tap (Remedy 'manual'), never by the
+   *  connection coming back or by finishing (B4 re-review). */
+  idempotent?: boolean
+}
+
+let calls = 0
 
 /**
  * Every write goes through here, so the optimistic path exists in exactly one
@@ -25,6 +50,7 @@ export function useSessionMutation<Args extends unknown[]>(
   sessionId: number,
   run: (...args: Args) => Promise<SessionDetailPayload>,
   optimistic?: (current: SessionDetailPayload, ...args: Args) => SessionDetailPayload,
+  options: WriteOptions<Args> = {},
 ) {
   const client = useQueryClient()
   const key = sessionKey(sessionId)
@@ -32,9 +58,39 @@ export function useSessionMutation<Args extends unknown[]>(
   const end = useSaveState((s) => s.end)
   const succeed = useSaveState((s) => s.succeed)
   const fail = useSaveState((s) => s.fail)
+  // Which write a failure belongs to: this hook (the kind of write) and what
+  // it names (WriteOptions.key). A success answers only its own write's
+  // failure -- ticking set 2 does not save the lost weight of set 1 (G-139).
+  const writer = useId()
+  const writeKey = (args: Args) => {
+    if (options.key === undefined) return `${writer}:${JSON.stringify(args[0] ?? null)}`
+    return options.key(...args) ?? `${writer}:call-${++calls}`
+  }
+
+  /** A 409 or a 404 to the live screen: it wrote to something the server
+   *  no longer has. Which of three things happened, only the server knows,
+   *  so ask it. The workout finished -- on the other phone, or by the
+   *  three-hour rule: its page is the debrief now, a reload shows it. It is
+   *  gone -- discarded: home. Still running: the write aimed at a row that
+   *  is gone -- a resent delete that had landed after all, a set the
+   *  partner's plan removed -- and is moot, not failed. Reloading for that
+   *  threw away whatever the lifter was typing (B4 re-review). */
+  const settleStale = async (failureKey: string) => {
+    try {
+      const fresh = await client.fetchQuery({
+        queryKey: key, queryFn: () => fetchSession(sessionId), staleTime: 0,
+      })
+      if (fresh.session.finished_at !== null) window.location.reload()
+      else succeed(failureKey)
+    } catch (error) {
+      if (error instanceof MutationFailed && error.reason === 'gone') window.location.assign('/gym')
+      else window.location.reload()
+    }
+  }
 
   const mutation = useMutation<
-    SessionDetailPayload, MutationFailed, Args, { previous?: SessionDetailPayload }
+    SessionDetailPayload, MutationFailed, Args,
+    { previous?: SessionDetailPayload; failureKey: string }
   >({
     mutationFn: (args) => run(...args),
 
@@ -51,6 +107,9 @@ export function useSessionMutation<Args extends unknown[]>(
 
     onMutate: async (args) => {
       begin()
+      // Named once per call: a key that is new for every call has to be the
+      // same one when its answer comes back.
+      const failureKey = writeKey(args)
       // Stop an in-flight refetch from landing on top of the optimistic state
       // and undoing it a moment before the server answers.
       await client.cancelQueries({ queryKey: key })
@@ -58,10 +117,10 @@ export function useSessionMutation<Args extends unknown[]>(
       if (optimistic && previous !== undefined) {
         client.setQueryData(key, optimistic(previous, ...args))
       }
-      return { previous }
+      return { previous, failureKey }
     },
 
-    onSuccess: (fresh) => {
+    onSuccess: (fresh, args, result) => {
       // The server recomputes which exercise is live on every write, so its
       // answer replaces the local guess wholesale rather than merging into it
       // -- unless a LATER write is already queued behind this one. That write
@@ -76,15 +135,15 @@ export function useSessionMutation<Args extends unknown[]>(
       }
       // Here, not in onSettled: onSettled also runs after a FAILURE, so
       // clearing there erased the banner the failure had just raised.
-      succeed()
+      succeed(result?.failureKey ?? writeKey(args))
     },
 
     onError: (error, args, context) => {
-      // The workout finished under this screen -- on the other phone, or
-      // before the back button restored it. The page for it now is the
-      // debrief, and a reload is what shows it; there is nothing to retry.
-      if (error.reason === 'finished') {
-        window.location.reload()
+      const failureKey = context?.failureKey ?? writeKey(args)
+      // The server no longer has what this screen wrote to: nothing to
+      // retry, and whether anything is wrong at all is the server's to say.
+      if (error.reason === 'finished' || error.reason === 'gone') {
+        void settleStale(failureKey)
         return
       }
       if (context?.previous !== undefined) {
@@ -99,9 +158,14 @@ export function useSessionMutation<Args extends unknown[]>(
       // -- the only fix is a fresh page (a fresh token, or the login page), so
       // that is what the retry does for them. A refused value has no retry at
       // all: sending it again gets the same refusal.
-      fail(error.germanMessage, error.needsReload
-        ? () => { window.location.reload() }
-        : error.retryable ? () => { mutation.mutate(args) } : null)
+      if (error.needsReload) {
+        fail(failureKey, error.germanMessage, () => { window.location.reload() }, 'reload')
+        return
+      }
+      const resend = error.retryable && !options.ephemeral
+        ? () => { mutation.mutate(args) } : null
+      fail(failureKey, error.germanMessage, resend,
+        resend !== null && options.idempotent === false ? 'manual' : 'auto')
     },
 
     onSettled: () => { end() },

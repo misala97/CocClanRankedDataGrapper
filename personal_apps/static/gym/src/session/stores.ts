@@ -76,33 +76,63 @@ export const useWorkoutUi = create<WorkoutUiState>((set) => ({
 
 // ---------------------------------------------------------------------------
 // Save status: how many writes are in flight, which forms are locked, and the
-// one visible answer to "did that save?".
+// one visible answer to "did that save?" -- for every write that did not.
 // ---------------------------------------------------------------------------
 
+/** What mends a failure. 'auto': sending the same write again, which the
+ *  connection coming back or finishing does by itself. 'manual': sending it
+ *  again, but only on the lifter's tap -- a write that is new work each
+ *  time (an added set) may have landed with only its answer lost, and sent
+ *  again by itself it lands twice (B4 re-review). 'reload': a fresh page --
+ *  a stale token or a lapsed login fails every write alike. */
+export type Remedy = 'auto' | 'manual' | 'reload'
+
 export interface SaveError {
+  /** Which write failed -- the same write landing later answers it. */
+  key: string
+  /** New for every failure, so "did anything fail since?" can be asked. */
+  id: number
   message: string
   /** Null when sending the same write again cannot work -- a value the
-   *  server refused says so, and the banner offers no retry for it. */
+   *  server refused says so, and the banner offers no retry for it. For
+   *  'reload', the reload. */
   retry: (() => void) | null
+  remedy: Remedy
 }
 
 interface SaveStateStore {
   pending: number
-  error: SaveError | null
+  /** Every write that failed and has not landed since, oldest first. One
+   *  slot kept only the newest, and any later success emptied it: earlier
+   *  writes, already rolled back, vanished with no banner (G-139). */
+  errors: SaveError[]
   locked: Record<string, true>
   begin(): void
   end(): void
-  succeed(): void
-  fail(message: string, retry: (() => void) | null): void
-  dismissError(): void
+  succeed(key: string): void
+  fail(key: string, message: string, retry: (() => void) | null, remedy?: Remedy): void
+  /** Takes every failure that sending again mends by itself ('auto') off the
+   *  list and sends it; one that fails again comes back as a new entry. The
+   *  rest stay: the refused ones, the ones for the lifter to resend, and the
+   *  ones only a fresh page mends -- the connection coming back must not
+   *  reload the page under the lifter (B4 review). */
+  resendAll(): void
+  /** "Erneut versuchen", the lifter's tap: a fresh page when any failure
+   *  needs one -- it answers all of them, and resending the rest first only
+   *  raced it (B4 review) -- else every failure with a retry, 'manual' ones
+   *  included. */
+  retryAll(): void
+  dismissErrors(): void
   lock(formId: string): void
   unlock(formId: string): void
   isLocked(formId: string): boolean
 }
 
+let lastErrorId = 0
+
 export const useSaveState = create<SaveStateStore>((set, get) => ({
   pending: 0,
-  error: null,
+  errors: [],
   locked: {},
 
   /** Counted, not flagged. Two concurrent saves need two ends -- a boolean
@@ -115,12 +145,40 @@ export const useSaveState = create<SaveStateStore>((set, get) => ({
    *  that FINISHED is not a write that WORKED. */
   end: () => set((state) => ({ pending: Math.max(0, state.pending - 1) })),
 
-  /** A real answer from the server: the last failure is no longer the current
-   *  truth, so the banner goes with it. */
-  succeed: () => set({ error: null }),
+  /** A real answer from the server for THIS write: its earlier failure is
+   *  no longer the truth, and neither is one about a part of what it names
+   *  -- a deleted set answers its lost tick ('set-4' answers 'set-4:done').
+   *  Any other write's failure still is. */
+  succeed: (key) => set((state) => ({
+    errors: state.errors.filter((e) => e.key !== key && !e.key.startsWith(`${key}:`)),
+  })),
 
-  fail: (message, retry) => set({ error: { message, retry } }),
-  dismissError: () => set({ error: null }),
+  /** The newest failure of a write replaces its older one -- it carries the
+   *  lifter's latest intent, and one write needs one retry. */
+  fail: (key, message, retry, remedy = 'auto') => set((state) => ({
+    errors: [...state.errors.filter((e) => e.key !== key),
+      { key, id: ++lastErrorId, message, retry, remedy }],
+  })),
+
+  resendAll: () => {
+    const resends = get().errors.flatMap((e) => (
+      e.retry !== null && e.remedy === 'auto' ? [e.retry] : []))
+    set((state) => ({
+      errors: state.errors.filter((e) => e.retry === null || e.remedy !== 'auto'),
+    }))
+    for (const resend of resends) resend()
+  },
+
+  retryAll: () => {
+    const errors = get().errors
+    const reload = errors.find((e) => e.remedy === 'reload' && e.retry !== null)
+    if (reload !== undefined) { reload.retry!(); return }
+    const resends = errors.flatMap((e) => (e.retry !== null ? [e.retry] : []))
+    set((state) => ({ errors: state.errors.filter((e) => e.retry === null) }))
+    for (const resend of resends) resend()
+  },
+
+  dismissErrors: () => set({ errors: [] }),
 
   /** One write per form at a time. The confirm button is in the thumb zone
    *  and its answer arrives a round trip later, so a second tap before the
@@ -138,6 +196,14 @@ export const useSaveState = create<SaveStateStore>((set, get) => ({
   isLocked: (formId) => get().locked[formId] === true,
 }))
 
+/** Takes a checkpoint; the function it returns says whether any write has
+ *  failed since. A write that failed before and fails AGAIN counts: its entry
+ *  is new, even though the list is no longer. */
+export function failureCheckpoint(): () => boolean {
+  const before = new Set(useSaveState.getState().errors.map((e) => e.id))
+  return () => useSaveState.getState().errors.some((e) => !before.has(e.id))
+}
+
 // ---------------------------------------------------------------------------
 // Push: a fact about this device, not about the account.
 // ---------------------------------------------------------------------------
@@ -147,12 +213,18 @@ interface PushState {
    *  until it resolves; treating null as false would offer to enable push on a
    *  device that already has it. */
   subscribed: boolean | null
+  /** Why the last tap on "aktivieren" did not turn push on, shown beside the
+   *  button that was tapped; null when there is nothing to say. */
+  error: string | null
   setSubscribed(value: boolean): void
+  setError(message: string | null): void
 }
 
 export const usePush = create<PushState>((set) => ({
   subscribed: null,
+  error: null,
   setSubscribed: (subscribed) => set({ subscribed }),
+  setError: (error) => set({ error }),
 }))
 
 

@@ -6,6 +6,8 @@ export interface HistoryEntry {
   started_at: string
   finished_at: string | null
   is_deload: boolean
+  /** Ended by the app three hours after its last set (D5). */
+  auto_finished: boolean
   volume: number
   record_count: number
   /** The same exercises the volume beside it was computed from -- swapped-out

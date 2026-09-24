@@ -159,6 +159,7 @@ def gym_verlauf():
                         'started_at': entry['session'].started_at,
                         'finished_at': entry['session'].finished_at,
                         'is_deload': entry['session'].is_deload,
+                        'auto_finished': entry['session'].auto_finished,
                         'volume': entry['volume'],
                         'record_count': entry['record_count'],
                         'exercises': entry['exercises'],

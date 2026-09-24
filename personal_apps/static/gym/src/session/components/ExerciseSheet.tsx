@@ -19,7 +19,8 @@ export interface ExerciseSheetActions {
   onOpenSettings(): void
   onMetaSave(meta: { pain: boolean; notes: string }): void
   onSetUpdate(setId: number, weight: number, reps: number): void
-  onSetDelete(setId: number): void
+  /** Settles once the server has answered; rejects when the delete failed. */
+  onSetDelete(setId: number, keepalive: boolean): Promise<unknown>
   onAddSet(weight: number, reps: number): void
   onToggleSkip(): void
   onReplace(exerciseId: number): void
@@ -73,11 +74,14 @@ export function ExerciseSheet({
     offerUndo({
       label: `Satz ${ordinal} gelöscht.`,
       undo: () => setHiddenSetIds((ids) => ids.filter((id) => id !== setId)),
-      // The keepalive flag stops here: the write goes through the session
-      // mutation layer, which owns its own fetch. A pagehide flush mid-window
-      // therefore races the navigation -- acceptable for a 5s window on a
-      // screen you leave by finishing the workout.
-      commit: () => onSetDelete(setId),
+      // keepalive rides through to the fetch, so a delete flushed by leaving
+      // the page leaves with it (G-062). A delete that fails brings its row
+      // back: the payload rolls back to the set, but this list kept hiding
+      // it, so a lost delete looked like a done one (G-147).
+      commit: (keepalive) => {
+        onSetDelete(setId, keepalive)
+          .catch(() => setHiddenSetIds((ids) => ids.filter((id) => id !== setId)))
+      },
     })
   }
 

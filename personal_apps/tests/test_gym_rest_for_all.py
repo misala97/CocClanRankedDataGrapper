@@ -260,12 +260,16 @@ def test_the_live_payload_names_the_rest_that_always_applies(lifter, lifter_clie
 def test_finishing_writes_the_rest_in_force_into_the_rows(lifter, lifter_client):
     """Tomorrow's setting must not rewrite what today's workout planned."""
     from extensions import db
-    from models import SessionExercise
+    from models import SessionExercise, SessionSet
     uid = lifter['user']
     with flask_app.app_context():
         exercises.set_rest_for_all(uid, 150)
         db.session.commit()
-        session_id, se_ids, _ = _workout(uid, [(lifter['curl'], None), (lifter['row'], 200)])
+        session_id, se_ids, set_ids = _workout(uid, [(lifter['curl'], None), (lifter['row'], 200)])
+        # Finishing needs something lifted: an empty workout is only
+        # discarded (D5).
+        db.session.get(SessionSet, set_ids[0]).completed = True
+        db.session.commit()
     lifter_client.post(f'/gym/session/{session_id}/finish')
     with flask_app.app_context():
         assert [db.session.get(SessionExercise, i).rest_seconds for i in se_ids] == [150, 200]

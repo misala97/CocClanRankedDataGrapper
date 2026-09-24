@@ -125,6 +125,15 @@ describe('SessionSheet', () => {
     expect(screen.queryByText(/Pausen-Benachrichtigung/)).not.toBeInTheDocument()
   })
 
+  it('says why push did not turn on, under its row (G-148)', () => {
+    open()
+    act(() => {
+      usePush.setState({ subscribed: false, error: 'Benachrichtigung ließ sich nicht aktivieren.' })
+    })
+    expect(screen.getByRole('alert'))
+      .toHaveTextContent('Benachrichtigung ließ sich nicht aktivieren.')
+  })
+
   it('invites the chosen partner', async () => {
     const user = userEvent.setup()
     const { props } = open()

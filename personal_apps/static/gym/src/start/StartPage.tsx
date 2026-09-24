@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { HeutePayload, Onboarding, RoutineMemory, Stall } from './types'
 import { postForm, MutationFailed } from '../api'
-import { csrfToken, CsrfField } from '../csrf'
-import { heartbeatSubscription } from '../push'
+import { CsrfField } from '../csrf'
+import { enablePush, heartbeatSubscription } from '../push'
 import { UndoToast, useUndo } from '../undo'
 import { recency, sincePr } from '../catalogue/format'
 import { MAX_NAME_CHARS } from '../setInput'
@@ -14,6 +14,13 @@ import { morphFrom } from '../vt'
 
 const de = (value: number) => Math.round(value).toLocaleString('de-DE')
 const pad = (n: number) => String(n).padStart(2, '0')
+
+/** One routine back where it stood, into the list as it is now. */
+function putBack(now: RoutineMemory[], was: RoutineMemory[], id: number): RoutineMemory[] {
+  const at = was.findIndex((r) => r.template_id === id)
+  if (at < 0 || now.some((r) => r.template_id === id)) return now
+  return [...now.slice(0, at), was[at]!, ...now.slice(at)]
+}
 
 /** Elapsed since the running workout started. hh:mm:ss, as GymClock rendered it. */
 function useElapsed(startedAt: string): string {
@@ -146,6 +153,8 @@ interface FirstRunProps {
   onboarding: Onboarding
   daysSinceLast: number | null
   push: PushState
+  /** Why the last tap did not turn push on. */
+  pushError: string | null
   onEnablePush: () => void
   onStartFree: () => void
 }
@@ -158,7 +167,9 @@ interface FirstRunProps {
  * around), then let the phone call the end of a rest. One step at a time
  * wears the lifted plane and the live button.
  */
-function FirstRun({ onboarding, daysSinceLast, push, onEnablePush, onStartFree }: FirstRunProps) {
+function FirstRun({
+  onboarding, daysSinceLast, push, pushError, onEnablePush, onStartFree,
+}: FirstRunProps) {
   const { workouts, last } = onboarding
   const trained = workouts > 0
   const done = (trained ? 1 : 0) + (push === 'on' ? 1 : 0)
@@ -267,6 +278,9 @@ function FirstRun({ onboarding, daysSinceLast, push, onEnablePush, onStartFree }
                     Benachrichtigung aktivieren
                   </button>
                 )}
+                {push === 'off' && pushError !== null && (
+                  <p className="flash flash--error" role="alert">{pushError}</p>
+                )}
               </>
             )}
           </div>
@@ -289,6 +303,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   const openSheet = useSheets((s) => s.open)
   const subscribed = usePush((s) => s.subscribed)
   const setSubscribed = usePush((s) => s.setSubscribed)
+  const pushError = usePush((s) => s.error)
   // Renaming or deleting a routine answers with the fresh HeutePayload, and
   // the page re-renders from it -- the row changing is the feedback.
   const [payload, setPayload] = useState(initial)
@@ -308,23 +323,35 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
   const offerUndo = useUndo((s) => s.offer)
   /** confirm() replaced by delayed commit: the row vanishes now, the DELETE
    *  fires when the undo window closes, Rückgängig just puts the row back --
-   *  nothing has reached the server yet. */
+   *  nothing has reached the server yet. A delete that fails puts it back
+   *  too: the routine still exists (G-147). */
   const deleteRoutine = (routine: RoutineMemory) => {
     const before = payload
+    const id = routine.template_id
     setPayload((current) => ({
       ...current,
-      routines: current.routines.filter((r) => r.template_id !== routine.template_id),
-      templates: current.templates.filter((r) => r.template_id !== routine.template_id),
+      routines: current.routines.filter((r) => r.template_id !== id),
+      templates: current.templates.filter((r) => r.template_id !== id),
+    }))
+    // Into the page as it is by then, not the page from before the tap: a
+    // rename saved inside the window stays saved.
+    const restore = () => setPayload((current) => ({
+      ...current,
+      routines: putBack(current.routines, before.routines, id),
+      templates: putBack(current.templates, before.templates, id),
     }))
     offerUndo({
       label: `Routine „${routine.name}“ gelöscht.`,
-      undo: () => setPayload(before),
+      undo: restore,
       commit: (keepalive) => {
-        postForm<HeutePayload>(`/gym/templates/${routine.template_id}/delete`, {}, { keepalive })
+        postForm<HeutePayload>(`/gym/templates/${id}/delete`, {}, { keepalive })
           .then(setPayload)
-          .catch((error) => setSaveError(error instanceof MutationFailed
-            ? error.germanMessage
-            : 'Löschen fehlgeschlagen.'))
+          .catch((error) => {
+            restore()
+            setSaveError(error instanceof MutationFailed
+              ? error.germanMessage
+              : 'Löschen fehlgeschlagen.')
+          })
       },
     })
   }
@@ -428,13 +455,16 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
       {pushSupported && subscribed === false && !showChecklist && (
         <section className="sec notify-prompt" id="notify-start">
           <button type="button" className="notify-prompt__btn"
-            onClick={() => { void enablePush(payload.vapid_public_key, setSubscribed) }}>
+            onClick={() => { void enablePush(payload.vapid_public_key) }}>
             <Icon name="timer" />
             <span>
               <b>Pausen-Benachrichtigung aktivieren</b>
               <small>Auf diesem Gerät. Installiere die App zuerst über „Zum Home-Bildschirm“.</small>
             </span>
           </button>
+          {pushError !== null && (
+            <p className="flash flash--error" role="alert">{pushError}</p>
+          )}
         </section>
       )}
 
@@ -457,7 +487,8 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
       {showChecklist && (
         <FirstRun onboarding={firstRun} daysSinceLast={payload.consistency.days_since_last}
           push={pushState}
-          onEnablePush={() => { void enablePush(payload.vapid_public_key, setSubscribed) }}
+          pushError={pushError}
+          onEnablePush={() => { void enablePush(payload.vapid_public_key) }}
           onStartFree={() => openSheet('sheet-free')} />
       )}
 
@@ -765,26 +796,3 @@ function LeadWatch({ lead, stalls }: { lead: RoutineMemory; stalls: Stall[] }) {
   )
 }
 
-async function enablePush(
-  vapidPublicKey: string | null,
-  setSubscribed: (value: boolean) => void,
-): Promise<void> {
-  if (vapidPublicKey === null) return
-  const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/gym' })
-  const permission = await Notification.requestPermission()
-  if (permission !== 'granted') return
-  const padding = '='.repeat((4 - (vapidPublicKey.length % 4)) % 4)
-  const normalised = (vapidPublicKey + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const raw = atob(normalised)
-  const bytes = new Uint8Array(new ArrayBuffer(raw.length))
-  for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i)
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true, applicationServerKey: bytes.buffer,
-  })
-  await fetch('/gym/push/subscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-    body: JSON.stringify(subscription.toJSON()),
-  })
-  setSubscribed(true)
-}

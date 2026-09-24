@@ -1056,6 +1056,19 @@ def _client_for(user_id):
     return test_client
 
 
+def _lift_a_set(session_id):
+    """One done set in the workout's first row: finishing needs something
+    lifted -- an empty workout is only ever discarded (D5)."""
+    from extensions import db
+    from models import SessionSet, WorkoutSession
+
+    with flask_app.app_context():
+        row = db.session.get(WorkoutSession, session_id).exercises[0]
+        row.sets.append(SessionSet(position=len(row.sets) + 1, weight=40.0, reps=8,
+                                   completed=True, completed_at=dt.datetime.utcnow()))
+        db.session.commit()
+
+
 def _invite_lift(name):
     """A key-less exercise to add mid-workout; leader_with_partner sweeps it.
     Returns its id as the add form posts it."""
@@ -1777,6 +1790,7 @@ def test_the_leader_finishing_ends_the_link_and_leaves_the_follower_live(joined_
     from extensions import db
     from models import SharedSession, WorkoutSession
 
+    _lift_a_set(joined_pair['session'])
     _client_for(joined_pair['leader']).post(
         f"/gym/session/{joined_pair['session']}/finish")
 
@@ -1791,6 +1805,7 @@ def test_nothing_propagates_after_the_link_ended(joined_pair):
     from models import WorkoutSession
 
     leader_client = _client_for(joined_pair['leader'])
+    _lift_a_set(joined_pair['session'])
     leader_client.post(f"/gym/session/{joined_pair['session']}/finish")
     leader_client.post(f"/gym/session/{joined_pair['session']}/exercises/add",
                        data={'exercise_id': _invite_lift('pytest invite ghost')})
@@ -1810,6 +1825,7 @@ def test_deleting_a_finished_shared_session_clears_the_link_too(joined_pair):
     from models import SharedSession, WorkoutSession
 
     leader_client = _client_for(joined_pair['leader'])
+    _lift_a_set(joined_pair['session'])
     leader_client.post(f"/gym/session/{joined_pair['session']}/finish")
 
     response = leader_client.post(f"/gym/session/{joined_pair['session']}/delete")
@@ -1832,12 +1848,15 @@ def test_a_stale_leader_session_auto_finishing_also_ends_the_link(joined_pair):
     must end the link the same way, or a link tied to a session that quietly
     went stale is left dangling forever (accepted, never ended)."""
     from extensions import db
-    from models import STALE_SESSION_TIMEOUT, SharedSession, WorkoutSession
+    from models import STALE_SESSION_TIMEOUT, SessionSet, SharedSession, WorkoutSession
 
+    last_set = (dt.datetime.utcnow() - STALE_SESSION_TIMEOUT
+                - dt.timedelta(minutes=1)).replace(microsecond=0)
     with flask_app.app_context():
         leader_session = db.session.get(WorkoutSession, joined_pair['session'])
-        leader_session.started_at = (
-            dt.datetime.utcnow() - STALE_SESSION_TIMEOUT - dt.timedelta(minutes=1))
+        leader_session.started_at = last_set - dt.timedelta(minutes=30)
+        leader_session.exercises[0].sets.append(SessionSet(
+            position=1, weight=60.0, reps=8, completed=True, completed_at=last_set))
         db.session.commit()
 
     # Any page load for the leader runs _get_active_session() via the nav
@@ -1850,6 +1869,30 @@ def test_a_stale_leader_session_auto_finishing_also_ends_the_link(joined_pair):
         follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
         assert follower_session.finished_at is None, (
             'the follower\'s workout was ended too')
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        assert leader_session.finished_at == last_set
+        assert leader_session.auto_finished is True
+
+
+def test_a_stale_empty_leader_session_is_discarded_and_the_follower_trains_on(joined_pair):
+    """D5: an abandoned workout with nothing lifted is thrown away, not filed
+    as an empty 180-minute entry -- and its link goes with it."""
+    from extensions import db
+    from models import STALE_SESSION_TIMEOUT, SharedSession, WorkoutSession
+
+    with flask_app.app_context():
+        leader_session = db.session.get(WorkoutSession, joined_pair['session'])
+        leader_session.started_at = (
+            dt.datetime.utcnow() - STALE_SESSION_TIMEOUT - dt.timedelta(minutes=1))
+        db.session.commit()
+
+    _client_for(joined_pair['leader']).get('/gym')
+
+    with flask_app.app_context():
+        assert db.session.get(WorkoutSession, joined_pair['session']) is None
+        assert db.session.get(SharedSession, joined_pair['shared']) is None
+        follower_session = db.session.get(WorkoutSession, joined_pair['follower_session'])
+        assert follower_session is not None and follower_session.finished_at is None
 
 
 # --- The follower's page keeps up (Task 7) ---
@@ -2035,6 +2078,7 @@ def test_the_follower_finishing_ends_the_link_and_leaves_the_leader_live(joined_
     from extensions import db
     from models import SharedSession, WorkoutSession
 
+    _lift_a_set(joined_pair['follower_session'])
     _client_for(joined_pair['partner']).post(
         f"/gym/session/{joined_pair['follower_session']}/finish")
 
@@ -2168,6 +2212,7 @@ def test_reinviting_after_the_link_ended_gives_an_honest_message(joined_pair):
     from extensions import db
     from models import SharedSession
 
+    _lift_a_set(joined_pair['follower_session'])
     _client_for(joined_pair['partner']).post(
         f"/gym/session/{joined_pair['follower_session']}/finish")
 

@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { SessionIsland } from '../session/SessionIsland'
 import type { SessionDetailPayload } from '../session/types'
+import { reloadWhenRestored } from '../fresh'
+
+reloadWhenRestored()
 
 // The payload is embedded in the document rather than fetched, so the first
 // render has everything and there is no waterfall on load. It is the same
