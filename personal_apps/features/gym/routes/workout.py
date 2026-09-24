@@ -41,7 +41,7 @@ from ..seeding import (
 from ._blueprint import gym_bp
 from .helpers import (
     NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT,
-    _cancel_pending_push, _delete_session_and_links,
+    _cancel_pending_push, _debrief_args, _delete_session_and_links,
     _get_active_session, _refuse_live_write_if_finished, _refuse_structure_edit_if_finished,
     _to_bodyweight, _to_int, _to_name, _to_note, _to_reps, _to_rest_seconds, _to_weight,
     _username, _wants_json,
@@ -1684,12 +1684,13 @@ def gym_update_set(set_id):
             set_, set_.weight if weight_changed else None, set_.reps if reps_changed else None)
 
     db.session.commit()
-    # request.args carried through: the debrief's "Routine aktualisieren" offer
-    # is gated on ?just_finished, and this redirect dropped it -- so correcting
-    # one mistyped set silently destroyed the offer, permanently, with no other
+    # ?just_finished carried through: the debrief's "Routine aktualisieren"
+    # offer is gated on it, and this redirect dropped it -- so correcting one
+    # mistyped set silently destroyed the offer, permanently, with no other
     # route to it. gym_session_summary already does exactly this.
     return _mutation_response(
-        session_, 'gym.session_detail', session_id=set_.session_exercise.session_id, **request.args.to_dict())
+        session_, 'gym.session_detail', session_id=set_.session_exercise.session_id,
+        **_debrief_args())
 
 
 @gym_bp.route('/gym/session/<int:session_id>/exercises/reorder', methods=['POST'])
@@ -1708,9 +1709,11 @@ def gym_reorder_session_exercises(session_id):
         return _mutation_response(
             session_, 'gym.session_detail', session_id=session_id)
     lock_sessions([session_id])
-    data = request.get_json(silent=True) or {}
-    order = data.get('order')
-    if order is None:
+    data = request.get_json(silent=True)
+    # A JSON body that is not {"order": [...]} is no order at all: a bare
+    # array used to reach `.get` and answer 500 (G-135).
+    order = data.get('order') if isinstance(data, dict) else None
+    if not isinstance(order, list):
         # The React island posts through the shared form path (postForm), so
         # the order arrives as one comma-joined field; the JSON body shape the
         # old inline script used stays accepted.

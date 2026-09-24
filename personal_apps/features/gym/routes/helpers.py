@@ -442,3 +442,16 @@ def _username(user_id):
 # test lives with the login check, which needs it too (auth.login_redirect);
 # the routes here read it under its old name.
 _wants_json = wants_json
+
+
+def _debrief_args():
+    """The query flag a redirect to the debrief carries on: ?just_finished,
+    which the "Routine aktualisieren" offer is gated on.
+
+    Only that one. The whole query string used to be passed on, so
+    `?session_id=` collided with url_for's own keyword (a 500) and `?_scheme=`
+    rewrote the redirect (G-135).
+    """
+    if 'just_finished' in request.args:
+        return {'just_finished': request.args['just_finished']}
+    return {}

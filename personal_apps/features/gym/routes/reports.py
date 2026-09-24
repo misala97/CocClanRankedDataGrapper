@@ -23,7 +23,7 @@ from features.gym.scope import (
     current_user_id, my_sessions,
 )
 from .helpers import (
-    DAYPART_NAMES, MONTH_NAMES, WEEKDAY_NAMES, WEEKDAY_SHORT,
+    DAYPART_NAMES, MONTH_NAMES, WEEKDAY_NAMES, WEEKDAY_SHORT, InvalidInput,
 )
 from .history import (
     _session_rest_entries, load_performed,
@@ -390,6 +390,33 @@ def gym_statistik():
                            payload_json=payload.model_dump(mode='json'))
 
 
+# More workouts than anyone exports at once, and fewer than a URL can carry.
+MAX_EXPORT_IDS = 1000
+
+
+def _export_ids(raw):
+    """The ids in `?ids=`, in order, each once.
+
+    An id is one to ten ASCII digits -- a database id, not whatever int()
+    happens to take: '²' passed isdigit() and then failed int(), and a
+    5000-digit id went past Python's limit for parsing one; both answered 500
+    (G-135). Anything else in the list is skipped, as a stray comma always was.
+    """
+    ids, seen = [], set()
+    for part in raw.split(','):
+        part = part.strip()
+        if not (part.isascii() and part.isdigit() and len(part) <= 10):
+            continue
+        value = int(part)
+        if value not in seen:
+            seen.add(value)
+            ids.append(value)
+    if len(ids) > MAX_EXPORT_IDS:
+        raise InvalidInput(
+            f'Zu viele Workouts auf einmal — höchstens {MAX_EXPORT_IDS} pro Export.')
+    return ids
+
+
 @gym_bp.route('/gym/export')
 @login_required
 def gym_export():
@@ -403,12 +430,7 @@ def gym_export():
     computation), each carrying replaces/replaced_by exercise names so a
     swap is fully traceable. The payload shape is schema v2 and lives in
     features/gym/export.py."""
-    ids_param = request.args.get('ids', '')
-    session_ids = []
-    for raw_id in ids_param.split(','):
-        raw_id = raw_id.strip()
-        if raw_id.isdigit():
-            session_ids.append(int(raw_id))
+    session_ids = _export_ids(request.args.get('ids', ''))
 
     sessions = (
         my_sessions()

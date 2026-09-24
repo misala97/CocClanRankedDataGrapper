@@ -20,7 +20,8 @@ from features.gym.scope import (
     current_user_id, my_sessions, my_templates, owned_session, owned_template,
 )
 from .helpers import (
-    _delete_session_and_links, _refuse_live_write_if_finished, _to_int, _to_name, _wants_json,
+    _debrief_args, _delete_session_and_links, _refuse_live_write_if_finished, _to_int, _to_name,
+    _wants_json,
 )
 from .workout import (
     _heute_payload, _mutation_response, _template_exercises_from_session,
@@ -140,12 +141,11 @@ def gym_toggle_deload(session_id):
     # rewrote every prescribed weight, and the screen went on showing the old
     # numbers until a manual reload.
     #
-    # Same reason as gym_update_set for carrying request.args: marking a
-    # finished workout as a deload dropped ?just_finished and took the
-    # template offer with it.
+    # Same reason as gym_update_set for carrying ?just_finished: marking a
+    # finished workout as a deload dropped it and took the template offer
+    # with it.
     return _mutation_response(
-        session_, 'gym.session_detail', session_id=session_.id,
-        **request.args.to_dict())
+        session_, 'gym.session_detail', session_id=session_.id, **_debrief_args())
 
 
 @gym_bp.route('/gym/session/<int:session_id>/summary')
@@ -155,7 +155,7 @@ def gym_session_summary(session_id):
     # Kept as a redirect: a finished workout is one page now, and this URL is
     # in browser history and bookmarks.
     return redirect(url_for('gym.session_detail', session_id=session_id,
-                            **request.args.to_dict()))
+                            **_debrief_args()))
 
 
 @gym_bp.route('/gym/session/<int:session_id>/delete', methods=['POST'])
