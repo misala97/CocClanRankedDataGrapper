@@ -151,7 +151,8 @@ def _chart_geometry(series, pr_e1rm=None):
     same_day = {}
     for entry in series:
         for point in entry['points']:
-            key = point['started_at'].date()
+            # The lifter's day: 00:30 in Berlin is still yesterday in UTC.
+            key = stats.to_local(point['started_at']).date()
             same_day.setdefault(key, []).append(point['started_at'])
     def _base_x(stamp):
         return CHART_PAD + ((stamp - first).total_seconds() / 86400.0) / days * (CHART_W - 2 * CHART_PAD)

@@ -2,16 +2,10 @@ import { useMemo, useRef, useState } from 'react'
 import type {
   ProgressionRow, StatistikPayload, TimelineRecord, TonnageMonth,
 } from './types'
-import { kg1, roundTo, signedWhole, volume as de, whole } from '../format'
+import { kg1, localParts, roundTo, shortDate, signedWhole, volume as de, whole } from '../format'
 import { morphFrom } from '../vt'
 
-/** Local time, from a naive-UTC timestamp. */
-const local = (iso: string) => new Date(`${iso}Z`)
 const pad = (n: number) => String(n).padStart(2, '0')
-const dmy = (iso: string) => {
-  const d = local(iso)
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
-}
 const signed1 = (n: number) => `${n >= 0 ? '+' : '-'}${kg1(Math.abs(n))}`
 const mmss = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${pad(seconds % 60)}`
@@ -52,7 +46,7 @@ function Record({ record, hit = false }: { record: TimelineRecord; hit?: boolean
   return (
     <a className={`rec${hit ? ' is-hit' : ''}`} href={`/gym/session/${record.session_id}`}
       onClick={morphFrom('session', '.rec__name')}>
-      <span className="rec__date">{dmy(record.started_at)}</span>
+      <span className="rec__date">{shortDate(record.started_at)}</span>
       <span className="rec__name">{record.name}</span>
       <span className="rec__val">
         {`${kg1(move.value)} ${unit} `}
@@ -126,11 +120,12 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sel, months])
 
-  // UTC getters, matching the server's month bucketing -- local time would
-  // shift a record logged near midnight into the neighbouring month's bar.
+  // The lifter's month, matching the server's bucketing (analytics.
+  // monthly_tonnage is local): a record logged at 00:30 on the 1st belongs
+  // to the new month's bar, where UTC still said the old one.
   const recordKey = (record: TimelineRecord) => {
-    const d = new Date(`${record.started_at}Z`)
-    return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`
+    const d = localParts(record.started_at)
+    return `${d.year}-${d.month}`
   }
   const allRecords = useMemo(
     () => [...payload.recent_records, ...payload.record_years.flatMap((b) => b.records)],
@@ -224,7 +219,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
       <section className="lede" aria-labelledby="lede-h">
         <span className="lede__main">
           <span className="lede__kick">
-            {`Seit ${dmy(totals.first_session!)} · ${span(totals.days_training!)}`}
+            {`Seit ${shortDate(totals.first_session!)} · ${span(totals.days_training!)}`}
           </span>
           <h1 className="lede__h" id="lede-h">
             Du hast <em>{`${de(totals.tonnage / 1000)} Tonnen`}</em> bewegt
@@ -243,7 +238,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
               <a href={`/gym/session/${totals.best_session.session_id}`}>
                 <b>{`${de(totals.best_session.volume)} kg`}</b>
               </a>
-              {` · ${dmy(totals.best_session.started_at)}`}
+              {` · ${shortDate(totals.best_session.started_at)}`}
             </>
           )}
         </span>
@@ -776,7 +771,7 @@ export function StatistikPage({ payload }: { payload: StatistikPayload }) {
                 <span className="prog__pct"
                   title={row.last_record_at === null
                     ? 'Noch nie über die erste Einheit hinaus'
-                    : `Letzter Rekord: ${dmy(row.last_record_at)}`}>
+                    : `Letzter Rekord: ${shortDate(row.last_record_at)}`}>
                   {`${row.sessions_since}`}
                 </span>
               </div>

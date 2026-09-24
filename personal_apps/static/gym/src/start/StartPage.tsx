@@ -9,20 +9,11 @@ import { MAX_NAME_CHARS } from '../setInput'
 import { useSheets, usePush } from '../session/stores'
 import { Sheet } from '../session/components/Sheet'
 import { Icon } from '../components/Icon'
-import { kg1 } from '../format'
+import { dayMonth, instant, kg1, shortDate } from '../format'
 import { morphFrom } from '../vt'
 
 const de = (value: number) => Math.round(value).toLocaleString('de-DE')
-const local = (iso: string) => new Date(`${iso}Z`)
 const pad = (n: number) => String(n).padStart(2, '0')
-const dmy = (iso: string) => {
-  const d = local(iso)
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
-}
-const dm = (iso: string) => {
-  const d = local(iso)
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.`
-}
 
 /** Elapsed since the running workout started. hh:mm:ss, as GymClock rendered it. */
 function useElapsed(startedAt: string): string {
@@ -31,7 +22,7 @@ function useElapsed(startedAt: string): string {
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
-  const total = Math.max(0, Math.floor((now - local(startedAt).getTime()) / 1000))
+  const total = Math.max(0, Math.floor((now - instant(startedAt).getTime()) / 1000))
   return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`
 }
 
@@ -71,7 +62,7 @@ function useRestCountdown(restEndsAt: string | null): string | null {
     return () => clearInterval(id)
   }, [restEndsAt])
   if (restEndsAt === null) return null
-  const left = local(restEndsAt).getTime() - now
+  const left = instant(restEndsAt).getTime() - now
   if (left <= 0 || left > MAX_REST_MS) return null
   const total = Math.ceil(left / 1000)
   return `${Math.floor(total / 60)}:${pad(total % 60)}`
@@ -173,7 +164,7 @@ function FirstRun({ onboarding, daysSinceLast, push, onEnablePush, onStartFree }
   if (last !== null) {
     const when = recency(daysSinceLast)
     const minutes = Math.floor(
-      (local(last.finished_at).getTime() - local(last.started_at).getTime()) / 60000)
+      (instant(last.finished_at).getTime() - instant(last.started_at).getTime()) / 60000)
     receipt = workouts > 1
       ? `${workouts} Workouts · zuletzt ${when.toLowerCase()}`
       : `${when.charAt(0).toUpperCase()}${when.slice(1)} · ${last.exercises} ${last.exercises === 1 ? 'Übung' : 'Übungen'} · ${minutes < 1 ? '< 1' : minutes} min`
@@ -380,7 +371,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
         <div className="start__row">
           <h1 className="start__h">Start</h1>
           <span className="start__sp" />
-          <span className="start__date">{dmy(payload.now)}</span>
+          <span className="start__date">{shortDate(payload.now)}</span>
         </div>
         <p className="start__pulse">
           {payload.consistency.days_since_last !== null ? (
@@ -627,14 +618,14 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                       <span key={week.week_start}
                         className={`vbar${week.is_current ? ' is-live' : ''}${week.has_deload ? ' vbar--deload' : ''}`}
                         role="listitem"
-                        aria-label={`${week.is_current ? 'Diese Woche' : `Woche ab ${dm(week.week_start)}`}: ${de(week.volume)} kg${week.has_deload ? ', mit Deload-Einheit' : ''}`}
+                        aria-label={`${week.is_current ? 'Diese Woche' : `Woche ab ${dayMonth(week.week_start)}`}: ${de(week.volume)} kg${week.has_deload ? ', mit Deload-Einheit' : ''}`}
                         style={{ blockSize: `${Math.round((week.volume / payload.tonnage_peak) * 1000) / 10}%` }} />
                     ))}
                   </div>
                   <div className="vbars__axis" aria-hidden="true">
                     {payload.tonnage.map((week) => (
                       <span key={week.week_start}>
-                        {week.is_current ? 'Jetzt' : dm(week.week_start)}
+                        {week.is_current ? 'Jetzt' : dayMonth(week.week_start)}
                       </span>
                     ))}
                   </div>
@@ -703,7 +694,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
               </div>
               {payload.recent_sessions.length > 0 ? payload.recent_sessions.map((s) => {
                 const minutes = Math.floor(
-                  (local(s.finished_at).getTime() - local(s.started_at).getTime()) / 60000)
+                  (instant(s.finished_at).getTime() - instant(s.started_at).getTime()) / 60000)
                 return (
                   <a className="row" href={`/gym/session/${s.session_id}`} key={s.session_id}
                     onClick={morphFrom('session')}>
@@ -712,7 +703,7 @@ export function StartPage({ payload: initial }: { payload: HeutePayload }) {
                       <span className="row__meta">
                         {/* Sub-minute sessions printed "0 min" -- same guard as
                             Verlauf's rows. */}
-                        {`${dmy(s.started_at)} · ${minutes < 1 ? '< 1' : minutes} min${s.is_deload ? ' · Deload' : ''}`}
+                        {`${shortDate(s.started_at)} · ${minutes < 1 ? '< 1' : minutes} min${s.is_deload ? ' · Deload' : ''}`}
                       </span>
                     </span>
                     <span className="row__trail row__trail--stack">

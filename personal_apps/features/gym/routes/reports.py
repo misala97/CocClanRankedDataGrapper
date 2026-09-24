@@ -252,6 +252,18 @@ def _progression_view(ranking):
     return out
 
 
+def _year_bands(records):
+    """Records, newest first, folded into one band per year -- the lifter's
+    year: 00:30 on New Year's Day in Berlin is still 31 December in UTC."""
+    bands = []
+    for record in records:
+        year = stats.to_local(record['started_at']).year
+        if not bands or bands[-1]['year'] != year:
+            bands.append({'year': year, 'records': []})
+        bands[-1]['records'].append(record)
+    return bands
+
+
 def _longest_break_days(session_dates, now):
     """The longest run of days without a workout, the one still going included.
 
@@ -314,12 +326,7 @@ def gym_statistik():
     RECENT_RECORDS = 12
     records = analytics.record_timeline(performed)
     recent_records = records[:RECENT_RECORDS]
-    record_years = []
-    for record in records[RECENT_RECORDS:]:
-        year = record['started_at'].year
-        if not record_years or record_years[-1]['year'] != year:
-            record_years.append({'year': year, 'records': []})
-        record_years[-1]['records'].append(record)
+    record_years = _year_bands(records[RECENT_RECORDS:])
 
     # Gaps are built PER SESSION and then concatenated, never across the whole
     # history at once: rest_gaps() measures consecutive pairs, and two different

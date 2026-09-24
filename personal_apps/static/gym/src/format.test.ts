@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { kg1, roundTo, shortDate, signedWhole, volume, whole } from './format'
+import { dayMonth, kg1, localParts, roundTo, shortDate, signedWhole, volume, whole } from './format'
 
 describe('kg1', () => {
   it('uses a comma', () => {
@@ -85,5 +85,35 @@ describe('roundTo', () => {
 describe('shortDate', () => {
   it('renders dd.MM.yyyy regardless of the browser locale', () => {
     expect(shortDate('2026-08-09T18:00:00')).toBe('09.08.2026')
+  })
+
+  // G-032 / G-052: timestamps arrive naive-UTC. Read as the browser's local
+  // time, 00:10 on 23 September in Berlin printed as the 22nd.
+  it('reads a naive timestamp as UTC and dates it in Berlin', () => {
+    expect(shortDate('2026-09-22T22:10:41')).toBe('23.09.2026')
+  })
+
+  it('knows winter time', () => {
+    expect(shortDate('2026-01-01T23:30:00')).toBe('02.01.2026')
+    expect(shortDate('2026-01-01T22:30:00')).toBe('01.01.2026')
+  })
+
+  it('leaves a stamp that names its zone alone', () => {
+    expect(shortDate('2026-09-22T22:10:41Z')).toBe('23.09.2026')
+    expect(shortDate('2026-09-23T00:10:41+02:00')).toBe('23.09.2026')
+  })
+})
+
+describe('dayMonth', () => {
+  it('is shortDate without the year', () => {
+    expect(dayMonth('2026-09-22T22:10:41')).toBe('23.09.')
+  })
+})
+
+describe('localParts', () => {
+  it('gives the Berlin wall clock, Monday first', () => {
+    // Wednesday 23 September, 00:10 in Berlin.
+    expect(localParts('2026-09-22T22:10:41')).toEqual(
+      { year: 2026, month: 9, day: 23, hour: 0, minute: 10, weekday: 2 })
   })
 })

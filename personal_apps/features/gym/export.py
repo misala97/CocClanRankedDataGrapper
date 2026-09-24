@@ -133,7 +133,8 @@ def build_payload(sessions, requested_session_ids, exported_at, setups):
     Every exported session is the requester's own, so one `setups` map
     (exercise id to Setup) covers them all.
     """
-    dates = sorted(s.started_at.date() for s in sessions)
+    # Days the lifter trained on, so local; the stamps inside stay UTC with a Z.
+    dates = sorted(stats.to_local(s.started_at).date() for s in sessions)
     return {
         'schema_version': SCHEMA_VERSION,
         'exported_at': _stamp(exported_at),

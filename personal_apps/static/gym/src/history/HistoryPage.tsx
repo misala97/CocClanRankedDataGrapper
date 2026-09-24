@@ -2,12 +2,10 @@ import { Fragment, useMemo } from 'react'
 import type { HistoryEntry, HistoryPayload } from './types'
 import { useHistoryUi } from './store'
 import { Icon } from '../components/Icon'
+import { instant, localParts } from '../format'
 import { morphFrom } from '../vt'
 
 const de = (value: number) => Math.round(value).toLocaleString('de-DE')
-
-/** Local time, from a naive-UTC timestamp. */
-const local = (iso: string) => new Date(`${iso}Z`)
 
 function Row({ entry, weekdayShort }: {
   entry: HistoryEntry
@@ -18,13 +16,13 @@ function Row({ entry, weekdayShort }: {
   const toggle = useHistoryUi((s) => s.toggle)
   const needle = useHistoryUi((s) => s.query).trim().toLowerCase()
 
-  const started = local(entry.started_at)
+  const started = localParts(entry.started_at)
   const pad = (n: number) => String(n).padStart(2, '0')
-  // Monday-first, matching WEEKDAY_SHORT. getDay() is Sunday-first.
-  const weekday = weekdayShort[(started.getDay() + 6) % 7]
+  const weekday = weekdayShort[started.weekday]
   const minutes = entry.finished_at === null
     ? 0
-    : Math.floor((local(entry.finished_at).getTime() - started.getTime()) / 60000)
+    : Math.floor(
+      (instant(entry.finished_at).getTime() - instant(entry.started_at).getTime()) / 60000)
   const name = entry.name ?? 'Workout'
 
   return (
@@ -44,7 +42,7 @@ function Row({ entry, weekdayShort }: {
             for, and the band above already states the month. Sub-minute
             sessions printed "0 min" on 10 of 27 rows. */}
         <span className="row__meta">
-          {`${weekday} · ${pad(started.getDate())}.${pad(started.getMonth() + 1)}. · ${pad(started.getHours())}:${pad(started.getMinutes())} · ${minutes < 1 ? '< 1' : minutes} min`}
+          {`${weekday} · ${pad(started.day)}.${pad(started.month)}. · ${pad(started.hour)}:${pad(started.minute)} · ${minutes < 1 ? '< 1' : minutes} min`}
         </span>
         {/* The roster is clipped on essentially every row. While a search
             runs, matching exercises float to the FRONT of the line (stable
@@ -121,7 +119,7 @@ export function HistoryPage({ payload }: { payload: HistoryPayload }) {
   const pickWithin = (days: number | null) => {
     const cutoff = days === null ? null : Date.now() - days * 86_400_000
     replaceSelection(visible.flatMap(({ entries }) => entries
-      .filter((e) => cutoff === null || local(e.started_at).getTime() >= cutoff)
+      .filter((e) => cutoff === null || instant(e.started_at).getTime() >= cutoff)
       .map((e) => e.session_id)))
   }
 

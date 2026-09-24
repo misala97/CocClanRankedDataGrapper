@@ -4,7 +4,7 @@ import type {
   FinishedExercise, FinishedPayload, RecordKind, SessionRecord,
 } from './types'
 import { postForm, MutationFailed } from '../api'
-import { kg1, volume as de } from '../format'
+import { dayMonth, instant, kg1, localParts, shortDate, volume as de } from '../format'
 import {
   BODYWEIGHT_MAX_KG, BODYWEIGHT_MIN_KG, MAX_NAME_CHARS, MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG,
 } from '../setInput'
@@ -17,17 +17,7 @@ const KINDS: Record<RecordKind, string> = {
   weight: 'Gewichts', e1rm: 'e1RM', volume: 'Volumen',
 }
 
-/** Local time, from a naive-UTC timestamp. */
-const local = (iso: string) => new Date(`${iso}Z`)
 const pad = (n: number) => String(n).padStart(2, '0')
-const dmy = (iso: string) => {
-  const d = local(iso)
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
-}
-const dm = (iso: string) => {
-  const d = local(iso)
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.`
-}
 const signed = (pct: number) => `${pct >= 0 ? '+' : '-'}${Math.abs(pct)}`
 
 /** Floor-to-minutes alone prints "0 Minuten" for any real duration under a
@@ -161,10 +151,8 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
     }
 
   const elapsed = Math.floor(
-    (local(session.finished_at).getTime() - local(session.started_at).getTime()) / 60000)
-  // Monday-first, matching WEEKDAY_SHORT. getDay() is Sunday-first.
-  const started = local(session.started_at)
-  const weekday = payload.weekday_short[(started.getDay() + 6) % 7]
+    (instant(session.finished_at).getTime() - instant(session.started_at).getTime()) / 60000)
+  const weekday = payload.weekday_short[localParts(session.started_at).weekday]
 
   // Counted from the ticks themselves. Only a WEIGHT record earns a gold tick
   // (a set can honestly carry that and nothing else), but the label counted
@@ -184,7 +172,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
         <span className="session-top__name stack">
           <h1 className="finished__name" style={{ viewTransitionName: 'session' }}>{session.name ?? 'Workout'}</h1>
           <span className="finished__when">
-            {`${weekday} · ${dmy(session.started_at)} · ${minutes(elapsed)}`}
+            {`${weekday} · ${shortDate(session.started_at)} · ${minutes(elapsed)}`}
           </span>
           {/* Measured, not planned. Absent for every session logged before
               completed_at existed, and silent rather than zero in that case.
@@ -248,7 +236,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
               Letztes Mal{' '}
               <a href={`/gym/session/${payload.previous_session.id}`}>
                 <b>{`${de(payload.previous_session.volume)} kg`}</b>
-                {` am ${dm(payload.previous_session.started_at)}`}
+                {` am ${dayMonth(payload.previous_session.started_at)}`}
               </a>
               {payload.avg_total_volume !== null && (
                 <> · Schnitt <b>{`${de(payload.avg_total_volume)} kg`}</b></>
@@ -303,7 +291,7 @@ export function FinishedPage({ payload: initial }: { payload: FinishedPayload })
             <span className="record-flare__unit">kg</span>
           </div>
           <div className="record-flare__prev">
-            {`vorher ${kg1(lead.previous)} kg · ${dmy(lead.previous_at)} · als ${lead.position}. Übung`}
+            {`vorher ${kg1(lead.previous)} kg · ${shortDate(lead.previous_at)} · als ${lead.position}. Übung`}
           </div>
         </a>
       )}

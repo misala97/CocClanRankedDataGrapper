@@ -353,6 +353,15 @@ def test_range_derives_from_the_sessions_actually_exported():
     assert len(payload['sessions']) == 2
 
 
+def test_range_names_the_lifters_day_not_utcs():
+    """00:30 on 6 August in Berlin is 22:30 on the 5th in UTC. The range names
+    the day the workout happened on (G-129); the stamps stay UTC with a Z."""
+    night = _session(id=34, started_at=dt.datetime(2026, 8, 5, 22, 30))
+    payload = export.build_payload([night], [34], dt.datetime(2026, 8, 6, 18, 0), SETUPS)
+    assert payload['range'] == {'from': '2026-08-06', 'to': '2026-08-06'}
+    assert payload['sessions'][0]['started_at'] == '2026-08-05T22:30:00Z'
+
+
 def test_empty_selection_still_carries_every_key():
     payload = export.build_payload([], [], dt.datetime(2026, 8, 6, 18, 0), {})
     assert set(payload) == {'schema_version', 'exported_at', 'range',

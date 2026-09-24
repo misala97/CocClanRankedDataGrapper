@@ -133,7 +133,9 @@ def monthly_tonnage(rows, now):
 
     first = stats.to_local(min(row.started_at for row in rows))
     year, month = first.year, first.month
-    last = (now.year, now.month)
+    # `now` is UTC too: on the 1st before 02:00 it is still last month there.
+    today = stats.to_local(now)
+    last = (today.year, today.month)
 
     out = []
     while (year, month) <= last:

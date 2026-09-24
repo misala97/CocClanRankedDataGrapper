@@ -997,6 +997,14 @@ def test_monthly_tonnage_sums_volume_and_counts_deloads():
     assert months[0]['has_deload'] is True
 
 
+def test_monthly_tonnage_runs_to_the_local_month():
+    """00:30 on 1 April in Berlin is still 31 March in UTC; the strip ended a
+    month short until 02:00 (G-129)."""
+    rows = [perf([(100.0, 10)], started_at=dt.datetime(2026, 3, 5), session_id=1)]
+    months = analytics.monthly_tonnage(rows, dt.datetime(2026, 3, 31, 22, 30))
+    assert [(m['year'], m['month']) for m in months] == [(2026, 3), (2026, 4)]
+
+
 def test_monthly_tonnage_crosses_a_year_boundary():
     rows = [perf([(100.0, 10)], started_at=dt.datetime(2025, 11, 5), session_id=1)]
     months = analytics.monthly_tonnage(rows, dt.datetime(2026, 2, 1))

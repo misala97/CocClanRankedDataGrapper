@@ -60,13 +60,60 @@ export function signedWhole(value: number): string {
   return `${value >= 0 ? '+' : '-'}${rounded}`
 }
 
+/** A stored timestamp as an instant. They are naive UTC throughout this app,
+ *  so a string that names no zone is UTC -- never the browser's local time,
+ *  which is what `new Date()` assumes and what printed 00:10 on the 23rd as
+ *  the 22nd (G-032, G-052). */
+export function instant(iso: string): Date {
+  return new Date(/(?:Z|[+-]\d\d:?\d\d)$/i.test(iso) ? iso : `${iso}Z`)
+}
+
+/** The server's calendar zone (stats.LOCAL_TZ). Dates are read there whatever
+ *  zone the device is in: the server files weeks and months by it, and a date
+ *  printed in any other zone can disagree with its own bucket. */
+const ZONE = 'Europe/Berlin'
+
+const WALL_CLOCK = new Intl.DateTimeFormat('en-GB', {
+  timeZone: ZONE, year: 'numeric', month: 'numeric', day: 'numeric',
+  hour: 'numeric', minute: 'numeric', hourCycle: 'h23', weekday: 'short',
+})
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+export interface LocalParts {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  /** Monday first, matching WEEKDAY_SHORT: 0 is Monday. */
+  weekday: number
+}
+
+/** `x|local`: the wall clock in Berlin at a stored timestamp. */
+export function localParts(iso: string): LocalParts {
+  const part: Record<string, string> = {}
+  for (const { type, value } of WALL_CLOCK.formatToParts(instant(iso))) part[type] = value
+  return {
+    year: Number(part.year), month: Number(part.month), day: Number(part.day),
+    hour: Number(part.hour), minute: Number(part.minute),
+    weekday: WEEKDAYS.indexOf(part.weekday ?? ''),
+  }
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
 /** `(x|local).strftime('%d.%m.%Y')`
  *
- *  Built from the local-time parts rather than toLocaleDateString, which
+ *  Built from the wall-clock parts rather than toLocaleDateString, which
  *  varies with the browser's locale settings -- the app renders German dates
  *  regardless of who is looking at it. */
 export function shortDate(iso: string): string {
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
+  const d = localParts(iso)
+  return `${pad(d.day)}.${pad(d.month)}.${d.year}`
+}
+
+/** `(x|local).strftime('%d.%m.')` */
+export function dayMonth(iso: string): string {
+  const d = localParts(iso)
+  return `${pad(d.day)}.${pad(d.month)}.`
 }
