@@ -5,10 +5,13 @@ test_showoff.py does, and upstream HTTP is replaced by recorded fixtures.
 """
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import requests
 
+import auth
+from app import app as flask_app, FULL_ACCESS_HOST
 from features.barcode import codes, sources
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'barcode'
@@ -331,3 +334,78 @@ def test_dnb_failures_raise_instead_of_claiming_not_found(monkeypatch, failure):
     _fake_get(monkeypatch, {DNB: failure})
     with pytest.raises(sources.UpstreamError):
         sources.lookup('9783423282390')
+
+
+# --- routes and access -----------------------------------------------------------
+
+def _as(monkeypatch, role):
+    user = None if role == 'anonymous' else SimpleNamespace(is_admin=role == 'admin')
+    monkeypatch.setattr(auth, 'current_user', lambda: user)
+
+
+def _get(path, host=FULL_ACCESS_HOST):
+    with flask_app.test_client() as client:
+        return client.get(path, base_url=f'https://{host}')
+
+
+@pytest.mark.parametrize('host', ['localhost', FULL_ACCESS_HOST])
+@pytest.mark.parametrize('path', ['/barcode/', '/barcode/api/4001686301265'])
+def test_anonymous_is_sent_to_login(monkeypatch, host, path):
+    _as(monkeypatch, 'anonymous')
+    response = _get(path, host)
+    assert response.status_code == 302
+    assert response.location.endswith('/login')
+
+
+@pytest.mark.parametrize('host', ['localhost', FULL_ACCESS_HOST])
+@pytest.mark.parametrize('path', ['/barcode/', '/barcode/api/4001686301265'])
+def test_members_are_refused(monkeypatch, host, path):
+    _as(monkeypatch, 'member')
+    assert _get(path, host).status_code == 403
+
+
+def test_admin_gets_the_page(monkeypatch):
+    _as(monkeypatch, 'admin')
+    response = _get('/barcode/')
+    assert response.status_code == 200
+    assert b'id="barcode-app"' in response.data
+
+
+@pytest.mark.parametrize('role, visible', [('admin', True), ('member', False)])
+def test_hub_card_is_admin_only(monkeypatch, role, visible):
+    _as(monkeypatch, role)
+    hub = _get('/')
+    assert hub.status_code == 200
+    assert (b'href="/barcode/"' in hub.data) is visible
+
+
+def test_api_rejects_a_bad_code_without_asking_upstream(monkeypatch):
+    _as(monkeypatch, 'admin')
+    asked = []
+    monkeypatch.setattr(sources, 'lookup', asked.append)
+    response = _get('/barcode/api/4001686301266')
+    assert response.status_code == 400
+    assert 'Ungültiger Code' in response.get_json()['error']
+    assert asked == []
+
+
+def test_api_answers_with_the_normalized_code(monkeypatch):
+    _as(monkeypatch, 'admin')
+    monkeypatch.setattr(sources, 'lookup', lambda code: {'code': code, 'found': True})
+    response = _get('/barcode/api/036000291452')
+    assert response.status_code == 200
+    assert response.get_json() == {'code': '0036000291452', 'found': True}
+
+
+def test_api_reports_an_unreachable_database(monkeypatch):
+    _as(monkeypatch, 'admin')
+
+    def down(code):
+        raise sources.UpstreamError('timeout')
+
+    monkeypatch.setattr(sources, 'lookup', down)
+    response = _get('/barcode/api/4001686301265')
+    assert response.status_code == 502
+    body = response.get_json()
+    assert body['code'] == '4001686301265'
+    assert 'nicht erreichbar' in body['error']

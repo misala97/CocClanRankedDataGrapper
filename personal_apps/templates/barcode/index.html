@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d14">
+  <title>Barcode · Personal Apps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='barcode/barcode.css') }}">
+  <script type="module" src="{{ url_for('static', filename='barcode/barcode.js') }}"></script>
+</head>
+<body>
+  <main id="barcode-app" class="app">
+    <header class="top">
+      <a class="home" href="/" aria-label="Zurück zu Personal Apps">←</a>
+      <h1>Barcode</h1>
+    </header>
+
+    <section class="scanner" aria-label="Kamera">
+      <div class="viewfinder">
+        <video id="cam" playsinline muted></video>
+        <div class="aim" aria-hidden="true"></div>
+        <button id="start" class="start" type="button">Kamera starten</button>
+        <button id="torch" class="torch" type="button" aria-pressed="false" hidden>Licht</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite">Barcode vor die Kamera halten – Nummer geht auch.</p>
+    </section>
+
+    <form id="manual" class="manual" autocomplete="off">
+      <label for="code" class="visually-hidden">Nummer unter dem Barcode</label>
+      <input id="code" name="code" inputmode="numeric" maxlength="20" placeholder="Nummer eintippen" enterkeyhint="search">
+      <button type="submit">Suchen</button>
+    </form>
+
+    <section id="result" class="result" aria-live="polite"></section>
+
+    <section id="recent-section" class="recent" hidden>
+      <h2>Zuletzt gescannt</h2>
+      <ol id="recent"></ol>
+    </section>
+  </main>
+</body>
+</html>
