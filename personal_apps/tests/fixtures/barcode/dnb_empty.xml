@@ -1,2 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/"><version>1.1</version><numberOfRecords>0</numberOfRecords><records/><echoedSearchRetrieveRequest><version>1.1</version><query>isbn=9780000000002</query><xQuery xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/><maximumRecords>1</maximumRecords><recordSchema>oai_dc</recordSchema></echoedSearchRetrieveRequest></searchRetrieveResponse>

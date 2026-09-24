@@ -66,7 +66,6 @@ from features.quizbank.routes import quizbank_bp
 from features.gym.routes import gym_bp
 from features.radar.routes import radar_bp
 from features.showoff.routes import showoff_bp
-from features.barcode.routes import barcode_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(pubquiz_bp)
@@ -75,7 +74,6 @@ app.register_blueprint(quizbank_bp)
 app.register_blueprint(gym_bp)
 app.register_blueprint(radar_bp)
 app.register_blueprint(showoff_bp)
-app.register_blueprint(barcode_bp)
 
 # A timing line per request, keyed by route template, and radar.board's read
 # lines on stdout beside it. Registers nothing unless PERSONAL_REQUEST_TIMING_LOG
@@ -239,12 +237,6 @@ APPS = [
         'description': 'Stocks people have suddenly started talking about.',
         'icon': '📡',
         'url': '/radar/',
-    },
-    {
-        'name': 'Barcode Scanner',
-        'description': 'Produkt scannen: Nährwerte, Zutaten, Allergene, Bücher.',
-        'icon': '🏷️',
-        'url': '/barcode/',
     },
 ]
 
