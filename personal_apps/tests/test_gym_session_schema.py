@@ -32,7 +32,7 @@ def _minimal():
             'mirrored': False,
             'is_unilateral': False, 'rest_seconds': 90, 'rest_setting': 150,
             'rest_setting_mine': True, 'increment': 2.5,
-            'notes': None, 'pain': False,
+            'notes': None, 'pain': False, 'picture': None,
             'sets': [{
                 'id': 100, 'weight': 60.0, 'reps': 8, 'completed': False,
                 'base_weight': None,

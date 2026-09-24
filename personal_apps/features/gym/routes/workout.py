@@ -19,7 +19,7 @@ from models import (
     SessionExercise, SessionSet, PendingPush, SharedSession, MUSCLE_GROUPS,
 )
 from auth import login_required
-from features.gym import stats
+from features.gym import art, stats
 from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
 from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
 from features.gym.exercises import (
@@ -756,6 +756,7 @@ def _session_payload(session_):
             'increment': stats.resolve_increment(setup.weight_increment, se.exercise.is_unilateral),
             'notes': se.notes,
             'pain': se.pain,
+            'picture': art.picture_url(se.exercise.library_key),
             'sets': [{
                 'id': s.id, 'weight': s.weight, 'reps': s.reps,
                 'completed': s.completed, 'base_weight': s.base_weight,

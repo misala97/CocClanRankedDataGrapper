@@ -30,6 +30,35 @@ describe('LivePanel', () => {
     expect(useSheets.getState().openId).toBe(`sheet-ex-${live.id}`)
   })
 
+  it('shows the drawing beside the name, a tap from the sheet with it whole', async () => {
+    // Round 4: the small tile, not a band across the card.
+    const user = userEvent.setup()
+    expect(live.picture).not.toBeNull()
+    render(<LivePanel payload={payload} {...handlers()} />)
+    const tile = screen.getByRole('button', { name: `${live.name} — Bild` })
+    expect(tile).toHaveClass('pic', 'pic--live')
+    expect(tile.querySelector('img')).toHaveAttribute('src', live.picture)
+    expect(tile.closest('.live__title')!.querySelector('h2')).toHaveTextContent(live.name)
+
+    await user.click(tile)
+    expect(useSheets.getState().openId).toBe(`sheet-ex-${live.id}`)
+  })
+
+  it('holds the drawing\'s place with the dumbbell until there is one', () => {
+    // Not a button then: the sheet it would open has no picture to show.
+    const undrawn: SessionDetailPayload = {
+      ...payload,
+      visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === live.id ? { ...se, picture: null } : se),
+    }
+    const { container } = render(<LivePanel payload={undrawn} {...handlers()} />)
+    expect(screen.queryByRole('button', { name: `${live.name} — Bild` })).toBeNull()
+    const tile = container.querySelector('.live__title .pic--live.pic--none')!
+    expect(tile).toHaveAttribute('aria-hidden', 'true')
+    expect(tile.querySelector('svg.icon-dumbbell')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: live.name })).toBeInTheDocument()
+  })
+
   it('prefills the steppers from the pending set', () => {
     const next = live.sets.find((s) => !s.completed)!
     render(<LivePanel payload={payload} {...handlers()} />)

@@ -46,6 +46,23 @@ function open(props: Partial<Parameters<typeof ExerciseSheet>[0]> = {}) {
 }
 
 describe('ExerciseSheet', () => {
+  it('opens with the drawing on top, named for a screen reader', () => {
+    // Round 4: the live card's tile opens this sheet to show it whole.
+    expect(exercise.picture).not.toBeNull()
+    open()
+    // The movement's drawing (review): "Bankdrücken", not the Kurzhantel entry.
+    const img = screen.getByRole('img', { name: 'Zeichnung: Bankdrücken' })
+    expect(img).toHaveAttribute('src', exercise.picture)
+    const body = img.closest('.sheet__body')!
+    expect(body.firstElementChild).toHaveClass('pic-full')
+  })
+
+  it('leaves the picture out while the exercise has none', () => {
+    const { container } = open({ exercise: { ...exercise, picture: null } })
+    expect(container.ownerDocument.querySelector('.pic-full')).toBeNull()
+    expect(screen.getByText('Pause heute')).toBeInTheDocument()
+  })
+
   it("keeps today's rest apart from the settings that hold for every workout", () => {
     // Two rest fields side by side read as one. Today's is here; the lifter's
     // settings are one level down, and the row says they always apply.

@@ -1,4 +1,5 @@
 import datetime as dt
+import mimetypes
 import os
 import re
 import secrets
@@ -17,6 +18,11 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("PERSONAL_DB_NAME", "personal_apps")
 
 app = Flask(__name__)
+
+# The gym's exercise drawings are .webp, a type Python only knows from 3.13
+# on (and Windows' registry may not either): without this the static route
+# sends them as application/octet-stream, under nosniff.
+mimetypes.add_type('image/webp', '.webp')
 
 _secret_key = os.getenv("PERSONAL_SECRET_KEY")
 if not _secret_key:
@@ -91,6 +97,9 @@ app.jinja_env.globals['vite_asset_css'] = resolve_asset_css
 
 
 _HASHED_ASSET_PATH = re.compile(r'^/static/[^/]+/dist/assets/')
+# The gym's exercise drawings keep their names; their URLs carry the file's
+# hash instead (features/gym/art.py), so only a request that names one is.
+_HASHED_BY_QUERY_PATH = re.compile(r'^/static/gym/art/[^/]+\.webp$')
 
 
 @app.after_request
@@ -104,7 +113,8 @@ def _immutable_hashed_assets(response):
     # Matched by shape rather than by a list of features, so a new feature's
     # bundles are covered the day it builds instead of the day someone
     # remembers this line.
-    if _HASHED_ASSET_PATH.match(request.path):
+    if _HASHED_ASSET_PATH.match(request.path) or (
+            _HASHED_BY_QUERY_PATH.match(request.path) and request.args.get('v')):
         # Werkzeug's static handler has already written no-cache; clear it
         # rather than appending after it.
         response.cache_control.no_cache = None

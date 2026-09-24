@@ -5,6 +5,7 @@ import { useSaveState } from '../stores'
 import {
   MAX_NOTE_CHARS, MAX_REPS, MAX_WEIGHT_KG, parseSetInput, setInputProblem,
 } from '../../setInput'
+import { Drawing, movementOf } from './Picture'
 import { Sheet } from './Sheet'
 import { Icon } from '../../components/Icon'
 import { Choice } from '../../settings/Choice'
@@ -91,6 +92,14 @@ export function ExerciseSheet({
 
   return (
     <Sheet id={`sheet-ex-${exercise.id}`} title={exercise.name}>
+      {/* The drawing, whole (round 4): the live card's tile opens this sheet.
+          Nothing in its place while there is none -- a plate with a dumbbell
+          this size would only push the settings down. */}
+      {exercise.picture !== null && (
+        <div className="pic-full">
+          <Drawing src={exercise.picture} alt={`Zeichnung: ${movementOf(exercise.name)}`} />
+        </div>
+      )}
       {/* Today's rest, from the one in force: the setting's value is marked
           ("deine" or "Liste") and one tap away, and every tap saves. */}
       <div className="sheet__group">

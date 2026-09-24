@@ -65,6 +65,9 @@ export interface LiveExercise {
    *  default, so never null -- typed as a string once and the endpoint
    *  rejected its own payload. */
   pain: boolean
+  /** Where the exercise's drawing loads from, or null while it has none
+   *  (off the list, or not drawn yet): the page shows the placeholder. */
+  picture: string | null
   sets: LiveSet[]
 }
 

@@ -3,6 +3,7 @@ import type { LiveExercise } from '../types'
 import { useAnnouncer, useSheets, useWorkoutUi } from '../stores'
 import { Icon } from '../../components/Icon'
 import { kg1 } from '../../format'
+import { PictureTile } from './Picture'
 
 interface Props {
   exercises: LiveExercise[]
@@ -32,6 +33,10 @@ function loadSummary(se: LiveExercise, isLive: boolean): string {
 const DRAG_THRESHOLD = 8
 const SCROLL_EDGE = 80
 const SCROLL_SPEED = 16
+
+/** How long the row you were just handed carries .just-now: long enough for
+ *  gym.css's fade-in and the drawing's landing (--dur-3) to play, once. */
+export const HAND_OVER_MS = 400
 
 interface DragState {
   seId: number
@@ -74,6 +79,22 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
   const handleRefs = useRef(new Map<number, HTMLButtonElement>())
   const drag = useRef<DragState | null>(null)
   const pendingFocus = useRef<number | null>(null)
+
+  // The row the workout just moved on to, for as long as its arrival plays.
+  // Set during render from the previous live id, not in an effect: the class
+  // is on the row the same paint the wash moves, and the first render hands
+  // nothing over.
+  const [prevLive, setPrevLive] = useState(liveId)
+  const [handedTo, setHandedTo] = useState<number | null>(null)
+  if (liveId !== prevLive) {
+    setPrevLive(liveId)
+    setHandedTo(liveId)
+  }
+  useEffect(() => {
+    if (handedTo === null) return
+    const t = window.setTimeout(() => setHandedTo(null), HAND_OVER_MS)
+    return () => window.clearTimeout(t)
+  }, [handedTo])
 
   // Leaving the mode always discards a half-done drag.
   useEffect(() => {
@@ -303,6 +324,7 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
         const className = [
           'row queue__row',
           isLive ? 'is-now' : '',
+          isLive && handedTo === se.id ? 'just-now' : '',
           isDone ? 'is-done' : '',
           se.skipped ? 'is-skipped' : '',
           draggedId === se.id ? 'is-dragging' : '',
@@ -335,18 +357,18 @@ export function Queue({ exercises, liveId, onReorder }: Props) {
                 moveByKey(se, e.key)
               }}>⠿</button>
 
-            {/* Never colour alone: a tick for finished, a filled dot for the
-                one you are on, the slot number for one still ahead. The number
-                is the row's place in THIS list, not the stored position: that
-                can have holes (a workout from before removals closed them) or
-                twins, and "1, 3, 4" is not a sequence anyone can read. It also
-                keeps counting correctly while a row is mid-drag. */}
+            {/* The exercise's drawing for the one you are on and those still
+                ahead (round 4: it took the slot number's place -- the list's
+                own order says what the number said). A finished one keeps its
+                tick: done is the thing to know about it, and never by colour
+                alone. The row you are on keeps its bold name and its wash.
+                The drawing is aria-hidden, so the place a screen reader
+                used to hear from the number is said here instead. */}
             <span className="row__lead queue__lead">
-              {isLive
-                ? <span className="queue__now" aria-hidden="true" />
-                : isDone
-                  ? <span className="queue__mark"><Icon name="check" /></span>
-                  : index + 1}
+              <span className="sr-only">{`${index + 1}.`}</span>
+              {isDone && !isLive
+                ? <span className="queue__mark"><Icon name="check" /></span>
+                : <PictureTile src={se.picture} size="queue" />}
             </span>
 
             <button type="button" className="row__main"

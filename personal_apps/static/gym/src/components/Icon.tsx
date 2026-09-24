@@ -81,6 +81,13 @@ const PATHS = {
       <path d="M12.5 4.4l-.6 8.7a1.3 1.3 0 0 1-1.3 1.2H5.4a1.3 1.3 0 0 1-1.3-1.2l-.6-8.7" />
     </>
   ),
+  // Stands in for an exercise whose drawing is not made yet (round 4).
+  dumbbell: (
+    <>
+      <path d="M2.4 5.6v4.8M4.8 4v8M11.2 4v8M13.6 5.6v4.8" />
+      <path d="M4.8 8h6.4" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS

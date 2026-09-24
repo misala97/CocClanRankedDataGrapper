@@ -290,6 +290,9 @@ class LiveExercise(_Model):
     # default, so never None. Typed str here first and the endpoint rejected
     # its own payload the moment a real session was fed through it.
     pain: bool
+    #: Where the exercise's drawing loads from (art.picture_url), or None
+    #: while it has none -- off the list, or not drawn yet: the placeholder.
+    picture: str | None
     sets: list[LiveSet]
 
 

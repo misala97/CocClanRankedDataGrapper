@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { Queue } from './Queue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { HAND_OVER_MS, Queue } from './Queue'
 import { TickStrip } from './TickStrip'
 import { useAnnouncer, useSheets, useWorkoutUi } from '../stores'
 import { payload } from '../types.test-d'
@@ -12,6 +12,10 @@ beforeEach(() => {
   useWorkoutUi.setState(useWorkoutUi.getInitialState(), true)
   useAnnouncer.setState(useAnnouncer.getInitialState(), true)
 })
+
+// A test on fake timers that fails midway must not leave the rest on them:
+// userEvent waits on real ones, and every later test times out instead.
+afterEach(() => { vi.useRealTimers() })
 
 const exercises = payload.visible_exercises
 const liveId = payload.live_id
@@ -48,6 +52,33 @@ describe('Queue', () => {
     }
   })
 
+  it('still tells a screen reader each row\'s place, now that no number shows', () => {
+    // I1b review: the number was the only position cue, and the drawing that
+    // took its place is aria-hidden. The row's place in THIS list, as before.
+    const gappy = exercises.map((se, i) => ({ ...se, position: (i + 1) * 3 }))
+    const { container } = render(<Queue exercises={gappy} liveId={liveId} onReorder={noop} />)
+    const places = [...container.querySelectorAll('.queue__row .queue__lead .sr-only')]
+      .map((el) => el.textContent)
+    expect(places).toEqual(gappy.map((_, i) => `${i + 1}.`))
+  })
+
+  it('hands the wash to the next row with the drawing landing, once', () => {
+    // gym.css has carried .just-now since the Jinja screen; the port never
+    // set it (I1b review). Not on the first render: nothing was handed over.
+    vi.useFakeTimers()
+    const other = exercises.find((se) => se.id !== liveId)!
+    const { container, rerender } = render(
+      <Queue exercises={exercises} liveId={liveId} onReorder={noop} />)
+    expect(container.querySelector('.just-now')).toBeNull()
+
+    rerender(<Queue exercises={exercises} liveId={other.id} onReorder={noop} />)
+    expect(container.querySelector(`[data-se-id="${other.id}"]`)).toHaveClass('just-now')
+    expect(container.querySelectorAll('.just-now')).toHaveLength(1)
+
+    act(() => { vi.advanceTimersByTime(HAND_OVER_MS) })
+    expect(container.querySelector('.just-now')).toBeNull()
+  })
+
   it('marks the live row for assistive tech, not by colour alone', () => {
     render(<Queue exercises={exercises} liveId={liveId} onReorder={noop} />)
     const live = exercises.find((se) => se.id === liveId)!
@@ -55,39 +86,56 @@ describe('Queue', () => {
       .toHaveAttribute('aria-current', 'step')
   })
 
-  it('leads with a tick when finished, a dot when live, the slot number otherwise', () => {
+  it('leads with a tick when finished, the drawing when live or still ahead', () => {
+    // Round 4: the drawing took the slot number's place. Done keeps its tick
+    // -- done is the thing to know about it, and never by colour alone.
     const done: LiveExercise = {
       ...exercises[0]!, id: 90, name: 'Fertig', position: 4, skipped: false,
       sets: [{ id: 1, weight: 50, reps: 5, completed: true, base_weight: null }],
     }
+    const drawn = exercises.map((se) => ({ ...se, picture: `/static/gym/art/x-${se.id}.webp?v=1` }))
     const { container } = render(
-      <Queue exercises={[...exercises, done]} liveId={liveId} onReorder={noop} />)
+      <Queue exercises={[...drawn, done]} liveId={liveId} onReorder={noop} />)
     const row = container.querySelector('[data-se-id="90"]') as HTMLElement
-    // A finished exercise leads with the tick, not with its slot number.
     expect(row.querySelector('.queue__mark')).toBeInTheDocument()
-    expect(within(row).queryByText('4')).toBeNull()
+    expect(row.querySelector('.pic')).toBeNull()
 
-    // The live one leads with the dot instead.
     const live = container.querySelector(`[data-se-id="${liveId}"]`)!
-    expect(live.querySelector('.queue__now')).toBeInTheDocument()
+    expect(live.querySelector('.pic--queue img')!.getAttribute('src'))
+      .toBe(`/static/gym/art/x-${liveId}.webp?v=1`)
     expect(live.querySelector('.queue__mark')).toBeNull()
 
-    // One still ahead leads with its position.
-    const ahead = exercises.find((se) => se.id !== liveId)!
+    const ahead = drawn.find((se) => se.id !== liveId)!
     const aheadRow = container.querySelector(`[data-se-id="${ahead.id}"]`) as HTMLElement
-    expect(within(aheadRow).getByText(String(ahead.position))).toBeInTheDocument()
+    expect(aheadRow.querySelector('.pic--queue img')).toBeInTheDocument()
   })
 
-  it('numbers the rows by where they stand, not by the stored slot', () => {
-    // The stored position can have holes (a workout from before removals
-    // closed them) or twins (a substitute shares its hidden original's). What
-    // the lifter reads here is "third thing I will do", and that is the row's
-    // place in this list.
-    const gappy = exercises.map((se, i) => ({ ...se, skipped: false, position: (i + 1) * 3 }))
+  it('keeps the drawing on the live row once its last set is logged', () => {
+    // Everything logged, the last exercise stays live: it is still the one
+    // you are on, not a finished one further up.
+    const allDone = exercises.map((se) => ({
+      ...se, skipped: false, sets: se.sets.map((s) => ({ ...s, completed: true })),
+    }))
+    const { container } = render(<Queue exercises={allDone} liveId={liveId} onReorder={noop} />)
+    const live = container.querySelector(`[data-se-id="${liveId}"]`)!
+    expect(live.querySelector('.pic--queue')).toBeInTheDocument()
+    expect(live.querySelector('.queue__mark')).toBeNull()
+  })
+
+  it('draws the dumbbell for an exercise without a drawing, and shows no number', () => {
+    // The list's own order is the order; the stored slot never was (it can
+    // have holes or twins), and the row's place no longer needs spelling out
+    // on screen -- only to a screen reader (above).
+    const gappy = exercises.map((se, i) => ({
+      ...se, skipped: false, picture: null, position: (i + 1) * 3,
+    }))
     const { container } = render(<Queue exercises={gappy} liveId={liveId} onReorder={noop} />)
     const second = container.querySelector(`[data-se-id="${gappy[1]!.id}"]`) as HTMLElement
-    expect(within(second).getByText('2')).toBeInTheDocument()
-    expect(within(second).queryByText('6')).toBeNull()
+    expect(second.querySelector('.pic--queue.pic--none svg.icon-dumbbell')).toBeInTheDocument()
+    for (const lead of container.querySelectorAll('.queue__row .queue__lead')) {
+      const shown = [...lead.children].filter((el) => !el.classList.contains('sr-only'))
+      expect(shown.map((el) => el.textContent).join('')).toBe('')
+    }
   })
 
   it('summarises each row by what it is', () => {

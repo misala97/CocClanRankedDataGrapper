@@ -91,6 +91,11 @@
   --wash-live:   rgba(194, 65, 12, .10);
   --wash-record: rgba(240, 180, 41, .16);
   --wash-stall:  rgba(12, 115, 130, .10);
+  /* The exercise drawings' plate: make_art.py snaps each file's own
+     background to this colour, so plate and picture read as one surface.
+     Dark keeps it lit (dark ink on light) and dims both a little. */
+  --art-plate:   #EEE5F3;
+  --art-dim:     none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -132,6 +137,8 @@
     --wash-live:   rgba(255, 122, 77, .14);
     --wash-record: rgba(255, 200, 97, .14);
     --wash-stall:  rgba(95, 221, 236, .14);
+    --art-plate:   #D6CEDB;
+    --art-dim:     brightness(.9);
   }
 }
 
@@ -148,6 +155,7 @@ html[data-theme="light"] {
   --glow-record:0 10px 26px -14px rgba(240,180,41,.70);
   --lift:0 1px 2px rgba(41,18,56,.05), 0 10px 30px -16px rgba(41,18,56,.32);
   --wash-live:rgba(194,65,12,.10); --wash-record:rgba(240,180,41,.16); --wash-stall:rgba(12,115,130,.10);
+  --art-plate:#EEE5F3; --art-dim:none;
 }
 html[data-theme="dark"] {
   --ground:#241132; --chassis:#371B49; --raised:#1B0B26;
@@ -161,6 +169,7 @@ html[data-theme="dark"] {
   --glow-record:0 10px 26px -14px rgba(255,200,97,.55);
   --lift:0 2px 4px rgba(0,0,0,.40), 0 14px 34px -18px rgba(0,0,0,.85);
   --wash-live:rgba(255,122,77,.14); --wash-record:rgba(255,200,97,.14); --wash-stall:rgba(95,221,236,.14);
+  --art-plate:#D6CEDB; --art-dim:brightness(.9);
 }
 
 :root {
@@ -1734,6 +1743,33 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   letter-spacing: var(--track-name); line-height: 1.16; margin-top: 4px;
   text-wrap: balance;
 }
+
+/* ---- exercise pictures (round 4) ----
+   The drawing on its plate, or the dumbbell while there is none. Tiles fill
+   their square (the files are squares with their own margin); the sheet
+   shows the drawing whole. */
+.pic {
+  display: block; flex: none; overflow: hidden; padding: 0; border: 0;
+  border-radius: var(--r-inset); background: var(--art-plate);
+}
+.pic img, .pic-full img {
+  display: block; inline-size: 100%; block-size: 100%; filter: var(--art-dim);
+}
+.pic img { object-fit: cover; }
+.pic-full img { object-fit: contain; }
+button.pic { cursor: zoom-in; }
+.pic--live { inline-size: 72px; block-size: 72px; }
+.pic--queue { inline-size: 34px; block-size: 34px; border-radius: 9px; }
+.pic--none { display: grid; place-items: center; background: var(--raised); color: var(--dim); }
+.pic--none .icon { inline-size: 45%; block-size: 45%; }
+.live__title { display: flex; align-items: center; gap: var(--sp-3); margin-top: 4px; }
+/* Beside a 72px tile a long German compound ("Negativbankdrücken") is wider
+   than what is left at 320px: without these it pushed out of the card. */
+.live__title .live__name { margin-top: 0; min-inline-size: 0; overflow-wrap: anywhere; hyphens: auto; }
+.pic-full {
+  aspect-ratio: 1; margin-block: 0 var(--sp-2); overflow: hidden;
+  border-radius: var(--r-control); background: var(--art-plate);
+}
 .live__alldone { margin-top: var(--sp-4); font-size: var(--t-sm); color: var(--dim); line-height: 1.5; }
 /* An exercise added mid-workout has no sets yet. Same voice as __alldone --
    this is a note, not a state -- because the workspace below it is the real
@@ -2168,34 +2204,32 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 /* one line per exercise: the marker column and the load column both scan
    straight down, so the list reads as a table without being one */
 .queue__row { flex-wrap: nowrap; min-block-size: 46px; }
+/* the drawing's column: the tick of a finished row centres in it */
 .queue__lead {
-  inline-size: 22px; display: inline-flex; align-items: center; justify-content: center;
+  inline-size: 34px; display: inline-flex; align-items: center; justify-content: center;
   font-size: var(--t-meta); font-weight: var(--w-bold); color: var(--unlit);
 }
+.queue__row.is-skipped .pic { opacity: .5; }
 .queue__row .row__main { min-inline-size: 0; text-align: start; }
 .queue__row .row__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .queue__load {
   font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--unlit);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-/* the row you are on: warm ink, a filled dot, and a tinted row -- three
-   carriers, so it survives greyscale and a glance */
+/* the row you are on: a bold name, a warm "1/3" and a tinted row -- weight
+   and wording carry it too, so it survives greyscale and a glance */
 .queue__row.is-now { background: var(--wash-live); border-radius: var(--r-inset); padding-inline: var(--sp-2); }
 .queue__row.is-now .row__name { color: var(--ink); font-weight: var(--w-bold); }
 .queue__row.is-now .queue__load { color: var(--live-ink); font-weight: var(--w-bold); }
-.queue__now {
-  inline-size: 9px; block-size: 9px; border-radius: 50%; background: var(--live);
-  display: inline-block;
-}
 /* Finishing an exercise moves this wash one row down the list -- the only
    place on the screen that says which exercise you were just handed. It fades
    in on the new row rather than cutting, so the handover is followable; the
-   dot and the load column arrive with it. */
+   drawing lands and the load column arrives with it. */
 @keyframes queue-hand-over {
   from { background: color-mix(in oklab, var(--wash-live), transparent 100%); }
 }
 .queue__row.just-now { animation: queue-hand-over var(--dur-3) var(--ease-out); }
-.queue__row.just-now .queue__now { animation: set-land var(--dur-3) var(--ease); }
+.queue__row.just-now .queue__lead .pic { animation: set-land var(--dur-3) var(--ease); }
 /* The row IS the target. .row__main only wraps the name, so it measured 290x24
    inside a 46px row -- the lead marker and the trailing load are siblings, and
    a thumb landing on either got nothing. This is the only route to an

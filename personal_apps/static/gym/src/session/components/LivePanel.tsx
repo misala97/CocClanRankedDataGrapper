@@ -7,6 +7,7 @@ import { Icon } from '../../components/Icon'
 import { kg1, setsLine, shortDate, whenSaid } from '../../format'
 import { MAX_REPS, MAX_WEIGHT_KG, REPS_HINT, WEIGHT_HINT } from '../../setInput'
 import { REST_MAX, REST_NUDGE, clock } from '../../settings/values'
+import { Drawing, PictureTile } from './Picture'
 import { RecordTakeover } from './RecordTakeover'
 import { SetRow } from './SetRow'
 import { Stepper, type StepperHandle } from './Stepper'
@@ -275,7 +276,21 @@ export function LivePanel({
           <Icon name="more" />
         </button>
       </div>
-      <h2 className="live__name">{live.name}</h2>
+      {/* The drawing beside the name (round 4), a tap from the sheet that
+          shows it whole. Not drawn yet: the dumbbell, keeping the name where
+          it always is, and no second way into the sheet that has no picture. */}
+      <div className="live__title">
+        {live.picture !== null
+          ? (
+            <button type="button" className="pic pic--live"
+              aria-label={`${live.name} — Bild`}
+              onClick={() => openSheet(`sheet-ex-${live.id}`)}>
+              <Drawing src={live.picture} />
+            </button>
+          )
+          : <PictureTile src={null} size="live" />}
+        <h2 className="live__name">{live.name}</h2>
+      </div>
 
       {/* Above the workspace, not below it. This is advice about the numbers
           you are about to set, and it used to render under the 64px confirm
