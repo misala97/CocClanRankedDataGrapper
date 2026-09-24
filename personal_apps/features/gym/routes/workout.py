@@ -1842,7 +1842,10 @@ def gym_shift_rest(session_id):
     refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
         return refusal
-    now = dt.datetime.utcnow()
+    # Whole seconds, as the column stores them: MariaDB rounds a fraction
+    # to the nearest second, so a cap of now + 600 could land half a second
+    # past itself. The stamps compared against are whole seconds already.
+    now = dt.datetime.utcnow().replace(microsecond=0)
     if session_.rest_ends_at and session_.rest_ends_at > now:
         ends = session_.rest_ends_at + dt.timedelta(seconds=seconds)
         if seconds > 0:
@@ -1854,7 +1857,7 @@ def gym_shift_rest(session_id):
         _cancel_pending_push(session_)
         if ends <= now:
             # Over, as a skip leaves it: the band counts up from here.
-            session_.rest_ends_at = now.replace(microsecond=0)
+            session_.rest_ends_at = now
         else:
             session_.rest_ends_at = ends
             db.session.add(PendingPush(session_id=session_.id, fire_at=ends))
