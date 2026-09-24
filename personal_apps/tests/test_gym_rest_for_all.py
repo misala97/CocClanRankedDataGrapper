@@ -272,15 +272,14 @@ def test_finishing_writes_the_rest_in_force_into_the_rows(lifter, lifter_client)
 
 
 def test_a_workout_started_from_a_routine_follows_the_setting(lifter, lifter_client):
-    """The routine's old copy of a rest is not read, and the new rows hold
-    none: the setting decides, from the next set on."""
+    """A routine holds no rest (G-076), and the new rows hold none either:
+    the setting decides, from the next set on."""
     from extensions import db
     from models import TemplateExercise, WorkoutSession, WorkoutTemplate
     uid = lifter['user']
     with flask_app.app_context():
         template = WorkoutTemplate(name='pytest rest routine', user_id=uid)
-        template.exercises.append(TemplateExercise(exercise_id=lifter['curl'], position=1,
-                                                   rest_seconds=45))
+        template.exercises.append(TemplateExercise(exercise_id=lifter['curl'], position=1))
         db.session.add(template)
         db.session.commit()
         template_id = template.id
@@ -294,7 +293,8 @@ def test_a_workout_started_from_a_routine_follows_the_setting(lifter, lifter_cli
 
 
 def test_saving_a_routine_copies_no_rest(lifter, lifter_client):
-    from models import WorkoutTemplate
+    """A routine has nowhere to keep one: the column went with G-076."""
+    from models import TemplateExercise, WorkoutTemplate
     uid = lifter['user']
     with flask_app.app_context():
         session_id, _, _ = _workout(uid, [(lifter['curl'], 200)])
@@ -302,7 +302,8 @@ def test_saving_a_routine_copies_no_rest(lifter, lifter_client):
                        data={'template_name': 'pytest rest saved'})
     with flask_app.app_context():
         template = WorkoutTemplate.query.filter_by(user_id=uid).one()
-        assert [te.rest_seconds for te in template.exercises] == [None]
+        assert [te.exercise_id for te in template.exercises] == [lifter['curl']]
+        assert 'rest_seconds' not in TemplateExercise.__table__.columns
 
 
 def test_adding_an_exercise_mid_workout_stores_no_rest(lifter, lifter_client):

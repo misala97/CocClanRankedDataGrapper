@@ -31,6 +31,19 @@ def list_exercise(key='machine_fly'):
     return Exercise.query.filter_by(library_key=key).one()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_push(monkeypatch):
+    """No test reaches a push service, whatever the code under test does.
+
+    The development database is a copy of production's, subscriptions
+    included, so a test that invites the admin would buzz a real phone
+    (G-096). PERSONAL_PUSH_SENDING=off stops the app itself; this stops a run
+    on a machine without that line, or against code from before the switch.
+    Tests that check sending install their own stub over this one."""
+    from features.gym import push
+    monkeypatch.setattr(push, 'webpush', lambda *args, **kwargs: None)
+
+
 @pytest.fixture()
 def client():
     """Logged in as the author. The gym suites act as the admin throughout."""

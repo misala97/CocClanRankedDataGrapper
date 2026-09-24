@@ -22,6 +22,7 @@ from auth import (
 from features.gym.scope import (
     current_user_id, my_templates, owned_session,
 )
+from ..locking import lock_sessions, lock_user
 from .helpers import (
     _delete_session_and_links, _get_active_session, _to_int, _username,
 )
@@ -42,12 +43,24 @@ def gym_invite_partner(session_id):
     """
     session_ = owned_session(session_id)
     partner_id = request.form.get('partner_id', type=int)
+    # Checked and inserted under the workout's lock: a double tap used to run
+    # both halves past the check below, and the second insert hit the
+    # (session, partner) unique key -- a 500 (G-136). Now it waits, then
+    # finds the invite the first one made.
+    lock_sessions([session_id])
 
     if not partner_id or partner_id == current_user_id():
         flash('Kein Trainingspartner ausgewählt.', 'error')
         return redirect(url_for('gym.session_detail', session_id=session_.id))
     if session_.finished_at is not None:
         flash('Das Workout ist schon vorbei.', 'error')
+        return redirect(url_for('gym.session_detail', session_id=session_.id))
+    # A follower's workout follows the leader's order, and a third lifter
+    # invited from it followed a follower: the leader's changes reached only
+    # the first, and the mirror of a mirror drifted (G-085). The leader
+    # invites; a follower's screen offers no picker.
+    if sharing.is_live_follower(session_.id):
+        flash('Einladen kann nur, wer das gemeinsame Training leitet.', 'error')
         return redirect(url_for('gym.session_detail', session_id=session_.id))
 
     partner = db.session.get(AppUser, partner_id)
@@ -214,6 +227,15 @@ def gym_shared_accept(shared_id):
     somebody else -- the leader's routine, most obviously -- resolves to no
     routine rather than being claimed.
     """
+    # Under the lifter's lock, like a start: "Mitmachen" tapped twice made two
+    # workouts, and the link kept the second while the first ran on unlinked
+    # (G-136). The second tap now waits and finds the join already done.
+    lock_user(current_user_id())
+    joined = db.session.get(SharedSession, shared_id)
+    if (joined is not None and joined.follower_user_id == current_user_id()
+            and joined.accepted_at is not None and joined.follower_session_id is not None):
+        return redirect(url_for('gym.session_detail', session_id=joined.follower_session_id))
+
     shared = _invite_for_recipient(shared_id)
     refusal = _invite_refusal(shared)
     if refusal is not None:

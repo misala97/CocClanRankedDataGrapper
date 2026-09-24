@@ -68,7 +68,6 @@ def copy_templates(source_username, destination_username, commit):
                 template_id=copy.id,
                 exercise_id=te.exercise_id,
                 position=te.position,
-                rest_seconds=te.rest_seconds,
             ))
 
     if commit:

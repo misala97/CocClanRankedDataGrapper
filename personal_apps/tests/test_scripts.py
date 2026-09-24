@@ -155,7 +155,7 @@ def test_copy_templates_names_the_same_exercises(throwaway_user):
             for name in ('pytest fork A', 'pytest fork B'):
                 template = WorkoutTemplate(name=name, user_id=source_id)
                 template.exercises.append(
-                    TemplateExercise(exercise_id=shared.id, position=1, rest_seconds=150))
+                    TemplateExercise(exercise_id=shared.id, position=1))
                 db.session.add(template)
                 db.session.flush()
                 made.append(('template', template.id))
@@ -171,8 +171,8 @@ def test_copy_templates_names_the_same_exercises(throwaway_user):
             copies = WorkoutTemplate.query.filter(
                 WorkoutTemplate.user_id == throwaway_user,
                 WorkoutTemplate.name.like('pytest fork %')).all()
-            assert [(te.exercise_id, te.rest_seconds) for t in copies for te in t.exercises] == \
-                [(made[0][1], 150)] * 2
+            assert [(te.exercise_id, te.position) for t in copies for te in t.exercises] == \
+                [(made[0][1], 1)] * 2
             assert ExerciseSettings.query.filter_by(user_id=throwaway_user).count() == 0, \
                 'the source\'s settings were copied'
     finally:

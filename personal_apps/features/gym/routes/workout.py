@@ -11,7 +11,6 @@ Moved verbatim from the pre-split routes.py.
 import datetime as dt
 
 from flask import abort, current_app, jsonify, redirect, render_template, request, url_for
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, load_only
 
 from extensions import db
@@ -33,14 +32,14 @@ from features.gym.scope import (
     owned_session, owned_session_exercise, owned_set,
 )
 from .. import sharing
-from ..locking import lock_sessions
+from ..locking import lock_sessions, lock_user
 from ..seeding import (
     _pick_session_exercise, _seed_source, _seeded_sets, _seeded_suggestion,
     reseed_for_slot,
 )
 from ._blueprint import gym_bp
 from .helpers import (
-    NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT,
+    NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT, InvalidInput,
     _cancel_pending_push, _debrief_args, _delete_session_and_links,
     _get_active_session, _refuse_live_write_if_finished, _refuse_structure_edit_if_finished,
     _to_bodyweight, _to_int, _to_name, _to_note, _to_reps, _to_rest_seconds, _to_weight,
@@ -340,6 +339,9 @@ def gym_heute():
 @gym_bp.route('/gym/start', methods=['POST'])
 @login_required
 def gym_start():
+    # Checked and inserted under the lifter's lock: two starts at once -- two
+    # tabs, two devices -- both saw no running workout and made two (G-091).
+    lock_user(current_user_id())
     active_session = _get_active_session()
     if active_session:
         return redirect(url_for('gym.session_detail', session_id=active_session.id))
@@ -365,8 +367,7 @@ def gym_start():
         for i, te in enumerate(template.exercises, start=1):
             # No rest on the row: it follows the lifter's setting, read at
             # each set, so "Deine Pause" changed mid-workout counts from the
-            # next set. The routine's own old copy is not read either
-            # (TemplateExercise.rest_seconds).
+            # next set. A routine holds no rest to read (G-076).
             session_exercise = SessionExercise(exercise_id=te.exercise_id, position=i)
             session_exercise.sets.extend(_seeded_sets(session_, te.exercise_id, i))
             session_.exercises.append(session_exercise)
@@ -610,11 +611,12 @@ def _live_data(session_):
                 break
 
     # Everyone else with an account. Three people use this app; a picker is
-    # the whole feature, and a friends list would be ceremony.
-    partners = (AppUser.query
-                .filter(AppUser.id != current_user_id())
-                .order_by(AppUser.username)
-                .all())
+    # the whole feature, and a friends list would be ceremony. Nobody for a
+    # follower: the invite is the leader's (G-085, gym_invite_partner).
+    partners = [] if session_is_shared else (AppUser.query
+                                             .filter(AppUser.id != current_user_id())
+                                             .order_by(AppUser.username)
+                                             .all())
     shared_out = (SharedSession.query
                   .filter(SharedSession.leader_session_id == session_.id,
                           SharedSession.ended_at.is_(None))
@@ -1186,11 +1188,19 @@ def gym_replace_session_exercise(session_exercise_id):
     exercise_id = request.form.get('exercise_id', type=int)
     if not exercise_id and request.form.get('new_exercise_name', '').strip():
         abort(400)   # read-only list: see gym_add_session_exercise
+    if not exercise_id:
+        raise InvalidInput('Keine Übung ausgewählt — nichts ersetzt.')
+    exercise_or_404(exercise_id)
 
-    if exercise_id:
-        exercise_or_404(exercise_id)
+    # Every no-op used to answer 200 as if the swap had happened (G-149).
+    # Under the workout's lock the substitute a second tap or another tab
+    # made is visible here: the same exercise is a swap already done, a
+    # different one is refused with the reason.
+    already = original.replaced_by
+    if already is not None and already.exercise_id != exercise_id:
+        raise InvalidInput(f'Die Übung ist schon durch {already.exercise.name} ersetzt.')
 
-    if exercise_id and exercise_id != original.exercise_id and not original.replaced_by:
+    if already is None and exercise_id != original.exercise_id:
         substitute = SessionExercise(
             session_id=session_id, exercise_id=exercise_id, position=original.position,
             rest_seconds=original.rest_seconds, replaces_id=original.id,
@@ -1210,13 +1220,9 @@ def gym_replace_session_exercise(session_exercise_id):
             _seeded_sets(original.session, exercise_id, original.position))
         db.session.add(substitute)
 
-    # A lost race against a concurrent replace of the same original is caught
-    # here (the unique constraint on replaces_id rejects the second insert)
-    # and treated as a no-op instead of a 500.
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
+    # No IntegrityError to swallow any more: a concurrent replace of the same
+    # original waits for the lock above and then sees its substitute.
+    db.session.commit()
     sharing.propagate_structure(original.session)
 
     return _mutation_response(

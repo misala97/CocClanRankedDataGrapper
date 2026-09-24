@@ -21,7 +21,7 @@ this is the one place a cross-user write can happen.
 import datetime as dt
 
 from flask import current_app
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from extensions import db
 from models import PendingPush, SessionExercise, SharedSession, WorkoutSession
@@ -478,7 +478,11 @@ def propagate_structure(session_, skip_changed=None):
                 _carry_skip(shared, skip_changed)
             reconcile_follower(shared)
         db.session.commit()
-    except IntegrityError:
+    except (IntegrityError, OperationalError):
+        # OperationalError: a lock wait timeout or a deadlock on the
+        # partner's rows. It used to escape as a 500 for a change that had
+        # already committed -- the screen said "nicht gespeichert", and a
+        # retry of "add exercise" added it twice (G-136).
         db.session.rollback()
         current_app.logger.exception(
             'propagate_structure: reconciliation failed for session %s, '

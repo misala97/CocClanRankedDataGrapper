@@ -295,12 +295,8 @@ class TemplateExercise(db.Model):
     template_id  = db.Column(db.Integer, db.ForeignKey('gym_workout_templates.id'), nullable=False)
     exercise_id  = db.Column(db.Integer, db.ForeignKey('gym_exercises.id'), nullable=False)
     position     = db.Column(db.Integer, nullable=False, default=0)
-    # Neither written nor read since V3 (2026-09-23): a routine holds no rest --
-    # the lifter's setting decides (exercises.setups). It used to capture the
-    # session's rest on save, which no screen ever set, and that copy then
-    # outvoted every later change of the setting. Old rows keep what they
-    # captured, so a rollback reads what it always read.
-    rest_seconds = db.Column(db.Integer, nullable=True)
+    # No rest: a routine holds none since V3 -- the lifter's setting decides
+    # (exercises.setups). The column went with G-076 (migration a3c9e5f1b7d2).
 
     template = db.relationship('WorkoutTemplate', back_populates='exercises')
     exercise = db.relationship('Exercise')

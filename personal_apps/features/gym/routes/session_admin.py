@@ -19,9 +19,10 @@ from features.gym.exercises import setups as exercise_setups
 from features.gym.scope import (
     current_user_id, my_sessions, my_templates, owned_session, owned_template,
 )
+from ..locking import lock_user
 from .helpers import (
-    _debrief_args, _delete_session_and_links, _refuse_live_write_if_finished, _to_int, _to_name,
-    _wants_json,
+    InvalidInput, _debrief_args, _delete_session_and_links, _refuse_live_write_if_finished,
+    _to_int, _to_name, _wants_json,
 )
 from .workout import (
     _heute_payload, _mutation_response, _template_exercises_from_session,
@@ -162,11 +163,14 @@ def gym_session_summary(session_id):
 @login_required
 def gym_delete_session(session_id):
     session_ = owned_session(session_id)
-    if session_.finished_at is not None:  # never delete the active workout by accident
-        # The link is spent anyway, since a session can only be deleted here
-        # once it has finished. An unfinished one goes through
-        # gym_discard_session, which refuses anything with a logged set.
-        _delete_session_and_links(session_)
+    if session_.finished_at is None:
+        # Never the running workout, by accident or otherwise: that goes
+        # through gym_discard_session, which refuses anything with a logged
+        # set. This used to answer deleted: true regardless (G-149).
+        raise InvalidInput('Das Workout läuft noch — löschen geht erst, wenn es beendet ist.')
+    # The link is spent anyway, since a session can only be deleted here
+    # once it has finished.
+    _delete_session_and_links(session_)
     # The island's delayed-commit undo posts this via fetch; it needs an
     # answer, not a redirect it would have to parse HTML out of.
     if _wants_json():
@@ -177,6 +181,11 @@ def gym_delete_session(session_id):
 @gym_bp.route('/gym/session/<int:session_id>/update_template', methods=['POST'])
 @login_required
 def gym_update_template(session_id):
+    # Under the lifter's lock: a second "Routine aktualisieren" read the
+    # routine's old rows, deleted what the first had already deleted, and
+    # inserted again -- every exercise twice (G-136). Now it waits, clears
+    # the rows the first one wrote, and writes the same list.
+    lock_user(current_user_id())
     session_ = owned_session(session_id)
     if session_.template_id:
         template = my_templates().filter_by(id=session_.template_id).first()
@@ -189,15 +198,33 @@ def gym_update_template(session_id):
     return redirect(url_for('gym.session_detail', session_id=session_.id))
 
 
+def _same_routine(name, exercise_ids):
+    """The caller's routine named `name` with exactly these exercises in this
+    order, or None: what saving this workout under this name would create."""
+    for template in my_templates().filter_by(name=name).all():
+        # Compared here as well: the column's collation matches "push" to "Push".
+        if (template.name == name
+                and [te.exercise_id for te in template.exercises] == exercise_ids):
+            return template
+    return None
+
+
 @gym_bp.route('/gym/session/<int:session_id>/save_as_template', methods=['POST'])
 @login_required
 def gym_save_as_template(session_id):
-    session_ = owned_session(session_id)
     template_name = _to_name(request.form.get('template_name', ''))
+    # Under the lifter's lock, and a routine that already exists under this
+    # name with these exercises is the one this save would make: a double
+    # tap used to save the routine twice (G-136).
+    lock_user(current_user_id())
+    session_ = owned_session(session_id)
     if template_name:
-        template = WorkoutTemplate(name=template_name, user_id=current_user_id())
-        template.exercises.extend(_template_exercises_from_session(session_))
-        db.session.add(template)
+        exercises = _template_exercises_from_session(session_)
+        template = _same_routine(template_name, [te.exercise_id for te in exercises])
+        if template is None:
+            template = WorkoutTemplate(name=template_name, user_id=current_user_id())
+            template.exercises.extend(exercises)
+            db.session.add(template)
         # Start reads "last done" off WorkoutSession.template_id, so a routine
         # saved from a workout you have just finished announced itself as never
         # performed: the one instance of it that certainly exists was not

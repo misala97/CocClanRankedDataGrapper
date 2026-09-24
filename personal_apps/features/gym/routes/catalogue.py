@@ -30,6 +30,7 @@ from features.gym.exercises import (
 from features.gym.scope import (
     current_user_id,
 )
+from ..locking import lock_user
 from .helpers import (
     EXERCISE_STATE_CHIP, NON_MUSCLE_GROUPS, _exercise_meta,
     _to_bar_weight, _to_increment, _to_rest_seconds, _to_stack_steps, _wants_json,
@@ -176,6 +177,10 @@ def gym_update_exercise(exercise_id):
     }
     submitted = {field: parse(request.form.get(field, ''))
                  for field, parse in parsers.items() if field in request.form}
+    # The first save of an exercise's settings inserts their row; two at
+    # once -- the keepalive save on leaving the page skips the client's queue
+    # -- both found none and the second insert hit the unique key (G-136).
+    lock_user(current_user_id())
     saved = save_setup(current_user_id(), exercise, submitted)
     db.session.commit()
     if _wants_json():
@@ -206,6 +211,7 @@ def gym_rest_for_all():
     the rest for all off. Answers with the fresh overview."""
     seconds = _to_rest_seconds(request.form.get('rest_seconds', ''))
     user_id = current_user_id()
+    lock_user(user_id)   # its first write inserts the lifter's row: see gym_update_exercise
     set_rest_for_all(user_id, seconds)
     db.session.commit()
     if _wants_json():

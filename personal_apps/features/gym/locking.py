@@ -25,7 +25,28 @@ Not a Flask route module and imported by both routes and sharing.py, for the
 same reason seeding.py is its own module: sharing cannot import routes.
 """
 from extensions import db
-from models import WorkoutSession
+from models import AppUser, WorkoutSession
+
+
+def lock_user(user_id):
+    """Serialise against every other write of this lifter's that checks
+    first and then inserts: starting or joining a workout, saving or
+    updating a routine, the first write of a setting.
+
+    Each of those used to run twice on a double tap or from two tabs, both
+    halves seeing "nothing there yet": two running workouts, a partner
+    workout joined twice, a routine saved twice, every exercise of a routine
+    written twice, a setting's insert refused by its own unique key (G-091,
+    G-136). The lifter's own row is the lock; the rules are lock_sessions':
+    call it before changing anything, since the current transaction ends
+    here. Taken before any session lock, never after, so two callers can
+    never wait on each other.
+    """
+    db.session.rollback()
+    (AppUser.query
+     .filter(AppUser.id == user_id)
+     .with_for_update()
+     .one_or_none())
 
 
 def lock_sessions(session_ids):
