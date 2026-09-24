@@ -60,7 +60,7 @@
        Scope '/gym', NOT '/gym/': a scope is a URL prefix, and the Start page
        lives at /gym itself -- with the slash, every page was controlled
        except the one the app opens on. #}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js', { scope: '/gym' });
     }
@@ -77,7 +77,7 @@
        export is excluded too -- prefetching a file download wastes exactly
        the bytes it claims to save. Browsers without the API ignore the
        script type wholesale. #}
-    <script type="speculationrules">
+    <script type="speculationrules" nonce="{{ csp_nonce() }}">
     {
       "prefetch": [{
         "where": {

@@ -93,7 +93,7 @@
           data-max-rest="900">--:--</span>
     {% endif %}
 </a>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
     var elapsed = document.getElementById('resume-elapsed');
     var rest = document.getElementById('resume-rest');
@@ -163,7 +163,7 @@
     {% if is_admin %}<a href="/admin/users" class="label">Benutzer</a>{% endif %}
     <a href="/logout" class="label">Abmelden</a>
 </div>
-<script>
+<script nonce="{{ csp_nonce() }}">
     // CSS `order` and `position: fixed` both move things visually without
     // moving them in the tab sequence -- Tab still follows DOM order. This
     // partial is included ahead of a page's real content, so everything it

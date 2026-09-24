@@ -4,7 +4,7 @@ import re
 import secrets
 
 from dotenv import load_dotenv
-from flask import Flask, abort, render_template, request, redirect, url_for
+from flask import Flask, abort, g, render_template, request, redirect, url_for
 from flask_migrate import Migrate
 
 from extensions import db
@@ -111,6 +111,43 @@ def _immutable_hashed_assets(response):
         response.cache_control.public = True
         response.cache_control.max_age = 31536000
         response.cache_control.immutable = True
+    return response
+
+
+def csp_nonce():
+    """This response's nonce, for an inline <script> on a page under the
+    strict policy below: `<script nonce="{{ csp_nonce() }}">`. One per
+    request, minted on first use."""
+    if 'csp_nonce' not in g:
+        g.csp_nonce = secrets.token_urlsafe(16)
+    return g.csp_nonce
+
+
+app.jinja_env.globals['csp_nonce'] = csp_nonce
+
+# Pages whose every script is a file of this app or carries the nonce -- so a
+# script injected into one runs nowhere. The other features still use inline
+# scripts without one, and keep the rest of the headers only.
+_STRICT_SCRIPT_BLUEPRINTS = {'gym', 'auth'}
+
+
+@app.after_request
+def _security_headers(response):
+    """Defence in depth for every response (walkthrough 2026-09-23, G-122).
+
+    Nothing set these before; the proxy is not relied on for them. No page
+    here is meant to be framed -- by anyone, this origin included -- no
+    response is meant to be read as a type other than the one it declares,
+    and a URL is nobody else's business.
+    """
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('Referrer-Policy', 'same-origin')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    policy = "frame-ancestors 'none'"
+    if response.mimetype == 'text/html' and request.blueprint in _STRICT_SCRIPT_BLUEPRINTS:
+        policy = (f"script-src 'self' 'nonce-{csp_nonce()}'; object-src 'none'; "
+                  f"base-uri 'self'; {policy}")
+    response.headers.setdefault('Content-Security-Policy', policy)
     return response
 
 # FULL_ACCESS_HOST (from auth) requires a login for every page. Other public
