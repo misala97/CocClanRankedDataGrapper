@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/"><version>1.1</version><numberOfRecords>1</numberOfRecords><records><record><recordSchema>oai_dc</recordSchema><recordPacking>xml</recordPacking><recordData><dc xmlns:dnb="http://d-nb.de/standards/dnbterms" xmlns="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Tasso im Irrenhaus : drei Erzählungen / Ingo Schulze</dc:title>
+  <dc:creator>Schulze, Ingo [Verfasser]</dc:creator>
+  <dc:publisher>München : dtv</dc:publisher>
+  <dc:date>2021</dc:date>
+  <dc:language>ger</dc:language>
+  <dc:identifier xmlns:tel="http://krait.kb.nl/coop/tel/handbook/telterms.html" xsi:type="tel:ISBN">978-3-423-28239-0 Gewebe : EUR 20.00 (DE), EUR 20.60 (AT), CHF 26.90 (freier Preis)</dc:identifier>
+  <dc:identifier xmlns:tel="http://krait.kb.nl/coop/tel/handbook/telterms.html" xsi:type="tel:ISBN">3-423-28239-8</dc:identifier>
+  <dc:identifier xsi:type="dnb:IDN">1220520136</dc:identifier>
+  <dc:subject>830 Deutsche Literatur</dc:subject>
+  <dc:subject>B Belletristik</dc:subject>
+  <dc:format>158 Seiten</dc:format>
+  <dc:relation>http://d-nb.info/1234309815</dc:relation>
+</dc></recordData><recordPosition>1</recordPosition></record></records><echoedSearchRetrieveRequest><version>1.1</version><query>isbn=9783423282390</query><xQuery xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/><maximumRecords>1</maximumRecords><recordSchema>oai_dc</recordSchema></echoedSearchRetrieveRequest></searchRetrieveResponse>
