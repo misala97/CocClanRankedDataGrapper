@@ -345,6 +345,36 @@ def test_a_partners_lock_timeout_does_not_fail_the_leaders_saved_change(
         _drop_links(live_session['session'])
 
 
+# -- G-055: the rest band's "+15", tapped twice ------------------------------------
+
+def test_two_quick_plus_fifteens_add_thirty_seconds(live_session, monkeypatch):
+    """Two taps are two requests. Each read the end both of them saw, and the
+    second wrote the same "+15" over the first: the lifter asked for 30
+    seconds and got 15."""
+    from extensions import db
+    from models import PendingPush, SessionSet, WorkoutSession
+    from features.gym.routes import workout
+    monkeypatch.setattr(workout, '_cancel_pending_push', _slowed(workout._cancel_pending_push))
+
+    started = dt.datetime.utcnow().replace(microsecond=0)
+    with flask_app.app_context():
+        db.session.get(SessionSet, live_session['done_set']).completed_at = started
+        row = db.session.get(WorkoutSession, live_session['session'])
+        row.rest_ends_at = started + dt.timedelta(seconds=90)
+        row.resting_set_id = live_session['done_set']
+        db.session.commit()
+
+    results = _race(_admin_id(), 'post',
+                    f"/gym/session/{live_session['session']}/rest/shift", {'seconds': '15'})
+
+    assert _statuses(results) == [302, 302]
+    with flask_app.app_context():
+        row = db.session.get(WorkoutSession, live_session['session'])
+        assert row.rest_ends_at == started + dt.timedelta(seconds=120)
+        pushes = PendingPush.query.filter_by(session_id=row.id, sent=False).all()
+        assert [p.fire_at for p in pushes] == [row.rest_ends_at]
+
+
 # -- G-149: no answer as if done ------------------------------------------------
 
 def test_deleting_a_running_workout_is_refused_with_a_reason(client, live_session):

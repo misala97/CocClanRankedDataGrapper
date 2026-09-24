@@ -1,4 +1,5 @@
 import type { LiveSet } from '../types'
+import { Icon } from '../../components/Icon'
 import { kg1 } from '../../format'
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 }
 
 /**
- * One set chip: outline = offen, filled rose = erledigt, gold = ein Rekord,
+ * One set chip: plain = offen, tinted with a tick = erledigt, gold = ein Rekord,
  * outlined warm = the one you are about to do.
  *
  * Every chip with numbers shows the same weight-times-reps (a blank planned
@@ -75,6 +76,10 @@ export function SetRow({
       // than "log it": the steppers decide the numbers, not the plan.
       onClick={() => onToggle(set.id, !set.completed)}
     >
+      {/* A logged set is a settled fact: a tint and a tick, not the solid
+          fill that outweighed the next set -- in dark the brightest thing on
+          the card (G-112). The next set's ring leads the row now. */}
+      {className === 'set is-done' && <Icon name="check" />}
       {`${weight} × ${set.reps}`}
     </button>
   )

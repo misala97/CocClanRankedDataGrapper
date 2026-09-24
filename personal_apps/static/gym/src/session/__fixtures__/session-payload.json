@@ -139,7 +139,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18045,
       "label": "Kurzhantel",
       "movement": "Bankdrücken",
@@ -178,7 +178,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18061,
       "label": "Maschine, Scheiben",
       "movement": "Bankdrücken",
@@ -334,7 +334,7 @@
     },
     {
       "common": true,
-      "days_ago": 24,
+      "days_ago": 25,
       "id": 18120,
       "label": "Kurzhantel",
       "movement": "Bizepscurls",
@@ -438,7 +438,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18059,
       "label": "Maschine",
       "movement": "Butterfly",
@@ -490,16 +490,16 @@
     },
     {
       "common": false,
-      "days_ago": null,
+      "days_ago": 1,
       "id": 18108,
       "label": "Kabel",
       "movement": "Face Pulls",
       "movement_group": "Schultern",
       "muscle_group": "Schultern",
       "name": "Face Pulls (Kabel)",
-      "rank": null,
+      "rank": 16,
       "search": "face pulls kabel face pull",
-      "workouts": 0
+      "workouts": 1
     },
     {
       "common": false,
@@ -763,7 +763,7 @@
     },
     {
       "common": true,
-      "days_ago": 24,
+      "days_ago": 25,
       "id": 18121,
       "label": "Kurzhantel",
       "movement": "Hammercurls",
@@ -984,14 +984,14 @@
     },
     {
       "common": false,
-      "days_ago": 52,
+      "days_ago": 53,
       "id": 18079,
       "label": "Kabel",
       "movement": "Latzug",
       "movement_group": "Rücken",
       "muscle_group": "Rücken",
       "name": "Latzug (Kabel)",
-      "rank": 16,
+      "rank": 17,
       "search": "latzug kabel lat pulldown lat pulldown kabelzug latziehen latzug breit",
       "workouts": 2
     },
@@ -1049,7 +1049,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18090,
       "label": "Maschine, Scheiben",
       "movement": "Latzug",
@@ -1058,7 +1058,7 @@
       "name": "Latzug (Maschine, Scheiben)",
       "rank": 1,
       "search": "latzug maschine scheiben iso lateral lat pulldown lat pulldown plate loaded lat pulldown single arm",
-      "workouts": 20
+      "workouts": 21
     },
     {
       "common": false,
@@ -1179,7 +1179,7 @@
     },
     {
       "common": true,
-      "days_ago": 24,
+      "days_ago": 25,
       "id": 18114,
       "label": "Maschine",
       "movement": "Reverse Butterfly",
@@ -1335,7 +1335,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18088,
       "label": "Maschine",
       "movement": "Rudern",
@@ -1374,20 +1374,20 @@
     },
     {
       "common": false,
-      "days_ago": 73,
+      "days_ago": 74,
       "id": 18078,
       "label": "T-Bar, liegend",
       "movement": "Rudern",
       "movement_group": "Rücken",
       "muscle_group": "Rücken",
       "name": "Rudern (T-Bar, liegend)",
-      "rank": 17,
+      "rank": 18,
       "search": "rudern t bar liegend chest supported t bar row t bar row lying t bar rudern liegend",
       "workouts": 2
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18077,
       "label": "T-Bar, stehend",
       "movement": "Rudern",
@@ -1569,7 +1569,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18093,
       "label": "Langhantel, stehend",
       "movement": "Schulterdrücken",
@@ -1634,7 +1634,7 @@
     },
     {
       "common": true,
-      "days_ago": 24,
+      "days_ago": 25,
       "id": 18129,
       "label": "Maschine",
       "movement": "Scottcurls",
@@ -1647,7 +1647,7 @@
     },
     {
       "common": true,
-      "days_ago": 33,
+      "days_ago": 34,
       "id": 18130,
       "label": "Maschine, Scheiben",
       "movement": "Scottcurls",
@@ -1712,7 +1712,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18113,
       "label": "Maschine",
       "movement": "Seitheben",
@@ -1725,14 +1725,14 @@
     },
     {
       "common": false,
-      "days_ago": 34,
+      "days_ago": 35,
       "id": 18116,
       "label": "Maschine, Scheiben",
       "movement": "Seitheben",
       "movement_group": "Schultern",
       "muscle_group": "Schultern",
       "name": "Seitheben (Maschine, Scheiben)",
-      "rank": 18,
+      "rank": 19,
       "search": "seitheben maschine scheiben lateral raise plate loaded iso lateral lateral raise",
       "workouts": 1
     },
@@ -1868,7 +1868,7 @@
     },
     {
       "common": true,
-      "days_ago": 0,
+      "days_ago": 1,
       "id": 18138,
       "label": "Kabel, Stange",
       "movement": "Trizepsdrücken",
@@ -1907,7 +1907,7 @@
     },
     {
       "common": true,
-      "days_ago": 22,
+      "days_ago": 23,
       "id": 18142,
       "label": "Kabel",
       "movement": "Trizepsstrecken über Kopf",
@@ -2104,6 +2104,10 @@
     {
       "id": 1002,
       "username": "Partner 2"
+    },
+    {
+      "id": 1003,
+      "username": "Partner 3"
     }
   ],
   "ready_for_more": null,
@@ -2124,12 +2128,42 @@
     "10": {
       "basis": "slot",
       "date": "2026-09-22T22:26:26",
-      "position": 2
+      "is_latest": true,
+      "position": 2,
+      "sets": [
+        {
+          "reps": 10,
+          "weight": 26.0
+        },
+        {
+          "reps": 9,
+          "weight": 26.0
+        },
+        {
+          "reps": 8,
+          "weight": 26.0
+        }
+      ]
     },
     "11": {
       "basis": "slot",
       "date": "2026-09-22T22:26:26",
-      "position": 4
+      "is_latest": true,
+      "position": 4,
+      "sets": [
+        {
+          "reps": 9,
+          "weight": 77.0
+        },
+        {
+          "reps": 8,
+          "weight": 77.0
+        },
+        {
+          "reps": 8,
+          "weight": 69.0
+        }
+      ]
     }
   },
   "session": {
@@ -2142,7 +2176,7 @@
     "notes": null,
     "rest_ends_at": null,
     "resting_set_id": null,
-    "started_at": "2026-09-23T14:05:19",
+    "started_at": "2026-09-24T11:10:18",
     "structure_version": 0,
     "template_id": null,
     "template_name": null
@@ -2156,7 +2190,7 @@
     "11": 4
   },
   "stall_next_weight": {
-    "11": 71.5
+    "11": 77.0
   },
   "suggestions": {
     "10": {
@@ -2188,7 +2222,7 @@
       "position": 1,
       "rest_seconds": null,
       "rest_setting": 150,
-      "rest_setting_mine": true,
+      "rest_setting_mine": false,
       "sets": [
         {
           "base_weight": null,
@@ -2217,7 +2251,7 @@
     {
       "exercise_id": 18059,
       "id": 11,
-      "increment": 2.5,
+      "increment": 8.0,
       "is_unilateral": false,
       "mirrored": false,
       "muscle_group": "Brust",
@@ -2226,8 +2260,8 @@
       "pain": false,
       "position": 2,
       "rest_seconds": null,
-      "rest_setting": 90,
-      "rest_setting_mine": false,
+      "rest_setting": 150,
+      "rest_setting_mine": true,
       "sets": [
         {
           "base_weight": null,

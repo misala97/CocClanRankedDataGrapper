@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  deleteSet, reorderExercises, setExerciseMeta, setRest, toggleSet, toggleSkip, updateSet,
+  deleteSet, reorderExercises, setExerciseMeta, setRest, shiftRest, skipRest, toggleSet, toggleSkip,
+  updateSet,
 } from './optimistic'
 import { payload } from './types.test-d'
+import type { SessionDetailPayload } from './types'
+import { REST_MAX } from '../settings/values'
 
 const live = payload.visible_exercises.find((se) => se.id === payload.live_id)!
 const openSet = live.sets.find((s) => !s.completed)!
@@ -147,7 +150,7 @@ describe('what deliberately has no optimistic path', () => {
     // untouched and the server's answer still replaces it wholesale.
     const module = await import('./optimistic')
     expect(Object.keys(module).sort()).toEqual(
-      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'setRest', 'toggleSet',
+      ['deleteSet', 'reorderExercises', 'setExerciseMeta', 'setRest', 'shiftRest', 'skipRest', 'toggleSet',
         'toggleSkip', 'updateSet'])
   })
 })
@@ -164,6 +167,78 @@ describe('setRest', () => {
   it("stores the setting's own value as nothing, so the row follows the setting", () => {
     const today = setRest(payload, se.id, 180)
     expect(setRest(today, se.id, se.rest_setting!).visible_exercises[0]!.rest_seconds).toBeNull()
+  })
+})
+
+describe('shiftRest', () => {
+  // A 90-second rest with 60 left, at a fixed now.
+  const now = Date.parse('2026-09-24T10:00:00Z')
+  const resting: SessionDetailPayload = {
+    ...payload,
+    resting: true,
+    rest_total_seconds: 90,
+    session: { ...payload.session, rest_ends_at: '2026-09-24T10:01:00', resting_set_id: doneSet.id },
+  }
+  const endsAt = (p: SessionDetailPayload) => Date.parse(`${p.session.rest_ends_at}Z`)
+
+  it('moves the end and the total together, as gym_shift_rest does', () => {
+    const later = shiftRest(resting, 15, now)
+    expect(endsAt(later) - endsAt(resting)).toBe(15_000)
+    expect(later.rest_total_seconds).toBe(105)
+
+    const sooner = shiftRest(resting, -15, now)
+    expect(endsAt(resting) - endsAt(sooner)).toBe(15_000)
+    expect(sooner.rest_total_seconds).toBe(75)
+  })
+
+  it('ends the rest when the step goes past its end, as a skip leaves it', () => {
+    const almost = { ...resting, session: { ...resting.session, rest_ends_at: '2026-09-24T10:00:10' } }
+    const over = shiftRest(almost, -15, now)
+    expect(over.resting).toBe(false)
+    expect(endsAt(over)).toBe(now)
+    expect(over.session.resting_set_id).toBe(doneSet.id)
+    expect(over.rest_total_seconds).toBe(0)
+  })
+
+  it('stops at the longest rest there is', () => {
+    const long = { ...resting, rest_total_seconds: 595 }
+    expect(shiftRest(long, 15, now).rest_total_seconds).toBe(REST_MAX)
+    expect(shiftRest(shiftRest(long, 15, now), 15, now).rest_total_seconds).toBe(REST_MAX)
+  })
+
+  it('never shortens a rest already longer than that, and "−15" still works on it', () => {
+    // 15 minutes, saved before rests had a cap: 60 s left of it.
+    const legacy = { ...resting, rest_total_seconds: 900 }
+    expect(shiftRest(legacy, 15, now)).toEqual(legacy)
+    expect(shiftRest(legacy, -15, now).rest_total_seconds).toBe(885)
+  })
+
+  it('leaves a payload with no rest running alone', () => {
+    expect(shiftRest(payload, 15, now)).toBe(payload)
+  })
+})
+
+describe('skipRest', () => {
+  const now = Date.parse('2026-09-24T10:00:00.400Z')
+  const resting: SessionDetailPayload = {
+    ...payload,
+    resting: true,
+    rest_total_seconds: 90,
+    session: { ...payload.session, rest_ends_at: '2026-09-24T10:01:00', resting_set_id: doneSet.id },
+  }
+
+  it('stamps the end now, in whole seconds, and keeps the set the rest followed', () => {
+    const over = skipRest(resting, now)
+    expect(over.resting).toBe(false)
+    expect(over.rest_total_seconds).toBe(0)
+    expect(Date.parse(`${over.session.rest_ends_at}Z`)).toBe(Date.parse('2026-09-24T10:00:00Z'))
+    expect(over.session.resting_set_id).toBe(doneSet.id)
+  })
+
+  it('leaves a rest that is not running alone', () => {
+    expect(skipRest(payload, now)).toBe(payload)
+    const ranOut = { ...resting, session: { ...resting.session, rest_ends_at: '2026-09-24T09:59:00' } }
+    expect(skipRest(ranOut, now)).toBe(ranOut)
   })
 })
 

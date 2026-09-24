@@ -23,6 +23,7 @@ from features.gym import stats
 from features.gym.library import BY_KEY, LIST_GROUPS, MOVEMENT_GROUP
 from features.gym.schemas import FinishedPayload, HeutePayload, SessionDetailPayload
 from features.gym.exercises import (
+    REST_MAX_SECONDS, REST_NUDGE_SECONDS,
     exercise_or_404, library_exercises, search_text, settle_rests,
     setup as exercise_setup, setups as exercise_setups, touched_exercises,
     usage as exercise_usage,
@@ -143,14 +144,42 @@ def _schedule_rest(session_set):
     if rest_seconds is None:
         rest_seconds = exercise_setup(session_.user_id, session_exercise.exercise).default_rest_seconds
     if not rest_seconds:
+        # No rest after this one, but the last rest is over all the same: the
+        # band must not go on counting up from a rest before this set.
+        session_.rest_ends_at = None
+        session_.resting_set_id = None
+        _cancel_pending_push(session_)
         return
-    rest_ends_at = dt.datetime.utcnow() + dt.timedelta(seconds=rest_seconds)
+    # From the set's own stamp: the rest runs from the moment the set landed,
+    # and its length reads back off the two stamps (_rest_total_seconds).
+    started = session_set.completed_at or dt.datetime.utcnow()
+    rest_ends_at = started + dt.timedelta(seconds=rest_seconds)
     session_.rest_ends_at = rest_ends_at
     session_.resting_set_id = session_set.id
     # Replace any still-pending push for this session rather than stacking
     # multiple -- a new completed set means a new (possibly shorter) rest period.
     _cancel_pending_push(session_)
     db.session.add(PendingPush(session_id=session_.id, fire_at=rest_ends_at))
+
+
+def _rest_total_seconds(session_, setups):
+    """How long the running rest is, for the bar that charges through it:
+    from the set that started it to rest_ends_at.
+
+    Read off the two stamps, because the end moves after the rest starts --
+    "−15" and "+15" shift it -- while "Pause heute" changes the setting and
+    leaves a countdown already running alone, so a total re-read from the
+    setting made the bar jump. A set with no stamp falls back to the rest set
+    on the exercise that owns it, which after an exercise's last set is not
+    the one now live. `setups` covers every exercise of the session."""
+    for se in session_.exercises:
+        for set_ in se.sets:
+            if set_.id != session_.resting_set_id:
+                continue
+            if set_.completed_at is not None:
+                return max(0, round((session_.rest_ends_at - set_.completed_at).total_seconds()))
+            return se.rest_seconds or setups[se.exercise_id].default_rest_seconds or 0
+    return 0
 
 
 def _as_routine(template, last_done, days_ago):
@@ -600,15 +629,7 @@ def _live_data(session_):
     )
 
     resting = bool(session_.rest_ends_at and session_.rest_ends_at > dt.datetime.utcnow())
-    # Whose rest is it? The set that started it, which after the last set of an
-    # exercise is no longer on the exercise that is now live.
-    rest_total_seconds = 0
-    if resting:
-        for se in visible_exercises:
-            if any(s.id == session_.resting_set_id for s in se.sets):
-                rest_total_seconds = (se.rest_seconds
-                                      or setups[se.exercise_id].default_rest_seconds or 0)
-                break
+    rest_total_seconds = _rest_total_seconds(session_, setups) if resting else 0
 
     # Everyone else with an account. Three people use this app; a picker is
     # the whole feature, and a friends list would be ceremony. Nobody for a
@@ -1769,18 +1790,75 @@ def gym_skip_rest(session_id):
     on, "I'm ready, go" needs a real action behind it. Before, the only way out
     of a rest was to wait it out or to confirm the next set through it.
 
-    Clearing the window also cancels the pending push, for the same reason
+    Ending the rest also cancels the pending push, for the same reason
     finishing early does: the notifier daemon would otherwise fire a
     "Pause vorbei" for a rest the lifter already ended themselves.
+
+    The end is stamped now rather than cleared: the band stays until the next
+    set, counting up from the rest's end, so nothing on the screen moves under
+    the lifter's thumb (round 4). A rest that already ran out keeps its end.
     """
     session_ = owned_session(session_id)
     refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
         return refusal
-    session_.rest_ends_at = None
-    session_.resting_set_id = None
+    lock_sessions([session_id])
+    refusal = _refuse_structure_edit_if_finished(session_)
+    if refusal is not None:
+        return refusal
+    now = dt.datetime.utcnow().replace(microsecond=0)
+    if session_.rest_ends_at and session_.rest_ends_at > now:
+        session_.rest_ends_at = now
     _cancel_pending_push(session_)
     db.session.commit()
+    return _mutation_response(
+        session_, 'gym.session_detail', session_id=session_.id)
+
+
+@gym_bp.route('/gym/session/<int:session_id>/rest/shift', methods=['POST'])
+@login_required
+def gym_shift_rest(session_id):
+    """Move the running rest's end by REST_NUDGE_SECONDS either way: the
+    "−15" and "+15" on the countdown band above the confirm button (G-055).
+
+    The push moves with it, or it fires at the old end. "−15" with less than
+    that left ends the rest, as the skip does. "+15" stops at the longest rest
+    the steppers offer, counted from the set that started it -- but never
+    shortens one that is already longer (saved before rests had a cap). A
+    rest that has already run out stays over -- nothing clears rest_ends_at
+    when it passes, and a stale screen must not bring the countdown back.
+    """
+    session_ = owned_session(session_id)
+    refusal = _refuse_structure_edit_if_finished(session_)
+    if refusal is not None:
+        return refusal
+    seconds = _to_int(request.form.get('seconds'))
+    if seconds not in (-REST_NUDGE_SECONDS, REST_NUDGE_SECONDS):
+        raise InvalidInput(f'Pause: {REST_NUDGE_SECONDS} Sekunden mehr oder weniger.')
+    # Two quick taps are two requests, and each must move the end the other
+    # left, not the end both of them read.
+    lock_sessions([session_id])
+    # Finished by the other phone between the check above and the lock.
+    refusal = _refuse_structure_edit_if_finished(session_)
+    if refusal is not None:
+        return refusal
+    now = dt.datetime.utcnow()
+    if session_.rest_ends_at and session_.rest_ends_at > now:
+        ends = session_.rest_ends_at + dt.timedelta(seconds=seconds)
+        if seconds > 0:
+            resting_set = (db.session.get(SessionSet, session_.resting_set_id)
+                           if session_.resting_set_id else None)
+            started = resting_set.completed_at if resting_set is not None else None
+            cap = (started or now) + dt.timedelta(seconds=REST_MAX_SECONDS)
+            ends = min(ends, max(session_.rest_ends_at, cap))
+        _cancel_pending_push(session_)
+        if ends <= now:
+            # Over, as a skip leaves it: the band counts up from here.
+            session_.rest_ends_at = now.replace(microsecond=0)
+        else:
+            session_.rest_ends_at = ends
+            db.session.add(PendingPush(session_id=session_.id, fire_at=ends))
+        db.session.commit()
     return _mutation_response(
         session_, 'gym.session_detail', session_id=session_.id)
 

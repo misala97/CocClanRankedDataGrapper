@@ -384,8 +384,11 @@ def ready_for_more(rows, position=None):
     # logged after the evidence must not downgrade the wording, because
     # nothing on screen treats that deload as the last time either -- the
     # chips' prefill skips it for the same reason this judgement does.
+    # By workout, not by row, as the seed line judges it: the newest workout
+    # can hold the exercise twice, and either row of it is "last time".
     newest = _chronological(prog)[-1]
-    return {'sets': len(qualifying), 'weight': top, 'is_latest': last is newest}
+    return {'sets': len(qualifying), 'weight': top,
+            'is_latest': last.session_id == newest.session_id}
 
 
 def exercise_state(rows, position=None, threshold=STAGNATION_THRESHOLD):

@@ -1,13 +1,13 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { kg1 } from '../../format'
-import { LivePanel } from './LivePanel'
+import { BAND_ARMS_MS, LivePanel } from './LivePanel'
 import { Rail } from './Rail'
 import { SessionTotals } from './SessionTotals'
 import { useSheets } from '../stores'
 import { payload } from '../types.test-d'
-import type { SessionDetailPayload } from '../types'
+import type { SeedSource, SessionDetailPayload } from '../types'
 
 beforeEach(() => {
   useSheets.setState(useSheets.getInitialState(), true)
@@ -15,6 +15,7 @@ beforeEach(() => {
 
 const handlers = () => ({
   onConfirm: vi.fn(), onToggleSet: vi.fn(), onRestOver: vi.fn(),
+  onShiftRest: vi.fn(), onSkipRest: vi.fn(),
 })
 
 const live = payload.visible_exercises.find((se) => se.id === payload.live_id)!
@@ -168,58 +169,73 @@ describe('LivePanel', () => {
       .toHaveTextContent(kg1(next.weight! + payload.live_increment))
   })
 
-  it('says where the plan came from', () => {
-    // Its own seed rather than the fixture's: the fixture is regenerated from
-    // a real history, and the pick it finds changes with that history.
-    const same: SessionDetailPayload = {
-      ...payload,
-      seed_sources: {
-        ...payload.seed_sources,
-        [String(live.id)]: { date: '2026-08-25T09:47:25', position: live.position, basis: 'slot' },
+  // Its own seed rather than the fixture's: the fixture is regenerated from a
+  // real history, and the pick it finds changes with that history. Dates are
+  // well over a week back, so the line names the date, not a weekday.
+  const LIFTED = [{ weight: 55, reps: 10 }, { weight: 55, reps: 9 }, { weight: 55, reps: 8 }]
+  const seeded = (source: Partial<SeedSource>, over: Partial<SessionDetailPayload> = {}) => ({
+    ...payload,
+    ...over,
+    seed_sources: {
+      ...payload.seed_sources,
+      [String(live.id)]: {
+        date: '2026-08-25T09:47:25', position: live.position, basis: 'slot' as const,
+        is_latest: true, sets: LIFTED, ...source,
       },
-    }
-    render(<LivePanel payload={same} {...handlers()} />)
-    const line = screen.getByText('Vorgabe').closest('p')!
-    expect(line).toHaveTextContent('Vorgabe vom 25.08., gleiche Position im Workout.')
+    },
+  })
+  /** The rule behind the numbers, one tap away (D8). */
+  const openSource = async () => {
+    await userEvent.setup().click(screen.getByRole('button', { name: /^(Letztes Mal|Stärkste Einheit)/ }))
+    return screen.getByText('Vorgabe').closest('p')!
+  }
+
+  it('leads with what was lifted, in one line', () => {
+    // G-053: the numbers, not the position-matching rule behind them. The box
+    // took 60-90px of every card for a sentence nobody needed mid-set.
+    render(<LivePanel payload={seeded({})} {...handlers()} />)
+    const line = screen.getByRole('button', { name: /^Letztes Mal/ })
+    expect(line).toHaveTextContent('Letztes Mal 25.08. 55,0 × 10 · 9 · 8')
+    expect(line).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Vorgabe')).not.toBeInTheDocument()
   })
 
-  it('says so when the plan comes from an earlier, fresher slot', () => {
-    const late: SessionDetailPayload = {
-      ...payload,
-      seed_sources: {
-        ...payload.seed_sources,
-        [String(live.id)]: { date: '2026-08-30T09:57:42', position: 1, basis: 'earlier_slot' },
-      },
-      visible_exercises: payload.visible_exercises.map((se) =>
-        se.id === live.id ? { ...se, position: 4 } : se),
-    }
+  it('says "Letztes Mal" only when it was the last time', () => {
+    // The best result lately, seeded at this slot, can be ten days old while
+    // a lighter workout came after it.
+    render(<LivePanel payload={seeded({ is_latest: false })} {...handlers()} />)
+    expect(screen.queryByRole('button', { name: /^Letztes Mal/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Stärkste Einheit 25\.08\./ })).toBeInTheDocument()
+  })
+
+  it('says where the plan came from on a tap', async () => {
+    render(<LivePanel payload={seeded({})} {...handlers()} />)
+    const rule = await openSource()
+    expect(rule).toHaveTextContent('Vorgabe vom 25.08., gleiche Position im Workout.')
+    expect(screen.getByRole('button', { name: /^Letztes Mal/ }))
+      .toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('says so when the plan comes from an earlier, fresher slot', async () => {
+    const late = seeded(
+      { date: '2026-08-30T09:57:42', position: 1, basis: 'earlier_slot' },
+      { visible_exercises: payload.visible_exercises.map((se) =>
+        se.id === live.id ? { ...se, position: 4 } : se) })
     render(<LivePanel payload={late} {...handlers()} />)
-    expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
+    expect(await openSource()).toHaveTextContent(
       'Vorgabe vom 30.08., damals an Position 1 — so spät im Workout gibt es noch nichts, daher dein bestes Ergebnis von früher.')
   })
 
-  it('says so when the plan comes from a later slot, and after a layoff', () => {
-    const later: SessionDetailPayload = {
-      ...payload,
-      seed_sources: {
-        ...payload.seed_sources,
-        [String(live.id)]: { date: '2026-08-30T09:57:42', position: 5, basis: 'slot' },
-      },
-    }
+  it('says so when the plan comes from a later slot, and after a layoff', async () => {
+    const later = seeded({ date: '2026-08-30T09:57:42', position: 5 })
     const { unmount } = render(<LivePanel payload={later} {...handlers()} />)
-    expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
+    expect(await openSource()).toHaveTextContent(
       'Vorgabe vom 30.08., damals später im Workout (Position 5).')
     unmount()
 
-    const layoff: SessionDetailPayload = {
-      ...payload,
-      seed_sources: {
-        ...payload.seed_sources,
-        [String(live.id)]: { date: '2026-06-14T09:00:00', position: 2, basis: 'layoff' },
-      },
-    }
+    const layoff = seeded({ date: '2026-06-14T09:00:00', position: 2, basis: 'layoff' })
     render(<LivePanel payload={layoff} {...handlers()} />)
-    expect(screen.getByText('Vorgabe').closest('p')).toHaveTextContent(
+    expect(await openSource()).toHaveTextContent(
       'Vorgabe vom 14.06. — schon länger her, daher dein letztes Workout statt des besten.')
   })
 
@@ -230,6 +246,8 @@ describe('LivePanel', () => {
     }
     render(<LivePanel payload={none} {...handlers()} />)
     expect(screen.queryByText('Vorgabe')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^(Letztes Mal|Stärkste Einheit)/ }))
+      .not.toBeInTheDocument()
   })
 
   it('falls back to the last set done when nothing is pending', () => {
@@ -334,24 +352,188 @@ describe('LivePanel', () => {
     expect(screen.getByText(/mehr Gewicht oder Wdh\. versuchen/)).toBeInTheDocument()
   })
 
+  /** A rest of `total` seconds with `left` still to go, after the live
+   *  exercise's first set. */
+  const restingFor = (left: number, total = 90): SessionDetailPayload => ({
+    ...payload,
+    resting: true,
+    rest_total_seconds: total,
+    session: {
+      ...payload.session,
+      rest_ends_at: new Date(Date.now() + left * 1000).toISOString().replace('Z', ''),
+      resting_set_id: live.sets[0]!.id,
+    },
+  })
+  /** The same rest ended `ago` seconds back, as the server reports it then. */
+  const restOver = (ago: number): SessionDetailPayload => ({
+    ...restingFor(-ago), resting: false, rest_total_seconds: 0,
+  })
+
   it('keeps the button name stable while a rest runs', () => {
     // A name that rewrote itself every second would be worse than no
-    // countdown, so the clock is aria-hidden and the announcement goes to the
-    // live region instead.
-    const resting: SessionDetailPayload = {
-      ...payload,
-      resting: true,
-      rest_total_seconds: 90,
-      session: {
-        ...payload.session,
-        rest_ends_at: new Date(Date.now() + 90_000).toISOString().replace('Z', ''),
-      },
-    }
-    const { container } = render(<LivePanel payload={resting} {...handlers()} />)
-    expect(container.querySelector('#set-confirm')).toHaveClass('is-resting')
-    expect(screen.getByText('Satz geschafft')).toBeInTheDocument()
-    expect(container.querySelector('.go__clock'))
-      .toHaveAttribute('aria-hidden', 'true')
+    // countdown. The clock has its own band now, outside the button.
+    const { container } = render(<LivePanel payload={restingFor(90)} {...handlers()} />)
+    const confirm = container.querySelector('#set-confirm')!
+    expect(confirm).toHaveClass('is-resting')
+    expect(confirm).toHaveAccessibleName('Satz geschafft')
+    expect(confirm).not.toHaveTextContent(/\d:\d\d/)
+  })
+
+  it('puts the countdown in a band above the button, readable from the bench', () => {
+    // G-055: "Pause 2:25" was 13px at the edge of the orange button.
+    const { container } = render(<LivePanel payload={restingFor(60)} {...handlers()} />)
+    const band = screen.getByRole('group', { name: 'Pause' })
+    expect(band).toHaveTextContent('Pause · von 1:30')
+    expect(screen.getByRole('timer')).toHaveTextContent(/^(1:00|0:59)$/)
+    const confirm = container.querySelector('#set-confirm')!
+    expect(band.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('moves or ends the rest from the band', () => {
+    // Ending a rest early was ⋮ -> "Pause beenden", and there was no ±15 s.
+    // The keys say what they show, so "+15" is also what a voice user says.
+    vi.useFakeTimers()
+    const h = handlers()
+    render(<LivePanel payload={restingFor(60)} {...h} />)
+    act(() => { vi.advanceTimersByTime(BAND_ARMS_MS) })
+
+    fireEvent.click(screen.getByRole('button', { name: '+15 Sekunden' }))
+    expect(h.onShiftRest).toHaveBeenLastCalledWith(15)
+    fireEvent.click(screen.getByRole('button', { name: '−15 Sekunden' }))
+    expect(h.onShiftRest).toHaveBeenLastCalledWith(-15)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause beenden' }))
+    expect(h.onSkipRest).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('ignores taps on a band that has only just appeared', () => {
+    // I1 review: the band pushes the confirm button down, and the second tap
+    // of a double tap on "Satz geschafft" landed on "−15".
+    vi.useFakeTimers()
+    const h = handlers()
+    render(<LivePanel payload={restingFor(60)} {...h} />)
+    fireEvent.click(screen.getByRole('button', { name: '−15 Sekunden' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pause beenden' }))
+    expect(h.onShiftRest).not.toHaveBeenCalled()
+    expect(h.onSkipRest).not.toHaveBeenCalled()
+
+    act(() => { vi.advanceTimersByTime(BAND_ARMS_MS) })
+    fireEvent.click(screen.getByRole('button', { name: '−15 Sekunden' }))
+    expect(h.onShiftRest).toHaveBeenCalledWith(-15)
+    vi.useRealTimers()
+  })
+
+  it('arms a band that arrives with a later answer, not with the panel', () => {
+    // The set's answer brings the band; the panel has been up for minutes.
+    vi.useFakeTimers()
+    const h = handlers()
+    const { rerender } = render(<LivePanel payload={payload} {...h} />)
+    expect(screen.queryByRole('group', { name: 'Pause' })).not.toBeInTheDocument()
+    act(() => { vi.advanceTimersByTime(5000) })
+
+    rerender(<LivePanel payload={restingFor(60)} {...h} />)
+    fireEvent.click(screen.getByRole('button', { name: '−15 Sekunden' }))
+    expect(h.onShiftRest).not.toHaveBeenCalled()
+
+    act(() => { vi.advanceTimersByTime(BAND_ARMS_MS) })
+    fireEvent.click(screen.getByRole('button', { name: '−15 Sekunden' }))
+    expect(h.onShiftRest).toHaveBeenCalledWith(-15)
+    vi.useRealTimers()
+  })
+
+  describe('a band that stays up', () => {
+    // Fix-round review: staying until the next set, the band is moved by the
+    // card above it (the next exercise's name, a line that comes or goes),
+    // and the button with it -- the double tap's second press finds a key.
+    let bandTop = 300
+    beforeEach(() => {
+      bandTop = 300
+      vi.useFakeTimers()
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        const top = this.classList.contains('restband') ? bandTop : 0
+        return { top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) }
+      })
+    })
+    afterEach(() => {
+      vi.restoreAllMocks()
+      vi.useRealTimers()
+    })
+
+    it('ignores taps again once it is pushed down', () => {
+      const h = handlers()
+      render(<LivePanel payload={restingFor(60)} {...h} />)
+      act(() => { vi.advanceTimersByTime(BAND_ARMS_MS) })
+      fireEvent.click(screen.getByRole('button', { name: '+15 Sekunden' }))
+      expect(h.onShiftRest).toHaveBeenCalledTimes(1)
+
+      bandTop = 420
+      act(() => { vi.advanceTimersByTime(1000) })   // the next render measures it
+      fireEvent.click(screen.getByRole('button', { name: '+15 Sekunden' }))
+      expect(h.onShiftRest).toHaveBeenCalledTimes(1)
+
+      act(() => { vi.advanceTimersByTime(BAND_ARMS_MS) })
+      fireEvent.click(screen.getByRole('button', { name: '+15 Sekunden' }))
+      expect(h.onShiftRest).toHaveBeenCalledTimes(2)
+    })
+
+    it('stays armed when it moves up, and measures the next push from there', () => {
+      // Up, the band leaves the button's old spot to what is below it.
+      const h = handlers()
+      render(<LivePanel payload={restingFor(60)} {...h} />)
+      act(() => { vi.advanceTimersByTime(BAND_ARMS_MS) })
+
+      bandTop = 200
+      act(() => { vi.advanceTimersByTime(1000) })
+      fireEvent.click(screen.getByRole('button', { name: '+15 Sekunden' }))
+      expect(h.onShiftRest).toHaveBeenCalledTimes(1)
+
+      bandTop = 260   // down again, but still above where it started
+      act(() => { vi.advanceTimersByTime(1000) })
+      fireEvent.click(screen.getByRole('button', { name: '+15 Sekunden' }))
+      expect(h.onShiftRest).toHaveBeenCalledTimes(1)
+    })
+
+    it('stays armed through its own ticks', () => {
+      // A tick re-renders the panel every second; only a move re-arms.
+      const h = handlers()
+      render(<LivePanel payload={restingFor(60)} {...h} />)
+      act(() => { vi.advanceTimersByTime(2000) })   // lands on a tick
+      fireEvent.click(screen.getByRole('button', { name: 'Pause beenden' }))
+      expect(h.onSkipRest).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('offers no "+15" past the longest rest there is', () => {
+    render(<LivePanel payload={restingFor(300, 600)} {...handlers()} />)
+    expect(screen.getByRole('button', { name: '+15 Sekunden' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '−15 Sekunden' })).toBeEnabled()
+  })
+
+  it('keeps the band once the rest is over, counting up, until the next set', () => {
+    // Round 4: gone, the band took the button 112px up while the phone rang.
+    const { container } = render(<LivePanel payload={restOver(12)} {...handlers()} />)
+    const band = screen.getByRole('group', { name: 'Pause' })
+    expect(band).toHaveTextContent('Pause vorbei')
+    expect(band).toHaveClass('is-over')
+    expect(screen.getByRole('timer')).toHaveTextContent(/^\+0:1[23]$/)
+    // Nothing left to shorten, lengthen or end.
+    expect(screen.queryByRole('button', { name: /Sekunden|Pause beenden/ })).not.toBeInTheDocument()
+    expect(container.querySelector('#set-confirm')).not.toHaveClass('is-resting')
+  })
+
+  it('counts up from zero when the server ended the rest a moment ahead of this clock', () => {
+    // A skip stamps the end with the server's now; a phone a few seconds slow
+    // must not count that back down as a rest.
+    render(<LivePanel payload={{ ...restingFor(4), resting: false, rest_total_seconds: 0 }}
+      {...handlers()} />)
+    expect(screen.getByRole('group', { name: 'Pause' })).toHaveTextContent('Pause vorbei')
+    expect(screen.getByRole('timer')).toHaveTextContent('+0:00')
+  })
+
+  it('shows no band while nothing rests', () => {
+    render(<LivePanel payload={payload} {...handlers()} />)
+    expect(screen.queryByRole('group', { name: 'Pause' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument()
   })
 
   it('rings the confirm button when the rest hits zero', () => {
@@ -368,6 +550,7 @@ describe('LivePanel', () => {
       session: {
         ...payload.session,
         rest_ends_at: new Date(Date.now() + 900).toISOString().replace('Z', ''),
+        resting_set_id: live.sets[0]!.id,
       },
     }
     const { container } = render(<LivePanel payload={nearlyOver} {...handlers()} />)
@@ -393,6 +576,7 @@ describe('LivePanel', () => {
       session: {
         ...payload.session,
         rest_ends_at: new Date(Date.now() + 90_000).toISOString().replace('Z', ''),
+        resting_set_id: live.sets[0]!.id,
       },
     }
     const { unmount } = render(<LivePanel payload={resting} {...handlers()} />)

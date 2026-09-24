@@ -160,3 +160,24 @@ def test_the_whole_winning_session_seeds_in_order(history_builder):
     seeded = _seed(created['exercise'], position=2)
     assert [(s['weight'], s['reps']) for s in seeded] == [
         (60.0, 10), (65.0, 8), (70.0, 6)]
+
+
+def test_last_time_is_the_newest_workout_whichever_of_its_rows_was_picked():
+    """The newest workout can hold the exercise twice (added twice, or
+    swapped for itself): the pick may land on either row, and both are "Letztes
+    Mal". Compared by row, the other one read "Stärkste Einheit" (I1 review)."""
+    from types import SimpleNamespace
+
+    from features.gym.seeding import Pick, _seed_source
+
+    def row(session_id, sets):
+        return SimpleNamespace(
+            session_id=session_id, position=1,
+            session=SimpleNamespace(started_at=dt.datetime(2026, 9, 23, 17)),
+            sets=[SimpleNamespace(weight=w, reps=r, completed=True) for w, r in sets])
+
+    first, second = row(7, [(50.0, 10)]), row(7, [(55.0, 8)])
+    older = row(3, [(60.0, 8)])
+
+    assert _seed_source(Pick(second, 'slot', first))['is_latest'] is True
+    assert _seed_source(Pick(older, 'slot', first))['is_latest'] is False

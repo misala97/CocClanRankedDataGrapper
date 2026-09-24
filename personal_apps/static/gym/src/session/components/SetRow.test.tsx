@@ -56,6 +56,18 @@ describe('SetRow', () => {
     expect(screen.getByRole('button')).not.toHaveClass('is-done')
   })
 
+  it('ticks a logged set, so it reads as settled rather than loud', () => {
+    // G-112: the filled done chip outweighed the next set, and in dark it was
+    // the brightest thing on the card. It is a tint now, and the tick says
+    // "done" where the fill used to.
+    const { rerender } = render(<SetRow {...props} set={aSet({ completed: true })} />)
+    expect(screen.getByRole('button').querySelector('svg')).not.toBeNull()
+    expect(screen.getByRole('button')).toHaveTextContent('62,5 × 8')
+
+    rerender(<SetRow {...props} set={aSet()} isNext />)
+    expect(screen.getByRole('button').querySelector('svg')).toBeNull()
+  })
+
   it('marks the set you are about to do', () => {
     render(<SetRow {...props} set={aSet()} isNext />)
     expect(screen.getByRole('button')).toHaveClass('is-now')

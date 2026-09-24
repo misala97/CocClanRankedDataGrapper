@@ -117,3 +117,29 @@ export function dayMonth(iso: string): string {
   const d = localParts(iso)
   return `${pad(d.day)}.${pad(d.month)}.`
 }
+
+/** WEEKDAY_SHORT, the server's own: the app speaks German to everyone. */
+const WEEKDAY_DE = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+
+/** A past day as a lifter says it: "heute", "gestern", the weekday within the
+ *  last week, the date before that -- a week ago was the same weekday as
+ *  today. Calendar days in Berlin, like every other date here. `now` is for
+ *  tests. */
+export function whenSaid(iso: string, now: Date = new Date()): string {
+  const then = localParts(iso)
+  const today = localParts(now.toISOString())
+  const days = Math.round((Date.UTC(today.year, today.month - 1, today.day)
+    - Date.UTC(then.year, then.month - 1, then.day)) / 86_400_000)
+  if (days === 0) return 'heute'
+  if (days === 1) return 'gestern'
+  if (days > 1 && days < 7) return WEEKDAY_DE[then.weekday] ?? dayMonth(iso)
+  return dayMonth(iso)
+}
+
+/** A workout's sets as one line, the weight said again only where it
+ *  changes: "55,0 × 10 · 9 · 8", "60,0 × 8 · 62,5 × 6 · 6". */
+export function setsLine(sets: { weight: number; reps: number }[]): string {
+  return sets.map((set, i) => (i > 0 && set.weight === sets[i - 1]!.weight
+    ? String(set.reps)
+    : `${kg1(set.weight)} × ${set.reps}`)).join(' · ')
+}

@@ -388,6 +388,8 @@ def save_setup(user_id, exercise, submitted):
 # rest in the same range (the settings form refuses nothing, but a stepper
 # needs ends).
 REST_MIN_SECONDS, REST_MAX_SECONDS = 15, 600
+# One tap of "−15" / "+15" on a running rest's countdown band.
+REST_NUDGE_SECONDS = 15
 # Where "Eine für alle" starts when the lifter has no rest of their own yet.
 REST_FOR_ALL_START = 120
 

@@ -6,6 +6,7 @@ import {
 describe('how a setting reads', () => {
   it('reads a rest as m:ss and a weight with a comma', () => {
     expect([clock(45), clock(90), clock(150), clock(600)]).toEqual(['0:45', '1:30', '2:30', '10:00'])
+    expect([clock(3599), clock(3600), clock(3725)]).toEqual(['59:59', '1:00:00', '1:02:05'])
     expect([kg(2.5), kg(5), kg(1.25), kg(0.1 + 0.2)]).toEqual(['2,5', '5', '1,25', '0,3'])
     expect([barLabel(0), barLabel(20)]).toEqual(['Ohne', '20'])
   })

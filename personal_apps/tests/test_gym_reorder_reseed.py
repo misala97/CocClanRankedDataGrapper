@@ -772,6 +772,20 @@ def test_the_payload_says_which_workout_a_plan_was_seeded_from(solo):
     assert days_ago == 5
 
 
+def test_the_source_carries_its_sets_and_whether_it_was_the_last_time(solo):
+    """The Vorgabe is one line of numbers now (G-053): what was lifted that
+    day, and "Letztes Mal" only when that workout really was the last one --
+    the best at a later slot ten days ago is not what you did last time."""
+    source = _source(_payload(solo['leader'], solo['session']), RAISE)
+    assert source['is_latest'] is True
+    assert [(s['weight'], s['reps']) for s in source['sets']] == LEADER_RAISE_AT_3
+
+    source = _source(_reorder(solo['leader'], solo['session'], [PRESS, ROW, CURL, RAISE]), RAISE)
+    assert (source['basis'], source['position']) == ('slot', 4)
+    assert source['is_latest'] is False
+    assert [(s['weight'], s['reps']) for s in source['sets']] == LEADER_RAISE_AT_4
+
+
 def test_the_source_follows_the_exercise_to_its_new_slot(solo):
     payload = _reorder(solo['leader'], solo['session'], [PRESS, ROW, CURL, RAISE])
 

@@ -16,7 +16,11 @@ beforeEach(() => {
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
-const exercise = payload.visible_exercises[0]!
+// Its own rest, 2:30, and none for today, whatever the lifter the fixture
+// was captured from had set when it was: the pills below are read against it.
+const exercise = {
+  ...payload.visible_exercises[0]!, rest_setting: 150, rest_setting_mine: true, rest_seconds: null,
+}
 const catalogue = [
   listed(exercise.exercise_id, exercise.name,
     { muscle_group: exercise.muscle_group, search: fold(exercise.name) }),
@@ -55,8 +59,8 @@ describe('ExerciseSheet', () => {
   })
 
   it('marks the rest in force and saves a pick on the tap', async () => {
-    // The fixture's first exercise has its own rest, 2:30, and none for
-    // today: the row centres on it, marked "deine".
+    // The exercise has its own rest, 2:30, and none for today: the row
+    // centres on it, marked "deine".
     const user = userEvent.setup()
     const { actions: a } = open()
     const row = within(screen.getByRole('group', { name: 'Pause heute' }))

@@ -1,14 +1,19 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { SeedSource, SessionDetailPayload, VariantRef } from '../types'
 import { useSheets } from '../stores'
 import { useRestTick } from '../useRestTick'
 import { useRecordTakeover } from '../useRecordTakeover'
 import { Icon } from '../../components/Icon'
-import { kg1, shortDate } from '../../format'
+import { kg1, setsLine, shortDate, whenSaid } from '../../format'
 import { MAX_REPS, MAX_WEIGHT_KG, REPS_HINT, WEIGHT_HINT } from '../../setInput'
+import { REST_MAX, REST_NUDGE, clock } from '../../settings/values'
 import { RecordTakeover } from './RecordTakeover'
 import { SetRow } from './SetRow'
 import { Stepper, type StepperHandle } from './Stepper'
+
+/** How long a freshly shown or moved rest band ignores taps: longer than the gap
+ *  between a double tap's two presses, shorter than any deliberate reach. */
+export const BAND_ARMS_MS = 600
 
 /** The sentence after "Vorgabe". Day and month only: every basis but the
  *  layoff is inside seeding's four-week window, where a year is noise. No
@@ -62,6 +67,10 @@ interface Props {
   /** A logged chip was tapped: put it back to open. */
   onToggleSet(setId: number, completed: boolean): void
   onRestOver(): void
+  /** "−15" / "+15" on the running rest. */
+  onShiftRest(seconds: number): void
+  /** End the running rest now. */
+  onSkipRest(): void
   /** A set write is still on its way. The confirm button waits for it. */
   confirmBusy?: boolean
 }
@@ -77,7 +86,7 @@ interface Props {
  * state needed the control, not new machinery.
  */
 export function LivePanel({
-  payload, onConfirm, onToggleSet, onRestOver, confirmBusy = false,
+  payload, onConfirm, onToggleSet, onRestOver, onShiftRest, onSkipRest, confirmBusy = false,
 }: Props) {
   const openSheet = useSheets((s) => s.open)
   const live = payload.visible_exercises.find((se) => se.id === payload.live_id) ?? null
@@ -151,10 +160,44 @@ export function LivePanel({
   // celebrate every record already in the payload.
   const { celebration, dismiss } = useRecordTakeover(payload)
 
+  // Which exercise's Vorgabe rule is spelled out. Kept per exercise rather
+  // than as a flag, so the next exercise going live starts on the one line.
+  const [sourceOpenFor, setSourceOpenFor] = useState<number | null>(null)
+
+  // The last rest's end, while no set has been logged since (a new set
+  // replaces it; reopening or deleting its set, or the finish, clears it):
+  // the band counts down to it, then up from it (round 4).
   const rest = useRestTick(
-    payload.resting ? payload.session.rest_ends_at : null,
+    payload.session.resting_set_id !== null ? payload.session.rest_ends_at : null,
     payload.rest_total_seconds,
-    { onOver: () => { setRinging(true); onRestOver() } })
+    { stopped: !payload.resting, onOver: () => { setRinging(true); onRestOver() } })
+
+  // A band that has only just appeared pushed the confirm button down under
+  // a thumb already on its way: a double tap on "Satz geschafft" landed its
+  // second tap on "−15" (I1 review). Staying until the next set (round 4),
+  // the band can also be pushed down by the card above it -- the next
+  // exercise's name, a line that comes -- onto where the button was
+  // (fix-round review). Either way its keys wait BAND_ARMS_MS. A band that
+  // moves UP leaves that spot to what is below the button, so it stays armed:
+  // closing the Vorgabe and reaching for "+15" is no double tap. Measured in
+  // the commit that moved it, before the next paint or tap; against the
+  // page, so scrolling is no move.
+  const band = rest.running || rest.over
+  const bandRef = useRef<HTMLDivElement>(null)
+  const bandArm = useRef({ since: 0, top: Number.NaN })
+  useLayoutEffect(() => {
+    if (bandRef.current === null) {
+      bandArm.current.top = Number.NaN
+      return
+    }
+    const top = bandRef.current.getBoundingClientRect().top + window.scrollY
+    const last = bandArm.current.top
+    if (Number.isNaN(last) || top - last >= 1) bandArm.current = { since: Date.now(), top }
+    else bandArm.current.top = top
+  })
+  const armed = (act: () => void) => () => {
+    if (Date.now() - bandArm.current.since >= BAND_ARMS_MS) act()
+  }
 
   // The countdown follows the lifter into another tab: leaving mid-rest is
   // exactly when this screen is not on screen to show it. The phone has the
@@ -163,7 +206,7 @@ export function LivePanel({
     if (!rest.running) return
     const base = document.title
     document.title =
-      `${Math.floor(rest.remaining / 60)}:${String(rest.remaining % 60).padStart(2, '0')} Pause · ${base}`
+      `${clock(rest.remaining)} Pause · ${base}`
     return () => { document.title = base }
   }, [rest.running, rest.remaining])
 
@@ -265,16 +308,32 @@ export function LivePanel({
       )}
 
       {/* Where the numbers below come from, said rather than left to guess.
-          Seeding reads the slot as a fatigue proxy, so moving an exercise can
-          change its plan -- or, this late in a workout, visibly NOT change it,
-          because nothing was ever lifted that late and the best earlier result
-          stands in. The owner kept that fallback on the condition that the
-          screen says so. Quiet: same note anatomy, no ink of its own. */}
+          One line now (G-053, D8): what was lifted and when, which is what a
+          lifter reads it for. The rule behind it is one tap away -- seeding
+          reads the slot as a fatigue proxy, so moving an exercise can change
+          its plan or, this late in a workout, visibly NOT change it, and the
+          owner kept that fallback on the condition that the screen says so.
+          "Letztes Mal" only when it was: the best result lately can be ten
+          days old with a lighter workout since. */}
       {source !== null && (
-        <p className="live__seed">
-          <span className="live__seed-lbl">Vorgabe</span>
-          {` ${seedSourceText(source, live.position)}`}
-        </p>
+        <>
+          <button type="button" className="seedline"
+            aria-expanded={sourceOpenFor === live.id} aria-controls={`seed-rule-${live.id}`}
+            onClick={() => setSourceOpenFor(sourceOpenFor === live.id ? null : live.id)}>
+            <span className="seedline__lbl">
+              {`${source.is_latest ? 'Letztes Mal' : 'Stärkste Einheit'} ${whenSaid(source.date)}`}
+            </span>
+            {' '}
+            <span className="seedline__val">{setsLine(source.sets)}</span>
+            <Icon name="forward" />
+          </button>
+          {sourceOpenFor === live.id && (
+            <p className="live__seed" id={`seed-rule-${live.id}`}>
+              <span className="live__seed-lbl">Vorgabe</span>
+              {` ${seedSourceText(source, live.position)}`}
+            </p>
+          )}
+        </>
       )}
       {/* The other half of the same slot: no history, so no Vorgabe -- the
           plan is blank and the lifter types the first set. The other
@@ -351,12 +410,48 @@ export function LivePanel({
           onDraft={setDraftReps} onChange={setReps} />
       </div>
 
-      {/* The rest does not take this slot -- it runs THROUGH it. The button is
-          present and pressable for the whole countdown; the band charges
-          underneath. aria-hidden on the clock keeps the accessible name stable
-          at "Satz geschafft": a name that rewrote itself every second would be
-          worse than no countdown, and the announcement lives in the live
-          region, which speaks twice per rest rather than ninety times. */}
+      {/* The rest gets a band of its own above the button (D8, variant B):
+          "Pause 2:25" at 13px on the button's edge could not be read from
+          the bench, ending a rest early sat behind ⋮, and there was no ±15
+          (G-055). The card stays -- the next set's numbers are what the rest
+          is for. The time is a timer, silent by role; the end is announced
+          once, by the live region.
+          It stays once the countdown is done, counting up, until the next set
+          (round 4): gone, it took the button 112px up while the phone rang. */}
+      {band && (
+        <div ref={bandRef} className={`restband${rest.over ? ' is-over' : ''}`} role="group" aria-label="Pause">
+          {/* The label on a line of its own, the band's full width: beside
+              the keys it wrapped on a 360px phone, and the band changed
+              height when the keys went. */}
+          <span className="restband__lbl">
+            {rest.running ? `Pause · von ${clock(payload.rest_total_seconds)}` : 'Pause vorbei'}
+          </span>
+          <div className="restband__row">
+            <div className="restband__time">
+              <span className={`restband__num${rest.running && rest.remaining >= 600 ? ' is-long' : ''}`}
+                role="timer">
+                {rest.running ? clock(rest.remaining) : `+${clock(rest.sinceEnd)}`}
+              </span>
+            </div>
+            {rest.running && (
+              <div className="restband__keys">
+                <button type="button" className="restband__key" aria-label="−15 Sekunden"
+                  onClick={armed(() => onShiftRest(-REST_NUDGE))}>−15</button>
+                {/* The server stops a rest at the longest one there is; at
+                    that point the key has nothing left to do. */}
+                <button type="button" className="restband__key" aria-label="+15 Sekunden"
+                  disabled={payload.rest_total_seconds >= REST_MAX}
+                  onClick={armed(() => onShiftRest(REST_NUDGE))}>+15</button>
+                <button type="button" className="restband__key" aria-label="Pause beenden"
+                  onClick={armed(onSkipRest)}><Icon name="skip" /></button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* The button stays present and pressable for the whole countdown, and
+          its name stays "Satz geschafft": the band charges underneath it. */}
       {/* Disabled for the length of the round trip: a sweaty double-tap on a
           64px thumb target is normal use, and the second press must not race
           the first one's answer. It keyed on the NEXT set's id, which is null
@@ -385,19 +480,10 @@ export function LivePanel({
               : <><Icon name="check" />Satz geschafft</>}
         </span>
         {rest.running && (
-          <>
-            {/* "Pause" is said: a bare 2:59 inside a button labelled "Satz
-                geschafft" read as anything but the rest. Stacked above the
-                time (gym.css), so it costs no width beside the label. */}
-            <span className="go__clock" aria-hidden="true">
-              <span className="go__clock-lbl">Pause</span>
-              {`${Math.floor(rest.remaining / 60)}:${String(rest.remaining % 60).padStart(2, '0')}`}
-            </span>
-            <span className="go__band" aria-hidden="true">
-              <span className="go__charge"
-                style={{ transform: `scaleX(${rest.progress})` }} />
-            </span>
-          </>
+          <span className="go__band" aria-hidden="true">
+            <span className="go__charge"
+              style={{ transform: `scaleX(${rest.progress})` }} />
+          </span>
         )}
       </button>
     </section>

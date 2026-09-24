@@ -9,6 +9,9 @@ interface Options {
   /** Fired once when the countdown reaches zero. No refetch happens here: the
    *  server still thinks a rest is running, and it is right to. */
   onOver?(): void
+  /** The server says this rest is over (skipped, or "−15" past its end), so
+   *  it is, whatever this phone's clock thinks of the stamp. */
+  stopped?: boolean
 }
 
 export interface RestTick {
@@ -18,6 +21,11 @@ export interface RestTick {
   /** 0 at the start, 1 when elapsed. Drawn as scaleX, so it must stay finite
    *  even when total is 0 -- which it is whenever nothing is resting. */
   progress: number
+  /** The last rest has ended and no set has been logged since: the band's
+   *  "Pause vorbei", which stays until the next set (round 4). */
+  over: boolean
+  /** Whole seconds since that end, never negative. */
+  sinceEnd: number
 }
 
 /**
@@ -30,7 +38,7 @@ export interface RestTick {
 export function useRestTick(
   restEndsAt: string | null,
   totalSeconds: number,
-  { onStart, onOver }: Options = {},
+  { onStart, onOver, stopped = false }: Options = {},
 ): RestTick {
   const endsAt = restEndsAt === null
     ? null
@@ -53,11 +61,11 @@ export function useRestTick(
     return () => clearInterval(id)
   }, [endsAt])
 
-  const remainingMs = endsAt === null ? 0 : Math.max(0, endsAt - now)
+  const remainingMs = endsAt === null || stopped ? 0 : Math.max(0, endsAt - now)
   const running = endsAt !== null && remainingMs > 0
 
   useEffect(() => {
-    if (endsAt === null || announced.current === endsAt) return
+    if (endsAt === null || stopped || announced.current === endsAt) return
     // A rest that already elapsed before this mounted is not starting.
     if (endsAt > Date.now()) {
       announced.current = endsAt
@@ -80,5 +88,7 @@ export function useRestTick(
     progress: totalSeconds > 0
       ? Math.min(1, 1 - remainingMs / (totalSeconds * 1000))
       : 1,
+    over: endsAt !== null && !running,
+    sinceEnd: endsAt === null ? 0 : Math.max(0, Math.round((now - endsAt) / 1000)),
   }
 }

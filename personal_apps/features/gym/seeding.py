@@ -15,6 +15,7 @@ would not find nothing -- it would quietly seed the follower from the
 LEADER's history, which is worse.
 """
 import datetime as dt
+from typing import NamedTuple
 
 from sqlalchemy.orm import contains_eager, selectinload
 
@@ -59,17 +60,39 @@ def _seed_source(picked):
     a slot later than anything in the fresh window is seeded from a fresher
     one, so the numbers may run heavy, and the lifter should be told rather
     than left to wonder why moving an exercise down changed nothing.
+
+    The live card says it as one line of numbers (G-053): the sets lifted
+    that day, and "Letztes Mal" only when `is_latest` -- when the workout
+    picked is also the newest one that counts. Deloads are left out of
+    "newest" as they are out of the pick, the same rule stats.ready_for_more
+    words its "Letztes Mal" by.
     """
-    session_exercise, basis = picked
+    session_exercise, basis, newest = picked
     if session_exercise is None:
         return None
     return {'date': session_exercise.session.started_at,
             'position': session_exercise.position,
-            'basis': basis}
+            'basis': basis,
+            # By workout, not by row: the newest workout can hold the
+            # exercise twice (added twice, or swapped for itself), and either
+            # row of it is "last time".
+            'is_latest': session_exercise.session_id == newest.session_id,
+            'sets': [{'weight': s.weight, 'reps': s.reps}
+                     for s in session_exercise.sets if s.completed]}
+
+
+class Pick(NamedTuple):
+    """_pick_session_exercise's answer: the row to seed from and the rule
+    that chose it, plus the newest row that counts, so a caller can tell
+    "last time" from "best lately" without asking again."""
+    session_exercise: SessionExercise | None
+    basis: str | None
+    newest: SessionExercise | None
 
 
 def _pick_session_exercise(exercise_id, position=None, user_id=None, exclude_session_id=None):
-    """(SessionExercise to seed from, which rule picked it) -- or (None, None).
+    """Pick(SessionExercise to seed from, which rule picked it, the newest
+    row that counts) -- or Pick(None, None, None).
 
     `exclude_session_id` is the workout being seeded, which is never its own
     history. It qualifies on every other count the moment one set is logged --
@@ -130,20 +153,20 @@ def _pick_session_exercise(exercise_id, position=None, user_id=None, exclude_ses
         .all()
     )
     if not pool:
-        return None, None
+        return Pick(None, None, None)
 
     cutoff = dt.datetime.utcnow() - dt.timedelta(days=stats.ROLLING_WINDOW_DAYS)
     fresh = [se for se in pool if se.session.started_at >= cutoff]
     if not fresh:
         # Layoff: rule 3. `pool` is newest-first.
-        return pool[0], 'layoff'
+        return Pick(pool[0], 'layoff', pool[0])
 
     # Best e1RM; the newest wins a tie because the lists are newest-first
     # and max() keeps the first of equals.
     at_or_after = [se for se in fresh if position is None or se.position >= position]
     if at_or_after:
-        return max(at_or_after, key=_session_exercise_e1rm), 'slot'
-    return max(fresh, key=_session_exercise_e1rm), 'earlier_slot'
+        return Pick(max(at_or_after, key=_session_exercise_e1rm), 'slot', pool[0])
+    return Pick(max(fresh, key=_session_exercise_e1rm), 'earlier_slot', pool[0])
 
 
 def _last_performance(exercise_id, position=None, user_id=None, picked=None):

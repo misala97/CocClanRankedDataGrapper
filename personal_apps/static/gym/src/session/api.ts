@@ -93,6 +93,10 @@ export const api = {
 
   skipRest: (sessionId: number) => post(`/gym/session/${sessionId}/rest/skip`),
 
+  /** "−15" / "+15" on the countdown band: `seconds` is one of the two. */
+  shiftRest: (sessionId: number, seconds: number) =>
+    post(`/gym/session/${sessionId}/rest/shift`, { seconds }),
+
   toggleDeload: (sessionId: number, on: boolean, pct: number) =>
     post(`/gym/session/${sessionId}/deload`, { on: on ? '1' : '0', pct }),
 }

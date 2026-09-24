@@ -1281,6 +1281,21 @@ def test_a_populated_slot_is_judged_on_its_own_sessions():
     assert stats.ready_for_more(rows, position=7) is None
 
 
+def test_last_time_is_the_newest_workout_whichever_of_its_rows_counted():
+    """The newest workout holds the exercise twice (added twice, or swapped
+    for itself): the slot-7 row is the evidence, the other row of the SAME
+    workout sorts last. That workout is still "Letztes Mal" -- by workout,
+    as the seed line says it (fix-round review)."""
+    older = perf([(35.0, 6), (35.0, 5)], position=7,
+                 started_at=dt.datetime(2026, 7, 24), session_id=2)
+    here = perf([(35.0, 10), (35.0, 10)], position=7,
+                started_at=dt.datetime(2026, 7, 28), session_id=4)
+    again = perf([(30.0, 8)], position=9,
+                 started_at=dt.datetime(2026, 7, 28), session_id=4)
+    assert stats.ready_for_more([older, here, again], position=7) == {
+        'sets': 2, 'weight': 35.0, 'is_latest': True}
+
+
 def test_no_history_says_nothing():
     assert stats.ready_for_more([]) is None
 

@@ -122,7 +122,11 @@
     --stall-ink: #5FDDEC;
     --on-stall:  #04262C;
 
-    --glow-live:   0 10px 26px -14px rgba(255, 122, 77, .60);
+    /* No glow in dark (G-112): the confirm and "Starten" sit on their plane
+       like every other control; the orange halo made them the loudest thing
+       on the screen before anything had happened. A zero shadow, not `none`,
+       because the token also sits inside shadow lists. */
+    --glow-live:   0 0 0 0 transparent;
     --glow-record: 0 10px 26px -14px rgba(255, 200, 97, .55);
     --lift:        0 2px 4px rgba(0, 0, 0, .40), 0 14px 34px -18px rgba(0, 0, 0, .85);
     --wash-live:   rgba(255, 122, 77, .14);
@@ -153,7 +157,7 @@ html[data-theme="dark"] {
   --done:#F1C8DD; --done-ink:#F1C8DD; --on-done:#2A1233;
   --record:#FFC861; --record-ink:#FFC861; --on-record:#2A1D00;
   --stall:#5FDDEC; --stall-ink:#5FDDEC; --on-stall:#04262C;
-  --glow-live:0 10px 26px -14px rgba(255,122,77,.60);
+  --glow-live:0 0 0 0 transparent;
   --glow-record:0 10px 26px -14px rgba(255,200,97,.55);
   --lift:0 2px 4px rgba(0,0,0,.40), 0 14px 34px -18px rgba(0,0,0,.85);
   --wash-live:rgba(255,122,77,.14); --wash-record:rgba(255,200,97,.14); --wash-stall:rgba(95,221,236,.14);
@@ -786,7 +790,7 @@ body.is-focus .tabbar, body.is-focus .nav-footer, body.is-focus .topbar { displa
    this file has hit it; see .row[hidden] and .go[hidden]. */
 .resume__clock[hidden] { display: none; }
 /* No opacity on either prefix. "Pause" at 0.85 measured 3.88:1 against --live
-   and failed AA -- the same trade .go__clock made and lost, for the same
+   and failed AA -- the same trade the confirm's old in-button clock made and lost, for the same
    reason: --on-live on --live is 4.79:1, which has 0.29 of headroom and no
    more. These labels are already secondary by size (11px against a 22px
    numeral) and by case; they do not also need to be faded. */
@@ -1687,6 +1691,12 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
 @keyframes rail-grow { from { transform: scaleX(var(--p0, 0)); } }
 .rail__fill.just-grew { animation: rail-grow var(--dur-3) var(--ease-out); }
 .rail__cap { display: flex; justify-content: space-between; margin: 7px var(--sp-4) 0; }
+/* Sentence case at the data floor, not a tracked uppercase eyebrow (D11):
+   "Übung 1 von 4 · noch 8 Sätze" is a reading, not a section title. */
+.rail__cap .label {
+  text-transform: none; letter-spacing: 0;
+  font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim);
+}
 
 /* ---- the one lifted plane ---- */
 .live {
@@ -1855,11 +1865,36 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   display: block; font-size: var(--t-micro); font-weight: var(--w-bold);
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--dim);
 }
+/* D11 on the live card, as for the rail caption: the four note labels are
+   words at the data floor, not tracked uppercase eyebrows at 11px. Each
+   keeps its own ink, so the note still says what kind it is. */
+.live__record-lbl, .live__stall-lbl, .live__ready-lbl, .live__seed-lbl {
+  font-size: var(--t-meta); letter-spacing: 0; text-transform: none;
+}
 /* "Erstes Mal": the lifter's other variants of the movement, a line of its
    own under the instruction. The variant names carry the ink -- they are what
    the eye scans for. */
 .live__refs { display: block; margin-top: var(--sp-2); }
 .live__refs b { font-weight: var(--w-semi); color: var(--ink); }
+
+/* The Vorgabe as one line (G-053): when, then the numbers, which carry the
+   ink. The rule behind them is the chevron's -- the note above opens beneath
+   it. The numbers wrap rather than clip: a cut-off rep count is a wrong one. */
+.seedline {
+  inline-size: 100%; min-block-size: var(--tap); margin-top: var(--sp-2);
+  display: flex; align-items: center; gap: var(--sp-2);
+  background: none; border: 0; padding: 0; color: var(--dim); text-align: start;
+  font: inherit; font-size: var(--t-sm); cursor: pointer;
+}
+.seedline__lbl { flex: none; font-weight: var(--w-semi); }
+.seedline__val {
+  flex: 1; min-inline-size: 0; color: var(--ink); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+}
+.seedline .icon { flex: none; color: var(--unlit); transition: transform var(--dur-2) var(--ease); }
+.seedline[aria-expanded="true"] .icon { transform: rotate(90deg); }
+.seedline + .live__seed { margin-top: var(--sp-1); }
+.seedline + .sets { margin-top: var(--sp-2); }
 
 /* ---- set chips ---- */
 /* Wraps, because a row that only ever compressed hit 35px per chip at eight
@@ -1881,9 +1916,19 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease),
               transform var(--dur-1) var(--ease);
 }
-.set.is-done { background: var(--done); color: var(--on-done); }
+/* A logged set is a settled fact (G-112): a tint of the done hue and a tick,
+   not the solid fill that outweighed the next set -- in dark it was the
+   brightest thing on the card. The accumulation stays loud where it lives,
+   in the tick strip and the kg total. */
+.set.is-done {
+  gap: 5px;
+  background: color-mix(in oklab, var(--done) 13%, var(--chassis));
+  color: var(--done-ink);
+}
+.set.is-done .icon { inline-size: 13px; block-size: 13px; stroke-width: 2.2; flex: none; }
 .set.is-record { background: var(--record); color: var(--on-record); }
-.set.is-now { background: transparent; box-shadow: inset 0 0 0 2px var(--live); color: var(--live-ink); }
+/* The next set leads the row: the ring plus a wash of the live hue. */
+.set.is-now { background: var(--wash-live); box-shadow: inset 0 0 0 2px var(--live); color: var(--live-ink); }
 /* A planned set still waiting for its numbers reads "Satz 2": a word, not a
    load, so one weight lighter than the numerals beside it. */
 .set.is-blank { font-weight: var(--w-semi); }
@@ -1966,6 +2011,57 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   border: 2px dashed var(--edge-hi); border-radius: var(--r-inset);
 }
 
+/* ---- the rest, in a band of its own above the confirm (D8, variant B) ----
+   The time is the one number read from the bench, so it is the band's size;
+   the label says which rest and how long it was set for. The keys are the
+   chassis colour on the raised band: pressable, and quieter than the confirm
+   below, which is still the next thing to press. */
+.restband {
+  margin-top: var(--sp-4); display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+  border-radius: var(--r-control); background: var(--raised);
+}
+/* The row keeps the keys' height with or without them, so the band is one
+   height counting down and counting up. */
+.restband__row { display: flex; align-items: center; gap: var(--sp-3); min-block-size: 52px; }
+/* The number is sized by its column, not the other way round: beside three
+   52px keys the column is 114px at 390 and narrower on smaller phones, where
+   a fixed 3.5rem ran under "−15" (I1 review). "10:00" is a digit wider, for
+   the first second of the longest rest. */
+.restband__time { flex: 1; min-inline-size: 0; container-type: inline-size; }
+.restband__lbl { font-size: var(--t-meta); font-weight: var(--w-semi); color: var(--dim); }
+.restband__num {
+  font-family: var(--font-display); font-size: min(3.5rem, 48cqi); font-weight: var(--w-max);
+  letter-spacing: var(--track-num); font-variant-numeric: tabular-nums;
+  /* The full size's line box whatever the digits' size, so the band is one
+     height counting down beside the keys and counting up without them. */
+  line-height: calc(3.5rem * .9);
+  color: var(--ink);
+  margin-inline-start: -0.04em;   /* optical: the tabular digits carry side bearing */
+}
+.restband__num.is-long { font-size: min(3.5rem, 38cqi); }
+/* Over, and staying until the next set (round 4): the count-up is the quiet
+   half now -- the confirm below, ringing, is what to press. */
+.restband.is-over .restband__num { color: var(--dim); }
+.restband__keys { flex: none; display: flex; gap: var(--sp-2); }
+.restband__key {
+  inline-size: 52px; block-size: 52px; border: 0; border-radius: var(--r-inset);
+  display: grid; place-items: center;
+  background: var(--chassis); color: var(--ink); box-shadow: 0 1px 0 var(--edge);
+  font: inherit; font-size: var(--t-body); font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.restband__key .icon { inline-size: 20px; block-size: 20px; }
+.restband__key:active { transform: scale(0.96); }
+.restband__key:disabled { opacity: .45; cursor: default; }
+.restband__key:disabled:active { transform: none; }
+/* Under 360px three 52px keys leave the number a third of that: the keys
+   give up to the 44px minimum instead. */
+@media (max-width: 359px) {
+  .restband__keys { gap: 6px; }
+  .restband__key { inline-size: 44px; block-size: 44px; }
+}
+
 /* ---- confirm, and the rest that runs through it ---- */
 .go {
   position: relative; overflow: hidden;   /* the band is clipped to the radius */
@@ -2005,23 +2101,6 @@ a.row:active, a.row__main:active { transform: scale(0.99); }
   transform-origin: left; transform: scaleX(var(--p, 0));
   transition: transform 1s linear;
 }
-/* No opacity. --on-live on --live is 4.79:1 -- it clears AA with 0.29 to
-   spare, and knocking it back to 85% spent all of that and landed on 3.88:1.
-   At 14px/700 the large-text exemption does not apply, so this was a real
-   failure on the one number you read at arm's length. The clock is already
-   secondary by size (14 against the label's 17); it does not also need to be
-   faded. */
-.go__clock {
-  position: absolute; inset-inline-end: var(--sp-4);
-  font-size: var(--t-sm); font-weight: var(--w-bold);
-  font-variant-numeric: tabular-nums;
-}
-/* The word sits ON the countdown, not beside it: beside, it needed 40px the
-   centred label does not leave on a 390px phone. Stacked it costs height the
-   64px button already has, and the clock block keeps the width of "2:59". */
-.go__clock { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
-.go__clock-lbl { font-size: var(--t-label); font-weight: var(--w-med); }
-
 
 /* The rest hitting zero is the cue to start the next set, and it arrives while
    the phone is face-down on a bench -- so the button has to announce itself,

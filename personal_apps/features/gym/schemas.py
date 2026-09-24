@@ -340,6 +340,11 @@ class SeedSource(_Model):
     # The slot the exercise sat in during THAT workout.
     position: int
     basis: Literal['slot', 'earlier_slot', 'layoff']
+    # That workout is also the newest one that counts (deloads left out):
+    # the card may say "Letztes Mal" only then.
+    is_latest: bool
+    # What was lifted that day, in order -- the one line the card leads with.
+    sets: list[Suggestion]
 
 
 class LiveRecord(_Model):

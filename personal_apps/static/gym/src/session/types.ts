@@ -110,6 +110,11 @@ export interface SeedSource {
   /** The slot the exercise sat in during THAT workout. */
   position: number
   basis: 'slot' | 'earlier_slot' | 'layoff'
+  /** That workout is also the newest one that counts (deloads left out), so
+   *  the card may call it "Letztes Mal". */
+  is_latest: boolean
+  /** What was lifted that day, in order. */
+  sets: Suggestion[]
 }
 
 /** What one just-logged set beat. 'weight' wins when a set beats both, which

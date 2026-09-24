@@ -156,6 +156,7 @@ SESSION_ROUTES = [
     ('POST', '/gym/session/{}/exercises/add',      'session_id'),
     ('POST', '/gym/session/{}/exercises/reorder',  'session_id'),
     ('POST', '/gym/session/{}/rest/skip',          'session_id'),
+    ('POST', '/gym/session/{}/rest/shift',         'session_id'),
     ('POST', '/gym/session/{}/finish',             'session_id'),
     ('POST', '/gym/session/{}/discard',            'session_id'),
     ('POST', '/gym/session/{}/deload',             'session_id'),

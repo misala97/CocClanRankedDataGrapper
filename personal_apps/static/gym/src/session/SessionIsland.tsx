@@ -133,7 +133,9 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     (seId: number, seconds: number) => api.setRest(seId, seconds), optimistic.setRest)
   const sessionMeta = useSessionMutation(sessionId,
     (meta: SessionMetaPatch) => api.setSessionMeta(sessionId, meta))
-  const skipRest = useSessionMutation(sessionId, () => api.skipRest(sessionId))
+  const skipRest = useSessionMutation(sessionId, () => api.skipRest(sessionId), optimistic.skipRest)
+  const shiftRest = useSessionMutation(sessionId,
+    (seconds: number) => api.shiftRest(sessionId, seconds), optimistic.shiftRest)
   const toggleDeload = useSessionMutation(sessionId,
     (on: boolean, pct: number) => api.toggleDeload(sessionId, on, pct))
 
@@ -238,6 +240,9 @@ function SessionIslandInner({ initial }: { initial: SessionDetailPayload }) {
     // bodyweight for the note must not close it under the lifter.
     onSessionMetaSave: (meta) => { sessionMeta.mutate([meta]) },
     onSkipRest: () => { skipRest.mutate([]); close() },
+    // Each tap is its own write, queued behind the last in the session's
+    // scope, and each moves the countdown on the spot.
+    onShiftRest: (seconds) => { shiftRest.mutate([seconds]) },
     // A navigation, not an in-place write: the invite has its own page.
     // postNavigate carries the csrf_token the hand-built form here forgot,
     // which the blueprint gate has 403'd since it closed.

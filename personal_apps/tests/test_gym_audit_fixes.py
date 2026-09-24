@@ -72,6 +72,7 @@ def test_every_live_route_refuses_a_finished_workout(client, live_session):
         (f"/gym/session-exercise/{ids['se']}/replace", {'exercise_id': str(ids['exercise'])}),
         (f"/gym/session/{ids['session']}/exercises/reorder", {'order': str(ids['se'])}),
         (f"/gym/session/{ids['session']}/rest/skip", {}),
+        (f"/gym/session/{ids['session']}/rest/shift", {'seconds': '15'}),
         (f"/gym/session/{ids['session']}/deload", {'on': '1', 'pct': '60'}),
         (f"/gym/session-exercise/{ids['se']}/delete", {}),
     ]

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { dayMonth, kg1, localParts, roundTo, shortDate, signedWhole, volume, whole } from './format'
+import {
+  dayMonth, kg1, localParts, roundTo, setsLine, shortDate, signedWhole, volume, whenSaid, whole,
+} from './format'
 
 describe('kg1', () => {
   it('uses a comma', () => {
@@ -115,5 +117,39 @@ describe('localParts', () => {
     // Wednesday 23 September, 00:10 in Berlin.
     expect(localParts('2026-09-22T22:10:41')).toEqual(
       { year: 2026, month: 9, day: 23, hour: 0, minute: 10, weekday: 2 })
+  })
+})
+
+describe('whenSaid', () => {
+  // Thursday 24 September, noon in Berlin.
+  const now = new Date('2026-09-24T10:00:00Z')
+
+  it('says the day the way a lifter does', () => {
+    expect(whenSaid('2026-09-24T06:00:00', now)).toBe('heute')
+    expect(whenSaid('2026-09-23T06:00:00', now)).toBe('gestern')
+    expect(whenSaid('2026-09-21T16:00:00', now)).toBe('Mo')
+    expect(whenSaid('2026-09-18T16:00:00', now)).toBe('Fr')
+  })
+
+  it('names the date once the weekday would be ambiguous', () => {
+    // A week ago was a Thursday too.
+    expect(whenSaid('2026-09-17T16:00:00', now)).toBe('17.09.')
+  })
+
+  it('counts Berlin days, not UTC ones', () => {
+    // 00:30 on Wednesday in Berlin is still Tuesday in UTC.
+    expect(whenSaid('2026-09-22T22:30:00', now)).toBe('gestern')
+  })
+})
+
+describe('setsLine', () => {
+  it('says the weight once while it holds', () => {
+    expect(setsLine([{ weight: 55, reps: 10 }, { weight: 55, reps: 9 }, { weight: 55, reps: 8 }]))
+      .toBe('55,0 × 10 · 9 · 8')
+  })
+
+  it('says it again where it changes', () => {
+    expect(setsLine([{ weight: 60, reps: 8 }, { weight: 62.5, reps: 6 }, { weight: 62.5, reps: 6 }]))
+      .toBe('60,0 × 8 · 62,5 × 6 · 6')
   })
 })

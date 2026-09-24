@@ -1,4 +1,6 @@
 import type { LiveExercise, SessionDetailPayload } from './types'
+import { instant } from '../format'
+import { REST_MAX } from '../settings/values'
 
 /**
  * Local guesses at what a write will do, applied before the server answers.
@@ -194,5 +196,55 @@ export function setRest(
       se.id === sessionExerciseId
         ? { ...se, rest_seconds: seconds === se.rest_setting ? null : seconds }
         : se),
+  }
+}
+
+/** Naive UTC, as the server sends it. */
+function naive(ms: number): string {
+  return new Date(ms).toISOString().replace('Z', '')
+}
+
+/** The running rest ended now, as gym_skip_rest leaves it: its end stamped
+ *  now (whole seconds, as the database keeps it) and the set it followed
+ *  kept, so the band stays and counts up until the next set. A rest that is
+ *  not running is left alone. `now` is for tests. */
+export function skipRest(
+  payload: SessionDetailPayload,
+  now: number = Date.now(),
+): SessionDetailPayload {
+  const endsAt = payload.session.rest_ends_at
+  if (!payload.resting || endsAt === null || instant(endsAt).getTime() <= now) return payload
+  return {
+    ...payload,
+    resting: false,
+    rest_total_seconds: 0,
+    session: { ...payload.session, rest_ends_at: naive(Math.floor(now / 1000) * 1000) },
+  }
+}
+
+/** "−15" / "+15" on the running rest, as gym_shift_rest answers it: the end
+ *  and the total move together, "+15" stops at the longest rest there is
+ *  (never shortening one already longer), and a step past the end ends the
+ *  rest as the skip does. A rest that is not running -- or already ran out --
+ *  is left alone. `now` is for tests. */
+export function shiftRest(
+  payload: SessionDetailPayload,
+  seconds: number,
+  now: number = Date.now(),
+): SessionDetailPayload {
+  const endsAt = payload.session.rest_ends_at
+  if (!payload.resting || endsAt === null) return payload
+  const ends = instant(endsAt).getTime()
+  if (ends <= now) return payload
+  const started = ends - payload.rest_total_seconds * 1000
+  const moved = seconds > 0
+    ? Math.min(ends + seconds * 1000, Math.max(ends, started + REST_MAX * 1000))
+    : ends + seconds * 1000
+  if (moved === ends) return payload
+  if (moved <= now) return skipRest(payload, now)
+  return {
+    ...payload,
+    rest_total_seconds: Math.round((moved - started) / 1000),
+    session: { ...payload.session, rest_ends_at: naive(moved) },
   }
 }

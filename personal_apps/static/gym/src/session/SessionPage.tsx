@@ -37,6 +37,8 @@ export interface SessionActions {
   onReorder(order: number[]): void
   onSessionMetaSave(meta: SessionMetaPatch): void
   onSkipRest(): void
+  /** "−15" / "+15" on the running rest. */
+  onShiftRest(seconds: number): void
   onInvite(partnerId: number): void
   onEnablePush(): void
   onToggleDeload(on: boolean, pct: number): void
@@ -97,7 +99,9 @@ export function SessionPage({
       <LivePanel payload={payload} confirmBusy={confirmBusy}
         onConfirm={actions.onConfirmSet}
         onToggleSet={actions.onToggleSet}
-        onRestOver={() => announce('Pause vorbei.')} />
+        onRestOver={() => announce('Pause vorbei.')}
+        onShiftRest={actions.onShiftRest}
+        onSkipRest={actions.onSkipRest} />
 
       <SessionTotals volume={payload.session_volume}
         setsDone={payload.sets_done}

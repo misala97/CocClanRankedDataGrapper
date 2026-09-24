@@ -3,8 +3,13 @@
 
 /** 150 -> "2:30". */
 export function clock(seconds: number): string {
-  const minutes = Math.floor(seconds / 60)
-  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`
+  const two = (n: number) => String(n).padStart(2, '0')
+  // Past an hour only the rest band's "Pause vorbei" count-up gets here: a
+  // lifter who walked away mid-workout.
+  if (seconds >= 3600) {
+    return `${Math.floor(seconds / 3600)}:${two(Math.floor(seconds / 60) % 60)}:${two(seconds % 60)}`
+  }
+  return `${Math.floor(seconds / 60)}:${two(seconds % 60)}`
 }
 
 /** 2.5 -> "2,5", 5 -> "5": a setting reads the way it is typed. */
