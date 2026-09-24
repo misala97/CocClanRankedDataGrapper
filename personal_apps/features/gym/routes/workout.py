@@ -42,7 +42,7 @@ from ._blueprint import gym_bp
 from .helpers import (
     NON_MUSCLE_GROUPS, ONBOARDING_WORKOUTS, RECENT_SESSIONS, WEEKDAY_SHORT,
     _cancel_pending_push, _delete_session_and_links,
-    _get_active_session, _refuse_live_write_if_finished,
+    _get_active_session, _refuse_live_write_if_finished, _refuse_structure_edit_if_finished,
     _to_bodyweight, _to_int, _to_name, _to_note, _to_reps, _to_rest_seconds, _to_weight,
     _username, _wants_json,
 )
@@ -1128,7 +1128,7 @@ def session_detail(session_id):
 @login_required
 def gym_add_session_exercise(session_id):
     session_ = owned_session(session_id)
-    refusal = _refuse_live_write_if_finished(session_)
+    refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
         return refusal
     # Before anything is created: taking the lock ends the transaction.
@@ -1179,7 +1179,7 @@ def gym_replace_session_exercise(session_exercise_id):
     skips substitutes entirely so this never gets written into a template."""
     original = _locked_session_exercise(session_exercise_id)
     session_id = original.session_id
-    refusal = _refuse_live_write_if_finished(original.session)
+    refusal = _refuse_structure_edit_if_finished(original.session)
     if refusal is not None:
         return refusal
 
@@ -1230,7 +1230,7 @@ def gym_update_session_exercise_rest(session_exercise_id):
     lifter's setting itself -- or a blank -- stores nothing: the row follows
     the setting again, so a change to it still reaches this workout."""
     session_exercise = owned_session_exercise(session_exercise_id)
-    refusal = _refuse_live_write_if_finished(session_exercise.session)
+    refusal = _refuse_structure_edit_if_finished(session_exercise.session)
     if refusal is not None:
         return refusal
     seconds = _to_rest_seconds(request.form.get('rest_seconds', ''))
@@ -1325,7 +1325,7 @@ def gym_add_set(session_exercise_id):
 @login_required
 def gym_delete_session_exercise(session_exercise_id):
     session_exercise = _locked_session_exercise(session_exercise_id, with_partners=True)
-    refusal = _refuse_live_write_if_finished(session_exercise.session)
+    refusal = _refuse_structure_edit_if_finished(session_exercise.session)
     if refusal is not None:
         return refusal
     # Captured before the delete: walking session_exercise.session afterwards
@@ -1380,12 +1380,9 @@ def gym_toggle_skip_session_exercise(session_exercise_id):
     start does, but only if nothing is left over from before the skip."""
     session_exercise = _locked_session_exercise(session_exercise_id)
     session_ = session_exercise.session
-    refusal = _refuse_live_write_if_finished(session_)
+    refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
         return refusal
-    if session_.finished_at:
-        return _mutation_response(
-        session_, 'gym.session_detail', session_id=session_.id)
 
     session_exercise.skipped = not session_exercise.skipped
     if session_exercise.skipped:
@@ -1589,8 +1586,14 @@ def gym_toggle_set_complete(set_id):
         # gym_add_set gives a set without both numbers.
         set_.completed = False
     # The stamp follows the flag in both directions. Leaving it behind on an
-    # un-complete would make the next tick measure the wrong interval.
-    set_.completed_at = dt.datetime.utcnow() if set_.completed else None
+    # un-complete would make the next tick measure the wrong interval. Only a
+    # CHANGE moves it: a duplicate "done" used to re-stamp a set already
+    # logged. And a tick on a finished workout gets no stamp at all -- the set
+    # was lifted at some unknown point during it, not hours later when the
+    # debrief was corrected (G-090; gym_add_set does the same).
+    if set_.completed != was_completed:
+        live = session_.finished_at is None
+        set_.completed_at = dt.datetime.utcnow() if set_.completed and live else None
 
     if set_.completed and was_default_seeded and (weight_changed or reps_changed):
         # A correction to the invented default plan, being confirmed done --
@@ -1693,7 +1696,7 @@ def gym_update_set(set_id):
 @login_required
 def gym_reorder_session_exercises(session_id):
     session_ = owned_session(session_id)
-    refusal = _refuse_live_write_if_finished(session_)
+    refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
         return refusal
     # Training together means one order, and it is the leader's. A follower's
@@ -1762,7 +1765,7 @@ def gym_skip_rest(session_id):
     "Pause vorbei" for a rest the lifter already ended themselves.
     """
     session_ = owned_session(session_id)
-    refusal = _refuse_live_write_if_finished(session_)
+    refusal = _refuse_structure_edit_if_finished(session_)
     if refusal is not None:
         return refusal
     session_.rest_ends_at = None

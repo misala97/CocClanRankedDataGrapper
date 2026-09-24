@@ -248,6 +248,28 @@ def _refuse_live_write_if_finished(session_):
     """
     if session_.finished_at is None or request.headers.get(LIVE_SURFACE_HEADER) != 'live':
         return None
+    return _finished_refusal(session_)
+
+
+def _refuse_structure_edit_if_finished(session_):
+    """409 for a change to a finished workout's shape, else None -- whoever
+    asks.
+
+    A finished workout is corrected from the debrief: set values, ticks,
+    notes, bodyweight and the deload mark (_refuse_live_write_if_finished
+    guards those). Adding, replacing, skipping, removing or reordering
+    exercises, their rests and the rest skip have no place there, and used to
+    go through for any caller that left out the live screen's header -- a
+    "replace" hid two logged sets from the debrief while the stats still
+    counted them (G-090). The header no longer decides whether; the live
+    island still answers the 409 by reloading into the debrief.
+    """
+    if session_.finished_at is None:
+        return None
+    return _finished_refusal(session_)
+
+
+def _finished_refusal(session_):
     if _wants_json():
         return jsonify({'finished': True}), 409
     return redirect(url_for('gym.session_detail', session_id=session_.id))
