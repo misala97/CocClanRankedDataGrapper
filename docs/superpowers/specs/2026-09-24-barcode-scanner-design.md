@@ -64,8 +64,8 @@ island (one screen, no client state worth a build).
     upstream unreachable (`error` text in German), 200 otherwise (including
     not found: `found: false`).
 
-User-Agent on every upstream call: `PersonalApps-Barcode/1.0 (michi7788@googlemail.com)`
-(OFF asks for an identifying UA). Timeout 8 s.
+User-Agent on every upstream call: `PersonalApps-Barcode/1.0` (OFF asks for an
+identifying app name; no personal contact data is sent). Timeout 8 s.
 
 ## Page (`templates/barcode/index.html`, `static/barcode/barcode.{js,css}`)
 
