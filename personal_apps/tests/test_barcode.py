@@ -224,7 +224,6 @@ def test_normalize_dnb():
         'pages': 158,
         'price_de': 20.0,
         'subject': 'Deutsche Literatur',
-        'image': 'https://portal.dnb.de/opac/mvb/cover?isbn=9783423282390',
         'source': {'name': 'Deutsche Nationalbibliothek', 'url': 'https://d-nb.info/1220520136'},
     }
 
@@ -238,11 +237,12 @@ def test_normalize_dnb_without_a_record():
 class _Response:
     """What `requests.get` hands back, minus the network."""
 
-    def __init__(self, status_code=200, payload=None, content=b'', url=''):
+    def __init__(self, status_code=200, payload=None, content=b'', url='', headers=None):
         self.status_code = status_code
         self._payload = payload
         self.content = content
         self.url = url
+        self.headers = headers or {}
 
     def json(self):
         if self._payload is None:
@@ -336,6 +336,22 @@ def test_dnb_failures_raise_instead_of_claiming_not_found(monkeypatch, failure):
         sources.lookup('9783423282390')
 
 
+COVER = 'https://portal.dnb.de/opac/mvb/cover'
+
+
+@pytest.mark.parametrize('answer, expected', [
+    (_Response(200, content=b'\xff\xd8' + b'x' * 2000, headers={'Content-Type': 'image/jpeg; charset=UTF-8'}),
+     (b'\xff\xd8' + b'x' * 2000, 'image/jpeg')),
+    (_Response(200, content=b'<html>' + b'x' * 2000, headers={'Content-Type': 'text/html'}), None),
+    (_Response(200, content=b'<svg>' + b'x' * 2000, headers={'Content-Type': 'image/svg+xml'}), None),
+    (_Response(200, content=b'GIF89a' + b'x' * 37, headers={'Content-Type': 'image/gif'}), None),  # 1-px "no cover"
+    (_Response(404, headers={'Content-Type': 'image/jpeg'}), None),
+])
+def test_fetch_cover_keeps_only_real_raster_images(monkeypatch, answer, expected):
+    _fake_get(monkeypatch, {COVER: answer})
+    assert sources.fetch_cover('9783423282390') == expected
+
+
 # --- routes and access -----------------------------------------------------------
 
 def _as(monkeypatch, role):
@@ -348,8 +364,11 @@ def _get(path, host=FULL_ACCESS_HOST):
         return client.get(path, base_url=f'https://{host}')
 
 
+PATHS = ['/barcode/', '/barcode/api/4001686301265', '/barcode/cover/9783423282390']
+
+
 @pytest.mark.parametrize('host', ['localhost', FULL_ACCESS_HOST])
-@pytest.mark.parametrize('path', ['/barcode/', '/barcode/api/4001686301265'])
+@pytest.mark.parametrize('path', PATHS)
 def test_anonymous_is_sent_to_login(monkeypatch, host, path):
     _as(monkeypatch, 'anonymous')
     response = _get(path, host)
@@ -358,7 +377,7 @@ def test_anonymous_is_sent_to_login(monkeypatch, host, path):
 
 
 @pytest.mark.parametrize('host', ['localhost', FULL_ACCESS_HOST])
-@pytest.mark.parametrize('path', ['/barcode/', '/barcode/api/4001686301265'])
+@pytest.mark.parametrize('path', PATHS)
 def test_members_are_refused(monkeypatch, host, path):
     _as(monkeypatch, 'member')
     assert _get(path, host).status_code == 403
@@ -409,3 +428,41 @@ def test_api_reports_an_unreachable_database(monkeypatch):
     body = response.get_json()
     assert body['code'] == '4001686301265'
     assert 'nicht erreichbar' in body['error']
+
+
+def test_api_points_book_covers_at_our_own_origin(monkeypatch):
+    _as(monkeypatch, 'admin')
+    monkeypatch.setattr(sources, 'lookup', lambda code: {'code': code, 'found': True, 'book': {'title': 'T'}})
+    body = _get('/barcode/api/9783423282390').get_json()
+    assert body['book']['image'] == '/barcode/cover/9783423282390'
+
+
+def test_cover_is_served_from_our_origin(monkeypatch):
+    _as(monkeypatch, 'admin')
+    monkeypatch.setattr(sources, 'fetch_cover', lambda isbn: (b'\xff\xd8jpeg', 'image/jpeg'))
+    response = _get('/barcode/cover/9783423282390')
+    assert response.status_code == 200
+    assert (response.mimetype, response.data) == ('image/jpeg', b'\xff\xd8jpeg')
+    assert response.headers['X-Content-Type-Options'] == 'nosniff'
+
+
+@pytest.mark.parametrize('isbn', ['9783423282391', '4001686301265'])  # bad check digit; not a book
+def test_cover_refuses_what_is_not_a_book(monkeypatch, isbn):
+    _as(monkeypatch, 'admin')
+    asked = []
+    monkeypatch.setattr(sources, 'fetch_cover', asked.append)
+    assert _get(f'/barcode/cover/{isbn}').status_code == 404
+    assert asked == []
+
+
+@pytest.mark.parametrize('answer', [None, sources.UpstreamError('down')])
+def test_cover_missing_or_unreachable_is_a_404(monkeypatch, answer):
+    _as(monkeypatch, 'admin')
+
+    def fetch(isbn):
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(sources, 'fetch_cover', fetch)
+    assert _get('/barcode/cover/9783423282390').status_code == 404

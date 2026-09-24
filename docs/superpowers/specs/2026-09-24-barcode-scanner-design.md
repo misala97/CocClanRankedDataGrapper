@@ -62,7 +62,11 @@ island (one screen, no client state worth a build).
   - `GET /barcode/` → `templates/barcode/index.html`.
   - `GET /barcode/api/<raw>` → JSON. 400 invalid code / bad checksum, 502
     upstream unreachable (`error` text in German), 200 otherwise (including
-    not found: `found: false`).
+    not found: `found: false`). A found book gets `image: /barcode/cover/<isbn>`.
+  - `GET /barcode/cover/<isbn>` → the DNB cover (`sources.fetch_cover`),
+    served from our origin: the DNB answers a browser's image request with
+    HTML, which Chrome blocks as ORB (found in the browser check). JPEG / PNG /
+    GIF / WebP only (no SVG from our origin), `nosniff`, 404 when missing.
 
 User-Agent on every upstream call: `PersonalApps-Barcode/1.0` (OFF asks for an
 identifying app name; no personal contact data is sent). Timeout 8 s.

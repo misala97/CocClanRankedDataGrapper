@@ -31,7 +31,11 @@ OFF_FIELDS = ','.join([
     'ingredients_analysis_tags', 'labels_tags',
 ])
 DNB_URL = 'https://services.dnb.de/sru/dnb'
-DNB_COVER_URL = 'https://portal.dnb.de/opac/mvb/cover?isbn={isbn}'
+DNB_COVER_URL = 'https://portal.dnb.de/opac/mvb/cover'
+# Raster formats only: an SVG served from our own origin could carry script.
+_COVER_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+# The DNB answers "no cover" with a tiny placeholder rather than a 404.
+_COVER_MIN_BYTES = 1000
 
 # Final host after OFF's redirect -> (product type, database name).
 _FLAVORS = {
@@ -291,6 +295,7 @@ def fetch_dnb(isbn):
 
 
 def normalize_dnb(xml, isbn):
+    """The book in the DNB's answer for `isbn`, or None when it has no record."""
     try:
         root = ET.fromstring(xml)
     except ET.ParseError as exc:
@@ -332,10 +337,24 @@ def normalize_dnb(xml, isbn):
         'pages': pages,
         'price_de': price,
         'subject': subject,
-        'image': DNB_COVER_URL.format(isbn=isbn),
         'source': {'name': 'Deutsche Nationalbibliothek',
                    'url': f'https://d-nb.info/{idn}' if idn else None},
     }
+
+
+def fetch_cover(isbn):
+    """(image bytes, media type) of the cover, or None when there is none.
+
+    Fetched here and served from /barcode/cover/ because the DNB answers a
+    browser's image request with an HTML page (checked 2026-09-24), which
+    Chrome then blocks as ORB; a plain server request gets the JPEG.
+    """
+    response = _get(DNB_COVER_URL, {'isbn': isbn})
+    media_type = response.headers.get('Content-Type', '').split(';')[0].strip().lower()
+    if (response.status_code != 200 or media_type not in _COVER_TYPES
+            or len(response.content) < _COVER_MIN_BYTES):
+        return None
+    return response.content, media_type
 
 
 def _person(creator):
