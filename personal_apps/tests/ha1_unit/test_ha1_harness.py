@@ -934,6 +934,7 @@ def toy_app(*, remove_member_gate=False, add_radar_member=False):
         app.register_blueprint(blueprint)
     namespace = {'request': flask.request, 'redirect': flask.redirect, 'url_for': flask.url_for,
                  'abort': flask.abort, 'FULL_ACCESS_HOST': HOST, '_MEMBER_BLUEPRINTS': members,
+                 '_request_hostname': lambda: flask.request.host.split(':')[0].rstrip('.').lower(),
                  '_is_logged_in': lambda: 'user_id' in flask.session,
                  'is_admin': lambda: flask.session.get('user_id') == ADMIN_ID}
     exec(compile(ast.fix_missing_locations(ast.Module(body=[gate], type_ignores=[])), str(APP_PY), 'exec'),
@@ -950,6 +951,10 @@ class TestFullAccessHostGate:
             assert harness.host_session_get(client, HOST, MEMBER_ID, COMPANY).status_code == 403
             assert harness.host_session_get(client, HOST, MEMBER_ID, '/gym/').status_code == 200
             assert harness.host_session_get(client, HOST, ADMIN_ID, COMPANY).status_code == 200
+        with app.test_client() as client:
+            # G-151: every public host holds a member to the member blueprints.
+            assert harness.host_session_get(client, 'pubquizmainz.viewdns.net', MEMBER_ID,
+                                            COMPANY).status_code == 403
         with app.test_client() as client:
             assert harness.host_session_get(client, '127.0.0.1', MEMBER_ID, COMPANY).status_code == 200
 

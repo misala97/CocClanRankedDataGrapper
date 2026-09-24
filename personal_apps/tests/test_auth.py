@@ -124,32 +124,37 @@ def test_a_session_pointing_at_a_deleted_user_is_logged_out(anon_client):
     assert '/login' in response.headers['Location']
 
 
-# The before_request gate only engages on the full-access hostname -- the
-# public pubquiz domain does not proxy the other apps at all, so their
-# protection lives on that host. The test client defaults to "localhost", where
-# the gate returns early, so these requests must state the host explicitly or
-# they would assert against a surface the gate never touches.
+# The before_request gate asks for a login on the full-access hostname only,
+# and holds a signed-in non-admin to the member blueprints on every public
+# hostname. Loopback is exempt, and the test client defaults to "localhost",
+# where the gate returns early -- so these requests must state the host
+# explicitly or they would assert against a surface the gate never touches.
 from app import FULL_ACCESS_HOST
 
 FULL_ACCESS_URL = f'http://{FULL_ACCESS_HOST}'
+PUBQUIZ_HOST = 'pubquizmainz.viewdns.net'
 
 
 @contextmanager
-def _client_on_full_access_host(user_id):
-    """A logged-in client whose session cookie is scoped to the full-access host.
+def _client_on_host(user_id, host):
+    """A logged-in client whose session cookie is scoped to `host`.
 
     `session_transaction()` writes the cookie against the client's *current*
     host, and Werkzeug's jar is host-only when no Domain attribute is set. Set
     the session on the default localhost and every later request carrying
-    base_url=FULL_ACCESS_URL arrives anonymous -- which would make these tests
+    another base_url arrives anonymous -- which would make these tests
     assert 302-vs-403 rather than admin-vs-non-admin. The host must be stated
     when the session is written, not only when the request is made.
     """
     flask_app.config['TESTING'] = True
     with flask_app.test_client() as test_client:
-        with test_client.session_transaction(base_url=FULL_ACCESS_URL) as flask_session:
+        with test_client.session_transaction(base_url=f'http://{host}') as flask_session:
             flask_session['user_id'] = user_id
         yield test_client
+
+
+def _client_on_full_access_host(user_id):
+    return _client_on_host(user_id, FULL_ACCESS_HOST)
 
 
 @pytest.fixture()
@@ -202,6 +207,57 @@ def test_the_overview_shows_only_the_gym_to_a_non_admin(member_client):
 
 def test_only_an_admin_reaches_the_user_admin(member_client):
     assert member_client.get('/admin/users', base_url=FULL_ACCESS_URL).status_code == 403
+
+
+# G-151: the member check used to run on the full-access host only. The
+# pub-quiz domain proxies /pubquiz*, /login and /logout, so a member who signed
+# in there got the quiz admin. G-132: the host was compared as sent, so other
+# spellings of the full-access host skipped the gate as well.
+@pytest.mark.parametrize('host', [PUBQUIZ_HOST, FULL_ACCESS_HOST + '.', '192.168.1.20'])
+@pytest.mark.parametrize('path', ['/pubquiz/admin', '/tips', '/quizbank', '/radar/'])
+def test_a_non_admin_is_refused_the_other_apps_on_every_public_host(temp_user, host, path):
+    user_id, _, _ = temp_user
+    with _client_on_host(user_id, host) as test_client:
+        assert test_client.get(path, base_url=f'http://{host}').status_code == 403
+
+
+def test_a_non_admin_still_gets_the_public_quiz_page_without_an_admin_link(temp_user):
+    """Public on the quiz domain, so a signed-in member must not get less than
+    a stranger -- and no Admin link that would only 403."""
+    user_id, _, _ = temp_user
+    with _client_on_host(user_id, PUBQUIZ_HOST) as test_client:
+        response = test_client.get('/pubquiz', base_url=f'http://{PUBQUIZ_HOST}')
+    assert response.status_code == 200
+    assert 'href="/pubquiz/admin"' not in response.get_data(as_text=True)
+
+
+def test_an_admin_still_runs_the_quiz_on_the_quiz_domain():
+    with _client_on_host(_admin_id(), PUBQUIZ_HOST) as admin_client:
+        assert admin_client.get('/pubquiz/admin', base_url=f'http://{PUBQUIZ_HOST}').status_code == 200
+
+
+def test_a_member_signing_in_on_the_quiz_domain_lands_on_the_public_page(anon_client, temp_user):
+    _, username, password = temp_user
+    quiz_url = f'http://{PUBQUIZ_HOST}'
+    anon_client.get('/login', base_url=quiz_url)  # issues the CSRF token
+    with anon_client.session_transaction(base_url=quiz_url) as flask_session:
+        csrf = flask_session['csrf_token']
+    response = anon_client.post('/login', base_url=quiz_url, data={
+        'username': username, 'password': password, 'csrf_token': csrf,
+    })
+    assert response.status_code in (302, 303)
+    assert response.headers['Location'].endswith('/pubquiz')
+
+
+@pytest.mark.parametrize('host', [FULL_ACCESS_HOST.upper(), FULL_ACCESS_HOST + '.',
+                                  FULL_ACCESS_HOST.upper() + '.:443'])
+def test_the_full_access_host_asks_for_a_login_however_it_is_spelled(anon_client, host):
+    """/pubquiz is public on every other host, so it shows whether the login
+    requirement engaged. The Host header goes in raw: the test client
+    lowercases a base_url's host on its own, which would hide the case bug."""
+    response = anon_client.get('/pubquiz', environ_overrides={'HTTP_HOST': host})
+    assert response.status_code == 302
+    assert '/login' in response.headers['Location']
 
 
 def test_an_admin_can_create_a_user(temp_user):

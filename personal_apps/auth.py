@@ -18,7 +18,21 @@ _DUMMY_PASSWORD_HASH = generate_password_hash(secrets.token_hex(32))
 # Hostname that has access to everything (incl. the overview page at "/").
 # Other hostnames (e.g. the public pubquiz-only domain) don't proxy "/" at
 # all, so logins from there should land on a route that domain actually serves.
-FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net")
+FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net").strip().rstrip('.').lower()
+
+
+def _request_hostname():
+    """The Host header's name, lowercased, without the port or a trailing dot.
+
+    DNS names are case-insensitive and may end in a dot. Comparing the raw
+    header let "MGEMMEL.VIEWDNS.NET" or "mgemmel.viewdns.net." skip the
+    full-access gate wherever the header arrives as the client sent it
+    (G-132). Production's nginx forwards `$host`, which is normalised already.
+    """
+    host = request.host.lower()
+    if host.startswith('['):   # an IPv6 literal, "[::1]:5001"
+        return host[1:].partition(']')[0]
+    return host.partition(':')[0].rstrip('.')
 
 
 def current_user():
@@ -38,7 +52,7 @@ def _is_logged_in():
 
 
 def _on_full_access_host():
-    return request.host.split(':')[0] == FULL_ACCESS_HOST
+    return _request_hostname() == FULL_ACCESS_HOST
 
 
 @auth_bp.app_context_processor
@@ -64,9 +78,13 @@ def _no_index(response):
 
 
 def _post_login_redirect():
-    if request.host.split(':')[0] == FULL_ACCESS_HOST:
+    if _on_full_access_host():
         return redirect(url_for('index'))
-    return redirect(url_for('pubquiz.pubquiz_admin'))
+    # The pub-quiz domain serves only the quiz, and its admin is an admin's.
+    # A member who signs in there gets the public page, not a 403.
+    if is_admin():
+        return redirect(url_for('pubquiz.pubquiz_admin'))
+    return redirect(url_for('pubquiz.pubquiz'))
 
 
 def login_required(f):
@@ -124,7 +142,7 @@ def login():
 @auth_bp.route('/logout')
 def logout():
     session.clear()
-    if request.host.split(':')[0] == FULL_ACCESS_HOST:
+    if _on_full_access_host():
         return redirect(url_for('index'))
     return redirect(url_for('pubquiz.pubquiz'))
 

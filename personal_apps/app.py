@@ -49,7 +49,7 @@ migrate = Migrate(app, db)
 from models import *
 db.configure_mappers()
 
-from auth import auth_bp, _is_logged_in, login_required, is_admin
+from auth import auth_bp, _is_logged_in, _request_hostname, login_required, is_admin, FULL_ACCESS_HOST
 from features.pubquiz.routes import pubquiz_bp
 from features.tips.routes import tips_bp
 from features.quizbank.routes import quizbank_bp
@@ -107,30 +107,41 @@ def _immutable_hashed_assets(response):
         response.cache_control.immutable = True
     return response
 
-# Hostname that should require login for every page (the "full access" domain).
-# Other hostnames (e.g. the public pubquiz-only domain) are unaffected and keep
-# whatever per-route protection each blueprint already defines.
-FULL_ACCESS_HOST = os.getenv("PERSONAL_FULL_ACCESS_HOST", "mgemmel.viewdns.net")
+# FULL_ACCESS_HOST (from auth) requires a login for every page. Other public
+# hostnames (the pub-quiz domain) leave anonymous visitors to each route's own
+# protection, but a signed-in non-admin is held to the member blueprints on
+# every one of them.
 
-
-# Blueprints a non-admin may reach. Everything else on the full-access host is
-# the author's. Gym scopes member data; Showoff is a shared browser experience.
+# Blueprints a non-admin may reach. Everything else is the author's. Gym
+# scopes member data; Showoff is a shared browser experience.
 _MEMBER_BLUEPRINTS = {'gym', 'auth', 'showoff'}
 
 
 @app.before_request
 def _require_login_on_full_access_host():
-    if request.host.split(':')[0] != FULL_ACCESS_HOST:
-        return
     if request.endpoint in ('auth.login', 'auth.logout', 'static', 'gym.gym_service_worker'):
         return
+    hostname = _request_hostname()
+    # Loopback is the local dev server and the test client, where each route
+    # keeps its own protection. Production never forwards it: nginx answers
+    # an unknown Host with 444, and gunicorn listens on 127.0.0.1 only.
+    if hostname in ('localhost', '127.0.0.1', '::1'):
+        return
     if not _is_logged_in():
-        return redirect(url_for('auth.login'))
+        if hostname == FULL_ACCESS_HOST:
+            return redirect(url_for('auth.login'))
+        return
+    # This check used to run on the full-access host only, so a member who
+    # signed in on the pub-quiz domain got the quiz admin there (G-151). The
+    # quiz's public scoreboard stays open: it is public on that domain, and a
+    # signed-in member should not get less than a stranger.
     # `request.blueprint is None` for routes registered on the app itself --
     # which here is only `/`, and that route filters its own contents by
     # permission. Blocking it at the gate would 403 the overview page for the
     # very user it is being filtered for.
-    if not is_admin() and request.blueprint is not None and request.blueprint not in _MEMBER_BLUEPRINTS:
+    if (not is_admin() and request.blueprint is not None
+            and request.blueprint not in _MEMBER_BLUEPRINTS
+            and request.endpoint not in ('pubquiz.pubquiz', 'pubquiz.pubquiz_admin_logout')):
         abort(403)
 
 
