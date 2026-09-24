@@ -33,13 +33,42 @@ def scratch_session():
     Deleted afterwards whatever the test does -- this suite runs against the
     real local development database.
     """
+    with flask_app.app_context():
+        exercise_id = list_exercise().id
+    yield from _scratch_session(exercise_id)
+
+
+@pytest.fixture()
+def even_step_session():
+    """scratch_session on a key-less row of its own with a 2.5 kg step.
+
+    The deload tests assert rounding, and rounding follows the lifter's own
+    step for the exercise. On a list exercise that is real user data: the
+    admin carries 8 kg on Butterfly (Maschine) since the 09-23 list migration
+    kept what differed from the list, which turned 80/75 into 56/51.
+    """
+    with flask_app.app_context():
+        exercise = Exercise(name='pytest scratch even steps', list_increment=2.5)
+        db.session.add(exercise)
+        db.session.commit()
+        exercise_id = exercise.id
+    try:
+        yield from _scratch_session(exercise_id)
+    finally:
+        with flask_app.app_context():
+            row = db.session.get(Exercise, exercise_id)
+            if row is not None:
+                db.session.delete(row)
+                db.session.commit()
+
+
+def _scratch_session(exercise_id):
     from extensions import db
     from models import SessionExercise, SessionSet, WorkoutSession
     with flask_app.app_context():
-        exercise = list_exercise()
         session_ = WorkoutSession(name='pytest scratch', started_at=dt.datetime.utcnow(),
                                   user_id=_admin_id())
-        session_exercise = SessionExercise(exercise_id=exercise.id, position=1)
+        session_exercise = SessionExercise(exercise_id=exercise_id, position=1)
         session_exercise.sets = [
             SessionSet(position=1, weight=80.0, reps=8, completed=False),
             SessionSet(position=2, weight=75.0, reps=8, completed=False),
@@ -162,158 +191,158 @@ def base_weights(session_id):
         return [s.base_weight for se in session_.exercises for s in se.sets]
 
 
-def test_deload_on_rewrites_every_weight_when_nothing_is_completed(client, scratch_session):
-    response = client.post('/gym/session/{}/deload'.format(scratch_session),
+def test_deload_on_rewrites_every_weight_when_nothing_is_completed(client, even_step_session):
+    response = client.post('/gym/session/{}/deload'.format(even_step_session),
                            data={'on': '1', 'pct': '70'})
     assert response.status_code in (302, 303)
     # 80 * 0.7 = 56 -> 55.0 ; 75 * 0.7 = 52.5 -> 52.5
-    assert set_weights(scratch_session) == [55.0, 52.5]
-    assert deload_state(scratch_session) == (True, 70)
+    assert set_weights(even_step_session) == [55.0, 52.5]
+    assert deload_state(even_step_session) == (True, 70)
 
 
-def test_deload_percentage_change_scales_from_the_baseline_not_the_deloaded_weight(client, scratch_session):
+def test_deload_percentage_change_scales_from_the_baseline_not_the_deloaded_weight(client, even_step_session):
     """The compounding regression. Two picks in a row must not stack."""
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
-    assert set_weights(scratch_session) == [55.0, 52.5]
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '60'})
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(even_step_session) == [55.0, 52.5]
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '60'})
     # 60 % of the 80/75 baseline -> 47.5 / 45.0.
     # Compounding from 55/52.5 would give 32.5 / 30.0.
-    assert set_weights(scratch_session) == [47.5, 45.0]
+    assert set_weights(even_step_session) == [47.5, 45.0]
 
 
-def test_deload_applied_twice_at_the_same_percentage_is_idempotent(client, scratch_session):
+def test_deload_applied_twice_at_the_same_percentage_is_idempotent(client, even_step_session):
     """A double-tap or a POST retry must not reduce the weights twice."""
     for _ in range(2):
-        client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
-    assert set_weights(scratch_session) == [55.0, 52.5]
+        client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(even_step_session) == [55.0, 52.5]
 
 
-def test_deload_off_restores_the_exact_pre_deload_weights(client, scratch_session):
+def test_deload_off_restores_the_exact_pre_deload_weights(client, even_step_session):
     """Replaces the old test, which asserted `!= [77.5, 75.0]` and so passed
     even when the off-branch did nothing at all."""
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
-    assert set_weights(scratch_session) == [80.0, 75.0]
-    assert base_weights(scratch_session) == [None, None]
-    assert deload_state(scratch_session) == (False, None)
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '0'})
+    assert set_weights(even_step_session) == [80.0, 75.0]
+    assert base_weights(even_step_session) == [None, None]
+    assert deload_state(even_step_session) == (False, None)
 
 
-def test_deload_off_restores_a_manually_adjusted_weight_not_last_sessions(client, scratch_session):
+def test_deload_off_restores_a_manually_adjusted_weight_not_last_sessions(client, even_step_session):
     """The baseline is what was actually planned, which may not match history."""
     from extensions import db
     from models import WorkoutSession
     with flask_app.app_context():
-        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_ = db.session.get(WorkoutSession, even_step_session)
         session_.exercises[0].sets[0].weight = 92.5      # user bumped it before starting
         db.session.commit()
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
-    assert set_weights(scratch_session)[0] == 92.5
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '0'})
+    assert set_weights(even_step_session)[0] == 92.5
 
 
-def test_deload_on_rewrites_nothing_once_a_set_is_completed(client, scratch_session):
+def test_deload_on_rewrites_nothing_once_a_set_is_completed(client, even_step_session):
     from extensions import db
     from models import WorkoutSession
     with flask_app.app_context():
-        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_ = db.session.get(WorkoutSession, even_step_session)
         session_.exercises[0].sets[0].completed = True
         db.session.commit()
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
-    assert set_weights(scratch_session) == [80.0, 75.0]
-    assert deload_state(scratch_session) == (True, 70)
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(even_step_session) == [80.0, 75.0]
+    assert deload_state(even_step_session) == (True, 70)
 
 
-def test_deload_on_a_finished_session_is_label_only(client, scratch_session):
+def test_deload_on_a_finished_session_is_label_only(client, even_step_session):
     from extensions import db
     from models import WorkoutSession
     with flask_app.app_context():
-        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_ = db.session.get(WorkoutSession, even_step_session)
         session_.exercises[0].sets[0].completed = True
         session_.finished_at = dt.datetime.utcnow()
         db.session.commit()
-    response = client.post('/gym/session/{}/deload'.format(scratch_session),
+    response = client.post('/gym/session/{}/deload'.format(even_step_session),
                            data={'on': '1', 'pct': '70'})
     assert response.status_code in (302, 303)
-    assert set_weights(scratch_session) == [80.0, 75.0]
-    assert deload_state(scratch_session) == (True, 70)
+    assert set_weights(even_step_session) == [80.0, 75.0]
+    assert deload_state(even_step_session) == (True, 70)
 
 
-def test_deload_pct_out_of_range_falls_back_to_the_default(client, scratch_session):
-    client.post('/gym/session/{}/deload'.format(scratch_session),
+def test_deload_pct_out_of_range_falls_back_to_the_default(client, even_step_session):
+    client.post('/gym/session/{}/deload'.format(even_step_session),
                 data={'on': '1', 'pct': '999'})
-    assert deload_state(scratch_session) == (True, 70)
+    assert deload_state(even_step_session) == (True, 70)
 
 
-def test_deload_pct_that_is_not_a_number_falls_back_to_the_default(client, scratch_session):
-    client.post('/gym/session/{}/deload'.format(scratch_session),
+def test_deload_pct_that_is_not_a_number_falls_back_to_the_default(client, even_step_session):
+    client.post('/gym/session/{}/deload'.format(even_step_session),
                 data={'on': '1', 'pct': 'schwer'})
-    assert deload_state(scratch_session) == (True, 70)
+    assert deload_state(even_step_session) == (True, 70)
 
 
-def test_deload_on_records_the_baseline_it_captured(client, scratch_session):
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
-    assert base_weights(scratch_session) == [80.0, 75.0]
+def test_deload_on_records_the_baseline_it_captured(client, even_step_session):
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
+    assert base_weights(even_step_session) == [80.0, 75.0]
 
 
-def test_completing_a_set_freezes_the_weights_and_un_completing_thaws_them(client, scratch_session):
+def test_completing_a_set_freezes_the_weights_and_un_completing_thaws_them(client, even_step_session):
     """The "computed, not latched" guarantee: the completed-set gate is
     re-evaluated per request, so un-completing a set makes the toggle able to
     rewrite again and a mis-tap is always recoverable."""
     from extensions import db
     from models import WorkoutSession
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
-    assert set_weights(scratch_session) == [55.0, 52.5]
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
+    assert set_weights(even_step_session) == [55.0, 52.5]
 
     with flask_app.app_context():
-        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_ = db.session.get(WorkoutSession, even_step_session)
         session_.exercises[0].sets[0].completed = True
         db.session.commit()
     # Frozen: a completed set gates the rewrite, so toggling off changes the
     # flag but leaves every weight alone.
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
-    assert set_weights(scratch_session) == [55.0, 52.5]
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '0'})
+    assert set_weights(even_step_session) == [55.0, 52.5]
 
     with flask_app.app_context():
-        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_ = db.session.get(WorkoutSession, even_step_session)
         session_.exercises[0].sets[0].completed = False
         db.session.commit()
     # Thawed: nothing is completed any more, so the gate opens and the
     # baseline restores exactly.
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
-    assert set_weights(scratch_session) == [80.0, 75.0]
-    assert base_weights(scratch_session) == [None, None]
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '0'})
+    assert set_weights(even_step_session) == [80.0, 75.0]
+    assert base_weights(even_step_session) == [None, None]
 
 
-def test_a_weight_typed_during_a_deload_survives_turning_it_off(client, scratch_session):
+def test_a_weight_typed_during_a_deload_survives_turning_it_off(client, even_step_session):
     """Fix 1's regression: a stale baseline must not overwrite a hand-typed
     weight. Before the fix this restored 80.0 and lost the 60.0 entirely."""
     from extensions import db
     from models import WorkoutSession
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
     with flask_app.app_context():
-        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_ = db.session.get(WorkoutSession, even_step_session)
         set_id = session_.exercises[0].sets[0].id
     client.post('/gym/set/{}/update'.format(set_id), data={'weight': '60', 'reps': '8'})
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
-    assert set_weights(scratch_session)[0] == 60.0
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '0'})
+    assert set_weights(even_step_session)[0] == 60.0
 
 
-def test_ticking_a_set_done_does_not_destroy_its_deload_baseline(client, scratch_session):
+def test_ticking_a_set_done_does_not_destroy_its_deload_baseline(client, even_step_session):
     """The check button submits the whole row, so an unchanged weight must not
     read as a hand-typed one -- otherwise completing and un-completing a set
     during a deload loses its working weight for good."""
     from extensions import db
     from models import WorkoutSession
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '1', 'pct': '70'})
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '1', 'pct': '70'})
     with flask_app.app_context():
-        session_ = db.session.get(WorkoutSession, scratch_session)
+        session_ = db.session.get(WorkoutSession, even_step_session)
         set_id = session_.exercises[0].sets[0].id
     # Tick done, then undo -- exactly what the form posts, weight unchanged.
     client.post('/gym/set/{}/toggle_complete'.format(set_id), data={'weight': '55.0', 'reps': '8'})
     client.post('/gym/set/{}/toggle_complete'.format(set_id), data={'weight': '55.0', 'reps': '8'})
-    client.post('/gym/session/{}/deload'.format(scratch_session), data={'on': '0'})
-    assert set_weights(scratch_session) == [80.0, 75.0]
-    assert base_weights(scratch_session) == [None, None]
+    client.post('/gym/session/{}/deload'.format(even_step_session), data={'on': '0'})
+    assert set_weights(even_step_session) == [80.0, 75.0]
+    assert base_weights(even_step_session) == [None, None]
 
 
 def test_a_new_session_seeds_from_the_last_normal_session_not_the_deload():
